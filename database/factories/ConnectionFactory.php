@@ -24,6 +24,32 @@ class ConnectionFactory extends Factory
             'scopes' => ['read', 'write'],
             'status' => 'active',
             'last_rotated_at' => now(),
+            // Pilot reality: credentials are treated as exposed until rotated.
+            'compromised' => true,
+            'compromised_reason' => 'pilot exposure',
+            'exposed_at' => now(),
         ];
+    }
+
+    /**
+     * A credential that has been rotated since exposure and passes the gate.
+     */
+    public function rotated(): static
+    {
+        return $this->state(fn () => [
+            'compromised' => false,
+            'compromised_reason' => null,
+            'exposed_at' => now()->subDay(),
+            'last_rotated_at' => now(),
+        ]);
+    }
+
+    public function compromised(?string $reason = 'pilot exposure'): static
+    {
+        return $this->state(fn () => [
+            'compromised' => true,
+            'compromised_reason' => $reason,
+            'exposed_at' => now(),
+        ]);
     }
 }
