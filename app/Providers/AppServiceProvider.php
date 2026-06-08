@@ -9,6 +9,8 @@ use App\Integrations\Census\CensusProvider;
 use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Conversions\ConversionProvider;
+use App\Integrations\Conversions\MockConversionProvider;
 use App\Integrations\Embedding\EmbeddingProvider;
 use App\Integrations\Embedding\MockEmbeddingProvider;
 use App\Integrations\Fal\FalClient;
@@ -66,6 +68,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(NewsProvider::class, MockNewsProvider::class);
         $this->app->singleton(EmbeddingProvider::class, MockEmbeddingProvider::class);
         $this->app->singleton(OnDemandSourcePull::class, MockOnDemandSourcePull::class);
+
+        // §7c conversion ingestion (GA4/GHL → leads) is mock-first; the real
+        // pull+normalize adapter binds here later with no dashboard change.
+        $this->app->singleton(
+            ConversionProvider::class,
+            MockConversionProvider::class,
+        );
 
         // §2 publish-path adapters (committed vendors). fal generates images and
         // Claude vision finalizes alt text; both are mocked in tests, no network.

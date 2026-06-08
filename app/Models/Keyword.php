@@ -28,6 +28,12 @@ class Keyword extends Model
         return $this->belongsTo(Silo::class);
     }
 
+    /** @return HasMany<PositionSnapshot, $this> */
+    public function positionSnapshots(): HasMany
+    {
+        return $this->hasMany(PositionSnapshot::class);
+    }
+
     /**
      * Content rows that target this keyword.
      *
