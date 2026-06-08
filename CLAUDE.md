@@ -49,6 +49,9 @@ composer run dev
 # Lint / format
 ./vendor/bin/pint            # apply fixes
 ./vendor/bin/pint --test     # check only
+
+# Static analysis (Larastan)
+./vendor/bin/phpstan analyse
 ```
 
 ## Testing conventions
@@ -75,3 +78,44 @@ composer run dev
 - Never commit secrets. `.env` is git-ignored; keep `.env.example` as the
   documented template (any new config key should be added there too).
 - Add new database changes as migrations in `database/migrations/`.
+- Before committing schema/model work, run the full gate: `migrate:fresh --seed`,
+  `pint --test`, `phpstan analyse`, and `php artisan test` — all must be green.
+
+## Domain model (§1 — foundation data layer)
+
+The `§1` data layer is the multi-tenant control plane that builds and feeds
+WordPress sites. It is schema + models only (no pillar features, WP sync, AI, or
+UI). Key conventions:
+
+- **ULID primary keys** everywhere (`HasUlids`); foreign keys use `foreignUlid`.
+- **Backed enums** live in `app/Enums` and are applied as model casts — never
+  store enumerated values as bare strings with magic values.
+- **JSON columns** are cast to `array`.
+- **Soft deletes** on `Content`, `ProofItem`, `MediaAsset`, `Silo`.
+
+### Multi-tenancy
+
+`Account` (1) — (N) `Site`. `Site` is the tenancy scope key; every
+content-level table carries `site_id`.
+
+- `App\Models\Concerns\BelongsToSite` applies a global `SiteScope` keyed on the
+  resolved current site and auto-fills `site_id` on create. Use it on every
+  site-scoped model.
+- `App\Support\CurrentSite` is a request-lifetime singleton; resolve the tenant
+  with `CurrentSite::id()` and set it via `CurrentSite::set($id)` (or the thin,
+  swappable `ResolveCurrentSite` middleware). How a site is *selected*
+  (subdomain, header, operator switch) is finalised in a later section.
+- **Global records** (no `site_id`: `Account`, `User`, library-level
+  `WireframeKit`) opt out by simply not using the trait. Use
+  `Model::withoutGlobalScopes()` for cross-tenant/operator queries.
+
+### Notes
+
+- `Connection.credentials` uses the `encrypted:array` cast — no plaintext
+  secrets at rest; `last_rotated_at` is the rotation hook.
+- A single partial unique index enforces one `active` `VoiceProfile` per site.
+- Two relationships are intentionally *not* DB-level foreign keys due to
+  circular dependencies, populated after insert: `Silo.pillar_content_id` and
+  `Keyword.target_content_id` (both indexed ULID columns).
+- `database/seeders/DemoSeeder.php` builds one coherent demo tenant — the
+  fixture later sections develop against.

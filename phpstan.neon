@@ -1,0 +1,12 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app
+        - database
+
+    level: 5
+
+    ignoreErrors:
+        # Eloquent magic attribute assignment used in seeders/tests is well understood.
