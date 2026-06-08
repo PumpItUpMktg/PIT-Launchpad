@@ -13,6 +13,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property SiloType $type
+ * @property array<string, mixed>|null $rule_set
+ */
 class Silo extends Model
 {
     /** @use HasFactory<SiloFactory> */

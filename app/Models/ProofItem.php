@@ -11,6 +11,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property ProofType $type
+ */
 class ProofItem extends Model
 {
     /** @use HasFactory<ProofItemFactory> */
