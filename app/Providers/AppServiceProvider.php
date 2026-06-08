@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\ContentEngine\RelevanceScorer;
+use App\Enums\AuditAction;
 use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Embedding\EmbeddingProvider;
@@ -15,7 +16,12 @@ use App\Integrations\News\NewsProvider;
 use App\Integrations\News\OnDemandSourcePull;
 use App\Integrations\Serp\MockSerpProvider;
 use App\Integrations\Serp\SerpProvider;
+use App\Models\User;
+use App\Security\Audit;
+use App\Security\Verification\ConnectionVerifier;
+use App\Security\Verification\MockConnectionVerifier;
 use App\Support\CurrentSite;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -42,6 +48,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(EmbeddingProvider::class, MockEmbeddingProvider::class);
         $this->app->singleton(OnDemandSourcePull::class, MockOnDemandSourcePull::class);
 
+        // §9 credential rotation verifies the new secret with a live provider
+        // call before revoking the old. The real per-provider adapters bind here
+        // later; the default is a mock so the flow is exercisable without network.
+        $this->app->singleton(ConnectionVerifier::class, MockConnectionVerifier::class);
+
         // Relevance scoring runs on the cheaper Haiku model (drafting uses a
         // larger model later in §6b), so route the scorer's ClaudeClient there.
         $this->app->when(RelevanceScorer::class)
@@ -58,6 +69,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // §9 audit: record RBAC role changes. (Publish — ContentPublished — is
+        // emitted by the §2 publish pipeline; that call site attaches there.)
+        User::updated(function (User $user): void {
+            if (! $user->wasChanged('role')) {
+                return;
+            }
+
+            app(Audit::class)->log(AuditAction::RoleChanged, $user, Auth::id(), [
+                'from' => $user->getRawOriginal('role'),
+                'to' => $user->role->value,
+            ]);
+        });
     }
 }

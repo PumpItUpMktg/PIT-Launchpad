@@ -250,3 +250,46 @@ It lives under `app/ContentEngine/` and builds on §1 + §4.
   `Content.source_name` / `source_url` + candidate fields (`matched_silo_id`,
   `angle_hint`, `relevance_score`, `local_relevance`). Candidates are `Content`
   posts (`reactive`, status `candidate`; borderline → `in_review`).
+
+## Security, Credentials & Tenancy Ops (§9 — credential vault hardening)
+
+`§9` makes the platform safe for real clients: how secrets are stored, rotated,
+access-controlled, how tenants are isolated, and how it is all audited. It
+builds on §1 only (no §2/§3/§5/§6 dependency) and lives under `app/Security/`.
+
+- **Two secret tiers.** *Platform* secrets (`PlatformSecret`: app_key, database,
+  r2, fal_key, anthropic_key) live in env, never the DB. *Per-tenant* secrets
+  live on `Connection.credentials` (`encrypted:array`, `site_id`-scoped).
+- **The headline — pre-client rotation gate** (`SiteLaunchGate`): a `Site` cannot
+  go `live` while any `Connection` is `compromised` / unrotated-since-`exposed_at`,
+  or any required `PlatformSecret` lacks a `platform_secret_rotations`
+  attestation. `check()` is pure and returns a structured `GateResult`
+  (per-credential `GateCheck` checklist, red-until-green). `SiteLauncher` is the
+  only place a site flips to `SiteStatus::Live`, and only when the gate passes.
+- **Rotation tooling.** `ConnectionRotator` does no-downtime **verify-before-revoke**
+  (the new credential is checked via the `ConnectionVerifier` seam — mock default,
+  real per-provider adapters bind later — *before* the old is replaced; only then
+  is `last_rotated_at` stamped and `compromised` cleared). `AppKeyRotator`
+  re-encrypts every `Connection` across an APP_KEY change (decrypt-old →
+  re-encrypt-new at the raw column level, round-trip safe). Commands:
+  `launchpad:rotate-connection`, `launchpad:rotate-app-key`,
+  `launchpad:attest-platform-rotation`.
+- **Staleness** (`ConnectionStaleness` + `launchpad:check-stale-connections`,
+  scheduled weekly): flags credentials past a config-driven per-provider
+  threshold (`config/launchpad.php`). Advisory only — **never auto-rotates**.
+- **RBAC + masked reveal.** `ConnectionPolicy` gates view/reveal/rotate to
+  operators (`UserRole::Operator`); clients never see credentials.
+  `CredentialMasker` renders `••••` + last 4. `CredentialRevealer` is the single
+  audited path to plaintext (writes `AuditAction::CredentialRevealed`, never the
+  secret itself).
+- **Tenancy isolation** is the §1 `site_id` global scope; §9 adds regression
+  tests proving tenant A cannot read tenant B's `Connection`/`Content`/`Silo`/
+  media rows.
+- **Audit** (`Audit` → append-only `AuditLog`, update/delete rejected at the
+  model): reveal, rotation, role change, and go-live write rows. Publish
+  (`ContentPublished`) attaches at the §2 pipeline (hook noted in
+  `AppServiceProvider`).
+- **§1 additions:** `Connection.compromised` (default `true`) /
+  `compromised_reason` / `exposed_at`; `platform_secret_rotations` and
+  `audit_logs` tables; enums `PlatformSecret` / `AuditAction` / `CredentialType` /
+  `SiteStatus`. RBAC `User.role` already existed (§1) — not duplicated.
