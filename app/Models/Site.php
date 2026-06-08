@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property SiteStatus $status
+ * @property int|null $budget_ceiling
  */
 class Site extends Model
 {
@@ -164,6 +165,7 @@ class Site extends Model
         return [
             'slug_conventions' => 'array',
             'status' => SiteStatus::class,
+            'budget_ceiling' => 'integer',
         ];
     }
 }

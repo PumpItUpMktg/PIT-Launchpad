@@ -9,6 +9,11 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $version
+ * @property VoiceStatus $status
+ * @property string|null $framing_model
+ */
 class VoiceProfile extends Model
 {
     /** @use HasFactory<VoiceProfileFactory> */
