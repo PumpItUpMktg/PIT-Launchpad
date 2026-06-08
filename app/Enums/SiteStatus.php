@@ -9,6 +9,9 @@ namespace App\Enums;
  */
 enum SiteStatus: string
 {
+    // The §7a onboarding wizard's initial lifecycle state, flipped to Active
+    // once the intake is complete and the launch gate is satisfied.
+    case Onboarding = 'onboarding';
     case Active = 'active';
     case Building = 'building';
     case Live = 'live';

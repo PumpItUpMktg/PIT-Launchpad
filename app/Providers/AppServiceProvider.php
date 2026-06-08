@@ -5,12 +5,16 @@ namespace App\Providers;
 use App\ContentEngine\Drafting\Drafter;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\AuditAction;
+use App\Integrations\Census\CensusProvider;
+use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Embedding\EmbeddingProvider;
 use App\Integrations\Embedding\MockEmbeddingProvider;
 use App\Integrations\Fal\FalClient;
 use App\Integrations\Fal\FalHttpClient;
+use App\Integrations\Gbp\GbpProvider;
+use App\Integrations\Gbp\MockGbpProvider;
 use App\Integrations\LocalGrid\LocalGridProvider;
 use App\Integrations\LocalGrid\MockLocalGridProvider;
 use App\Integrations\News\MockNewsProvider;
@@ -21,6 +25,8 @@ use App\Integrations\Serp\MockSerpProvider;
 use App\Integrations\Serp\SerpProvider;
 use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
+use App\Integrations\Voice\MockVoiceSynthesizer;
+use App\Integrations\Voice\VoiceSynthesizer;
 use App\Models\User;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
@@ -44,6 +50,13 @@ class AppServiceProvider extends ServiceProvider
             (string) config('services.anthropic.model', 'claude-opus-4-8'),
             (int) config('services.anthropic.max_tokens', 4096),
         ));
+
+        // §7a onboarding adapters are deferred: default to mocks behind the
+        // capability-role interfaces (GBP category seeding, Census enrichment,
+        // Claude voice synthesis). Real adapters bind here later.
+        $this->app->bind(GbpProvider::class, MockGbpProvider::class);
+        $this->app->bind(CensusProvider::class, MockCensusProvider::class);
+        $this->app->bind(VoiceSynthesizer::class, MockVoiceSynthesizer::class);
 
         // Vendors are deferred: default to mock adapters behind the
         // capability-role interfaces. Real adapters bind here later with no
