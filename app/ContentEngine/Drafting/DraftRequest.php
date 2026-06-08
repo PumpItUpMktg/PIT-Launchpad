@@ -5,6 +5,7 @@ namespace App\ContentEngine\Drafting;
 use App\Enums\ContentKind;
 use App\Enums\DraftTrigger;
 use App\Enums\IntakeType;
+use App\Enums\RefreshTrigger;
 use App\KeywordGenerator\Gap\GapBrief;
 use App\Models\Content;
 
@@ -37,6 +38,7 @@ final class DraftRequest
         public readonly bool $localRelevance = false,
         public readonly ?string $marketId = null,
         public readonly ?string $refreshOfContentId = null,
+        public readonly ?RefreshTrigger $refreshTrigger = null,
     ) {}
 
     /**
@@ -89,9 +91,13 @@ final class DraftRequest
 
     /**
      * Mark this request as a re-draft of an existing content row (refresh path).
-     * The engine updates that row in place rather than creating a new one.
+     * The engine updates that row in place rather than creating a new one, so
+     * refreshOfContentId is a lookup key only — it is not persisted back onto the
+     * row. The RefreshTrigger records why the refresh happened and is written to
+     * the RefreshEvent (never onto Content.draft_trigger, which keeps the
+     * original lane).
      */
-    public function refreshing(Content $existing): self
+    public function refreshing(Content $existing, RefreshTrigger $trigger): self
     {
         return new self(
             siteId: $this->siteId,
@@ -110,6 +116,7 @@ final class DraftRequest
             localRelevance: $this->localRelevance,
             marketId: $this->marketId,
             refreshOfContentId: $existing->id,
+            refreshTrigger: $trigger,
         );
     }
 

@@ -121,6 +121,8 @@ class Content extends Model
             'local_relevance' => 'boolean',
             'draft_trigger' => DraftTrigger::class,
             'verification' => 'array',
+            'last_refreshed_at' => 'datetime',
+            'refresh_count' => 'integer',
         ];
     }
 }

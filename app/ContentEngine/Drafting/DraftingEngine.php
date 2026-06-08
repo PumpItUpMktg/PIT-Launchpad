@@ -4,7 +4,9 @@ namespace App\ContentEngine\Drafting;
 
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\RefreshTrigger;
 use App\Models\Content;
+use App\Models\RefreshEvent;
 use App\Models\Scopes\SiteScope;
 use Illuminate\Support\Str;
 
@@ -50,13 +52,24 @@ class DraftingEngine
         $title = $this->title($request, $payload);
 
         return Content::create([
-            ...$this->attributes($request, $grounding, $payload, $verification),
+            ...$this->draftAttributes($request, $grounding, $payload, $verification),
+            // Lane provenance is fixed at creation and never rewritten by a
+            // later refresh (the refresh cause lives on the RefreshEvent).
+            'draft_trigger' => $request->trigger,
+            'draft_lane' => $this->lane($request),
             'title' => $title,
             'slug' => $this->uniqueSlug($request->siteId, $payload->seo->slug !== '' ? $payload->seo->slug : $title),
             'version' => 1,
         ]);
     }
 
+    /**
+     * Re-draft an existing row in place: refresh its content, bump the version,
+     * touch the denormalized refresh cache, and record exactly one RefreshEvent
+     * (the source of truth) for the cause. The original lane (draft_trigger /
+     * draft_lane) is deliberately left untouched, and refresh_of_content_id is
+     * not written — it stays null for a possible future supersedes/version model.
+     */
     private function updateRefresh(
         DraftRequest $request,
         Grounding $grounding,
@@ -68,22 +81,31 @@ class DraftingEngine
             ->findOrFail($request->refreshOfContentId);
 
         $existing->fill([
-            ...$this->attributes($request, $grounding, $payload, $verification),
+            ...$this->draftAttributes($request, $grounding, $payload, $verification),
             'title' => $this->title($request, $payload),
             'version' => (int) $existing->version + 1,
+            'last_refreshed_at' => now(),
+            'refresh_count' => (int) $existing->refresh_count + 1,
         ]);
         $existing->save();
+
+        RefreshEvent::create([
+            'site_id' => $existing->site_id,
+            'content_id' => $existing->id,
+            'trigger' => $request->refreshTrigger ?? RefreshTrigger::Manual,
+        ]);
 
         return $existing;
     }
 
     /**
-     * The shared draft attributes — everything except identity (title/slug) and
-     * version, which differ between the create and refresh paths.
+     * The re-drafted content fields shared by the create and refresh paths.
+     * Excludes identity (title/slug), version, and lane provenance
+     * (draft_trigger / draft_lane), which the two paths handle differently.
      *
      * @return array<string, mixed>
      */
-    private function attributes(
+    private function draftAttributes(
         DraftRequest $request,
         Grounding $grounding,
         DraftPayload $payload,
@@ -107,8 +129,6 @@ class DraftingEngine
             'source_url' => $request->sourceUrl,
             'angle_hint' => $request->angleHint,
             'local_relevance' => $request->localRelevance,
-            'draft_trigger' => $request->trigger,
-            'draft_lane' => $this->lane($request),
             'meta' => [
                 'seo' => $payload->seo->toArray(),
                 'image_specs' => $payload->imageSpecsArray(),
@@ -116,7 +136,6 @@ class DraftingEngine
                 'sources_cited' => $verification->sourceAttributions,
             ],
             'verification' => $verification->toArray(),
-            'refresh_of_content_id' => $request->refreshOfContentId,
         ];
     }
 
