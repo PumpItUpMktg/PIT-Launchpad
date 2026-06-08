@@ -119,3 +119,40 @@ content-level table carries `site_id`.
   `Keyword.target_content_id` (both indexed ULID columns).
 - `database/seeders/DemoSeeder.php` builds one coherent demo tenant — the
   fixture later sections develop against.
+
+## Keyword Generator (§5 — directed targeting + tracking)
+
+`§5` turns silos + rule_sets into a prioritized, revenue-weighted plan of
+cluster targets and tracks whether they win. It lives under
+`app/KeywordGenerator/` and builds on §1 (and §4's silos/rule_sets — read from
+`Silo.rule_set`, seeded as fixtures here).
+
+- **Vendors are deferred.** All external data flows through capability-role
+  interfaces with a **normalized contract**: `App\Integrations\Serp\SerpProvider`
+  and `App\Integrations\LocalGrid\LocalGridProvider`, with normalized DTOs
+  (`KeywordMetrics`, `SerpResult(Set)`, `GridMetrics`). `Mock*` implementations
+  are the default container bindings; real adapters bind later with no change to
+  scoring/beatability/tracking.
+- **Opportunity** = `(w_d·Demand + w_i·Intent + w_v·BusinessValue) × Beatability`
+  (`OpportunityScorer`, weights default `.35/.25/.45`, value-heavy). Demand is
+  log-scaled volume; a vanity guard down-weights high-volume / no-revenue
+  informational keywords. Quick-win build order ≈ `Opportunity × (1 − Difficulty)`.
+- **Beatability is lane-aware** (`BeatabilityEngine`): `LaneClassifier` →
+  local_pack vs organic; `CompetitorClassifier` (national/aggregator/local/
+  editorial); local lane scored **per (keyword × market)** from grid data;
+  organic gated by a coarse, self-calibrating `SiteAuthority` tier (derived from
+  `PositionSnapshot` history). Below a floor a keyword is parked unless flagged a
+  long-play. Output: 0–1 multiplier + lane tag + rationale.
+- **Gap analysis** (`GapAnalyzer`) compares should-cover vs covered per silo and
+  emits the prescriptive `GapBrief` (target, score/beatability/lane/intent, silo
+  + page-type/kit, problem framing, coverage requirements **reusing the SERP
+  pull**, proof hooks, internal links, differentiation, CTA, priority lane, SEO
+  targets) into a quick-wins-ordered `GapBriefQueue`.
+- **Position tracking** — `PositionSnapshot` time-series (organic series +
+  per-market local series carrying `market_id`); `CannibalizationDetector` flags
+  multiple owned URLs on one keyword.
+- **Sampling cadence** — `Tiering` (value + market priority + lifecycle +
+  volatility bump) and `CadenceScheduler` honor a per-tenant **budget ceiling**,
+  degrading coverage/low tiers first and keeping forced event-triggers.
+- `KeywordPipeline` runs discover → bucket (`Bucketer`, rule_set include/exclude)
+  → score → gap end-to-end and writes scores back onto `Keyword` rows.
