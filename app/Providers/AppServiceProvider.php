@@ -2,8 +2,15 @@
 
 namespace App\Providers;
 
+use App\ContentEngine\RelevanceScorer;
 use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Embedding\EmbeddingProvider;
+use App\Integrations\Embedding\MockEmbeddingProvider;
+use App\Integrations\News\MockNewsProvider;
+use App\Integrations\News\MockOnDemandSourcePull;
+use App\Integrations\News\NewsProvider;
+use App\Integrations\News\OnDemandSourcePull;
 use App\Support\CurrentSite;
 use Illuminate\Support\ServiceProvider;
 
@@ -21,6 +28,22 @@ class AppServiceProvider extends ServiceProvider
             (string) config('services.anthropic.model', 'claude-opus-4-8'),
             (int) config('services.anthropic.max_tokens', 4096),
         ));
+
+        // §6a vendors are deferred: default to mock adapters behind the
+        // capability-role interfaces. Real adapters bind here later.
+        $this->app->singleton(NewsProvider::class, MockNewsProvider::class);
+        $this->app->singleton(EmbeddingProvider::class, MockEmbeddingProvider::class);
+        $this->app->singleton(OnDemandSourcePull::class, MockOnDemandSourcePull::class);
+
+        // Relevance scoring runs on the cheaper Haiku model (drafting uses a
+        // larger model later in §6b), so route the scorer's ClaudeClient there.
+        $this->app->when(RelevanceScorer::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn () => new AnthropicClaudeClient(
+                (string) config('services.anthropic.key'),
+                (string) config('services.anthropic.scoring_model', 'claude-haiku-4-5'),
+                (int) config('services.anthropic.max_tokens', 4096),
+            ));
     }
 
     /**
