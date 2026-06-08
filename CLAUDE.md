@@ -119,3 +119,39 @@ content-level table carries `site_id`.
   `Keyword.target_content_id` (both indexed ULID columns).
 - `database/seeders/DemoSeeder.php` builds one coherent demo tenant — the
   fixture later sections develop against.
+
+## Silo Creator (§4 — content-architecture skeleton)
+
+`§4` turns a Site's Service Catalog + Targets into the silo tree (skeleton
+only; §5 adds scored keyword targets → cluster pages). It lives under
+`app/SiloCreator/` and builds on §1.
+
+- **Auto-propose** (`AutoProposer`) runs two passes: `DeterministicProposer`
+  (a `service_pillar` silo per `silo_role=pillar` service, its `ServiceProblem`s
+  as candidate clusters) and `TopicalClusterer` (Claude-assisted clustering of
+  problems + seed keywords into advisory themes → topical silos).
+- **Proposals** are immutable value objects (`SiloProposal`, `RuleSet`,
+  `ClusterCandidate`) in a reviewable `SiloProposalSet` (accept / edit / reject /
+  merge), then `SiloCommitter` persists the tree (hierarchy, `Silo`↔`Service`
+  mapping, rule_sets, pillars) in one transaction.
+- **rule_sets** (`RuleSetSeeder`) seed `seed_terms` + `include_patterns` +
+  `exclude_patterns` from service scope + problems (+ theme terms); §5 refines.
+- **Viability guard** (`ViabilityGuard`) drops themes below a support threshold;
+  **geo-neutral validator** (`GeoNeutralValidator`) rejects any silo/rule_set
+  containing market/city/state terms (hard rule — geo lives only on location
+  pages). `SiloCommitter` enforces it before writing.
+- **Pillars** (`PillarFactory`) create/link a pillar `Content` stub per silo and
+  pin `Silo.pillar_content_id`. **Internal linking** (`InternalLinking` +
+  `silo_links` table) persists controlled cross-silo links; intra-silo
+  pillar↔cluster/sibling links are derivable.
+- **`wp_category_id` is left unset** — the §2 publish pipeline fills it (no WP
+  push here).
+
+### Integrations
+
+- `App\Integrations\Claude\ClaudeClient` is the thin, swappable Claude seam
+  (first use of the §2 adapter pattern). The default binding,
+  `AnthropicClaudeClient`, uses the official Anthropic PHP SDK
+  (`anthropic-ai/sdk`) with `claude-opus-4-8` + adaptive thinking; the model is
+  configurable via `config/services.php` (`ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`).
+  Tests bind a `FakeClaudeClient`, so no network call is made.
