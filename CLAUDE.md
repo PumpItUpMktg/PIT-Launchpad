@@ -466,3 +466,41 @@ thin over them. Completes the operator cockpit.
   active version, which version is pinned on recent content; activate a version
   (archives the prior active).
 - **§1 additions:** `Source.enabled`, `Site.budget_ceiling`.
+
+## Client Performance Dashboard (§7c — surfaces)
+
+`§7c` is the **client-facing** performance dashboard — a SEPARATE, white-labeled
+Filament panel (id `client`, path `/portal`), client-gated and read-only. The one
+client-facing surface. View-models under `app/Client/`; widgets under
+`app/Filament/Client/Widgets/`.
+
+- **Honest framing (hard constraint):** the dashboard demonstrates value without
+  over-claiming. Refresh↔position is shown as **observed correlation** (refresh
+  markers annotate the position trend) — **no causal claims, no stored/computed
+  ROI-attribution field** (the `conversions` table has no roi/attribution/value
+  column; `PositionTrends` emits only `series` / `refresh_markers` (dates) /
+  `standings`). Leads are totals + trends, never per-action attributed. Guarded
+  in code + tests.
+- **Separate client panel** (`ClientPanelProvider`): client-gated via
+  `User::canAccessPanel` (panel-aware — clients never reach the operator panel,
+  operators never reach the client panel); **white-labeled per Account**
+  (brand name / logo / primary color resolved dynamically from the client's
+  Account — Launchpad is invisible); Account-scoped via `ClientAccess` +
+  `ClientContext` with a Site switcher (session-selected, owned-only).
+- **Leads/conversions headline** (`LeadsMetrics`; `LeadsHeadlineWidget`): total +
+  weekly trend, from the **mock-first** GA4/GHL `ConversionProvider` seam →
+  `Conversion` model.
+- **Ranking gains + position trends** (`RankingGains`, `PositionTrends`): moved-up
+  / newly-ranked keywords; organic series + SERP standings
+  (primary/secondary/tertiary, as-of) with refresh markers as correlation.
+- **Local grid heatmap** (`LocalGrid`; `LocalGridWidget`): per-market local-pack
+  visibility.
+- **Content/coverage + quick-wins** (`CoverageSummary`, `QuickWins`): published
+  body of work per silo; early low-difficulty keywords that landed.
+- **Performance card grid** (`PerformanceCards`; `PerformanceCardsWidget`): the
+  *performance* face of the lifecycle card — per published page, its best
+  position + refresh history + publish date.
+- **§1 additions:** `Account` white-label fields (brand_name/logo_url/
+  primary_color/accent_color); `Conversion` model + table (no attribution column,
+  by design); enums `ConversionType` / `ConversionSource`; the `ConversionProvider`
+  (GA4/GHL) mock-first seam.

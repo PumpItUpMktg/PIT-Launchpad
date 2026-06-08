@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 /**
  * @property ContentStatus $status
@@ -27,6 +28,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property bool $locally_edited
  * @property int|null $wp_post_id
  * @property string|null $near_dup_of_content_id
+ * @property Carbon|null $published_at
  * @property array<string, mixed>|null $meta
  * @property array<string, mixed>|null $slot_payload
  * @property array<string, mixed>|null $schema_payload
