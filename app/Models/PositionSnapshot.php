@@ -9,11 +9,18 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * A time-series position sample: one organic series per keyword + per-market
  * local-pack series (carrying market_id). Distinct from the content-level
  * SerpSnapshot used for the refresh trigger.
+ *
+ * @property BeatabilityLane $lane
+ * @property int|null $rank
+ * @property string|null $ranking_url
+ * @property string|null $market_id
+ * @property Carbon|null $captured_at
  */
 class PositionSnapshot extends Model
 {
