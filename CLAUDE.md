@@ -433,3 +433,19 @@ Every install is a fresh blank WordPress instance the platform controls — so
   the engine resumes there. `SiteWentLive` audited.
 - **Panel gate:** the whole admin panel is operator-only via
   `User::canAccessPanel` (`FilamentUser`).
+
+### §7b stage (b) — Coverage / targeting workspace
+Manage what the engine targets. Services under `app/Operator/Coverage/`; Filament
+resources are thin over them.
+- **Target queue + gaps** (`TargetQueue`; `KeywordResource`): §5 keyword targets
+  opportunity-sorted; **gaps** = uncovered keywords (no `target_content_id`),
+  **queue** = priority-then-opportunity. Operator promote/demote sets a `priority`
+  override on the keyword.
+- **Silo management** (`SiloManager`; `SiloManagementResource`): view/edit §4
+  silos with §4's `ViabilityGuard` surfaced — a thin silo (below the
+  keyword-support floor) is flagged.
+- **Position tracking** (`PositionTracking` → `KeywordStandings`): the §5 two-lane
+  data — latest organic standing + per-market local-pack standings, a
+  cannibalization flag (multiple owned URLs in one capture), and refresh-ROI
+  markers (RefreshEvent count on the target content + the organic rank series).
+- **§1 additions:** `Keyword.priority` (operator target-queue override).

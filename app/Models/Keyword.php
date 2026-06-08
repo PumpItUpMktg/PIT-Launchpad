@@ -11,6 +11,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property int $priority
+ * @property string|null $target_content_id
+ */
 class Keyword extends Model
 {
     /** @use HasFactory<KeywordFactory> */
@@ -54,6 +58,7 @@ class Keyword extends Model
             'difficulty' => 'integer',
             'opportunity_score' => 'decimal:4',
             'beatability' => 'decimal:4',
+            'priority' => 'integer',
         ];
     }
 }
