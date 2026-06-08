@@ -400,3 +400,36 @@ approve → render → publish now runs end to end. It lives under
   `SiteStatus::Onboarding` (reconciling §7a's lifecycle with §9's enum).
 - **Out of scope (→ §7):** portfolio triage, dashboards/funnel/stat-cards,
   coverage workspace, client performance dashboard, scheduled publishing.
+
+## Operator-Admin Cockpit (§7b — surfaces)
+
+`§7b` is the operator's multi-tenant cockpit that wraps the §6c review queue:
+monitor the pipeline across all tenants, and hand sites over to clients **through
+the §9 gate**. Operator-only and internal. Logic lives in testable services under
+`app/Operator/`; Filament surfaces are thin over them. Shipped in stages — **(a)**
+portfolio triage + pipeline dashboards + the handover gate (this), then **(b)**
+coverage/targeting workspace, **(c)** controls.
+
+### Site lifecycle (locked)
+`Onboarding →(wizard complete)→ Active →(operator handover, §9-gated)→ Live`.
+Every install is a fresh blank WordPress instance the platform controls — so
+**§2 publish is NOT gated on Live**: content flows to the blank instance from
+`Active`. `Live` is the **client-handover** milestone, not a publish switch.
+
+### Stage (a)
+- **Portfolio triage** (`PortfolioHealth` → `SiteHealth`; `SiteResource`): every
+  tenant with at-a-glance health — review backlog, job failures, published/week,
+  §9 compromised credentials — most-urgent-first, click-through to the tenant's
+  review queue.
+- **Pipeline dashboards** (`PipelineMetrics`; widgets): stat cards, funnel
+  (candidate → published), per-silo volume, published/week trend, job health —
+  computed for the whole portfolio or a single tenant.
+- **Site handover** (`SiteHandover` — THE invariant): the single guarded path to
+  `Live`. Every path routes through §9's `SiteLauncher` (the sole writer of
+  `SiteStatus::Live`) so the gate always runs and blocks until credentials are
+  clean. **Stays-on-our-hosting** → gate → Live (same Connection). **Migrate-to-
+  client-hosting** → re-point the WP Connection (new URL + fresh app password) →
+  verify against the new host (a §9 rotation, verify-before-revoke) → gate → Live;
+  the engine resumes there. `SiteWentLive` audited.
+- **Panel gate:** the whole admin panel is operator-only via
+  `User::canAccessPanel` (`FilamentUser`).
