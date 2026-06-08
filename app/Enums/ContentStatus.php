@@ -10,8 +10,10 @@ enum ContentStatus: string
     case NeedsReview = 'needs_review';
     case InReview = 'in_review';
     case Approved = 'approved';
+    case Rendering = 'rendering';
     case Publishing = 'publishing';
     case Published = 'published';
     case RenderFailed = 'render_failed';
+    case PublishFailed = 'publish_failed';
     case Rejected = 'rejected';
 }

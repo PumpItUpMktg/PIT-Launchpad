@@ -9,6 +9,8 @@ use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Embedding\EmbeddingProvider;
 use App\Integrations\Embedding\MockEmbeddingProvider;
+use App\Integrations\Fal\FalClient;
+use App\Integrations\Fal\FalHttpClient;
 use App\Integrations\LocalGrid\LocalGridProvider;
 use App\Integrations\LocalGrid\MockLocalGridProvider;
 use App\Integrations\News\MockNewsProvider;
@@ -17,11 +19,14 @@ use App\Integrations\News\NewsProvider;
 use App\Integrations\News\OnDemandSourcePull;
 use App\Integrations\Serp\MockSerpProvider;
 use App\Integrations\Serp\SerpProvider;
+use App\Integrations\Vision\ClaudeVisionClient;
+use App\Integrations\Vision\VisionClient;
 use App\Models\User;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
-use App\Security\Verification\MockConnectionVerifier;
+use App\Security\Verification\WordpressConnectionVerifier;
 use App\Support\CurrentSite;
+use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
 
@@ -49,10 +54,27 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(EmbeddingProvider::class, MockEmbeddingProvider::class);
         $this->app->singleton(OnDemandSourcePull::class, MockOnDemandSourcePull::class);
 
+        // §2 publish-path adapters (committed vendors). fal generates images and
+        // Claude vision finalizes alt text; both are mocked in tests, no network.
+        $this->app->bind(FalClient::class, fn ($app) => new FalHttpClient(
+            $app->make(Http::class),
+            (string) config('services.fal.key'),
+            (string) config('services.fal.base_url', 'https://fal.run'),
+            (string) config('services.fal.model', 'fal-ai/flux/dev'),
+            (int) config('services.fal.timeout', 60),
+        ));
+
+        $this->app->bind(VisionClient::class, fn ($app) => new ClaudeVisionClient(
+            $app->make(Http::class),
+            (string) config('services.anthropic.key'),
+            (string) config('services.anthropic.vision_model', 'claude-sonnet-4-6'),
+        ));
+
         // §9 credential rotation verifies the new secret with a live provider
-        // call before revoking the old. The real per-provider adapters bind here
-        // later; the default is a mock so the flow is exercisable without network.
-        $this->app->singleton(ConnectionVerifier::class, MockConnectionVerifier::class);
+        // call before revoking the old. §2 backs the verifier with the real WP
+        // REST client (a live WordPress ping); other providers stay permissive
+        // until their adapters land (e.g. GBP, with the GBP integration).
+        $this->app->singleton(ConnectionVerifier::class, WordpressConnectionVerifier::class);
 
         // Relevance scoring runs on the cheaper Haiku model, so route the
         // scorer's ClaudeClient there.

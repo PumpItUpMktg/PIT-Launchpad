@@ -21,8 +21,9 @@ test('the audit recorder writes a row with target and metadata', function () {
 });
 
 test('an audit log cannot be updated', function () {
-    $log = AuditLog::factory()->create();
+    $log = AuditLog::factory()->create(['action' => AuditAction::CredentialRevealed->value]);
 
+    // A genuinely different value, so the update is dirty and the guard fires.
     expect(fn () => $log->update(['action' => AuditAction::SiteWentLive->value]))
         ->toThrow(RuntimeException::class, 'append-only');
 });
