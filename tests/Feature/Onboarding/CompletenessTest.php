@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\SiteStatus;
 use App\Enums\UserRole;
 use App\Models\Account;
 use App\Models\Site;
@@ -53,7 +54,7 @@ test('launch is blocked until the intake is complete, then succeeds', function (
 
     $state = $wizard->launch($site, UserRole::Operator);
     expect($state->launched_at)->not->toBeNull()
-        ->and($site->fresh()->status)->toBe('active');
+        ->and($site->fresh()->status)->toBe(SiteStatus::Active);
 });
 
 test('a client may not launch the tenant', function () {

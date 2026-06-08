@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ConnectionProvider;
+use App\Enums\SiteStatus;
 use App\Enums\VoiceStatus;
 use App\Models\Account;
 use App\Models\Competitor;
@@ -29,7 +30,7 @@ test('the wizard collects all seven buckets into the correct §1 entities', func
 
     // Step 1 — Account + WordPress credential.
     $site = $collector->createSite($account, ['brand_name' => 'Apex Plumbing', 'domain_url' => 'https://apex.example']);
-    expect($site->status)->toBe('onboarding');
+    expect($site->status)->toBe(SiteStatus::Onboarding);
 
     $wp = $collector->storeWordPressCredential($site, ['app_password' => 'abcd efgh ijkl', 'user' => 'launchpad-sync']);
     expect($wp->provider)->toBe(ConnectionProvider::WpAppPassword)

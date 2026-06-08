@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\SiteStatus;
 use Database\Factories\SiteFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,6 +11,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
+/**
+ * @property SiteStatus $status
+ */
 class Site extends Model
 {
     /** @use HasFactory<SiteFactory> */
@@ -149,11 +153,17 @@ class Site extends Model
         return $this->hasMany(Connection::class);
     }
 
+    public function isLive(): bool
+    {
+        return $this->status === SiteStatus::Live;
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
         return [
             'slug_conventions' => 'array',
+            'status' => SiteStatus::class,
         ];
     }
 }

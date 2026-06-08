@@ -146,3 +146,221 @@ silo-selection step (9) wait on §4/§5/§6 and are not built here. It lives und
 - `WizardStep` enum is the dependency-ordered step list; step 9 (silo selection)
   is a wired placeholder. The Filament page is the surface; the validation gate
   is the service layer.
+
+## Page Builder content contract (§3a)
+
+`§3a` is the content-contract half of the Page Builder — schema + validation
+only. **No LLM generation, no WordPress communication, no SEO/render** (those
+need §2 and the generation work). It lives under `app/PageBuilder/`.
+
+- **Kits as data.** The two locked kits (`service-page`, `location-page`) are
+  authored as JSON in `database/data/wireframe-kits/` and seeded as library-level
+  `WireframeKit` records by `WireframeKitSeeder`. A kit's full schema lives in the
+  `slot_schema` JSON column; `version`/`page_type`/template + SEO refs are also
+  denormalised to columns, unique on `(site_id, page_type, version)`.
+- **Typed value objects** (`app/PageBuilder/Schema`): `KitSchema` → `SlotDefinition`
+  → `SlotConstraints`/`Cardinality`/`MediaConstraints`/`SlotCondition`. They
+  round-trip losslessly to/from `slot_schema`. `WireframeKit::schema()` returns the
+  parsed `KitSchema`; `Content` pins `wireframe_kit_version`.
+- **Slot enums:** `SlotContentType`, `SlotRole`, `SlotSource`
+  (`generated|grounded|entity|client|media`) in `app/Enums`.
+- **Validation engine** (`app/PageBuilder/Validation`): `KitValidator` checks
+  structure (required/length/cardinality/content-type), media presence/size/alt,
+  and entity/grounding resolution; it returns a structured `ValidationResult`
+  (never throws for expected failures). `ThinPageGuard` holds a page from publish
+  when its proof slots resolve to zero entity content. `PublishEligibility`
+  orchestrates both and parks a failing page in `ContentStatus::InReview`.
+- **Entity resolution** (`app/PageBuilder/Entities/EntityResolver`) maps entity
+  keys (e.g. `proof.substantiated`, `reviews.market`, `location.nap`,
+  `conversion.primary_action`) to §1 model counts, dropping only the `SiteScope`
+  for determinism. `jobcapture.radius` resolves to 0 until the Job Capture
+  section ships (no such §1 model yet).
+## Silo Creator (§4 — content-architecture skeleton)
+
+`§4` turns a Site's Service Catalog + Targets into the silo tree (skeleton
+only; §5 adds scored keyword targets → cluster pages). It lives under
+`app/SiloCreator/` and builds on §1.
+
+- **Auto-propose** (`AutoProposer`) runs two passes: `DeterministicProposer`
+  (a `service_pillar` silo per `silo_role=pillar` service, its `ServiceProblem`s
+  as candidate clusters) and `TopicalClusterer` (Claude-assisted clustering of
+  problems + seed keywords into advisory themes → topical silos).
+- **Proposals** are immutable value objects (`SiloProposal`, `RuleSet`,
+  `ClusterCandidate`) in a reviewable `SiloProposalSet` (accept / edit / reject /
+  merge), then `SiloCommitter` persists the tree (hierarchy, `Silo`↔`Service`
+  mapping, rule_sets, pillars) in one transaction.
+- **rule_sets** (`RuleSetSeeder`) seed `seed_terms` + `include_patterns` +
+  `exclude_patterns` from service scope + problems (+ theme terms); §5 refines.
+- **Viability guard** (`ViabilityGuard`) drops themes below a support threshold;
+  **geo-neutral validator** (`GeoNeutralValidator`) rejects any silo/rule_set
+  containing market/city/state terms (hard rule — geo lives only on location
+  pages). `SiloCommitter` enforces it before writing.
+- **Pillars** (`PillarFactory`) create/link a pillar `Content` stub per silo and
+  pin `Silo.pillar_content_id`. **Internal linking** (`InternalLinking` +
+  `silo_links` table) persists controlled cross-silo links; intra-silo
+  pillar↔cluster/sibling links are derivable.
+- **`wp_category_id` is left unset** — the §2 publish pipeline fills it (no WP
+  push here).
+
+### Integrations
+
+- `App\Integrations\Claude\ClaudeClient` is the thin, swappable Claude seam
+  (first use of the §2 adapter pattern). The default binding,
+  `AnthropicClaudeClient`, uses the official Anthropic PHP SDK
+  (`anthropic-ai/sdk`) with `claude-opus-4-8` + adaptive thinking; the model is
+  configurable via `config/services.php` (`ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`).
+  Tests bind a `FakeClaudeClient`, so no network call is made.
+## Keyword Generator (§5 — directed targeting + tracking)
+
+`§5` turns silos + rule_sets into a prioritized, revenue-weighted plan of
+cluster targets and tracks whether they win. It lives under
+`app/KeywordGenerator/` and builds on §1 (and §4's silos/rule_sets — read from
+`Silo.rule_set`, seeded as fixtures here).
+
+- **Vendors are deferred.** All external data flows through capability-role
+  interfaces with a **normalized contract**: `App\Integrations\Serp\SerpProvider`
+  and `App\Integrations\LocalGrid\LocalGridProvider`, with normalized DTOs
+  (`KeywordMetrics`, `SerpResult(Set)`, `GridMetrics`). `Mock*` implementations
+  are the default container bindings; real adapters bind later with no change to
+  scoring/beatability/tracking.
+- **Opportunity** = `(w_d·Demand + w_i·Intent + w_v·BusinessValue) × Beatability`
+  (`OpportunityScorer`, weights default `.35/.25/.45`, value-heavy). Demand is
+  log-scaled volume; a vanity guard down-weights high-volume / no-revenue
+  informational keywords. Quick-win build order ≈ `Opportunity × (1 − Difficulty)`.
+- **Beatability is lane-aware** (`BeatabilityEngine`): `LaneClassifier` →
+  local_pack vs organic; `CompetitorClassifier` (national/aggregator/local/
+  editorial); local lane scored **per (keyword × market)** from grid data;
+  organic gated by a coarse, self-calibrating `SiteAuthority` tier (derived from
+  `PositionSnapshot` history). Below a floor a keyword is parked unless flagged a
+  long-play. Output: 0–1 multiplier + lane tag + rationale.
+- **Gap analysis** (`GapAnalyzer`) compares should-cover vs covered per silo and
+  emits the prescriptive `GapBrief` (target, score/beatability/lane/intent, silo
+  + page-type/kit, problem framing, coverage requirements **reusing the SERP
+  pull**, proof hooks, internal links, differentiation, CTA, priority lane, SEO
+  targets) into a quick-wins-ordered `GapBriefQueue`.
+- **Position tracking** — `PositionSnapshot` time-series (organic series +
+  per-market local series carrying `market_id`); `CannibalizationDetector` flags
+  multiple owned URLs on one keyword.
+- **Sampling cadence** — `Tiering` (value + market priority + lifecycle +
+  volatility bump) and `CadenceScheduler` honor a per-tenant **budget ceiling**,
+  degrading coverage/low tiers first and keeping forced event-triggers.
+- `KeywordPipeline` runs discover → bucket (`Bucketer`, rule_set include/exclude)
+  → score → gap end-to-end and writes scores back onto `Keyword` rows.
+
+## Content Engine — Candidate funnel (§6a)
+
+`§6a` is the first §6 sub-unit: it turns raw news intake (+ on-demand/backfill
+sources) into scored, deduped, silo-routed, **draft-ready candidates** with angle
+hints. Drafting (§6b), the review queue and publish (§6c) are **not** built here.
+It lives under `app/ContentEngine/` and builds on §1 + §4.
+
+- **Vendors deferred** — `App\Integrations\News\NewsProvider` and
+  `App\Integrations\Embedding\EmbeddingProvider` (+ `OnDemandSourcePull`) with
+  normalized DTOs and `Mock*` default bindings. Relevance scoring uses the §4
+  `ClaudeClient` seam, contextually bound to the cheaper `scoring_model`
+  (Haiku) for `RelevanceScorer`.
+- **Pipeline** (`CandidateFunnel`): pre-filter (`PreFilter`) → same-story
+  clustering (`SameStoryClusterer`) → relevance scoring → near-dup → routed
+  candidates. `ingest()` for steady state; `backfill()` for first run.
+- **Relevance** (`RelevanceScorer`, Haiku) is triple-duty: score + matched-silo
+  routing (against §4 rule_sets, passed in-prompt) + advisory-angle hint, with a
+  silo-match gate, a brand-safety/sensitivity gate, and a draft/borderline/drop
+  band.
+- **Near-dup** (`NearDuplicateDetector`): semantic similarity (embeddings, scoped
+  to the matched silo) + keyword overlap; very-high vs a live page → **refresh**
+  mark (don't duplicate) + operator alert; moderate → operator flag; low →
+  proceed. Every dedup/refresh outcome raises an `OperatorAlert`.
+- **First-run backfill** (`BackfillSplitter`): items older than the freshness
+  cutoff (default 90d, tunable) become the **silo-discovery corpus**
+  (`DiscoveryCluster`, never drafted); newer items flow normally.
+- **§1 additions:** `RefreshEvent` (emitted later by §5/§6b/c) and
+  `Content.source_name` / `source_url` + candidate fields (`matched_silo_id`,
+  `angle_hint`, `relevance_score`, `local_relevance`). Candidates are `Content`
+  posts (`reactive`, status `candidate`; borderline → `in_review`).
+
+## Security, Credentials & Tenancy Ops (§9 — credential vault hardening)
+
+`§9` makes the platform safe for real clients: how secrets are stored, rotated,
+access-controlled, how tenants are isolated, and how it is all audited. It
+builds on §1 only (no §2/§3/§5/§6 dependency) and lives under `app/Security/`.
+
+- **Two secret tiers.** *Platform* secrets (`PlatformSecret`: app_key, database,
+  r2, fal_key, anthropic_key) live in env, never the DB. *Per-tenant* secrets
+  live on `Connection.credentials` (`encrypted:array`, `site_id`-scoped).
+- **The headline — pre-client rotation gate** (`SiteLaunchGate`): a `Site` cannot
+  go `live` while any `Connection` is `compromised` / unrotated-since-`exposed_at`,
+  or any required `PlatformSecret` lacks a `platform_secret_rotations`
+  attestation. `check()` is pure and returns a structured `GateResult`
+  (per-credential `GateCheck` checklist, red-until-green). `SiteLauncher` is the
+  only place a site flips to `SiteStatus::Live`, and only when the gate passes.
+- **Rotation tooling.** `ConnectionRotator` does no-downtime **verify-before-revoke**
+  (the new credential is checked via the `ConnectionVerifier` seam — mock default,
+  real per-provider adapters bind later — *before* the old is replaced; only then
+  is `last_rotated_at` stamped and `compromised` cleared). `AppKeyRotator`
+  re-encrypts every `Connection` across an APP_KEY change (decrypt-old →
+  re-encrypt-new at the raw column level, round-trip safe). Commands:
+  `launchpad:rotate-connection`, `launchpad:rotate-app-key`,
+  `launchpad:attest-platform-rotation`.
+- **Staleness** (`ConnectionStaleness` + `launchpad:check-stale-connections`,
+  scheduled weekly): flags credentials past a config-driven per-provider
+  threshold (`config/launchpad.php`). Advisory only — **never auto-rotates**.
+- **RBAC + masked reveal.** `ConnectionPolicy` gates view/reveal/rotate to
+  operators (`UserRole::Operator`); clients never see credentials.
+  `CredentialMasker` renders `••••` + last 4. `CredentialRevealer` is the single
+  audited path to plaintext (writes `AuditAction::CredentialRevealed`, never the
+  secret itself).
+- **Tenancy isolation** is the §1 `site_id` global scope; §9 adds regression
+  tests proving tenant A cannot read tenant B's `Connection`/`Content`/`Silo`/
+  media rows.
+- **Audit** (`Audit` → append-only `AuditLog`, update/delete rejected at the
+  model): reveal, rotation, role change, and go-live write rows. Publish
+  (`ContentPublished`) attaches at the §2 pipeline (hook noted in
+  `AppServiceProvider`).
+- **§1 additions:** `Connection.compromised` (default `true`) /
+  `compromised_reason` / `exposed_at`; `platform_secret_rotations` and
+  `audit_logs` tables; enums `PlatformSecret` / `AuditAction` / `CredentialType` /
+  `SiteStatus`. RBAC `User.role` already existed (§1) — not duplicated.
+
+## Control-Plane Publish Pipeline (§2)
+
+`§2` is the path from an **approved** `Content` to a live WordPress page. It
+renders images, assembles the consolidated meta-blob, and pushes to the
+companion plugin's authed REST contract — ending at "pushed to WP / state
+recorded." It builds on §1/§3a/§4/§6b/§9 and lives under `app/Publishing/` +
+`app/Integrations/{Fal,Vision,Wordpress}` + `app/Jobs`.
+
+- **Contract authority is the companion plugin** (`wordpress-plugin/`, separate
+  codebase). Three upsert endpoints under `launchpad/v1`, each keyed on the
+  control-plane **ULID** so retries are idempotent: `/content` (the consolidated
+  meta-blob: `content_id`/kind/page_type/kit/slug/status/locked + `slot_payload`
+  + `images` + `seo`), `/silo` (returns `wp_category_id`), `/redirects`.
+- **WP REST transport** (`WordpressClient` + `WordpressClientFactory`): Basic
+  auth from the per-site WP app-password `Connection` (decrypted via §9's vault,
+  never logged); transient 5xx/timeout retry with backoff; idempotent by ULID.
+- **Render pipeline** (`ImageRenderer` + `RenderCoordinator`, `RenderImage` job):
+  fal generate → R2 under the **per-tenant prefix** (`TenantStorage`) → Claude
+  **vision** alt-text pass → minted `ImageObject`. Hardened from the pilot: fal
+  HTTP timeout + job timeout, **bounded retries → `render_failed` terminal**, and
+  `launchpad:reset-render` to requeue. A failed **required** image blocks publish
+  (no partial page); images serve from R2/CDN, never the WP media library.
+- **Publish jobs** (Horizon-ready `ShouldQueue`, idempotent by ULID):
+  `PublishContent` (the entrypoint §6c calls — drives `approved → rendering →
+  publishing → published`, with `render_failed`/`publish_failed` surfaced branches;
+  stores `wp_post_id`; fires §9's `ContentPublished` audit), `PublishSilo`
+  (carries §4's `wp_category_id`), `PublishRedirects`.
+- **Locked / locally-edited protection**: `PublishContent` never overwrites a
+  `locked` or `locally_edited` page (or one the plugin reports skipped) — it skips
+  with a surfaced warning.
+- **Meta-blob** (`MetaBlobAssembler`): §3a slot values pass through keyed by slot
+  key (the plugin's `lp/*` tags read them); the kit's `og_image` seo_binding picks
+  the OG image; SEO is engine-owned (title/meta/canonical/robots/og/schema/
+  breadcrumbs). NO ACF.
+- **Adapters** (committed, mocked in tests): `FalClient`→`FalHttpClient`,
+  `VisionClient`→`ClaudeVisionClient`, WP REST (Http-faked), R2 (Storage-faked).
+  **§9's `ConnectionVerifier` is now WP-backed** (`WordpressConnectionVerifier`):
+  rotation's verify-before-revoke pings live WordPress; non-WP providers stay
+  permissive until their adapters land.
+- **§1 additions:** `ContentStatus::Rendering`/`PublishFailed`;
+  `Content.locked`/`locally_edited`/`last_publish_error`; `render_jobs` per-image
+  fields (slot, seo_filename, alt/title/caption, required, attempts, width/height).
+  `Silo.wp_category_id` (§4) is now filled by `PublishSilo`.
