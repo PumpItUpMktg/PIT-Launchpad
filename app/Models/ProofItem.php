@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * @property ProofType $type
+ * @property array<string, mixed>|null $payload
  */
 class ProofItem extends Model
 {

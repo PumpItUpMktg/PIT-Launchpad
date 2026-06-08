@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\ContentEngine\Drafting\Drafter;
 use App\ContentEngine\RelevanceScorer;
 use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
@@ -42,13 +43,23 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(EmbeddingProvider::class, MockEmbeddingProvider::class);
         $this->app->singleton(OnDemandSourcePull::class, MockOnDemandSourcePull::class);
 
-        // Relevance scoring runs on the cheaper Haiku model (drafting uses a
-        // larger model later in §6b), so route the scorer's ClaudeClient there.
+        // Relevance scoring runs on the cheaper Haiku model, so route the
+        // scorer's ClaudeClient there.
         $this->app->when(RelevanceScorer::class)
             ->needs(ClaudeClient::class)
             ->give(fn () => new AnthropicClaudeClient(
                 (string) config('services.anthropic.key'),
                 (string) config('services.anthropic.scoring_model', 'claude-haiku-4-5'),
+                (int) config('services.anthropic.max_tokens', 4096),
+            ));
+
+        // Drafting (§6b) is quality-sensitive and runs on Sonnet — route the
+        // Drafter's ClaudeClient to the drafting model.
+        $this->app->when(Drafter::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn () => new AnthropicClaudeClient(
+                (string) config('services.anthropic.key'),
+                (string) config('services.anthropic.drafting_model', 'claude-sonnet-4-6'),
                 (int) config('services.anthropic.max_tokens', 4096),
             ));
     }
