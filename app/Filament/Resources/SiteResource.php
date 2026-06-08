@@ -5,6 +5,8 @@ namespace App\Filament\Resources;
 use App\Enums\SiteStatus;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
 use App\Models\Site;
+use App\Operator\Controls\BudgetControl;
+use App\Operator\Controls\CadenceControl;
 use App\Operator\Handover\SiteHandover;
 use App\Security\GateCheck;
 use BackedEnum;
@@ -69,6 +71,7 @@ class SiteResource extends Resource
             ])
             ->recordActions([
                 self::queueAction(),
+                self::budgetAction(),
                 self::handoverAction(),
             ]);
     }
@@ -79,6 +82,44 @@ class SiteResource extends Resource
             ->label('Review queue')
             ->icon('heroicon-o-inbox-stack')
             ->url(fn (): string => ContentReviewResource::getUrl('index'));
+    }
+
+    /**
+     * The §5 budget ceiling (editable) + read-only usage, with the cadence tier
+     * degradation order surfaced (C dropped first under the ceiling).
+     */
+    private static function budgetAction(): Action
+    {
+        return Action::make('budget')
+            ->label('Budget & cadence')
+            ->icon('heroicon-o-banknotes')
+            ->fillForm(fn (Site $record): array => ['budget_ceiling' => app(BudgetControl::class)->ceiling($record)])
+            ->modalDescription(fn (Site $record): string => self::cadenceSummary($record))
+            ->schema([
+                TextInput::make('budget_ceiling')
+                    ->label('Sampling budget ceiling (units/period)')
+                    ->numeric()
+                    ->helperText('Usage-against-budget is read-only — metered billing is deferred.'),
+            ])
+            ->action(function (Site $record, array $data): void {
+                $ceiling = $data['budget_ceiling'] !== null && $data['budget_ceiling'] !== ''
+                    ? (int) $data['budget_ceiling'] : null;
+                app(BudgetControl::class)->setCeiling($record, $ceiling);
+                Notification::make()->success()->title('Budget updated')->send();
+            });
+    }
+
+    private static function cadenceSummary(Site $site): string
+    {
+        $budget = app(BudgetControl::class);
+        $cadence = app(CadenceControl::class);
+
+        $usage = $budget->usage($site);
+        $ceiling = $budget->ceiling($site);
+        $order = implode(' → ', array_map(fn (array $t): string => strtoupper($t['tier']), $cadence->tiers()));
+
+        return "Usage this period: {$usage}".($ceiling !== null ? " / {$ceiling}" : ' (no ceiling set)')
+            ."\nCadence degrades tiers in order: {$order} (dropped-first → kept-last).";
     }
 
     private static function handoverAction(): Action

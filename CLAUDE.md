@@ -449,3 +449,20 @@ resources are thin over them.
   cannibalization flag (multiple owned URLs in one capture), and refresh-ROI
   markers (RefreshEvent count on the target content + the organic rank series).
 - **§1 additions:** `Keyword.priority` (operator target-queue override).
+
+### §7b stage (c) — Controls (engine configuration, per tenant)
+The final §7b stage. Services under `app/Operator/Controls/`; Filament resources
+thin over them. Completes the operator cockpit.
+- **Connections** (`ConnectionsResource`): §9 connection management — credentials
+  **masked** (`CredentialMasker`), explicit **audited reveal** (`CredentialRevealer`
+  writes the audit row, plaintext only to an operator), **rotate** wired to §9's
+  verify-before-revoke `ConnectionRotator`, compromised/unrotated gate flags.
+- **Feeds** (`FeedControl`; `SourceResource`): view / add / remove / enable §6a
+  source feeds; backfill/freshness tunables on the feed config.
+- **Budget + cadence** (`BudgetControl`, `CadenceControl`; SiteResource action):
+  set the §5 per-tenant budget ceiling; usage-against-budget **read-only**
+  (metered billing deferred); the sampling-tier degradation order (C→B→A) shown.
+- **Voice** (`VoiceControl`; `VoiceProfileResource`): view versioned profiles, the
+  active version, which version is pinned on recent content; activate a version
+  (archives the prior active).
+- **§1 additions:** `Source.enabled`, `Site.budget_ceiling`.

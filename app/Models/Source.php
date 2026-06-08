@@ -36,6 +36,7 @@ class Source extends Model
         return [
             'type' => SourceType::class,
             'config' => 'array',
+            'enabled' => 'boolean',
         ];
     }
 }
