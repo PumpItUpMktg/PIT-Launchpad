@@ -1,0 +1,14 @@
+# Laravel application runtime/build artifacts. The Laravel control plane lives
+# on its own branches; this branch ships the WordPress plugin under
+# wordpress-plugin/. These are regenerable and never committed.
+/vendor
+/node_modules
+.env
+.env.*
+!.env.example
+/bootstrap/cache
+/storage/framework
+/storage/logs
+/database/*.sqlite
+/.phpunit.cache
+.phpunit.result.cache
