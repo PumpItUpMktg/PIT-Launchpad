@@ -219,3 +219,34 @@ cluster targets and tracks whether they win. It lives under
   degrading coverage/low tiers first and keeping forced event-triggers.
 - `KeywordPipeline` runs discover → bucket (`Bucketer`, rule_set include/exclude)
   → score → gap end-to-end and writes scores back onto `Keyword` rows.
+
+## Content Engine — Candidate funnel (§6a)
+
+`§6a` is the first §6 sub-unit: it turns raw news intake (+ on-demand/backfill
+sources) into scored, deduped, silo-routed, **draft-ready candidates** with angle
+hints. Drafting (§6b), the review queue and publish (§6c) are **not** built here.
+It lives under `app/ContentEngine/` and builds on §1 + §4.
+
+- **Vendors deferred** — `App\Integrations\News\NewsProvider` and
+  `App\Integrations\Embedding\EmbeddingProvider` (+ `OnDemandSourcePull`) with
+  normalized DTOs and `Mock*` default bindings. Relevance scoring uses the §4
+  `ClaudeClient` seam, contextually bound to the cheaper `scoring_model`
+  (Haiku) for `RelevanceScorer`.
+- **Pipeline** (`CandidateFunnel`): pre-filter (`PreFilter`) → same-story
+  clustering (`SameStoryClusterer`) → relevance scoring → near-dup → routed
+  candidates. `ingest()` for steady state; `backfill()` for first run.
+- **Relevance** (`RelevanceScorer`, Haiku) is triple-duty: score + matched-silo
+  routing (against §4 rule_sets, passed in-prompt) + advisory-angle hint, with a
+  silo-match gate, a brand-safety/sensitivity gate, and a draft/borderline/drop
+  band.
+- **Near-dup** (`NearDuplicateDetector`): semantic similarity (embeddings, scoped
+  to the matched silo) + keyword overlap; very-high vs a live page → **refresh**
+  mark (don't duplicate) + operator alert; moderate → operator flag; low →
+  proceed. Every dedup/refresh outcome raises an `OperatorAlert`.
+- **First-run backfill** (`BackfillSplitter`): items older than the freshness
+  cutoff (default 90d, tunable) become the **silo-discovery corpus**
+  (`DiscoveryCluster`, never drafted); newer items flow normally.
+- **§1 additions:** `RefreshEvent` (emitted later by §5/§6b/c) and
+  `Content.source_name` / `source_url` + candidate fields (`matched_silo_id`,
+  `angle_hint`, `relevance_score`, `local_relevance`). Candidates are `Content`
+  posts (`reactive`, status `candidate`; borderline → `in_review`).

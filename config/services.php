@@ -38,6 +38,8 @@ return [
     'anthropic' => [
         'key' => env('ANTHROPIC_API_KEY'),
         'model' => env('ANTHROPIC_MODEL', 'claude-opus-4-8'),
+        // Relevance scoring is a cheap, high-volume pass — defaults to Haiku.
+        'scoring_model' => env('ANTHROPIC_SCORING_MODEL', 'claude-haiku-4-5'),
         'max_tokens' => (int) env('ANTHROPIC_MAX_TOKENS', 4096),
     ],
 

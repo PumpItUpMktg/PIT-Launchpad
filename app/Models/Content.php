@@ -48,6 +48,23 @@ class Content extends Model
         return $this->belongsTo(WireframeKit::class);
     }
 
+    /**
+     * The relevance-time matched silo for a reactive candidate. FK is not
+     * DB-enforced (additive ALTER); resolved at the model level.
+     *
+     * @return BelongsTo<Silo, $this>
+     */
+    public function matchedSilo(): BelongsTo
+    {
+        return $this->belongsTo(Silo::class, 'matched_silo_id');
+    }
+
+    /** @return HasMany<RefreshEvent, $this> */
+    public function refreshEvents(): HasMany
+    {
+        return $this->hasMany(RefreshEvent::class);
+    }
+
     /** @return HasMany<ContentVersion, $this> */
     public function versions(): HasMany
     {
@@ -88,6 +105,8 @@ class Content extends Model
             'wp_post_id' => 'integer',
             'version' => 'integer',
             'published_at' => 'datetime',
+            'relevance_score' => 'decimal:4',
+            'local_relevance' => 'boolean',
         ];
     }
 }
