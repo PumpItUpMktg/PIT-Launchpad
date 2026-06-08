@@ -364,3 +364,39 @@ recorded." It builds on §1/§3a/§4/§6b/§9 and lives under `app/Publishing/` 
   `Content.locked`/`locally_edited`/`last_publish_error`; `render_jobs` per-image
   fields (slot, seo_filename, alt/title/caption, required, attempts, width/height).
   `Silo.wp_category_id` (§4) is now filled by `PublishSilo`.
+
+## Content Engine review queue + publish wiring (§6c)
+
+`§6c` is the operator **review queue** — the command center where `needs_review`
+drafts are triaged, edited, and approved into publish. It **closes the
+pipeline**: approve → §2's `PublishContent`. So intake → draft → review →
+approve → render → publish now runs end to end. It lives under
+`app/ContentEngine/Review/` (logic) + `app/Filament/Resources/ContentReviewResource`
+(surface) and builds on §1/§6a/§6b/§9/§2/§7a.
+
+- **§6c ↔ §7 boundary:** §6c is the *queue itself* (the Filament resource);
+  §7 is the cockpit around it (portfolio triage, dashboards, coverage
+  workspace). §7 embeds this queue as its home base.
+- **Logic in testable services** (UI-agnostic): `ReviewQueue` (the actionable
+  status set — needs_review / in_review / render_failed / publish_failed —
+  flagged-first ordering, filters), `AlertFlags` (derives the flagged-lane
+  alerts from persisted upstream state + DB filters), `ReviewActions`
+  (approve / reject / lock / bulk / edit-in-place).
+- **Flagged-lane alert center** (`ReviewFlag`): render_failed (§2, blocks
+  approve), unsupported-claim (§6b verification, warns), near-duplicate (§6a
+  linkage), brand-safety (meta flag), on-demand (non-reactive trigger),
+  relevance-band (in_review). Informational + filterable — never auto-rejects.
+- **Approve → publish** (`ReviewActions::approve`): validates (a required-image
+  `render_failed` hard-**blocks**; an unsupported claim **warns**), flips to
+  `approved`, and **enqueues `PublishContent`** (§2's idempotent-by-ULID job —
+  a refresh re-publish updates the same WP post). Bulk-approve applies the same
+  guard per item.
+- **Review detail** (`EditContentReview`): edit kit slots / body / SEO in place;
+  saves route through `ReviewActions::saveEdits` so SEO merges into `meta`
+  without clobbering the drafter's image specs.
+- **Operator-only** (`ContentReviewResource::canAccess` → `UserRole::Operator`).
+- **§1 additions:** `Content.reject_reason`, `Content.near_dup_of_content_id`
+  (deferred-FK, populated by §6a's near-dup detection); `ReviewFlag` enum;
+  `SiteStatus::Onboarding` (reconciling §7a's lifecycle with §9's enum).
+- **Out of scope (→ §7):** portfolio triage, dashboards/funnel/stat-cards,
+  coverage workspace, client performance dashboard, scheduled publishing.

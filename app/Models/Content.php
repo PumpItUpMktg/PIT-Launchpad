@@ -22,12 +22,15 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property ContentStatus $status
  * @property ContentKind $kind
  * @property PageType|null $page_type
+ * @property DraftTrigger|null $draft_trigger
  * @property bool $locked
  * @property bool $locally_edited
  * @property int|null $wp_post_id
+ * @property string|null $near_dup_of_content_id
  * @property array<string, mixed>|null $meta
  * @property array<string, mixed>|null $slot_payload
  * @property array<string, mixed>|null $schema_payload
+ * @property array<string, mixed>|null $verification
  */
 class Content extends Model
 {
@@ -78,6 +81,17 @@ class Content extends Model
     public function matchedSilo(): BelongsTo
     {
         return $this->belongsTo(Silo::class, 'matched_silo_id');
+    }
+
+    /**
+     * The existing content this draft was flagged a near-duplicate of (§6a).
+     * FK is not DB-enforced (additive ALTER; §1 deferred-FK pattern).
+     *
+     * @return BelongsTo<Content, $this>
+     */
+    public function nearDupOf(): BelongsTo
+    {
+        return $this->belongsTo(Content::class, 'near_dup_of_content_id');
     }
 
     /** @return HasMany<RefreshEvent, $this> */
