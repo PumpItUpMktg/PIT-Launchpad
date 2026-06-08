@@ -7,6 +7,7 @@ enum ContentStatus: string
     case Candidate = 'candidate';
     case Scored = 'scored';
     case Drafted = 'drafted';
+    case NeedsReview = 'needs_review';
     case InReview = 'in_review';
     case Approved = 'approved';
     case Publishing = 'publishing';

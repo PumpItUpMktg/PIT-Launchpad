@@ -10,7 +10,7 @@ namespace App\Enums;
 enum RefreshTrigger: string
 {
     case PositionDrop = 'position_drop';
-    case NearDupMerge = 'near_dup_merge';
+    case NearDuplicateMerge = 'near_dup_merge';
     case NewsDevelopment = 'news_development';
     case Manual = 'manual';
 }
