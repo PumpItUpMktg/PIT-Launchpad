@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\DraftTrigger;
 use App\Enums\IntakeType;
 use App\Enums\PageType;
 use App\Models\Concerns\BelongsToSite;
@@ -65,6 +66,17 @@ class Content extends Model
         return $this->hasMany(RefreshEvent::class);
     }
 
+    /**
+     * The content this draft refreshes (re-draft in place). FK is not
+     * DB-enforced (additive ALTER; matches the §1 deferred-FK pattern).
+     *
+     * @return BelongsTo<Content, $this>
+     */
+    public function refreshOf(): BelongsTo
+    {
+        return $this->belongsTo(Content::class, 'refresh_of_content_id');
+    }
+
     /** @return HasMany<ContentVersion, $this> */
     public function versions(): HasMany
     {
@@ -107,6 +119,8 @@ class Content extends Model
             'published_at' => 'datetime',
             'relevance_score' => 'decimal:4',
             'local_relevance' => 'boolean',
+            'draft_trigger' => DraftTrigger::class,
+            'verification' => 'array',
         ];
     }
 }
