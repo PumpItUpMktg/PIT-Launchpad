@@ -1,0 +1,166 @@
+{
+    "name": "location-page",
+    "version": 1,
+    "page_type": "location",
+    "elementor_template_ref": "lp-location-v1",
+    "seo_profile_ref": "location",
+    "slots": [
+        {
+            "key": "hero_heading",
+            "label": "Hero Heading",
+            "content_type": "heading",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 8, "max_length": 120 },
+            "client_override": true,
+            "generation_hint": "Area + service headline.",
+            "seo_binding": "h1",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hero_image",
+            "label": "Hero Image",
+            "content_type": "image",
+            "role": "hero_solution",
+            "source": "media",
+            "cardinality": { "type": "single" },
+            "constraints": {
+                "required": true,
+                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": false }
+            },
+            "client_override": false,
+            "generation_hint": "Never FLUX-fabricate a local scene; fall back to a brand image.",
+            "seo_binding": "og_image",
+            "elementor_binding": "lp/image"
+        },
+        {
+            "key": "area_intro",
+            "label": "Area Intro",
+            "content_type": "rich_text",
+            "role": "local_relevance",
+            "source": "grounded",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 80, "entity": "market.profile", "min_entities": 1 },
+            "client_override": true,
+            "generation_hint": "Grounded on Market data (demographics, neighborhoods, local nuances).",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "why_us_local",
+            "label": "Why Us — Local",
+            "content_type": "rich_text",
+            "role": "proof",
+            "source": "grounded",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 80, "entity": "proof.substantiated", "min_entities": 1 },
+            "client_override": true,
+            "generation_hint": "Grounded on the substantiated-claims set.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "nap_block",
+            "label": "NAP Block",
+            "content_type": "cta",
+            "role": "contact",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "entity": "location.nap", "min_entities": 1 },
+            "client_override": false,
+            "condition": { "field": "is_storefront", "equals": true },
+            "elementor_binding": "lp/cta"
+        },
+        {
+            "key": "map",
+            "label": "Map",
+            "content_type": "map",
+            "role": "contact",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "entity": "location.nap", "min_entities": 1 },
+            "client_override": false,
+            "condition": { "field": "is_storefront", "equals": true },
+            "elementor_binding": "lp/map"
+        },
+        {
+            "key": "services_here",
+            "label": "Services Here",
+            "content_type": "list",
+            "role": "navigation",
+            "source": "entity",
+            "cardinality": { "type": "repeater", "min": 1, "max": 12 },
+            "constraints": { "required": true, "entity": "services.site", "min_entities": 1 },
+            "client_override": false,
+            "generation_hint": "Ordered by service priority.",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "local_testimonials",
+            "label": "Local Testimonials",
+            "content_type": "testimonial",
+            "role": "proof",
+            "source": "entity",
+            "cardinality": { "type": "repeater", "min": 0, "max": 6 },
+            "constraints": { "required": false, "entity": "reviews.market", "min_entities": 0 },
+            "client_override": false,
+            "generation_hint": "Market-tagged reviews only.",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "recent_work",
+            "label": "Recent Work",
+            "content_type": "gallery",
+            "role": "proof",
+            "source": "entity",
+            "cardinality": { "type": "repeater", "min": 0, "max": 12 },
+            "constraints": { "required": false, "entity": "jobcapture.radius", "min_entities": 0 },
+            "client_override": false,
+            "generation_hint": "Job Capture installs within the per-market radius (20mi default).",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "service_area_list",
+            "label": "Service Area List",
+            "content_type": "list",
+            "role": "local_relevance",
+            "source": "client",
+            "cardinality": { "type": "repeater", "min": 0, "max": 40 },
+            "constraints": { "required": false },
+            "client_override": true,
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "offers",
+            "label": "Local Offers",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": { "type": "repeater", "min": 0, "max": 6 },
+            "constraints": { "required": false, "entity": "offers.site", "min_entities": 0 },
+            "client_override": false,
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "nearby_landmarks",
+            "label": "Nearby Landmarks",
+            "content_type": "list",
+            "role": "local_relevance",
+            "source": "client",
+            "cardinality": { "type": "repeater", "min": 0, "max": 20 },
+            "constraints": { "required": false },
+            "client_override": true,
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "cta_contact",
+            "label": "Contact CTA",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "entity": "conversion.primary_action", "min_entities": 1 },
+            "client_override": false,
+            "elementor_binding": "lp/cta"
+        }
+    ]
+}

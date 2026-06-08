@@ -1,0 +1,162 @@
+{
+    "name": "service-page",
+    "version": 1,
+    "page_type": "service",
+    "elementor_template_ref": "lp-service-v1",
+    "seo_profile_ref": "service",
+    "slots": [
+        {
+            "key": "hero_problem",
+            "label": "Hero — Problem",
+            "content_type": "heading",
+            "role": "hero_problem",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 8, "max_length": 120 },
+            "client_override": true,
+            "generation_hint": "Name the customer's problem in their words.",
+            "seo_binding": "h1",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hero_solution",
+            "label": "Hero — Solution",
+            "content_type": "short_text",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 12, "max_length": 220 },
+            "client_override": true,
+            "generation_hint": "State the outcome the service delivers.",
+            "seo_binding": "meta_description",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hero_image",
+            "label": "Hero Image",
+            "content_type": "image",
+            "role": "hero_solution",
+            "source": "media",
+            "cardinality": { "type": "single" },
+            "constraints": {
+                "required": true,
+                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": true }
+            },
+            "client_override": false,
+            "seo_binding": "og_image",
+            "elementor_binding": "lp/image"
+        },
+        {
+            "key": "problem_explainer",
+            "label": "Problem Explainer",
+            "content_type": "long_text",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 120 },
+            "client_override": true,
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "solution_overview",
+            "label": "Solution Overview",
+            "content_type": "rich_text",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 120, "format": "html" },
+            "client_override": true,
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "service_features",
+            "label": "Service Features",
+            "content_type": "list",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "repeater", "min": 3, "max": 8 },
+            "constraints": { "required": true },
+            "client_override": true,
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "process_steps",
+            "label": "Process Steps",
+            "content_type": "list",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "repeater", "min": 3, "max": 6 },
+            "constraints": { "required": false },
+            "client_override": true,
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "why_us",
+            "label": "Why Us",
+            "content_type": "rich_text",
+            "role": "proof",
+            "source": "grounded",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 80, "entity": "proof.substantiated", "min_entities": 1 },
+            "client_override": true,
+            "generation_hint": "Write only from the substantiated-claims set.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "proof_strip",
+            "label": "Proof Strip",
+            "content_type": "stat",
+            "role": "proof",
+            "source": "entity",
+            "cardinality": { "type": "repeater", "min": 2, "max": 6 },
+            "constraints": { "required": true, "entity": "proof.substantiated", "min_entities": 2 },
+            "client_override": false,
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "testimonial",
+            "label": "Testimonials",
+            "content_type": "testimonial",
+            "role": "proof",
+            "source": "entity",
+            "cardinality": { "type": "repeater", "min": 1, "max": 3 },
+            "constraints": { "required": true, "entity": "reviews.market", "min_entities": 1 },
+            "client_override": false,
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "faq",
+            "label": "FAQ",
+            "content_type": "faq",
+            "role": "faq",
+            "source": "generated",
+            "cardinality": { "type": "repeater", "min": 3, "max": 8 },
+            "constraints": { "required": true },
+            "client_override": true,
+            "seo_binding": "faqpage",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "cta",
+            "label": "Primary CTA",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "entity": "conversion.primary_action", "min_entities": 1 },
+            "client_override": false,
+            "elementor_binding": "lp/cta"
+        },
+        {
+            "key": "contact_block",
+            "label": "Contact Block",
+            "content_type": "cta",
+            "role": "contact",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "entity": "location.nap", "min_entities": 1 },
+            "client_override": false,
+            "elementor_binding": "lp/cta"
+        }
+    ]
+}

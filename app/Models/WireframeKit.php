@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\PageType;
+use App\PageBuilder\Schema\KitSchema;
 use Database\Factories\WireframeKitFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -33,11 +35,21 @@ class WireframeKit extends Model
         return $this->hasMany(Content::class);
     }
 
+    /**
+     * The typed slot-schema for this kit, parsed from the slot_schema column.
+     */
+    public function schema(): KitSchema
+    {
+        return KitSchema::fromArray($this->slot_schema ?? []);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
         return [
             'slot_schema' => 'array',
+            'page_type' => PageType::class,
+            'version' => 'integer',
         ];
     }
 }

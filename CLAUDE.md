@@ -119,3 +119,32 @@ content-level table carries `site_id`.
   `Keyword.target_content_id` (both indexed ULID columns).
 - `database/seeders/DemoSeeder.php` builds one coherent demo tenant — the
   fixture later sections develop against.
+
+## Page Builder content contract (§3a)
+
+`§3a` is the content-contract half of the Page Builder — schema + validation
+only. **No LLM generation, no WordPress communication, no SEO/render** (those
+need §2 and the generation work). It lives under `app/PageBuilder/`.
+
+- **Kits as data.** The two locked kits (`service-page`, `location-page`) are
+  authored as JSON in `database/data/wireframe-kits/` and seeded as library-level
+  `WireframeKit` records by `WireframeKitSeeder`. A kit's full schema lives in the
+  `slot_schema` JSON column; `version`/`page_type`/template + SEO refs are also
+  denormalised to columns, unique on `(site_id, page_type, version)`.
+- **Typed value objects** (`app/PageBuilder/Schema`): `KitSchema` → `SlotDefinition`
+  → `SlotConstraints`/`Cardinality`/`MediaConstraints`/`SlotCondition`. They
+  round-trip losslessly to/from `slot_schema`. `WireframeKit::schema()` returns the
+  parsed `KitSchema`; `Content` pins `wireframe_kit_version`.
+- **Slot enums:** `SlotContentType`, `SlotRole`, `SlotSource`
+  (`generated|grounded|entity|client|media`) in `app/Enums`.
+- **Validation engine** (`app/PageBuilder/Validation`): `KitValidator` checks
+  structure (required/length/cardinality/content-type), media presence/size/alt,
+  and entity/grounding resolution; it returns a structured `ValidationResult`
+  (never throws for expected failures). `ThinPageGuard` holds a page from publish
+  when its proof slots resolve to zero entity content. `PublishEligibility`
+  orchestrates both and parks a failing page in `ContentStatus::InReview`.
+- **Entity resolution** (`app/PageBuilder/Entities/EntityResolver`) maps entity
+  keys (e.g. `proof.substantiated`, `reviews.market`, `location.nap`,
+  `conversion.primary_action`) to §1 model counts, dropping only the `SiteScope`
+  for determinism. `jobcapture.radius` resolves to 0 until the Job Capture
+  section ships (no such §1 model yet).
