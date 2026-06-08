@@ -84,6 +84,7 @@ class Content extends Model
             'schema_payload' => 'array',
             'slot_payload' => 'array',
             'voice_profile_version' => 'integer',
+            'wireframe_kit_version' => 'integer',
             'wp_post_id' => 'integer',
             'version' => 'integer',
             'published_at' => 'datetime',
