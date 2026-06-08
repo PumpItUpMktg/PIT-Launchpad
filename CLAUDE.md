@@ -293,3 +293,47 @@ builds on §1 only (no §2/§3/§5/§6 dependency) and lives under `app/Security
   `compromised_reason` / `exposed_at`; `platform_secret_rotations` and
   `audit_logs` tables; enums `PlatformSecret` / `AuditAction` / `CredentialType` /
   `SiteStatus`. RBAC `User.role` already existed (§1) — not duplicated.
+
+## Control-Plane Publish Pipeline (§2)
+
+`§2` is the path from an **approved** `Content` to a live WordPress page. It
+renders images, assembles the consolidated meta-blob, and pushes to the
+companion plugin's authed REST contract — ending at "pushed to WP / state
+recorded." It builds on §1/§3a/§4/§6b/§9 and lives under `app/Publishing/` +
+`app/Integrations/{Fal,Vision,Wordpress}` + `app/Jobs`.
+
+- **Contract authority is the companion plugin** (`wordpress-plugin/`, separate
+  codebase). Three upsert endpoints under `launchpad/v1`, each keyed on the
+  control-plane **ULID** so retries are idempotent: `/content` (the consolidated
+  meta-blob: `content_id`/kind/page_type/kit/slug/status/locked + `slot_payload`
+  + `images` + `seo`), `/silo` (returns `wp_category_id`), `/redirects`.
+- **WP REST transport** (`WordpressClient` + `WordpressClientFactory`): Basic
+  auth from the per-site WP app-password `Connection` (decrypted via §9's vault,
+  never logged); transient 5xx/timeout retry with backoff; idempotent by ULID.
+- **Render pipeline** (`ImageRenderer` + `RenderCoordinator`, `RenderImage` job):
+  fal generate → R2 under the **per-tenant prefix** (`TenantStorage`) → Claude
+  **vision** alt-text pass → minted `ImageObject`. Hardened from the pilot: fal
+  HTTP timeout + job timeout, **bounded retries → `render_failed` terminal**, and
+  `launchpad:reset-render` to requeue. A failed **required** image blocks publish
+  (no partial page); images serve from R2/CDN, never the WP media library.
+- **Publish jobs** (Horizon-ready `ShouldQueue`, idempotent by ULID):
+  `PublishContent` (the entrypoint §6c calls — drives `approved → rendering →
+  publishing → published`, with `render_failed`/`publish_failed` surfaced branches;
+  stores `wp_post_id`; fires §9's `ContentPublished` audit), `PublishSilo`
+  (carries §4's `wp_category_id`), `PublishRedirects`.
+- **Locked / locally-edited protection**: `PublishContent` never overwrites a
+  `locked` or `locally_edited` page (or one the plugin reports skipped) — it skips
+  with a surfaced warning.
+- **Meta-blob** (`MetaBlobAssembler`): §3a slot values pass through keyed by slot
+  key (the plugin's `lp/*` tags read them); the kit's `og_image` seo_binding picks
+  the OG image; SEO is engine-owned (title/meta/canonical/robots/og/schema/
+  breadcrumbs). NO ACF.
+- **Adapters** (committed, mocked in tests): `FalClient`→`FalHttpClient`,
+  `VisionClient`→`ClaudeVisionClient`, WP REST (Http-faked), R2 (Storage-faked).
+  **§9's `ConnectionVerifier` is now WP-backed** (`WordpressConnectionVerifier`):
+  rotation's verify-before-revoke pings live WordPress; non-WP providers stay
+  permissive until their adapters land.
+- **§1 additions:** `ContentStatus::Rendering`/`PublishFailed`;
+  `Content.locked`/`locally_edited`/`last_publish_error`; `render_jobs` per-image
+  fields (slot, seo_filename, alt/title/caption, required, attempts, width/height).
+  `Silo.wp_category_id` (§4) is now filled by `PublishSilo`.

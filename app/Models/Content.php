@@ -18,12 +18,32 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property ContentStatus $status
+ * @property ContentKind $kind
+ * @property PageType|null $page_type
+ * @property bool $locked
+ * @property bool $locally_edited
+ * @property int|null $wp_post_id
+ * @property array<string, mixed>|null $meta
+ * @property array<string, mixed>|null $slot_payload
+ * @property array<string, mixed>|null $schema_payload
+ */
 class Content extends Model
 {
     /** @use HasFactory<ContentFactory> */
     use BelongsToSite, HasFactory, HasUlids, SoftDeletes;
 
     protected $guarded = [];
+
+    /**
+     * Whether a re-publish must NOT overwrite the live page — the operator
+     * locked it, or the plugin reported it edited directly in WordPress.
+     */
+    public function isPublishProtected(): bool
+    {
+        return $this->locked || $this->locally_edited;
+    }
 
     /** @return BelongsTo<Silo, $this> */
     public function silo(): BelongsTo
@@ -123,6 +143,8 @@ class Content extends Model
             'verification' => 'array',
             'last_refreshed_at' => 'datetime',
             'refresh_count' => 'integer',
+            'locked' => 'boolean',
+            'locally_edited' => 'boolean',
         ];
     }
 }

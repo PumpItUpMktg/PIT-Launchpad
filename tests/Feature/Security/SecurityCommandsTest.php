@@ -4,13 +4,17 @@ use App\Enums\PlatformSecret;
 use App\Models\Connection;
 use App\Models\PlatformSecretRotation;
 use App\Models\Site;
+use Illuminate\Support\Facades\Http;
 
 test('rotate-connection rotates a tenant credential via the command', function () {
+    // §2 backs the verifier with a live WP ping (verify-before-revoke); fake it.
+    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
+
     $site = Site::factory()->create();
     $connection = Connection::factory()->compromised()->create([
         'site_id' => $site->id,
         'provider' => 'wp_app_password',
-        'credentials' => ['password' => 'old'],
+        'credentials' => ['base_url' => 'https://wp.test', 'username' => 'svc', 'password' => 'old'],
     ]);
 
     $this->artisan('launchpad:rotate-connection', [
