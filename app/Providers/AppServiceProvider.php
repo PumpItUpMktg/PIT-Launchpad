@@ -13,7 +13,7 @@ use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Conversions\ConversionProvider;
-use App\Integrations\Conversions\MockConversionProvider;
+use App\Integrations\Conversions\Ga4ConversionProvider;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\DataForSeo\DataForSeoLocalGridProvider;
 use App\Integrations\DataForSeo\DataForSeoSerpProvider;
@@ -24,6 +24,10 @@ use App\Integrations\Fal\FalClient;
 use App\Integrations\Fal\FalHttpClient;
 use App\Integrations\Gbp\GbpProvider;
 use App\Integrations\Gbp\MockGbpProvider;
+use App\Integrations\Google\GoogleConnectionService;
+use App\Integrations\Google\GoogleOAuthClient;
+use App\Integrations\Google\GoogleSearchConsoleProvider;
+use App\Integrations\Google\SearchConsoleProvider;
 use App\Integrations\LocalGrid\LocalGridProvider;
 use App\Integrations\News\GdeltNewsProvider;
 use App\Integrations\News\GdeltRateLimiter;
@@ -150,12 +154,40 @@ class AppServiceProvider extends ServiceProvider
             };
         });
 
-        // §7c conversion ingestion (GA4/GHL → leads) is mock-first; the real
-        // pull+normalize adapter binds here later with no dashboard change.
-        $this->app->singleton(
-            ConversionProvider::class,
-            MockConversionProvider::class,
-        );
+        // Google (Step 2, Adapter 4): per-tenant OAuth backing GSC (§5) + GA4
+        // (§7c). Platform OAuth app creds are env; per-client tokens live in the
+        // §9 vault on the Connection. The connection service owns refresh +
+        // lifecycle. Tests bind fakes / Http::fake; creds are scrubbed in tests.
+        $this->app->singleton(GoogleOAuthClient::class, fn () => new GoogleOAuthClient(
+            $this->app->make(Http::class),
+            (string) config('services.google.client_id'),
+            (string) config('services.google.client_secret'),
+            (string) config('services.google.redirect_uri'),
+            (string) config('services.google.auth_uri', 'https://accounts.google.com/o/oauth2/v2/auth'),
+            (string) config('services.google.token_uri', 'https://oauth2.googleapis.com/token'),
+            (int) config('services.google.timeout', 30),
+        ));
+
+        $this->app->singleton(GoogleConnectionService::class, fn () => new GoogleConnectionService(
+            $this->app->make(Http::class),
+            $this->app->make(GoogleOAuthClient::class),
+            (int) config('services.google.timeout', 30),
+        ));
+
+        // §7c conversions now pull live from GA4 (the GA4 portion; GHL is adapter
+        // 5). A site with no Google connection yields no records — no dashboard change.
+        $this->app->singleton(ConversionProvider::class, fn () => new Ga4ConversionProvider(
+            $this->app->make(GoogleConnectionService::class),
+            (string) config('services.google.ga4_data_base_url', 'https://analyticsdata.googleapis.com/v1beta'),
+        ));
+
+        // §5 GSC first-party calibration seam (net-new). No §5 consumer wired yet —
+        // SiteAuthority calibrates off DataForSEO position history; this supplies
+        // the normalized rows for a later §5 change.
+        $this->app->singleton(SearchConsoleProvider::class, fn () => new GoogleSearchConsoleProvider(
+            $this->app->make(GoogleConnectionService::class),
+            (string) config('services.google.gsc_base_url', 'https://www.googleapis.com/webmasters/v3'),
+        ));
 
         // §2 publish-path adapters (committed vendors). fal generates images and
         // Claude vision finalizes alt text; both are mocked in tests, no network.

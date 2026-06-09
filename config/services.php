@@ -106,13 +106,23 @@ return [
         'provider' => env('EMBEDDINGS_PROVIDER', 'openai'),
     ],
 
-    // Google — GBP OAuth, Maps, and the project for analytics (§5/§7).
+    // Google — GSC (§5 calibration) + GA4 (§7c conversions) behind per-tenant
+    // OAuth. The platform OAuth app creds are env (one app all clients consent
+    // to); per-client access/refresh tokens live in the §9 vault, never here.
+    // OAuth/API endpoints are non-secret defaults. Maps key is separate (location
+    // pages), GBP is out (v1.5).
     'google' => [
         'project_id' => env('GOOGLE_PROJECT_ID'),
         'maps_api_key' => env('GOOGLE_MAPS_API_KEY'),
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect_uri' => env('GOOGLE_REDIRECT_URI'),
+        'auth_uri' => env('GOOGLE_AUTH_URI', 'https://accounts.google.com/o/oauth2/v2/auth'),
+        'token_uri' => env('GOOGLE_TOKEN_URI', 'https://oauth2.googleapis.com/token'),
+        'gsc_base_url' => env('GOOGLE_GSC_BASE_URL', 'https://www.googleapis.com/webmasters/v3'),
+        'ga4_data_base_url' => env('GOOGLE_GA4_DATA_BASE_URL', 'https://analyticsdata.googleapis.com/v1beta'),
+        'ga4_admin_base_url' => env('GOOGLE_GA4_ADMIN_BASE_URL', 'https://analyticsadmin.googleapis.com/v1beta'),
+        'timeout' => (int) env('GOOGLE_TIMEOUT', 30),
     ],
 
     // US Census — demographics enrichment (§7a onboarding markets).
