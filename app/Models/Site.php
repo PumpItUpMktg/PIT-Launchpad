@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 /**
  * @property SiteStatus $status
  * @property int|null $budget_ceiling
+ * @property string|null $domain_url
+ * @property string $brand_name
  */
 class Site extends Model
 {

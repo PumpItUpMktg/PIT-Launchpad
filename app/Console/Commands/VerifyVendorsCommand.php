@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Integrations\Claude\AnthropicClaudeClient;
+use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\Fal\FalClient;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
@@ -13,9 +15,11 @@ use Throwable;
  * Live vendor-path verification (diagnostic). Fires each committed vendor path
  * once against the REAL API and reports LIVE / SKIP / FAIL:
  *
- *  - Claude — one minimal Haiku completion (the real Anthropic SDK path).
- *  - fal    — one cheapest-possible image (512x512). One image maximum.
- *  - R2     — put a tiny object, read it back, delete it.
+ *  - Claude     — one minimal Haiku completion (the real Anthropic SDK path).
+ *  - fal        — one cheapest-possible image (512x512). One image maximum.
+ *  - R2         — put a tiny object, read it back, delete it.
+ *  - DataForSEO — the zero-cost account endpoint (appendix/user_data): confirms
+ *                 Basic auth + connectivity without spending, reports balance.
  *
  * It reads the same env vars as the app, no-ops with a clear message when a key
  * is absent (safe to run before keys land), never writes to domain tables, and
@@ -26,17 +30,18 @@ class VerifyVendorsCommand extends Command
 {
     protected $signature = 'launchpad:verify-vendors';
 
-    protected $description = 'Fire each committed vendor path (Claude/fal/R2) once against LIVE and report LIVE/SKIP/FAIL. Makes real outbound calls — never run in CI.';
+    protected $description = 'Fire each committed vendor path (Claude/fal/R2/DataForSEO) once against LIVE and report LIVE/SKIP/FAIL. Makes real outbound calls — never run in CI.';
 
     public function handle(): int
     {
-        $this->warn('Live vendor verification — real outbound calls: one Claude completion, up to one fal image, one R2 object (put → get → delete).');
+        $this->warn('Live vendor verification — real outbound calls: one Claude completion, up to one fal image, one R2 object (put → get → delete), one zero-cost DataForSEO account read.');
         $this->newLine();
 
         $results = [
             $this->verifyClaude(),
             $this->verifyFal(),
             $this->verifyR2(),
+            $this->verifyDataForSeo(),
         ];
 
         foreach ($results as $line) {
@@ -119,6 +124,33 @@ class VerifyVendorsCommand extends Command
                 : 'R2     : FAIL — readback mismatch';
         } catch (Throwable $e) {
             return 'R2     : FAIL — '.$this->short($e);
+        }
+    }
+
+    private function verifyDataForSeo(): string
+    {
+        $login = (string) config('services.dataforseo.login');
+        $password = (string) config('services.dataforseo.password');
+        if ($login === '' || $password === '') {
+            return 'DFSEO  : SKIP — DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD not set';
+        }
+
+        try {
+            // Zero-cost account read: confirms Basic auth + connectivity, no spend.
+            $client = new DataForSeoClient(
+                app(Http::class),
+                $login,
+                $password,
+                (string) config('services.dataforseo.base_url', 'https://api.dataforseo.com'),
+                (int) config('services.dataforseo.timeout', 30),
+            );
+
+            $data = $client->userData();
+            $balance = $data['balance'] !== null ? '$'.number_format($data['balance'], 2) : 'n/a';
+
+            return "DFSEO  : LIVE — appendix/user_data ok (login={$data['login']}, balance={$balance})";
+        } catch (Throwable $e) {
+            return 'DFSEO  : FAIL — '.$this->short($e);
         }
     }
 
