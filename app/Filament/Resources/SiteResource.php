@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
+use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\Models\Site;
@@ -18,6 +19,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -238,12 +240,48 @@ class SiteResource extends Resource
     }
 
     /**
+     * The lightweight "stand up a tenant" create — name, URL, status. The §7a
+     * onboarding wizard is the full intake; this is the minimal path to get a Site
+     * row to wire a connection against and exercise the launch orchestrator without
+     * running the whole intake. (Sites have no scalar slug column — `domain_url`
+     * is the wireable "where it lives" field; `slug_conventions` is a separate
+     * content-slug pattern set during intake.)
+     */
+    public static function form(Schema $schema): Schema
+    {
+        return $schema->components([
+            Select::make('account_id')
+                ->label('Account (brand)')
+                ->relationship('account', 'name')
+                ->searchable()
+                ->preload()
+                ->required()
+                ->createOptionForm([
+                    TextInput::make('name')->label('Account name')->required(),
+                ]),
+            TextInput::make('brand_name')
+                ->label('Site name')
+                ->required(),
+            TextInput::make('domain_url')
+                ->label('Site URL')
+                ->url()
+                ->placeholder('https://client-site.com')
+                ->helperText('Where the site lives — the WordPress base URL you will wire a connection to.'),
+            Select::make('status')
+                ->options(self::statusOptions())
+                ->default(SiteStatus::Onboarding->value)
+                ->required(),
+        ]);
+    }
+
+    /**
      * @return array<string, PageRegistration>
      */
     public static function getPages(): array
     {
         return [
             'index' => ListSites::route('/'),
+            'create' => CreateSite::route('/create'),
         ];
     }
 }
