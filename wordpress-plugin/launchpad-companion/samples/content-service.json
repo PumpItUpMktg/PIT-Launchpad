@@ -1,0 +1,64 @@
+{
+    "content_id": "01J8ZA0CONTENTSERVICE0000001",
+    "kind": "page",
+    "page_type": "service",
+    "kit": "service-page",
+    "kit_version": "1",
+    "silo_id": "01J8Z9SILOPLUMBING00000001",
+    "slug": "water-heater-repair-austin",
+    "status": "published",
+    "locked": false,
+    "slot_payload": {
+        "hero_problem": "Leaking water heater flooding your garage?",
+        "hero_solution": "Fast, guaranteed water heater repair, often the same day.",
+        "problem_explainer": "A failing water heater disrupts every routine in the home — cold showers, rising bills, and the risk of water damage. The longer it waits, the more it costs.",
+        "solution_overview": "<p>Our licensed technicians diagnose the fault, quote upfront, and repair on the spot whenever possible — with workmanship backed in writing.</p>",
+        "service_features": ["Same-day service", "Licensed technicians", "Upfront pricing", "Workmanship warranty"],
+        "process_steps": ["Diagnose the fault", "Quote upfront", "Repair and test"],
+        "why_us": "Licensed, insured, and fully warrantied — every repair is backed by our written guarantee.",
+        "proof_strip": [
+            { "value": "20+ yrs", "label": "In business" },
+            { "value": "4.9★", "label": "Google rating" },
+            { "value": "5,000+", "label": "Repairs completed" }
+        ],
+        "testimonial": [
+            { "quote": "They fixed our heater the same morning we called.", "author": "Dana R., Austin" }
+        ],
+        "faq": [
+            { "question": "How fast can you come out?", "answer": "Often the same day." },
+            { "question": "How much does a repair cost?", "answer": "You get an upfront quote before any work begins." },
+            { "question": "Is the work guaranteed?", "answer": "Yes — parts and labor are warrantied." }
+        ],
+        "cta": { "label": "Call now", "url": "tel:+15125550100" },
+        "contact_block": { "label": "Visit our Austin office", "url": "/contact" }
+    },
+    "images": {
+        "hero_image": {
+            "url": "https://cdn.example-r2.dev/sites/apex/water-heater-repair-austin-hero.webp",
+            "alt": "Technician repairing a residential water heater",
+            "title": "Water heater repair in Austin",
+            "caption": "Same-day water heater repair",
+            "width": 1200,
+            "height": 675
+        }
+    },
+    "seo": {
+        "title": "Water Heater Repair in Austin | Apex Plumbing & HVAC",
+        "meta_description": "Fast, guaranteed water heater repair in Austin. Licensed technicians, upfront pricing, same-day service.",
+        "canonical": "https://apexplumbing.example/services/water-heater-repair-austin",
+        "robots": "index, follow",
+        "og": { "image": "https://cdn.example-r2.dev/sites/apex/water-heater-repair-austin-hero.webp" },
+        "schema_type": "Service",
+        "schema_payload": {
+            "@type": "Service",
+            "name": "Water Heater Repair",
+            "areaServed": "Austin, TX",
+            "provider": { "@type": "LocalBusiness", "name": "Apex Plumbing & HVAC" }
+        },
+        "breadcrumbs": [
+            { "name": "Home", "url": "https://apexplumbing.example/" },
+            { "name": "Plumbing", "url": "https://apexplumbing.example/plumbing" },
+            { "name": "Water Heater Repair", "url": "" }
+        ]
+    }
+}

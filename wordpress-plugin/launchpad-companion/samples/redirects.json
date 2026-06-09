@@ -1,0 +1,6 @@
+{
+    "redirects": [
+        { "from_url": "/old-water-heater-page", "to_url": "/services/water-heater-repair-austin", "code": 301 },
+        { "from_url": "/plumbing-old", "to_url": "/plumbing", "code": 301 }
+    ]
+}
