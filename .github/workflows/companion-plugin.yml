@@ -60,4 +60,4 @@ jobs:
 
       - name: Stop wp-env
         if: always()
-        run: wp-env stop
+        run: wp-env stop || true

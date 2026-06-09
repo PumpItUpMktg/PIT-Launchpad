@@ -1,5 +1,6 @@
 {
     "plugins": [
+        "https://downloads.wordpress.org/plugin/elementor.latest-stable.zip",
         "./wordpress-plugin/launchpad-companion"
     ],
     "phpVersion": "8.1"
