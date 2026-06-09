@@ -76,7 +76,7 @@ class GeneratedFeedReconciler
 
     private function signature(Keyword $keyword, ?Market $market): string
     {
-        return 'kw:'.$keyword->id.':mkt:'.($market?->id ?? 'national');
+        return 'kw:'.$keyword->id.':mkt:'.($market !== null ? $market->id : 'national');
     }
 
     private function feedUrl(Keyword $keyword, ?Market $market): string

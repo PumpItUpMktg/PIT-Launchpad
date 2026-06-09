@@ -12,7 +12,24 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property string $id
+ * @property string $site_id
+ * @property string|null $silo_id
+ * @property SourceType $type
+ * @property FeedOrigin $origin
+ * @property array<string, mixed>|null $config
+ * @property string|null $schedule
+ * @property string|null $url
+ * @property string|null $derived_from
+ * @property string|null $label
+ * @property bool $enabled
+ * @property Carbon|null $last_fetched_at
+ * @property Carbon|null $last_item_at
+ * @property string|null $last_error
+ */
 class Source extends Model
 {
     /** @use HasFactory<SourceFactory> */

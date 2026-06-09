@@ -45,7 +45,7 @@ class FeedValidator
 
         return FeedPreview::ok(
             publisher: $result->items[0]->sourceName,
-            samples: array_values(array_slice(array_map(fn ($i) => $i->title, $result->items), 0, 5)),
+            samples: array_slice(array_map(fn ($i) => $i->title, $result->items), 0, 5),
         );
     }
 
