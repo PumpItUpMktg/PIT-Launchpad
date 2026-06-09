@@ -7,6 +7,7 @@ use App\Integrations\News\NewsSourceException;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Http as HttpFacade;
+use Illuminate\Support\Sleep;
 
 function gdeltProvider(int $maxRecords = 250, int $recencyDays = 90): GdeltNewsProvider
 {
@@ -130,3 +131,43 @@ it('throws when the query is too short / empty to build', function () {
 
     gdeltProvider()->fetch(['keywords' => ['', '  ']]);
 })->throws(NewsSourceException::class);
+
+it('sends a browser User-Agent (the GDELT unblock)', function () {
+    HttpFacade::fake(['*' => HttpFacade::response(['articles' => []])]);
+
+    gdeltProvider()->fetch(['query' => 'plumbing']);
+
+    HttpFacade::assertSent(fn ($request) => str_starts_with((string) $request->header('User-Agent')[0], 'Mozilla/5.0'));
+});
+
+it('retries a 429 honoring Retry-After, then succeeds', function () {
+    Sleep::fake(); // no real backoff delay in the test
+
+    $calls = 0;
+    HttpFacade::fake(function () use (&$calls) {
+        $calls++;
+
+        return $calls === 1
+            ? HttpFacade::response('Too Many Requests', 429, ['Retry-After' => '2'])
+            : HttpFacade::response(['articles' => [gdeltArticle('https://tribune.com/a')]]);
+    });
+
+    $items = gdeltProvider()->fetch(['query' => 'plumbing']);
+
+    expect($calls)->toBe(2)          // one 429, then the retry succeeded
+        ->and($items)->toHaveCount(1);
+});
+
+it('surfaces a persistent 429 after exhausting retries (not fatal)', function () {
+    Sleep::fake();
+
+    HttpFacade::fake(['*' => HttpFacade::response('Too Many Requests', 429, ['Retry-After' => '1'])]);
+
+    try {
+        gdeltProvider()->fetch(['query' => 'plumbing']);
+        test()->fail('expected NewsSourceException');
+    } catch (NewsSourceException $e) {
+        expect($e->fatal)->toBeFalse()       // retried, then surfaced — not fatal
+            ->and($e->getMessage())->toContain('429');
+    }
+});

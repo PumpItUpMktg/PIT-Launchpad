@@ -5,8 +5,11 @@ namespace App\Integrations\News;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as Http;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Live GDELT DOC 2.0 news source (the §6a default). No key/auth; emits candidate
@@ -26,6 +29,20 @@ class GdeltNewsProvider implements NewsProvider
 
     /** Don't bisect below a 15-minute window (GDELT's own resolution floor). */
     private const MIN_WINDOW_SECONDS = 900;
+
+    /**
+     * GDELT blocks the default HTTP-client UA (the actual cause of the 403/503
+     * failures), so present a standard browser UA.
+     */
+    private const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+    /** Transient-failure retries (429 / 5xx / connection). */
+    private const RETRY_TIMES = 3;
+
+    private const RETRY_BACKOFF_MS = 1000;
+
+    /** Cap on an honored Retry-After (seconds) so a hostile header can't hang a run. */
+    private const MAX_RETRY_AFTER_SECONDS = 60;
 
     public function __construct(
         private readonly Http $http,
@@ -88,7 +105,22 @@ class GdeltNewsProvider implements NewsProvider
         $this->limiter->throttle();
 
         $response = $this->http
+            ->withUserAgent(self::USER_AGENT)
             ->timeout($this->timeout)
+            ->retry(self::RETRY_TIMES, function (int $attempt, Throwable $e): int {
+                // Honor Retry-After on a 429; otherwise exponential backoff.
+                if ($e instanceof RequestException && $e->response->status() === 429) {
+                    $retryAfter = (int) $e->response->header('Retry-After');
+                    if ($retryAfter > 0) {
+                        return min($retryAfter, self::MAX_RETRY_AFTER_SECONDS) * 1000;
+                    }
+                }
+
+                return self::RETRY_BACKOFF_MS * $attempt;
+            }, function (Throwable $e): bool {
+                return $e instanceof ConnectionException
+                    || ($e instanceof RequestException && in_array($e->response->status(), [429, 500, 502, 503, 504], true));
+            }, throw: false)
             ->get($this->baseUrl, [
                 'query' => $query,
                 'mode' => 'artlist',
@@ -103,7 +135,9 @@ class GdeltNewsProvider implements NewsProvider
             throw new NewsSourceException(
                 'GDELT HTTP '.$response->status(),
                 (string) $response->status(),
-                fatal: in_array($response->status(), [401, 403, 429], true),
+                // 429 retried above; a persistent one (or 5xx) is surfaced, not
+                // marked fatal. Only auth failures are fatal.
+                fatal: in_array($response->status(), [401, 403], true),
             );
         }
 
