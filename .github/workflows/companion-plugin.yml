@@ -1,0 +1,63 @@
+name: Companion Plugin (wp-env)
+
+# Additive to the Laravel CI job — a different runtime (Dockerized WordPress via
+# @wordpress/env) that actually runs the companion plugin's PHPUnit suite. Path-
+# filtered so pure-Laravel changes don't trigger it.
+on:
+  pull_request:
+    paths:
+      - 'wordpress-plugin/**'
+      - '.wp-env.json'
+      - '.github/workflows/companion-plugin.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'wordpress-plugin/**'
+      - '.wp-env.json'
+      - '.github/workflows/companion-plugin.yml'
+
+jobs:
+  plugin-tests:
+    name: WP PHPUnit (wp-env)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP (host — resolves dev deps for the container's 8.1)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      - name: Install plugin dev dependencies (wp-phpunit + polyfills)
+        working-directory: wordpress-plugin/launchpad-companion
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install @wordpress/env
+        run: npm -g install @wordpress/env
+
+      - name: Start WordPress (wp-env)
+        run: wp-env start
+
+      # The engine-facing contract suite is pure WP-core (REST / posts / terms /
+      # meta / media) and needs no Elementor Pro; R2 is mocked. Pro-only render
+      # tests skip themselves when Pro is absent (verified against a real instance).
+      - name: Run companion plugin PHPUnit
+        run: >-
+          wp-env run tests-cli --env-cwd=wp-content/plugins/launchpad-companion
+          env
+          WP_TESTS_DB_HOST=tests-mysql
+          WP_TESTS_DB_NAME=tests-wordpress
+          WP_TESTS_DB_USER=root
+          WP_TESTS_DB_PASSWORD=password
+          ./vendor/bin/phpunit
+
+      - name: Stop wp-env
+        if: always()
+        run: wp-env stop || true

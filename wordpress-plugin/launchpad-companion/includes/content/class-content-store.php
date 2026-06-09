@@ -22,7 +22,7 @@ final class ContentStore
 {
     /**
      * @param  array<string, mixed>  $payload
-     * @return array{content_id: string, wp_post_id: int, status: string, skipped: bool}
+     * @return array{content_id: string, wp_post_id: int, status: string, skipped: bool, error?: string}
      */
     public function upsert(array $payload): array
     {
@@ -59,15 +59,29 @@ final class ContentStore
         }
 
         // Run the write under the edit guard so the resulting save_post is not
-        // mistaken for a human edit.
-        $post_id = (int) EditGuard::during_write(static function () use ($postarr, $existing_id) {
+        // mistaken for a human edit. We pass $wp_error=true, so a failure comes
+        // back as a WP_Error object — it must be inspected, never (int)-cast
+        // (casting a WP_Error to int is a fatal in PHP 8 and would mask the real
+        // reason behind the graceful-error branch below).
+        $result = EditGuard::during_write(static function () use ($postarr, $existing_id) {
             return $existing_id > 0
                 ? wp_update_post(wp_slash($postarr), true)
                 : wp_insert_post(wp_slash($postarr), true);
         });
 
+        if (is_wp_error($result)) {
+            return [
+                'content_id' => $content_id,
+                'wp_post_id' => $existing_id,
+                'status' => 'error',
+                'skipped' => false,
+                'error' => $result->get_error_code().': '.$result->get_error_message(),
+            ];
+        }
+
+        $post_id = (int) $result;
         if ($post_id <= 0) {
-            return ['content_id' => $content_id, 'wp_post_id' => 0, 'status' => 'error', 'skipped' => false];
+            return ['content_id' => $content_id, 'wp_post_id' => $existing_id, 'status' => 'error', 'skipped' => false];
         }
 
         $images = is_array($payload['images'] ?? null)

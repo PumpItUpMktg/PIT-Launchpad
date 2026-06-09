@@ -47,6 +47,7 @@ class Test_Content_Store extends WP_UnitTestCase
         $a = $store->upsert($this->payload());
         $b = $store->upsert($this->payload(['slot_payload' => ['hero_heading' => 'Updated']]));
 
+        $this->assertNotSame('error', $b['status'], 'The re-push must update, not error: ' . ($b['error'] ?? ''));
         $this->assertSame($a['wp_post_id'], $b['wp_post_id'], 'Same content_id must update, not duplicate.');
         $found = get_posts(['post_type' => ['page', 'post'], 'post_status' => 'any', 'meta_key' => Meta::CONTENT_ID, 'meta_value' => '01JCONTENTSERVICE000000000', 'fields' => 'ids']);
         $this->assertCount(1, $found);
