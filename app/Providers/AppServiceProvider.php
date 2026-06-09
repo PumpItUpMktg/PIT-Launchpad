@@ -3,6 +3,10 @@
 namespace App\Providers;
 
 use App\ContentEngine\Drafting\Drafter;
+use App\ContentEngine\Feeds\FeedFetcher;
+use App\ContentEngine\Feeds\FeedHealth;
+use App\ContentEngine\Feeds\FeedValidator;
+use App\ContentEngine\Feeds\GeneratedFeedReconciler;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\AuditAction;
 use App\Enums\DataForSeoMode;
@@ -151,6 +155,29 @@ class AppServiceProvider extends ServiceProvider
                 ),
             };
         });
+
+        // §6a Phase 2 feed services. FeedFetcher is the single host-branched fetch
+        // path (consent recipe only for news.google.com); the validator, health
+        // and reconciler build on it + config. FeedIngestor auto-resolves from
+        // FeedFetcher + CandidateFunnel. Tests use Http::fake, so CI makes no call.
+        $this->app->singleton(FeedFetcher::class, fn () => new FeedFetcher(
+            $this->app->make(Http::class),
+            (int) config('launchpad.feeds.fetch_timeout', 30),
+            (int) config('launchpad.feeds.fetch_max_items', 100),
+        ));
+        $this->app->singleton(FeedValidator::class, fn () => new FeedValidator(
+            $this->app->make(FeedFetcher::class),
+            (int) config('launchpad.feeds.client_soft_cap', 25),
+        ));
+        $this->app->singleton(FeedHealth::class, fn () => new FeedHealth(
+            (int) config('launchpad.feeds.unhealthy_after_days', 21),
+        ));
+        $this->app->singleton(GeneratedFeedReconciler::class, fn () => new GeneratedFeedReconciler(
+            (string) config('launchpad.feeds.generated.base_url', 'https://news.google.com'),
+            (string) config('launchpad.feeds.generated.hl', 'en-US'),
+            (string) config('launchpad.feeds.generated.gl', 'US'),
+            (string) config('launchpad.feeds.generated.ceid', 'US:en'),
+        ));
 
         // §6 near-duplicate embeddings run on the real OpenAI adapter (Step 2,
         // Adapter 3) behind the unchanged EmbeddingProvider contract — vectors

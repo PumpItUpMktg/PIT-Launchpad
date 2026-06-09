@@ -27,8 +27,15 @@ class RelevanceScorer
 
     /**
      * @param  Collection<int, Silo>  $silos
+     * @param  string|null  $hintSiloId  The originating feed's routing hint
+     *                                   (Source.silo_id). A backstop only: when
+     *                                   the model returns no match it falls back
+     *                                   to the hint, so a hinted feed routes more
+     *                                   precisely while an untagged feed still
+     *                                   routes purely by content. The score still
+     *                                   gates band (brand-safety + thresholds).
      */
-    public function score(NewsItem $item, Collection $silos): RelevanceResult
+    public function score(NewsItem $item, Collection $silos, ?string $hintSiloId = null): RelevanceResult
     {
         $data = $this->parse($this->claude->complete($this->prompt($item, $silos), $this->system()));
 
@@ -38,6 +45,10 @@ class RelevanceScorer
         $matchedSilo = isset($data['matched_silo'])
             ? $silos->first(fn (Silo $s) => strcasecmp($s->name, (string) $data['matched_silo']) === 0)
             : null;
+
+        if ($matchedSilo === null && $hintSiloId !== null) {
+            $matchedSilo = $silos->first(fn (Silo $s) => $s->id === $hintSiloId);
+        }
 
         $band = match (true) {
             ! $brandSafe => RelevanceBand::Dropped,

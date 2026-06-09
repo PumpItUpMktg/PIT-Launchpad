@@ -38,6 +38,7 @@ class ClientPanelProvider extends PanelProvider
             ->colors(fn (): array => ['primary' => Color::hex(app(ClientContext::class)->branding()['primary'])])
             ->discoverPages(in: app_path('Filament/Client/Pages'), for: 'App\Filament\Client\Pages')
             ->pages([Dashboard::class])
+            ->discoverResources(in: app_path('Filament/Client/Resources'), for: 'App\Filament\Client\Resources')
             ->discoverWidgets(in: app_path('Filament/Client/Widgets'), for: 'App\Filament\Client\Widgets')
             ->middleware([
                 EncryptCookies::class,

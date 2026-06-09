@@ -66,8 +66,11 @@ class CandidateFunnel
 
     /**
      * @param  list<NewsItem>  $items
+     * @param  string|null  $routingHint  The originating feed's silo_id, passed to
+     *                                    the scorer as a routing backstop (used
+     *                                    only when content scoring finds no silo).
      */
-    public function process(Site $site, array $items): FunnelResult
+    public function process(Site $site, array $items, ?string $routingHint = null): FunnelResult
     {
         $silos = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
 
@@ -88,7 +91,7 @@ class CandidateFunnel
 
         foreach ($this->clusterer->cluster($filtered) as $cluster) {
             $item = $cluster->representative;
-            $relevance = $this->scorer->score($item, $silos);
+            $relevance = $this->scorer->score($item, $silos, $routingHint);
 
             if ($relevance->band === RelevanceBand::Dropped) {
                 $dropped[] = ['title' => $item->title, 'reason' => $this->dropReason($relevance)];
@@ -168,6 +171,7 @@ class CandidateFunnel
             'site_id' => $site->id,
             'silo_id' => $relevance->matchedSiloId,
             'matched_silo_id' => $relevance->matchedSiloId,
+            'source_id' => $item->feedId,
             'kind' => ContentKind::Post,
             'intake_type' => IntakeType::Reactive,
             'status' => $status,
