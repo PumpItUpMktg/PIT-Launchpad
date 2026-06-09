@@ -1,0 +1,257 @@
+{
+    "version": "0.4",
+    "title": "Page - Blog Index",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "4e41565",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-hero",
+                "_css_classes": "wf-block wf-block-hero"
+            },
+            "elements": [
+                {
+                    "id": "df67af6",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "column",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 18,
+                            "column": "18",
+                            "row": "18"
+                        },
+                        "width": {
+                            "unit": "%",
+                            "size": 100,
+                            "sizes": []
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "f277ab5",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Service eyebrow</p>",
+                                "_title": "hero_eyebrow",
+                                "_css_classes": "wf-hero-eyebrow"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "4fe95b5",
+                            "elType": "widget",
+                            "widgetType": "heading",
+                            "settings": {
+                                "title": "Short page headline",
+                                "header_size": "h1",
+                                "_title": "hero_headline",
+                                "_css_classes": "wf-hero-headline"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "59c765f",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Subhead stating the solution and one proof point.</p>",
+                                "_title": "hero_subhead",
+                                "_css_classes": "wf-hero-subhead"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "aaf583f",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "row",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 12,
+                                    "column": "12",
+                                    "row": "12"
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "3a756a6",
+                                    "elType": "widget",
+                                    "widgetType": "button",
+                                    "settings": {
+                                        "text": "Primary CTA",
+                                        "_title": "hero_cta_primary",
+                                        "_css_classes": "wf-hero-cta-primary"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "a6afb69",
+                                    "elType": "widget",
+                                    "widgetType": "button",
+                                    "settings": {
+                                        "text": "Call now",
+                                        "_title": "hero_cta_phone",
+                                        "_css_classes": "wf-hero-cta-phone"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "6aa6543",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-post-grid",
+                "_css_classes": "wf-block wf-block-post-grid"
+            },
+            "elements": [
+                {
+                    "id": "8b9de23",
+                    "elType": "widget",
+                    "widgetType": "posts",
+                    "settings": {
+                        "posts_per_page": 9,
+                        "columns": 3,
+                        "pagination_type": "numbers",
+                        "_title": "post_loop",
+                        "_css_classes": "wf-post-loop"
+                    },
+                    "elements": []
+                }
+            ]
+        },
+        {
+            "id": "1af717a",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-final-cta",
+                "_css_classes": "wf-block wf-block-final-cta",
+                "flex_align_items": "center"
+            },
+            "elements": [
+                {
+                    "id": "a228f2e",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Ready to get started?",
+                        "header_size": "h2",
+                        "_title": "cta_heading",
+                        "_css_classes": "wf-cta-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "d688e08",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>Closing line that nudges the action, 80–150 chars.</p>",
+                        "_title": "cta_body",
+                        "_css_classes": "wf-cta-body"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "2e8fc7f",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "6285f49",
+                            "elType": "widget",
+                            "widgetType": "button",
+                            "settings": {
+                                "text": "Primary CTA",
+                                "_title": "cta_primary",
+                                "_css_classes": "wf-cta-primary"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "9c59a96",
+                            "elType": "widget",
+                            "widgetType": "button",
+                            "settings": {
+                                "text": "Call now",
+                                "_title": "cta_phone",
+                                "_css_classes": "wf-cta-phone"
+                            },
+                            "elements": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

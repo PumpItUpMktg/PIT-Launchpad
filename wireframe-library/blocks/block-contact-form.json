@@ -1,0 +1,88 @@
+{
+    "version": "0.4",
+    "title": "Block - Contact Form",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "44d480a",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-contact-form",
+                "_css_classes": "wf-block wf-block-contact-form"
+            },
+            "elements": [
+                {
+                    "id": "6cf5d38",
+                    "elType": "widget",
+                    "widgetType": "form",
+                    "settings": {
+                        "form_name": "Contact",
+                        "form_fields": [
+                            {
+                                "custom_id": "name",
+                                "field_type": "text",
+                                "field_label": "Name",
+                                "placeholder": "Name",
+                                "required": "true",
+                                "width": "50",
+                                "_id": "8ddf905"
+                            },
+                            {
+                                "custom_id": "email",
+                                "field_type": "email",
+                                "field_label": "Email",
+                                "placeholder": "Email",
+                                "required": "true",
+                                "width": "50",
+                                "_id": "be9b4c3"
+                            },
+                            {
+                                "custom_id": "phone",
+                                "field_type": "tel",
+                                "field_label": "Phone",
+                                "placeholder": "Phone",
+                                "width": "50",
+                                "_id": "1bb339e"
+                            },
+                            {
+                                "custom_id": "message",
+                                "field_type": "textarea",
+                                "field_label": "Message",
+                                "placeholder": "Message",
+                                "required": "true",
+                                "width": "100",
+                                "_id": "0efa762"
+                            }
+                        ],
+                        "button_text": "Send message",
+                        "submit_actions": [
+                            "redirect"
+                        ],
+                        "redirect_to": "/thank-you",
+                        "_title": "contact_form",
+                        "_css_classes": "wf-contact-form"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}

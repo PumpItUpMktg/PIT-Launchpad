@@ -1,0 +1,113 @@
+{
+    "version": "0.4",
+    "title": "Block - Service List",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "c465903",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-service-list",
+                "_css_classes": "wf-block wf-block-service-list"
+            },
+            "elements": [
+                {
+                    "id": "dff9b63",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Our services",
+                        "header_size": "h2",
+                        "_title": "svclist_heading",
+                        "_css_classes": "wf-svclist-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "ae430ba",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p><a href=\"#\">Service 1</a></p>",
+                        "_title": "svc_item_1",
+                        "_css_classes": "wf-svc-item-1"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "e473604",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p><a href=\"#\">Service 2</a></p>",
+                        "_title": "svc_item_2",
+                        "_css_classes": "wf-svc-item-2"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "f4ebed5",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p><a href=\"#\">Service 3</a></p>",
+                        "_title": "svc_item_3",
+                        "_css_classes": "wf-svc-item-3"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "8f56aeb",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p><a href=\"#\">Service 4</a></p>",
+                        "_title": "svc_item_4",
+                        "_css_classes": "wf-svc-item-4"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "8c009c1",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p><a href=\"#\">Service 5</a></p>",
+                        "_title": "svc_item_5",
+                        "_css_classes": "wf-svc-item-5"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "b04f2bb",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p><a href=\"#\">Service 6</a></p>",
+                        "_title": "svc_item_6",
+                        "_css_classes": "wf-svc-item-6"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}

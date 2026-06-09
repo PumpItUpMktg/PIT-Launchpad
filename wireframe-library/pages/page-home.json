@@ -1,0 +1,1764 @@
+{
+    "version": "0.4",
+    "title": "Page - Home",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "cce795c",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-hero",
+                "_css_classes": "wf-block wf-block-hero"
+            },
+            "elements": [
+                {
+                    "id": "b9cc397",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 34,
+                            "column": "34",
+                            "row": "34"
+                        },
+                        "flex_align_items": "center"
+                    },
+                    "elements": [
+                        {
+                            "id": "df67af6",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 18,
+                                    "column": "18",
+                                    "row": "18"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 52,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "f277ab5",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Service eyebrow</p>",
+                                        "_title": "hero_eyebrow",
+                                        "_css_classes": "wf-hero-eyebrow"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "4fe95b5",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Brand promise headline",
+                                        "header_size": "h1",
+                                        "_title": "hero_headline",
+                                        "_css_classes": "wf-hero-headline"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "59c765f",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Subhead stating the solution and one proof point.</p>",
+                                        "_title": "hero_subhead",
+                                        "_css_classes": "wf-hero-subhead"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "aaf583f",
+                                    "elType": "container",
+                                    "isInner": true,
+                                    "settings": {
+                                        "flex_direction": "row",
+                                        "flex_gap": {
+                                            "unit": "px",
+                                            "size": 12,
+                                            "column": "12",
+                                            "row": "12"
+                                        }
+                                    },
+                                    "elements": [
+                                        {
+                                            "id": "3a756a6",
+                                            "elType": "widget",
+                                            "widgetType": "button",
+                                            "settings": {
+                                                "text": "Primary CTA",
+                                                "_title": "hero_cta_primary",
+                                                "_css_classes": "wf-hero-cta-primary"
+                                            },
+                                            "elements": []
+                                        },
+                                        {
+                                            "id": "a6afb69",
+                                            "elType": "widget",
+                                            "widgetType": "button",
+                                            "settings": {
+                                                "text": "Call now",
+                                                "_title": "hero_cta_phone",
+                                                "_css_classes": "wf-hero-cta-phone"
+                                            },
+                                            "elements": []
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "7375d20",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 16,
+                                    "column": "16",
+                                    "row": "16"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 48,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "c610b0f",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/hero-1200x900.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "1200",
+                                            "height": "900"
+                                        },
+                                        "_title": "hero_image",
+                                        "_css_classes": "wf-hero-image"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "4d6e6df",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-trust-bar",
+                "_css_classes": "wf-block wf-block-trust-bar"
+            },
+            "elements": [
+                {
+                    "id": "3569660",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        },
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "40cfb2c",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 6,
+                                    "column": "6",
+                                    "row": "6"
+                                },
+                                "flex_align_items": "center"
+                            },
+                            "elements": [
+                                {
+                                    "id": "0dba67e",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Value 1",
+                                        "header_size": "h3",
+                                        "_title": "trust_value_1",
+                                        "_css_classes": "wf-trust-value-1"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "f89e706",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Label</p>",
+                                        "_title": "trust_label_1",
+                                        "_css_classes": "wf-trust-label-1"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "0425ac1",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 6,
+                                    "column": "6",
+                                    "row": "6"
+                                },
+                                "flex_align_items": "center"
+                            },
+                            "elements": [
+                                {
+                                    "id": "7199492",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Value 2",
+                                        "header_size": "h3",
+                                        "_title": "trust_value_2",
+                                        "_css_classes": "wf-trust-value-2"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "51c43e6",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Label</p>",
+                                        "_title": "trust_label_2",
+                                        "_css_classes": "wf-trust-label-2"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "4e5e77c",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 6,
+                                    "column": "6",
+                                    "row": "6"
+                                },
+                                "flex_align_items": "center"
+                            },
+                            "elements": [
+                                {
+                                    "id": "2910109",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Value 3",
+                                        "header_size": "h3",
+                                        "_title": "trust_value_3",
+                                        "_css_classes": "wf-trust-value-3"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "1cf646f",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Label</p>",
+                                        "_title": "trust_label_3",
+                                        "_css_classes": "wf-trust-label-3"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "b3f7f47",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 6,
+                                    "column": "6",
+                                    "row": "6"
+                                },
+                                "flex_align_items": "center"
+                            },
+                            "elements": [
+                                {
+                                    "id": "149279e",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Value 4",
+                                        "header_size": "h3",
+                                        "_title": "trust_value_4",
+                                        "_css_classes": "wf-trust-value-4"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "f8e63bc",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Label</p>",
+                                        "_title": "trust_label_4",
+                                        "_css_classes": "wf-trust-label-4"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "66c9d98",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-services-grid",
+                "_css_classes": "wf-block wf-block-services-grid"
+            },
+            "elements": [
+                {
+                    "id": "2651e3c",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Services",
+                        "header_size": "h2",
+                        "_title": "svcgrid_heading",
+                        "_css_classes": "wf-svcgrid-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "fa8cff1",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "d40dc4f",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "0943488",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/svccard-1-600x400.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "600",
+                                            "height": "400"
+                                        },
+                                        "_title": "svccard_1_image",
+                                        "_css_classes": "wf-svccard-1-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "265623a",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Service 1",
+                                        "header_size": "h3",
+                                        "_title": "svccard_1_title",
+                                        "_css_classes": "wf-svccard-1-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "dea6b5f",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short blurb. <a href=\"#\">Learn more</a></p>",
+                                        "_title": "svccard_1_body",
+                                        "_css_classes": "wf-svccard-1-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "d6f576a",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "4171408",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/svccard-2-600x400.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "600",
+                                            "height": "400"
+                                        },
+                                        "_title": "svccard_2_image",
+                                        "_css_classes": "wf-svccard-2-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "582707a",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Service 2",
+                                        "header_size": "h3",
+                                        "_title": "svccard_2_title",
+                                        "_css_classes": "wf-svccard-2-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "a39a96a",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short blurb. <a href=\"#\">Learn more</a></p>",
+                                        "_title": "svccard_2_body",
+                                        "_css_classes": "wf-svccard-2-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "0590e02",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "633c5b9",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/svccard-3-600x400.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "600",
+                                            "height": "400"
+                                        },
+                                        "_title": "svccard_3_image",
+                                        "_css_classes": "wf-svccard-3-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "229729a",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Service 3",
+                                        "header_size": "h3",
+                                        "_title": "svccard_3_title",
+                                        "_css_classes": "wf-svccard-3-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "1a56138",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short blurb. <a href=\"#\">Learn more</a></p>",
+                                        "_title": "svccard_3_body",
+                                        "_css_classes": "wf-svccard-3-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "72df391",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-why-us",
+                "_css_classes": "wf-block wf-block-why-us"
+            },
+            "elements": [
+                {
+                    "id": "dafbf31",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Why choose us",
+                        "header_size": "h2",
+                        "_title": "why_heading",
+                        "_css_classes": "wf-why-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "3ab73ad",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "c56b1aa",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "b71dc58",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Reason 1",
+                                        "header_size": "h3",
+                                        "_title": "why_card_1_title",
+                                        "_css_classes": "wf-why-card-1-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "d0d5f12",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Supporting copy for this reason.</p>",
+                                        "_title": "why_card_1_body",
+                                        "_css_classes": "wf-why-card-1-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "8622091",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "0b4f699",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Reason 2",
+                                        "header_size": "h3",
+                                        "_title": "why_card_2_title",
+                                        "_css_classes": "wf-why-card-2-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "4d49e5c",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Supporting copy for this reason.</p>",
+                                        "_title": "why_card_2_body",
+                                        "_css_classes": "wf-why-card-2-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "c6cd972",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "448e472",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Reason 3",
+                                        "header_size": "h3",
+                                        "_title": "why_card_3_title",
+                                        "_css_classes": "wf-why-card-3-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "19b1674",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Supporting copy for this reason.</p>",
+                                        "_title": "why_card_3_body",
+                                        "_css_classes": "wf-why-card-3-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "9d65efc",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-areas-teaser",
+                "_css_classes": "wf-block wf-block-areas-teaser"
+            },
+            "elements": [
+                {
+                    "id": "cf18a39",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Areas we serve",
+                        "header_size": "h2",
+                        "_title": "areateaser_heading",
+                        "_css_classes": "wf-areateaser-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "27814f2",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "955ad19",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 16,
+                                    "column": "16",
+                                    "row": "16"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 55,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "e9aeeff",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/areateaser-map-800x500.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "500"
+                                        },
+                                        "_title": "areateaser_map",
+                                        "_css_classes": "wf-areateaser-map"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "d813cf2",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "row",
+                                "flex_wrap": "wrap",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 12,
+                                    "column": "12",
+                                    "row": "12"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 45,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "ae04d38",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 1</a></p>",
+                                        "_title": "areateaser_link_1",
+                                        "_css_classes": "wf-areateaser-link-1"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "6d068e4",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 2</a></p>",
+                                        "_title": "areateaser_link_2",
+                                        "_css_classes": "wf-areateaser-link-2"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "4c4d9d9",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 3</a></p>",
+                                        "_title": "areateaser_link_3",
+                                        "_css_classes": "wf-areateaser-link-3"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "24aacdf",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 4</a></p>",
+                                        "_title": "areateaser_link_4",
+                                        "_css_classes": "wf-areateaser-link-4"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "1a59760",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 5</a></p>",
+                                        "_title": "areateaser_link_5",
+                                        "_css_classes": "wf-areateaser-link-5"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "fa458a3",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 6</a></p>",
+                                        "_title": "areateaser_link_6",
+                                        "_css_classes": "wf-areateaser-link-6"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "d1d1fb9",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 7</a></p>",
+                                        "_title": "areateaser_link_7",
+                                        "_css_classes": "wf-areateaser-link-7"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "d5a901a",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 8</a></p>",
+                                        "_title": "areateaser_link_8",
+                                        "_css_classes": "wf-areateaser-link-8"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "822adc1",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-testimonials",
+                "_css_classes": "wf-block wf-block-testimonials"
+            },
+            "elements": [
+                {
+                    "id": "90080d3",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "What customers say",
+                        "header_size": "h2",
+                        "_title": "reviews_heading",
+                        "_css_classes": "wf-reviews-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "2e4d31b",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>★★★★★ rating summary</p>",
+                        "_title": "reviews_rating",
+                        "_css_classes": "wf-reviews-rating"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "8ec8ddf",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "b5e09e9",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "e0d5efc",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Review body, 110–220 chars.</p>",
+                                        "_title": "review_1_body",
+                                        "_css_classes": "wf-review-1-body"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "dc1b632",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Reviewer name</p>",
+                                        "_title": "review_1_name",
+                                        "_css_classes": "wf-review-1-name"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "c730bb7",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "review_1_town",
+                                        "_css_classes": "wf-review-1-town"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "eeaad01",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "3cdfce0",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Review body, 110–220 chars.</p>",
+                                        "_title": "review_2_body",
+                                        "_css_classes": "wf-review-2-body"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "65f2e52",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Reviewer name</p>",
+                                        "_title": "review_2_name",
+                                        "_css_classes": "wf-review-2-name"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "6b3863c",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "review_2_town",
+                                        "_css_classes": "wf-review-2-town"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "d9e6d42",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "a85b4ff",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Review body, 110–220 chars.</p>",
+                                        "_title": "review_3_body",
+                                        "_css_classes": "wf-review-3-body"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "c6e969c",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Reviewer name</p>",
+                                        "_title": "review_3_name",
+                                        "_css_classes": "wf-review-3-name"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "835ced9",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "review_3_town",
+                                        "_css_classes": "wf-review-3-town"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "2193596",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-jobs",
+                "_css_classes": "wf-block wf-block-jobs"
+            },
+            "elements": [
+                {
+                    "id": "f979fac",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Recent jobs",
+                        "header_size": "h2",
+                        "_title": "jobs_heading",
+                        "_css_classes": "wf-jobs-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "108f46b",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 20,
+                            "column": "20",
+                            "row": "20"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "c0b2ed5",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 25,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "ade6477",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/job-1-800x600.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "600"
+                                        },
+                                        "_title": "job_1_image",
+                                        "_css_classes": "wf-job-1-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "50bb34a",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "job_1_town",
+                                        "_css_classes": "wf-job-1-town"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "ca4583b",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Job title 1",
+                                        "header_size": "h3",
+                                        "_title": "job_1_title",
+                                        "_css_classes": "wf-job-1-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "a9fc3f8",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short recap of the job done.</p>",
+                                        "_title": "job_1_body",
+                                        "_css_classes": "wf-job-1-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "beb5ca1",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 25,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "4433a90",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/job-2-800x600.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "600"
+                                        },
+                                        "_title": "job_2_image",
+                                        "_css_classes": "wf-job-2-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "b902f3b",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "job_2_town",
+                                        "_css_classes": "wf-job-2-town"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "72bfdd8",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Job title 2",
+                                        "header_size": "h3",
+                                        "_title": "job_2_title",
+                                        "_css_classes": "wf-job-2-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "09afb78",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short recap of the job done.</p>",
+                                        "_title": "job_2_body",
+                                        "_css_classes": "wf-job-2-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "2d25063",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 25,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "e83aba6",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/job-3-800x600.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "600"
+                                        },
+                                        "_title": "job_3_image",
+                                        "_css_classes": "wf-job-3-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "b114a7f",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "job_3_town",
+                                        "_css_classes": "wf-job-3-town"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "c80ae50",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Job title 3",
+                                        "header_size": "h3",
+                                        "_title": "job_3_title",
+                                        "_css_classes": "wf-job-3-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "8290450",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short recap of the job done.</p>",
+                                        "_title": "job_3_body",
+                                        "_css_classes": "wf-job-3-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "1d01656",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 25,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "b50fcc1",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/job-4-800x600.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "600"
+                                        },
+                                        "_title": "job_4_image",
+                                        "_css_classes": "wf-job-4-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "244abea",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "job_4_town",
+                                        "_css_classes": "wf-job-4-town"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "612e103",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Job title 4",
+                                        "header_size": "h3",
+                                        "_title": "job_4_title",
+                                        "_css_classes": "wf-job-4-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "9b6e732",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short recap of the job done.</p>",
+                                        "_title": "job_4_body",
+                                        "_css_classes": "wf-job-4-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "3b8a0b3",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-faq",
+                "_css_classes": "wf-block wf-block-faq"
+            },
+            "elements": [
+                {
+                    "id": "b769254",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Frequently asked questions",
+                        "header_size": "h2",
+                        "_title": "faq_heading",
+                        "_css_classes": "wf-faq-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "226d1f9",
+                    "elType": "widget",
+                    "widgetType": "accordion",
+                    "settings": {
+                        "tabs": [
+                            {
+                                "tab_title": "Frequently asked question 1",
+                                "tab_content": "<p>Answer to the question, 140–300 chars.</p>",
+                                "_id": "fb61ab0"
+                            },
+                            {
+                                "tab_title": "Frequently asked question 2",
+                                "tab_content": "<p>Answer to the question, 140–300 chars.</p>",
+                                "_id": "03b9ead"
+                            },
+                            {
+                                "tab_title": "Frequently asked question 3",
+                                "tab_content": "<p>Answer to the question, 140–300 chars.</p>",
+                                "_id": "295bad4"
+                            },
+                            {
+                                "tab_title": "Frequently asked question 4",
+                                "tab_content": "<p>Answer to the question, 140–300 chars.</p>",
+                                "_id": "acfcf06"
+                            }
+                        ],
+                        "_title": "faq",
+                        "_css_classes": "wf-faq"
+                    },
+                    "elements": []
+                }
+            ]
+        },
+        {
+            "id": "2ce9f73",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-final-cta",
+                "_css_classes": "wf-block wf-block-final-cta",
+                "flex_align_items": "center"
+            },
+            "elements": [
+                {
+                    "id": "c05e210",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Ready to get started?",
+                        "header_size": "h2",
+                        "_title": "cta_heading",
+                        "_css_classes": "wf-cta-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "de71d5e",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>Closing line that nudges the action, 80–150 chars.</p>",
+                        "_title": "cta_body",
+                        "_css_classes": "wf-cta-body"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "deee5ac",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "38700da",
+                            "elType": "widget",
+                            "widgetType": "button",
+                            "settings": {
+                                "text": "Primary CTA",
+                                "_title": "cta_primary",
+                                "_css_classes": "wf-cta-primary"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "efafb90",
+                            "elType": "widget",
+                            "widgetType": "button",
+                            "settings": {
+                                "text": "Call now",
+                                "_title": "cta_phone",
+                                "_css_classes": "wf-cta-phone"
+                            },
+                            "elements": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

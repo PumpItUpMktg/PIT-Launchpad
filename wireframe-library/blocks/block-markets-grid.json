@@ -1,0 +1,149 @@
+{
+    "version": "0.4",
+    "title": "Block - Markets Grid",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "161c3e1",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-markets-grid",
+                "_css_classes": "wf-block wf-block-markets-grid"
+            },
+            "elements": [
+                {
+                    "id": "ae60466",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Markets we serve",
+                        "header_size": "h2",
+                        "_title": "markets_heading",
+                        "_css_classes": "wf-markets-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "079dcd3",
+                    "elType": "widget",
+                    "widgetType": "image",
+                    "settings": {
+                        "image": {
+                            "url": "https://PLACEHOLDER.local/wf/markets-map-800x500.png",
+                            "id": 0
+                        },
+                        "image_size": "custom",
+                        "image_custom_dimension": {
+                            "width": "800",
+                            "height": "500"
+                        },
+                        "_title": "markets_map",
+                        "_css_classes": "wf-markets-map"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "fbba6c4",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_wrap": "wrap",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 16,
+                            "column": "16",
+                            "row": "16"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "6ed934e",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Market 1</a></p>",
+                                "_title": "market_1",
+                                "_css_classes": "wf-market-1"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "b217e6a",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Market 2</a></p>",
+                                "_title": "market_2",
+                                "_css_classes": "wf-market-2"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "d1d8172",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Market 3</a></p>",
+                                "_title": "market_3",
+                                "_css_classes": "wf-market-3"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "759c18c",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Market 4</a></p>",
+                                "_title": "market_4",
+                                "_css_classes": "wf-market-4"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "e26cb55",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Market 5</a></p>",
+                                "_title": "market_5",
+                                "_css_classes": "wf-market-5"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "b033166",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Market 6</a></p>",
+                                "_title": "market_6",
+                                "_css_classes": "wf-market-6"
+                            },
+                            "elements": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

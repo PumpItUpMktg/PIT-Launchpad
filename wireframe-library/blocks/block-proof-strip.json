@@ -1,0 +1,148 @@
+{
+    "version": "0.4",
+    "title": "Block - Proof Strip",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "69f761b",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-proof-strip",
+                "_css_classes": "wf-block wf-block-proof-strip"
+            },
+            "elements": [
+                {
+                    "id": "aaf583f",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        },
+                        "flex_align_items": "center",
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "363b999",
+                            "elType": "widget",
+                            "widgetType": "image",
+                            "settings": {
+                                "image": {
+                                    "url": "https://PLACEHOLDER.local/wf/proof-logo-1-200x80.png",
+                                    "id": 0
+                                },
+                                "image_size": "custom",
+                                "image_custom_dimension": {
+                                    "width": "200",
+                                    "height": "80"
+                                },
+                                "_title": "proof_logo_1",
+                                "_css_classes": "wf-proof-logo-1"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "e271f71",
+                            "elType": "widget",
+                            "widgetType": "image",
+                            "settings": {
+                                "image": {
+                                    "url": "https://PLACEHOLDER.local/wf/proof-logo-2-200x80.png",
+                                    "id": 0
+                                },
+                                "image_size": "custom",
+                                "image_custom_dimension": {
+                                    "width": "200",
+                                    "height": "80"
+                                },
+                                "_title": "proof_logo_2",
+                                "_css_classes": "wf-proof-logo-2"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "62b0082",
+                            "elType": "widget",
+                            "widgetType": "image",
+                            "settings": {
+                                "image": {
+                                    "url": "https://PLACEHOLDER.local/wf/proof-logo-3-200x80.png",
+                                    "id": 0
+                                },
+                                "image_size": "custom",
+                                "image_custom_dimension": {
+                                    "width": "200",
+                                    "height": "80"
+                                },
+                                "_title": "proof_logo_3",
+                                "_css_classes": "wf-proof-logo-3"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "5a4d53b",
+                            "elType": "widget",
+                            "widgetType": "image",
+                            "settings": {
+                                "image": {
+                                    "url": "https://PLACEHOLDER.local/wf/proof-logo-4-200x80.png",
+                                    "id": 0
+                                },
+                                "image_size": "custom",
+                                "image_custom_dimension": {
+                                    "width": "200",
+                                    "height": "80"
+                                },
+                                "_title": "proof_logo_4",
+                                "_css_classes": "wf-proof-logo-4"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "3ec276d",
+                            "elType": "widget",
+                            "widgetType": "image",
+                            "settings": {
+                                "image": {
+                                    "url": "https://PLACEHOLDER.local/wf/proof-logo-5-200x80.png",
+                                    "id": 0
+                                },
+                                "image_size": "custom",
+                                "image_custom_dimension": {
+                                    "width": "200",
+                                    "height": "80"
+                                },
+                                "_title": "proof_logo_5",
+                                "_css_classes": "wf-proof-logo-5"
+                            },
+                            "elements": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

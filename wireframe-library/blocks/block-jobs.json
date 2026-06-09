@@ -1,0 +1,359 @@
+{
+    "version": "0.4",
+    "title": "Block - Jobs",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "050fa3c",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-jobs",
+                "_css_classes": "wf-block wf-block-jobs"
+            },
+            "elements": [
+                {
+                    "id": "f86bee8",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Recent jobs",
+                        "header_size": "h2",
+                        "_title": "jobs_heading",
+                        "_css_classes": "wf-jobs-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "81d71af",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 20,
+                            "column": "20",
+                            "row": "20"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "ca1306e",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 25,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "cc46f49",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/job-1-800x600.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "600"
+                                        },
+                                        "_title": "job_1_image",
+                                        "_css_classes": "wf-job-1-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "1c0039b",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "job_1_town",
+                                        "_css_classes": "wf-job-1-town"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "2358c1e",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Job title 1",
+                                        "header_size": "h3",
+                                        "_title": "job_1_title",
+                                        "_css_classes": "wf-job-1-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "6e4c36e",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short recap of the job done.</p>",
+                                        "_title": "job_1_body",
+                                        "_css_classes": "wf-job-1-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "f0f11da",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 25,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "3f340cf",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/job-2-800x600.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "600"
+                                        },
+                                        "_title": "job_2_image",
+                                        "_css_classes": "wf-job-2-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "4d77592",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "job_2_town",
+                                        "_css_classes": "wf-job-2-town"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "9aee64a",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Job title 2",
+                                        "header_size": "h3",
+                                        "_title": "job_2_title",
+                                        "_css_classes": "wf-job-2-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "b7e5747",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short recap of the job done.</p>",
+                                        "_title": "job_2_body",
+                                        "_css_classes": "wf-job-2-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "7fa8c2d",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 25,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "a9b94f7",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/job-3-800x600.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "600"
+                                        },
+                                        "_title": "job_3_image",
+                                        "_css_classes": "wf-job-3-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "04ca162",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "job_3_town",
+                                        "_css_classes": "wf-job-3-town"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "8a07cd7",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Job title 3",
+                                        "header_size": "h3",
+                                        "_title": "job_3_title",
+                                        "_css_classes": "wf-job-3-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "acd3502",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short recap of the job done.</p>",
+                                        "_title": "job_3_body",
+                                        "_css_classes": "wf-job-3-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "4e5e77c",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 25,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "178751d",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/job-4-800x600.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "600"
+                                        },
+                                        "_title": "job_4_image",
+                                        "_css_classes": "wf-job-4-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "7e3a5a7",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "job_4_town",
+                                        "_css_classes": "wf-job-4-town"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "29c7f7c",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Job title 4",
+                                        "header_size": "h3",
+                                        "_title": "job_4_title",
+                                        "_css_classes": "wf-job-4-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "a208c93",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short recap of the job done.</p>",
+                                        "_title": "job_4_body",
+                                        "_css_classes": "wf-job-4-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

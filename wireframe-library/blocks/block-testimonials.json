@@ -1,0 +1,236 @@
+{
+    "version": "0.4",
+    "title": "Block - Testimonials",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "376698e",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-testimonials",
+                "_css_classes": "wf-block wf-block-testimonials"
+            },
+            "elements": [
+                {
+                    "id": "b96aca3",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "What customers say",
+                        "header_size": "h2",
+                        "_title": "reviews_heading",
+                        "_css_classes": "wf-reviews-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "c694916",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>★★★★★ rating summary</p>",
+                        "_title": "reviews_rating",
+                        "_css_classes": "wf-reviews-rating"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "2e8fc7f",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "ce5798c",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "4951b13",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Review body, 110–220 chars.</p>",
+                                        "_title": "review_1_body",
+                                        "_css_classes": "wf-review-1-body"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "01a6a8b",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Reviewer name</p>",
+                                        "_title": "review_1_name",
+                                        "_css_classes": "wf-review-1-name"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "301c7e8",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "review_1_town",
+                                        "_css_classes": "wf-review-1-town"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "08e028b",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "f4c4ea8",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Review body, 110–220 chars.</p>",
+                                        "_title": "review_2_body",
+                                        "_css_classes": "wf-review-2-body"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "9d6fc32",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Reviewer name</p>",
+                                        "_title": "review_2_name",
+                                        "_css_classes": "wf-review-2-name"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "73e6527",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "review_2_town",
+                                        "_css_classes": "wf-review-2-town"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "3184f81",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "546a09c",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Review body, 110–220 chars.</p>",
+                                        "_title": "review_3_body",
+                                        "_css_classes": "wf-review-3-body"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "0af63f6",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Reviewer name</p>",
+                                        "_title": "review_3_name",
+                                        "_css_classes": "wf-review-3-name"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "1fb5dcb",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Town</p>",
+                                        "_title": "review_3_town",
+                                        "_css_classes": "wf-review-3-town"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
