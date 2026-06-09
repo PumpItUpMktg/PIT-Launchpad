@@ -1,0 +1,58 @@
+{
+    "content_id": "01J8ZA1CONTENTLOCATION000001",
+    "kind": "page",
+    "page_type": "location",
+    "kit": "location-page",
+    "kit_version": "1",
+    "silo_id": "01J8Z9SILOPLUMBING00000001",
+    "slug": "plumber-round-rock-tx",
+    "status": "published",
+    "locked": false,
+    "slot_payload": {
+        "hero_heading": "Plumbing & Water Heater Service in Round Rock",
+        "area_intro": "<p>We serve Round Rock and the surrounding neighborhoods with prompt, local plumbing service — from Old Settlers Park to Teravista.</p>",
+        "why_us_local": "Round Rock homeowners trust our licensed, warrantied crews who know the area's hard-water quirks.",
+        "nap_block": { "label": "Call our Round Rock team", "url": "tel:+15125550110" },
+        "map": { "lat": "30.5083", "lng": "-97.6789" },
+        "services_here": ["Water Heater Repair", "Drain Cleaning", "Leak Detection"],
+        "local_testimonials": [
+            { "quote": "Quick, tidy, and fairly priced.", "author": "Marcus T., Round Rock" }
+        ],
+        "recent_work": [
+            { "url": "https://cdn.example-r2.dev/sites/apex/jobs/rr-install-01.webp", "alt": "New water heater installed in Round Rock" }
+        ],
+        "service_area_list": ["Teravista", "Old Settlers", "Forest Creek", "Behrens Ranch"],
+        "offers": [
+            { "label": "$50 off first service", "url": "/offers/new-customer" }
+        ],
+        "nearby_landmarks": ["Old Settlers Park", "Dell Diamond"],
+        "cta_contact": { "label": "Book online", "url": "/book" }
+    },
+    "images": {
+        "hero_image": {
+            "url": "https://cdn.example-r2.dev/sites/apex/round-rock-hero.webp",
+            "alt": "Apex Plumbing van in a Round Rock neighborhood",
+            "title": "Plumber in Round Rock, TX",
+            "width": 1200,
+            "height": 675
+        }
+    },
+    "seo": {
+        "title": "Plumber in Round Rock, TX | Apex Plumbing & HVAC",
+        "meta_description": "Local, licensed plumbing and water heater service in Round Rock, TX. Same-day appointments and upfront pricing.",
+        "canonical": "https://apexplumbing.example/plumber-round-rock-tx",
+        "robots": "index, follow",
+        "og": { "image": "https://cdn.example-r2.dev/sites/apex/round-rock-hero.webp" },
+        "schema_type": "LocalBusiness",
+        "schema_payload": {
+            "@type": "LocalBusiness",
+            "name": "Apex Plumbing & HVAC",
+            "areaServed": "Round Rock, TX"
+        },
+        "breadcrumbs": [
+            { "name": "Home", "url": "https://apexplumbing.example/" },
+            { "name": "Service Areas", "url": "https://apexplumbing.example/service-areas" },
+            { "name": "Round Rock", "url": "" }
+        ]
+    }
+}

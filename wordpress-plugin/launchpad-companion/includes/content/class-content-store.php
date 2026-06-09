@@ -1,0 +1,168 @@
+<?php
+/**
+ * Upserts a page or post from a contract /content payload (idempotent on the
+ * control-plane content_id ULID): stores the consolidated slot blob + SEO under
+ * single meta keys (no ACF), sideloads images, assigns the silo category (pages
+ * AND posts), routes the kit template, and honors the locked / locally-edited
+ * protocol — returning {skipped:true} rather than clobbering an operator's edits.
+ *
+ * @package Launchpad\Companion
+ */
+
+namespace Launchpad\Companion\Content;
+
+use Launchpad\Companion\Meta;
+use Launchpad\Companion\Render\TemplateRouter;
+
+if (! defined('ABSPATH')) {
+    exit;
+}
+
+final class ContentStore
+{
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{content_id: string, wp_post_id: int, status: string, skipped: bool}
+     */
+    public function upsert(array $payload): array
+    {
+        $content_id = (string) ($payload['content_id'] ?? '');
+        $kind = ($payload['kind'] ?? 'page') === 'post' ? 'post' : 'page';
+
+        $existing_id = $this->find($content_id);
+
+        // Locked protocol: never overwrite an operator-locked or locally-edited
+        // page. Echo the post id and report the skip; the engine records it.
+        if ($existing_id > 0 && $this->is_protected($existing_id, $payload)) {
+            return [
+                'content_id' => $content_id,
+                'wp_post_id' => $existing_id,
+                'status' => (string) get_post_status($existing_id),
+                'skipped' => true,
+            ];
+        }
+
+        $seo = is_array($payload['seo'] ?? null) ? $payload['seo'] : [];
+        $status = ($payload['status'] ?? '') === 'published' ? 'publish' : 'draft';
+
+        $postarr = [
+            'post_type' => $kind,
+            'post_status' => $status,
+            'post_title' => (string) ($seo['title'] ?? $payload['title'] ?? 'Untitled'),
+            'post_content' => '',
+        ];
+        if (! empty($payload['slug'])) {
+            $postarr['post_name'] = sanitize_title((string) $payload['slug']);
+        }
+        if ($existing_id > 0) {
+            $postarr['ID'] = $existing_id;
+        }
+
+        // Run the write under the edit guard so the resulting save_post is not
+        // mistaken for a human edit.
+        $post_id = (int) EditGuard::during_write(static function () use ($postarr, $existing_id) {
+            return $existing_id > 0
+                ? wp_update_post(wp_slash($postarr), true)
+                : wp_insert_post(wp_slash($postarr), true);
+        });
+
+        if ($post_id <= 0) {
+            return ['content_id' => $content_id, 'wp_post_id' => 0, 'status' => 'error', 'skipped' => false];
+        }
+
+        $images = is_array($payload['images'] ?? null)
+            ? ImageImporter::import_all($payload['images'], $post_id)
+            : [];
+
+        $this->store_meta($post_id, $content_id, $kind, $payload, $seo, $images);
+        TemplateRouter::assign($post_id, (string) ($payload['kit'] ?? ''), (string) ($payload['page_type'] ?? ''));
+        $this->assign_category($post_id, (string) ($payload['silo_id'] ?? ''));
+
+        EditGuard::record_push($post_id, $this->fingerprint($payload));
+
+        return [
+            'content_id' => $content_id,
+            'wp_post_id' => $post_id,
+            'status' => $status,
+            'skipped' => false,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function is_protected(int $post_id, array $payload): bool
+    {
+        return ! empty($payload['locked'])
+            || get_post_meta($post_id, Meta::LOCKED, true) === '1'
+            || EditGuard::is_locally_edited($post_id);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $seo
+     * @param  array<string, array<string, mixed>>  $images
+     */
+    private function store_meta(int $post_id, string $content_id, string $kind, array $payload, array $seo, array $images): void
+    {
+        update_post_meta($post_id, Meta::CONTENT_ID, $content_id);
+        update_post_meta($post_id, Meta::SLOTS, is_array($payload['slot_payload'] ?? null) ? $payload['slot_payload'] : []);
+        update_post_meta($post_id, Meta::SEO, $seo);
+        update_post_meta($post_id, Meta::IMAGES, $images);
+        update_post_meta($post_id, Meta::KIND, $kind);
+        update_post_meta($post_id, Meta::PAGE_TYPE, (string) ($payload['page_type'] ?? ''));
+        update_post_meta($post_id, Meta::KIT, (string) ($payload['kit'] ?? ''));
+        update_post_meta($post_id, Meta::KIT_VERSION, (string) ($payload['kit_version'] ?? ''));
+        update_post_meta($post_id, Meta::SILO_ID, (string) ($payload['silo_id'] ?? ''));
+        update_post_meta($post_id, Meta::LOCKED, ! empty($payload['locked']) ? '1' : '0');
+    }
+
+    /**
+     * Link the silo category — for BOTH pages and posts (service/location pages
+     * are kind=page and must carry it). Lazily creates a placeholder category if
+     * the silo_id hasn't been pushed via /silo yet; a later /silo find-or-updates it.
+     */
+    private function assign_category(int $post_id, string $silo_id): void
+    {
+        if ($silo_id === '') {
+            return;
+        }
+
+        $term_id = SiloStore::term_for_or_create($silo_id);
+        if ($term_id > 0) {
+            wp_set_post_categories($post_id, [$term_id], false);
+        }
+    }
+
+    private function find(string $content_id): int
+    {
+        if ($content_id === '') {
+            return 0;
+        }
+
+        $posts = get_posts([
+            'post_type' => ['page', 'post'],
+            'post_status' => 'any',
+            'numberposts' => 1,
+            'fields' => 'ids',
+            'meta_key' => Meta::CONTENT_ID,
+            'meta_value' => $content_id,
+            'suppress_filters' => false,
+        ]);
+
+        return $posts ? (int) $posts[0] : 0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function fingerprint(array $payload): string
+    {
+        return md5((string) wp_json_encode([
+            $payload['slot_payload'] ?? [],
+            $payload['seo'] ?? [],
+            $payload['images'] ?? [],
+            $payload['slug'] ?? '',
+        ]));
+    }
+}
