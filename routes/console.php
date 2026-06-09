@@ -30,3 +30,13 @@ Schedule::job(new IngestConversions)->hourly()->withoutOverlapping();
 // eligible site. Daily; the per-site cadence (off durable artifacts) gates the
 // actual work, so tracking refreshes on its beat and discovery runs slower.
 Schedule::job(new RefreshKeywordPipelines)->daily()->withoutOverlapping();
+
+// §6a generated feeds — materialize the keyword map × markets into Google News
+// feeds (idempotent; retires stale by deactivation). Daily, after the pipeline
+// refresh so new keywords/markets project on the same beat.
+Schedule::command('launchpad:reconcile-generated-feeds')->daily()->withoutOverlapping();
+
+// §6a feed ingest — fetch every active feed (generated + client) and route items
+// through the candidate funnel. Hourly; withoutOverlapping so the keyword×geo
+// fan-out can't stack runs.
+Schedule::command('launchpad:ingest-feeds')->hourly()->withoutOverlapping();
