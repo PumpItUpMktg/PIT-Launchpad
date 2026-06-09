@@ -82,7 +82,7 @@ class AppServiceProvider extends ServiceProvider
             $app->make(Http::class),
             (string) config('services.fal.key'),
             (string) config('services.fal.base_url', 'https://fal.run'),
-            (string) config('services.fal.model', 'fal-ai/flux/dev'),
+            (string) config('services.fal.image_model', 'fal-ai/flux/dev'),
             (int) config('services.fal.timeout', 60),
         ));
 
