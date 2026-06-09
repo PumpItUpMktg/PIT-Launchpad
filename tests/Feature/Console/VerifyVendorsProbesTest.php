@@ -44,14 +44,17 @@ it('skips keyless vendors without making any outbound call', function () {
     Http::assertNothingSent();
 });
 
-it('runs the configured news probe live (faked) and reports the count', function () {
+it('runs the configured news probe live (faked) and asserts XML body-shape', function () {
+    // Default provider is Google News — the probe asserts XML + a parsed item.
     Http::fake([
-        '*' => Http::response(['articles' => [[
-            'url' => 'https://tribune.com/story',
-            'title' => 'A title',
-            'seendate' => '20260605T143000Z',
-            'domain' => 'tribune.com',
-        ]]]),
+        '*/rss/search*' => Http::response(
+            '<?xml version="1.0"?><rss version="2.0"><channel><item>'
+            .'<title>A title</title><link>https://www.google.com/url?url=https://tribune.com/story</link>'
+            .'<pubDate>Mon, 01 Jun 2026 14:30:00 GMT</pubDate><source url="https://tribune.com">Tribune</source>'
+            .'</item></channel></rss>',
+            200,
+            ['Content-Type' => 'application/xml'],
+        ),
     ]);
 
     $news = collect(app(VendorProbeRegistry::class)->all())
@@ -60,8 +63,22 @@ it('runs the configured news probe live (faked) and reports the count', function
     $result = $news->run();
 
     expect($result->status)->toBe(ProbeStatus::Live)
-        ->and($result->detail)->toContain('provider=gdelt')
-        ->and($result->detail)->toContain('1 item');
+        ->and($result->detail)->toContain('provider=googlenews')
+        ->and($result->detail)->toContain('xml');
+});
+
+it('the news probe FAILs on a consent HTML page (no false LIVE)', function () {
+    Http::fake([
+        '*/rss/search*' => Http::response('<!doctype html><html><title>Before you continue</title></html>', 200, ['Content-Type' => 'text/html']),
+    ]);
+
+    $news = collect(app(VendorProbeRegistry::class)->all())
+        ->firstOrFail(fn (VendorProbe $p) => $p->label() === 'News');
+
+    $result = $news->run();
+
+    expect($result->status)->toBe(ProbeStatus::Fail)
+        ->and($result->detail)->toContain('consent');
 });
 
 it('formats a result as an aligned LIVE/SKIP/FAIL line', function () {

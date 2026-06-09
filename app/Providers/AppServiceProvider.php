@@ -34,6 +34,7 @@ use App\Integrations\Google\SearchConsoleProvider;
 use App\Integrations\LocalGrid\LocalGridProvider;
 use App\Integrations\News\GdeltNewsProvider;
 use App\Integrations\News\GdeltRateLimiter;
+use App\Integrations\News\GoogleNewsRssProvider;
 use App\Integrations\News\MockOnDemandSourcePull;
 use App\Integrations\News\NewsApiProvider;
 use App\Integrations\News\NewsProvider;
@@ -120,27 +121,35 @@ class AppServiceProvider extends ServiceProvider
         // NewsProvider contract — the candidate funnel/scoring is untouched.
         // Tests bind a fake source / Http::fake, so CI makes no live call.
         $this->app->singleton(NewsProvider::class, function () {
-            if ($this->newsProviderChoice() === NewsProviderType::NewsApi) {
-                return new NewsApiProvider(
+            return match ($this->newsProviderChoice()) {
+                NewsProviderType::NewsApi => new NewsApiProvider(
                     $this->app->make(Http::class),
                     (string) config('services.news.key'),
                     (string) config('services.news.base_url', 'https://newsapi.org/v2'),
                     (int) config('services.news.recency_days', 90),
                     (int) config('services.news.timeout', 30),
-                );
-            }
-
-            return new GdeltNewsProvider(
-                $this->app->make(Http::class),
-                new GdeltRateLimiter(
-                    $this->app->make(CacheRepository::class),
-                    (int) config('services.news.gdelt_throttle_seconds', 6),
                 ),
-                (string) config('services.news.gdelt_base_url', 'https://api.gdeltproject.org/api/v2/doc/doc'),
-                (int) config('services.news.gdelt_max_records', 250),
-                (int) config('services.news.recency_days', 90),
-                (int) config('services.news.timeout', 30),
-            );
+                NewsProviderType::Gdelt => new GdeltNewsProvider(
+                    $this->app->make(Http::class),
+                    new GdeltRateLimiter(
+                        $this->app->make(CacheRepository::class),
+                        (int) config('services.news.gdelt_throttle_seconds', 6),
+                    ),
+                    (string) config('services.news.gdelt_base_url', 'https://api.gdeltproject.org/api/v2/doc/doc'),
+                    (int) config('services.news.gdelt_max_records', 250),
+                    (int) config('services.news.recency_days', 90),
+                    (int) config('services.news.timeout', 30),
+                ),
+                default => new GoogleNewsRssProvider(
+                    $this->app->make(Http::class),
+                    (string) config('services.news.googlenews_base_url', 'https://news.google.com'),
+                    (string) config('services.news.googlenews_hl', 'en-US'),
+                    (string) config('services.news.googlenews_gl', 'US'),
+                    (string) config('services.news.googlenews_ceid', 'US:en'),
+                    (int) config('services.news.recency_days', 90),
+                    (int) config('services.news.timeout', 30),
+                ),
+            };
         });
 
         // §6 near-duplicate embeddings run on the real OpenAI adapter (Step 2,
@@ -292,8 +301,8 @@ class AppServiceProvider extends ServiceProvider
      */
     private function newsProviderChoice(): NewsProviderType
     {
-        return NewsProviderType::tryFrom((string) config('services.news.provider', 'gdelt'))
-            ?? NewsProviderType::Gdelt;
+        return NewsProviderType::tryFrom((string) config('services.news.provider', 'googlenews'))
+            ?? NewsProviderType::GoogleNews;
     }
 
     /**

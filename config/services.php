@@ -82,10 +82,16 @@ return [
     // (default, no key, ~3-month rolling window) or `newsapi` (keyed alternate,
     // paid in production). Non-secret tunables baked in.
     'news' => [
-        'provider' => env('NEWS_PROVIDER', 'gdelt'),
+        'provider' => env('NEWS_PROVIDER', 'googlenews'),
         // Per-client recency window applied at the query level (default 90d).
         'recency_days' => (int) env('CONTENT_ENGINE_RECENCY_DAYS', 90),
         'timeout' => (int) env('NEWS_TIMEOUT', 30),
+        // Google News RSS (default) — consent-aware fetch beats the datacenter-IP
+        // wall GDELT hits. Locale via hl/gl/ceid; no key.
+        'googlenews_base_url' => env('GOOGLE_NEWS_BASE_URL', 'https://news.google.com'),
+        'googlenews_hl' => env('GOOGLE_NEWS_HL', 'en-US'),
+        'googlenews_gl' => env('GOOGLE_NEWS_GL', 'US'),
+        'googlenews_ceid' => env('GOOGLE_NEWS_CEID', 'US:en'),
         // GDELT DOC 2.0 — no auth. Throttle ~1 req / 5-6s; maxrecords caps at 250.
         'gdelt_base_url' => env('GDELT_BASE_URL', 'https://api.gdeltproject.org/api/v2/doc/doc'),
         'gdelt_throttle_seconds' => (int) env('GDELT_THROTTLE_SECONDS', 6),
