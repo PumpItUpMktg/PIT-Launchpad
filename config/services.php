@@ -78,10 +78,20 @@ return [
         'cache_ttl_hours' => (int) env('DATAFORSEO_CACHE_TTL_HOURS', 168),
     ],
 
-    // News feeds (§6a candidate funnel). `provider` selects the news source.
+    // News feeds (§6a candidate funnel). `provider` selects the source: `gdelt`
+    // (default, no key, ~3-month rolling window) or `newsapi` (keyed alternate,
+    // paid in production). Non-secret tunables baked in.
     'news' => [
-        'provider' => env('NEWS_PROVIDER', 'newsapi'),
-        'key' => env('NEWS_API_KEY'),
+        'provider' => env('NEWS_PROVIDER', 'gdelt'),
+        // Per-client recency window applied at the query level (default 90d).
+        'recency_days' => (int) env('CONTENT_ENGINE_RECENCY_DAYS', 90),
+        'timeout' => (int) env('NEWS_TIMEOUT', 30),
+        // GDELT DOC 2.0 — no auth. Throttle ~1 req / 5-6s; maxrecords caps at 250.
+        'gdelt_base_url' => env('GDELT_BASE_URL', 'https://api.gdeltproject.org/api/v2/doc/doc'),
+        'gdelt_throttle_seconds' => (int) env('GDELT_THROTTLE_SECONDS', 6),
+        'gdelt_max_records' => (int) env('GDELT_MAX_RECORDS', 250),
+        // NewsAPI — keyed alternate. NEWSAPI_KEY preferred; NEWS_API_KEY back-compat.
+        'key' => env('NEWSAPI_KEY', env('NEWS_API_KEY')),
         'base_url' => env('NEWS_BASE_URL', 'https://newsapi.org/v2'),
     ],
 
