@@ -21,6 +21,11 @@ final class ProbeResult
         return new self(ProbeStatus::Live, $detail);
     }
 
+    public static function ready(string $detail): self
+    {
+        return new self(ProbeStatus::Ready, $detail);
+    }
+
     public static function skip(string $detail): self
     {
         return new self(ProbeStatus::Skip, $detail);
