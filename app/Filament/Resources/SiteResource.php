@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
@@ -11,6 +12,7 @@ use App\Models\Site;
 use App\Operator\Controls\BudgetControl;
 use App\Operator\Controls\CadenceControl;
 use App\Operator\Handover\SiteHandover;
+use App\Publishing\LaunchOrchestrator;
 use App\Security\GateCheck;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -75,10 +77,41 @@ class SiteResource extends Resource
             ])
             ->recordActions([
                 self::queueAction(),
+                self::launchAction(),
                 self::refreshKeywordsAction(),
                 self::budgetAction(),
                 self::handoverAction(),
             ]);
+    }
+
+    /**
+     * Launch site — push the full built site (silos → content → redirects) to its
+     * connected WordPress instance through the plugin contract. Idempotent (edited
+     * pages are skipped, never clobbered) and gated on a present, non-compromised
+     * WordPress connection; the run is recorded as the go-live audit.
+     */
+    private static function launchAction(): Action
+    {
+        return Action::make('launch')
+            ->label('Launch site')
+            ->icon('heroicon-o-paper-airplane')
+            ->requiresConfirmation()
+            ->modalDescription('Pushes this site\'s silos, content and redirects to its connected WordPress instance. Safe to re-run — pages edited in WordPress are skipped, not overwritten.')
+            ->action(function (Site $record): void {
+                $run = app(LaunchOrchestrator::class)->launch($record, Auth::id());
+
+                if ($run->status === LaunchRunStatus::Blocked) {
+                    Notification::make()->danger()
+                        ->title('Launch blocked')
+                        ->body('No present, non-compromised WordPress connection. Wire one via Connections → Connect WordPress site.')
+                        ->send();
+
+                    return;
+                }
+
+                $notification = Notification::make()->title('Launch complete — '.$run->summary());
+                ($run->failed > 0 ? $notification->warning() : $notification->success())->send();
+            });
     }
 
     /**
