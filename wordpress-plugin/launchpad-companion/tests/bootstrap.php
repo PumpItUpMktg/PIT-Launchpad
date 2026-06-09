@@ -1,13 +1,22 @@
 <?php
 /**
- * PHPUnit bootstrap for the WordPress test suite. Run against the WP test library
- * (see bin/install-wp-tests.sh) or `wp-env`. Loads the plugin as an mu-plugin so
- * its hooks register before the tests run.
+ * PHPUnit bootstrap for the WordPress test suite. Runs under wp-env via
+ * wp-phpunit (CI), or the classic WP test library when WP_TESTS_DIR is set.
+ * Loads the plugin as an mu-plugin so its hooks register before the tests run.
  *
  * @package Launchpad\Companion
  */
 
+// Composer dev deps: yoast/phpunit-polyfills + wp-phpunit (sets WP_PHPUNIT__DIR).
+$_autoload = dirname(__DIR__) . '/vendor/autoload.php';
+if (file_exists($_autoload)) {
+    require_once $_autoload;
+}
+
 $_tests_dir = getenv('WP_TESTS_DIR');
+if (! $_tests_dir) {
+    $_tests_dir = getenv('WP_PHPUNIT__DIR');
+}
 if (! $_tests_dir) {
     $_tests_dir = rtrim(sys_get_temp_dir(), '/\\') . '/wordpress-tests-lib';
 }
