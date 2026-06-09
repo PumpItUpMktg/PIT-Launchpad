@@ -122,6 +122,35 @@ it('reads the zero-cost account endpoint for the verify probe', function () {
     ]);
 
     expect(dfsClient()->userData())->toBe(['login' => 'login@example.com', 'balance' => 12.34]);
+
+    // appendix/user_data is a no-body endpoint — it MUST be a GET, not a POST
+    // (a POST with no body yields 40502 "POST Data Is Empty").
+    HttpFacade::assertSent(fn ($request) => $request->method() === 'GET'
+        && str_contains($request->url(), '/appendix/user_data'));
+});
+
+it('issues the no-body collection endpoints (tasks_ready, task_get) as GET', function () {
+    HttpFacade::fake([
+        '*/tasks_ready' => HttpFacade::response(dfsEnvelope([['id' => 'task-1']])),
+        '*/task_get/advanced/*' => HttpFacade::response(dfsEnvelope([['items' => []]])),
+    ]);
+
+    dfsClient()->tasksReady('/v3/serp/google/organic/tasks_ready');
+    dfsClient()->taskGet('/v3/serp/google/organic/task_get/advanced', 'task-1');
+
+    HttpFacade::assertSent(fn ($request) => str_contains($request->url(), '/tasks_ready') && $request->method() === 'GET');
+    HttpFacade::assertSent(fn ($request) => str_contains($request->url(), '/task_get/advanced/task-1') && $request->method() === 'GET');
+});
+
+it('keeps the task/live endpoints as POST with a non-empty body', function () {
+    HttpFacade::fake([
+        '*/search_volume/live' => HttpFacade::response(dfsEnvelope([['keyword' => 'x', 'search_volume' => 1]])),
+    ]);
+
+    dfsClient()->liveSearchVolume(['x'], 2840, 'en');
+
+    HttpFacade::assertSent(fn ($request) => $request->method() === 'POST'
+        && $request->data() !== [] && $request->data() !== null);
 });
 
 it('throws on a non-20000 top-level status_code envelope', function () {

@@ -4,7 +4,9 @@ namespace App\Integrations\DataForSeo;
 
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as Http;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Throwable;
 
 /**
@@ -140,7 +142,7 @@ class DataForSeoClient
      */
     public function tasksReady(string $readyPath): array
     {
-        $json = $this->request($readyPath, []);
+        $json = $this->requestGet($readyPath);
 
         $ids = [];
         foreach (($json['tasks'] ?? []) as $task) {
@@ -161,7 +163,7 @@ class DataForSeoClient
      */
     public function taskGet(string $getPath, string $taskId): array
     {
-        $json = $this->request(rtrim($getPath, '/').'/'.$taskId, []);
+        $json = $this->requestGet(rtrim($getPath, '/').'/'.$taskId);
 
         return $this->firstTaskResult($json);
     }
@@ -173,7 +175,7 @@ class DataForSeoClient
      */
     public function userData(): array
     {
-        $json = $this->request('/v3/appendix/user_data', []);
+        $json = $this->requestGet('/v3/appendix/user_data');
         $row = $this->firstTaskResult($json)[0] ?? [];
         $row = is_array($row) ? $row : [];
 
@@ -307,21 +309,45 @@ class DataForSeoClient
     }
 
     /**
+     * POST a JSON body — the task/live endpoints, which carry an array-of-tasks.
+     *
      * @param  array<int|string, mixed>  $body
      * @return array<string, mixed>
      */
     private function request(string $path, array $body): array
     {
-        $response = $this->http
+        return $this->handle($this->pending()->post($this->url($path), $body));
+    }
+
+    /**
+     * GET a no-body endpoint. DataForSEO's appendix/user_data, tasks_ready, and
+     * task_get take NO POST body — sending one as a POST yields status_code 40502
+     * "POST Data Is Empty", so they must be issued as GET.
+     *
+     * @return array<string, mixed>
+     */
+    private function requestGet(string $path): array
+    {
+        return $this->handle($this->pending()->get($this->url($path)));
+    }
+
+    private function pending(): PendingRequest
+    {
+        return $this->http
             ->withBasicAuth($this->login, $this->password)
             ->timeout($this->timeout)
             ->acceptJson()
             ->retry(self::TRIES, self::BACKOFF_MS, function (Throwable $e): bool {
                 return $e instanceof ConnectionException
                     || ($e instanceof RequestException && $e->response->serverError());
-            }, throw: false)
-            ->post($this->url($path), $body);
+            }, throw: false);
+    }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function handle(Response $response): array
+    {
         if (! $response->successful()) {
             throw new DataForSeoException(
                 'DataForSEO HTTP '.$response->status(),
