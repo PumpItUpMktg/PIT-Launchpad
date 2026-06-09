@@ -19,6 +19,40 @@ final class TemplateRouter
     public function register(): void
     {
         add_filter('body_class', [$this, 'body_class']);
+
+        // Declare the templates this router assigns (the kit map + the Elementor
+        // canvas fallback) as valid page templates for EVERY post type. WordPress
+        // core re-validates a post's _wp_page_template on every wp_update_post; we
+        // call it with $wp_error=true, so an unrecognized template comes back as
+        // WP_Error('invalid_page_template') instead of silently degrading to
+        // 'default'. The contract write must not depend on the active theme (or
+        // Elementor) having registered these, so the plugin registers them itself.
+        add_filter('theme_templates', [$this, 'register_templates']);
+    }
+
+    /**
+     * Keep an idempotent re-push from failing on a template the active theme
+     * doesn't know: advertise the canvas fallback + every mapped kit template as
+     * valid. The generic `theme_templates` hook covers pages AND posts.
+     *
+     * @param  array<string, string>  $templates
+     * @return array<string, string>
+     */
+    public function register_templates(array $templates): array
+    {
+        $templates['elementor_canvas'] = 'Elementor Canvas';
+
+        $map = get_option(Meta::OPTION_TEMPLATES, []);
+        if (is_array($map)) {
+            foreach ($map as $file) {
+                $file = (string) $file;
+                if ($file !== '' && ! isset($templates[$file])) {
+                    $templates[$file] = $file;
+                }
+            }
+        }
+
+        return $templates;
     }
 
     /**
