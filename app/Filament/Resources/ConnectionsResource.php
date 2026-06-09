@@ -4,13 +4,17 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ConnectionsResource\Pages\ListConnections;
 use App\Models\Connection;
+use App\Models\Site;
 use App\Models\User;
+use App\Operator\Controls\WordpressConnector;
 use App\Security\ConnectionRotator;
 use App\Security\CredentialMasker;
 use App\Security\CredentialRevealer;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\KeyValue;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
@@ -19,6 +23,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
+use Throwable;
 
 /**
  * §9 connection management for the §7b controls. Credentials are shown masked
@@ -64,6 +69,64 @@ class ConnectionsResource extends Resource
                 self::revealAction(),
                 self::rotateAction(),
             ]);
+    }
+
+    /**
+     * Manual WordPress app-password connection — the prerequisite for wiring a WP
+     * instance the orchestrator pushes to. §1's connection entry was OAuth-oriented
+     * (Google), so this is the manual path: enter base URL + WP username + app
+     * password; it is verified against live WordPress before it is stored.
+     */
+    public static function connectWordPressAction(): Action
+    {
+        return Action::make('connectWordPress')
+            ->label('Connect WordPress site')
+            ->icon('heroicon-o-globe-alt')
+            ->modalSubmitActionLabel('Verify & connect')
+            ->schema([
+                Select::make('site_id')
+                    ->label('Tenant')
+                    ->options(fn (): array => Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all())
+                    ->searchable()
+                    ->required(),
+                TextInput::make('base_url')
+                    ->label('WordPress base URL')
+                    ->url()
+                    ->required()
+                    ->placeholder('https://client-site.com')
+                    ->helperText('The site root — the client appends /wp-json/…'),
+                TextInput::make('username')
+                    ->label('WP username')
+                    ->required()
+                    ->default('launchpad-sync'),
+                TextInput::make('app_password')
+                    ->label('Application password')
+                    ->password()
+                    ->revealable()
+                    ->required()
+                    ->helperText('Generated for the launchpad-sync user (provider = WordPress).'),
+            ])
+            ->action(function (array $data): void {
+                try {
+                    $connection = app(WordpressConnector::class)->connect((string) $data['site_id'], [
+                        'base_url' => (string) $data['base_url'],
+                        'username' => (string) $data['username'],
+                        'app_password' => (string) $data['app_password'],
+                    ]);
+                } catch (Throwable $e) {
+                    Notification::make()->danger()
+                        ->title('Could not verify WordPress')
+                        ->body($e->getMessage())
+                        ->send();
+
+                    return;
+                }
+
+                Notification::make()->success()
+                    ->title('WordPress connected & verified')
+                    ->body('Provider wp_app_password stored for '.($connection->credentials['base_url'] ?? '').'.')
+                    ->send();
+            });
     }
 
     private static function maskedSummary(Connection $connection): string
