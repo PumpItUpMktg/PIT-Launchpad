@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\Fal\FalClient;
+use App\Integrations\News\NewsProvider;
+use DateTimeImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Storage;
@@ -20,6 +22,8 @@ use Throwable;
  *  - R2         — put a tiny object, read it back, delete it.
  *  - DataForSEO — the zero-cost account endpoint (appendix/user_data): confirms
  *                 Basic auth + connectivity without spending, reports balance.
+ *  - News       — the configured §6a source (GDELT default / NewsAPI): one trivial
+ *                 recent query (maxrecords=1), confirms connectivity + parse.
  *
  * It reads the same env vars as the app, no-ops with a clear message when a key
  * is absent (safe to run before keys land), never writes to domain tables, and
@@ -30,11 +34,11 @@ class VerifyVendorsCommand extends Command
 {
     protected $signature = 'launchpad:verify-vendors';
 
-    protected $description = 'Fire each committed vendor path (Claude/fal/R2/DataForSEO) once against LIVE and report LIVE/SKIP/FAIL. Makes real outbound calls — never run in CI.';
+    protected $description = 'Fire each committed vendor path (Claude/fal/R2/DataForSEO/News) once against LIVE and report LIVE/SKIP/FAIL. Makes real outbound calls — never run in CI.';
 
     public function handle(): int
     {
-        $this->warn('Live vendor verification — real outbound calls: one Claude completion, up to one fal image, one R2 object (put → get → delete), one zero-cost DataForSEO account read.');
+        $this->warn('Live vendor verification — real outbound calls: one Claude completion, up to one fal image, one R2 object (put → get → delete), one zero-cost DataForSEO account read, one trivial news query.');
         $this->newLine();
 
         $results = [
@@ -42,6 +46,7 @@ class VerifyVendorsCommand extends Command
             $this->verifyFal(),
             $this->verifyR2(),
             $this->verifyDataForSeo(),
+            $this->verifyNews(),
         ];
 
         foreach ($results as $line) {
@@ -151,6 +156,27 @@ class VerifyVendorsCommand extends Command
             return "DFSEO  : LIVE — appendix/user_data ok (login={$data['login']}, balance={$balance})";
         } catch (Throwable $e) {
             return 'DFSEO  : FAIL — '.$this->short($e);
+        }
+    }
+
+    private function verifyNews(): string
+    {
+        $provider = (string) config('services.news.provider', 'gdelt');
+
+        if ($provider === 'newsapi' && (string) config('services.news.key') === '') {
+            return 'News   : SKIP — NEWS_PROVIDER=newsapi but NEWSAPI_KEY not set';
+        }
+
+        try {
+            // One trivial, recent, single-record query against the bound source.
+            // GDELT rejects very short windows ("Timespan is too short"), so use a
+            // comfortably-valid recent window for the probe.
+            $since = new DateTimeImmutable('-1 day');
+            $items = app(NewsProvider::class)->fetch(['query' => 'plumbing', 'max' => 1], $since);
+
+            return "News   : LIVE — provider={$provider}, ".count($items).' item(s) returned';
+        } catch (Throwable $e) {
+            return 'News   : FAIL — '.$this->short($e);
         }
     }
 

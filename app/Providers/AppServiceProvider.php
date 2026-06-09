@@ -6,6 +6,7 @@ use App\ContentEngine\Drafting\Drafter;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\AuditAction;
 use App\Enums\DataForSeoMode;
+use App\Enums\NewsProvider as NewsProviderType;
 use App\Integrations\Census\CensusProvider;
 use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Claude\AnthropicClaudeClient;
@@ -23,8 +24,10 @@ use App\Integrations\Fal\FalHttpClient;
 use App\Integrations\Gbp\GbpProvider;
 use App\Integrations\Gbp\MockGbpProvider;
 use App\Integrations\LocalGrid\LocalGridProvider;
-use App\Integrations\News\MockNewsProvider;
+use App\Integrations\News\GdeltNewsProvider;
+use App\Integrations\News\GdeltRateLimiter;
 use App\Integrations\News\MockOnDemandSourcePull;
+use App\Integrations\News\NewsApiProvider;
 use App\Integrations\News\NewsProvider;
 use App\Integrations\News\OnDemandSourcePull;
 use App\Integrations\Serp\SerpProvider;
@@ -99,12 +102,37 @@ class AppServiceProvider extends ServiceProvider
             (float) config('services.dataforseo.grid_step', 0.018),
             (int) config('services.dataforseo.cache_ttl_hours', 168),
         ));
-
-        // Remaining vendors are deferred: default to mock adapters behind the
-        // capability-role interfaces. Real adapters bind here later.
-        $this->app->singleton(NewsProvider::class, MockNewsProvider::class);
-        $this->app->singleton(EmbeddingProvider::class, MockEmbeddingProvider::class);
         $this->app->singleton(OnDemandSourcePull::class, MockOnDemandSourcePull::class);
+
+        // §6a news source runs on a real adapter (Step 2, Adapter 2): GDELT by
+        // default (no key), NewsAPI when configured. Behind the unchanged §6a
+        // NewsProvider contract — the candidate funnel/scoring is untouched.
+        // Tests bind a fake source / Http::fake, so CI makes no live call.
+        $this->app->singleton(NewsProvider::class, function () {
+            if ($this->newsProviderChoice() === NewsProviderType::NewsApi) {
+                return new NewsApiProvider(
+                    $this->app->make(Http::class),
+                    (string) config('services.news.key'),
+                    (string) config('services.news.base_url', 'https://newsapi.org/v2'),
+                    (int) config('services.news.recency_days', 90),
+                    (int) config('services.news.timeout', 30),
+                );
+            }
+
+            return new GdeltNewsProvider(
+                $this->app->make(Http::class),
+                new GdeltRateLimiter(
+                    $this->app->make(CacheRepository::class),
+                    (int) config('services.news.gdelt_throttle_seconds', 6),
+                ),
+                (string) config('services.news.gdelt_base_url', 'https://api.gdeltproject.org/api/v2/doc/doc'),
+                (int) config('services.news.gdelt_max_records', 250),
+                (int) config('services.news.recency_days', 90),
+                (int) config('services.news.timeout', 30),
+            );
+        });
+
+        $this->app->singleton(EmbeddingProvider::class, MockEmbeddingProvider::class);
 
         // §7c conversion ingestion (GA4/GHL → leads) is mock-first; the real
         // pull+normalize adapter binds here later with no dashboard change.
@@ -166,6 +194,16 @@ class AppServiceProvider extends ServiceProvider
     {
         return DataForSeoMode::tryFrom((string) config('services.dataforseo.mode', 'standard'))
             ?? DataForSeoMode::Standard;
+    }
+
+    /**
+     * Resolve the configured news source, defaulting to GDELT (no key) on an
+     * unrecognized value.
+     */
+    private function newsProviderChoice(): NewsProviderType
+    {
+        return NewsProviderType::tryFrom((string) config('services.news.provider', 'gdelt'))
+            ?? NewsProviderType::Gdelt;
     }
 
     /**
