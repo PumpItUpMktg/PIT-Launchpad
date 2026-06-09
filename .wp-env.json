@@ -1,7 +1,9 @@
 {
     "plugins": [
-        "https://downloads.wordpress.org/plugin/elementor.latest-stable.zip",
-        "./wordpress-plugin/launchpad-companion"
+        "https://downloads.wordpress.org/plugin/elementor.latest-stable.zip"
     ],
+    "mappings": {
+        "wp-content/plugins/launchpad-companion": "./wordpress-plugin/launchpad-companion"
+    },
     "phpVersion": "8.1"
 }
