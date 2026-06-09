@@ -1,5 +1,6 @@
 <?php
 
+use App\Integrations\Conversions\IngestConversions;
 use App\Integrations\DataForSeo\IngestSerpTasks;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -18,3 +19,8 @@ Schedule::command('launchpad:check-stale-connections')->weekly();
 // postback is an optional later swap). withoutOverlapping keeps one sweep at a
 // time so concurrent runs can't double-collect.
 Schedule::job(new IngestSerpTasks)->everyFiveMinutes()->withoutOverlapping();
+
+// §7c conversion ingest — per tenant, pull every active source (GA4 + Krayin +
+// Mautic) and upsert dated-count Conversion rows the dashboard reads. Hourly;
+// withoutOverlapping so a slow run can't stack.
+Schedule::job(new IngestConversions)->hourly()->withoutOverlapping();

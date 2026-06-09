@@ -29,6 +29,11 @@ class Ga4ConversionProvider implements ConversionProvider
         private readonly string $baseUrl,
     ) {}
 
+    public function source(): ConversionSource
+    {
+        return ConversionSource::Ga4;
+    }
+
     /**
      * @return list<ConversionRecord>
      */

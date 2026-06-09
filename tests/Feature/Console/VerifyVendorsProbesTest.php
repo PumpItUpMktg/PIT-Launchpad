@@ -21,7 +21,7 @@ it('auto-discovers every vendor probe in deterministic order', function () {
     }
 
     expect(array_map(fn (VendorProbe $p) => $p->label(), $probes))
-        ->toBe(['Claude', 'fal', 'R2', 'DataForSEO', 'News', 'Embeddings', 'Google']);
+        ->toBe(['Claude', 'fal', 'R2', 'DataForSEO', 'News', 'Embeddings', 'Google', 'Krayin', 'Mautic']);
 });
 
 it('skips keyless vendors without making any outbound call', function () {
@@ -37,7 +37,9 @@ it('skips keyless vendors without making any outbound call', function () {
         ->and($byLabel['R2']->run()->status)->toBe(ProbeStatus::Skip)
         ->and($byLabel['DataForSEO']->run()->status)->toBe(ProbeStatus::Skip)
         ->and($byLabel['Embeddings']->run()->status)->toBe(ProbeStatus::Skip)
-        ->and($byLabel['Google']->run()->status)->toBe(ProbeStatus::Skip);
+        ->and($byLabel['Google']->run()->status)->toBe(ProbeStatus::Skip)
+        ->and($byLabel['Krayin']->run()->status)->toBe(ProbeStatus::Skip)
+        ->and($byLabel['Mautic']->run()->status)->toBe(ProbeStatus::Skip);
 
     Http::assertNothingSent();
 });
