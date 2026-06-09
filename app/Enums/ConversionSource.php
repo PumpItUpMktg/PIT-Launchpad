@@ -3,12 +3,15 @@
 namespace App\Enums;
 
 /**
- * Where a conversion was observed. The GA4/GHL pull is a mock-first seam; real
- * ingestion is a deferred integration.
+ * Where a conversion was observed. GA4 (web conversions), Krayin (won-stage CRM
+ * leads), and Mautic (form submissions / campaign goals) are aggregated by the
+ * conversion ingest job; the dashboard tells them apart by this tag.
  */
 enum ConversionSource: string
 {
     case Ga4 = 'ga4';
     case Ghl = 'ghl';
+    case Krayin = 'krayin';
+    case Mautic = 'mautic';
     case Manual = 'manual';
 }

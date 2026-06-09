@@ -13,7 +13,10 @@ use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Conversions\ConversionProvider;
+use App\Integrations\Conversions\ConversionProviders;
 use App\Integrations\Conversions\Ga4ConversionProvider;
+use App\Integrations\Conversions\KrayinConversionProvider;
+use App\Integrations\Conversions\MauticConversionProvider;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\DataForSeo\DataForSeoLocalGridProvider;
 use App\Integrations\DataForSeo\DataForSeoSerpProvider;
@@ -174,12 +177,37 @@ class AppServiceProvider extends ServiceProvider
             (int) config('services.google.timeout', 30),
         ));
 
-        // §7c conversions now pull live from GA4 (the GA4 portion; GHL is adapter
-        // 5). A site with no Google connection yields no records — no dashboard change.
-        $this->app->singleton(ConversionProvider::class, fn () => new Ga4ConversionProvider(
+        // §7c conversions (Step 2, Adapter 5): GA4 + Krayin + Mautic can all be
+        // active for one tenant — the IngestConversions job aggregates the tagged
+        // set. Each is dormant (returns nothing) until its source is connected /
+        // deployed. ConversionProvider::class stays bound to GA4 for back-compat.
+        $this->app->singleton(Ga4ConversionProvider::class, fn () => new Ga4ConversionProvider(
             $this->app->make(GoogleConnectionService::class),
             (string) config('services.google.ga4_data_base_url', 'https://analyticsdata.googleapis.com/v1beta'),
         ));
+        $this->app->singleton(KrayinConversionProvider::class, fn () => new KrayinConversionProvider(
+            $this->app->make(Http::class),
+            (string) config('services.krayin.base_url'),
+            (string) config('services.krayin.token'),
+            (array) config('services.krayin.won_stages', ['won']),
+            (int) config('services.krayin.timeout', 30),
+        ));
+        $this->app->singleton(MauticConversionProvider::class, fn () => new MauticConversionProvider(
+            $this->app->make(Http::class),
+            $this->app->make(CacheRepository::class),
+            (string) config('services.mautic.base_url'),
+            (string) config('services.mautic.client_id'),
+            (string) config('services.mautic.client_secret'),
+            config('services.mautic.conversion_form_id') !== null ? (string) config('services.mautic.conversion_form_id') : null,
+            (int) config('services.mautic.timeout', 30),
+        ));
+        $this->app->bind(ConversionProvider::class, Ga4ConversionProvider::class);
+        $this->app->tag([
+            Ga4ConversionProvider::class,
+            KrayinConversionProvider::class,
+            MauticConversionProvider::class,
+        ], 'conversion.providers');
+        $this->app->singleton(ConversionProviders::class, fn ($app) => new ConversionProviders(app: $app));
 
         // §5 GSC first-party calibration seam (net-new). No §5 consumer wired yet —
         // SiteAuthority calibrates off DataForSEO position history; this supplies

@@ -130,17 +130,23 @@ return [
         'key' => env('CENSUS_API_KEY'),
     ],
 
-    // Krayin CRM — lead sync (self-hosted; base URL is per-install).
+    // Krayin CRM — won-stage leads → conversions (self-hosted, shared instance;
+    // deferred until deployed). `won_stages` are the pipeline stages counted.
     'krayin' => [
         'base_url' => env('KRAYIN_BASE_URL'),
-        'token' => env('KRAYIN_TOKEN'),
+        'token' => env('KRAYIN_API_TOKEN', env('KRAYIN_TOKEN')),
+        'won_stages' => array_values(array_filter(array_map('trim', explode(',', (string) env('KRAYIN_WON_STAGES', 'won'))))),
+        'timeout' => (int) env('KRAYIN_TIMEOUT', 30),
     ],
 
-    // Mautic — marketing automation (self-hosted; base URL is per-install).
+    // Mautic — form submissions → conversions (self-hosted, shared instance;
+    // deferred until deployed). `conversion_form_id` is the lead-gen form pulled.
     'mautic' => [
         'base_url' => env('MAUTIC_BASE_URL'),
         'client_id' => env('MAUTIC_CLIENT_ID'),
         'client_secret' => env('MAUTIC_CLIENT_SECRET'),
+        'conversion_form_id' => env('MAUTIC_CONVERSION_FORM_ID'),
+        'timeout' => (int) env('MAUTIC_TIMEOUT', 30),
     ],
 
     // Cal.com — scheduling.

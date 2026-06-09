@@ -14,6 +14,11 @@ use DateTimeInterface;
  */
 class MockConversionProvider implements ConversionProvider
 {
+    public function source(): ConversionSource
+    {
+        return ConversionSource::Ga4;
+    }
+
     public function pull(Site $site, DateTimeInterface $since): array
     {
         $records = [];
