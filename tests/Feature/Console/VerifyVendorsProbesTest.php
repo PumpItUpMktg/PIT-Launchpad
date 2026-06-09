@@ -7,22 +7,12 @@ use App\Console\VendorProbes\VendorProbeRegistry;
 use Illuminate\Support\Facades\Http;
 
 /**
- * The probe tests must never make a live call, even though the host environment
- * may carry real vendor credentials. Blank every credential so the keyed probes
- * take their deterministic SKIP path; GDELT (keyless) is exercised via Http::fake.
+ * No credentials are blanked here on purpose: phpunit.xml force-blanks every
+ * vendor secret globally, so the keyed probes must take their deterministic SKIP
+ * path with no local setup. This file doubles as the canary for that floor — if
+ * a real credential ever leaks into the test env, the SKIP test below goes red.
+ * GDELT (keyless) is exercised via Http::fake.
  */
-beforeEach(function () {
-    config([
-        'services.anthropic.key' => '',
-        'services.fal.key' => '',
-        'services.dataforseo.login' => '',
-        'services.dataforseo.password' => '',
-        'filesystems.disks.r2.key' => '',
-        'filesystems.disks.r2.bucket' => '',
-        'services.news.provider' => 'gdelt',
-    ]);
-});
-
 it('auto-discovers every vendor probe in deterministic order', function () {
     $probes = app(VendorProbeRegistry::class)->all();
 
