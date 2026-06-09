@@ -23,8 +23,13 @@ wireframe-library/
 ├── wireframe-spec.json    # sidecar: wf-* class → {type, image_size?, char_range?, source}
 ├── blocks/                # 26 reusable block templates  (type: container)
 ├── pages/                 # 13 page assemblies            (type: container / single-post)
-└── theme-builder/         # tb-header (type: header), tb-footer (type: footer)
+├── theme-builder/         # tb-header (type: header), tb-footer (type: footer)
+└── sources/               # the relay brief + wireframe HTML the generator was built from
 ```
+
+`sources/` holds the design inputs the generator encodes: the relay brief, the
+all-pages composition wireframe, and the header/footer tier wireframe. They are
+reference material, not imported — edit `build.php` to change output.
 
 ## Importing
 

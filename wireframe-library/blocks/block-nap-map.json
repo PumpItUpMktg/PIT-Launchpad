@@ -44,7 +44,7 @@
                     },
                     "elements": [
                         {
-                            "id": "ff86b43",
+                            "id": "174f921",
                             "elType": "container",
                             "isInner": true,
                             "settings": {
@@ -63,7 +63,7 @@
                             },
                             "elements": [
                                 {
-                                    "id": "c34ea49",
+                                    "id": "0eb2c43",
                                     "elType": "widget",
                                     "widgetType": "text-editor",
                                     "settings": {
@@ -95,7 +95,7 @@
                             },
                             "elements": [
                                 {
-                                    "id": "c30b409",
+                                    "id": "57f0137",
                                     "elType": "widget",
                                     "widgetType": "image",
                                     "settings": {

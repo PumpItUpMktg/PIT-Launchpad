@@ -451,13 +451,20 @@ function block_area_intro(Ids $ids): array
     ]);
 }
 
-function block_nap_map(Ids $ids): array
+function block_nap_map(Ids $ids, bool $mapOnly = false): array
 {
     // Conditional: storefront only — suppressed for SAB (service-area business).
+    // $mapOnly renders a full-width map (the Contact page's "nap-map(map)"
+    // trailing block, where the NAP already lives in the details cluster).
+    $map = image($ids, 800, 500, 'wf-map', 'map', 'embed / static', '8:5');
+    if ($mapOnly) {
+        return block($ids, 'block-nap-map', [$map]);
+    }
+
     return block($ids, 'block-nap-map', [
         row($ids, [
             col($ids, [textEl($ids, 'Name · Address · Phone', 'wf-nap')], ['width' => widthPct(40)]),
-            col($ids, [image($ids, 800, 500, 'wf-map', 'map', 'embed / static', '8:5')], ['width' => widthPct(60)]),
+            col($ids, [$map], ['width' => widthPct(60)]),
         ], ['flex_gap' => gap(24)]),
     ]);
 }
@@ -919,19 +926,20 @@ function page_about(Ids $ids): array
 
 function page_contact(Ids $ids): array
 {
+    // §6: hero(slim) → [contact-form + hours + nap] → nap-map(map) → final-cta.
+    // The NAP lives in the details cluster; the trailing nap-map is map-only.
     return envelope('Page - Contact', 'container', [
         block_hero($ids, 'slim'),
-        block(
-            $GLOBALS['ids'],
-            'block-contact',
-            [
-                row($GLOBALS['ids'], [
-                    col($GLOBALS['ids'], [block_contact_form($GLOBALS['ids'])], ['width' => widthPct(55)]),
-                    col($GLOBALS['ids'], [block_hours($GLOBALS['ids'])], ['width' => widthPct(45)]),
-                ], ['flex_gap' => gap(34), 'flex_align_items' => 'flex-start']),
-            ]
-        ),
-        block_nap_map($ids),
+        block($ids, 'block-contact', [
+            row($ids, [
+                col($ids, [block_contact_form($ids)], ['width' => widthPct(55)]),
+                col($ids, [
+                    block_hours($ids),
+                    textEl($ids, 'Name · Address · City · Phone', 'wf-nap'),
+                ], ['width' => widthPct(45), 'flex_gap' => gap(16)]),
+            ], ['flex_gap' => gap(34), 'flex_align_items' => 'flex-start']),
+        ]),
+        block_nap_map($ids, true),
         block_final_cta($ids),
     ]);
 }

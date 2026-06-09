@@ -125,7 +125,7 @@
             ]
         },
         {
-            "id": "5899042",
+            "id": "f8d78af",
             "elType": "container",
             "isInner": false,
             "settings": {
@@ -150,7 +150,7 @@
             },
             "elements": [
                 {
-                    "id": "fa8cff1",
+                    "id": "288a888",
                     "elType": "container",
                     "isInner": true,
                     "settings": {
@@ -266,7 +266,7 @@
                             ]
                         },
                         {
-                            "id": "f4bb5e5",
+                            "id": "ee20e4c",
                             "elType": "container",
                             "isInner": true,
                             "settings": {
@@ -583,6 +583,17 @@
                                             ]
                                         }
                                     ]
+                                },
+                                {
+                                    "id": "287cfbb",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Name · Address · City · Phone</p>",
+                                        "_title": "nap",
+                                        "_css_classes": "wf-nap"
+                                    },
+                                    "elements": []
                                 }
                             ]
                         }
@@ -591,7 +602,7 @@
             ]
         },
         {
-            "id": "cfeb7f1",
+            "id": "520d665",
             "elType": "container",
             "isInner": false,
             "settings": {
@@ -616,97 +627,28 @@
             },
             "elements": [
                 {
-                    "id": "045def8",
-                    "elType": "container",
-                    "isInner": true,
+                    "id": "65213d7",
+                    "elType": "widget",
+                    "widgetType": "image",
                     "settings": {
-                        "flex_direction": "row",
-                        "flex_gap": {
-                            "unit": "px",
-                            "size": 24,
-                            "column": "24",
-                            "row": "24"
-                        }
-                    },
-                    "elements": [
-                        {
-                            "id": "5bd197c",
-                            "elType": "container",
-                            "isInner": true,
-                            "settings": {
-                                "flex_direction": "column",
-                                "flex_gap": {
-                                    "unit": "px",
-                                    "size": 16,
-                                    "column": "16",
-                                    "row": "16"
-                                },
-                                "width": {
-                                    "unit": "%",
-                                    "size": 40,
-                                    "sizes": []
-                                }
-                            },
-                            "elements": [
-                                {
-                                    "id": "74d9067",
-                                    "elType": "widget",
-                                    "widgetType": "text-editor",
-                                    "settings": {
-                                        "editor": "<p>Name · Address · Phone</p>",
-                                        "_title": "nap",
-                                        "_css_classes": "wf-nap"
-                                    },
-                                    "elements": []
-                                }
-                            ]
+                        "image": {
+                            "url": "https://PLACEHOLDER.local/wf/map-800x500.png",
+                            "id": 0
                         },
-                        {
-                            "id": "c56b1aa",
-                            "elType": "container",
-                            "isInner": true,
-                            "settings": {
-                                "flex_direction": "column",
-                                "flex_gap": {
-                                    "unit": "px",
-                                    "size": 16,
-                                    "column": "16",
-                                    "row": "16"
-                                },
-                                "width": {
-                                    "unit": "%",
-                                    "size": 60,
-                                    "sizes": []
-                                }
-                            },
-                            "elements": [
-                                {
-                                    "id": "c95e18b",
-                                    "elType": "widget",
-                                    "widgetType": "image",
-                                    "settings": {
-                                        "image": {
-                                            "url": "https://PLACEHOLDER.local/wf/map-800x500.png",
-                                            "id": 0
-                                        },
-                                        "image_size": "custom",
-                                        "image_custom_dimension": {
-                                            "width": "800",
-                                            "height": "500"
-                                        },
-                                        "_title": "map",
-                                        "_css_classes": "wf-map"
-                                    },
-                                    "elements": []
-                                }
-                            ]
-                        }
-                    ]
+                        "image_size": "custom",
+                        "image_custom_dimension": {
+                            "width": "800",
+                            "height": "500"
+                        },
+                        "_title": "map",
+                        "_css_classes": "wf-map"
+                    },
+                    "elements": []
                 }
             ]
         },
         {
-            "id": "a99bc10",
+            "id": "45ef467",
             "elType": "container",
             "isInner": false,
             "settings": {
@@ -732,7 +674,7 @@
             },
             "elements": [
                 {
-                    "id": "84cc65c",
+                    "id": "48e144c",
                     "elType": "widget",
                     "widgetType": "heading",
                     "settings": {
@@ -744,7 +686,7 @@
                     "elements": []
                 },
                 {
-                    "id": "1d73f26",
+                    "id": "b0f4098",
                     "elType": "widget",
                     "widgetType": "text-editor",
                     "settings": {
@@ -755,7 +697,7 @@
                     "elements": []
                 },
                 {
-                    "id": "3ab73ad",
+                    "id": "da4414c",
                     "elType": "container",
                     "isInner": true,
                     "settings": {
@@ -769,7 +711,7 @@
                     },
                     "elements": [
                         {
-                            "id": "b7b209a",
+                            "id": "1d7ccb0",
                             "elType": "widget",
                             "widgetType": "button",
                             "settings": {
@@ -780,7 +722,7 @@
                             "elements": []
                         },
                         {
-                            "id": "88a1c55",
+                            "id": "3d9410b",
                             "elType": "widget",
                             "widgetType": "button",
                             "settings": {

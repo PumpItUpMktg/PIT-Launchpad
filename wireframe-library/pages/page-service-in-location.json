@@ -662,7 +662,7 @@
                     },
                     "elements": [
                         {
-                            "id": "8bcdb0b",
+                            "id": "c56b1aa",
                             "elType": "container",
                             "isInner": true,
                             "settings": {
@@ -681,7 +681,7 @@
                             },
                             "elements": [
                                 {
-                                    "id": "492e3c7",
+                                    "id": "4497b8e",
                                     "elType": "widget",
                                     "widgetType": "text-editor",
                                     "settings": {
@@ -713,7 +713,7 @@
                             },
                             "elements": [
                                 {
-                                    "id": "9f3e4ae",
+                                    "id": "65213d7",
                                     "elType": "widget",
                                     "widgetType": "image",
                                     "settings": {
