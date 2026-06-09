@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
+use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\Models\Site;
 use App\Operator\Controls\BudgetControl;
 use App\Operator\Controls\CadenceControl;
@@ -71,9 +73,38 @@ class SiteResource extends Resource
             ])
             ->recordActions([
                 self::queueAction(),
+                self::refreshKeywordsAction(),
                 self::budgetAction(),
                 self::handoverAction(),
             ]);
+    }
+
+    /**
+     * Operator "refresh now" — drive §5 discovery + position tracking for this
+     * site immediately, bypassing the cadence window, and report inline. Spends
+     * DataForSEO calls, so it confirms before running.
+     */
+    private static function refreshKeywordsAction(): Action
+    {
+        return Action::make('refresh_keywords')
+            ->label('Refresh §5')
+            ->icon('heroicon-o-arrow-path')
+            ->requiresConfirmation()
+            ->modalDescription('Runs keyword discovery + position tracking now (bypasses the cadence window). Spends DataForSEO calls.')
+            ->action(function (Site $record): void {
+                $result = app(SitePipelineRefresher::class)->refresh($record, PipelineTrigger::Manual, force: true);
+
+                Notification::make()->success()
+                    ->title('§5 refresh complete')
+                    ->body(sprintf(
+                        'Discovery: %s (%d scored) · Tracking: %s (%d snapshots).',
+                        $result->discoveryRan ? 'ran' : 'skipped',
+                        $result->keywordsScored,
+                        $result->trackingRan ? 'ran' : 'skipped',
+                        $result->snapshots,
+                    ))
+                    ->send();
+            });
     }
 
     private static function queueAction(): Action

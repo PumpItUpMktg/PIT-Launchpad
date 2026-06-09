@@ -43,6 +43,9 @@ use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
 use App\Integrations\Voice\MockVoiceSynthesizer;
 use App\Integrations\Voice\VoiceSynthesizer;
+use App\KeywordGenerator\Pipeline\KeywordPipeline;
+use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
+use App\KeywordGenerator\Tracking\PositionTracker;
 use App\Models\User;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
@@ -208,6 +211,17 @@ class AppServiceProvider extends ServiceProvider
             MauticConversionProvider::class,
         ], 'conversion.providers');
         $this->app->singleton(ConversionProviders::class, fn ($app) => new ConversionProviders(app: $app));
+
+        // §5 pipeline driver — the caller that runs discovery + position tracking
+        // per site (cadence read off durable artifacts). §5 internals unchanged.
+        $this->app->bind(SitePipelineRefresher::class, fn ($app) => new SitePipelineRefresher(
+            $app->make(KeywordPipeline::class),
+            $app->make(PositionTracker::class),
+            $app->make(SerpProvider::class),
+            $app->make(LocalGridProvider::class),
+            (int) config('content_engine.pipeline.tracking_cadence_days', 1),
+            (int) config('content_engine.pipeline.discovery_cadence_days', 7),
+        ));
 
         // §5 GSC first-party calibration seam (net-new). No §5 consumer wired yet —
         // SiteAuthority calibrates off DataForSEO position history; this supplies

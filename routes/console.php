@@ -2,6 +2,7 @@
 
 use App\Integrations\Conversions\IngestConversions;
 use App\Integrations\DataForSeo\IngestSerpTasks;
+use App\KeywordGenerator\Pipeline\RefreshKeywordPipelines;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -24,3 +25,8 @@ Schedule::job(new IngestSerpTasks)->everyFiveMinutes()->withoutOverlapping();
 // Mautic) and upsert dated-count Conversion rows the dashboard reads. Hourly;
 // withoutOverlapping so a slow run can't stack.
 Schedule::job(new IngestConversions)->hourly()->withoutOverlapping();
+
+// §5 pipeline driver — runs keyword discovery + position tracking per engine-
+// eligible site. Daily; the per-site cadence (off durable artifacts) gates the
+// actual work, so tracking refreshes on its beat and discovery runs slower.
+Schedule::job(new RefreshKeywordPipelines)->daily()->withoutOverlapping();
