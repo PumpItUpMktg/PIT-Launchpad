@@ -28,8 +28,17 @@ wireframe-library/
 ```
 
 `sources/` holds the design inputs the generator encodes: the relay brief, the
-all-pages composition wireframe, and the header/footer tier wireframe. They are
-reference material, not imported — edit `build.php` to change output.
+all-pages composition wireframe, the header/footer tier wireframe, and the two
+detailed page wireframes (service, location). They are reference material, not
+imported — edit `build.php` to change output.
+
+Reconciled against the detailed service/location wireframes:
+- **trust-bar** renders label (small) above value (H3), matching the source order.
+- **testimonials** show the reviewer **town only on proximity scopes**
+  (`radius`/`county`); service-scoped and brand-wide reviews are name-only.
+- **why-us `local`** is a lead paragraph + three bare proof points (body only,
+  no per-card H3); `claims` keeps the per-card title + body.
+- **service-list** lays its items out as a multi-column grid, not a stacked list.
 
 ## Importing
 

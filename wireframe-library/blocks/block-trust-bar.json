@@ -60,7 +60,18 @@
                             },
                             "elements": [
                                 {
-                                    "id": "5b088a8",
+                                    "id": "844fe0c",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Label</p>",
+                                        "_title": "trust_label_1",
+                                        "_css_classes": "wf-trust-label-1"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "564a2d2",
                                     "elType": "widget",
                                     "widgetType": "heading",
                                     "settings": {
@@ -68,17 +79,6 @@
                                         "header_size": "h3",
                                         "_title": "trust_value_1",
                                         "_css_classes": "wf-trust-value-1"
-                                    },
-                                    "elements": []
-                                },
-                                {
-                                    "id": "4a5cd01",
-                                    "elType": "widget",
-                                    "widgetType": "text-editor",
-                                    "settings": {
-                                        "editor": "<p>Label</p>",
-                                        "_title": "trust_label_1",
-                                        "_css_classes": "wf-trust-label-1"
                                     },
                                     "elements": []
                                 }
@@ -100,7 +100,18 @@
                             },
                             "elements": [
                                 {
-                                    "id": "fb3c06e",
+                                    "id": "beb30e9",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Label</p>",
+                                        "_title": "trust_label_2",
+                                        "_css_classes": "wf-trust-label-2"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "8ac3760",
                                     "elType": "widget",
                                     "widgetType": "heading",
                                     "settings": {
@@ -108,17 +119,6 @@
                                         "header_size": "h3",
                                         "_title": "trust_value_2",
                                         "_css_classes": "wf-trust-value-2"
-                                    },
-                                    "elements": []
-                                },
-                                {
-                                    "id": "2c6e23b",
-                                    "elType": "widget",
-                                    "widgetType": "text-editor",
-                                    "settings": {
-                                        "editor": "<p>Label</p>",
-                                        "_title": "trust_label_2",
-                                        "_css_classes": "wf-trust-label-2"
                                     },
                                     "elements": []
                                 }
@@ -140,7 +140,18 @@
                             },
                             "elements": [
                                 {
-                                    "id": "1562d47",
+                                    "id": "41e1385",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Label</p>",
+                                        "_title": "trust_label_3",
+                                        "_css_classes": "wf-trust-label-3"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "ca53523",
                                     "elType": "widget",
                                     "widgetType": "heading",
                                     "settings": {
@@ -148,17 +159,6 @@
                                         "header_size": "h3",
                                         "_title": "trust_value_3",
                                         "_css_classes": "wf-trust-value-3"
-                                    },
-                                    "elements": []
-                                },
-                                {
-                                    "id": "f4ce6ef",
-                                    "elType": "widget",
-                                    "widgetType": "text-editor",
-                                    "settings": {
-                                        "editor": "<p>Label</p>",
-                                        "_title": "trust_label_3",
-                                        "_css_classes": "wf-trust-label-3"
                                     },
                                     "elements": []
                                 }
@@ -180,7 +180,18 @@
                             },
                             "elements": [
                                 {
-                                    "id": "2d60728",
+                                    "id": "a446da3",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Label</p>",
+                                        "_title": "trust_label_4",
+                                        "_css_classes": "wf-trust-label-4"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "39118b5",
                                     "elType": "widget",
                                     "widgetType": "heading",
                                     "settings": {
@@ -188,17 +199,6 @@
                                         "header_size": "h3",
                                         "_title": "trust_value_4",
                                         "_css_classes": "wf-trust-value-4"
-                                    },
-                                    "elements": []
-                                },
-                                {
-                                    "id": "f12dddc",
-                                    "elType": "widget",
-                                    "widgetType": "text-editor",
-                                    "settings": {
-                                        "editor": "<p>Label</p>",
-                                        "_title": "trust_label_4",
-                                        "_css_classes": "wf-trust-label-4"
                                     },
                                     "elements": []
                                 }

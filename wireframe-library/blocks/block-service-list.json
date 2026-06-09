@@ -5,7 +5,7 @@
     "page_settings": [],
     "content": [
         {
-            "id": "c465903",
+            "id": "a90e4f0",
             "elType": "container",
             "isInner": false,
             "settings": {
@@ -30,11 +30,11 @@
             },
             "elements": [
                 {
-                    "id": "dff9b63",
+                    "id": "778d5a7",
                     "elType": "widget",
                     "widgetType": "heading",
                     "settings": {
-                        "title": "Our services",
+                        "title": "Services we provide",
                         "header_size": "h2",
                         "_title": "svclist_heading",
                         "_css_classes": "wf-svclist-heading"
@@ -42,70 +42,183 @@
                     "elements": []
                 },
                 {
-                    "id": "ae430ba",
-                    "elType": "widget",
-                    "widgetType": "text-editor",
+                    "id": "790c169",
+                    "elType": "container",
+                    "isInner": true,
                     "settings": {
-                        "editor": "<p><a href=\"#\">Service 1</a></p>",
-                        "_title": "svc_item_1",
-                        "_css_classes": "wf-svc-item-1"
+                        "flex_direction": "row",
+                        "flex_wrap": "wrap",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        }
                     },
-                    "elements": []
-                },
-                {
-                    "id": "e473604",
-                    "elType": "widget",
-                    "widgetType": "text-editor",
-                    "settings": {
-                        "editor": "<p><a href=\"#\">Service 2</a></p>",
-                        "_title": "svc_item_2",
-                        "_css_classes": "wf-svc-item-2"
-                    },
-                    "elements": []
-                },
-                {
-                    "id": "f4ebed5",
-                    "elType": "widget",
-                    "widgetType": "text-editor",
-                    "settings": {
-                        "editor": "<p><a href=\"#\">Service 3</a></p>",
-                        "_title": "svc_item_3",
-                        "_css_classes": "wf-svc-item-3"
-                    },
-                    "elements": []
-                },
-                {
-                    "id": "8f56aeb",
-                    "elType": "widget",
-                    "widgetType": "text-editor",
-                    "settings": {
-                        "editor": "<p><a href=\"#\">Service 4</a></p>",
-                        "_title": "svc_item_4",
-                        "_css_classes": "wf-svc-item-4"
-                    },
-                    "elements": []
-                },
-                {
-                    "id": "8c009c1",
-                    "elType": "widget",
-                    "widgetType": "text-editor",
-                    "settings": {
-                        "editor": "<p><a href=\"#\">Service 5</a></p>",
-                        "_title": "svc_item_5",
-                        "_css_classes": "wf-svc-item-5"
-                    },
-                    "elements": []
-                },
-                {
-                    "id": "b04f2bb",
-                    "elType": "widget",
-                    "widgetType": "text-editor",
-                    "settings": {
-                        "editor": "<p><a href=\"#\">Service 6</a></p>",
-                        "_title": "svc_item_6",
-                        "_css_classes": "wf-svc-item-6"
-                    },
-                    "elements": []
+                    "elements": [
+                        {
+                            "id": "93602a4",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "row",
+                                "width": {
+                                    "unit": "%",
+                                    "size": 32,
+                                    "sizes": []
+                                },
+                                "flex_justify_content": "space-between"
+                            },
+                            "elements": [
+                                {
+                                    "id": "1b27447",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Service 1</a></p>",
+                                        "_title": "svc_item_1",
+                                        "_css_classes": "wf-svc-item-1"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "f3ce4a1",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "row",
+                                "width": {
+                                    "unit": "%",
+                                    "size": 32,
+                                    "sizes": []
+                                },
+                                "flex_justify_content": "space-between"
+                            },
+                            "elements": [
+                                {
+                                    "id": "e473604",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Service 2</a></p>",
+                                        "_title": "svc_item_2",
+                                        "_css_classes": "wf-svc-item-2"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "d6b991a",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "row",
+                                "width": {
+                                    "unit": "%",
+                                    "size": 32,
+                                    "sizes": []
+                                },
+                                "flex_justify_content": "space-between"
+                            },
+                            "elements": [
+                                {
+                                    "id": "e445c44",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Service 3</a></p>",
+                                        "_title": "svc_item_3",
+                                        "_css_classes": "wf-svc-item-3"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "d0ea450",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "row",
+                                "width": {
+                                    "unit": "%",
+                                    "size": 32,
+                                    "sizes": []
+                                },
+                                "flex_justify_content": "space-between"
+                            },
+                            "elements": [
+                                {
+                                    "id": "3d37085",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Service 4</a></p>",
+                                        "_title": "svc_item_4",
+                                        "_css_classes": "wf-svc-item-4"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "9f37719",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "row",
+                                "width": {
+                                    "unit": "%",
+                                    "size": 32,
+                                    "sizes": []
+                                },
+                                "flex_justify_content": "space-between"
+                            },
+                            "elements": [
+                                {
+                                    "id": "6120e49",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Service 5</a></p>",
+                                        "_title": "svc_item_5",
+                                        "_css_classes": "wf-svc-item-5"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "c09ec28",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "row",
+                                "width": {
+                                    "unit": "%",
+                                    "size": 32,
+                                    "sizes": []
+                                },
+                                "flex_justify_content": "space-between"
+                            },
+                            "elements": [
+                                {
+                                    "id": "6613c8a",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Service 6</a></p>",
+                                        "_title": "svc_item_6",
+                                        "_css_classes": "wf-svc-item-6"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
                 }
             ]
         }

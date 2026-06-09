@@ -373,7 +373,7 @@
             ]
         },
         {
-            "id": "2a8d5d9",
+            "id": "a3ee9d7",
             "elType": "container",
             "isInner": false,
             "settings": {
@@ -398,30 +398,48 @@
             },
             "elements": [
                 {
-                    "id": "94c877e",
-                    "elType": "widget",
-                    "widgetType": "heading",
+                    "id": "5e31196",
+                    "elType": "container",
+                    "isInner": true,
                     "settings": {
-                        "title": "What customers say",
-                        "header_size": "h2",
-                        "_title": "reviews_heading",
-                        "_css_classes": "wf-reviews-heading"
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        },
+                        "flex_justify_content": "space-between",
+                        "flex_align_items": "flex-end"
                     },
-                    "elements": []
+                    "elements": [
+                        {
+                            "id": "d3bd9fc",
+                            "elType": "widget",
+                            "widgetType": "heading",
+                            "settings": {
+                                "title": "What customers say",
+                                "header_size": "h2",
+                                "_title": "reviews_heading",
+                                "_css_classes": "wf-reviews-heading"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "817e7c3",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>★★★★★ 0.0 · 00+ reviews</p>",
+                                "_title": "reviews_rating",
+                                "_css_classes": "wf-reviews-rating"
+                            },
+                            "elements": []
+                        }
+                    ]
                 },
                 {
-                    "id": "445100e",
-                    "elType": "widget",
-                    "widgetType": "text-editor",
-                    "settings": {
-                        "editor": "<p>★★★★★ rating summary</p>",
-                        "_title": "reviews_rating",
-                        "_css_classes": "wf-reviews-rating"
-                    },
-                    "elements": []
-                },
-                {
-                    "id": "fa8cff1",
+                    "id": "af2e42c",
                     "elType": "container",
                     "isInner": true,
                     "settings": {
@@ -435,7 +453,7 @@
                     },
                     "elements": [
                         {
-                            "id": "abafdcc",
+                            "id": "2992971",
                             "elType": "container",
                             "isInner": true,
                             "settings": {
@@ -474,22 +492,11 @@
                                         "_css_classes": "wf-review-1-name"
                                     },
                                     "elements": []
-                                },
-                                {
-                                    "id": "6b4a5e5",
-                                    "elType": "widget",
-                                    "widgetType": "text-editor",
-                                    "settings": {
-                                        "editor": "<p>Town</p>",
-                                        "_title": "review_1_town",
-                                        "_css_classes": "wf-review-1-town"
-                                    },
-                                    "elements": []
                                 }
                             ]
                         },
                         {
-                            "id": "d30a0ee",
+                            "id": "57d03ee",
                             "elType": "container",
                             "isInner": true,
                             "settings": {
@@ -508,7 +515,7 @@
                             },
                             "elements": [
                                 {
-                                    "id": "3d2d57a",
+                                    "id": "c085417",
                                     "elType": "widget",
                                     "widgetType": "text-editor",
                                     "settings": {
@@ -519,7 +526,7 @@
                                     "elements": []
                                 },
                                 {
-                                    "id": "d36795b",
+                                    "id": "306f426",
                                     "elType": "widget",
                                     "widgetType": "text-editor",
                                     "settings": {
@@ -528,22 +535,11 @@
                                         "_css_classes": "wf-review-2-name"
                                     },
                                     "elements": []
-                                },
-                                {
-                                    "id": "3fbb472",
-                                    "elType": "widget",
-                                    "widgetType": "text-editor",
-                                    "settings": {
-                                        "editor": "<p>Town</p>",
-                                        "_title": "review_2_town",
-                                        "_css_classes": "wf-review-2-town"
-                                    },
-                                    "elements": []
                                 }
                             ]
                         },
                         {
-                            "id": "66b0775",
+                            "id": "d6f576a",
                             "elType": "container",
                             "isInner": true,
                             "settings": {
@@ -562,7 +558,7 @@
                             },
                             "elements": [
                                 {
-                                    "id": "9652ca3",
+                                    "id": "04f9a3e",
                                     "elType": "widget",
                                     "widgetType": "text-editor",
                                     "settings": {
@@ -573,24 +569,13 @@
                                     "elements": []
                                 },
                                 {
-                                    "id": "12253e9",
+                                    "id": "20051ae",
                                     "elType": "widget",
                                     "widgetType": "text-editor",
                                     "settings": {
                                         "editor": "<p>Reviewer name</p>",
                                         "_title": "review_3_name",
                                         "_css_classes": "wf-review-3-name"
-                                    },
-                                    "elements": []
-                                },
-                                {
-                                    "id": "71597c6",
-                                    "elType": "widget",
-                                    "widgetType": "text-editor",
-                                    "settings": {
-                                        "editor": "<p>Town</p>",
-                                        "_title": "review_3_town",
-                                        "_css_classes": "wf-review-3-town"
                                     },
                                     "elements": []
                                 }
@@ -601,7 +586,7 @@
             ]
         },
         {
-            "id": "aebaf23",
+            "id": "1fd6b92",
             "elType": "container",
             "isInner": false,
             "settings": {
@@ -627,7 +612,7 @@
             },
             "elements": [
                 {
-                    "id": "f99fbf0",
+                    "id": "ce3763f",
                     "elType": "widget",
                     "widgetType": "heading",
                     "settings": {
@@ -639,7 +624,7 @@
                     "elements": []
                 },
                 {
-                    "id": "b677703",
+                    "id": "f02d339",
                     "elType": "widget",
                     "widgetType": "text-editor",
                     "settings": {
@@ -650,7 +635,7 @@
                     "elements": []
                 },
                 {
-                    "id": "045def8",
+                    "id": "22e8940",
                     "elType": "container",
                     "isInner": true,
                     "settings": {
@@ -664,7 +649,7 @@
                     },
                     "elements": [
                         {
-                            "id": "1a4cabc",
+                            "id": "66173ac",
                             "elType": "widget",
                             "widgetType": "button",
                             "settings": {
@@ -675,7 +660,7 @@
                             "elements": []
                         },
                         {
-                            "id": "31f02cb",
+                            "id": "769ec03",
                             "elType": "widget",
                             "widgetType": "button",
                             "settings": {

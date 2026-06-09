@@ -286,11 +286,12 @@ function block_hero(Ids $ids, string $variant = 'problem_led'): array
 
 function block_trust_bar(Ids $ids): array
 {
+    // Source order: label (small, top) then value (H3, below).
     $cards = [];
     for ($n = 1; $n <= 4; $n++) {
         $cards[] = col($ids, [
-            heading($ids, 'Value '.$n, 'h3', "wf-trust-value-{$n}", [8, 18]),
             textEl($ids, 'Label', "wf-trust-label-{$n}", [6, 12]),
+            heading($ids, 'Value '.$n, 'h3', "wf-trust-value-{$n}", [8, 18]),
         ], ['flex_align_items' => 'center', 'flex_gap' => gap(6)]);
     }
 
@@ -321,8 +322,9 @@ function block_problem_solution(Ids $ids): array
 
 function block_why_us(Ids $ids, string $variant = 'claims'): array
 {
+    // claims: 3 cards = title (H3) + body. local: a lead paragraph + 3 bare
+    // proof points (body only, no card title) — per the location wireframe.
     $local = $variant === 'local';
-    $cardRange = $local ? [40, 90] : [90, 150];
 
     $top = [heading($ids, 'Why choose us', 'h2', 'wf-why-heading', [30, 55])];
     if ($local) {
@@ -331,10 +333,16 @@ function block_why_us(Ids $ids, string $variant = 'claims'): array
 
     $cards = [];
     for ($n = 1; $n <= 3; $n++) {
-        $cards[] = col($ids, [
-            heading($ids, 'Reason '.$n, 'h3', "wf-why-card-{$n}-title", [18, 40]),
-            textEl($ids, 'Supporting copy for this reason.', "wf-why-card-{$n}-body", $cardRange),
-        ], ['width' => widthPct(33), 'flex_gap' => gap(8)]);
+        if ($local) {
+            $cards[] = col($ids, [
+                textEl($ids, 'Local proof point '.$n.'.', "wf-why-card-{$n}-body", [40, 90]),
+            ], ['width' => widthPct(33)]);
+        } else {
+            $cards[] = col($ids, [
+                heading($ids, 'Reason '.$n, 'h3', "wf-why-card-{$n}-title", [18, 40]),
+                textEl($ids, 'Supporting copy for this reason.', "wf-why-card-{$n}-body", [90, 150]),
+            ], ['width' => widthPct(33), 'flex_gap' => gap(8)]);
+        }
     }
     $top[] = row($ids, $cards, ['flex_gap' => gap(24)]);
 
@@ -355,7 +363,9 @@ function block_proof_strip(Ids $ids): array
 
 function block_testimonials(Ids $ids, string $geoScope = 'service'): array
 {
-    $withTown = $geoScope !== 'none';
+    // Reviewer town shows only on proximity scopes (radius/county) — service-
+    // scoped and brand-wide reviews are name-only, per the wireframes.
+    $withTown = in_array($geoScope, ['radius', 'county', 'location'], true);
     $cards = [];
     for ($n = 1; $n <= 3; $n++) {
         $els = [
@@ -369,8 +379,10 @@ function block_testimonials(Ids $ids, string $geoScope = 'service'): array
     }
 
     return block($ids, 'block-testimonials', [
-        heading($ids, 'What customers say', 'h2', 'wf-reviews-heading', [30, 55]),
-        textEl($ids, '★★★★★ rating summary', 'wf-reviews-rating'),
+        row($ids, [
+            heading($ids, 'What customers say', 'h2', 'wf-reviews-heading', [30, 55]),
+            textEl($ids, '★★★★★ 0.0 · 00+ reviews', 'wf-reviews-rating'),
+        ], ['flex_justify_content' => 'space-between', 'flex_align_items' => 'flex-end']),
         row($ids, $cards, ['flex_gap' => gap(24)]),
     ]);
 }
@@ -471,12 +483,19 @@ function block_nap_map(Ids $ids, bool $mapOnly = false): array
 
 function block_service_list(Ids $ids): array
 {
-    $items = [heading($ids, 'Our services', 'h2', 'wf-svclist-heading', [30, 55])];
+    // Priority-ordered entity list, laid out as a multi-column grid (each item
+    // links to its service page) — per the location wireframe's svc-grid.
+    $items = [];
     for ($n = 1; $n <= 6; $n++) {
-        $items[] = textEl($ids, '<p><a href="#">Service '.$n.'</a></p>', "wf-svc-item-{$n}", [12, 32]);
+        $items[] = container($ids, ['flex_direction' => 'row', 'width' => widthPct(32), 'flex_justify_content' => 'space-between'], [
+            textEl($ids, '<p><a href="#">Service '.$n.'</a></p>', "wf-svc-item-{$n}", [12, 32]),
+        ], true, 'svcitem');
     }
 
-    return block($ids, 'block-service-list', $items);
+    return block($ids, 'block-service-list', [
+        heading($ids, 'Services we provide', 'h2', 'wf-svclist-heading', [30, 55]),
+        container($ids, ['flex_direction' => 'row', 'flex_wrap' => 'wrap', 'flex_gap' => gap(12)], $items, true, 'svcgrid'),
+    ]);
 }
 
 function block_services_grid(Ids $ids): array
