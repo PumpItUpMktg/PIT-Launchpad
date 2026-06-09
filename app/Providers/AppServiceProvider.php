@@ -98,14 +98,16 @@ class AppServiceProvider extends ServiceProvider
         // until their adapters land (e.g. GBP, with the GBP integration).
         $this->app->singleton(ConnectionVerifier::class, WordpressConnectionVerifier::class);
 
-        // Relevance scoring runs on the cheaper Haiku model, so route the
-        // scorer's ClaudeClient there.
+        // Relevance scoring runs on the cheaper Haiku model with NO extended
+        // thinking — Haiku doesn't support it, and a cheap scoring pass doesn't
+        // want a reasoning budget. The call site declares intent (thinking: null).
         $this->app->when(RelevanceScorer::class)
             ->needs(ClaudeClient::class)
             ->give(fn () => new AnthropicClaudeClient(
                 (string) config('services.anthropic.key'),
                 (string) config('services.anthropic.scoring_model', 'claude-haiku-4-5'),
                 (int) config('services.anthropic.max_tokens', 4096),
+                thinking: null,
             ));
 
         // Drafting (§6b) is quality-sensitive and runs on Sonnet — route the

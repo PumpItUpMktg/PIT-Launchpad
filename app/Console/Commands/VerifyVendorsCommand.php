@@ -62,11 +62,12 @@ class VerifyVendorsCommand extends Command
         $model = (string) config('services.anthropic.scoring_model', 'claude-haiku-4-5');
 
         try {
-            $text = (new AnthropicClaudeClient($key, $model, 256))
+            // Mirror the real scoring call site: Haiku with no extended thinking.
+            $text = (new AnthropicClaudeClient($key, $model, 256, thinking: null))
                 ->complete('Reply with the single word: ok');
 
             return trim($text) !== ''
-                ? "Claude : LIVE — model={$model}, completion returned"
+                ? "Claude : LIVE — model={$model} (scoring path, no thinking), completion returned"
                 : 'Claude : FAIL — completion was empty';
         } catch (Throwable $e) {
             return 'Claude : FAIL — '.$this->short($e);
