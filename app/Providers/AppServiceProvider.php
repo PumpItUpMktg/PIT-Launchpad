@@ -6,6 +6,7 @@ use App\ContentEngine\Drafting\Drafter;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\AuditAction;
 use App\Enums\DataForSeoMode;
+use App\Enums\EmbeddingsProvider as EmbeddingsProviderType;
 use App\Enums\NewsProvider as NewsProviderType;
 use App\Integrations\Census\CensusProvider;
 use App\Integrations\Census\MockCensusProvider;
@@ -18,7 +19,7 @@ use App\Integrations\DataForSeo\DataForSeoLocalGridProvider;
 use App\Integrations\DataForSeo\DataForSeoSerpProvider;
 use App\Integrations\DataForSeo\SerpTaskDispatcher;
 use App\Integrations\Embedding\EmbeddingProvider;
-use App\Integrations\Embedding\MockEmbeddingProvider;
+use App\Integrations\Embedding\OpenAiEmbeddingProvider;
 use App\Integrations\Fal\FalClient;
 use App\Integrations\Fal\FalHttpClient;
 use App\Integrations\Gbp\GbpProvider;
@@ -132,7 +133,22 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        $this->app->singleton(EmbeddingProvider::class, MockEmbeddingProvider::class);
+        // §6 near-duplicate embeddings run on the real OpenAI adapter (Step 2,
+        // Adapter 3) behind the unchanged EmbeddingProvider contract — vectors
+        // only; the similarity/clustering logic stays in §6. Tests bind a fake /
+        // Http::fake, and credentials are scrubbed in tests, so CI makes no call.
+        $this->app->singleton(EmbeddingProvider::class, function () {
+            return match ($this->embeddingsProviderChoice()) {
+                default => new OpenAiEmbeddingProvider(
+                    $this->app->make(Http::class),
+                    $this->app->make(CacheRepository::class),
+                    (string) config('services.openai.key'),
+                    (string) config('services.openai.base_url', 'https://api.openai.com/v1'),
+                    (string) config('services.openai.embedding_model', 'text-embedding-3-small'),
+                    (int) config('services.openai.embedding_dimensions', 1536),
+                ),
+            };
+        });
 
         // §7c conversion ingestion (GA4/GHL → leads) is mock-first; the real
         // pull+normalize adapter binds here later with no dashboard change.
@@ -204,6 +220,16 @@ class AppServiceProvider extends ServiceProvider
     {
         return NewsProviderType::tryFrom((string) config('services.news.provider', 'gdelt'))
             ?? NewsProviderType::Gdelt;
+    }
+
+    /**
+     * Resolve the configured embeddings backend, defaulting to OpenAI on an
+     * unrecognized value.
+     */
+    private function embeddingsProviderChoice(): EmbeddingsProviderType
+    {
+        return EmbeddingsProviderType::tryFrom((string) config('services.openai.provider', 'openai'))
+            ?? EmbeddingsProviderType::OpenAi;
     }
 
     /**

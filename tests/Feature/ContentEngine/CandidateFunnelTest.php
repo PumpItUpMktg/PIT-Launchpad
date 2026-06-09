@@ -4,6 +4,8 @@ use App\ContentEngine\CandidateFunnel;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\AlertType;
 use App\Enums\ContentStatus;
+use App\Integrations\Embedding\EmbeddingProvider;
+use App\Integrations\Embedding\MockEmbeddingProvider;
 use App\Integrations\News\MockNewsProvider;
 use App\Integrations\News\NewsProvider;
 use App\Models\Content;
@@ -52,6 +54,7 @@ test('the funnel routes a mixed batch into candidates, parks, drops and refreshe
         ->on('Tankless water heater rebate explained', relevanceJson(0.85, 'Water Heaters'));
 
     $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
 
     $items = [
         News::item('Cold snap maintenance tips for homeowners', summary: 'Protect your plumbing this winter.'),
@@ -105,6 +108,7 @@ test('first-run backfill yields a discovery corpus for old items and drafts only
 
     $claude = (new ScriptedClaudeClient)->fallback(relevanceJson(0.8, 'Water Heaters'));
     $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
 
     $news = app(MockNewsProvider::class)->withItems([
         News::item('Recent water heater advisory', ageDays: 10, topic: 'recent'),
