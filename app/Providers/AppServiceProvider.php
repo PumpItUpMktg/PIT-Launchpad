@@ -5,12 +5,17 @@ namespace App\Providers;
 use App\ContentEngine\Drafting\Drafter;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\AuditAction;
+use App\Enums\DataForSeoMode;
 use App\Integrations\Census\CensusProvider;
 use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Conversions\ConversionProvider;
 use App\Integrations\Conversions\MockConversionProvider;
+use App\Integrations\DataForSeo\DataForSeoClient;
+use App\Integrations\DataForSeo\DataForSeoLocalGridProvider;
+use App\Integrations\DataForSeo\DataForSeoSerpProvider;
+use App\Integrations\DataForSeo\SerpTaskDispatcher;
 use App\Integrations\Embedding\EmbeddingProvider;
 use App\Integrations\Embedding\MockEmbeddingProvider;
 use App\Integrations\Fal\FalClient;
@@ -18,12 +23,10 @@ use App\Integrations\Fal\FalHttpClient;
 use App\Integrations\Gbp\GbpProvider;
 use App\Integrations\Gbp\MockGbpProvider;
 use App\Integrations\LocalGrid\LocalGridProvider;
-use App\Integrations\LocalGrid\MockLocalGridProvider;
 use App\Integrations\News\MockNewsProvider;
 use App\Integrations\News\MockOnDemandSourcePull;
 use App\Integrations\News\NewsProvider;
 use App\Integrations\News\OnDemandSourcePull;
-use App\Integrations\Serp\MockSerpProvider;
 use App\Integrations\Serp\SerpProvider;
 use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
@@ -34,6 +37,7 @@ use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
 use App\Support\CurrentSite;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
@@ -60,11 +64,44 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(CensusProvider::class, MockCensusProvider::class);
         $this->app->bind(VoiceSynthesizer::class, MockVoiceSynthesizer::class);
 
-        // Vendors are deferred: default to mock adapters behind the
-        // capability-role interfaces. Real adapters bind here later with no
-        // change to scoring/beatability/tracking (§5) or the candidate funnel (§6a).
-        $this->app->singleton(SerpProvider::class, MockSerpProvider::class);
-        $this->app->singleton(LocalGridProvider::class, MockLocalGridProvider::class);
+        // §5 SERP + local-grid run on the real DataForSEO adapters (Step 2,
+        // Adapter 1). They supply NORMALIZED signals only — opportunity scoring
+        // and two-lane beatability stay in §5, behind the unchanged contracts.
+        // Tests bind a fake adapter / Http::fake (same pattern as Claude/fal), so
+        // CI makes no live call and needs no credentials.
+        $this->app->singleton(DataForSeoClient::class, fn () => new DataForSeoClient(
+            $this->app->make(Http::class),
+            (string) config('services.dataforseo.login'),
+            (string) config('services.dataforseo.password'),
+            (string) config('services.dataforseo.base_url', 'https://api.dataforseo.com'),
+            (int) config('services.dataforseo.timeout', 30),
+        ));
+
+        $this->app->singleton(SerpProvider::class, fn () => new DataForSeoSerpProvider(
+            $this->app->make(DataForSeoClient::class),
+            $this->app->make(SerpTaskDispatcher::class),
+            $this->app->make(CacheRepository::class),
+            $this->dataForSeoMode(),
+            (int) config('services.dataforseo.location_code', 2840),
+            (string) config('services.dataforseo.language_code', 'en'),
+            (int) config('services.dataforseo.serp_depth', 20),
+            (int) config('services.dataforseo.related_limit', 20),
+            (int) config('services.dataforseo.cache_ttl_hours', 168),
+        ));
+
+        $this->app->singleton(LocalGridProvider::class, fn () => new DataForSeoLocalGridProvider(
+            $this->app->make(DataForSeoClient::class),
+            $this->app->make(SerpTaskDispatcher::class),
+            $this->app->make(CacheRepository::class),
+            $this->dataForSeoMode(),
+            (string) config('services.dataforseo.language_code', 'en'),
+            (int) config('services.dataforseo.grid_size', 3),
+            (float) config('services.dataforseo.grid_step', 0.018),
+            (int) config('services.dataforseo.cache_ttl_hours', 168),
+        ));
+
+        // Remaining vendors are deferred: default to mock adapters behind the
+        // capability-role interfaces. Real adapters bind here later.
         $this->app->singleton(NewsProvider::class, MockNewsProvider::class);
         $this->app->singleton(EmbeddingProvider::class, MockEmbeddingProvider::class);
         $this->app->singleton(OnDemandSourcePull::class, MockOnDemandSourcePull::class);
@@ -119,6 +156,16 @@ class AppServiceProvider extends ServiceProvider
                 (string) config('services.anthropic.drafting_model', 'claude-sonnet-4-6'),
                 (int) config('services.anthropic.max_tokens', 4096),
             ));
+    }
+
+    /**
+     * Resolve the configured DataForSEO request mode, defaulting to standard
+     * (task-based) on an unrecognized value.
+     */
+    private function dataForSeoMode(): DataForSeoMode
+    {
+        return DataForSeoMode::tryFrom((string) config('services.dataforseo.mode', 'standard'))
+            ?? DataForSeoMode::Standard;
     }
 
     /**

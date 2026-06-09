@@ -56,13 +56,26 @@ return [
         'timeout' => (int) env('FAL_TIMEOUT', 60),
     ],
 
-    // DataForSEO — SERP + keyword data (§5). `mode` selects the standard vs live
-    // request mode.
+    // DataForSEO — SERP + keyword data (§5). `mode` selects the standard
+    // (task-based, cheaper) vs live (synchronous) request mode.
     'dataforseo' => [
         'login' => env('DATAFORSEO_LOGIN'),
         'password' => env('DATAFORSEO_PASSWORD'),
         'base_url' => env('DATAFORSEO_BASE_URL', 'https://api.dataforseo.com'),
         'mode' => env('DATAFORSEO_DEFAULT_MODE', 'standard'),
+        'timeout' => (int) env('DATAFORSEO_TIMEOUT', 30),
+        // Default geo for the location-less SerpProvider contract methods.
+        'location_code' => (int) env('DATAFORSEO_LOCATION_CODE', 2840), // United States
+        'language_code' => env('DATAFORSEO_LANGUAGE_CODE', 'en'),
+        // Organic SERP depth — top-N occupants parsed for beatability.
+        'serp_depth' => (int) env('DATAFORSEO_SERP_DEPTH', 20),
+        // Related-keyword fetch limit.
+        'related_limit' => (int) env('DATAFORSEO_RELATED_LIMIT', 20),
+        // Local geo-grid around the market centre (NxN points at step degrees).
+        'grid_size' => (int) env('DATAFORSEO_GRID_SIZE', 3),
+        'grid_step' => (float) env('DATAFORSEO_GRID_STEP', 0.018),
+        // Cache TTL (hours) guarding against re-fetch inside the refresh cadence.
+        'cache_ttl_hours' => (int) env('DATAFORSEO_CACHE_TTL_HOURS', 168),
     ],
 
     // News feeds (§6a candidate funnel). `provider` selects the news source.
