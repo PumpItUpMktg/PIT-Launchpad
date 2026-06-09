@@ -24,4 +24,13 @@ return [
     'news_provider' => env('NEWS_PROVIDER', 'newsapi'),
     'embeddings_provider' => env('EMBEDDINGS_PROVIDER', 'openai'),
 
+    // §5 keyword-pipeline driver cadence (days). The scheduled driver re-runs a
+    // site's unit only when its newest durable artifact is older than this — so
+    // position tracking refreshes on a regular beat and discovery runs slower.
+    // The operator "refresh now" action bypasses both.
+    'pipeline' => [
+        'tracking_cadence_days' => (int) env('KEYWORD_TRACKING_CADENCE_DAYS', 1),
+        'discovery_cadence_days' => (int) env('KEYWORD_DISCOVERY_CADENCE_DAYS', 7),
+    ],
+
 ];
