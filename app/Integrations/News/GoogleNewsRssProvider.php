@@ -24,11 +24,6 @@ use Illuminate\Http\Client\Response;
  */
 class GoogleNewsRssProvider implements NewsProvider
 {
-    /** Consent cookies that flip Google off the interstitial for cookieless clients. */
-    private const CONSENT_COOKIE = 'CONSENT=YES+cb; SOCS=CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjQwMTAxLjAwX3AwGgJlbiACGgYIgIChrgY';
-
-    private const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-
     public function __construct(
         private readonly Http $http,
         private readonly string $baseUrl,
@@ -48,6 +43,7 @@ class GoogleNewsRssProvider implements NewsProvider
         $query = $this->buildQuery($feedConfig, $since);
         $max = (int) ($feedConfig['max'] ?? 100);
         $topic = isset($feedConfig['topic']) ? (string) $feedConfig['topic'] : null;
+        $feedId = isset($feedConfig['feed_id']) ? (string) $feedConfig['feed_id'] : null;
 
         [$response, $shape] = $this->request($query);
 
@@ -61,19 +57,23 @@ class GoogleNewsRssProvider implements NewsProvider
 
         $items = [];
         foreach (RssFeed::parse($response->body()) as $row) {
-            $url = RssFeed::unwrapGoogleNewsUrl($row['link']);
-            if ($url === '') {
+            if ($row['link'] === '') {
                 continue;
             }
+
+            // Decision #1: no opaque-token decoder. A clean canonical resolves to
+            // the publisher; a modern opaque token stays null — cite by <source>.
+            $url = RssFeed::publisherUrl($row['link']);
             $items[] = new NewsItem(
-                externalId: 'googlenews:'.sha1($url),
+                externalId: 'googlenews:'.sha1($row['link']),
                 title: $row['title'],
                 summary: '',
-                sourceName: $row['source'] !== '' ? $row['source'] : (string) (parse_url($url, PHP_URL_HOST) ?: ''),
+                sourceName: $row['source'] !== '' ? $row['source'] : ($url !== null ? (string) (parse_url($url, PHP_URL_HOST) ?: '') : ''),
                 publishedAt: RssFeed::parseDate($row['published']),
                 url: $url,
                 body: null,
                 topic: $topic,
+                feedId: $feedId,
             );
 
             if (count($items) >= $max) {
@@ -111,8 +111,8 @@ class GoogleNewsRssProvider implements NewsProvider
     private function request(string $query): array
     {
         $response = $this->http
-            ->withUserAgent(self::USER_AGENT)
-            ->withHeaders(['Cookie' => self::CONSENT_COOKIE])
+            ->withUserAgent(RssFeed::USER_AGENT)
+            ->withHeaders(['Cookie' => RssFeed::GOOGLE_CONSENT_COOKIE])
             ->timeout($this->timeout)
             ->get(rtrim($this->baseUrl, '/').'/rss/search', [
                 'q' => $query,

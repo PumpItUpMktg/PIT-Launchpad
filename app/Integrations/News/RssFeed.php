@@ -17,6 +17,12 @@ use Throwable;
  */
 final class RssFeed
 {
+    /** Browser UA — datacenter IPs get a consent interstitial / softer rate limits without it. */
+    public const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+    /** Consent cookies that flip Google News off the interstitial for cookieless clients. */
+    public const GOOGLE_CONSENT_COOKIE = 'CONSENT=YES+cb; SOCS=CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjQwMTAxLjAwX3AwGgJlbiACGgYIgIChrgY';
+
     /**
      * Classify a fetched body: format (xml | html | empty | unknown) + item count.
      *
@@ -140,6 +146,53 @@ final class RssFeed
         }
 
         return $link;
+    }
+
+    /**
+     * The feed's own title (RSS <channel><title> or Atom <feed><title>) — the
+     * publisher name for a single-outlet direct feed, where per-item <source> is
+     * absent. Empty string when none is present or the body doesn't parse.
+     */
+    public static function channelTitle(string $body): string
+    {
+        try {
+            $previous = libxml_use_internal_errors(true);
+            $xml = simplexml_load_string($body);
+            libxml_use_internal_errors($previous);
+        } catch (Throwable) {
+            return '';
+        }
+
+        if ($xml === false) {
+            return '';
+        }
+
+        if (isset($xml->channel->title)) {
+            return trim((string) $xml->channel->title);
+        }
+
+        return isset($xml->title) ? trim((string) $xml->title) : '';
+    }
+
+    /**
+     * The real outlet URL for a Google News item link, or null when the link is
+     * a Google redirect we deliberately do NOT decode. Per the §6a Phase-2
+     * decision there is no token decoder (no batchexecute, no follow-redirect):
+     * a `google.com/url?...&url=` wrapper and the legacy base64 article id still
+     * resolve exactly, but a modern opaque article token unwraps to itself — so
+     * anything left on a google.com host is not a usable link and the item is
+     * cited by its <source> name only.
+     */
+    public static function publisherUrl(string $link): ?string
+    {
+        $resolved = self::unwrapGoogleNewsUrl($link);
+        if ($resolved === '') {
+            return null;
+        }
+
+        $host = strtolower((string) (parse_url($resolved, PHP_URL_HOST) ?: ''));
+
+        return ($host === '' || str_contains($host, 'google.com')) ? null : $resolved;
     }
 
     public static function parseDate(string $value): DateTimeImmutable
