@@ -205,14 +205,32 @@ class Drafter
      */
     private function parse(string $response): array
     {
-        $start = strpos($response, '{');
-        $end = strrpos($response, '}');
+        $candidate = $this->unfence($response);
+
+        $start = strpos($candidate, '{');
+        $end = strrpos($candidate, '}');
         if ($start === false || $end === false || $end < $start) {
             return [];
         }
 
-        $decoded = json_decode(substr($response, $start, $end - $start + 1), true);
+        $decoded = json_decode(substr($candidate, $start, $end - $start + 1), true);
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Sonnet often wraps its JSON in a markdown code fence (```json … ```), and
+     * sometimes prefaces it with prose. Return the first fenced block's contents
+     * when present, so the brace-span extraction can't be poisoned by a stray
+     * brace in that prose (e.g. "using a {key: value} shape:"). No fence → the
+     * response is returned unchanged and the brace span handles it.
+     */
+    private function unfence(string $response): string
+    {
+        if (preg_match('/```(?:json)?\s*\n?(.+?)\n?```/is', $response, $m) === 1) {
+            return trim($m[1]);
+        }
+
+        return $response;
     }
 }
