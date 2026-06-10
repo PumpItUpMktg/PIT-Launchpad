@@ -18,7 +18,7 @@ final class KitSchema
     public function __construct(
         public readonly string $name,
         public readonly int $version,
-        public readonly PageType $pageType,
+        public readonly ?PageType $pageType,
         public readonly array $slots,
         public readonly ?string $elementorTemplateRef = null,
         public readonly ?string $seoProfileRef = null,
@@ -44,19 +44,26 @@ final class KitSchema
     }
 
     /**
+     * Parse a WireframeKit's slot_schema. Only `slots` drives the render/publish
+     * path; the kit-level metadata (`name`, `page_type`) is descriptive and may be
+     * absent on a real persisted kit (e.g. a simpler `{slot: constraints}` schema),
+     * so its absence degrades gracefully rather than fatalling the push.
+     *
      * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
     {
         $slots = [];
         foreach (($data['slots'] ?? []) as $slot) {
-            $slots[] = SlotDefinition::fromArray($slot);
+            if (is_array($slot)) {
+                $slots[] = SlotDefinition::fromArray($slot);
+            }
         }
 
         return new self(
-            name: (string) $data['name'],
+            name: (string) ($data['name'] ?? ''),
             version: (int) ($data['version'] ?? 1),
-            pageType: PageType::from((string) $data['page_type']),
+            pageType: PageType::tryFrom((string) ($data['page_type'] ?? '')),
             slots: $slots,
             elementorTemplateRef: isset($data['elementor_template_ref']) ? (string) $data['elementor_template_ref'] : null,
             seoProfileRef: isset($data['seo_profile_ref']) ? (string) $data['seo_profile_ref'] : null,
@@ -71,7 +78,7 @@ final class KitSchema
         return [
             'name' => $this->name,
             'version' => $this->version,
-            'page_type' => $this->pageType->value,
+            'page_type' => $this->pageType?->value,
             'elementor_template_ref' => $this->elementorTemplateRef,
             'seo_profile_ref' => $this->seoProfileRef,
             'slots' => array_map(fn (SlotDefinition $s) => $s->toArray(), $this->slots),

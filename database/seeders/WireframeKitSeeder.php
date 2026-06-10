@@ -27,7 +27,7 @@ class WireframeKitSeeder extends Seeder
             WireframeKit::updateOrCreate(
                 [
                     'site_id' => null,
-                    'page_type' => $schema->pageType->value,
+                    'page_type' => $schema->pageType?->value,
                     'version' => $schema->version,
                 ],
                 [
