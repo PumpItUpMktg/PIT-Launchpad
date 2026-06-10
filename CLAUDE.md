@@ -401,6 +401,30 @@ approve → render → publish now runs end to end. It lives under
 - **Out of scope (→ §7):** portfolio triage, dashboards/funnel/stat-cards,
   coverage workspace, client performance dashboard, scheduled publishing.
 
+### Draft-flow invariants (§6a→§6b→§6c)
+
+- **Generation is never automatic.** A candidate becomes a draft only through an
+  explicit operator action ("Generate post" on the Candidates *or* Review-queue
+  screen) or the `launchpad:generate-post` command — both gated. There is no
+  scheduled/auto-draft caller of `PostGenerator` / `DraftingEngine`, so the
+  expensive **Sonnet** drafter + **fal** render fire only on a confirmed action.
+- **No draft, no transition.** `DraftingEngine` only flips a candidate to
+  `needs_review` when the drafter actually produced content (post body / page
+  slots). An empty payload leaves the row in place, stamps `meta.draft_error`,
+  logs, and throws `DraftFailedException` (surfaced by the command + action) —
+  never a silent `needs_review` with null body. `Content::hasDraft()` is the
+  single drafted-vs-undrafted test; **approve and publish are both gated on it**
+  (an undrafted item can never push an empty post to WordPress).
+- **`draft_trigger` vs `draft_lane`.** `draft_trigger` (the `DraftTrigger` enum:
+  `gap`/`news`/`on_demand`/`seasonal`/`backfill`) is *what* put the draft in the
+  pipeline — directed vs reactive vs operator/calendar. `draft_lane` (free string)
+  is finer provenance: the §5 quick-win **priority lane** (e.g. `local_pack` /
+  `organic`) carried in from the gap brief for directed work, or `'reactive'` for
+  news, else null. The review queue's "Lane" column shows `draft_trigger`.
+- **Titles are original, not carried.** Google News appends `" - {Source}"` to
+  item titles; it's stripped at ingest (`RssFeed::stripGoogleSourceSuffix`). The
+  drafted post then takes the generated SEO title, not the publisher's headline.
+
 ## Operator-Admin Cockpit (§7b — surfaces)
 
 `§7b` is the operator's multi-tenant cockpit that wraps the §6c review queue:
