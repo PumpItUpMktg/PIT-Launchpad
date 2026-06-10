@@ -11,6 +11,7 @@ use App\Publishing\RenderCoordinator;
 use App\Publishing\RenderOutcome;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\FakeClaudeClient;
 use Tests\Support\PageFixture;
 
@@ -28,12 +29,22 @@ it('queue() stamps the page generating and dispatches without drafting inline', 
     Bus::fake();
     $page = PageFixture::intakePage();
 
-    GeneratePage::queue($page, actorId: 'op-1');
+    GeneratePage::enqueue($page, actorId: 'op-1');
 
     expect($page->fresh()->isGenerating())->toBeTrue()
         ->and($page->fresh()->hasDraft())->toBeFalse();
 
     Bus::assertDispatched(GeneratePage::class, fn (GeneratePage $job) => $job->contentId === $page->id);
+});
+
+it('dispatches through a real queue connection without a reserved-name collision', function () {
+    config(['queue.default' => 'database']);
+    $page = PageFixture::intakePage();
+
+    GeneratePage::enqueue($page);
+
+    expect($page->fresh()->isGenerating())->toBeTrue()
+        ->and(DB::table('jobs')->count())->toBe(1);
 });
 
 it('handle() drafts + renders the page on the worker → needs_review', function () {

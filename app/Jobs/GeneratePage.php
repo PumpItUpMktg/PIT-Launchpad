@@ -27,7 +27,13 @@ class GeneratePage implements ShouldQueue
         public readonly ?string $actorId = null,
     ) {}
 
-    public static function queue(Content $page, ?string $actorId = null): void
+    /**
+     * Stamp the page "generating" and enqueue. Named `enqueue`, NOT `queue` — a
+     * `queue` method on a job is Laravel's reserved custom-queueing hook
+     * (`$command->queue($queue, …)`), which would shadow this and pass the queue
+     * connection as $page.
+     */
+    public static function enqueue(Content $page, ?string $actorId = null): void
     {
         $page->markGenerating();
 

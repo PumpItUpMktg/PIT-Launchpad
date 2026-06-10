@@ -85,7 +85,7 @@ class PageResource extends Resource
                     ->requiresConfirmation()
                     ->modalDescription('Queues the page draft (kit slots from brand voice + intake grounding, via Sonnet) and image render (fal) on the worker. The row shows "Generating" until the draft lands in Review.')
                     ->action(function (Content $record): void {
-                        GeneratePage::queue($record, actorId: Auth::id());
+                        GeneratePage::enqueue($record, actorId: Auth::id());
 
                         Notification::make()->success()
                             ->title('Queued — generating on the worker')
