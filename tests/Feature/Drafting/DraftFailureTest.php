@@ -3,6 +3,7 @@
 use App\ContentEngine\Drafting\DraftFailedException;
 use App\Enums\ContentStatus;
 use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Claude\CompletionResult;
 use App\Models\Content;
 use App\Models\Silo;
 use App\Models\Site;
@@ -35,6 +36,11 @@ it('captures the underlying exception class, message and Anthropic HTTP status w
         public function __construct(private Throwable $e) {}
 
         public function complete(string $prompt, ?string $system = null): string
+        {
+            throw $this->e;
+        }
+
+        public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
         {
             throw $this->e;
         }

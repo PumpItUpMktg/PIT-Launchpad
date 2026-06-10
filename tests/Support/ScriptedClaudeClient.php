@@ -3,6 +3,7 @@
 namespace Tests\Support;
 
 use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Claude\CompletionResult;
 
 /**
  * A ClaudeClient whose response is chosen by a substring found in the prompt
@@ -32,12 +33,17 @@ class ScriptedClaudeClient implements ClaudeClient
 
     public function complete(string $prompt, ?string $system = null): string
     {
+        return $this->completeDetailed($prompt, $system)->text;
+    }
+
+    public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
+    {
         foreach ($this->map as $needle => $response) {
             if (str_contains($prompt, $needle)) {
-                return $response;
+                return new CompletionResult($response, 'end_turn');
             }
         }
 
-        return $this->fallback;
+        return new CompletionResult($this->fallback, 'end_turn');
     }
 }
