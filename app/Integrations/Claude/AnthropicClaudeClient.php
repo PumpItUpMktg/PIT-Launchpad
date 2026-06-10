@@ -26,6 +26,21 @@ class AnthropicClaudeClient implements ClaudeClient
         private readonly ?string $thinking = 'adaptive',
     ) {}
 
+    /**
+     * The resolved call-site config (model, token budget, thinking mode) — for
+     * diagnostics that need to report what client a path actually runs with.
+     *
+     * @return array{model: string, max_tokens: int, thinking: string|null}
+     */
+    public function describe(): array
+    {
+        return [
+            'model' => $this->model,
+            'max_tokens' => $this->maxTokens,
+            'thinking' => $this->thinking,
+        ];
+    }
+
     public function complete(string $prompt, ?string $system = null): string
     {
         $client = new Client(apiKey: $this->apiKey);

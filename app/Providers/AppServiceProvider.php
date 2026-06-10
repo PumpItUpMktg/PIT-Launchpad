@@ -14,8 +14,8 @@ use App\Enums\EmbeddingsProvider as EmbeddingsProviderType;
 use App\Enums\NewsProvider as NewsProviderType;
 use App\Integrations\Census\CensusProvider;
 use App\Integrations\Census\MockCensusProvider;
-use App\Integrations\Claude\AnthropicClaudeClient;
 use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Claude\ClaudeClientFactory;
 use App\Integrations\Conversions\ConversionProvider;
 use App\Integrations\Conversions\ConversionProviders;
 use App\Integrations\Conversions\Ga4ConversionProvider;
@@ -70,11 +70,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(CurrentSite::class);
 
-        $this->app->bind(ClaudeClient::class, fn () => new AnthropicClaudeClient(
-            (string) config('services.anthropic.key'),
-            (string) config('services.anthropic.model', 'claude-opus-4-8'),
-            (int) config('services.anthropic.max_tokens', 4096),
-        ));
+        $this->app->bind(ClaudeClient::class, fn ($app) => $app->make(ClaudeClientFactory::class)->default());
 
         // §7a onboarding adapters are deferred: default to mocks behind the
         // capability-role interfaces (GBP category seeding, Census enrichment,
@@ -290,26 +286,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ConnectionVerifier::class, WordpressConnectionVerifier::class);
 
         // Relevance scoring runs on the cheaper Haiku model with NO extended
-        // thinking — Haiku doesn't support it, and a cheap scoring pass doesn't
-        // want a reasoning budget. The call site declares intent (thinking: null).
+        // thinking; drafting is quality-sensitive and runs on Sonnet with adaptive
+        // thinking. Both clients come from the one factory so the probe can build
+        // the identical client (see ClaudeClientFactory).
         $this->app->when(RelevanceScorer::class)
             ->needs(ClaudeClient::class)
-            ->give(fn () => new AnthropicClaudeClient(
-                (string) config('services.anthropic.key'),
-                (string) config('services.anthropic.scoring_model', 'claude-haiku-4-5'),
-                (int) config('services.anthropic.max_tokens', 4096),
-                thinking: null,
-            ));
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
 
-        // Drafting (§6b) is quality-sensitive and runs on Sonnet — route the
-        // Drafter's ClaudeClient to the drafting model.
         $this->app->when(Drafter::class)
             ->needs(ClaudeClient::class)
-            ->give(fn () => new AnthropicClaudeClient(
-                (string) config('services.anthropic.key'),
-                (string) config('services.anthropic.drafting_model', 'claude-sonnet-4-6'),
-                (int) config('services.anthropic.max_tokens', 4096),
-            ));
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->drafting());
     }
 
     /**

@@ -38,6 +38,17 @@ class Drafter
         return new DraftAttempt($response, DraftPayload::fromArray($this->parse($response)));
     }
 
+    /**
+     * The exact system + user prompt this drafter would send — for the drafter
+     * probe to show what goes to the model, without making the call.
+     *
+     * @return array{system: string, prompt: string}
+     */
+    public function preview(DraftRequest $request, Grounding $grounding): array
+    {
+        return ['system' => $this->system(), 'prompt' => $this->prompt($request, $grounding)];
+    }
+
     private function system(): string
     {
         return 'You are a home-services content drafter. You write in the brand voice provided. '
