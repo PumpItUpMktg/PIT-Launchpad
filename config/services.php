@@ -44,6 +44,13 @@ return [
         'drafting_model' => env('ANTHROPIC_DRAFTING_MODEL', 'claude-sonnet-4-6'),
         'vision_model' => env('ANTHROPIC_VISION_MODEL', 'claude-sonnet-4-6'),
         'max_tokens' => (int) env('ANTHROPIC_MAX_TOKENS', 4096),
+        // Drafting writes a full HTML post + SEO JSON and runs extended thinking,
+        // which spends from the same completion budget — 4096 let a long thinking
+        // roll exhaust the budget before any text (stop_reason=max_tokens, empty
+        // body). Give drafting a materially larger budget and cap thinking well
+        // below it so reasoning can never starve the output.
+        'drafting_max_tokens' => (int) env('ANTHROPIC_DRAFTING_MAX_TOKENS', 12000),
+        'drafting_thinking_budget' => (int) env('ANTHROPIC_DRAFTING_THINKING_BUDGET', 4000),
     ],
 
     // fal.ai image generation (§2 render pipeline). `provider` is the selected

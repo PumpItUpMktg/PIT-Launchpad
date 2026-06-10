@@ -16,21 +16,26 @@ use Anthropic\Messages\TextBlock;
 class AnthropicClaudeClient implements ClaudeClient
 {
     /**
-     * @param  string|null  $thinking  the extended-thinking type (e.g. 'adaptive'),
-     *                                 or null to send no thinking param at all.
+     * @param  string|null  $thinking  the extended-thinking type ('adaptive' |
+     *                                 'enabled'), or null to send no thinking param.
+     * @param  int|null  $thinkingBudget  when thinking is 'enabled', the explicit
+     *                                    budget_tokens cap (must be ≥1024 and
+     *                                    < maxTokens) so reasoning can't starve the
+     *                                    output budget. Ignored for 'adaptive'/null.
      */
     public function __construct(
         private readonly string $apiKey,
         private readonly string $model = 'claude-opus-4-8',
         private readonly int $maxTokens = 4096,
         private readonly ?string $thinking = 'adaptive',
+        private readonly ?int $thinkingBudget = null,
     ) {}
 
     /**
      * The resolved call-site config (model, token budget, thinking mode) — for
      * diagnostics that need to report what client a path actually runs with.
      *
-     * @return array{model: string, max_tokens: int, thinking: string|null}
+     * @return array{model: string, max_tokens: int, thinking: string|null, thinking_budget: int|null}
      */
     public function describe(): array
     {
@@ -38,10 +43,16 @@ class AnthropicClaudeClient implements ClaudeClient
             'model' => $this->model,
             'max_tokens' => $this->maxTokens,
             'thinking' => $this->thinking,
+            'thinking_budget' => $this->thinkingBudget,
         ];
     }
 
     public function complete(string $prompt, ?string $system = null): string
+    {
+        return $this->completeDetailed($prompt, $system)->text;
+    }
+
+    public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
     {
         $client = new Client(apiKey: $this->apiKey);
 
@@ -54,12 +65,19 @@ class AnthropicClaudeClient implements ClaudeClient
             }
         }
 
-        return $text;
+        return new CompletionResult(
+            text: $text,
+            stopReason: $message->stopReason,
+            inputTokens: $message->usage->inputTokens,
+            outputTokens: $message->usage->outputTokens,
+            thinkingTokens: $message->usage->outputTokensDetails?->thinkingTokens,
+        );
     }
 
     /**
      * The named parameters for the Messages API call. The thinking param is
-     * included only when this call site asked for it.
+     * included only when this call site asked for it; an 'enabled' budget caps
+     * reasoning below maxTokens so it can't exhaust the completion.
      *
      * @return array<string, mixed>
      */
@@ -73,7 +91,9 @@ class AnthropicClaudeClient implements ClaudeClient
         ];
 
         if ($this->thinking !== null) {
-            $payload['thinking'] = ['type' => $this->thinking];
+            $payload['thinking'] = $this->thinking === 'enabled' && $this->thinkingBudget !== null
+                ? ['type' => 'enabled', 'budget_tokens' => $this->thinkingBudget]
+                : ['type' => $this->thinking];
         }
 
         return $payload;

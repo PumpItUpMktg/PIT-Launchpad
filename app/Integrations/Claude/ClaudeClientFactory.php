@@ -13,12 +13,19 @@ namespace App\Integrations\Claude;
  */
 class ClaudeClientFactory
 {
-    /** Drafting (§6b) — quality-sensitive, Sonnet with adaptive thinking. */
+    /**
+     * Drafting (§6b) — quality-sensitive, Sonnet. Extended thinking is ENABLED
+     * with an explicit budget kept below a materially larger max_tokens, so a
+     * long reasoning roll can't exhaust the completion before any text (the
+     * empty-body / stop_reason=max_tokens bug under adaptive thinking + 4096).
+     */
     public function drafting(): AnthropicClaudeClient
     {
         return $this->make(
             (string) config('services.anthropic.drafting_model', 'claude-sonnet-4-6'),
-            thinking: 'adaptive',
+            thinking: 'enabled',
+            maxTokens: (int) config('services.anthropic.drafting_max_tokens', 12000),
+            thinkingBudget: (int) config('services.anthropic.drafting_thinking_budget', 4000),
         );
     }
 
@@ -40,13 +47,14 @@ class ClaudeClientFactory
         );
     }
 
-    private function make(string $model, ?string $thinking): AnthropicClaudeClient
+    private function make(string $model, ?string $thinking, ?int $maxTokens = null, ?int $thinkingBudget = null): AnthropicClaudeClient
     {
         return new AnthropicClaudeClient(
             (string) config('services.anthropic.key'),
             $model,
-            (int) config('services.anthropic.max_tokens', 4096),
+            $maxTokens ?? (int) config('services.anthropic.max_tokens', 4096),
             thinking: $thinking,
+            thinkingBudget: $thinkingBudget,
         );
     }
 }
