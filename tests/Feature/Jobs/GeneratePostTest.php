@@ -12,6 +12,7 @@ use App\Publishing\RenderCoordinator;
 use App\Publishing\RenderOutcome;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\Draft;
 use Tests\Support\FakeClaudeClient;
 
@@ -38,7 +39,7 @@ it('queue() stamps the row generating and dispatches the job without drafting in
     Bus::fake();
     $candidate = jobCandidate();
 
-    GeneratePost::queue($candidate, actorId: 'op-1');
+    GeneratePost::enqueue($candidate, actorId: 'op-1');
 
     $fresh = $candidate->fresh();
     expect($fresh->isGenerating())->toBeTrue()
@@ -47,6 +48,18 @@ it('queue() stamps the row generating and dispatches the job without drafting in
 
     Bus::assertDispatched(GeneratePost::class, fn (GeneratePost $job) => $job->contentId === $candidate->id
         && $job->actorId === 'op-1');
+});
+
+it('dispatches through a real queue connection without a reserved-name collision', function () {
+    // The bug Bus::fake() hid: Laravel's dispatchToQueue treats a `queue` method
+    // on a job as its custom-queueing hook. A real connection runs that path.
+    config(['queue.default' => 'database']);
+    $candidate = jobCandidate();
+
+    GeneratePost::enqueue($candidate);
+
+    expect($candidate->fresh()->isGenerating())->toBeTrue()
+        ->and(DB::table('jobs')->count())->toBe(1); // queued cleanly, no TypeError
 });
 
 it('handle() runs the draft on the worker — candidate → needs_review, generating cleared', function () {

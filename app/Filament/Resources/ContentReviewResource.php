@@ -150,7 +150,7 @@ class ContentReviewResource extends Resource
             ->requiresConfirmation()
             ->modalDescription('Queues the draft (Sonnet) + image render (fal) on the worker — the expensive step runs in the background, not in this request. The row shows "Generating" until the draft is ready.')
             ->action(function (Content $record): void {
-                GeneratePost::queue($record, actorId: Auth::id());
+                GeneratePost::enqueue($record, actorId: Auth::id());
 
                 Notification::make()->success()
                     ->title('Queued — generating on the worker')

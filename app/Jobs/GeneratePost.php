@@ -35,8 +35,12 @@ class GeneratePost implements ShouldQueue
     /**
      * Stamp the row "generating" and enqueue. Marking before dispatch means the
      * surfaces show the generating state immediately, before the worker picks up.
+     *
+     * Named `enqueue`, NOT `queue`: Laravel's Bus dispatcher treats a `queue`
+     * method on a job as its custom-queueing hook (`$command->queue($queue, …)`),
+     * which would shadow this helper and pass the queue connection as $content.
      */
-    public static function queue(Content $content, ?string $marketId = null, ?string $actorId = null): void
+    public static function enqueue(Content $content, ?string $marketId = null, ?string $actorId = null): void
     {
         $content->markGenerating();
 
