@@ -10,6 +10,7 @@ use App\Models\RefreshEvent;
 use App\Models\Scopes\SiteScope;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * The middle of the §6 pipeline: it takes a normalized DraftRequest, assembles
@@ -34,14 +35,11 @@ class DraftingEngine
     public function run(DraftRequest $request, array $extraSources = []): DraftResult
     {
         $grounding = $this->assembler->assemble($request, $extraSources);
-        $payload = $this->drafter->draft($request, $grounding);
 
-        // Guard the persistence: an empty draft must never create a needs_review
-        // row, and on the refresh path must never overwrite a live page.
-        if (! $this->payloadHasDraft($request->kind, $payload)) {
-            $this->logDraftFailure($request->refreshOfContentId, $request->siteId, $request->kind->value);
-            throw DraftFailedException::emptyDraft($request->refreshOfContentId);
-        }
+        // Guard the persistence: a failed draft must never create a needs_review
+        // row, and on the refresh path must never overwrite a live page. No row to
+        // stamp on the create path, so the cause rides the log + exception only.
+        $payload = $this->attemptDraft($request, $grounding, null, $request->refreshOfContentId);
 
         $verification = $this->verification->verify($payload, $grounding);
 
@@ -65,16 +63,12 @@ class DraftingEngine
         $request = DraftRequest::forCandidate($candidate, $marketId, $sourceBody);
 
         $grounding = $this->assembler->assemble($request);
-        $payload = $this->drafter->draft($request, $grounding);
 
         // The silent-failure fix: only transition candidate → needs_review when a
-        // draft was actually produced. On an empty draft, leave the candidate in
-        // place (so it can be retried), stamp a failure marker, and surface loudly.
-        if (! $this->payloadHasDraft($request->kind, $payload)) {
-            $this->markDraftFailed($candidate);
-            $this->logDraftFailure($candidate->id, $candidate->site_id, $request->kind->value);
-            throw DraftFailedException::emptyDraft($candidate->id);
-        }
+        // draft was actually produced. On a failed draft, leave the candidate in
+        // place (so it can be retried), stamp a detailed failure marker, and
+        // surface loudly with the captured cause.
+        $payload = $this->attemptDraft($request, $grounding, $candidate, $candidate->id);
 
         $verification = $this->verification->verify($payload, $grounding);
 
@@ -207,6 +201,48 @@ class DraftingEngine
     }
 
     /**
+     * Run the drafter once and return its payload only when a real draft was
+     * produced. On a thrown call OR an empty/unparseable response, capture the
+     * cause as a DraftFailure, stamp it on $markOn (when present), log it, and
+     * throw — the single place both draft paths route failures through.
+     */
+    private function attemptDraft(
+        DraftRequest $request,
+        Grounding $grounding,
+        ?Content $markOn,
+        ?string $contentId,
+    ): DraftPayload {
+        try {
+            $attempt = $this->drafter->attempt($request, $grounding);
+        } catch (Throwable $e) {
+            $this->failDraft($markOn, $contentId, $request->siteId, $request->kind->value, DraftFailure::fromException($e), $e);
+        }
+
+        if (! $this->payloadHasDraft($request->kind, $attempt->payload)) {
+            $this->failDraft($markOn, $contentId, $request->siteId, $request->kind->value, DraftFailure::emptyResponse($attempt->rawResponse), null);
+        }
+
+        return $attempt->payload;
+    }
+
+    private function failDraft(
+        ?Content $markOn,
+        ?string $contentId,
+        string $siteId,
+        string $kind,
+        DraftFailure $failure,
+        ?Throwable $previous,
+    ): never {
+        if ($markOn !== null) {
+            $this->markDraftFailed($markOn, $failure);
+        }
+
+        $this->logDraftFailure($contentId, $siteId, $kind, $failure);
+
+        throw DraftFailedException::fromFailure($contentId, $failure, $previous);
+    }
+
+    /**
      * A draft is "produced" only with real output: a post needs body HTML, a page
      * needs at least one filled slot. An empty payload is a failed model call.
      */
@@ -221,24 +257,29 @@ class DraftingEngine
 
     /**
      * Persist the silent-failure marker on the candidate (without transitioning
-     * its status) so the review/candidate surfaces can show "Draft failed". A
-     * later successful draft rebuilds `meta` wholesale, clearing the marker.
+     * its status) so the review/candidate surfaces can show "Draft failed". The
+     * human one-liner stays on `draft_error` (read by the queue indicator); the
+     * structured cause (exception class/message, HTTP status, raw excerpt) lands
+     * on `draft_failure`. A later successful draft rebuilds `meta` wholesale,
+     * clearing both.
      */
-    private function markDraftFailed(Content $candidate): void
+    private function markDraftFailed(Content $candidate, DraftFailure $failure): void
     {
         $meta = $candidate->meta ?? [];
-        $meta['draft_error'] = 'The drafter returned no content (empty body/slots).';
+        $meta['draft_error'] = $failure->summary();
+        $meta['draft_failure'] = $failure->toArray();
         $meta['draft_failed_at'] = now()->toIso8601String();
 
         $candidate->forceFill(['meta' => $meta])->save();
     }
 
-    private function logDraftFailure(?string $contentId, string $siteId, string $kind): void
+    private function logDraftFailure(?string $contentId, string $siteId, string $kind, DraftFailure $failure): void
     {
-        Log::error('Draft generation produced no content — left undrafted.', [
+        Log::error('Draft generation failed — left undrafted.', [
             'content_id' => $contentId,
             'site_id' => $siteId,
             'kind' => $kind,
+            ...$failure->logContext(),
         ]);
     }
 
