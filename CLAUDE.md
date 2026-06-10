@@ -448,6 +448,13 @@ approve → render → publish now runs end to end. It lives under
   screen) or the `launchpad:generate-post` command — both gated. There is no
   scheduled/auto-draft caller of `PostGenerator` / `DraftingEngine`, so the
   expensive **Sonnet** drafter + **fal** render fire only on a confirmed action.
+- **The Filament action queues, the worker drafts.** "Generate post" dispatches
+  the `GeneratePost` job (`GeneratePost::queue` stamps `meta.generating_at` then
+  dispatches) and returns immediately — the Sonnet+fal call runs on the worker,
+  off the web request, with no FPM timeout. `Content::generationState()` is the
+  single state machine (`drafted`/`generating`/`failed`/`awaiting`) the surfaces
+  read; the action hides while a job is in flight. The CLI command stays
+  synchronous (no FPM clock on the console).
 - **No draft, no transition.** `DraftingEngine` only flips a candidate to
   `needs_review` when the drafter actually produced content (post body / page
   slots). An empty payload leaves the row in place, stamps `meta.draft_error`,

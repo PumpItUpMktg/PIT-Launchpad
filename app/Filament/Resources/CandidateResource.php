@@ -2,10 +2,9 @@
 
 namespace App\Filament\Resources;
 
-use App\ContentEngine\Drafting\DraftFailedException;
-use App\ContentEngine\Generation\PostGenerator;
 use App\Enums\ContentStatus;
 use App\Filament\Resources\CandidateResource\Pages\ListCandidates;
+use App\Jobs\GeneratePost;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use BackedEnum;
@@ -17,6 +16,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * §6a routed news candidates awaiting drafting — the entry point of the ongoing
@@ -50,6 +50,19 @@ class CandidateResource extends Resource
                 TextColumn::make('title')->searchable()->wrap()->limit(70),
                 TextColumn::make('source_name')->label('Source')->placeholder('—'),
                 TextColumn::make('relevance_score')->label('Score')->numeric(2)->sortable(),
+                TextColumn::make('generation_state')
+                    ->label('State')
+                    ->badge()
+                    ->state(fn (Content $record): string => match ($record->generationState()) {
+                        'generating' => 'Generating',
+                        'failed' => 'Draft failed',
+                        default => 'New',
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'Generating' => 'info',
+                        'Draft failed' => 'danger',
+                        default => 'gray',
+                    }),
                 TextColumn::make('created_at')->label('Found')->since()->sortable(),
             ])
             ->defaultSort('relevance_score', 'desc')
@@ -60,23 +73,15 @@ class CandidateResource extends Resource
                 Action::make('generate')
                     ->label('Generate post')
                     ->icon('heroicon-o-sparkles')
+                    ->visible(fn (Content $record): bool => ! $record->hasDraft() && ! $record->isGenerating())
                     ->requiresConfirmation()
-                    ->modalDescription('Drafts the post with brand voice + grounding (Sonnet) and renders its image (fal). This is the expensive step and runs only when you confirm.')
+                    ->modalDescription('Queues the draft (brand voice + grounding via Sonnet) and image render (fal) on the worker — the expensive step runs in the background, not in this request. The row shows "Generating" until it lands in Review.')
                     ->action(function (Content $record): void {
-                        try {
-                            $result = app(PostGenerator::class)->generate($record);
-                        } catch (DraftFailedException $e) {
-                            Notification::make()->danger()
-                                ->title('Generation failed — candidate left undrafted')
-                                ->body($e->getMessage())
-                                ->send();
-
-                            return;
-                        }
+                        GeneratePost::queue($record, actorId: Auth::id());
 
                         Notification::make()->success()
-                            ->title('Post generated → review queue')
-                            ->body("'{$result->content->title}' is drafted and waiting in Review.")
+                            ->title('Queued — generating on the worker')
+                            ->body("'{$record->title}' is being drafted; it will appear in Review when ready.")
                             ->send();
                     }),
             ]);
