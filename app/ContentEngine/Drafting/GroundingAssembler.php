@@ -23,6 +23,7 @@ class GroundingAssembler
 {
     public function __construct(
         private readonly LocalInjectionPolicy $localInjection = new LocalInjectionPolicy,
+        private readonly VoiceResolver $voice = new VoiceResolver,
     ) {}
 
     /**
@@ -30,12 +31,12 @@ class GroundingAssembler
      */
     public function assemble(DraftRequest $request, array $extraSources = []): Grounding
     {
-        $voice = $this->activeVoiceProfile($request->siteId);
+        $voice = $this->voice->active($request->siteId);
 
         return new Grounding(
             claims: $this->claims($request->siteId),
             sources: $this->sources($request, $extraSources),
-            voiceProfile: $this->voiceArray($voice),
+            voiceProfile: $this->voice->toArray($voice),
             voiceProfileVersion: $voice !== null ? (int) $voice->version : 0,
             localInjectionAllowed: $request->allowsLocalInjection(),
             towns: $this->localInjection->townsFor($request),
@@ -98,38 +99,6 @@ class GroundingAssembler
         $parts = array_filter([$request->title, $request->angleHint], fn (?string $v) => $v !== null && $v !== '');
 
         return implode(' — ', $parts);
-    }
-
-    private function activeVoiceProfile(string $siteId): ?VoiceProfile
-    {
-        return VoiceProfile::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)
-            ->where('status', 'active')
-            ->orderByDesc('version')
-            ->first();
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function voiceArray(?VoiceProfile $voice): array
-    {
-        if ($voice === null) {
-            return [];
-        }
-
-        return [
-            'version' => $voice->version,
-            'framing_model' => $voice->framing_model,
-            'tone_axes' => $voice->tone_axes,
-            'reading_level' => $voice->reading_level,
-            'jargon_policy' => $voice->jargon_policy,
-            'format_conventions' => $voice->format_conventions,
-            'language_rules' => $voice->language_rules,
-            'audience' => $voice->audience,
-            'persona' => $voice->persona,
-            'cta_voice' => $voice->cta_voice,
-        ];
     }
 
     private function kit(DraftRequest $request): ?KitSchema
