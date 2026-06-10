@@ -141,6 +141,21 @@ final class RssFeed
     }
 
     /**
+     * Trim the section suffix feeds tack onto their <source> / channel name —
+     * "Community Impact | News" → "Community Impact". The publisher is the head
+     * segment before the first " | "; everything after is the site's section
+     * label, not the outlet. No pipe → unchanged (host fallbacks pass through).
+     */
+    public static function cleanSourceName(string $source): string
+    {
+        $source = trim($source);
+
+        $pipe = strpos($source, ' | ');
+
+        return $pipe !== false ? rtrim(substr($source, 0, $pipe)) : $source;
+    }
+
+    /**
      * Plain text from an RSS/Atom snippet: strip the HTML Google News wraps its
      * description in, decode entities, collapse whitespace, and cap the length so
      * it doesn't bloat the scoring prompt.
