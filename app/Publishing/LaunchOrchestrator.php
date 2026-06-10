@@ -2,10 +2,8 @@
 
 namespace App\Publishing;
 
-use App\Enums\ConnectionProvider;
 use App\Enums\ContentStatus;
 use App\Enums\LaunchRunStatus;
-use App\Models\Connection;
 use App\Models\Content;
 use App\Models\LaunchRun;
 use App\Models\Scopes\SiteScope;
@@ -47,6 +45,7 @@ class LaunchOrchestrator
         private readonly PublishSiloService $silos,
         private readonly PublishContentService $contents,
         private readonly PublishRedirectsService $redirects,
+        private readonly ConnectionGate $gate,
     ) {}
 
     public function launch(Site $site, ?string $actorId = null): LaunchRun
@@ -62,9 +61,8 @@ class LaunchOrchestrator
             'started_at' => now(),
         ]);
 
-        // Launch gate: a present, non-compromised WordPress connection. needsRotation()
-        // covers both compromised and never-rotated credentials.
-        if (! $this->hasLaunchableConnection($site)) {
+        // Launch gate: a present, non-compromised WordPress connection.
+        if (! $this->gate->hasVerifiedWordpress($site->id)) {
             $run->forceFill(['status' => LaunchRunStatus::Blocked->value, 'completed_at' => now()]);
             $run->recordItem('connection', $site->id, 'WordPress connection', 'failed',
                 'No present, non-compromised WordPress connection — wire and verify one first.');
@@ -82,16 +80,6 @@ class LaunchOrchestrator
         $run->forceFill(['status' => LaunchRunStatus::Completed->value, 'completed_at' => now()])->save();
 
         return $run;
-    }
-
-    private function hasLaunchableConnection(Site $site): bool
-    {
-        $connection = Connection::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('provider', ConnectionProvider::WpAppPassword->value)
-            ->first();
-
-        return $connection !== null && ! $connection->needsRotation();
     }
 
     private function pushSilos(Site $site, LaunchRun $run): void

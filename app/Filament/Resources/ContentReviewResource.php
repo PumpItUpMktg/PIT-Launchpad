@@ -13,6 +13,7 @@ use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
 use App\Filament\Resources\ContentReviewResource\Pages\ListContentReviews;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
+use App\Publishing\PostPublisher;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -96,6 +97,7 @@ class ContentReviewResource extends Resource
             ])
             ->recordActions([
                 self::approveAction(),
+                self::publishNowAction(),
                 self::rejectAction(),
                 self::lockAction(),
             ])
@@ -139,6 +141,39 @@ class ContentReviewResource extends Resource
                     $notification->body(implode(' ', $result->warnings));
                 }
                 $notification->send();
+            });
+    }
+
+    /**
+     * Per-post publish — push this reviewed post straight to WordPress now (the
+     * single-post analog of launch-site). Gated on a verified, non-compromised
+     * connection; reuses the proven publish path, so it honors {skipped:true} and
+     * is idempotent on re-publish.
+     */
+    private static function publishNowAction(): Action
+    {
+        return Action::make('publish_now')
+            ->label('Publish now')
+            ->icon('heroicon-o-paper-airplane')
+            ->requiresConfirmation()
+            ->modalDescription('Renders images and pushes this post to WordPress now (keyed by content_id — safe to re-run; a page edited in WordPress is skipped, not overwritten).')
+            ->action(function (Content $record): void {
+                $result = app(PostPublisher::class)->publish($record, Auth::id());
+
+                if ($result->isPublished()) {
+                    Notification::make()->success()
+                        ->title('Published to WordPress')->body("wp #{$result->wpPostId}")->send();
+
+                    return;
+                }
+
+                if ($result->wasSkipped()) {
+                    Notification::make()->warning()->title('Skipped')->body($result->message)->send();
+
+                    return;
+                }
+
+                Notification::make()->danger()->title('Publish failed')->body($result->message)->send();
             });
     }
 

@@ -35,6 +35,7 @@ final class DraftRequest
         public readonly array $brief = [],
         public readonly ?string $sourceName = null,
         public readonly ?string $sourceUrl = null,
+        public readonly ?string $sourceBody = null,
         public readonly bool $localRelevance = false,
         public readonly ?string $marketId = null,
         public readonly ?string $refreshOfContentId = null,
@@ -71,8 +72,14 @@ final class DraftRequest
      * Reactive lane: a §6a candidate (news item routed to a silo) drafted into
      * a post body. Local-town injection is permitted only here, and only when
      * the candidate was flagged locally relevant.
+     *
+     * `$sourceBody` is the captured article text for a direct-feed item (an item
+     * with a real source_url); it drives body-grounding. Google News candidates
+     * have no source_url and no body, so this stays null and grounding falls back
+     * to metadata. (Capturing the direct-feed body at ingest is the deferred
+     * follow-up that fills this in routinely.)
      */
-    public static function forCandidate(Content $candidate, ?string $marketId = null): self
+    public static function forCandidate(Content $candidate, ?string $marketId = null, ?string $sourceBody = null): self
     {
         return new self(
             siteId: $candidate->site_id,
@@ -84,6 +91,7 @@ final class DraftRequest
             angleHint: $candidate->angle_hint,
             sourceName: $candidate->source_name,
             sourceUrl: $candidate->source_url,
+            sourceBody: $sourceBody,
             localRelevance: (bool) $candidate->local_relevance,
             marketId: $marketId,
         );
@@ -113,6 +121,7 @@ final class DraftRequest
             brief: $this->brief,
             sourceName: $this->sourceName,
             sourceUrl: $this->sourceUrl,
+            sourceBody: $this->sourceBody,
             localRelevance: $this->localRelevance,
             marketId: $this->marketId,
             refreshOfContentId: $existing->id,
