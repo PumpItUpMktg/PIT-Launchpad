@@ -72,6 +72,12 @@ it('parses Google News RSS into NewsItems and unwraps to the publisher URL', fun
     expect($items[1]->url)->toBe('https://example.com/tankless');
 });
 
+it('trims the " | Section" suffix feeds tack onto the source name', function () {
+    expect(RssFeed::cleanSourceName('Community Impact | News'))->toBe('Community Impact')
+        ->and(RssFeed::cleanSourceName('ABC13 Houston'))->toBe('ABC13 Houston') // no pipe → unchanged
+        ->and(RssFeed::cleanSourceName('Outlet | City | Section'))->toBe('Outlet'); // head segment is the outlet
+});
+
 it('strips the " - {Source}" suffix Google appends, only when it matches the source', function () {
     expect(RssFeed::stripGoogleSourceSuffix('Rebate explained - Austin Tribune', 'Austin Tribune'))
         ->toBe('Rebate explained')

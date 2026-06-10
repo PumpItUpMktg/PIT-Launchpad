@@ -96,7 +96,7 @@ class FeedFetcher
                 externalId: $externalId,
                 title: $title,
                 summary: $row['summary'],
-                sourceName: $sourceName,
+                sourceName: RssFeed::cleanSourceName($sourceName),
                 publishedAt: RssFeed::parseDate($row['published']),
                 url: $articleUrl,
                 body: null,

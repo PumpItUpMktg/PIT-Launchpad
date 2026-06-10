@@ -68,7 +68,7 @@ class GoogleNewsRssProvider implements NewsProvider
                 externalId: 'googlenews:'.sha1($row['link']),
                 title: RssFeed::stripGoogleSourceSuffix($row['title'], $row['source']),
                 summary: $row['summary'],
-                sourceName: $row['source'] !== '' ? $row['source'] : ($url !== null ? (string) (parse_url($url, PHP_URL_HOST) ?: '') : ''),
+                sourceName: $row['source'] !== '' ? RssFeed::cleanSourceName($row['source']) : ($url !== null ? (string) (parse_url($url, PHP_URL_HOST) ?: '') : ''),
                 publishedAt: RssFeed::parseDate($row['published']),
                 url: $url,
                 body: null,
