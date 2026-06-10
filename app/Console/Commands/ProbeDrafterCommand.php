@@ -86,6 +86,11 @@ class ProbeDrafterCommand extends Command
             return $this->reportFailure(DraftFailure::fromException($e));
         }
 
+        $c = $attempt->completion;
+        $this->line('Stop/usage: stop_reason='.($c->stopReason ?? '—')
+            .'  in='.($c->inputTokens ?? '—')
+            .'  out='.($c->outputTokens ?? '—')
+            .'  thinking='.($c->thinkingTokens ?? '—'));
         $this->line('Raw resp  : '.strlen($attempt->rawResponse).' chars');
         $this->line(rtrim($this->indent($this->truncate($attempt->rawResponse, 800))));
         $this->line('');
@@ -116,6 +121,12 @@ class ProbeDrafterCommand extends Command
     private function reportFailure(DraftFailure $failure): int
     {
         $this->error('DRAFT FAILED — '.$failure->reason);
+        if ($failure->stopReason !== null) {
+            $this->line('  stop_reason : '.$failure->stopReason
+                .'  (in '.($failure->inputTokens ?? '—')
+                .', out '.($failure->outputTokens ?? '—')
+                .', thinking '.($failure->thinkingTokens ?? '—').')');
+        }
         if ($failure->httpStatus !== null) {
             $this->line('  Anthropic HTTP status : '.$failure->httpStatus);
         }

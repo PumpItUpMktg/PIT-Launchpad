@@ -219,7 +219,7 @@ class DraftingEngine
         }
 
         if (! $this->payloadHasDraft($request->kind, $attempt->payload)) {
-            $this->failDraft($markOn, $contentId, $request->siteId, $request->kind->value, DraftFailure::emptyResponse($attempt->rawResponse), null);
+            $this->failDraft($markOn, $contentId, $request->siteId, $request->kind->value, DraftFailure::emptyResponse($attempt->rawResponse, $attempt->completion), null);
         }
 
         return $attempt->payload;

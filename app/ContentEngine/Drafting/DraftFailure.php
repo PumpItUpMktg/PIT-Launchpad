@@ -3,6 +3,7 @@
 namespace App\ContentEngine\Drafting;
 
 use Anthropic\Core\Exceptions\APIException;
+use App\Integrations\Claude\CompletionResult;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -25,6 +26,10 @@ final class DraftFailure
         public readonly ?string $exceptionMessage,
         public readonly ?int $httpStatus,
         public readonly ?string $rawResponseExcerpt,
+        public readonly ?string $stopReason = null,
+        public readonly ?int $outputTokens = null,
+        public readonly ?int $thinkingTokens = null,
+        public readonly ?int $inputTokens = null,
     ) {}
 
     public static function fromException(Throwable $e): self
@@ -38,14 +43,25 @@ final class DraftFailure
         );
     }
 
-    public static function emptyResponse(string $rawResponse): self
+    public static function emptyResponse(string $rawResponse, ?CompletionResult $completion = null): self
     {
+        // A stop_reason of max_tokens with no usable text is the budget-exhaustion
+        // signature — thinking (or output) consumed the whole budget before a
+        // parseable draft landed. Name it so it isn't a "0 chars" mystery.
+        $reason = $completion?->stopReason === 'max_tokens'
+            ? 'The model hit max_tokens before emitting a usable draft — the completion budget was exhausted (likely by extended thinking). Raise drafting max_tokens or cap/disable the thinking budget.'
+            : 'The drafter returned no usable content (empty body/slots) — the model response did not parse into a draft.';
+
         return new self(
-            reason: 'The drafter returned no usable content (empty body/slots) — the model response did not parse into a draft.',
+            reason: $reason,
             exceptionClass: null,
             exceptionMessage: null,
             httpStatus: null,
             rawResponseExcerpt: self::excerpt($rawResponse),
+            stopReason: $completion?->stopReason,
+            outputTokens: $completion?->outputTokens,
+            thinkingTokens: $completion?->thinkingTokens,
+            inputTokens: $completion?->inputTokens,
         );
     }
 
@@ -69,6 +85,13 @@ final class DraftFailure
             $parts[] = $detail;
         }
 
+        if ($this->stopReason !== null) {
+            $tokens = $this->thinkingTokens !== null
+                ? " (out {$this->outputTokens}, thinking {$this->thinkingTokens})"
+                : '';
+            $parts[] = "stop_reason={$this->stopReason}{$tokens}";
+        }
+
         if ($this->rawResponseExcerpt !== null && $this->rawResponseExcerpt !== '') {
             $parts[] = 'raw≈"'.Str::limit(self::oneLine($this->rawResponseExcerpt), 160).'"';
         }
@@ -89,6 +112,10 @@ final class DraftFailure
             'exception_message' => $this->exceptionMessage,
             'http_status' => $this->httpStatus,
             'raw_response_excerpt' => $this->rawResponseExcerpt,
+            'stop_reason' => $this->stopReason,
+            'input_tokens' => $this->inputTokens,
+            'output_tokens' => $this->outputTokens,
+            'thinking_tokens' => $this->thinkingTokens,
         ];
     }
 
@@ -103,6 +130,10 @@ final class DraftFailure
             'exception_message' => $this->exceptionMessage,
             'anthropic_http_status' => $this->httpStatus,
             'raw_response_excerpt' => $this->rawResponseExcerpt,
+            'stop_reason' => $this->stopReason,
+            'input_tokens' => $this->inputTokens,
+            'output_tokens' => $this->outputTokens,
+            'thinking_tokens' => $this->thinkingTokens,
         ];
     }
 

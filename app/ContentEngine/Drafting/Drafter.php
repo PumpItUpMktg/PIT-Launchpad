@@ -33,9 +33,9 @@ class Drafter
      */
     public function attempt(DraftRequest $request, Grounding $grounding): DraftAttempt
     {
-        $response = $this->claude->complete($this->prompt($request, $grounding), $this->system());
+        $result = $this->claude->completeDetailed($this->prompt($request, $grounding), $this->system());
 
-        return new DraftAttempt($response, DraftPayload::fromArray($this->parse($response)));
+        return new DraftAttempt($result->text, DraftPayload::fromArray($this->parse($result->text)), $result);
     }
 
     /**
