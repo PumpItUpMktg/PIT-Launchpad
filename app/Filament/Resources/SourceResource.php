@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources;
 
+use App\ContentEngine\Feeds\FeedHealth;
+use App\Enums\FeedOrigin;
+use App\Enums\FeedStatus;
 use App\Enums\SourceType;
 use App\Filament\Resources\SourceResource\Pages\CreateSource;
 use App\Filament\Resources\SourceResource\Pages\ListSources;
@@ -42,12 +45,23 @@ class SourceResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
-                TextColumn::make('type')->badge(),
-                TextColumn::make('schedule')->placeholder('—'),
+                TextColumn::make('origin')->badge(),
+                TextColumn::make('url')->label('Feed URL')->limit(44)->color('gray')->toggleable(),
+                TextColumn::make('health')
+                    ->badge()
+                    ->state(fn (Source $record): string => ucfirst(app(FeedHealth::class)->status($record)->value))
+                    ->color(fn (Source $record): string => match (app(FeedHealth::class)->status($record)) {
+                        FeedStatus::Active => 'success',
+                        FeedStatus::Paused => 'gray',
+                        FeedStatus::Unhealthy => 'danger',
+                    }),
+                TextColumn::make('last_item_at')->label('Last item')->since()->placeholder('never'),
+                TextColumn::make('last_error')->label('Last error')->limit(44)->color('danger')->placeholder('—')->toggleable(),
                 IconColumn::make('enabled')->boolean(),
             ])
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
+                SelectFilter::make('origin')->options([FeedOrigin::Generated->value => 'Generated', FeedOrigin::Client->value => 'Client']),
                 SelectFilter::make('enabled')->options([1 => 'Enabled', 0 => 'Disabled']),
             ])
             ->recordActions([

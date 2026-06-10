@@ -81,7 +81,7 @@ class GeneratedFeedReconciler
 
     private function feedUrl(Keyword $keyword, ?Market $market): string
     {
-        $query = trim($keyword->query.($market !== null ? ' '.$market->name : ''));
+        $query = trim($keyword->query.($market !== null ? ' '.$this->marketLabel($market) : ''));
 
         return rtrim($this->baseUrl, '/').'/rss/search?'.http_build_query([
             'q' => $query,
@@ -93,7 +93,18 @@ class GeneratedFeedReconciler
 
     private function label(Keyword $keyword, ?Market $market): string
     {
-        return $keyword->query.($market !== null ? ' · '.$market->name : '').' (Google News)';
+        return $keyword->query.($market !== null ? ' · '.$this->marketLabel($market) : '').' (Google News)';
+    }
+
+    /**
+     * "Austin TX" — city plus state abbreviation, so the news query and panel
+     * label disambiguate same-named cities and read naturally.
+     */
+    private function marketLabel(Market $market): string
+    {
+        $region = is_string($market->region) ? trim($market->region) : '';
+
+        return trim($market->name.($region !== '' ? ' '.$region : ''));
     }
 
     /**

@@ -55,9 +55,12 @@ final class RssFeed
     }
 
     /**
-     * Parse RSS or Atom items into a normalized list.
+     * Parse RSS or Atom items into a normalized list. The `<description>` /
+     * `<summary>` snippet is captured (HTML-stripped) — without it every item
+     * reaches the candidate funnel with an empty summary and is dropped by the
+     * pre-filter's empty-item guard before scoring ever runs.
      *
-     * @return list<array{title: string, link: string, published: string, source: string}>
+     * @return list<array{title: string, link: string, published: string, source: string, summary: string}>
      */
     public static function parse(string $body): array
     {
@@ -84,6 +87,7 @@ final class RssFeed
                     'link' => trim((string) ($item->link ?? '')),
                     'published' => trim((string) ($item->pubDate ?? '')),
                     'source' => $source !== null ? trim((string) $source) : '',
+                    'summary' => self::cleanText((string) ($item->description ?? '')),
                 ];
             }
 
@@ -105,11 +109,25 @@ final class RssFeed
                     'link' => trim($link),
                     'published' => trim((string) ($entry->published ?? $entry->updated ?? '')),
                     'source' => trim((string) ($entry->source->title ?? '')),
+                    'summary' => self::cleanText((string) ($entry->summary ?? $entry->content ?? '')),
                 ];
             }
         }
 
         return $items;
+    }
+
+    /**
+     * Plain text from an RSS/Atom snippet: strip the HTML Google News wraps its
+     * description in, decode entities, collapse whitespace, and cap the length so
+     * it doesn't bloat the scoring prompt.
+     */
+    private static function cleanText(string $html): string
+    {
+        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = trim((string) preg_replace('/\s+/', ' ', $text));
+
+        return mb_substr($text, 0, 500);
     }
 
     /**

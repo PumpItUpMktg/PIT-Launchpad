@@ -10,6 +10,8 @@ use App\Operator\Coverage\PositionTracking;
 use App\Operator\Coverage\TargetQueue;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
@@ -77,6 +79,7 @@ class KeywordResource extends Resource
                     }),
             ])
             ->recordActions([
+                self::editAction(),
                 Action::make('promote')->icon('heroicon-o-arrow-up')->color('success')
                     ->action(fn (Keyword $record) => app(TargetQueue::class)->promote($record)),
                 Action::make('demote')->icon('heroicon-o-arrow-down')->color('gray')
@@ -84,6 +87,36 @@ class KeywordResource extends Resource
                 Action::make('standings')->icon('heroicon-o-chart-bar')
                     ->action(fn (Keyword $record) => self::notifyStandings($record)),
             ]);
+    }
+
+    /**
+     * Inline edit — correct a discovered keyword's query, intent, or lifecycle
+     * status without a tinker round-trip. Priority stays on promote/demote.
+     */
+    private static function editAction(): Action
+    {
+        return Action::make('edit')
+            ->icon('heroicon-o-pencil-square')
+            ->fillForm(fn (Keyword $record): array => [
+                'query' => $record->query,
+                'intent' => $record->intent,
+                'status' => $record->status,
+            ])
+            ->schema([
+                TextInput::make('query')->required(),
+                TextInput::make('intent')->helperText('informational / commercial / transactional'),
+                Select::make('status')
+                    ->options(['candidate' => 'Candidate', 'active' => 'Active', 'parked' => 'Parked'])
+                    ->required(),
+            ])
+            ->action(function (Keyword $record, array $data): void {
+                $record->update([
+                    'query' => $data['query'],
+                    'intent' => ($data['intent'] ?? '') !== '' ? $data['intent'] : null,
+                    'status' => $data['status'],
+                ]);
+                Notification::make()->success()->title('Keyword updated')->send();
+            });
     }
 
     private static function positionSummary(Keyword $keyword): string
