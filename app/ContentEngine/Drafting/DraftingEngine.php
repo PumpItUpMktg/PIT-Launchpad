@@ -8,6 +8,7 @@ use App\Enums\RefreshTrigger;
 use App\Models\Content;
 use App\Models\RefreshEvent;
 use App\Models\Scopes\SiteScope;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -34,6 +35,14 @@ class DraftingEngine
     {
         $grounding = $this->assembler->assemble($request, $extraSources);
         $payload = $this->drafter->draft($request, $grounding);
+
+        // Guard the persistence: an empty draft must never create a needs_review
+        // row, and on the refresh path must never overwrite a live page.
+        if (! $this->payloadHasDraft($request->kind, $payload)) {
+            $this->logDraftFailure($request->refreshOfContentId, $request->siteId, $request->kind->value);
+            throw DraftFailedException::emptyDraft($request->refreshOfContentId);
+        }
+
         $verification = $this->verification->verify($payload, $grounding);
 
         $content = $request->isRefresh()
@@ -57,11 +66,23 @@ class DraftingEngine
 
         $grounding = $this->assembler->assemble($request);
         $payload = $this->drafter->draft($request, $grounding);
+
+        // The silent-failure fix: only transition candidate → needs_review when a
+        // draft was actually produced. On an empty draft, leave the candidate in
+        // place (so it can be retried), stamp a failure marker, and surface loudly.
+        if (! $this->payloadHasDraft($request->kind, $payload)) {
+            $this->markDraftFailed($candidate);
+            $this->logDraftFailure($candidate->id, $candidate->site_id, $request->kind->value);
+            throw DraftFailedException::emptyDraft($candidate->id);
+        }
+
         $verification = $this->verification->verify($payload, $grounding);
 
         $candidate->fill([
             ...$this->draftAttributes($request, $grounding, $payload, $verification),
-            'title' => $this->title($request, $payload),
+            // Generate an original title from the draft rather than carrying the
+            // news headline (which still trails its " - Source" attribution).
+            'title' => $this->candidateTitle($request, $payload),
             'draft_trigger' => $request->trigger,
             'draft_lane' => $this->lane($request),
         ])->save();
@@ -169,6 +190,56 @@ class DraftingEngine
     {
         return $request->title
             ?? ($payload->seo->title !== '' ? $payload->seo->title : 'Untitled draft');
+    }
+
+    /**
+     * The reactive-candidate title: prefer the drafter's generated SEO title (an
+     * original, brand-voiced headline) over the carried news headline, which is
+     * the publisher's wording and still trails its " - Source" attribution.
+     */
+    private function candidateTitle(DraftRequest $request, DraftPayload $payload): string
+    {
+        if ($payload->seo->title !== '') {
+            return $payload->seo->title;
+        }
+
+        return $request->title !== null && $request->title !== '' ? $request->title : 'Untitled draft';
+    }
+
+    /**
+     * A draft is "produced" only with real output: a post needs body HTML, a page
+     * needs at least one filled slot. An empty payload is a failed model call.
+     */
+    private function payloadHasDraft(ContentKind $kind, DraftPayload $payload): bool
+    {
+        if ($kind === ContentKind::Page) {
+            return is_array($payload->slots) && $payload->slots !== [];
+        }
+
+        return is_string($payload->body) && trim($payload->body) !== '';
+    }
+
+    /**
+     * Persist the silent-failure marker on the candidate (without transitioning
+     * its status) so the review/candidate surfaces can show "Draft failed". A
+     * later successful draft rebuilds `meta` wholesale, clearing the marker.
+     */
+    private function markDraftFailed(Content $candidate): void
+    {
+        $meta = $candidate->meta ?? [];
+        $meta['draft_error'] = 'The drafter returned no content (empty body/slots).';
+        $meta['draft_failed_at'] = now()->toIso8601String();
+
+        $candidate->forceFill(['meta' => $meta])->save();
+    }
+
+    private function logDraftFailure(?string $contentId, string $siteId, string $kind): void
+    {
+        Log::error('Draft generation produced no content — left undrafted.', [
+            'content_id' => $contentId,
+            'site_id' => $siteId,
+            'kind' => $kind,
+        ]);
     }
 
     private function lane(DraftRequest $request): ?string

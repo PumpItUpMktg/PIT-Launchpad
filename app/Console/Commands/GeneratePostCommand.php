@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\ContentEngine\Drafting\DraftFailedException;
 use App\ContentEngine\Generation\PostGenerator;
 use App\Models\Content;
 use Illuminate\Console\Command;
@@ -22,7 +23,14 @@ class GeneratePostCommand extends Command
             return self::FAILURE;
         }
 
-        $result = $generator->generate($candidate, $this->option('market'));
+        try {
+            $result = $generator->generate($candidate, $this->option('market'));
+        } catch (DraftFailedException $e) {
+            $this->error('Draft failed — '.$e->getMessage());
+
+            return self::FAILURE;
+        }
+
         $content = $result->content;
 
         $this->info(sprintf(

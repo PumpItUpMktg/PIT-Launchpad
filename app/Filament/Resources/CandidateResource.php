@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\ContentEngine\Drafting\DraftFailedException;
 use App\ContentEngine\Generation\PostGenerator;
 use App\Enums\ContentStatus;
 use App\Filament\Resources\CandidateResource\Pages\ListCandidates;
@@ -62,7 +63,16 @@ class CandidateResource extends Resource
                     ->requiresConfirmation()
                     ->modalDescription('Drafts the post with brand voice + grounding (Sonnet) and renders its image (fal). This is the expensive step and runs only when you confirm.')
                     ->action(function (Content $record): void {
-                        $result = app(PostGenerator::class)->generate($record);
+                        try {
+                            $result = app(PostGenerator::class)->generate($record);
+                        } catch (DraftFailedException $e) {
+                            Notification::make()->danger()
+                                ->title('Generation failed — candidate left undrafted')
+                                ->body($e->getMessage())
+                                ->send();
+
+                            return;
+                        }
 
                         Notification::make()->success()
                             ->title('Post generated → review queue')

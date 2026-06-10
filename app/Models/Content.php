@@ -50,6 +50,29 @@ class Content extends Model
         return $this->locked || $this->locally_edited;
     }
 
+    /**
+     * Whether a real draft has been produced. A post needs body HTML; a page
+     * needs filled kit slots. A candidate whose status was flipped without a
+     * persisted draft (the silent-failure case) is NOT drafted — it must never
+     * approve or publish (it would push an empty post to WordPress).
+     */
+    public function hasDraft(): bool
+    {
+        if ($this->kind === ContentKind::Page) {
+            return is_array($this->slot_payload) && $this->slot_payload !== [];
+        }
+
+        return is_string($this->body) && trim($this->body) !== '';
+    }
+
+    /** The persisted last-draft failure reason (the silent-failure marker), if any. */
+    public function draftError(): ?string
+    {
+        $error = $this->meta['draft_error'] ?? null;
+
+        return is_string($error) && $error !== '' ? $error : null;
+    }
+
     /** @return BelongsTo<Silo, $this> */
     public function silo(): BelongsTo
     {
