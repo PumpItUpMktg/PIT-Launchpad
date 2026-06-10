@@ -108,6 +108,10 @@ class ReviewActions
      */
     public function blockingReason(Content $content): ?string
     {
+        if (! $content->hasDraft()) {
+            return 'This item has no completed draft yet — generate the post before approving.';
+        }
+
         if (in_array(ReviewFlag::RenderFailed, AlertFlags::for($content), true)) {
             return 'A required image failed to render — reset/retry it before approving.';
         }

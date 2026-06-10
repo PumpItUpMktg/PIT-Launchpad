@@ -19,6 +19,15 @@ class PostPublisher
 
     public function publish(Content $content, ?string $actorId = null): PublishResult
     {
+        // An undrafted candidate has no body/slots — publishing it would push an
+        // empty post to WordPress. Refuse before touching the connection or render.
+        if (! $content->hasDraft()) {
+            return PublishResult::failed(
+                $content,
+                'This item has no completed draft — generate the post before publishing.',
+            );
+        }
+
         if (! $this->gate->hasVerifiedWordpress($content->site_id)) {
             return PublishResult::failed(
                 $content,

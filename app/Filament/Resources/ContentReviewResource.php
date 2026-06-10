@@ -155,6 +155,8 @@ class ContentReviewResource extends Resource
         return Action::make('publish_now')
             ->label('Publish now')
             ->icon('heroicon-o-paper-airplane')
+            // An undrafted item can't publish (it would push an empty post) — hide it.
+            ->visible(fn (Content $record): bool => $record->hasDraft())
             ->requiresConfirmation()
             ->modalDescription('Renders images and pushes this post to WordPress now (keyed by content_id — safe to re-run; a page edited in WordPress is skipped, not overwritten).')
             ->action(function (Content $record): void {
