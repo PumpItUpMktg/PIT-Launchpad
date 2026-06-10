@@ -472,6 +472,31 @@ approve → render → publish now runs end to end. It lives under
   item titles; it's stripped at ingest (`RssFeed::stripGoogleSourceSuffix`). The
   drafted post then takes the generated SEO title, not the publisher's headline.
 
+### Page generation (the post flow's page sibling)
+
+`kind=page` content generates through siblings that **share the hardened
+mechanism** with the post flow and keep policy explicit per kind:
+
+- **Shared core (single-sourced, neither kind reimplements):** `DraftCall` (the
+  budget-fixed drafting client + fence/truncation-tolerant parse → `DraftAttempt`)
+  and `DraftGuard` (thrown-call OR empty-payload → `DraftFailure` marker + log +
+  throw, kind-aware; public `fail()` for kind-specific rejections). `VoiceResolver`
+  is shared. Bound once via `ClaudeClientFactory`.
+- **Page siblings:** `PageGroundingAssembler` (intake entities — services scoped
+  to the page silo; offers/markets/proof/branding at the honest site level; +
+  voice + kit), `PageDrafter` (kit-slot prompt → one JSON keyed by slot key),
+  `PageDraftingEngine` (drafts in place, then **`KitValidator` is the acceptance
+  test**: off-schema keys dropped, a structural failure surfaced via the guard;
+  media presence + entity grounding stay publish-time gates), `PageGenerator`
+  (draft → render image-slots via the reused `RenderCoordinator`).
+- **Triggers (gated, never auto):** `launchpad:generate-page {content}` (+
+  `--site=` to iterate a site's undrafted pages), the `GeneratePage` queued job
+  (operator action on the `PageResource` rows; same generating-state machine as
+  posts), and `launchpad:probe-drafter` works against a page via the common
+  `attempt(): DraftAttempt` contract.
+- Pages flow through the **same review queue + publish path** as posts
+  (`hasDraft()` gates, `PublishContentService`/`MetaBlobAssembler` are slot-keyed).
+
 ## Operator-Admin Cockpit (§7b — surfaces)
 
 `§7b` is the operator's multi-tenant cockpit that wraps the §6c review queue:
