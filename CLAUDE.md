@@ -2,6 +2,30 @@
 
 Guidance for Claude Code (and humans) working in this repository.
 
+## Container-reset durability protocol
+
+The build container resets without warning to a stale checkout, destroying
+anything un-pushed (this has caused work loss three times). These rules are
+mandatory:
+
+- **Push early, push always.** Create a fresh, uniquely-named branch at the
+  start of every work item and `commit` + `push` after every coherent layer
+  (a migration, a service, a test file). Never accumulate more than a few
+  minutes of un-pushed work.
+- **WIP-push before every pause.** Before asking the user anything, ending a
+  turn, or arming a check-in timer, push a WIP commit — those pauses are
+  exactly the reset window.
+- **Verify state on every session start and after any anomaly.** `git fetch`,
+  compare `HEAD` to `origin/main`, and check for missing files/branches. If the
+  checkout is stale: restore to current `origin/main`, report the reset, and
+  rebuild only what is genuinely lost — never build on a stale base silently.
+- **PR descriptions carry the spec.** Write each PR body complete enough that
+  the work could be rebuilt from it alone — it is the recovery record when both
+  the container and the conversation context are gone.
+- **Never force-push over unmerged commits.** Branch names are disposable;
+  commits are not. Unknown unmerged work gets diffed against `main` and either
+  cherry-picked to its own PR or deleted only after confirming redundancy.
+
 ## Project
 
 PIT-Launchpad is a freshly scaffolded **Laravel 13** application. The Laravel
