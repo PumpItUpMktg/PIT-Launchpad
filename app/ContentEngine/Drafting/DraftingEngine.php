@@ -8,15 +8,15 @@ use App\Enums\RefreshTrigger;
 use App\Models\Content;
 use App\Models\RefreshEvent;
 use App\Models\Scopes\SiteScope;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Throwable;
 
 /**
- * The middle of the §6 pipeline: it takes a normalized DraftRequest, assembles
- * the split grounding, drafts with Sonnet, runs the verification pass, and emits
- * a `needs_review` draft for the §6c review queue. It ends at "draft ready for
- * review" — it does not build the review UI, publish, or render images.
+ * The POST/news middle of the §6 pipeline: it takes a normalized DraftRequest,
+ * assembles the split grounding, drafts (Sonnet), runs the verification pass, and
+ * emits a `needs_review` draft for the §6c review queue. It ends at "draft ready
+ * for review" — it does not build the review UI, publish, or render images. The
+ * model call/parse and the failure machinery are the shared DraftCall/DraftGuard;
+ * PageDraftingEngine is the sibling for kit-slot pages.
  *
  * The refresh path re-drafts an existing row in place (bumping its version)
  * rather than creating a new Content.
@@ -27,6 +27,7 @@ class DraftingEngine
         private readonly GroundingAssembler $assembler,
         private readonly Drafter $drafter,
         private readonly VerificationPass $verification,
+        private readonly DraftGuard $guard,
     ) {}
 
     /**
@@ -212,75 +213,13 @@ class DraftingEngine
         ?Content $markOn,
         ?string $contentId,
     ): DraftPayload {
-        try {
-            $attempt = $this->drafter->attempt($request, $grounding);
-        } catch (Throwable $e) {
-            $this->failDraft($markOn, $contentId, $request->siteId, $request->kind->value, DraftFailure::fromException($e), $e);
-        }
-
-        if (! $this->payloadHasDraft($request->kind, $attempt->payload)) {
-            $this->failDraft($markOn, $contentId, $request->siteId, $request->kind->value, DraftFailure::emptyResponse($attempt->rawResponse, $attempt->completion), null);
-        }
-
-        return $attempt->payload;
-    }
-
-    private function failDraft(
-        ?Content $markOn,
-        ?string $contentId,
-        string $siteId,
-        string $kind,
-        DraftFailure $failure,
-        ?Throwable $previous,
-    ): never {
-        if ($markOn !== null) {
-            $this->markDraftFailed($markOn, $failure);
-        }
-
-        $this->logDraftFailure($contentId, $siteId, $kind, $failure);
-
-        throw DraftFailedException::fromFailure($contentId, $failure, $previous);
-    }
-
-    /**
-     * A draft is "produced" only with real output: a post needs body HTML, a page
-     * needs at least one filled slot. An empty payload is a failed model call.
-     */
-    private function payloadHasDraft(ContentKind $kind, DraftPayload $payload): bool
-    {
-        if ($kind === ContentKind::Page) {
-            return is_array($payload->slots) && $payload->slots !== [];
-        }
-
-        return is_string($payload->body) && trim($payload->body) !== '';
-    }
-
-    /**
-     * Persist the silent-failure marker on the candidate (without transitioning
-     * its status) so the review/candidate surfaces can show "Draft failed". The
-     * human one-liner stays on `draft_error` (read by the queue indicator); the
-     * structured cause (exception class/message, HTTP status, raw excerpt) lands
-     * on `draft_failure`. A later successful draft rebuilds `meta` wholesale,
-     * clearing both.
-     */
-    private function markDraftFailed(Content $candidate, DraftFailure $failure): void
-    {
-        $meta = $candidate->meta ?? [];
-        $meta['draft_error'] = $failure->summary();
-        $meta['draft_failure'] = $failure->toArray();
-        $meta['draft_failed_at'] = now()->toIso8601String();
-
-        $candidate->forceFill(['meta' => $meta])->save();
-    }
-
-    private function logDraftFailure(?string $contentId, string $siteId, string $kind, DraftFailure $failure): void
-    {
-        Log::error('Draft generation failed — left undrafted.', [
-            'content_id' => $contentId,
-            'site_id' => $siteId,
-            'kind' => $kind,
-            ...$failure->logContext(),
-        ]);
+        return $this->guard->run(
+            $request->kind,
+            $markOn,
+            $contentId,
+            $request->siteId,
+            fn (): DraftAttempt => $this->drafter->attempt($request, $grounding),
+        )->payload;
     }
 
     private function lane(DraftRequest $request): ?string

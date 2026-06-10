@@ -1,5 +1,6 @@
 <?php
 
+use App\ContentEngine\Drafting\DraftCall;
 use App\ContentEngine\Drafting\Drafter;
 use App\Enums\ContentStatus;
 use App\Models\Content;
@@ -27,7 +28,7 @@ it('runs the live drafter path and reports DRAFTED — read-only', function () {
     $candidate = probeCandidate();
 
     // Override the Drafter the command resolves from the container (the real path).
-    $this->app->bind(Drafter::class, fn () => new Drafter(new FakeClaudeClient(Draft::post('claim-x'))));
+    $this->app->bind(Drafter::class, fn () => new Drafter(new DraftCall(new FakeClaudeClient(Draft::post('claim-x')))));
 
     $this->artisan('launchpad:probe-drafter', ['content' => $candidate->id])
         ->expectsOutputToContain('DRAFTED')
@@ -42,7 +43,7 @@ it('reports DRAFT FAILED with the cause when the response does not parse', funct
     config(['services.anthropic.key' => 'test-key']);
     $candidate = probeCandidate();
 
-    $this->app->bind(Drafter::class, fn () => new Drafter(new FakeClaudeClient('Sorry, not JSON.')));
+    $this->app->bind(Drafter::class, fn () => new Drafter(new DraftCall(new FakeClaudeClient('Sorry, not JSON.'))));
 
     $this->artisan('launchpad:probe-drafter', ['content' => $candidate->id])
         ->expectsOutputToContain('DRAFT FAILED')
