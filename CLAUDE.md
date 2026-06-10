@@ -26,6 +26,22 @@ mandatory:
   commits are not. Unknown unmerged work gets diffed against `main` and either
   cherry-picked to its own PR or deleted only after confirming redundancy.
 
+## MCP write-verification protocol
+
+MCP calls can drop mid-flight; a cut-off call's outcome is unknown (this has
+caused "merged" reports for PRs that were still open). These rules are
+mandatory:
+
+- **No write is real until a read confirms it.** After every state-changing MCP
+  call (merge, PR create, comment, branch op), immediately verify with an
+  idempotent read — `merged: true`, the PR number exists, the comment is
+  present. Never report success from the write attempt alone.
+- **On any drop or error, re-read state before retrying.** Non-idempotent writes
+  (PR creation) get an existence check first so a retry can't duplicate;
+  idempotent writes (merge of an open PR) retry freely.
+- **Status reports cite the verified read, not the attempted write** — e.g.
+  "`merged: true`, squash `feae205`", not "I merged it".
+
 ## Project
 
 PIT-Launchpad is a freshly scaffolded **Laravel 13** application. The Laravel
