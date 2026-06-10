@@ -86,6 +86,27 @@ it('flags token-budget exhaustion (empty text + stop_reason=max_tokens) as a fai
         ->and($meta['draft_error'])->toContain('budget'); // named, not a "0 chars" mystery
 });
 
+it('reads a truncated-mid-JSON response (partial text + stop_reason=max_tokens) as budget exhaustion', function () {
+    $candidate = failureCandidate();
+    // Fenced, with real content — but cut off at the ceiling before the JSON closes.
+    $truncated = "```json\n{\"seo\":{\"title\":\"Heat Pump Rebates\"},\"body\":\"<p>Worried about your old water heat";
+    $claude = new FakeClaudeClient($truncated, stopReason: 'max_tokens', outputTokens: 12000, thinkingTokens: 8000);
+
+    try {
+        DraftingHarness::engine($claude)->draftCandidate($candidate->fresh());
+        $this->fail('expected DraftFailedException');
+    } catch (DraftFailedException $e) {
+        expect($e->failure->stopReason)->toBe('max_tokens')
+            ->and($e->getMessage())->toContain('max_tokens')
+            ->and($e->failure->rawResponseExcerpt)->toContain('Worried about'); // the partial text is captured
+    }
+
+    $meta = $candidate->fresh()->meta;
+    expect($candidate->fresh()->status)->toBe(ContentStatus::Candidate)
+        ->and($meta['draft_failure']['stop_reason'])->toBe('max_tokens')
+        ->and($meta['draft_error'])->toContain('token ceiling'); // truncation reads as budget exhaustion
+});
+
 it('captures a truncated raw model response when the response does not parse into a draft', function () {
     $candidate = failureCandidate();
 

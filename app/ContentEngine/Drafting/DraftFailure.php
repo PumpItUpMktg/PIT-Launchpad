@@ -45,11 +45,12 @@ final class DraftFailure
 
     public static function emptyResponse(string $rawResponse, ?CompletionResult $completion = null): self
     {
-        // A stop_reason of max_tokens with no usable text is the budget-exhaustion
-        // signature — thinking (or output) consumed the whole budget before a
-        // parseable draft landed. Name it so it isn't a "0 chars" mystery.
+        // A stop_reason of max_tokens means the completion was cut off at the
+        // ceiling before a parseable draft — whether it came back empty (thinking
+        // ate the whole budget) or as text truncated mid-JSON. Either way it's
+        // budget exhaustion, not a malformed model; name it so.
         $reason = $completion?->stopReason === 'max_tokens'
-            ? 'The model hit max_tokens before emitting a usable draft — the completion budget was exhausted (likely by extended thinking). Raise drafting max_tokens or cap/disable the thinking budget.'
+            ? 'The model hit max_tokens before a parseable draft — the completion was cut off at the token ceiling (empty, or text truncated mid-JSON). Raise drafting max_tokens or lower the thinking budget so the output has headroom.'
             : 'The drafter returned no usable content (empty body/slots) — the model response did not parse into a draft.';
 
         return new self(
