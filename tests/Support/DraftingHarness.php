@@ -2,7 +2,9 @@
 
 namespace Tests\Support;
 
+use App\ContentEngine\Drafting\DraftCall;
 use App\ContentEngine\Drafting\Drafter;
+use App\ContentEngine\Drafting\DraftGuard;
 use App\ContentEngine\Drafting\DraftingEngine;
 use App\ContentEngine\Drafting\DraftRequest;
 use App\ContentEngine\Drafting\GroundingAssembler;
@@ -25,7 +27,7 @@ class DraftingHarness
 {
     public static function engine(ClaudeClient $claude): DraftingEngine
     {
-        return new DraftingEngine(new GroundingAssembler, new Drafter($claude), new VerificationPass);
+        return new DraftingEngine(new GroundingAssembler, new Drafter(new DraftCall($claude)), new VerificationPass, new DraftGuard);
     }
 
     /**

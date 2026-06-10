@@ -3,21 +3,19 @@
 namespace App\ContentEngine\Drafting;
 
 use App\Enums\ContentKind;
-use App\Integrations\Claude\ClaudeClient;
 use App\PageBuilder\Schema\SlotDefinition;
 
 /**
- * Drafts content from assembled grounding via the Sonnet-configured ClaudeClient
- * seam (mockable in tests). The prompt enforces the Source/Claims split: business
- * assertions may come ONLY from the substantiated-claims pool (cited by id),
- * sources are attribution-only, and image slots yield SPECS, never renders. A
- * page draft fills the kit's slots; a post draft fills a body. Output is strict
- * JSON, parsed into a DraftPayload.
+ * Drafts a POST from assembled news grounding: the prompt enforces the
+ * Source/Claims split (business assertions only from the substantiated-claims
+ * pool, cited by id; sources attribution-only; image slots yield SPECS). It owns
+ * the post-shaped prompt only — the model call + JSON parse is the shared
+ * DraftCall mechanism, and PageDrafter is its sibling for kit-slot pages.
  */
 class Drafter
 {
     public function __construct(
-        private readonly ClaudeClient $claude,
+        private readonly DraftCall $call,
     ) {}
 
     public function draft(DraftRequest $request, Grounding $grounding): DraftPayload
@@ -26,16 +24,12 @@ class Drafter
     }
 
     /**
-     * The full call: returns the raw model response alongside the parsed payload.
-     * The ClaudeClient call is intentionally NOT caught here — a transport/HTTP
-     * failure propagates so the caller can record its cause; this method only
-     * fails to parse (yielding an empty payload), never silently swallows.
+     * The full call: returns the raw model response alongside the parsed payload
+     * (via the shared DraftCall).
      */
     public function attempt(DraftRequest $request, Grounding $grounding): DraftAttempt
     {
-        $result = $this->claude->completeDetailed($this->prompt($request, $grounding), $this->system());
-
-        return new DraftAttempt($result->text, DraftPayload::fromArray($this->parse($result->text)), $result);
+        return $this->call->attempt($this->system(), $this->prompt($request, $grounding));
     }
 
     /**
@@ -198,39 +192,5 @@ class Drafter
             .'  "sources_cited": [{"name":"<source name>","url":"<canonical url or null>"}],'."\n"
             .'  "towns": ["<town>", ...]'."\n"
             .'}';
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function parse(string $response): array
-    {
-        $candidate = $this->unfence($response);
-
-        $start = strpos($candidate, '{');
-        $end = strrpos($candidate, '}');
-        if ($start === false || $end === false || $end < $start) {
-            return [];
-        }
-
-        $decoded = json_decode(substr($candidate, $start, $end - $start + 1), true);
-
-        return is_array($decoded) ? $decoded : [];
-    }
-
-    /**
-     * Sonnet often wraps its JSON in a markdown code fence (```json … ```), and
-     * sometimes prefaces it with prose. Return the first fenced block's contents
-     * when present, so the brace-span extraction can't be poisoned by a stray
-     * brace in that prose (e.g. "using a {key: value} shape:"). No fence → the
-     * response is returned unchanged and the brace span handles it.
-     */
-    private function unfence(string $response): string
-    {
-        if (preg_match('/```(?:json)?\s*\n?(.+?)\n?```/is', $response, $m) === 1) {
-            return trim($m[1]);
-        }
-
-        return $response;
     }
 }

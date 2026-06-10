@@ -2,11 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\ContentEngine\Drafting\DraftAttempt;
 use App\ContentEngine\Drafting\Drafter;
 use App\ContentEngine\Drafting\DraftFailure;
 use App\ContentEngine\Drafting\DraftPayload;
 use App\ContentEngine\Drafting\DraftRequest;
 use App\ContentEngine\Drafting\GroundingAssembler;
+use App\ContentEngine\Drafting\PageDrafter;
+use App\ContentEngine\Drafting\PageGroundingAssembler;
 use App\Enums\ContentKind;
 use App\Integrations\Claude\ClaudeClientFactory;
 use App\Models\Content;
@@ -30,21 +33,26 @@ use Throwable;
  */
 class ProbeDrafterCommand extends Command
 {
-    protected $signature = 'launchpad:probe-drafter {content : A real candidate Content id} {--market= : Market id for local injection} {--show-prompt : Print the full system + user prompt}';
+    protected $signature = 'launchpad:probe-drafter {content : A real Content id (post candidate or page)} {--market= : Market id for local injection} {--show-prompt : Print the full system + user prompt}';
 
-    protected $description = 'Run the live Drafter path against a candidate and report it verbosely (model, grounding, prompt, raw response, parse). Makes a real Claude call — console-only, never in CI.';
+    protected $description = 'Run the live drafter path against a post candidate OR a page and report it verbosely (model, grounding, prompt, raw response, parse). Makes a real Claude call — console-only, never in CI.';
 
-    public function handle(ClaudeClientFactory $factory, GroundingAssembler $assembler, Drafter $drafter): int
-    {
+    public function handle(
+        ClaudeClientFactory $factory,
+        GroundingAssembler $assembler,
+        Drafter $drafter,
+        PageGroundingAssembler $pageAssembler,
+        PageDrafter $pageDrafter,
+    ): int {
         $candidate = Content::query()->withoutGlobalScope(SiteScope::class)->find($this->argument('content'));
 
         if ($candidate === null) {
-            $this->error('Candidate not found.');
+            $this->error('Content not found.');
 
             return self::FAILURE;
         }
 
-        $this->warn('Live drafter probe — this makes a real Claude call on the drafting model. Read-only: the candidate is not modified.');
+        $this->warn('Live drafter probe — this makes a real Claude call on the drafting model. Read-only: the content is not modified.');
         $this->line('');
 
         // The divergence the probe exists to expose: drafting client vs the
@@ -61,15 +69,36 @@ class ProbeDrafterCommand extends Command
             return self::FAILURE;
         }
 
-        $request = DraftRequest::forCandidate($candidate, $this->option('market') !== null ? (string) $this->option('market') : null);
-        $grounding = $assembler->assemble($request);
-        $this->line('Grounding : voice v'.$grounding->voiceProfileVersion
-            .', claims='.count($grounding->claims)
-            .', sources='.count($grounding->sources)
-            .', towns='.count($grounding->towns)
-            .', kit='.($grounding->kit !== null ? 'yes' : 'none'));
+        // Both kinds report identically below; only the grounding + prompt + the
+        // attempt closure differ (post Drafter vs PageDrafter, via the common
+        // attempt(): DraftAttempt contract). Grounding assembly can throw (e.g. a
+        // page with no kit) — that's a failure too.
+        try {
+            if ($candidate->kind === ContentKind::Page) {
+                $grounding = $pageAssembler->assemble($candidate);
+                $this->line('Grounding : voice v'.$grounding->voiceProfileVersion
+                    .', services='.count($grounding->services)
+                    .', problems='.count($grounding->problems)
+                    .', proof='.count($grounding->proof)
+                    .', markets='.count($grounding->markets)
+                    .', kit_slots='.count($grounding->kit->slots));
+                $preview = $pageDrafter->preview($grounding);
+                $attemptFn = fn (): DraftAttempt => $pageDrafter->attempt($grounding);
+            } else {
+                $request = DraftRequest::forCandidate($candidate, $this->option('market') !== null ? (string) $this->option('market') : null);
+                $newsGrounding = $assembler->assemble($request);
+                $this->line('Grounding : voice v'.$newsGrounding->voiceProfileVersion
+                    .', claims='.count($newsGrounding->claims)
+                    .', sources='.count($newsGrounding->sources)
+                    .', towns='.count($newsGrounding->towns)
+                    .', kit='.($newsGrounding->kit !== null ? 'yes' : 'none'));
+                $preview = $drafter->preview($request, $newsGrounding);
+                $attemptFn = fn (): DraftAttempt => $drafter->attempt($request, $newsGrounding);
+            }
+        } catch (Throwable $e) {
+            return $this->reportFailure(DraftFailure::fromException($e));
+        }
 
-        $preview = $drafter->preview($request, $grounding);
         $this->line('Prompt    : system '.strlen($preview['system']).' chars, user '.strlen($preview['prompt']).' chars');
         if ($this->option('show-prompt')) {
             $this->line('');
@@ -81,7 +110,7 @@ class ProbeDrafterCommand extends Command
         $this->line('');
 
         try {
-            $attempt = $drafter->attempt($request, $grounding);
+            $attempt = $attemptFn();
         } catch (Throwable $e) {
             return $this->reportFailure(DraftFailure::fromException($e));
         }
@@ -96,7 +125,7 @@ class ProbeDrafterCommand extends Command
         $this->line('');
 
         if (! $this->producedDraft($candidate->kind, $attempt->payload)) {
-            return $this->reportFailure(DraftFailure::emptyResponse($attempt->rawResponse));
+            return $this->reportFailure(DraftFailure::emptyResponse($attempt->rawResponse, $attempt->completion));
         }
 
         $payload = $attempt->payload;

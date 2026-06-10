@@ -2,7 +2,7 @@
 
 namespace App\Providers;
 
-use App\ContentEngine\Drafting\Drafter;
+use App\ContentEngine\Drafting\DraftCall;
 use App\ContentEngine\Feeds\FeedFetcher;
 use App\ContentEngine\Feeds\FeedHealth;
 use App\ContentEngine\Feeds\FeedValidator;
@@ -293,9 +293,13 @@ class AppServiceProvider extends ServiceProvider
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
 
-        $this->app->when(Drafter::class)
-            ->needs(ClaudeClient::class)
-            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->drafting());
+        // The shared drafting MECHANISM (DraftCall) carries the budget-fixed
+        // drafting client; every draft sibling (post Drafter, PageDrafter) depends
+        // on it, so the model call + parse live in exactly one place.
+        $this->app->bind(
+            DraftCall::class,
+            fn ($app) => new DraftCall($app->make(ClaudeClientFactory::class)->drafting()),
+        );
     }
 
     /**

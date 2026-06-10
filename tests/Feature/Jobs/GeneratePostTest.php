@@ -1,5 +1,6 @@
 <?php
 
+use App\ContentEngine\Drafting\DraftCall;
 use App\ContentEngine\Drafting\Drafter;
 use App\ContentEngine\Generation\PostGenerator;
 use App\Enums\ContentStatus;
@@ -30,7 +31,7 @@ function jobCandidate(): Content
 
 function bindDrafter(FakeClaudeClient $claude): void
 {
-    app()->bind(Drafter::class, fn () => new Drafter($claude));
+    app()->bind(Drafter::class, fn () => new Drafter(new DraftCall($claude)));
 }
 
 it('queue() stamps the row generating and dispatches the job without drafting inline', function () {
