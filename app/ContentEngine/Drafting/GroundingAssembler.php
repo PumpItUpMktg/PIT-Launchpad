@@ -71,14 +71,33 @@ class GroundingAssembler
         $sources = [];
 
         if ($request->sourceName !== null && $request->sourceName !== '') {
+            // Grounding follows the source. A direct-feed item with a captured
+            // body grounds on the BODY; a Google News item (no source_url, hence
+            // no body) grounds on METADATA only and is cited by name. The url is
+            // always passed through — SourceRef decides citability (a Google News
+            // redirect token collapses to name-only attribution).
+            $hasBody = $request->sourceUrl !== null && $request->sourceUrl !== ''
+                && $request->sourceBody !== null && $request->sourceBody !== '';
+
             $sources[] = new SourceRef(
                 name: $request->sourceName,
-                summary: $request->angleHint,
+                summary: $hasBody ? $request->sourceBody : $this->metadataSummary($request),
                 url: $request->sourceUrl,
             );
         }
 
         return [...$sources, ...$extraSources];
+    }
+
+    /**
+     * The metadata grounding for an item without a usable body: the title and the
+     * advisory angle (the snippet/date the candidate carries), kept copyright-safe.
+     */
+    private function metadataSummary(DraftRequest $request): string
+    {
+        $parts = array_filter([$request->title, $request->angleHint], fn (?string $v) => $v !== null && $v !== '');
+
+        return implode(' — ', $parts);
     }
 
     private function activeVoiceProfile(string $siteId): ?VoiceProfile

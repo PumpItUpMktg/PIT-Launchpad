@@ -43,6 +43,32 @@ class DraftingEngine
         return new DraftResult($content, $payload, $verification, $request->isRefresh());
     }
 
+    /**
+     * First-draft a §6a candidate IN PLACE. The candidate already IS a Content row
+     * (status candidate/scored, carrying its routed silo + source), so drafting
+     * transitions that same row to needs_review rather than spawning a duplicate.
+     * Distinct from the refresh path: no version bump, no refresh_count, no
+     * RefreshEvent; the candidate's slug and identity are preserved. Lane
+     * provenance is fixed here (the candidate carried none).
+     */
+    public function draftCandidate(Content $candidate, ?string $marketId = null, ?string $sourceBody = null): DraftResult
+    {
+        $request = DraftRequest::forCandidate($candidate, $marketId, $sourceBody);
+
+        $grounding = $this->assembler->assemble($request);
+        $payload = $this->drafter->draft($request, $grounding);
+        $verification = $this->verification->verify($payload, $grounding);
+
+        $candidate->fill([
+            ...$this->draftAttributes($request, $grounding, $payload, $verification),
+            'title' => $this->title($request, $payload),
+            'draft_trigger' => $request->trigger,
+            'draft_lane' => $this->lane($request),
+        ])->save();
+
+        return new DraftResult($candidate, $payload, $verification, false);
+    }
+
     private function createDraft(
         DraftRequest $request,
         Grounding $grounding,
