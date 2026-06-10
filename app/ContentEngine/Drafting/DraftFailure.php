@@ -43,6 +43,27 @@ final class DraftFailure
         );
     }
 
+    /**
+     * A page draft that came back structurally off-schema (missing required slots,
+     * bad cardinality/content-type/length). Slot keys are the render contract, so
+     * this is a draft failure surfaced through the same machinery — no status flip.
+     *
+     * @param  list<string>  $messages
+     */
+    public static function schemaRejected(array $messages): self
+    {
+        $shown = array_slice($messages, 0, 5);
+        $suffix = count($messages) > 5 ? ' (+'.(count($messages) - 5).' more)' : '';
+
+        return new self(
+            reason: 'The page draft did not satisfy the kit schema: '.implode('; ', $shown).$suffix,
+            exceptionClass: null,
+            exceptionMessage: null,
+            httpStatus: null,
+            rawResponseExcerpt: null,
+        );
+    }
+
     public static function emptyResponse(string $rawResponse, ?CompletionResult $completion = null): self
     {
         // A stop_reason of max_tokens means the completion was cut off at the
