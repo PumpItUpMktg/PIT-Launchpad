@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\ContentEngine\Drafting\DraftFailedException;
+use App\ContentEngine\Generation\PostGenerator;
 use App\ContentEngine\Review\AlertFlags;
 use App\ContentEngine\Review\ReviewActions;
 use App\ContentEngine\Review\ReviewQueue;
@@ -70,6 +72,15 @@ class ContentReviewResource extends Resource
                 TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('silo.name')->label('Silo')->placeholder('—'),
                 TextColumn::make('kind')->badge(),
+                TextColumn::make('draft_state')
+                    ->label('Draft')
+                    ->badge()
+                    ->state(fn (Content $record): string => self::draftState($record))
+                    ->color(fn (string $state): string => match ($state) {
+                        'Drafted' => 'success',
+                        'Draft failed' => 'danger',
+                        default => 'gray',
+                    }),
                 TextColumn::make('draft_trigger')->label('Lane')->badge()->placeholder('—'),
                 TextColumn::make('flags')
                     ->label('Flags')
@@ -96,6 +107,7 @@ class ContentReviewResource extends Resource
                     }),
             ])
             ->recordActions([
+                self::generateAction(),
                 self::approveAction(),
                 self::publishNowAction(),
                 self::rejectAction(),
@@ -119,6 +131,37 @@ class ContentReviewResource extends Resource
                 TextInput::make('slug'),
             ]),
         ]);
+    }
+
+    /**
+     * Draft a borderline candidate that landed in the queue undrafted (§6a routes
+     * borderline-relevance items straight to in_review). Without this, those rows
+     * were stranded — the "Generate post" action lived only on the Candidates
+     * screen, which lists candidate/scored, never in_review. Shown only when the
+     * row has no draft yet; the expensive Sonnet+fal step still runs on confirm.
+     */
+    private static function generateAction(): Action
+    {
+        return Action::make('generate')
+            ->label('Generate post')
+            ->icon('heroicon-o-sparkles')
+            ->color('info')
+            ->visible(fn (Content $record): bool => ! $record->hasDraft())
+            ->requiresConfirmation()
+            ->modalDescription('Drafts the post with brand voice + grounding (Sonnet) and renders its image (fal). This is the expensive step and runs only when you confirm.')
+            ->action(function (Content $record): void {
+                try {
+                    $result = app(PostGenerator::class)->generate($record);
+                } catch (DraftFailedException $e) {
+                    Notification::make()->danger()
+                        ->title('Generation failed — left undrafted')->body($e->getMessage())->send();
+
+                    return;
+                }
+
+                Notification::make()->success()
+                    ->title('Post generated')->body("'{$result->content->title}' is drafted and ready to review.")->send();
+            });
     }
 
     private static function approveAction(): Action
@@ -155,6 +198,8 @@ class ContentReviewResource extends Resource
         return Action::make('publish_now')
             ->label('Publish now')
             ->icon('heroicon-o-paper-airplane')
+            // An undrafted item can't publish (it would push an empty post) — hide it.
+            ->visible(fn (Content $record): bool => $record->hasDraft())
             ->requiresConfirmation()
             ->modalDescription('Renders images and pushes this post to WordPress now (keyed by content_id — safe to re-run; a page edited in WordPress is skipped, not overwritten).')
             ->action(function (Content $record): void {
@@ -226,6 +271,20 @@ class ContentReviewResource extends Resource
             'index' => ListContentReviews::route('/'),
             'edit' => EditContentReview::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * The drafted-vs-undrafted indicator for a queue row. Drafting is synchronous
+     * (no async "generating" state to surface), so a row is Drafted, carries a
+     * persisted draft-failure marker, or is simply Awaiting draft.
+     */
+    private static function draftState(Content $record): string
+    {
+        if ($record->hasDraft()) {
+            return 'Drafted';
+        }
+
+        return $record->draftError() !== null ? 'Draft failed' : 'Awaiting draft';
     }
 
     /**

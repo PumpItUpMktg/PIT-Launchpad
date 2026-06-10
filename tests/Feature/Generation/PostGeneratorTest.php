@@ -1,5 +1,6 @@
 <?php
 
+use App\ContentEngine\Drafting\DraftFailedException;
 use App\ContentEngine\Generation\PostGenerator;
 use App\Enums\ContentStatus;
 use App\Models\Content;
@@ -56,4 +57,45 @@ it('drafts a candidate in place (→ needs_review) and renders its image — onl
         ->and($drafted->body)->not->toBeNull()
         ->and($drafted->meta['image_specs'])->not->toBeEmpty()
         ->and($claude->prompts)->toHaveCount(1); // the gated Sonnet call fired exactly once
+});
+
+it('does NOT flip a candidate to needs_review when the draft comes back empty — and surfaces it', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $candidate = newsCandidate($site, $silo);
+    $candidate->update(['body' => null]); // a real news candidate carries no body
+
+    // An empty / unparseable model response yields no draft.
+    $claude = new FakeClaudeClient('');
+    $renders = Mockery::mock(RenderCoordinator::class);
+    $renders->shouldReceive('render')->never(); // never burn a fal render on a failed draft
+
+    expect(fn () => (new PostGenerator(DraftingHarness::engine($claude), $renders))->generate($candidate->fresh()))
+        ->toThrow(DraftFailedException::class);
+
+    $after = $candidate->fresh();
+    expect($after->status)->toBe(ContentStatus::Candidate) // NOT needs_review
+        ->and($after->body)->toBeNull()
+        ->and($after->hasDraft())->toBeFalse()
+        ->and($after->draftError())->not->toBeNull(); // failure marker persisted for the surfaces
+});
+
+it('titles the drafted post from the generated SEO title, not the carried news headline', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $candidate = newsCandidate($site, $silo); // carried title: 'Heat pump rebate expands'
+
+    $claude = new FakeClaudeClient(Draft::post('claim-x', [
+        'seo' => [
+            'title' => 'What the Heat-Pump Rebate Means for Your Energy Bill',
+            'meta_description' => 'A homeowner rundown.',
+            'slug' => 'heat-pump-rebate-energy-bill',
+        ],
+    ]));
+    $renders = Mockery::mock(RenderCoordinator::class);
+    $renders->shouldReceive('render')->once()->andReturn(new RenderOutcome(new Collection, true, []));
+
+    $result = (new PostGenerator(DraftingHarness::engine($claude), $renders))->generate($candidate->fresh());
+
+    expect($result->content->fresh()->title)->toBe('What the Heat-Pump Rebate Means for Your Energy Bill');
 });

@@ -26,6 +26,20 @@ test('approve flips the draft to approved and enqueues PublishContent', function
         && $job->actorId === 'operator-1');
 });
 
+test('approve is blocked for an undrafted candidate and dispatches nothing', function () {
+    Bus::fake();
+    // A borderline candidate sits in_review undrafted (no body) — must not approve.
+    $content = Content::factory()->post()->create(['status' => ContentStatus::InReview, 'body' => null]);
+
+    $result = reviewActions()->approve($content);
+
+    expect($result->isBlocked())->toBeTrue()
+        ->and($result->blockedReason)->toContain('no completed draft')
+        ->and($content->fresh()->status)->toBe(ContentStatus::InReview);
+
+    Bus::assertNotDispatched(PublishContent::class);
+});
+
 test('a required-image render_failed blocks approve and dispatches nothing', function () {
     Bus::fake();
     $content = Content::factory()->create(['status' => ContentStatus::NeedsReview]);

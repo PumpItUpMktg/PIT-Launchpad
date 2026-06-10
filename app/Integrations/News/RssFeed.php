@@ -118,6 +118,29 @@ final class RssFeed
     }
 
     /**
+     * Google News appends " - {Source}" to every item <title> (matching the
+     * item's <source> element). Strip that trailing attribution so it never
+     * leaks into the candidate title — and from there into the slug. Only the
+     * exact known-source suffix is removed; a title that legitimately contains
+     * " - " elsewhere is left intact, and an empty source is a no-op.
+     */
+    public static function stripGoogleSourceSuffix(string $title, string $source): string
+    {
+        $title = trim($title);
+        $source = trim($source);
+
+        if ($source === '') {
+            return $title;
+        }
+
+        $suffix = ' - '.$source;
+
+        return str_ends_with($title, $suffix)
+            ? rtrim(substr($title, 0, -strlen($suffix)))
+            : $title;
+    }
+
+    /**
      * Plain text from an RSS/Atom snippet: strip the HTML Google News wraps its
      * description in, decode entities, collapse whitespace, and cap the length so
      * it doesn't bloat the scoring prompt.

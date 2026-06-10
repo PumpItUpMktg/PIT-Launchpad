@@ -80,6 +80,22 @@ it('refuses to publish without a present, non-compromised connection', function 
     Http::assertNothingSent();
 });
 
+it('refuses to publish an undrafted candidate — would push an empty post', function () {
+    Http::fake();
+    $site = verifiedSite();
+    $candidate = Content::factory()->post()->create([
+        'site_id' => $site->id,
+        'status' => ContentStatus::InReview,
+        'body' => null, // never drafted
+    ]);
+
+    $result = app(PostPublisher::class)->publish($candidate);
+
+    expect($result->hasFailed())->toBeTrue()
+        ->and($result->message)->toContain('no completed draft');
+    Http::assertNothingSent();
+});
+
 it('publishes via the launchpad:publish-content command and refuses when blocked', function () {
     Http::fake(['*/launchpad/v1/content' => Http::response(['wp_post_id' => 108, 'status' => 'publish', 'skipped' => false])]);
     $site = verifiedSite();

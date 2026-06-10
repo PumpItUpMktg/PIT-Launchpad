@@ -3,6 +3,7 @@
 use App\Integrations\News\GoogleNewsRssProvider;
 use App\Integrations\News\NewsItem;
 use App\Integrations\News\NewsSourceException;
+use App\Integrations\News\RssFeed;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Http as HttpFacade;
 
@@ -62,13 +63,24 @@ it('parses Google News RSS into NewsItems and unwraps to the publisher URL', fun
     $first = $items[0];
     expect($first)->toBeInstanceOf(NewsItem::class)
         ->and($first->url)->toBe('https://tribune.com/water-heater-rebate')   // unwrapped, not news.google.com
-        ->and($first->title)->toBe('Rebate explained - Austin Tribune')
+        ->and($first->title)->toBe('Rebate explained')                       // " - Austin Tribune" suffix stripped
         ->and($first->sourceName)->toBe('Austin Tribune')
         ->and($first->topic)->toBe('Water Heaters')
         ->and($first->externalId)->toStartWith('googlenews:');
 
     // The google.com/url?...&url= wrapper is decoded too.
     expect($items[1]->url)->toBe('https://example.com/tankless');
+});
+
+it('strips the " - {Source}" suffix Google appends, only when it matches the source', function () {
+    expect(RssFeed::stripGoogleSourceSuffix('Rebate explained - Austin Tribune', 'Austin Tribune'))
+        ->toBe('Rebate explained')
+        // A " - " that is part of the headline (not the source) is preserved.
+        ->and(RssFeed::stripGoogleSourceSuffix('DIY or Professional - a guide', 'Austin Tribune'))
+        ->toBe('DIY or Professional - a guide')
+        // No source → no-op.
+        ->and(RssFeed::stripGoogleSourceSuffix('Rebate explained - Austin Tribune', ''))
+        ->toBe('Rebate explained - Austin Tribune');
 });
 
 it('sends the consent cookie, hl/gl/ceid params and a browser User-Agent', function () {

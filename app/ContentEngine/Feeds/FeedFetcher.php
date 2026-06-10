@@ -78,6 +78,9 @@ class FeedFetcher
                     ? $row['source']
                     : ($articleUrl !== null ? (string) (parse_url($articleUrl, PHP_URL_HOST) ?: '') : '');
                 $externalId = 'googlenews:'.sha1($row['link']);
+                // Google appends " - {Source}" to the title — strip it before it
+                // becomes the candidate title (and slug).
+                $title = RssFeed::stripGoogleSourceSuffix($row['title'], $row['source']);
             } else {
                 // Client direct feed: <link> IS the publisher URL; the channel
                 // <title> is the outlet name when per-item <source> is absent.
@@ -86,11 +89,12 @@ class FeedFetcher
                     ? $row['source']
                     : ($channel !== '' ? $channel : (string) (parse_url($row['link'], PHP_URL_HOST) ?: ''));
                 $externalId = 'feed:'.sha1($row['link']);
+                $title = $row['title'];
             }
 
             $items[] = new NewsItem(
                 externalId: $externalId,
-                title: $row['title'],
+                title: $title,
                 summary: $row['summary'],
                 sourceName: $sourceName,
                 publishedAt: RssFeed::parseDate($row['published']),
