@@ -73,6 +73,53 @@ class Content extends Model
         return is_string($error) && $error !== '' ? $error : null;
     }
 
+    /**
+     * The generation-state machine for the surfaces (single source of truth):
+     * `drafted` (has body/slots) → `failed` (a recorded draft error) →
+     * `generating` (a queued GeneratePost job is in flight) → `awaiting`.
+     */
+    public function generationState(): string
+    {
+        if ($this->hasDraft()) {
+            return 'drafted';
+        }
+
+        if ($this->draftError() !== null) {
+            return 'failed';
+        }
+
+        return ($this->meta['generating_at'] ?? null) !== null ? 'generating' : 'awaiting';
+    }
+
+    /** Whether a queued GeneratePost job is in flight for this row. */
+    public function isGenerating(): bool
+    {
+        return $this->generationState() === 'generating';
+    }
+
+    /**
+     * Stamp the row "generating" (clearing any prior failure marker so a re-run
+     * doesn't read as failed while it works). Set before dispatch so the UI
+     * reflects it immediately.
+     */
+    public function markGenerating(): void
+    {
+        $meta = $this->meta ?? [];
+        $meta['generating_at'] = now()->toIso8601String();
+        unset($meta['draft_error'], $meta['draft_failure'], $meta['draft_failed_at']);
+
+        $this->forceFill(['meta' => $meta])->save();
+    }
+
+    /** Drop the generating marker (on failure; success rebuilds meta wholesale). */
+    public function clearGenerating(): void
+    {
+        $meta = $this->meta ?? [];
+        unset($meta['generating_at']);
+
+        $this->forceFill(['meta' => $meta])->save();
+    }
+
     /** @return BelongsTo<Silo, $this> */
     public function silo(): BelongsTo
     {

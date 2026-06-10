@@ -2,8 +2,6 @@
 
 namespace App\Filament\Resources;
 
-use App\ContentEngine\Drafting\DraftFailedException;
-use App\ContentEngine\Generation\PostGenerator;
 use App\ContentEngine\Review\AlertFlags;
 use App\ContentEngine\Review\ReviewActions;
 use App\ContentEngine\Review\ReviewQueue;
@@ -13,6 +11,7 @@ use App\Enums\ReviewFlag;
 use App\Enums\UserRole;
 use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
 use App\Filament\Resources\ContentReviewResource\Pages\ListContentReviews;
+use App\Jobs\GeneratePost;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Publishing\PostPublisher;
@@ -78,6 +77,7 @@ class ContentReviewResource extends Resource
                     ->state(fn (Content $record): string => self::draftState($record))
                     ->color(fn (string $state): string => match ($state) {
                         'Drafted' => 'success',
+                        'Generating' => 'info',
                         'Draft failed' => 'danger',
                         default => 'gray',
                     }),
@@ -146,21 +146,15 @@ class ContentReviewResource extends Resource
             ->label('Generate post')
             ->icon('heroicon-o-sparkles')
             ->color('info')
-            ->visible(fn (Content $record): bool => ! $record->hasDraft())
+            ->visible(fn (Content $record): bool => ! $record->hasDraft() && ! $record->isGenerating())
             ->requiresConfirmation()
-            ->modalDescription('Drafts the post with brand voice + grounding (Sonnet) and renders its image (fal). This is the expensive step and runs only when you confirm.')
+            ->modalDescription('Queues the draft (Sonnet) + image render (fal) on the worker — the expensive step runs in the background, not in this request. The row shows "Generating" until the draft is ready.')
             ->action(function (Content $record): void {
-                try {
-                    $result = app(PostGenerator::class)->generate($record);
-                } catch (DraftFailedException $e) {
-                    Notification::make()->danger()
-                        ->title('Generation failed — left undrafted')->body($e->getMessage())->send();
-
-                    return;
-                }
+                GeneratePost::queue($record, actorId: Auth::id());
 
                 Notification::make()->success()
-                    ->title('Post generated')->body("'{$result->content->title}' is drafted and ready to review.")->send();
+                    ->title('Queued — generating on the worker')
+                    ->body("'{$record->title}' is being drafted; the row will update when it's ready.")->send();
             });
     }
 
@@ -280,11 +274,12 @@ class ContentReviewResource extends Resource
      */
     private static function draftState(Content $record): string
     {
-        if ($record->hasDraft()) {
-            return 'Drafted';
-        }
-
-        return $record->draftError() !== null ? 'Draft failed' : 'Awaiting draft';
+        return match ($record->generationState()) {
+            'drafted' => 'Drafted',
+            'generating' => 'Generating',
+            'failed' => 'Draft failed',
+            default => 'Awaiting draft',
+        };
     }
 
     /**
