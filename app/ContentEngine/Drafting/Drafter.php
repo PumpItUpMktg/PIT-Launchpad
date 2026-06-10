@@ -22,9 +22,31 @@ class Drafter
 
     public function draft(DraftRequest $request, Grounding $grounding): DraftPayload
     {
+        return $this->attempt($request, $grounding)->payload;
+    }
+
+    /**
+     * The full call: returns the raw model response alongside the parsed payload.
+     * The ClaudeClient call is intentionally NOT caught here — a transport/HTTP
+     * failure propagates so the caller can record its cause; this method only
+     * fails to parse (yielding an empty payload), never silently swallows.
+     */
+    public function attempt(DraftRequest $request, Grounding $grounding): DraftAttempt
+    {
         $response = $this->claude->complete($this->prompt($request, $grounding), $this->system());
 
-        return DraftPayload::fromArray($this->parse($response));
+        return new DraftAttempt($response, DraftPayload::fromArray($this->parse($response)));
+    }
+
+    /**
+     * The exact system + user prompt this drafter would send — for the drafter
+     * probe to show what goes to the model, without making the call.
+     *
+     * @return array{system: string, prompt: string}
+     */
+    public function preview(DraftRequest $request, Grounding $grounding): array
+    {
+        return ['system' => $this->system(), 'prompt' => $this->prompt($request, $grounding)];
     }
 
     private function system(): string
