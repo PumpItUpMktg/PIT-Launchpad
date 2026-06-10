@@ -3,7 +3,6 @@
 namespace App\ContentEngine\Feeds;
 
 use App\ContentEngine\CandidateFunnel;
-use App\ContentEngine\FunnelResult;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\Source;
@@ -15,6 +14,10 @@ use Illuminate\Support\Facades\Log;
  * the items through the same §6a candidate funnel, passing the feed's silo as a
  * routing backstop. The only origin-dependent decisions live in FeedFetcher; from
  * here down, generated and client feeds are identical.
+ *
+ * Each feed returns a per-stage FeedIngestReport (fetched → prefiltered-out →
+ * deduped → score-rejected → routed/parked) — logged and surfaced — so a
+ * 0-candidates run says exactly where the items went instead of vanishing.
  */
 class FeedIngestor
 {
@@ -23,27 +26,32 @@ class FeedIngestor
         private readonly CandidateFunnel $funnel,
     ) {}
 
-    public function ingestFeed(Source $feed): FunnelResult
+    public function ingestFeed(Source $feed): FeedIngestReport
     {
+        $label = $feed->label ?? $feed->url ?? $feed->id;
         $result = $this->fetcher->fetch($feed);
         $this->recordHealth($feed, $result);
 
         if (! $result->ok()) {
             Log::warning('feed.ingest.skipped', ['feed_id' => $feed->id, 'error' => $result->error]);
 
-            return new FunnelResult([], [], [], [], []);
+            return FeedIngestReport::unfetched($feed->id, $label, $result->error);
         }
 
         $site = Site::query()->findOrFail($feed->site_id);
+        $funnel = $this->funnel->process($site, $result->items, $feed->silo_id);
 
-        return $this->funnel->process($site, $result->items, $feed->silo_id);
+        $report = FeedIngestReport::fromFunnel($feed->id, $label, count($result->items), $funnel);
+        Log::info('feed.ingest.report', $report->toLog());
+
+        return $report;
     }
 
     /**
      * Ingest every active feed for a site. Paced by the caller — the keyword×geo
      * fan-out can be large.
      *
-     * @return array{feeds: int, candidates: int, parked: int, unhealthy: int}
+     * @return array{feeds: int, fetched: int, prefiltered_out: int, deduped: int, score_rejected: int, routed: int, parked: int, refresh_marked: int, unhealthy: int, reports: list<FeedIngestReport>}
      */
     public function ingestSite(Site $site): array
     {
@@ -53,24 +61,25 @@ class FeedIngestor
             ->whereNotNull('url')
             ->get();
 
-        $candidates = 0;
-        $parked = 0;
-        $unhealthy = 0;
-
+        /** @var list<FeedIngestReport> $reports */
+        $reports = [];
         foreach ($feeds as $feed) {
-            $result = $this->ingestFeed($feed);
-            $candidates += count($result->created);
-            $parked += count($result->parked);
-            if (filled($feed->last_error)) {
-                $unhealthy++;
-            }
+            $reports[] = $this->ingestFeed($feed);
         }
+
+        $sum = fn (callable $field): int => array_sum(array_map($field, $reports));
 
         return [
             'feeds' => $feeds->count(),
-            'candidates' => $candidates,
-            'parked' => $parked,
-            'unhealthy' => $unhealthy,
+            'fetched' => $sum(fn (FeedIngestReport $r) => $r->fetched),
+            'prefiltered_out' => $sum(fn (FeedIngestReport $r) => $r->prefilteredOut),
+            'deduped' => $sum(fn (FeedIngestReport $r) => $r->deduped),
+            'score_rejected' => $sum(fn (FeedIngestReport $r) => $r->scoreRejected),
+            'routed' => $sum(fn (FeedIngestReport $r) => $r->routed),
+            'parked' => $sum(fn (FeedIngestReport $r) => $r->parked),
+            'refresh_marked' => $sum(fn (FeedIngestReport $r) => $r->refreshMarked),
+            'unhealthy' => count(array_filter($reports, fn (FeedIngestReport $r) => $r->error !== null)),
+            'reports' => $reports,
         ];
     }
 

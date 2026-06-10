@@ -19,6 +19,7 @@ class Feeds
     ): string {
         return '<?xml version="1.0"?><rss version="2.0"><channel><title>'.$channel.'</title>'
             .'<item><title>'.$title.'</title><link>'.$link.'</link>'
+            .'<description>&lt;p&gt;A short snippet describing the development.&lt;/p&gt;</description>'
             .'<pubDate>Mon, 01 Jun 2026 10:00:00 GMT</pubDate></item></channel></rss>';
     }
 

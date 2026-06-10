@@ -91,7 +91,7 @@ class FeedFetcher
             $items[] = new NewsItem(
                 externalId: $externalId,
                 title: $row['title'],
-                summary: '',
+                summary: $row['summary'],
                 sourceName: $sourceName,
                 publishedAt: RssFeed::parseDate($row['published']),
                 url: $articleUrl,

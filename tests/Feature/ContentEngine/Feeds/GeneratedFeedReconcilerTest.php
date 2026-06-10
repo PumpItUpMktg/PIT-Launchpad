@@ -23,8 +23,8 @@ it('materializes one generated feed per (routable keyword x market) with the mar
     $silo = Silo::factory()->create(['site_id' => $site->id]);
     Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'water heater repair']);
     Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => null, 'query' => 'no silo keyword']); // skipped — unroutable
-    Market::factory()->create(['site_id' => $site->id, 'name' => 'Austin']);
-    Market::factory()->create(['site_id' => $site->id, 'name' => 'Dallas']);
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Austin', 'region' => 'TX']);
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Dallas', 'region' => 'TX']);
 
     $result = reconciler()->reconcile($site);
 
@@ -32,12 +32,13 @@ it('materializes one generated feed per (routable keyword x market) with the mar
     $feeds = generatedFeeds($site->id);
     expect($feeds)->toHaveCount(2);
 
-    $austin = $feeds->firstWhere('label', 'water heater repair · Austin (Google News)');
+    // Market string is city + state abbrev ("Austin TX").
+    $austin = $feeds->firstWhere('label', 'water heater repair · Austin TX (Google News)');
     expect($austin)->not->toBeNull()
         ->and($austin->silo_id)->toBe($silo->id)
         ->and($austin->enabled)->toBeTrue()
         ->and($austin->url)->toContain('news.google.com/rss/search')
-        ->and(urldecode($austin->url))->toContain('water heater repair Austin');
+        ->and(urldecode($austin->url))->toContain('water heater repair Austin TX');
 });
 
 it('is idempotent — re-running does not duplicate feeds', function () {

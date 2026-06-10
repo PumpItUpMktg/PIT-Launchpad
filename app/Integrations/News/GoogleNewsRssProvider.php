@@ -67,7 +67,7 @@ class GoogleNewsRssProvider implements NewsProvider
             $items[] = new NewsItem(
                 externalId: 'googlenews:'.sha1($row['link']),
                 title: $row['title'],
-                summary: '',
+                summary: $row['summary'],
                 sourceName: $row['source'] !== '' ? $row['source'] : ($url !== null ? (string) (parse_url($url, PHP_URL_HOST) ?: '') : ''),
                 publishedAt: RssFeed::parseDate($row['published']),
                 url: $url,

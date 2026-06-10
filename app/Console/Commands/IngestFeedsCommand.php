@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class IngestFeedsCommand extends Command
 {
-    protected $signature = 'launchpad:ingest-feeds {--site= : Limit to a single site id}';
+    protected $signature = 'launchpad:ingest-feeds {--site= : Limit to a single site id} {--per-feed : Print the per-stage verdict for each feed}';
 
     protected $description = 'Fetch every active feed (generated + client) and route items through the §6a candidate funnel.';
 
@@ -16,14 +16,27 @@ class IngestFeedsCommand extends Command
     {
         foreach ($this->sites() as $site) {
             $result = $ingestor->ingestSite($site);
+
             $this->line(sprintf(
-                '%s: %d feeds → %d candidates, %d parked, %d unhealthy',
+                '%s (%s): %d feeds · fetched %d → prefiltered-out %d → deduped %d → score-rejected %d → routed %d (parked %d, refresh %d) · %d unhealthy',
+                $site->brand_name,
                 $site->id,
                 $result['feeds'],
-                $result['candidates'],
+                $result['fetched'],
+                $result['prefiltered_out'],
+                $result['deduped'],
+                $result['score_rejected'],
+                $result['routed'],
                 $result['parked'],
+                $result['refresh_marked'],
                 $result['unhealthy'],
             ));
+
+            if ($this->option('per-feed')) {
+                foreach ($result['reports'] as $report) {
+                    $this->line("  • {$report->label}: {$report->line()}");
+                }
+            }
         }
 
         return self::SUCCESS;

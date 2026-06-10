@@ -51,9 +51,11 @@ it('records the error and skips the funnel when a fetch fails', function () {
     $funnel = Mockery::mock(CandidateFunnel::class);
     $funnel->shouldReceive('process')->never();
 
-    $result = (new FeedIngestor(app(FeedFetcher::class), $funnel))->ingestFeed($feed);
+    $report = (new FeedIngestor(app(FeedFetcher::class), $funnel))->ingestFeed($feed);
 
-    expect($result->created)->toBe([]);
+    expect($report->error)->toContain('HTTP 500')
+        ->and($report->fetched)->toBe(0)
+        ->and($report->routed)->toBe(0);
     $feed->refresh();
     expect($feed->last_error)->toContain('HTTP 500')
         ->and($feed->last_item_at)->toBeNull()
