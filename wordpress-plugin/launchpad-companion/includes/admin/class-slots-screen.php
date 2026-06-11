@@ -21,6 +21,22 @@ if (! defined('ABSPATH')) {
 
 final class SlotsScreen
 {
+    /**
+     * The engine-owned SEO fields emitted into the document <head> on every
+     * managed post/page (see Seo\Head) — listed so an operator knows what is
+     * emitted and does NOT add a competing SEO plugin. There is no template tag
+     * to place: these bind automatically.
+     */
+    private const SEO_FIELDS = [
+        'title' => 'Document <title>, og:title, twitter:title (also the post title).',
+        'meta_description' => 'meta name="description", og:description, twitter:description.',
+        'canonical' => 'link rel="canonical".',
+        'robots' => 'robots meta — index/follow, honoring noindex / nofollow.',
+        'og:image' => 'og:image / twitter:image — the rendered hero image (R2/CDN url).',
+        'og:type, og:url' => 'OpenGraph type + URL.',
+        'twitter:card' => 'summary_large_image when an image is present, else summary.',
+    ];
+
     public function register(): void
     {
         add_action('admin_menu', [$this, 'menu']);
@@ -42,20 +58,56 @@ final class SlotsScreen
         $defs = is_array($defs) ? $defs : [];
 
         echo '<div class="wrap"><h1>Slots &amp; Shortcodes</h1>';
-        echo '<p>Bind pushed content in a Theme Builder template. Place a <strong>shortcode</strong> (Shortcode/Text widget) for any slot; scalar slots can also bind via the native <strong>Post Custom Field</strong> tag using the mirror key. Definitions reflect the kit contract — live values vary per page.</p>';
+        echo '<p>Bind pushed content in a Theme Builder template. Place a <strong>shortcode</strong> (Shortcode/Text widget) for any slot; scalar slots can also bind via the native <strong>Post Custom Field</strong> tag using the mirror key. Definitions reflect the contract — live values vary per page.</p>';
+
+        // Built-in Posts reference — the most-used binding (the post body) and the
+        // engine-owned SEO fields. Always shown: posts carry no kit, so this never
+        // appears in the kit-definition pushes below.
+        $this->render_posts_reference();
+
+        echo '<h2 style="margin-top:2.5em">Kit pages</h2>';
 
         if ($defs === []) {
-            echo '<p><em>No kits have been pushed yet. Publish a page and this fills in.</em></p></div>';
-
-            return;
-        }
-
-        foreach ($defs as $def) {
-            $this->render_kit(is_array($def) ? $def : []);
+            echo '<p><em>No kits have been pushed yet. Publish a page and this fills in.</em></p>';
+        } else {
+            foreach ($defs as $def) {
+                $this->render_kit(is_array($def) ? $def : []);
+            }
         }
 
         $this->copy_script();
         echo '</div>';
+    }
+
+    /**
+     * The built-in Posts section: how a news/reactive post's article body binds
+     * (shortcode + mirror key) and the SEO fields the engine emits — neither of
+     * which rides a kit push, so the kit tables below never document them.
+     */
+    private function render_posts_reference(): void
+    {
+        $body = ShortcodeReference::for_type('rich_text', 'body');
+        $mirror = ShortcodeReference::mirror_key('body');
+
+        echo '<h2 style="margin-top:1.5em">Posts <span style="color:#888;font-weight:400">built-in</span></h2>';
+        echo '<p>Every news / reactive <strong>post</strong> carries its article in the <code>body</code> slot — a scalar, so it binds two ways in the single-post Theme Builder template. Bind it once in the post template and every post fills it.</p>';
+
+        echo '<table class="widefat striped" style="max-width:64em"><thead><tr>'
+            . '<th>Slot</th><th>Shortcode</th><th>Post Custom Field</th><th>Renders</th>'
+            . '</tr></thead><tbody><tr>';
+        echo '<td><strong>Post body</strong><br><code>body</code><br><span style="color:#888">rich_text</span></td>';
+        echo '<td>' . $this->copyable($body['shortcode']) . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in copyable()
+        echo '<td>' . $this->copyable($mirror) . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in copyable()
+        echo '<td>The article HTML.</td>';
+        echo '</tr></tbody></table>';
+
+        echo '<h3 style="margin-top:1.5em">SEO fields <span style="color:#888;font-weight:400">auto-emitted — no binding needed</span></h3>';
+        echo '<p>Launchpad owns SEO and prints it into the page <code>&lt;head&gt;</code> on every managed post and page. There is no template tag to place — these are listed so you know what is emitted (and do not add a competing SEO plugin).</p>';
+        echo '<table class="widefat striped" style="max-width:64em"><thead><tr><th>Field</th><th>Where it appears</th></tr></thead><tbody>';
+        foreach (self::SEO_FIELDS as $field => $where) {
+            printf('<tr><td><code>%s</code></td><td>%s</td></tr>', esc_html((string) $field), esc_html($where));
+        }
+        echo '</tbody></table>';
     }
 
     /**

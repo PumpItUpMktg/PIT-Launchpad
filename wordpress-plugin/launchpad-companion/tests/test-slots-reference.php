@@ -83,4 +83,22 @@ class Test_Slots_Reference extends WP_UnitTestCase
 
         $this->assertStringContainsString('No kits have been pushed yet', $html);
     }
+
+    public function test_builtin_posts_reference_always_renders_independent_of_kit_pushes(): void
+    {
+        // No kit pushed — the Posts section (body binding + SEO fields) must still
+        // appear; it's the most-used binding and never rides a kit definition.
+        wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
+
+        ob_start();
+        ( new SlotsScreen() )->render();
+        $html = (string) ob_get_clean();
+
+        $this->assertStringContainsString('>Posts <', $html);                      // built-in section heading
+        $this->assertStringContainsString('[lp_slot key=&quot;body&quot;]', $html); // body shortcode (esc_html)
+        $this->assertStringContainsString('lp_slot_body', $html);                   // body mirror key
+        $this->assertStringContainsString('SEO fields', $html);                     // SEO bindings
+        $this->assertStringContainsString('canonical', $html);                      // an SEO field
+        $this->assertStringContainsString('No kits have been pushed yet', $html);   // kit area still shows its empty state
+    }
 }
