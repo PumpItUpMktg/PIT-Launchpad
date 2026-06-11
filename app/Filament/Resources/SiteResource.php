@@ -7,26 +7,31 @@ use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
+use App\Integrations\Wordpress\WordpressException;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\Models\Site;
 use App\Operator\Controls\BudgetControl;
 use App\Operator\Controls\CadenceControl;
+use App\Operator\Controls\TemplateMapping;
 use App\Operator\Handover\SiteHandover;
 use App\Publishing\LaunchOrchestrator;
 use App\Security\GateCheck;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\HtmlString;
 
 /**
  * Portfolio triage — the operator home. Lists every tenant with at-a-glance
@@ -80,8 +85,134 @@ class SiteResource extends Resource
                 self::launchAction(),
                 self::refreshKeywordsAction(),
                 self::budgetAction(),
+                self::templatesAction(),
                 self::handoverAction(),
             ]);
+    }
+
+    /**
+     * §7b(c) — map each pushed kit to one of this site's Elementor templates. The
+     * inventory is fetched LIVE from the site (so the operator maps with eyes,
+     * against templates that actually exist), with a preview link per template; an
+     * explicit mapping overrides the kit's elementor_template_ref suggestion and is
+     * stored engine-side (versioned). The §2 push stamps the resolved template on
+     * the /content blob.
+     */
+    private static function templatesAction(): Action
+    {
+        return Action::make('templates')
+            ->label('Templates')
+            ->icon('heroicon-o-rectangle-group')
+            ->modalDescription('Map each kit to one of this site\'s Elementor templates (fetched live). An explicit mapping overrides the kit\'s suggested template.')
+            ->schema(fn (Site $record): array => self::templateSchema($record))
+            ->action(function (Site $record, array $data): void {
+                $service = app(TemplateMapping::class);
+
+                $selections = [];
+                foreach ($service->kits($record) as $kit) {
+                    $key = self::templateFieldKey($kit['kit']);
+                    if (array_key_exists($key, $data)) {
+                        $value = $data[$key];
+                        $selections[$kit['kit']] = ($value === null || $value === '') ? null : (int) $value;
+                    }
+                }
+
+                $applied = $service->applyMappings($record, $selections, self::templateTitles($record));
+
+                Notification::make()->success()->title('Template mappings saved')->body($applied.' change(s).')->send();
+            });
+    }
+
+    /**
+     * A stable, Livewire-safe field key for a kit name (kit names carry hyphens).
+     */
+    private static function templateFieldKey(string $kit): string
+    {
+        return 'tpl_'.preg_replace('/[^a-z0-9_]/i', '_', $kit);
+    }
+
+    /**
+     * Best-effort id→title cache from the live inventory (for the stored display
+     * cache); empty when the site is unreachable.
+     *
+     * @return array<int, string>
+     */
+    private static function templateTitles(Site $site): array
+    {
+        try {
+            $inventory = app(TemplateMapping::class)->inventory($site);
+        } catch (WordpressException) {
+            return [];
+        }
+
+        $titles = [];
+        foreach ($inventory as $t) {
+            $titles[(int) ($t['id'] ?? 0)] = (string) ($t['title'] ?? '');
+        }
+
+        return $titles;
+    }
+
+    /**
+     * Build the mapping form: a preview list of the site's templates (with preview
+     * links) + one Select per pushed kit, defaulted to its current mapping. Returns
+     * a single explanatory field when the site is unreachable, has no templates, or
+     * has no pushed kits — never a half-rendered form.
+     *
+     * @return list<Component>
+     */
+    private static function templateSchema(Site $record): array
+    {
+        $service = app(TemplateMapping::class);
+
+        try {
+            $inventory = $service->inventory($record);
+        } catch (WordpressException $e) {
+            return [Placeholder::make('templates_error')->label('Site unreachable')
+                ->content('Could not read templates from this site: '.$e->getMessage())];
+        }
+
+        if ($inventory === []) {
+            return [Placeholder::make('templates_empty')
+                ->content('This site has no Elementor saved templates yet.')];
+        }
+
+        $options = [];
+        $previewLines = [];
+        foreach ($inventory as $t) {
+            $id = (int) ($t['id'] ?? 0);
+            $title = (string) ($t['title'] ?? ('#'.$id));
+            $type = (string) ($t['type'] ?? '');
+            $options[$id] = $title.($type !== '' ? " ({$type})" : '');
+
+            $preview = (string) ($t['preview_url'] ?? '');
+            $previewLines[] = $preview !== ''
+                ? e($title).' — <a href="'.e($preview).'" target="_blank" rel="noopener">preview</a>'
+                : e($title);
+        }
+
+        $kits = $service->kits($record);
+        if ($kits === []) {
+            return [Placeholder::make('templates_no_kits')
+                ->content('No kits are pushed for this site yet — publish a page first.')];
+        }
+
+        $current = $service->current($record);
+
+        $fields = [Placeholder::make('templates_preview')->label('Templates on this site')
+            ->content(new HtmlString(implode('<br>', $previewLines)))];
+
+        foreach ($kits as $kit) {
+            $name = $kit['kit'];
+            $fields[] = Select::make(self::templateFieldKey($name))
+                ->label($name.($kit['version'] !== null ? ' v'.$kit['version'] : ''))
+                ->options($options)
+                ->default($current[$name]->template_id ?? null)
+                ->placeholder('— use kit suggestion ('.($kit['suggestion'] ?? 'none').') —')
+                ->helperText('Default suggestion: '.($kit['suggestion'] ?? 'none'));
+        }
+
+        return $fields;
     }
 
     /**
