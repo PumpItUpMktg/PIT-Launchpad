@@ -12,6 +12,7 @@
 
 namespace Launchpad\Companion\Admin;
 
+use Launchpad\Companion\Content\KitTaxonomy;
 use Launchpad\Companion\Meta;
 use Launchpad\Companion\Render\ShortcodeReference;
 
@@ -75,8 +76,84 @@ final class SlotsScreen
             }
         }
 
+        // How each kit's mapped Elementor template is rendered (the lp_kit term
+        // condition the operator sets once per template).
+        $this->render_kit_templates();
+
         $this->copy_script();
         echo '</div>';
+    }
+
+    /**
+     * The kit→template rendering reference: every kit page is tagged with its kit
+     * in the `lp_kit` taxonomy; to render a kit's mapped Elementor template the
+     * operator points that template's Theme Builder display condition at the kit's
+     * term. The mapping itself is chosen in Launchpad (operator panel); this screen
+     * documents the one-time condition to set and echoes the resolved template id.
+     */
+    private function render_kit_templates(): void
+    {
+        echo '<h2 style="margin-top:2.5em">Kit templates <span style="color:#888;font-weight:400">Theme Builder rendering</span></h2>';
+        echo '<p>Each kit page is tagged with its kit in the <code>lp_kit</code> taxonomy. To render a kit\'s mapped Elementor template, open that template in <strong>Templates → Theme Builder</strong>, and set its <strong>Display Conditions</strong> to the term below. Which template maps to which kit is chosen in Launchpad (operator panel → Portfolio → Templates); the resolved id is shown here for reference. Requires Elementor Pro.</p>';
+
+        $terms = get_terms(['taxonomy' => KitTaxonomy::TAXONOMY, 'hide_empty' => false]);
+
+        if (! is_array($terms) || $terms === []) {
+            echo '<p><em>No kit pages have been published yet — the kit markers appear here once content is pushed.</em></p>';
+
+            return;
+        }
+
+        echo '<table class="widefat striped" style="max-width:64em"><thead><tr>'
+            . '<th>Kit</th><th>Set this template\'s display condition to</th><th>Mapped template id</th>'
+            . '</tr></thead><tbody>';
+
+        foreach ($terms as $term) {
+            if (! $term instanceof \WP_Term) {
+                continue;
+            }
+            $template_id = $this->kit_template_id($term->slug);
+            printf(
+                '<tr><td><code>%s</code></td><td>Singular → By Taxonomy → <strong>Launchpad Kit</strong>: <code>%s</code></td><td>%s</td></tr>',
+                esc_html($term->name),
+                esc_html($term->name),
+                $template_id !== null
+                    ? 'Template #' . esc_html((string) $template_id)
+                    : '<span style="color:#bbb">— map in Launchpad —</span>'
+            );
+        }
+
+        echo '</tbody></table>';
+    }
+
+    /**
+     * A representative resolved template id for a kit — read from a page carrying
+     * the kit's term that has the engine-pushed `_lp_template_id`. Null when the
+     * kit is unmapped.
+     */
+    private function kit_template_id(string $kit): ?int
+    {
+        $posts = get_posts([
+            'post_type' => ['page', 'post'],
+            'post_status' => 'any',
+            'numberposts' => 1,
+            'fields' => 'ids',
+            'tax_query' => [[ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+                'taxonomy' => KitTaxonomy::TAXONOMY,
+                'field' => 'slug',
+                'terms' => $kit,
+            ]],
+            'meta_key' => Meta::TEMPLATE_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+            'suppress_filters' => false,
+        ]);
+
+        if ($posts === []) {
+            return null;
+        }
+
+        $value = get_post_meta((int) $posts[0], Meta::TEMPLATE_ID, true);
+
+        return ($value !== '' && $value !== false) ? (int) $value : null;
     }
 
     /**

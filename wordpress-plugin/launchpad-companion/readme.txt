@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.4.2
+Stable tag: 0.4.3
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -49,5 +49,15 @@ they can never fatal page rendering — use the shortcodes there.
 == Templates ==
 Brand-neutral Elementor templates are built by the designer. Map each page type
 to a template via the `lp_templates` option (page_type => template); pages also
-carry `lp-page-type-{type}` and `lp-kit-{kit}` body classes for Theme Builder
-display conditions.
+carry `lp-page-type-{type}` and `lp-kit-{kit}` body classes.
+
+Kit → template mapping is chosen in Launchpad (operator panel → Portfolio →
+Templates), against this site's live template inventory (GET /templates). Every
+kit page is tagged with its kit in the `lp_kit` taxonomy — a stable per-kit marker
+that an Elementor Pro Theme Builder "single" template can target as a Display
+Condition (Singular → By Taxonomy → Launchpad Kit → {kit}). Set that condition
+once per template and the mapped kit renders through it; Launchpad → Slots &
+Shortcodes → "Kit templates" lists the exact condition + the resolved template id
+per kit. (A taxonomy term is the condition target because Pro conditions match
+terms/post-types, not body classes; this is version-independent and works on the
+Atomic Editor where per-post page-template assignment does not.)

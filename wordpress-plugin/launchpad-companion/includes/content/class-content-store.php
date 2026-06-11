@@ -133,6 +133,22 @@ final class ContentStore
         update_post_meta($post_id, Meta::SILO_ID, (string) ($payload['silo_id'] ?? ''));
         update_post_meta($post_id, Meta::LOCKED, ! empty($payload['locked']) ? '1' : '0');
 
+        // §7b template mapping: stamp the kit marker (the Theme Builder display-
+        // condition target) on kit PAGES, and record the operator-resolved
+        // template id. Rendering is driven by the operator's condition against the
+        // lp_kit term — explicit mapping over the kit's elementor_template_ref.
+        $kit = (string) ($payload['kit'] ?? '');
+        if ($kind === 'page' && $kit !== '') {
+            KitTaxonomy::assign($post_id, $kit);
+        }
+
+        $template_id = $payload['template_id'] ?? null;
+        if (is_int($template_id) || (is_string($template_id) && ctype_digit($template_id))) {
+            update_post_meta($post_id, Meta::TEMPLATE_ID, (int) $template_id);
+        } else {
+            delete_post_meta($post_id, Meta::TEMPLATE_ID);
+        }
+
         $this->store_kit_definition($payload);
     }
 

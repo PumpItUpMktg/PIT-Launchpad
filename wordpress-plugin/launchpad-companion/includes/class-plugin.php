@@ -10,6 +10,7 @@ namespace Launchpad\Companion;
 
 use Launchpad\Companion\Admin\SlotsScreen;
 use Launchpad\Companion\Content\EditGuard;
+use Launchpad\Companion\Content\KitTaxonomy;
 use Launchpad\Companion\Render\Shortcodes;
 use Launchpad\Companion\Render\TagManager;
 use Launchpad\Companion\Render\TemplateRouter;
@@ -41,6 +42,10 @@ final class Plugin
         // Native categories on pages — service/location pages are kind=page and
         // must carry the silo category (backs the breadcrumb + link).
         add_action('init', [self::class, 'register_page_categories']);
+
+        // The lp_kit per-page marker — the Theme Builder display-condition target
+        // that renders each kit's mapped template.
+        add_action('init', [KitTaxonomy::class, 'register']);
 
         // Receiver.
         add_action('rest_api_init', [new Routes(), 'register']);
@@ -78,6 +83,7 @@ final class Plugin
     {
         ServiceUser::install();
         self::register_page_categories();
+        KitTaxonomy::register();
         ( new Sitemap() )->add_rewrite_rules();
         flush_rewrite_rules();
     }
