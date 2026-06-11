@@ -37,6 +37,26 @@ it('queue() stamps the page generating and dispatches without drafting inline', 
     Bus::assertDispatched(GeneratePage::class, fn (GeneratePage $job) => $job->contentId === $page->id);
 });
 
+it('failed() records the failure so a dead page job is not stuck generating', function () {
+    $page = PageFixture::intakePage();
+    $page->markGenerating();
+
+    (new GeneratePage($page->id))->failed(new RuntimeException('worker timed out'));
+
+    $fresh = $page->fresh();
+    expect($fresh->isGenerating())->toBeFalse()
+        ->and($fresh->generationState())->toBe('failed')
+        ->and($fresh->meta['draft_failure']['exception_message'])->toContain('timed out');
+});
+
+it('keeps $timeout generous but below the queue retry_after', function () {
+    $timeout = (new GeneratePage('x'))->timeout;
+    $retryAfter = (int) config('queue.connections.database.retry_after');
+
+    expect($timeout)->toBeGreaterThanOrEqual(300)
+        ->and($timeout)->toBeLessThan($retryAfter);
+});
+
 it('dispatches through a real queue connection without a reserved-name collision', function () {
     config(['queue.default' => 'database']);
     $page = PageFixture::intakePage();

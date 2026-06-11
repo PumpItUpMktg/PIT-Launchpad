@@ -40,7 +40,10 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // MUST exceed the longest job $timeout (GeneratePost/GeneratePage = 600s
+            // for Sonnet 12k + fal). If retry_after < a job's runtime the worker
+            // re-reserves it mid-run and burns its attempt (MaxAttemptsExceeded).
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 630),
             'after_commit' => false,
         ],
 

@@ -79,11 +79,6 @@ final class DraftGuard
      */
     private function mark(Content $content, DraftFailure $failure): void
     {
-        $meta = $content->meta ?? [];
-        $meta['draft_error'] = $failure->summary();
-        $meta['draft_failure'] = $failure->toArray();
-        $meta['draft_failed_at'] = now()->toIso8601String();
-
-        $content->forceFill(['meta' => $meta])->save();
+        $content->recordDraftFailure($failure);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\ContentEngine\Drafting\DraftFailure;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\DraftTrigger;
@@ -111,10 +112,20 @@ class Content extends Model
         $this->forceFill(['meta' => $meta])->save();
     }
 
-    /** Drop the generating marker (on failure; success rebuilds meta wholesale). */
-    public function clearGenerating(): void
+    /**
+     * Record a draft failure: stamp the human one-liner (`draft_error`, read by
+     * the queue indicator) + the structured cause (`draft_failure`) AND clear the
+     * generating marker — in ONE write, so a row is never simultaneously
+     * "generating" and "failed" (the marker-ordering invariant). The single
+     * failure-marker writer: the draft guard and a dead job's `failed()` hook both
+     * route through it. A later successful draft rebuilds `meta` wholesale.
+     */
+    public function recordDraftFailure(DraftFailure $failure): void
     {
         $meta = $this->meta ?? [];
+        $meta['draft_error'] = $failure->summary();
+        $meta['draft_failure'] = $failure->toArray();
+        $meta['draft_failed_at'] = now()->toIso8601String();
         unset($meta['generating_at']);
 
         $this->forceFill(['meta' => $meta])->save();

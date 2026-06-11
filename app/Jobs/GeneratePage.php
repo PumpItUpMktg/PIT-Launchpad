@@ -3,11 +3,13 @@
 namespace App\Jobs;
 
 use App\ContentEngine\Drafting\DraftFailedException;
+use App\ContentEngine\Drafting\DraftFailure;
 use App\ContentEngine\Generation\PageGenerator;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Throwable;
 
 /**
  * Run "Generate page" off the web request: the Filament action dispatches this
@@ -15,12 +17,18 @@ use Illuminate\Foundation\Queue\Queueable;
  * render with no FPM clock. The page-kind analog of GeneratePost — same
  * generating-marker + tries=1 (a failed draft records its cause; the operator
  * re-triggers rather than auto-retrying an expensive call).
+ *
+ * $timeout must stay BELOW the queue connection's retry_after (config/queue.php)
+ * or a long run gets re-reserved mid-flight and burns its one attempt. failed()
+ * records the failure so a dead job reads "Draft failed", never stuck generating.
  */
 class GeneratePage implements ShouldQueue
 {
     use Queueable;
 
     public int $tries = 1;
+
+    public int $timeout = 600;
 
     public function __construct(
         public readonly string $contentId,
@@ -51,9 +59,20 @@ class GeneratePage implements ShouldQueue
         try {
             $generator->generate($page);
         } catch (DraftFailedException) {
-            // The engine stamped the failure marker + logged; clear the generating
-            // flag so the row reads "Draft failed", not stuck generating.
-            $page->clearGenerating();
+            // Expected: the engine already recorded the failure (marker + cleared
+            // generating) and logged. Swallow so the job succeeds and the row reads
+            // "Draft failed" without burning the attempt as a job failure.
         }
+    }
+
+    /**
+     * A dead job (timeout/re-reservation, or an unexpected throw) must not leave
+     * the page stuck "Generating". Record the failure so it reads "Draft failed".
+     */
+    public function failed(?Throwable $exception): void
+    {
+        Content::withoutGlobalScope(SiteScope::class)
+            ->find($this->contentId)
+            ?->recordDraftFailure(DraftFailure::fromException($exception ?? new \RuntimeException('Generation job failed.')));
     }
 }

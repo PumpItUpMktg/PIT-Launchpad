@@ -3,28 +3,37 @@
 namespace App\Jobs;
 
 use App\ContentEngine\Drafting\DraftFailedException;
+use App\ContentEngine\Drafting\DraftFailure;
 use App\ContentEngine\Generation\PostGenerator;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Throwable;
 
 /**
  * Run the on-demand "Generate post" off the web request: the Filament action
  * dispatches this and returns immediately, and the worker executes the expensive
  * Sonnet draft + fal render with no FPM clock ticking. Models PublishContent.
  *
- * The row carries a "generating" marker (stamped at dispatch by ::queue) so the
+ * The row carries a "generating" marker (stamped at dispatch by ::enqueue) so the
  * surfaces show that state until the draft lands (→ needs_review) or fails
  * (→ draft_error). A failed draft is recorded by the engine, not retried — the
  * call is expensive and a budget/transport failure won't fix itself; the operator
  * re-triggers from the row. tries=1 for that reason.
+ *
+ * $timeout must stay BELOW the queue connection's retry_after (config/queue.php),
+ * or a long Sonnet+fal run gets re-reserved mid-flight and burns its one attempt
+ * (the MaxAttemptsExceeded the database default 90s caused). failed() records the
+ * failure so a dead job reads "Draft failed", never "Generating" forever.
  */
 class GeneratePost implements ShouldQueue
 {
     use Queueable;
 
     public int $tries = 1;
+
+    public int $timeout = 600;
 
     public function __construct(
         public readonly string $contentId,
@@ -58,9 +67,20 @@ class GeneratePost implements ShouldQueue
         try {
             $generator->generate($content, $this->marketId);
         } catch (DraftFailedException) {
-            // The engine already stamped the failure marker + logged. Clear the
-            // generating flag so the row reads "Draft failed", not stuck generating.
-            $content->clearGenerating();
+            // Expected: the engine already recorded the failure (marker + cleared
+            // generating) and logged. Swallow so the job succeeds — the row shows
+            // "Draft failed" and we don't burn the attempt as a job failure.
         }
+    }
+
+    /**
+     * A dead job (timeout/re-reservation, or an unexpected throw) must not leave
+     * the row stuck "Generating". Record the failure so it reads "Draft failed".
+     */
+    public function failed(?Throwable $exception): void
+    {
+        Content::withoutGlobalScope(SiteScope::class)
+            ->find($this->contentId)
+            ?->recordDraftFailure(DraftFailure::fromException($exception ?? new \RuntimeException('Generation job failed.')));
     }
 }
