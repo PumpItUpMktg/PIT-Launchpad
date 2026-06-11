@@ -37,7 +37,7 @@ class PublishContentService
     {
         // Operator-edit protection: never overwrite a locked / locally-edited page.
         if ($content->isPublishProtected()) {
-            return PublishResult::skipped(
+            return $this->resolveSkip(
                 $content,
                 'Content is locked or locally edited in WordPress; publish skipped to protect operator edits.'
             );
@@ -74,15 +74,12 @@ class PublishContentService
         }
 
         // The plugin upserts by ULID and reports a skip when the page is locked
-        // in WordPress — honor it as a locally-edited signal.
+        // in WordPress — honor it as a locally-edited signal, then resolve the
+        // transitional status (the live page stays; never strand at publishing).
         if (! empty($response['skipped'])) {
-            $message = 'WordPress reports the page is locked; not overwritten.';
-            $content->forceFill([
-                'locally_edited' => true,
-                'last_publish_error' => $message,
-            ])->save();
+            $content->forceFill(['locally_edited' => true])->save();
 
-            return PublishResult::skipped($content, $message);
+            return $this->resolveSkip($content, 'WordPress reports the page is locked; not overwritten.');
         }
 
         $wpPostId = (int) ($response['wp_post_id'] ?? 0);
@@ -99,5 +96,23 @@ class PublishContentService
         ]);
 
         return PublishResult::published($content, $wpPostId);
+    }
+
+    /**
+     * Resolve a by-design skip: the live page is kept (push declined), so the row
+     * returns to published rather than stranding in rendering/publishing — every
+     * transitional state needs an exit for every outcome, not just success. The
+     * skip reason is surfaced on last_publish_error (and carried in the result for
+     * the UI notification); published_at is preserved if the page was already live.
+     */
+    private function resolveSkip(Content $content, string $message): PublishResult
+    {
+        $content->forceFill([
+            'status' => ContentStatus::Published,
+            'published_at' => $content->published_at ?? now(),
+            'last_publish_error' => $message,
+        ])->save();
+
+        return PublishResult::skipped($content, $message);
     }
 }
