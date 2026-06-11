@@ -24,6 +24,15 @@ final class TagManager
 
     public function register(mixed $dynamic_tags): void
     {
+        // The lp/* tags extend Elementor's CLASSIC (V3) dynamic-tag base classes.
+        // On the Atomic Editor (V4) that surface can be absent — instantiating a
+        // tag would then fatal inside this hook and take down page rendering. Bail
+        // safely when it's missing; the shortcodes are the version-independent path.
+        if (! class_exists(\Elementor\Core\DynamicTags\Tag::class)
+            || ! class_exists(\Elementor\Modules\DynamicTags\Module::class)) {
+            return;
+        }
+
         if (method_exists($dynamic_tags, 'register_group')) {
             $dynamic_tags->register_group('launchpad', ['title' => 'Launchpad']);
         }

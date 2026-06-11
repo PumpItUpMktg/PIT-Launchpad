@@ -9,6 +9,7 @@ namespace Launchpad\Companion\Render\DynamicTags;
 
 use Elementor\Core\DynamicTags\Tag;
 use Elementor\Modules\DynamicTags\Module;
+use Launchpad\Companion\Render\SlotRenderer;
 
 if (! defined('ABSPATH')) {
     exit;
@@ -48,16 +49,6 @@ class CtaTag extends Tag
 
     public function render(): void
     {
-        $value = $this->slot_value();
-
-        if (! is_array($value) || empty($value['url'])) {
-            return;
-        }
-
-        printf(
-            '<a class="lp-cta" href="%s">%s</a>',
-            esc_url((string) $value['url']),
-            esc_html((string) ($value['label'] ?? 'Learn more'))
-        );
+        echo SlotRenderer::cta($this->slot_value()); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped by SlotRenderer
     }
 }

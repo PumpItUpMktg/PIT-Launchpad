@@ -9,6 +9,7 @@ namespace Launchpad\Companion\Render\DynamicTags;
 
 use Elementor\Core\DynamicTags\Tag;
 use Elementor\Modules\DynamicTags\Module;
+use Launchpad\Companion\Render\SlotRenderer;
 
 if (! defined('ABSPATH')) {
     exit;
@@ -48,10 +49,6 @@ class TextTag extends Tag
 
     public function render(): void
     {
-        $value = $this->slot_value();
-
-        if (is_string($value)) {
-            echo wp_kses_post($value);
-        }
+        echo SlotRenderer::text($this->slot_value()); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped by SlotRenderer
     }
 }
