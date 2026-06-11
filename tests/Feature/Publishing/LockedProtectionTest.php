@@ -15,8 +15,12 @@ test('a locked page is never overwritten — publish skips without pushing', fun
 
     $result = app(PublishContentService::class)->publish($content);
 
+    // A skip resolves the transitional status back to published (the live page is
+    // kept) and surfaces the reason — it never strands the row.
     expect($result->wasSkipped())->toBeTrue()
-        ->and($content->fresh()->status)->toBe(ContentStatus::Approved);
+        ->and($content->fresh()->status)->toBe(ContentStatus::Published)
+        ->and($content->fresh()->last_publish_error)->toContain('locked or locally edited')
+        ->and($result->message)->toContain('locked or locally edited');
 
     Http::assertNothingSent();
 });
@@ -34,7 +38,7 @@ test('a locally_edited page is never overwritten', function () {
     Http::assertNothingSent();
 });
 
-test('when WordPress reports the page locked, the push is honored as skipped (not published)', function () {
+test('when WordPress reports the page locked, the push is honored as skipped and the row resolves to published', function () {
     PublishHarness::fakeAdapters();
     Http::fake([
         '*/wp-json/launchpad/v1/content' => Http::response(['wp_post_id' => 9, 'skipped' => true], 200),
@@ -45,7 +49,10 @@ test('when WordPress reports the page locked, the push is honored as skipped (no
 
     $result = app(PublishContentService::class)->publish($content);
 
+    // The push was declined by design — the live page stays, so the transitional
+    // 'publishing' status must resolve to published, not strand. (Was the bug.)
     expect($result->wasSkipped())->toBeTrue()
         ->and($content->fresh()->locally_edited)->toBeTrue()
-        ->and($content->fresh()->status)->not->toBe(ContentStatus::Published);
+        ->and($content->fresh()->status)->toBe(ContentStatus::Published)
+        ->and($content->fresh()->last_publish_error)->toContain('not overwritten');
 });
