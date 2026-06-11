@@ -9,6 +9,7 @@ namespace Launchpad\Companion\Render\DynamicTags;
 
 use Elementor\Core\DynamicTags\Tag;
 use Elementor\Modules\DynamicTags\Module;
+use Launchpad\Companion\Render\SlotRenderer;
 
 if (! defined('ABSPATH')) {
     exit;
@@ -48,23 +49,6 @@ class MapTag extends Tag
 
     public function render(): void
     {
-        $value = $this->slot_value();
-
-        if (! is_array($value)) {
-            return;
-        }
-
-        if (! empty($value['embed_url'])) {
-            $src = (string) $value['embed_url'];
-        } elseif (isset($value['lat'], $value['lng'])) {
-            $src = 'https://www.google.com/maps?q=' . rawurlencode($value['lat'] . ',' . $value['lng']) . '&output=embed';
-        } else {
-            return;
-        }
-
-        printf(
-            '<iframe class="lp-map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="%s"></iframe>',
-            esc_url($src)
-        );
+        echo SlotRenderer::map($this->slot_value()); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped by SlotRenderer
     }
 }

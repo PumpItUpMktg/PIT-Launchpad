@@ -34,6 +34,8 @@ $classes = [
     'Launchpad\\Companion\\Render\\Payload',
     'Launchpad\\Companion\\Render\\TemplateRouter',
     'Launchpad\\Companion\\Render\\TagManager',
+    'Launchpad\\Companion\\Render\\SlotRenderer',
+    'Launchpad\\Companion\\Render\\Shortcodes',
     'Launchpad\\Companion\\Render\\DynamicTags\\TextTag',
     'Launchpad\\Companion\\Render\\DynamicTags\\ImageTag',
     'Launchpad\\Companion\\Render\\DynamicTags\\CtaTag',

@@ -9,6 +9,7 @@
 namespace Launchpad\Companion;
 
 use Launchpad\Companion\Content\EditGuard;
+use Launchpad\Companion\Render\Shortcodes;
 use Launchpad\Companion\Render\TagManager;
 use Launchpad\Companion\Render\TemplateRouter;
 use Launchpad\Companion\Rest\Routes;
@@ -46,7 +47,10 @@ final class Plugin
         // Locked / locally-edited protocol.
         ( new EditGuard() )->register();
 
-        // Renderer.
+        // Renderer. Shortcodes are the Elementor-version-independent binding path
+        // (no Elementor dependency); the classic lp/* dynamic tags register on top
+        // for the V3 editor, guarded so a missing dynamic-tag API can't fatal.
+        ( new Shortcodes() )->register();
         add_action('elementor/dynamic_tags/register', [new TagManager(), 'register']);
         ( new TemplateRouter() )->register();
 
