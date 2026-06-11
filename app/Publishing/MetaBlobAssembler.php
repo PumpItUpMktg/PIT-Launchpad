@@ -7,6 +7,7 @@ use App\Models\Content;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\SiteTemplateMapping;
 use App\PageBuilder\Schema\KitSchema;
 use Illuminate\Support\Collection;
 
@@ -39,9 +40,32 @@ class MetaBlobAssembler
             'locked' => (bool) $content->locked,
             'slot_payload' => $this->slotPayload($content),
             'kit_definition' => $this->kitDefinition($content),
+            'template_id' => $this->templateId($content),
             'images' => $images,
             'seo' => $this->seo($content, $images),
         ];
+    }
+
+    /**
+     * The operator's resolved Elementor template for this page's kit (§7b
+     * mapping), or null when unmapped / not a page. The companion plugin stamps
+     * the page's kit marker (`lp_kit` term) and surfaces this id as the template
+     * whose Theme Builder display condition should target that marker — explicit
+     * mapping over the kit's elementor_template_ref suggestion. Posts carry no kit
+     * template, so they resolve to null.
+     */
+    private function templateId(Content $content): ?int
+    {
+        if ($content->kind !== ContentKind::Page) {
+            return null;
+        }
+
+        $mapping = SiteTemplateMapping::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('kit', $this->kitName($content))
+            ->first();
+
+        return $mapping?->template_id;
     }
 
     /**
