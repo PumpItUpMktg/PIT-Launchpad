@@ -120,6 +120,12 @@ composer run dev
 - Add new database changes as migrations in `database/migrations/`.
 - Before committing schema/model work, run the full gate: `migrate:fresh --seed`,
   `pint --test`, `phpstan analyse`, and `php artisan test` — all must be green.
+- **Bump the version on every downloadable artifact.** When handing the user a
+  new build of a distributable (the WordPress companion plugin zip, an Elementor
+  template export, etc.), bump its version *first* — never ship a changed build
+  under an old version. For the companion plugin that means all three in lockstep:
+  the `Version:` header + `LPC_VERSION` in `launchpad-companion.php` and `Stable
+  tag:` in `readme.txt`. Name the zip with the version (`launchpad-companion-<v>.zip`).
 
 ## Domain model (§1 — foundation data layer)
 
