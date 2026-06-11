@@ -30,3 +30,6 @@ Thumbs.db
 /public/css/filament
 /public/js/filament
 /public/fonts/filament
+
+# Built companion-plugin distribution zips (artifacts, not source)
+wordpress-plugin/launchpad-companion-*.zip

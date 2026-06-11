@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -30,6 +30,13 @@ the classic editor, or none). Place these in a Theme Builder template:
 * [lp_image key="hero_image"]    an <img> from the R2/CDN image map
 Each accepts an optional id="<post_id>"; renders nothing for a non-managed post.
 Scalar slots also mirror to readable `lp_slot_<key>` post meta for native binding.
+
+Posts (news / reactive content) carry no kit: the article is the `body` slot. Bind
+it once in the single-post template with [lp_slot key="body"] (or the native Post
+Custom Field `lp_slot_body`). SEO (title, meta description, canonical, robots,
+OpenGraph/Twitter) is engine-owned and emitted into the document <head>
+automatically — there is no tag to place. Both are documented under
+Launchpad → Slots & Shortcodes (a built-in "Posts" section, independent of kit pushes).
 
 Dynamic tags (classic V3 editor only): lp/text, lp/image, lp/cta, lp/map,
 lp/repeater render the same content via the shared SlotRenderer. They are skipped
