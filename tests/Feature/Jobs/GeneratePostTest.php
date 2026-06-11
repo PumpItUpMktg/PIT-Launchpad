@@ -50,6 +50,29 @@ it('queue() stamps the row generating and dispatches the job without drafting in
         && $job->actorId === 'op-1');
 });
 
+it('failed() records the failure so a dead job is not stuck generating', function () {
+    $candidate = jobCandidate();
+    $candidate->markGenerating();
+    expect($candidate->fresh()->isGenerating())->toBeTrue();
+
+    (new GeneratePost($candidate->id))->failed(new RuntimeException('worker timed out'));
+
+    $fresh = $candidate->fresh();
+    expect($fresh->isGenerating())->toBeFalse()
+        ->and($fresh->generationState())->toBe('failed')
+        ->and($fresh->draftError())->not->toBeNull()
+        ->and($fresh->meta['draft_failure']['exception_message'])->toContain('timed out');
+});
+
+it('keeps $timeout generous but below the queue retry_after (no mid-run re-reservation)', function () {
+    $timeout = (new GeneratePost('x'))->timeout;
+    $retryAfter = (int) config('queue.connections.database.retry_after');
+
+    expect($timeout)->toBeGreaterThanOrEqual(300)
+        ->and($retryAfter)->toBeGreaterThanOrEqual(630)
+        ->and($timeout)->toBeLessThan($retryAfter); // the invariant the bug violated
+});
+
 it('dispatches through a real queue connection without a reserved-name collision', function () {
     // The bug Bus::fake() hid: Laravel's dispatchToQueue treats a `queue` method
     // on a job as its custom-queueing hook. A real connection runs that path.
