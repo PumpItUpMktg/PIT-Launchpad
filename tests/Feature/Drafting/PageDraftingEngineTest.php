@@ -6,6 +6,7 @@ use App\ContentEngine\Drafting\DraftGuard;
 use App\ContentEngine\Drafting\PageDrafter;
 use App\ContentEngine\Drafting\PageDraftingEngine;
 use App\ContentEngine\Drafting\PageGroundingAssembler;
+use App\ContentEngine\Drafting\SlotShaper;
 use App\Enums\ContentStatus;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
@@ -20,6 +21,7 @@ function pageEngine(FakeClaudeClient $claude): PageDraftingEngine
         new PageDrafter(new DraftCall($claude)),
         new DraftGuard,
         app(KitValidator::class),
+        new SlotShaper,
     );
 }
 
@@ -57,9 +59,13 @@ it('drops off-schema slot keys (the slot key is the render contract)', function 
 
 it('surfaces a missing required slot as a draft failure — no status flip', function () {
     $page = PageFixture::intakePage(['status' => ContentStatus::Scored]);
-    // Omit the required hero_problem slot.
+    // Omit the required hero_problem slot — drop its sentinel block.
     $response = PageFixture::validResponse(proofIdFor($page->site_id));
-    $response = str_replace('"hero_problem":"No hot water when you need it most?",', '', $response);
+    $response = str_replace(
+        \App\ContentEngine\Drafting\Sentinel::block('hero_problem', 'No hot water when you need it most?'),
+        '',
+        $response,
+    );
     $claude = new FakeClaudeClient($response);
 
     try {

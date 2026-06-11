@@ -8,7 +8,7 @@ use Tests\Support\Draft;
 use Tests\Support\DraftingHarness;
 use Tests\Support\FakeClaudeClient;
 
-function fencedCandidate(): Content
+function sentinelCandidate(): Content
 {
     $site = Site::factory()->create();
     $silo = Silo::factory()->create(['site_id' => $site->id]);
@@ -22,22 +22,23 @@ function fencedCandidate(): Content
     ]);
 }
 
-it('parses JSON the model wrapped in a ```json code fence', function () {
-    $candidate = fencedCandidate();
-    $json = Draft::post('claim-x', ['body' => '<p>Fenced but valid.</p>']);
-    $claude = new FakeClaudeClient("```json\n{$json}\n```");
+it('extracts the draft when the model wraps its sentinel blocks in prose', function () {
+    $candidate = sentinelCandidate();
+    $draft = Draft::post('claim-x', ['body' => '<p>Wrapped but valid.</p>']);
+    $claude = new FakeClaudeClient("Sure — here's the draft:\n\n{$draft}\n\nLet me know if you'd like changes.");
 
     $result = DraftingHarness::engine($claude)->draftCandidate($candidate->fresh());
 
     expect($result->content->status)->toBe(ContentStatus::NeedsReview)
-        ->and($result->content->body)->toBe('<p>Fenced but valid.</p>');
+        ->and($result->content->body)->toBe('<p>Wrapped but valid.</p>');
 });
 
-it('parses fenced JSON even when prose with a stray brace precedes the fence', function () {
-    $candidate = fencedCandidate();
-    $json = Draft::post('claim-x', ['body' => '<p>Still parses.</p>']);
-    // The prose brace is exactly what poisoned the old first-{-to-last-} span.
-    $claude = new FakeClaudeClient("Sure — here it is using a {key: value} shape:\n\n```json\n{$json}\n```\n\nHope that helps!");
+it('extracts the draft even when prose with a stray brace and a leftover fence precede the blocks', function () {
+    $candidate = sentinelCandidate();
+    $draft = Draft::post('claim-x', ['body' => '<p>Still parses.</p>']);
+    // A stray brace + a leftover code fence in the preamble poisoned the old
+    // first-{-to-last-} JSON span; sentinel extraction ignores all of it.
+    $claude = new FakeClaudeClient("Using a {key: value} note and ```a fence```:\n\n{$draft}\n\nHope that helps!");
 
     $result = DraftingHarness::engine($claude)->draftCandidate($candidate->fresh());
 

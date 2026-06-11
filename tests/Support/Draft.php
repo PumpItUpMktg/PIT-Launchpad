@@ -3,8 +3,11 @@
 namespace Tests\Support;
 
 /**
- * Builders for drafter-output fixtures: the strict JSON the Sonnet seam returns,
- * assembled so individual tests can override just the part they exercise.
+ * Builders for drafter-output fixtures: the sentinel-delimited blocks the Sonnet
+ * seam now returns, assembled so individual tests can override just the part they
+ * exercise. The logical payload shape is unchanged from the old JSON fixtures —
+ * only the wire encoding (via {@see SentinelEncoder}) differs, so the drafting
+ * tests still assert on parsed results, not on the format.
  */
 class Draft
 {
@@ -27,7 +30,7 @@ class Draft
             'towns' => [],
         ], $overrides);
 
-        return (string) json_encode($payload);
+        return SentinelEncoder::encode($payload);
     }
 
     /**
