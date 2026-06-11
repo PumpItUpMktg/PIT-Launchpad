@@ -20,6 +20,15 @@ final class Meta
     /** The single consolidated slot_payload blob. */
     public const SLOTS = '_lp_slots';
 
+    /**
+     * Per-slot readable mirror prefix. The consolidated SLOTS blob is protected
+     * (leading underscore) and serialized — invisible to the Custom Fields UI and
+     * unbindable. Each scalar slot is ALSO written to `lp_slot_{key}` (NO leading
+     * underscore), so it shows in the Custom Fields box and is bindable from a
+     * Theme Builder template via Elementor's native Post Custom Field dynamic tag.
+     */
+    public const SLOT_PREFIX = 'lp_slot_';
+
     public const SEO = '_lp_seo';
     public const IMAGES = '_lp_images';
     public const KIND = '_lp_kind';

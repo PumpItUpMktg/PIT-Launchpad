@@ -78,6 +78,30 @@ class Test_Content_Store extends WP_UnitTestCase
         $this->assertSame('https://r2.example/hero.jpg', $images['hero']['source_url']);
     }
 
+    public function test_scalar_slots_are_mirrored_to_readable_bindable_meta_keys(): void
+    {
+        $store = new ContentStore();
+        $result = $store->upsert($this->payload(['slot_payload' => [
+            'hero_heading' => 'Fast Water Heater Repair',
+            'cta_label' => 'Call now',
+            'service_features' => ['Endless hot water', 'Lower bills'], // repeater — not mirrored
+        ]]));
+        $id = $result['wp_post_id'];
+
+        // Each scalar slot is a readable, NON-protected meta key the Theme Builder
+        // template can bind via Elementor's Post Custom Field tag.
+        $this->assertSame('Fast Water Heater Repair', get_post_meta($id, 'lp_slot_hero_heading', true));
+        $this->assertSame('Call now', get_post_meta($id, 'lp_slot_cta_label', true));
+        $this->assertFalse(is_protected_meta('lp_slot_hero_heading', 'post'), 'Mirror keys must be visible/bindable (no leading underscore).');
+
+        // Repeaters bind via the lp/* tags off the consolidated blob, not a scalar mirror.
+        $this->assertSame('', get_post_meta($id, 'lp_slot_service_features', true));
+
+        // Re-push is authoritative: a dropped slot's mirror is removed (no stale bind).
+        $store->upsert($this->payload(['slot_payload' => ['hero_heading' => 'Fast Water Heater Repair']]));
+        $this->assertSame('', get_post_meta($id, 'lp_slot_cta_label', true), 'A dropped slot must not leave a stale mirror.');
+    }
+
     public function test_a_locally_edited_page_is_skipped_not_overwritten(): void
     {
         $store = new ContentStore();
