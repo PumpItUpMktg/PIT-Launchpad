@@ -95,6 +95,27 @@ class WordpressClient
     }
 
     /**
+     * Read the site's Elementor saved-template inventory (id/title/slug/type/
+     * modified/preview/thumbnail) through the same authed channel — the live list
+     * the operator maps each kit against.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function templates(): array
+    {
+        $response = $this->request()->get(rtrim($this->baseUrl, '/').self::NAMESPACE.'/templates');
+
+        if (! $response->successful()) {
+            throw new WordpressException('WordPress /templates returned HTTP '.$response->status());
+        }
+
+        $json = $response->json();
+        $templates = is_array($json) && isset($json['templates']) && is_array($json['templates']) ? $json['templates'] : [];
+
+        return array_values(array_filter($templates, 'is_array'));
+    }
+
+    /**
      * @param  array<string, mixed>  $body
      * @return array<string, mixed>
      */
