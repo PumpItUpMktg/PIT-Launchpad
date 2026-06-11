@@ -2,6 +2,7 @@
 
 namespace App\Publishing;
 
+use App\Enums\ContentKind;
 use App\Models\Content;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
@@ -36,11 +37,35 @@ class MetaBlobAssembler
             'slug' => $content->slug,
             'status' => 'published',
             'locked' => (bool) $content->locked,
-            'slot_payload' => $content->slot_payload ?? [],
+            'slot_payload' => $this->slotPayload($content),
             'kit_definition' => $this->kitDefinition($content),
             'images' => $images,
             'seo' => $this->seo($content, $images),
         ];
+    }
+
+    /**
+     * The slot blob pushed to WordPress. A POST's article body is not a kit slot
+     * (it lives in the `body` column), so it would never reach WP and the post
+     * would render blank. Carry it as the `body` slot — the plugin then mirrors it
+     * to the readable `lp_slot_body` meta and renders it via [lp_slot key="body"]
+     * (the single-post template's content section). Pages pass their kit slots
+     * through unchanged.
+     *
+     * @return array<string, mixed>
+     */
+    private function slotPayload(Content $content): array
+    {
+        $slots = is_array($content->slot_payload) ? $content->slot_payload : [];
+
+        if ($content->kind === ContentKind::Post
+            && is_string($content->body)
+            && trim($content->body) !== ''
+            && ! array_key_exists('body', $slots)) {
+            $slots['body'] = $content->body;
+        }
+
+        return $slots;
     }
 
     /**
