@@ -132,6 +132,36 @@ final class ContentStore
         update_post_meta($post_id, Meta::KIT_VERSION, (string) ($payload['kit_version'] ?? ''));
         update_post_meta($post_id, Meta::SILO_ID, (string) ($payload['silo_id'] ?? ''));
         update_post_meta($post_id, Meta::LOCKED, ! empty($payload['locked']) ? '1' : '0');
+
+        $this->store_kit_definition($payload);
+    }
+
+    /**
+     * Store the kit's contract definition (key/label/content_type/cardinality/
+     * required per slot) per "{kit}@{version}", so the Slots & Shortcodes reference
+     * reflects the contract across every push, not just one page's slot data.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function store_kit_definition(array $payload): void
+    {
+        $kit = (string) ($payload['kit'] ?? '');
+        $slots = $payload['kit_definition'] ?? null;
+
+        if ($kit === '' || ! is_array($slots) || $slots === []) {
+            return;
+        }
+
+        $version = (string) ($payload['kit_version'] ?? '');
+        $key = $kit . '@' . $version;
+
+        $all = get_option(Meta::OPTION_KIT_DEFINITIONS, []);
+        if (! is_array($all)) {
+            $all = [];
+        }
+
+        $all[$key] = ['kit' => $kit, 'version' => $version, 'slots' => $slots];
+        update_option(Meta::OPTION_KIT_DEFINITIONS, $all);
     }
 
     /**

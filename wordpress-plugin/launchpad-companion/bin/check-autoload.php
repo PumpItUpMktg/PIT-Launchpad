@@ -37,6 +37,8 @@ $classes = [
     'Launchpad\\Companion\\Render\\TagManager',
     'Launchpad\\Companion\\Render\\SlotRenderer',
     'Launchpad\\Companion\\Render\\Shortcodes',
+    'Launchpad\\Companion\\Render\\ShortcodeReference',
+    'Launchpad\\Companion\\Admin\\SlotsScreen',
     'Launchpad\\Companion\\Render\\DynamicTags\\TextTag',
     'Launchpad\\Companion\\Render\\DynamicTags\\ImageTag',
     'Launchpad\\Companion\\Render\\DynamicTags\\CtaTag',

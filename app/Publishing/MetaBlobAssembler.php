@@ -37,9 +37,43 @@ class MetaBlobAssembler
             'status' => 'published',
             'locked' => (bool) $content->locked,
             'slot_payload' => $content->slot_payload ?? [],
+            'kit_definition' => $this->kitDefinition($content),
             'images' => $images,
             'seo' => $this->seo($content, $images),
         ];
+    }
+
+    /**
+     * A trimmed, contract-level definition of the kit's slots (key / label /
+     * content_type / cardinality / required) so the companion plugin's reference
+     * screen reflects the CONTRACT, not just observed slot data. Empty when the
+     * content has no resolvable kit.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function kitDefinition(Content $content): array
+    {
+        $schema = $this->schema($content);
+        if ($schema === null) {
+            return [];
+        }
+
+        $defs = [];
+        foreach ($schema->slots as $slot) {
+            $defs[] = [
+                'key' => $slot->key,
+                'label' => $slot->label,
+                'content_type' => $slot->contentType->value,
+                'cardinality' => [
+                    'type' => $slot->cardinality->type,
+                    'min' => $slot->cardinality->min,
+                    'max' => $slot->cardinality->max,
+                ],
+                'required' => $slot->isRequired(),
+            ];
+        }
+
+        return $defs;
     }
 
     /**

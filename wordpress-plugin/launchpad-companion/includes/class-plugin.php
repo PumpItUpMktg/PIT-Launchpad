@@ -8,6 +8,7 @@
 
 namespace Launchpad\Companion;
 
+use Launchpad\Companion\Admin\SlotsScreen;
 use Launchpad\Companion\Content\EditGuard;
 use Launchpad\Companion\Render\Shortcodes;
 use Launchpad\Companion\Render\TagManager;
@@ -59,6 +60,9 @@ final class Plugin
         ( new Schema() )->register();
         ( new Suppressor() )->register();
         add_shortcode('lp_breadcrumbs', [Breadcrumbs::class, 'shortcode']);
+
+        // Admin reference (Launchpad → Slots & Shortcodes).
+        ( new SlotsScreen() )->register();
 
         // Sitemap + redirects.
         ( new Sitemap() )->register();
