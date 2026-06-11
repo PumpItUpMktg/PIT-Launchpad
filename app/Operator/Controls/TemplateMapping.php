@@ -3,9 +3,11 @@
 namespace App\Operator\Controls;
 
 use App\Integrations\Wordpress\WordpressClientFactory;
+use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
+use App\Models\WireframeKit;
 use Illuminate\Support\Collection;
 
 /**
@@ -36,6 +38,35 @@ class TemplateMapping
     public function inventory(Site $site): array
     {
         return $this->factory->forSite($site)->templates();
+    }
+
+    /**
+     * The kits "pushed" for this site — the distinct kits its page Content
+     * references — each with its version and its `elementor_template_ref` default
+     * SUGGESTION (which an explicit mapping overrides). These are the rows the
+     * operator maps; a site with no page content yet maps nothing.
+     *
+     * @return list<array{kit: string, version: int|null, suggestion: string|null}>
+     */
+    public function kits(Site $site): array
+    {
+        $kitIds = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereNotNull('wireframe_kit_id')
+            ->distinct()
+            ->pluck('wireframe_kit_id');
+
+        return WireframeKit::query()
+            ->whereIn('id', $kitIds)
+            ->get()
+            ->map(fn (WireframeKit $kit): array => [
+                'kit' => (string) $kit->name,
+                'version' => $kit->version,
+                'suggestion' => $kit->elementor_template_ref,
+            ])
+            ->unique('kit')
+            ->values()
+            ->all();
     }
 
     /**
@@ -88,6 +119,36 @@ class TemplateMapping
             'template_title' => $title,
             'version' => 1,
         ]);
+    }
+
+    /**
+     * Apply a batch of operator selections — [kit => template_id|null]. A null
+     * selection clears the kit's mapping (back to its elementor_template_ref
+     * suggestion); a non-null one maps/remaps it. `$titles` optionally supplies a
+     * display-title cache per template id. Returns the number of selections acted
+     * on. The single entry point the operator surface calls.
+     *
+     * @param  array<string, int|null>  $selections
+     * @param  array<int, string>  $titles
+     */
+    public function applyMappings(Site $site, array $selections, array $titles = []): int
+    {
+        $applied = 0;
+
+        foreach ($selections as $kit => $templateId) {
+            if ($templateId === null || $templateId === 0) {
+                if ($this->unmap($site, $kit)) {
+                    $applied++;
+                }
+
+                continue;
+            }
+
+            $this->map($site, $kit, $templateId, $titles[$templateId] ?? null);
+            $applied++;
+        }
+
+        return $applied;
     }
 
     /**

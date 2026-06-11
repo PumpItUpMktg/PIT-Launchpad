@@ -2,9 +2,11 @@
 
 use App\Enums\ConnectionProvider;
 use App\Models\Connection;
+use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
+use App\Models\WireframeKit;
 use App\Operator\Controls\TemplateMapping;
 use Illuminate\Support\Facades\Http;
 
@@ -83,6 +85,45 @@ it('unmaps a kit (falls back to the kit suggestion)', function () {
     expect($service->unmap($site, 'service-page'))->toBeTrue()
         ->and($service->resolve($site, 'service-page'))->toBeNull()
         ->and($service->unmap($site, 'service-page'))->toBeFalse(); // already gone
+});
+
+it('lists the kits pushed for a site with their version and suggestion', function () {
+    $site = mappingSite();
+    $kit = WireframeKit::create([
+        'name' => 'service-page',
+        'slot_schema' => [],
+        'page_type' => 'service',
+        'version' => 2,
+        'elementor_template_ref' => 'lp-service-v1',
+    ]);
+    // Two page contents on the same kit → one distinct kit row.
+    Content::factory()->page()->count(2)->create([
+        'site_id' => $site->id,
+        'wireframe_kit_id' => $kit->id,
+    ]);
+
+    $kits = app(TemplateMapping::class)->kits($site);
+
+    expect($kits)->toHaveCount(1)
+        ->and($kits[0]['kit'])->toBe('service-page')
+        ->and($kits[0]['version'])->toBe(2)
+        ->and($kits[0]['suggestion'])->toBe('lp-service-v1');
+});
+
+it('applies a batch of selections — maps non-null, clears null', function () {
+    $site = mappingSite();
+    $service = app(TemplateMapping::class);
+    $service->map($site, 'location-page', 50); // pre-existing, to be cleared
+
+    $applied = $service->applyMappings($site, [
+        'service-page' => 11,
+        'location-page' => null,
+    ], [11 => 'Service Page']);
+
+    expect($applied)->toBe(2)
+        ->and($service->resolve($site, 'service-page')->template_id)->toBe(11)
+        ->and($service->resolve($site, 'service-page')->template_title)->toBe('Service Page')
+        ->and($service->resolve($site, 'location-page'))->toBeNull();
 });
 
 it('keeps mappings isolated per tenant', function () {
