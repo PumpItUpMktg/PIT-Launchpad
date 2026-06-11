@@ -51,11 +51,22 @@ final class Routes
             'callback' => [$this, 'status'],
             'permission_callback' => $auth,
         ]);
+
+        register_rest_route(self::NS, '/templates', [
+            'methods' => 'GET',
+            'callback' => [$this, 'templates'],
+            'permission_callback' => $auth,
+        ]);
     }
 
     public function status(): WP_REST_Response
     {
         return new WP_REST_Response(Status::payload(), 200);
+    }
+
+    public function templates(): WP_REST_Response
+    {
+        return new WP_REST_Response(Templates::payload(), 200);
     }
 
     public function silo(WP_REST_Request $request): WP_REST_Response

@@ -29,6 +29,7 @@ $classes = [
     'Launchpad\\Companion\\Redirects',
     'Launchpad\\Companion\\Rest\\Routes',
     'Launchpad\\Companion\\Rest\\Status',
+    'Launchpad\\Companion\\Rest\\Templates',
     'Launchpad\\Companion\\Content\\ContentStore',
     'Launchpad\\Companion\\Content\\SiloStore',
     'Launchpad\\Companion\\Content\\RedirectStore',
