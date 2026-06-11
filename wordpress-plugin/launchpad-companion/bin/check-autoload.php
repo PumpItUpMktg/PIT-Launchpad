@@ -31,6 +31,7 @@ $classes = [
     'Launchpad\\Companion\\Rest\\Status',
     'Launchpad\\Companion\\Rest\\Templates',
     'Launchpad\\Companion\\Content\\ContentStore',
+    'Launchpad\\Companion\\Content\\KitTaxonomy',
     'Launchpad\\Companion\\Content\\SiloStore',
     'Launchpad\\Companion\\Content\\RedirectStore',
     'Launchpad\\Companion\\Render\\Payload',

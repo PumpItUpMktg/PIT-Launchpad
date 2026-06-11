@@ -1,5 +1,6 @@
 <?php
 
+use App\Operator\Controls\TemplateMapping;
 use App\Publishing\MetaBlobAssembler;
 use App\Publishing\RenderCoordinator;
 use Tests\Support\PublishHarness;
@@ -15,7 +16,7 @@ test('the assembled meta-blob matches the companion-plugin /content contract', f
     // Top-level contract keys (per samples/content-service.json).
     expect($payload)->toHaveKeys([
         'content_id', 'kind', 'page_type', 'kit', 'kit_version',
-        'silo_id', 'slug', 'status', 'locked', 'slot_payload', 'kit_definition', 'images', 'seo',
+        'silo_id', 'slug', 'status', 'locked', 'slot_payload', 'kit_definition', 'template_id', 'images', 'seo',
     ]);
 
     // The trimmed kit contract travels with the push (feeds the plugin's
@@ -51,4 +52,19 @@ test('the assembled meta-blob matches the companion-plugin /content contract', f
         ->and($payload['seo']['canonical'])->toBe('https://apex.example/water-heater-repair-austin')
         ->and($payload['seo']['og']['image'])->toBe($payload['images']['hero_image']['url'])
         ->and($payload['seo']['schema_type'])->toBe('Service');
+});
+
+test('the blob carries the operator-mapped template id for the page kit (null when unmapped)', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+    $outcome = app(RenderCoordinator::class)->render($content);
+
+    // Unmapped → null (the plugin falls back to the kit's suggestion).
+    expect(app(MetaBlobAssembler::class)->assemble($content, $outcome->jobs)['template_id'])->toBeNull();
+
+    // Map the page's kit (service-page) → an Elementor template id; it rides the blob.
+    app(TemplateMapping::class)->map($site, 'service-page', 77, 'Service Template');
+
+    expect(app(MetaBlobAssembler::class)->assemble($content, $outcome->jobs)['template_id'])->toBe(77);
 });

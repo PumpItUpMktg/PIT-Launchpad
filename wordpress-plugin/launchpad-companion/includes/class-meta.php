@@ -38,6 +38,12 @@ final class Meta
     public const SILO_ID = '_lp_silo_id';
     public const LOCKED = '_lp_locked';
 
+    /** The operator-resolved Elementor template id for this page's kit (§7b
+     * mapping). Stored for reference + the Theme Builder condition the Slots
+     * screen documents; rendering is driven by the lp_kit term condition, not
+     * this value. */
+    public const TEMPLATE_ID = '_lp_template_id';
+
     /** Set true when a non-plugin save_post edits a managed post (edited-in-WP). */
     public const LOCALLY_EDITED = '_lp_locally_edited';
 
