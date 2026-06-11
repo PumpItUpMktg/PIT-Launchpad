@@ -119,8 +119,11 @@ final class ContentStore
      */
     private function store_meta(int $post_id, string $content_id, string $kind, array $payload, array $seo, array $images): void
     {
+        $slots = is_array($payload['slot_payload'] ?? null) ? $payload['slot_payload'] : [];
+
         update_post_meta($post_id, Meta::CONTENT_ID, $content_id);
-        update_post_meta($post_id, Meta::SLOTS, is_array($payload['slot_payload'] ?? null) ? $payload['slot_payload'] : []);
+        update_post_meta($post_id, Meta::SLOTS, $slots);
+        $this->mirror_slots($post_id, $slots);
         update_post_meta($post_id, Meta::SEO, $seo);
         update_post_meta($post_id, Meta::IMAGES, $images);
         update_post_meta($post_id, Meta::KIND, $kind);
@@ -129,6 +132,38 @@ final class ContentStore
         update_post_meta($post_id, Meta::KIT_VERSION, (string) ($payload['kit_version'] ?? ''));
         update_post_meta($post_id, Meta::SILO_ID, (string) ($payload['silo_id'] ?? ''));
         update_post_meta($post_id, Meta::LOCKED, ! empty($payload['locked']) ? '1' : '0');
+    }
+
+    /**
+     * Mirror each SCALAR slot to an individual readable meta key (`lp_slot_{key}`)
+     * so a Theme Builder template can bind it via Elementor's native Post Custom
+     * Field tag and it shows in the Custom Fields box. Re-push is authoritative:
+     * mirrored keys absent from the new payload are removed, so a dropped slot
+     * doesn't leave stale bound content. Repeaters/objects are not mirrored — they
+     * bind through the lp/* dynamic tags off the consolidated blob.
+     *
+     * @param  array<string, mixed>  $slots
+     */
+    private function mirror_slots(int $post_id, array $slots): void
+    {
+        foreach (array_keys(get_post_meta($post_id)) as $key) {
+            if (is_string($key) && str_starts_with($key, Meta::SLOT_PREFIX)) {
+                delete_post_meta($post_id, $key);
+            }
+        }
+
+        foreach ($slots as $slot_key => $value) {
+            if (! is_scalar($value)) {
+                continue;
+            }
+
+            $suffix = sanitize_key((string) $slot_key);
+            if ($suffix === '') {
+                continue;
+            }
+
+            update_post_meta($post_id, Meta::SLOT_PREFIX.$suffix, (string) $value);
+        }
     }
 
     /**
