@@ -18,6 +18,9 @@ final class DraftFailure
 {
     private const RAW_EXCERPT_LIMIT = 1000;
 
+    /** The marker is DB-bounded; the log carries far more raw for diagnosis. */
+    private const RAW_LOG_LIMIT = 20000;
+
     private const MESSAGE_LIMIT = 500;
 
     private function __construct(
@@ -30,6 +33,7 @@ final class DraftFailure
         public readonly ?int $outputTokens = null,
         public readonly ?int $thinkingTokens = null,
         public readonly ?int $inputTokens = null,
+        public readonly ?string $rawResponseFull = null,
     ) {}
 
     public static function fromException(Throwable $e): self
@@ -84,6 +88,10 @@ final class DraftFailure
             outputTokens: $completion?->outputTokens,
             thinkingTokens: $completion?->thinkingTokens,
             inputTokens: $completion?->inputTokens,
+            // The full raw (bounded) goes to the LOG only — never the DB marker —
+            // so a parse failure like the fenced-but-invalid case is reproducible:
+            // pull it from the log and add it verbatim as a parse fixture.
+            rawResponseFull: Str::limit(trim($rawResponse), self::RAW_LOG_LIMIT, ''),
         );
     }
 
@@ -152,6 +160,7 @@ final class DraftFailure
             'exception_message' => $this->exceptionMessage,
             'anthropic_http_status' => $this->httpStatus,
             'raw_response_excerpt' => $this->rawResponseExcerpt,
+            'raw_response_full' => $this->rawResponseFull,
             'stop_reason' => $this->stopReason,
             'input_tokens' => $this->inputTokens,
             'output_tokens' => $this->outputTokens,

@@ -43,9 +43,77 @@ final class DraftCall
             return [];
         }
 
-        $decoded = json_decode(substr($candidate, $start, $end - $start + 1), true);
+        $json = substr($candidate, $start, $end - $start + 1);
+
+        $decoded = json_decode($json, true);
+
+        // A multi-KB HTML body wrapped in a JSON string is fragile: the model
+        // routinely emits RAW control characters (literal newlines/tabs) inside a
+        // string, which strict JSON forbids — a complete, end_turn response that
+        // still won't decode. Repair only that (escape control chars that sit
+        // inside a string) and retry. NOTE: an UNescaped quote inside the HTML is
+        // not heuristically repairable — that needs the structured-output fix.
+        if (! is_array($decoded)) {
+            $decoded = json_decode(self::escapeControlCharsInStrings($json), true);
+        }
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Escape raw control characters (< 0x20) that occur INSIDE a JSON string,
+     * leaving structural whitespace between tokens untouched. A single forward
+     * scan tracking string state + backslash escaping; UTF-8 multibyte bytes
+     * (>= 0x80) pass through unharmed.
+     */
+    private static function escapeControlCharsInStrings(string $json): string
+    {
+        $out = '';
+        $inString = false;
+        $escaped = false;
+        $len = strlen($json);
+
+        for ($i = 0; $i < $len; $i++) {
+            $c = $json[$i];
+
+            if ($escaped) {
+                $out .= $c;
+                $escaped = false;
+
+                continue;
+            }
+
+            if ($c === '\\') {
+                $out .= $c;
+                $escaped = true;
+
+                continue;
+            }
+
+            if ($c === '"') {
+                $out .= $c;
+                $inString = ! $inString;
+
+                continue;
+            }
+
+            if ($inString && ord($c) < 0x20) {
+                $out .= match ($c) {
+                    "\n" => '\\n',
+                    "\r" => '\\r',
+                    "\t" => '\\t',
+                    "\f" => '\\f',
+                    "\x08" => '\\b',
+                    default => sprintf('\\u%04x', ord($c)),
+                };
+
+                continue;
+            }
+
+            $out .= $c;
+        }
+
+        return $out;
     }
 
     /**
