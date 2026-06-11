@@ -2,6 +2,7 @@
 
 namespace App\ContentEngine\Drafting;
 
+use App\Enums\SlotContentType;
 use App\PageBuilder\Schema\SlotDefinition;
 
 /**
@@ -41,7 +42,8 @@ class PageDrafter
             .'SUBSTANTIATED PROOF pool, and you must cite the exact proof id you used. Reference locality '
             .'ONLY from the MARKETS provided — never invent towns, neighborhoods, or service areas. Fill '
             .'EVERY required slot, keyed EXACTLY by its slot key (an off-schema key renders as a blank '
-            .'section). Frame problem→solution. Return strict JSON only — no prose, no code fences.';
+            .'section). Frame problem→solution. Return ONLY sentinel-delimited blocks as specified — no JSON, '
+            .'no prose, no code fences. Write each value RAW between the markers: never escape quotes or newlines.';
     }
 
     private function prompt(PageGrounding $grounding): string
@@ -137,10 +139,10 @@ class PageDrafter
             $lines[] = $this->slotLine($slot);
         }
 
-        return 'KIT SLOTS — fill each by its EXACT key in "slots". Respect content_type, role (problem→solution '
-            ."arc), and cardinality (a repeater expects an array):\n".implode("\n", $lines)."\n\n"
-            .'For image/gallery slots: do NOT render. Emit a SPEC into "images" (slot, prompt, seo_filename, alt, '
-            .'title, caption) and leave the slot value out.';
+        return 'KIT SLOTS — emit one block per slot, keyed by its EXACT slot key. Respect content_type, role '
+            ."(problem→solution arc), and cardinality (repeat a slot's block once per item):\n".implode("\n", $lines)."\n\n"
+            .'For image/gallery slots: do NOT render. Emit an image SPEC block instead (image.<slot>) and leave the slot out. '
+            .'Entity-sourced slots (the platform fills them) you may omit.';
     }
 
     private function slotLine(SlotDefinition $slot): string
@@ -153,19 +155,35 @@ class PageDrafter
             ? ' [GROUNDED: only substantiated proof]'
             : '';
         $hint = $slot->generationHint !== null ? " — {$slot->generationHint}" : '';
+        $fields = $this->fieldOrder($slot);
 
-        return "- {$slot->key} ({$slot->contentType->value}, role={$slot->role->value}, {$card}, {$req}){$grounded}{$hint}";
+        return "- {$slot->key} ({$slot->contentType->value}, role={$slot->role->value}, {$card}, {$req}){$grounded}{$fields}{$hint}";
+    }
+
+    /**
+     * For object content types, declare the `||` sub-field order the SlotShaper
+     * re-keys (plain-text/list slots carry their value whole — no delimiter).
+     */
+    private function fieldOrder(SlotDefinition $slot): string
+    {
+        $order = match ($slot->contentType) {
+            SlotContentType::Faq => 'question || answer',
+            SlotContentType::Stat => 'value || label',
+            SlotContentType::Testimonial => 'quote || author',
+            SlotContentType::Cta => 'label || url',
+            default => null,
+        };
+
+        return $order !== null ? " [fields: {$order}]" : '';
     }
 
     private function outputContract(): string
     {
-        return "Return ONLY this JSON object:\n"
-            ."{\n"
-            .'  "slots": { "<slot_key>": <value-or-array>, ... },'."\n"
-            .'  "seo": {"title":"...","meta_description":"...","slug":"...","og_title":"...","og_description":"..."},'."\n"
-            .'  "images": [{"slot":"...","prompt":"...","seo_filename":"...","alt":"...","title":"...","caption":"..."}],'."\n"
-            .'  "claims_used": [{"text":"<assertion as written>","claim_id":"<id from the proof pool>"}]'."\n"
-            .'}';
+        return SentinelContract::describe(
+            'Return ONLY sentinel-delimited blocks — no JSON, no prose, no code fences. Write each value RAW '
+            .'between the markers (do not escape quotes or newlines). A block is:',
+            "<<<SLOT:hero_problem>>>\n…value (repeat a slot's block once per repeater item)…\n<<<END>>>",
+        );
     }
 
     /**

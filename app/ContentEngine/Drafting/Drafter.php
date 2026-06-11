@@ -49,8 +49,9 @@ class Drafter
             .'Accuracy is structural: you may assert a fact about the business ONLY if it is in the '
             .'SUBSTANTIATED CLAIMS pool, and you must cite the exact claim id you used. Material in the '
             .'SOURCES pool is background you may reference and attribute by name, but you must NEVER restate '
-            .'it as a claim about the business. Frame problem→solution. Return strict JSON only — no prose, '
-            .'no code fences.';
+            .'it as a claim about the business. Frame problem→solution. Return ONLY sentinel-delimited '
+            .'blocks as specified — no JSON, no prose, no code fences. Write content RAW between the markers: '
+            .'never escape quotes or newlines.';
     }
 
     private function prompt(DraftRequest $request, Grounding $grounding): string
@@ -151,10 +152,9 @@ class Drafter
             $lines[] = $this->slotLine($slot);
         }
 
-        return 'KIT SLOTS — fill each by its key in "slots". Respect content_type, role (problem→solution arc), '
-            ."and cardinality (a repeater expects an array):\n".implode("\n", $lines)."\n\n"
-            .'For image/gallery slots: do NOT render. Emit a SPEC into "images" (slot, prompt, seo_filename, alt, title, caption) '
-            .'and leave the slot value out.';
+        return 'KIT SLOTS — emit one block per slot, keyed by its slot key. Respect content_type, role '
+            ."(problem→solution arc), and cardinality (repeat a slot's block once per item):\n".implode("\n", $lines)."\n\n"
+            .'For image/gallery slots: do NOT render. Emit an image SPEC block instead (image.<slot>) and leave the slot out.';
     }
 
     private function slotLine(SlotDefinition $slot): string
@@ -173,24 +173,20 @@ class Drafter
 
     private function postBlock(): string
     {
-        return 'POST: write the article into "body" as clean HTML. Open by framing the reader\'s problem, '
-            .'then deliver the solution. Attribute any source material by name.';
+        return 'POST: write the article into the `body` block as clean HTML. Open by framing the reader\'s '
+            .'problem, then deliver the solution. Attribute any source material by name.';
     }
 
     private function outputContract(DraftRequest $request): string
     {
-        $shape = $request->kind === ContentKind::Page
-            ? '"slots": { "<slot_key>": <value-or-array>, ... }'
-            : '"body": "<html>"';
+        $contentBlocks = $request->kind === ContentKind::Page
+            ? "<<<SLOT:hero_problem>>>\n…value (repeat a slot's block once per repeater item)…\n<<<END>>>"
+            : "<<<SLOT:body>>>\n…the full article as clean HTML…\n<<<END>>>";
 
-        return "Return ONLY this JSON object:\n"
-            ."{\n"
-            ."  {$shape},\n"
-            .'  "seo": {"title":"...","meta_description":"...","slug":"...","og_title":"...","og_description":"...","twitter_title":"...","twitter_description":"..."},'."\n"
-            .'  "images": [{"slot":"...","prompt":"...","seo_filename":"...","alt":"...","title":"...","caption":"..."}],'."\n"
-            .'  "claims_used": [{"text":"<assertion as written>","claim_id":"<id from the claims pool>"}],'."\n"
-            .'  "sources_cited": [{"name":"<source name>","url":"<canonical url or null>"}],'."\n"
-            .'  "towns": ["<town>", ...]'."\n"
-            .'}';
+        return SentinelContract::describe(
+            'Return ONLY sentinel-delimited blocks — no JSON, no prose, no code fences. Write each value RAW '
+            .'between the markers (do not escape quotes or newlines). A block is:',
+            $contentBlocks,
+        );
     }
 }

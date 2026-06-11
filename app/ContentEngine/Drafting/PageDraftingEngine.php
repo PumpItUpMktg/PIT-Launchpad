@@ -5,7 +5,6 @@ namespace App\ContentEngine\Drafting;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
-use App\PageBuilder\Schema\SlotDefinition;
 use App\PageBuilder\Validation\KitValidator;
 use App\PageBuilder\Validation\ValidationCode;
 use App\PageBuilder\Validation\ValidationContext;
@@ -43,6 +42,7 @@ class PageDraftingEngine
         private readonly PageDrafter $drafter,
         private readonly DraftGuard $guard,
         private readonly KitValidator $validator,
+        private readonly SlotShaper $shaper,
     ) {}
 
     public function draftPage(Content $page): Content
@@ -66,9 +66,10 @@ class PageDraftingEngine
         /** @var PageGrounding $grounding */
         $kit = $grounding->kit;
 
-        // Drop off-schema keys (the render contract is the slot key), then validate
+        // Shape the raw sentinel slots to the kit's content types and drop
+        // off-schema keys (the render contract is the slot key), then validate
         // structure. A structural failure is surfaced; media/entity gate publish.
-        $slots = $this->reconcile($kit->slots, $attempt->payload->slots ?? []);
+        $slots = $this->shaper->shape($kit->slots, $attempt->payload->slots ?? []);
         $structural = $this->structuralFailures(
             $this->validator->validate($kit, $slots, new ValidationContext($page)),
         );
@@ -87,23 +88,6 @@ class PageDraftingEngine
         $this->persist($page, $grounding, $attempt->payload, $slots);
 
         return $page;
-    }
-
-    /**
-     * Keep only slots the kit defines (drop unknown keys).
-     *
-     * @param  list<SlotDefinition>  $definitions
-     * @param  array<string, mixed>  $slots
-     * @return array<string, mixed>
-     */
-    private function reconcile(array $definitions, array $slots): array
-    {
-        $known = [];
-        foreach ($definitions as $slot) {
-            $known[$slot->key] = true;
-        }
-
-        return array_intersect_key($slots, $known);
     }
 
     /**

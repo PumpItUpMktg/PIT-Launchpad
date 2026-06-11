@@ -5,6 +5,7 @@ use App\ContentEngine\Drafting\DraftGuard;
 use App\ContentEngine\Drafting\PageDrafter;
 use App\ContentEngine\Drafting\PageDraftingEngine;
 use App\ContentEngine\Drafting\PageGroundingAssembler;
+use App\ContentEngine\Drafting\SlotShaper;
 use App\ContentEngine\Generation\PageGenerator;
 use App\Enums\ContentStatus;
 use App\Models\Content;
@@ -27,6 +28,7 @@ it('drafts the page in place and renders its image-slots — only when invoked',
         new PageDrafter(new DraftCall($claude)),
         new DraftGuard,
         app(KitValidator::class),
+        new SlotShaper,
     );
 
     $renders = Mockery::mock(RenderCoordinator::class);
