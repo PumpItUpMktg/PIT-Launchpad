@@ -55,4 +55,8 @@ final class Meta
 
     /** from_url => [to_url, code] map. */
     public const OPTION_REDIRECTS = 'lp_redirects';
+
+    /** "{kit}@{version}" => ['kit','version','slots'] — the contract kit defs the
+     * Slots & Shortcodes reference screen reads (per kit/version, not observed data). */
+    public const OPTION_KIT_DEFINITIONS = 'lp_kit_definitions';
 }
