@@ -71,3 +71,30 @@ test('ping returns true on an authed 200', function () {
 
     expect(wpClient()->ping())->toBeTrue();
 });
+
+test('templates GETs /templates and returns the normalized inventory list', function () {
+    Http::fake(['*/wp-json/launchpad/v1/templates' => Http::response([
+        'templates' => [
+            ['id' => 11, 'title' => 'Service Page', 'slug' => 'service-page', 'type' => 'page', 'modified' => '2026-06-01T10:00:00+00:00', 'preview_url' => 'https://wp.test/?p=11', 'thumbnail' => null],
+            ['id' => 12, 'title' => 'Blog Single', 'slug' => 'blog-single', 'type' => 'single-post', 'modified' => '2026-06-02T10:00:00+00:00', 'preview_url' => 'https://wp.test/?p=12', 'thumbnail' => null],
+            'not-an-array', // a malformed row is filtered out, never fatals
+        ],
+    ], 200)]);
+
+    $templates = wpClient()->templates();
+
+    expect($templates)->toHaveCount(2)
+        ->and($templates[0]['id'])->toBe(11)
+        ->and($templates[0]['type'])->toBe('page')
+        ->and($templates[1]['title'])->toBe('Blog Single');
+
+    Http::assertSent(fn ($request) => str_ends_with($request->url(), '/wp-json/launchpad/v1/templates')
+        && $request->method() === 'GET'
+        && $request->hasHeader('Authorization', 'Basic '.base64_encode('svc-user:app-pass')));
+});
+
+test('templates surfaces a WordpressException on a non-2xx', function () {
+    Http::fake(['*/wp-json/launchpad/v1/templates' => Http::response('', 500)]);
+
+    expect(fn () => wpClient()->templates())->toThrow(WordpressException::class);
+});
