@@ -76,6 +76,25 @@ class WordpressClient
     }
 
     /**
+     * Read the companion plugin's environment introspection (WP/PHP/Elementor/
+     * theme/plugin versions) through the same authed channel.
+     *
+     * @return array<string, mixed>
+     */
+    public function status(): array
+    {
+        $response = $this->request()->get(rtrim($this->baseUrl, '/').self::NAMESPACE.'/status');
+
+        if (! $response->successful()) {
+            throw new WordpressException('WordPress /status returned HTTP '.$response->status());
+        }
+
+        $json = $response->json();
+
+        return is_array($json) ? $json : [];
+    }
+
+    /**
      * @param  array<string, mixed>  $body
      * @return array<string, mixed>
      */

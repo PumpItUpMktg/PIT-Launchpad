@@ -45,6 +45,17 @@ final class Routes
             'callback' => [$this, 'redirects'],
             'permission_callback' => $auth,
         ]);
+
+        register_rest_route(self::NS, '/status', [
+            'methods' => 'GET',
+            'callback' => [$this, 'status'],
+            'permission_callback' => $auth,
+        ]);
+    }
+
+    public function status(): WP_REST_Response
+    {
+        return new WP_REST_Response(Status::payload(), 200);
     }
 
     public function silo(WP_REST_Request $request): WP_REST_Response
