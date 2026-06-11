@@ -6,6 +6,7 @@ use App\ContentEngine\Drafting\DraftGuard;
 use App\ContentEngine\Drafting\PageDrafter;
 use App\ContentEngine\Drafting\PageDraftingEngine;
 use App\ContentEngine\Drafting\PageGroundingAssembler;
+use App\ContentEngine\Drafting\Sentinel;
 use App\ContentEngine\Drafting\SlotShaper;
 use App\Enums\ContentStatus;
 use App\Models\ProofItem;
@@ -62,7 +63,7 @@ it('surfaces a missing required slot as a draft failure — no status flip', fun
     // Omit the required hero_problem slot — drop its sentinel block.
     $response = PageFixture::validResponse(proofIdFor($page->site_id));
     $response = str_replace(
-        \App\ContentEngine\Drafting\Sentinel::block('hero_problem', 'No hot water when you need it most?'),
+        Sentinel::block('hero_problem', 'No hot water when you need it most?'),
         '',
         $response,
     );

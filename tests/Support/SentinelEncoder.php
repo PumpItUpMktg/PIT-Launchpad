@@ -3,9 +3,10 @@
 namespace Tests\Support;
 
 use App\ContentEngine\Drafting\Sentinel;
+use App\ContentEngine\Drafting\SentinelParser;
 
 /**
- * The test-side inverse of {@see \App\ContentEngine\Drafting\SentinelParser}:
+ * The test-side inverse of {@see SentinelParser}:
  * renders a logical drafter payload (the same associative shape the JSON
  * fixtures used) into the sentinel wire format the model now emits. Keeping the
  * fixtures' INPUT identical means the drafting tests assert on parsed results,

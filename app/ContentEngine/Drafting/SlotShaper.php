@@ -4,11 +4,12 @@ namespace App\ContentEngine\Drafting;
 
 use App\Enums\SlotContentType;
 use App\PageBuilder\Schema\SlotDefinition;
+use App\PageBuilder\Validation\KitValidator;
 
 /**
  * The kit-aware half of sentinel parsing for PAGES: it takes the format-only raw
  * slot map ({@see SentinelParser} — a scalar or a list of raw strings per key) and
- * shapes each value to what {@see \App\PageBuilder\Validation\KitValidator} expects,
+ * shapes each value to what {@see KitValidator} expects,
  * using the slot's content_type and cardinality. Off-schema keys are dropped (the
  * slot key is the render contract). Object content carries its sub-fields after the
  * `||` delimiter in the order the prompt declares, and is re-keyed here:
@@ -73,11 +74,11 @@ final class SlotShaper
         $fields = array_map('trim', explode(Sentinel::FIELD, $raw));
 
         return match ($type) {
-            SlotContentType::Faq => ['question' => $fields[0] ?? '', 'answer' => $fields[1] ?? ''],
-            SlotContentType::Stat => ['value' => $fields[0] ?? '', 'label' => $fields[1] ?? ''],
-            SlotContentType::Testimonial => ['quote' => $fields[0] ?? '', 'author' => $fields[1] ?? ''],
+            SlotContentType::Faq => ['question' => $fields[0], 'answer' => $fields[1] ?? ''],
+            SlotContentType::Stat => ['value' => $fields[0], 'label' => $fields[1] ?? ''],
+            SlotContentType::Testimonial => ['quote' => $fields[0], 'author' => $fields[1] ?? ''],
             SlotContentType::Cta => array_filter([
-                'label' => $fields[0] ?? '',
+                'label' => $fields[0],
                 'url' => $fields[1] ?? null,
                 'action' => $fields[2] ?? null,
             ], static fn ($v) => $v !== null && $v !== ''),
