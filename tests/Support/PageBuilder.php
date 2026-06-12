@@ -75,7 +75,9 @@ class PageBuilder
 
         Service::factory()->count(3)->create(['site_id' => $site->id]);
 
-        $content = Content::factory()->create(['site_id' => $site->id]);
+        // The page targets this market — reviews.market resolves against
+        // content.market_id (a site-wide review would also count).
+        $content = Content::factory()->create(['site_id' => $site->id, 'market_id' => $market->id]);
 
         return ['site' => $site, 'market' => $market, 'content' => $content];
     }

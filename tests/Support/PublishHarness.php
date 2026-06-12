@@ -50,6 +50,39 @@ class PublishHarness
         return $site;
     }
 
+    /**
+     * An approved LOCATION page (kind=page, page_type=location) with a hero image
+     * spec to render. `market_id` is caller-set so the review gate can be
+     * exercised (null = the fail-closed case).
+     */
+    public static function approvedLocationPage(Site $site, ?string $marketId = null): Content
+    {
+        (new WireframeKitSeeder)->run();
+        $kit = WireframeKit::where('page_type', 'location')->firstOrFail();
+
+        return Content::factory()->create([
+            'site_id' => $site->id,
+            'market_id' => $marketId,
+            'kind' => ContentKind::Page,
+            'page_type' => PageType::Location,
+            'status' => ContentStatus::Approved,
+            'slug' => 'water-heater-repair-austin-location',
+            'title' => 'Water Heater Repair in Austin',
+            'wireframe_kit_id' => $kit->id,
+            'wireframe_kit_version' => 1,
+            'slot_payload' => ['hero_heading' => 'Water Heater Repair in Austin'],
+            'meta' => [
+                'seo' => ['title' => 'Water Heater Repair in Austin', 'meta_description' => 'Local repair.'],
+                'image_specs' => [[
+                    'slot' => 'hero_image',
+                    'prompt' => 'An Austin neighborhood street',
+                    'seo_filename' => 'austin-hero.webp',
+                    'alt' => 'Austin neighborhood',
+                ]],
+            ],
+        ]);
+    }
+
     public static function approvedPage(Site $site): Content
     {
         (new WireframeKitSeeder)->run();

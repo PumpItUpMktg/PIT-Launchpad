@@ -9,6 +9,7 @@ use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\PageBuilder\Validation\ValidationContext;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Resolves the count of structured entity content backing a slot, querying §1
@@ -36,6 +37,10 @@ class EntityResolver
 
             'reviews.market' => $this->reviewsForMarket($context),
 
+            // Site-level substantiated reviews (any market or none) — the
+            // service-page testimonial conditional gates on this (has_reviews).
+            'reviews.site' => $this->substantiatedReviews($siteId)->count(),
+
             'services.site' => Service::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $siteId)
                 ->count(),
@@ -60,19 +65,40 @@ class EntityResolver
         };
     }
 
+    /**
+     * Substantiated reviews backing a location page's market gate. A review counts
+     * when it is attached to the page's market (content.market_id) OR is site-wide
+     * — a review attached to no market satisfies any market's gate (confirmed
+     * product decision: site-wide reviews count toward every market). The fail-
+     * closed "location page with no market_id never publishes" is enforced upstream
+     * (PublishEligibility), not here.
+     */
     private function reviewsForMarket(ValidationContext $context): int
     {
-        if ($context->market === null) {
-            return 0;
-        }
+        $marketId = $context->content->market_id;
 
-        $marketId = $context->market->id;
-
-        return ProofItem::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $context->siteId())
-            ->whereIn('type', ['testimonial', 'review_aggregate'])
-            ->whereHas('markets', fn ($query) => $query->whereKey($marketId))
+        return $this->substantiatedReviews($context->siteId())
+            ->where(function ($query) use ($marketId) {
+                $query->whereDoesntHave('markets'); // site-wide
+                if ($marketId !== null) {
+                    $query->orWhereHas('markets', fn ($m) => $m->whereKey($marketId));
+                }
+            })
             ->count();
+    }
+
+    /**
+     * Base query for a site's substantiated review-type proof (testimonials +
+     * review aggregates), SiteScope dropped + site filtered explicitly.
+     *
+     * @return Builder<ProofItem>
+     */
+    private function substantiatedReviews(string $siteId)
+    {
+        return ProofItem::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->where('is_substantiated', true)
+            ->whereIn('type', ['testimonial', 'review_aggregate']);
     }
 
     private function primaryActionCount(string $siteId): int

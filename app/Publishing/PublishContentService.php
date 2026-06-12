@@ -3,12 +3,15 @@
 namespace App\Publishing;
 
 use App\Enums\AuditAction;
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\PageBuilder\Validation\PublishEligibility;
+use App\PageBuilder\Validation\ValidationResult;
 use App\Security\Audit;
 
 /**
@@ -50,11 +53,17 @@ class PublishContentService
         private readonly MetaBlobAssembler $assembler,
         private readonly WordpressClientFactory $wordpress,
         private readonly Audit $audit,
+        private readonly PublishEligibility $eligibility,
     ) {}
 
     public static function isPublishable(ContentStatus $status): bool
     {
         return in_array($status, self::PUBLISHABLE, true);
+    }
+
+    private function reasons(ValidationResult $result): string
+    {
+        return implode('; ', array_map(fn ($f) => $f->code->value, $result->failures));
     }
 
     public function publish(Content $content, ?string $actorId = null): PublishResult
@@ -77,6 +86,17 @@ class PublishContentService
                 $content,
                 'Content is locked or locally edited in WordPress; publish skipped to protect operator edits.'
             );
+        }
+
+        // §3a review gate: a LOCATION page must know its market (fail closed) and
+        // have ≥1 market-scoped/site-wide review; a service page publishes without
+        // a review gate (its testimonial slot is conditional). A failing page is
+        // parked in in_review by evaluateForPublish() — never pushed.
+        if ($content->kind === ContentKind::Page) {
+            $eligibility = $this->eligibility->evaluateForPublish($content);
+            if ($eligibility->failed()) {
+                return PublishResult::blocked($content, 'Publish eligibility failed: '.$this->reasons($eligibility));
+            }
         }
 
         $content->forceFill(['status' => ContentStatus::Rendering])->save();
