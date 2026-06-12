@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.4.5
+Stable tag: 0.4.6
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -15,8 +15,10 @@ media-library import — images are served from R2/CDN URLs in the payload.
 * POST /content    — upsert a page/post (idempotent on content_id)
 * POST /redirects  — upsert 301s (idempotent on from_url)
 * GET  /status     — environment introspection (WP/PHP/Elementor/theme/plugin versions)
-* GET  /templates  — inventory of Elementor saved templates (id/title/slug/type/modified/
-                     preview/thumbnail) so the control plane maps kits to real templates
+* GET  /templates  — inventory of ALL Elementor saved templates across every Theme
+                     Builder group (single-page / single-post / header / footer / page /
+                     container …), any status, each with its actual _elementor_template_type
+                     (taxonomy fallback for v4), so the control plane maps kits to real templates
 
 Authentication: WordPress application password for the dedicated `launchpad-sync`
 service user (role `launchpad_service`, capability `lp_manage_content`).

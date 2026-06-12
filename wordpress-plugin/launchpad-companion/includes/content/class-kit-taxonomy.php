@@ -29,8 +29,10 @@ final class KitTaxonomy
     {
         register_taxonomy(self::TAXONOMY, ['page', 'post'], [
             'label' => 'Launchpad Kit',
-            'public' => false,
-            // Queryable so it is a valid Theme Builder display-condition target.
+            // Public + show_in_nav_menus so Elementor Pro lists it as a Theme
+            // Builder display-condition target ("By Taxonomy"); rewrite stays off
+            // to avoid public archive URLs.
+            'public' => true,
             'publicly_queryable' => true,
             'show_ui' => true,
             'show_in_menu' => false,
