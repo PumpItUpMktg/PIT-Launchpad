@@ -172,12 +172,13 @@ class LocationResource extends Resource
             ->dehydrateStateUsing(fn (mixed $state): array => BusinessHours::toStored(is_array($state) ? $state : null))
             ->default(BusinessHours::fromStored(null))
             ->addable(false)->deletable(false)->reorderable(false)
-            ->columns(4)
+            ->columns(5)
             ->schema([
                 TextInput::make('day')->disabled()->dehydrated()->formatStateUsing(fn (?string $state): string => ucfirst((string) $state)),
                 Toggle::make('closed')->live()->inline(false),
-                TextInput::make('open')->placeholder('08:00')->visible(fn (callable $get): bool => ! $get('closed')),
-                TextInput::make('close')->placeholder('17:00')->visible(fn (callable $get): bool => ! $get('closed')),
+                Toggle::make('all_day')->label('24h')->live()->inline(false)->visible(fn (callable $get): bool => ! $get('closed')),
+                TextInput::make('open')->placeholder('08:00')->visible(fn (callable $get): bool => ! $get('closed') && ! $get('all_day')),
+                TextInput::make('close')->placeholder('17:00')->visible(fn (callable $get): bool => ! $get('closed') && ! $get('all_day')),
             ]);
     }
 
