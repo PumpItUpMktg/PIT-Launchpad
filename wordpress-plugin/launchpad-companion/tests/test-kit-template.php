@@ -15,6 +15,16 @@ class Test_Kit_Template extends WP_UnitTestCase
         KitTaxonomy::register();
     }
 
+    public function test_lp_kit_is_registered_public_and_in_nav_menus_for_theme_builder_conditions(): void
+    {
+        $taxonomy = get_taxonomy(KitTaxonomy::TAXONOMY);
+
+        $this->assertNotFalse($taxonomy);
+        $this->assertTrue($taxonomy->public);             // listed as a Theme Builder condition target
+        $this->assertTrue($taxonomy->show_in_nav_menus);
+        $this->assertTrue($taxonomy->publicly_queryable);
+    }
+
     /**
      * @param array<string,mixed> $over
      * @return array<string,mixed>
