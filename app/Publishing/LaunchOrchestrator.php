@@ -31,15 +31,9 @@ use Throwable;
  */
 class LaunchOrchestrator
 {
-    /** Content that belongs on a launched site: approved or further along (never drafts/candidates/rejected). */
-    private const LAUNCHABLE = [
-        ContentStatus::Approved,
-        ContentStatus::Rendering,
-        ContentStatus::Publishing,
-        ContentStatus::Published,
-        ContentStatus::RenderFailed,
-        ContentStatus::PublishFailed,
-    ];
+    // The launchable set (approved or further along; never drafts/candidates/
+    // rejected) is the publishable set PublishContentService enforces — single-
+    // sourced there so the launch filter and the publish guard can't drift.
 
     public function __construct(
         private readonly PublishSiloService $silos,
@@ -108,7 +102,7 @@ class LaunchOrchestrator
     {
         $contents = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
-            ->whereIn('status', array_map(fn (ContentStatus $s) => $s->value, self::LAUNCHABLE))
+            ->whereIn('status', array_map(fn (ContentStatus $s) => $s->value, PublishContentService::PUBLISHABLE))
             ->orderByRaw('kind = ?', ['post']) // pages (pillars) before posts
             ->orderBy('created_at')
             ->get();
