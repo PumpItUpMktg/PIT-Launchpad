@@ -17,6 +17,29 @@ test('the post drafting prompt forbids a body <h1> (the title is rendered separa
         ->and($claude->prompts[0])->toContain('<h2>');
 });
 
+test('a drafted SEO title carries no pipe-suffix and no source-name attribution, capped for SERP', function () {
+    ['site' => $site, 'claim' => $claim] = DraftingHarness::fixture();
+    // postRequest's source is "Local Tribune" — the drafter emits a dirty title.
+    $claude = new FakeClaudeClient(Draft::post($claim->id, [
+        'seo' => [
+            'title' => 'Tankless Water Heater Rebates Explained | Local Tribune',
+            'meta_description' => 'x',
+            'slug' => 'whatever',
+        ],
+    ]));
+
+    $content = DraftingHarness::engine($claude)->run(DraftingHarness::postRequest($site))->content;
+
+    // The SEO title (the document <title>) is the drafter's seo.title, normalized.
+    expect($content->meta['seo']['title'])->toBe('Tankless Water Heater Rebates Explained')
+        ->and($content->meta['seo']['title'])->not->toContain('|')
+        ->and($content->meta['seo']['title'])->not->toContain('Local Tribune')
+        ->and(mb_strlen($content->meta['seo']['title']))->toBeLessThanOrEqual(60);
+
+    expect($claude->prompts[0])->toContain('NO publication/source names')
+        ->and($claude->prompts[0])->toContain('≤60 chars');
+});
+
 test('the post drafting prompt forbids placeholder/citation tokens and verbatim proof splicing', function () {
     ['site' => $site, 'claim' => $claim] = DraftingHarness::fixture();
     $claude = new FakeClaudeClient(Draft::post($claim->id));

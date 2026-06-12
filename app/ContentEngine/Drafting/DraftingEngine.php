@@ -8,6 +8,7 @@ use App\Enums\RefreshTrigger;
 use App\Models\Content;
 use App\Models\RefreshEvent;
 use App\Models\Scopes\SiteScope;
+use App\Support\SeoTitle;
 use Illuminate\Support\Str;
 
 /**
@@ -89,8 +90,8 @@ class DraftingEngine
         // once the post has been published (a live URL must never change on a
         // re-push), so we only set it while it has never reached WordPress.
         if ($candidate->wp_post_id === null) {
-            $slugSource = $payload->seo->title !== '' ? $payload->seo->title : $title;
-            $attributes['slug'] = $this->uniqueSlug($candidate->site_id, $slugSource, $candidate->id);
+            // $title is the normalized SEO title — a clean slug, no source suffix.
+            $attributes['slug'] = $this->uniqueSlug($candidate->site_id, $title, $candidate->id);
         }
 
         $candidate->fill($attributes)->save();
@@ -185,7 +186,7 @@ class DraftingEngine
             'angle_hint' => $request->angleHint,
             'local_relevance' => $request->localRelevance,
             'meta' => [
-                'seo' => $payload->seo->toArray(),
+                'seo' => $this->normalizedSeo($payload, $request),
                 'image_specs' => $payload->imageSpecsArray(),
                 'towns' => $payload->towns,
                 'sources_cited' => $verification->sourceAttributions,
@@ -194,10 +195,27 @@ class DraftingEngine
         ];
     }
 
+    /**
+     * The drafter's SEO array with its title normalized to the SEO-title rules
+     * (no source/pipe/attribution, ≤60 chars) — so the stored document title is
+     * clean from the first draft.
+     *
+     * @return array<string, mixed>
+     */
+    private function normalizedSeo(DraftPayload $payload, DraftRequest $request): array
+    {
+        $seo = $payload->seo->toArray();
+        $seo['title'] = SeoTitle::normalize((string) ($seo['title'] ?? ''), $request->sourceName);
+
+        return $seo;
+    }
+
     private function title(DraftRequest $request, DraftPayload $payload): string
     {
-        return $request->title
+        $title = $request->title
             ?? ($payload->seo->title !== '' ? $payload->seo->title : 'Untitled draft');
+
+        return SeoTitle::normalize($title, $request->sourceName);
     }
 
     /**
@@ -207,11 +225,11 @@ class DraftingEngine
      */
     private function candidateTitle(DraftRequest $request, DraftPayload $payload): string
     {
-        if ($payload->seo->title !== '') {
-            return $payload->seo->title;
-        }
+        $title = $payload->seo->title !== ''
+            ? $payload->seo->title
+            : ($request->title !== null && $request->title !== '' ? $request->title : 'Untitled draft');
 
-        return $request->title !== null && $request->title !== '' ? $request->title : 'Untitled draft';
+        return SeoTitle::normalize($title, $request->sourceName);
     }
 
     /**

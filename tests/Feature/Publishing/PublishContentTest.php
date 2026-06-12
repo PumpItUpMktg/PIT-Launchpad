@@ -45,7 +45,7 @@ test('publishing renders, pushes the meta-blob by ULID, stores wp_post_id and au
             && $request['status'] === 'published'
             && $request['slot_payload']['hero_problem'] !== ''
             && is_string($request['images']['hero_image']['url'])
-            && $request['seo']['title'] === 'Water Heater Repair in Austin | Apex';
+            && $request['seo']['title'] === 'Water Heater Repair in Austin'; // SEO title normalized (no "| Apex")
     });
 });
 
