@@ -60,9 +60,22 @@ final class TemplateRouter
      * selector (e.g. service-page, location-page); `page_type` is a fallback.
      * Unknown kits fall back to a generic canvas so a draft kit (whose §3a schema
      * isn't locked yet) renders its available slots rather than fatalling.
+     *
+     * POSTS get NO page template: `elementor_canvas` is a full-page Elementor
+     * template that bypasses Theme Builder *single* templates entirely (a post
+     * stamped with canvas renders blank of its single template). So for kind=post
+     * the canvas/page-template meta is cleared — the post falls back to the theme's
+     * default single, which a Theme Builder single template (the post body design)
+     * then drives via its display condition.
      */
-    public static function assign(int $post_id, string $kit, string $page_type = ''): void
+    public static function assign(int $post_id, string $kit, string $page_type = '', string $kind = 'page'): void
     {
+        if ($kind === 'post') {
+            delete_post_meta($post_id, '_wp_page_template');
+
+            return;
+        }
+
         $map = get_option(Meta::OPTION_TEMPLATES, []);
         $map = is_array($map) ? $map : [];
 

@@ -61,6 +61,10 @@ final class Plugin
         ( new TemplateRouter() )->register();
 
         // SEO (native; suppress competing SEO plugins on managed posts).
+        // Force core title-tag so the document <title> is emitted ONCE, through
+        // our pre_get_document_title filter (Head::title) — not a second hand-
+        // printed tag. Idempotent if the theme already declares title-tag support.
+        add_action('after_setup_theme', [self::class, 'enable_title_tag'], 20);
         ( new Head() )->register();
         ( new Schema() )->register();
         ( new Suppressor() )->register();
@@ -77,6 +81,15 @@ final class Plugin
     public static function register_page_categories(): void
     {
         register_taxonomy_for_object_type('category', 'page');
+    }
+
+    /**
+     * Let WordPress core render the single <title> tag (via pre_get_document_title,
+     * which Head filters). A managed head must not also hand-print a title.
+     */
+    public static function enable_title_tag(): void
+    {
+        add_theme_support('title-tag');
     }
 
     public static function activate(): void
