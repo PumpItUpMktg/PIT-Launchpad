@@ -69,4 +69,34 @@ it('drafts a bare tenant pillar end to end — no VoiceProfile/proof/services is
     expect($result->status)->toBe(ContentStatus::NeedsReview) // drafted, not failed
         ->and($result->hasDraft())->toBeTrue()
         ->and($result->voice_profile_version)->toBe(0);        // default voice, no profile required
+
+    // Structurally complete: every generated slot the kit expects is present and
+    // non-empty (KitValidator already enforced this before persist — a structural
+    // gap would have surfaced a draft failure, not reached needs_review).
+    $slots = $result->slot_payload;
+    foreach (['hero_problem', 'hero_solution', 'problem_explainer', 'solution_overview', 'service_features', 'why_us', 'faq'] as $key) {
+        expect($slots)->toHaveKey($key)
+            ->and($slots[$key])->not->toBeEmpty();
+    }
+
+    // Clean omission, not lorem ghosts: the proof-backed entity slots are simply
+    // ABSENT from the draft (they resolve downstream from §1 data — a bare tenant
+    // has none), never written as empty/placeholder values. The conditional
+    // testimonial (has_reviews == true) is omitted by the same mechanism.
+    foreach (['testimonial', 'proof_strip', 'cta', 'contact_block', 'hero_image'] as $entitySlot) {
+        expect($slots)->not->toHaveKey($entitySlot);
+    }
+
+    // No empty string / empty array slipped into any drafted slot.
+    foreach ($slots as $value) {
+        expect($value)->not->toBeEmpty();
+    }
 });
+
+/*
+ * What this test CANNOT prove: whether the default-voice copy a LIVE model returns
+ * reads as publishable vs. generic — the FakeClaudeClient returns fixed content, so
+ * content quality of the voice-less prompt is a live-model property. That is exactly
+ * what rehearsal step 5 (live generation) validates. This test proves the pipeline
+ * does not hard-fail or fabricate ghosts when a tenant is bare.
+ */
