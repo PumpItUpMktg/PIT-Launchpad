@@ -18,6 +18,7 @@ use App\Publishing\LaunchOrchestrator;
 use App\Security\GateCheck;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -65,6 +66,7 @@ class SiteResource extends Resource
     {
         return $table
             ->columns([
+                TextColumn::make('id')->label('ID')->copyable()->fontFamily('mono')->size('xs')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('brand_name')->label('Tenant')->searchable()->sortable(),
                 TextColumn::make('status')->badge()->sortable(),
                 TextColumn::make('review_backlog_count')->label('Backlog')->badge()->sortable(),
@@ -81,12 +83,14 @@ class SiteResource extends Resource
                 SelectFilter::make('status')->options(self::statusOptions()),
             ])
             ->recordActions([
-                self::queueAction(),
-                self::launchAction(),
-                self::refreshKeywordsAction(),
-                self::budgetAction(),
-                self::templatesAction(),
-                self::handoverAction(),
+                ActionGroup::make([
+                    self::queueAction(),
+                    self::launchAction(),
+                    self::refreshKeywordsAction(),
+                    self::budgetAction(),
+                    self::templatesAction(),
+                    self::handoverAction(),
+                ]),
             ]);
     }
 
