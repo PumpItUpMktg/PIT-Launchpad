@@ -11,3 +11,9 @@ test('the onboarding wizard page mounts and renders', function () {
 
     Livewire::test(Onboarding::class)->assertOk();
 });
+
+test('the §7a onboarding page is hidden from the operator nav (parked until unify-onboarding)', function () {
+    // The hardened Create Site wizard is the canonical create path; the 9-step
+    // intake stays mountable (logic intact) but is not a walkable nav door.
+    expect(Onboarding::shouldRegisterNavigation())->toBeFalse();
+});
