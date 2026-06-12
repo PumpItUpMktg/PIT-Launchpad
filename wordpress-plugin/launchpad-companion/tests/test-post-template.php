@@ -44,8 +44,10 @@ class Test_Post_Template extends WP_UnitTestCase
         $this->assertSame('', (string) get_post_meta($second['wp_post_id'], '_wp_page_template', true));
     }
 
-    public function test_a_page_still_gets_a_page_template(): void
+    public function test_a_kit_page_gets_no_canvas_so_its_theme_builder_template_renders(): void
     {
+        // Page 196 regression: canvas on a kit page blocks the Theme Builder single
+        // template the lp_kit condition renders through.
         $result = ( new ContentStore() )->upsert($this->payload([
             'content_id' => '01JPOSTTEMPLATE0000000000B',
             'kind' => 'page',
@@ -55,7 +57,24 @@ class Test_Post_Template extends WP_UnitTestCase
             'slot_payload' => ['hero_problem' => 'No hot water'],
         ]));
 
-        // No mapped template option → the canvas fallback (pages are full Elementor).
-        $this->assertSame('elementor_canvas', (string) get_post_meta($result['wp_post_id'], '_wp_page_template', true));
+        $this->assertSame('', (string) get_post_meta($result['wp_post_id'], '_wp_page_template', true));
+    }
+
+    public function test_an_explicit_lp_templates_mapping_still_wins_for_a_page(): void
+    {
+        update_option('lp_templates', ['service-page' => 'tpl-service.php']);
+
+        $result = ( new ContentStore() )->upsert($this->payload([
+            'content_id' => '01JPOSTTEMPLATE0000000000C',
+            'kind' => 'page',
+            'page_type' => 'service',
+            'kit' => 'service-page',
+            'slug' => 'mapped-page',
+            'slot_payload' => ['hero_problem' => 'x'],
+        ]));
+
+        $this->assertSame('tpl-service.php', (string) get_post_meta($result['wp_post_id'], '_wp_page_template', true));
+
+        delete_option('lp_templates');
     }
 }
