@@ -65,6 +65,55 @@ test('a re-publish re-sends the same ULID (idempotent) and keeps wp_post_id', fu
     Http::assertSent(fn ($request) => $request['content_id'] === $content->id);
 });
 
+test('a needs_review row is NEVER published — the desync guard no-ops without mutating status', function () {
+    PublishHarness::fakeAdapters();
+    fakeContentEndpoint();
+
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+    $content->forceFill(['status' => ContentStatus::NeedsReview])->save();
+
+    $result = app(PublishContentService::class)->publish($content);
+
+    expect($result->isPublished())->toBeFalse()
+        ->and($content->fresh()->status)->toBe(ContentStatus::NeedsReview) // untouched — review flow intact
+        ->and($content->fresh()->wp_post_id)->toBeNull();
+
+    // The hole page 196 fell through: nothing reaches WordPress.
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), '/wp-json/launchpad/v1/content'));
+});
+
+test('candidate / scored / drafted / in_review / rejected rows are all guarded out', function () {
+    PublishHarness::fakeAdapters();
+    fakeContentEndpoint();
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site); // one row, re-stamped each pass
+
+    foreach ([ContentStatus::Candidate, ContentStatus::Scored, ContentStatus::Drafted, ContentStatus::InReview, ContentStatus::Rejected] as $status) {
+        $content->forceFill(['status' => $status])->save();
+
+        app(PublishContentService::class)->publish($content->fresh());
+
+        expect($content->fresh()->status)->toBe($status); // unchanged by the guard
+    }
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), '/wp-json/launchpad/v1/content'));
+});
+
+test('a render_failed row is allowed to re-publish (retry)', function () {
+    PublishHarness::fakeAdapters();
+    fakeContentEndpoint(wpPostId: 77);
+
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+    $content->forceFill(['status' => ContentStatus::RenderFailed])->save();
+
+    $result = app(PublishContentService::class)->publish($content);
+
+    expect($result->isPublished())->toBeTrue()
+        ->and($content->fresh()->status)->toBe(ContentStatus::Published);
+});
+
 test('a push failure lands the content in publish_failed with the error surfaced', function () {
     PublishHarness::fakeAdapters();
     Http::fake(['*/wp-json/launchpad/v1/content' => Http::response('', 500)]);

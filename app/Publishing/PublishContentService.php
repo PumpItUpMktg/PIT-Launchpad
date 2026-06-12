@@ -26,6 +26,25 @@ use App\Security\Audit;
  */
 class PublishContentService
 {
+    /**
+     * The only statuses publish() will act on: approved (the normal entry) or
+     * further along — the in-flight transitional states (a retry continues), the
+     * retryable failures, and published (an idempotent re-push / refresh updates
+     * the live page by ULID). A candidate / scored / drafted / needs_review /
+     * in_review / rejected row is NEVER pushed. This is the single source of the
+     * publishable set — LaunchOrchestrator filters on it too.
+     *
+     * @var list<ContentStatus>
+     */
+    public const PUBLISHABLE = [
+        ContentStatus::Approved,
+        ContentStatus::Rendering,
+        ContentStatus::Publishing,
+        ContentStatus::Published,
+        ContentStatus::RenderFailed,
+        ContentStatus::PublishFailed,
+    ];
+
     public function __construct(
         private readonly RenderCoordinator $renders,
         private readonly MetaBlobAssembler $assembler,
@@ -33,8 +52,25 @@ class PublishContentService
         private readonly Audit $audit,
     ) {}
 
+    public static function isPublishable(ContentStatus $status): bool
+    {
+        return in_array($status, self::PUBLISHABLE, true);
+    }
+
     public function publish(Content $content, ?string $actorId = null): PublishResult
     {
+        // State guard (the desync fix): only publish from a publishable status. An
+        // unreviewed row — candidate / scored / drafted / needs_review / in_review,
+        // or a rejected one — must NEVER be pushed; a desynced dispatch on a
+        // needs_review row published page 196. No-op WITHOUT mutating status, so the
+        // row stays exactly where it is and the review flow is untouched.
+        if (! self::isPublishable($content->status)) {
+            return PublishResult::skipped(
+                $content,
+                'Content is '.$content->status->value.', not a publishable state; publish skipped.'
+            );
+        }
+
         // Operator-edit protection: never overwrite a locked / locally-edited page.
         if ($content->isPublishProtected()) {
             return $this->resolveSkip(
