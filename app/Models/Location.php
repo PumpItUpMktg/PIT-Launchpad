@@ -9,6 +9,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property array<string, mixed>|null $hours
+ * @property array<int, array<string, mixed>>|null $address_components
+ * @property string|null $gbp_url
+ * @property string|null $phone
+ */
 class Location extends Model
 {
     /** @use HasFactory<LocationFactory> */
