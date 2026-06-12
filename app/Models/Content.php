@@ -137,6 +137,12 @@ class Content extends Model
         return $this->belongsTo(Silo::class);
     }
 
+    /** @return BelongsTo<Market, $this> The market a location page targets (reviews.market gate). */
+    public function market(): BelongsTo
+    {
+        return $this->belongsTo(Market::class);
+    }
+
     /** @return BelongsTo<Source, $this> */
     public function source(): BelongsTo
     {

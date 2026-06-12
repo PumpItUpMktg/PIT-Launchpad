@@ -120,7 +120,8 @@
             "role": "proof",
             "source": "entity",
             "cardinality": { "type": "repeater", "min": 1, "max": 3 },
-            "constraints": { "required": true, "entity": "reviews.market", "min_entities": 1 },
+            "constraints": { "required": true, "entity": "reviews.site", "min_entities": 1 },
+            "condition": { "field": "has_reviews", "equals": true },
             "client_override": false,
             "elementor_binding": "lp/repeater"
         },

@@ -100,8 +100,8 @@
             "content_type": "testimonial",
             "role": "proof",
             "source": "entity",
-            "cardinality": { "type": "repeater", "min": 0, "max": 6 },
-            "constraints": { "required": false, "entity": "reviews.market", "min_entities": 0 },
+            "cardinality": { "type": "repeater", "min": 1, "max": 6 },
+            "constraints": { "required": true, "entity": "reviews.market", "min_entities": 1 },
             "client_override": false,
             "generation_hint": "Market-tagged reviews only.",
             "elementor_binding": "lp/repeater"
