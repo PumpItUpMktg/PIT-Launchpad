@@ -173,8 +173,10 @@ class Drafter
 
     private function postBlock(): string
     {
-        return 'POST: write the article into the `body` block as clean HTML. Open by framing the reader\'s '
-            .'problem, then deliver the solution. Attribute any source material by name.';
+        return 'POST: write the article into the `body` block as clean HTML. Begin at the first PARAGRAPH — '
+            .'do NOT include the article title or any <h1>; the page renders the title separately, so a body <h1> '
+            .'would duplicate it. Use <h2>/<h3> for section headings. Open by framing the reader\'s problem, then '
+            .'deliver the solution. Attribute any source material by name.';
     }
 
     private function outputContract(DraftRequest $request): string

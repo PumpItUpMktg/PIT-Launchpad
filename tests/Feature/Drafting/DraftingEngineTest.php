@@ -7,6 +7,16 @@ use Tests\Support\Draft;
 use Tests\Support\DraftingHarness;
 use Tests\Support\FakeClaudeClient;
 
+test('the post drafting prompt forbids a body <h1> (the title is rendered separately)', function () {
+    ['site' => $site, 'claim' => $claim] = DraftingHarness::fixture();
+    $claude = new FakeClaudeClient(Draft::post($claim->id));
+
+    DraftingHarness::engine($claude)->run(DraftingHarness::postRequest($site));
+
+    expect($claude->prompts[0])->toContain('do NOT include the article title or any <h1>')
+        ->and($claude->prompts[0])->toContain('<h2>');
+});
+
 test('a post draft is emitted as needs_review with a body, pinned voice, SEO and verification', function () {
     ['site' => $site, 'claim' => $claim] = DraftingHarness::fixture();
     $claude = new FakeClaudeClient(Draft::post($claim->id));

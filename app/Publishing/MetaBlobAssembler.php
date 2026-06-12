@@ -86,10 +86,22 @@ class MetaBlobAssembler
             && is_string($content->body)
             && trim($content->body) !== ''
             && ! array_key_exists('body', $slots)) {
-            $slots['body'] = $content->body;
+            $slots['body'] = $this->stripLeadingH1($content->body);
         }
 
         return $slots;
+    }
+
+    /**
+     * Drop a leading <h1> from the article body: the native Post Title widget
+     * renders the title, so a body that opens with its own <h1> duplicates it.
+     * Idempotent (a body with no leading <h1> is returned unchanged), so it
+     * normalizes every existing draft on re-push without re-drafting. Only a
+     * LEADING <h1> is removed — an <h1> deeper in the body is left alone.
+     */
+    private function stripLeadingH1(string $body): string
+    {
+        return (string) preg_replace('/^\s*<h1\b[^>]*>.*?<\/h1>\s*/is', '', $body, 1);
     }
 
     /**
@@ -222,6 +234,12 @@ class MetaBlobAssembler
 
     private function kitName(Content $content): string
     {
+        // A post has no kit — never synthesize a 'page-page' kit for it (that
+        // leaked into the plugin's lp-kit-* body class and a bogus kit marker).
+        if ($content->kind === ContentKind::Post) {
+            return '';
+        }
+
         $kit = $content->wireframe_kit_id !== null ? $content->wireframeKit : null;
 
         if ($kit !== null && $kit->name !== '') {
