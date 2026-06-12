@@ -20,7 +20,7 @@ it('renders the locations list and create form for an operator', function () {
     Location::factory()->create(['site_id' => $site->id]);
 
     Livewire::test(ListLocations::class)->assertOk();
-    Livewire::test(CreateLocation::class)->assertOk(); // exercises the hours repeater schema
+    Livewire::test(CreateLocation::class)->assertOk(); // exercises the per-day hours fields schema
 });
 
 it('creates a location, normalizing the phone to E.164', function () {

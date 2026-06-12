@@ -17,13 +17,14 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Fieldset;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -84,7 +85,7 @@ class LocationResource extends Resource
             Toggle::make('is_storefront')->label('Storefront (walk-in) location'),
             TextInput::make('booking_url')->label('Booking URL')->url(),
             TextInput::make('gbp_url')->label('Google Business Profile URL')->url(),
-            self::hoursRepeater(),
+            self::hoursFieldset(),
             // Populated by the Google import; not operator-edited directly.
             Hidden::make('place_id'),
             Hidden::make('lat'),
@@ -143,9 +144,10 @@ class LocationResource extends Resource
     }
 
     /**
-     * Map Place Details onto the form fields (hours as the stored map — the
-     * repeater re-hydrates it to rows). site/email/is_storefront/booking stay the
-     * operator's.
+     * Map Place Details onto the form fields. Hours expand to the flat per-day
+     * fields (`hours_mon_state`/`_open`/`_close`) the form edits directly — no
+     * repeater re-indexing to lose the day keys. site/email/is_storefront/booking
+     * stay the operator's.
      *
      * @return array<string, mixed>
      */
@@ -159,27 +161,38 @@ class LocationResource extends Resource
             'lat' => $details->lat,
             'lng' => $details->lng,
             'gbp_url' => $details->gbpUrl,
-            'hours' => $details->hours,
             'place_id' => $details->placeId,
+            ...BusinessHours::toFields($details->hours),
         ], fn ($value) => $value !== null && $value !== '');
     }
 
-    private static function hoursRepeater(): Repeater
+    /**
+     * Business hours as flat, day-named fields — one row per day, each a
+     * state Select (Open / Closed / 24 hours) with open/close inputs shown only
+     * when Open. Flat + day-keyed so there is no Filament repeater re-indexing to
+     * drop the day keys (the round-trip bug). The page hooks fold these back to
+     * the stored day-keyed map via `BusinessHours::fromFields`/`toFields`.
+     */
+    private static function hoursFieldset(): Fieldset
     {
-        return Repeater::make('hours')
-            ->label('Business hours')
-            ->afterStateHydrated(fn (Repeater $component, mixed $state) => $component->state(BusinessHours::fromStored(is_array($state) ? $state : null)))
-            ->dehydrateStateUsing(fn (mixed $state): array => BusinessHours::toStored(is_array($state) ? $state : null))
-            ->default(BusinessHours::fromStored(null))
-            ->addable(false)->deletable(false)->reorderable(false)
-            ->columns(5)
-            ->schema([
-                TextInput::make('day')->disabled()->dehydrated()->formatStateUsing(fn (?string $state): string => ucfirst((string) $state)),
-                Toggle::make('closed')->live()->inline(false),
-                Toggle::make('all_day')->label('24h')->live()->inline(false)->visible(fn (callable $get): bool => ! $get('closed')),
-                TextInput::make('open')->placeholder('08:00')->visible(fn (callable $get): bool => ! $get('closed') && ! $get('all_day')),
-                TextInput::make('close')->placeholder('17:00')->visible(fn (callable $get): bool => ! $get('closed') && ! $get('all_day')),
-            ]);
+        $rows = [];
+        foreach (BusinessHours::DAYS as $day) {
+            $rows[] = Select::make("hours_{$day}_state")
+                ->label(ucfirst($day))
+                ->options(['open' => 'Open', 'closed' => 'Closed', '24h' => '24 hours'])
+                ->default('closed')
+                ->selectablePlaceholder(false)
+                ->live()
+                ->dehydrated();
+            $rows[] = TextInput::make("hours_{$day}_open")
+                ->label('Open')->placeholder('08:00')->dehydrated()
+                ->visible(fn (Get $get): bool => $get("hours_{$day}_state") === 'open');
+            $rows[] = TextInput::make("hours_{$day}_close")
+                ->label('Close')->placeholder('17:00')->dehydrated()
+                ->visible(fn (Get $get): bool => $get("hours_{$day}_state") === 'open');
+        }
+
+        return Fieldset::make('Business hours')->columns(3)->schema($rows);
     }
 
     /**
