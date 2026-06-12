@@ -5,17 +5,23 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\LocationResource\Pages\CreateLocation;
 use App\Filament\Resources\LocationResource\Pages\EditLocation;
 use App\Filament\Resources\LocationResource\Pages\ListLocations;
+use App\Integrations\Places\PlaceCandidate;
+use App\Integrations\Places\PlaceDetails;
+use App\Integrations\Places\PlacesProvider;
 use App\Models\Location;
 use App\Support\BusinessHours;
 use App\Support\Phone;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -79,7 +85,83 @@ class LocationResource extends Resource
             TextInput::make('booking_url')->label('Booking URL')->url(),
             TextInput::make('gbp_url')->label('Google Business Profile URL')->url(),
             self::hoursRepeater(),
+            // Populated by the Google import; not operator-edited directly.
+            Hidden::make('place_id'),
+            Hidden::make('lat'),
+            Hidden::make('lng'),
+            Hidden::make('address_components'),
         ]);
+    }
+
+    /**
+     * "Import from Google" — paste a Maps/GBP URL or type the business name, pick
+     * the match, and the form AUTOFILLS for the operator to confirm (never a
+     * silent save). Talks to the PlacesProvider seam only.
+     */
+    public static function importAction(): Action
+    {
+        return Action::make('importFromGoogle')
+            ->label('Import from Google')
+            ->icon('heroicon-o-magnifying-glass')
+            ->modalSubmitActionLabel('Autofill from this place')
+            ->schema([
+                TextInput::make('query')
+                    ->label('Google Maps URL or business name')
+                    ->live(debounce: 600)
+                    ->helperText('Paste a Maps/GBP link or type the name, then pick the match below.'),
+                Select::make('place_id')
+                    ->label('Match')
+                    ->searchable()
+                    ->options(function (callable $get): array {
+                        $query = (string) $get('query');
+                        if (trim($query) === '') {
+                            return [];
+                        }
+
+                        return collect(app(PlacesProvider::class)->search($query))
+                            ->mapWithKeys(fn (PlaceCandidate $c): array => [$c->placeId => $c->name.' — '.$c->address])
+                            ->all();
+                    }),
+            ])
+            ->action(function (array $data, $livewire): void {
+                $placeId = (string) ($data['place_id'] ?? '');
+                if ($placeId === '') {
+                    return;
+                }
+
+                $details = app(PlacesProvider::class)->details($placeId);
+                if ($details === null) {
+                    Notification::make()->warning()->title('Could not load that place')->send();
+
+                    return;
+                }
+
+                $livewire->form->fill(self::fromPlace($details));
+
+                Notification::make()->success()->title('Imported — pick the tenant, review, and save')->send();
+            });
+    }
+
+    /**
+     * Map Place Details onto the form fields (hours as the stored map — the
+     * repeater re-hydrates it to rows). site/email/is_storefront/booking stay the
+     * operator's.
+     *
+     * @return array<string, mixed>
+     */
+    public static function fromPlace(PlaceDetails $details): array
+    {
+        return array_filter([
+            'name' => $details->name,
+            'address' => $details->address,
+            'address_components' => $details->addressComponents,
+            'phone' => $details->phone,
+            'lat' => $details->lat,
+            'lng' => $details->lng,
+            'gbp_url' => $details->gbpUrl,
+            'hours' => $details->hours,
+            'place_id' => $details->placeId,
+        ], fn ($value) => $value !== null && $value !== '');
     }
 
     private static function hoursRepeater(): Repeater
