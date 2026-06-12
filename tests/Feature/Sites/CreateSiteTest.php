@@ -89,10 +89,36 @@ it('wires a verified WordPress connection from the wizard when credentials are g
     $site = Site::query()->where('brand_name', 'Connected Co')->firstOrFail();
     $connection = Connection::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->firstOrFail();
 
+    // The decoded credentials carry ALL THREE keys WordPress Basic auth needs —
+    // base_url + username + app_password — not a two-key subset that would pass a
+    // token-lenient test yet dead-end at publish.
     expect($connection->provider)->toBe(ConnectionProvider::WpAppPassword)
+        ->and(array_keys($connection->credentials))->toEqualCanonicalizing(['base_url', 'username', 'app_password'])
         ->and($connection->credentials['base_url'])->toBe('https://connected-co.com') // defaulted from Site URL
-        ->and($connection->credentials['username'])->toBe('launchpad-sync')
-        ->and($connection->compromised)->toBeFalse(); // verify-before-store → passes the §9 gate
+        ->and($connection->credentials['username'])->toBe('launchpad-sync')           // the username field, persisted
+        ->and($connection->credentials['app_password'])->toBe('abcdefghijklmnop')      // spaces stripped, persisted
+        ->and($connection->compromised)->toBeFalse();                                  // verify-before-store → passes the §9 gate
+});
+
+it('persists a custom WP username from the wizard field (not just the default)', function () {
+    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
+    $account = Account::factory()->create();
+
+    Livewire::test(CreateSite::class)
+        ->fillForm([
+            'account_id' => $account->id,
+            'brand_name' => 'Custom User Co',
+            'base_url' => 'https://custom-user.com',
+            'username' => 'eric-admin',
+            'app_password' => 'abcd efgh ijkl mnop',
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $site = Site::query()->where('brand_name', 'Custom User Co')->firstOrFail();
+    $connection = Connection::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->firstOrFail();
+
+    expect($connection->credentials['username'])->toBe('eric-admin'); // the field is wired, not hardcoded
 });
 
 it('keeps the site even when WordPress verification fails (never loses the tenant)', function () {
