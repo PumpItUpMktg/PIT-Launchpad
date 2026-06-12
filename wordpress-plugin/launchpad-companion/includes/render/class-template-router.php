@@ -56,26 +56,19 @@ final class TemplateRouter
     }
 
     /**
-     * Route the kit to its Elementor template. The contract's `kit` is the
-     * selector (e.g. service-page, location-page); `page_type` is a fallback.
-     * Unknown kits fall back to a generic canvas so a draft kit (whose §3a schema
-     * isn't locked yet) renders its available slots rather than fatalling.
+     * Route managed content to its Elementor template. The contract's `kit` is the
+     * selector (e.g. service-page, location-page); `page_type` is a fallback. An
+     * explicit page-template FILE mapped via the `lp_templates` option still wins.
      *
-     * POSTS get NO page template: `elementor_canvas` is a full-page Elementor
-     * template that bypasses Theme Builder *single* templates entirely (a post
-     * stamped with canvas renders blank of its single template). So for kind=post
-     * the canvas/page-template meta is cleared — the post falls back to the theme's
-     * default single, which a Theme Builder single template (the post body design)
-     * then drives via its display condition.
+     * Otherwise NO page template is stamped — for kit PAGES as well as POSTS.
+     * `elementor_canvas` is a full-page Elementor template that BYPASSES the Theme
+     * Builder *single* template a kit renders through (its `lp_kit` display
+     * condition): a page stamped with canvas renders blank of that template
+     * (evidence: page 196's canvas body class). Clearing the meta leaves the
+     * content on the theme default so the Theme Builder condition drives it.
      */
-    public static function assign(int $post_id, string $kit, string $page_type = '', string $kind = 'page'): void
+    public static function assign(int $post_id, string $kit, string $page_type = ''): void
     {
-        if ($kind === 'post') {
-            delete_post_meta($post_id, '_wp_page_template');
-
-            return;
-        }
-
         $map = get_option(Meta::OPTION_TEMPLATES, []);
         $map = is_array($map) ? $map : [];
 
@@ -87,7 +80,13 @@ final class TemplateRouter
             }
         }
 
-        update_post_meta($post_id, '_wp_page_template', $template !== '' ? $template : 'elementor_canvas');
+        if ($template !== '') {
+            update_post_meta($post_id, '_wp_page_template', $template);
+
+            return;
+        }
+
+        delete_post_meta($post_id, '_wp_page_template');
     }
 
     /**

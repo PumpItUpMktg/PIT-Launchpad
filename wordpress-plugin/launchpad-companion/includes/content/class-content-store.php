@@ -90,7 +90,7 @@ final class ContentStore
 
         $this->store_meta($post_id, $content_id, $kind, $payload, $seo, $images);
         $this->apply_featured_image($post_id, $payload, $images);
-        TemplateRouter::assign($post_id, (string) ($payload['kit'] ?? ''), (string) ($payload['page_type'] ?? ''), $kind);
+        TemplateRouter::assign($post_id, (string) ($payload['kit'] ?? ''), (string) ($payload['page_type'] ?? ''));
         $this->assign_category($post_id, (string) ($payload['silo_id'] ?? ''));
 
         EditGuard::record_push($post_id, $this->fingerprint($payload));
