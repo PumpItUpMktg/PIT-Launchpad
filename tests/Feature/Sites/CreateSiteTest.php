@@ -67,6 +67,11 @@ it('wizard step 1 defines what a site is, to deter per-location sites', function
         ->assertSee('A site is one WordPress install');
 });
 
+it('wizard step 2 offers an in-panel Test connection action', function () {
+    Livewire::test(CreateSite::class)
+        ->assertSee('Test connection');
+});
+
 it('wires a verified WordPress connection from the wizard when credentials are given', function () {
     Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
     $account = Account::factory()->create();

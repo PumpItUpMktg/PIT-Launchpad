@@ -13,6 +13,7 @@ use App\Models\Site;
 use App\Operator\Controls\BudgetControl;
 use App\Operator\Controls\CadenceControl;
 use App\Operator\Controls\TemplateMapping;
+use App\Operator\Controls\WordpressConnector;
 use App\Operator\Handover\SiteHandover;
 use App\Publishing\LaunchOrchestrator;
 use App\Security\GateCheck;
@@ -25,8 +26,10 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Schema;
@@ -473,9 +476,49 @@ class SiteResource extends Resource
                             ->password()
                             ->revealable()
                             ->helperText('Generated for the launchpad-sync user (provider = WordPress).'),
+                        Actions::make([
+                            self::testConnectionAction(),
+                        ]),
                     ]),
             ]),
         ]);
+    }
+
+    /**
+     * "Test connection" — ping the entered WordPress credentials against the live
+     * site and report green/red inline, WITHOUT creating anything. Lets the
+     * operator confirm the connection in the panel before finishing the wizard
+     * (the runbook's step-2 green check), keeping the zero-tinker path honest.
+     */
+    private static function testConnectionAction(): Action
+    {
+        return Action::make('test_connection')
+            ->label('Test connection')
+            ->icon('heroicon-o-signal')
+            ->color('gray')
+            ->action(function (Get $get): void {
+                $baseUrl = trim((string) $get('base_url')) ?: trim((string) $get('domain_url'));
+                $password = trim((string) $get('app_password'));
+
+                if ($baseUrl === '' || $password === '') {
+                    Notification::make()->warning()
+                        ->title('Enter the WordPress URL and application password first')->send();
+
+                    return;
+                }
+
+                $ok = app(WordpressConnector::class)->verify([
+                    'base_url' => $baseUrl,
+                    'username' => trim((string) $get('username')) ?: 'launchpad-sync',
+                    'app_password' => $password,
+                ]);
+
+                $ok
+                    ? Notification::make()->success()->title('Connection verified')
+                        ->body('WordPress authenticated — green to finish the wizard.')->send()
+                    : Notification::make()->danger()->title('Connection failed')
+                        ->body('WordPress did not authenticate at '.$baseUrl.'/wp-json/wp/v2/users/me — check the URL and app password.')->send();
+            });
     }
 
     /**
