@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Enums\SiloType;
+use App\Filament\Resources\SiloManagementResource\Pages\CreateSilo;
 use App\Filament\Resources\SiloManagementResource\Pages\EditSilo;
 use App\Filament\Resources\SiloManagementResource\Pages\ListSilos;
 use App\Models\Silo;
@@ -19,10 +20,13 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * §4 silo management for the §7b workspace: view/edit the topical structure
- * (silos, types, pillars) with §4's ViabilityGuard surfaced — a thin silo
- * (below the keyword-support floor) is flagged so the operator can fatten or
- * fold it before it ever holds a lone page.
+ * §4 silo management for the §7b workspace: create / view / edit the topical
+ * structure (silos, types, pillars) with §4's ViabilityGuard surfaced — a thin
+ * silo (below the keyword-support floor) is flagged so the operator can fatten or
+ * fold it before it ever holds a lone page. "New silo" commits manual entry
+ * through §4's SiloCommitter (see CreateSilo) — geo-neutral validated, with a
+ * pillar stub + seeded rule_set — so a hand-made silo is a full citizen, not a
+ * raw row. (§4 auto-propose from services/targets is a separate later slice.)
  */
 class SiloManagementResource extends Resource
 {
@@ -89,6 +93,7 @@ class SiloManagementResource extends Resource
     {
         return [
             'index' => ListSilos::route('/'),
+            'create' => CreateSilo::route('/create'),
             'edit' => EditSilo::route('/{record}/edit'),
         ];
     }
