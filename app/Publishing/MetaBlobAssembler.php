@@ -9,6 +9,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
 use App\PageBuilder\Schema\KitSchema;
+use App\Support\SeoTitle;
 use Illuminate\Support\Collection;
 
 /**
@@ -193,7 +194,7 @@ class MetaBlobAssembler
         $ogImage = $this->ogImageUrl($content, $images);
 
         return array_filter([
-            'title' => (string) ($metaSeo['title'] ?? $content->title),
+            'title' => SeoTitle::normalize((string) ($metaSeo['title'] ?? $content->title), $content->source_name),
             'meta_description' => $metaSeo['meta_description'] ?? null,
             'canonical' => $this->canonical($content),
             'robots' => 'index, follow',

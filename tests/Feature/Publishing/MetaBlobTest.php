@@ -50,8 +50,9 @@ test('the assembled meta-blob matches the companion-plugin /content contract', f
 
     // Engine-owned SEO, with canonical + the OG image driven by the kit's
     // og_image seo_binding (the hero).
+    // The SEO title is normalized — the "| Apex" branding suffix is stripped.
     expect($payload['seo'])->toHaveKeys(['title', 'meta_description', 'canonical', 'robots', 'og', 'schema_type', 'breadcrumbs'])
-        ->and($payload['seo']['title'])->toBe('Water Heater Repair in Austin | Apex')
+        ->and($payload['seo']['title'])->toBe('Water Heater Repair in Austin')
         ->and($payload['seo']['canonical'])->toBe('https://apex.example/water-heater-repair-austin')
         ->and($payload['seo']['og']['image'])->toBe($payload['images']['hero_image']['url'])
         ->and($payload['seo']['schema_type'])->toBe('Service');
