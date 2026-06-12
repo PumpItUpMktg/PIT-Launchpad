@@ -44,6 +44,11 @@ it('drafts a kit-keyed slot map in place → needs_review with image specs', fun
         ->and($drafted->slot_payload['service_features'])->toHaveCount(3)
         ->and($drafted->meta['image_specs'])->not->toBeEmpty()
         ->and($drafted->wireframe_kit_version)->not->toBeNull();
+
+    // The shared proof-prose rule (DraftCall core) reaches the PAGE prompt too —
+    // page 196 spliced faker offer terms verbatim into FAQ copy.
+    expect($claude->prompts[0])->toContain('NEVER splice an entity')
+        ->and($claude->prompts[0])->toContain('NEVER emit a placeholder, citation, or annotation token');
 });
 
 it('drops off-schema slot keys (the slot key is the render contract)', function () {

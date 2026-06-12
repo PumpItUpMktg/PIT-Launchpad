@@ -128,8 +128,9 @@ class PageDrafter
 
         $lines = array_map(fn (Claim $c) => $c->promptLine(), $grounding->proof);
 
-        return 'SUBSTANTIATED PROOF pool — the ONLY facts you may assert. Cite the [id] of each one you use '
-            ."in claims_used:\n".implode("\n", $lines);
+        return 'SUBSTANTIATED PROOF pool — the ONLY facts you may assert:'."\n"
+            .implode("\n", $lines)."\n\n"
+            .DraftCall::PROOF_RULES;
     }
 
     private function kitBlock(PageGrounding $grounding): string

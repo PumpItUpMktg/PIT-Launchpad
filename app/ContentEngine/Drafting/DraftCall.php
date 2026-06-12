@@ -21,6 +21,22 @@ use App\Integrations\Claude\ClaudeClient;
  */
 final class DraftCall
 {
+    /**
+     * The shared proof-handling rule both kinds obey — single-sourced in the
+     * drafting core so it is not duplicated (or drift) per drafter. A grounding
+     * fact (claim/proof, offer, market, review) is a FACT to express in the
+     * brand's own prose, never an entity's raw text to splice in verbatim, and
+     * never a marker. (The post drafter rendered <sup>[review]</sup> tokens; the
+     * page drafter spliced faker offer terms verbatim into FAQ copy — page 196.)
+     */
+    public const PROOF_RULES =
+        'How to use grounding facts: a claim / proof / offer / market / review is a FACT to express in your own '
+        .'natural prose — NEVER splice an entity\'s raw text in verbatim, and NEVER emit a placeholder, citation, '
+        .'or annotation token (no <sup>…</sup>, no [review]/[warranty]/[citation]-style brackets, no footnote '
+        .'markers). Record any business claim you used in the separate `claim` blocks (text + its id) — that is the '
+        .'ONLY place an id appears, NEVER inline. If a fact cannot be written as a clean, natural sentence, omit that '
+        .'sentence entirely rather than padding it.';
+
     public function __construct(
         private readonly ClaudeClient $claude,
     ) {}
