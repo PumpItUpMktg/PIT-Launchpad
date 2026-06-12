@@ -8,6 +8,7 @@ use App\Integrations\Wordpress\WordpressException;
 use App\Models\Connection;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use Illuminate\Http\Client\ConnectionException;
 
 /**
  * Establishes a per-site manual WordPress app-password connection — the §1
@@ -51,6 +52,23 @@ class WordpressConnector
                 'last_rotated_at' => now(),
             ],
         );
+    }
+
+    /**
+     * Verify-only — ping the credentials against live WordPress WITHOUT persisting
+     * anything (no Site needed). Backs the wizard's "Test connection" button so the
+     * operator confirms green in the panel before finishing the create. An
+     * unreachable host (DNS/timeout) is a failed test, not an error.
+     *
+     * @param  array{base_url: string, username: string, app_password: string}  $input
+     */
+    public function verify(array $input): bool
+    {
+        try {
+            return $this->factory->usingCredentials($this->normalize($input), null)->ping();
+        } catch (ConnectionException) {
+            return false;
+        }
     }
 
     /**
