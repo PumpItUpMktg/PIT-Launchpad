@@ -20,12 +20,14 @@ test('stat cards count the headline statuses, portfolio and per-tenant', functio
     Content::factory()->create(['site_id' => $a->id, 'status' => ContentStatus::Approved]);
     Content::factory()->create(['site_id' => $a->id, 'status' => ContentStatus::RenderFailed]);
     Content::factory()->create(['site_id' => $b->id, 'status' => ContentStatus::NeedsReview]);
+    Content::factory()->count(2)->create(['site_id' => $a->id, 'status' => ContentStatus::Candidate]);
     Content::factory()->create(['site_id' => $a->id, 'status' => ContentStatus::Published, 'published_at' => now()]);
 
     $portfolio = metrics()->statCards();
     expect($portfolio['needs_review'])->toBe(3)
         ->and($portfolio['approved_pending'])->toBe(1)
         ->and($portfolio['render_failed'])->toBe(1)
+        ->and($portfolio['candidates'])->toBe(2)
         ->and($portfolio['published_this_week'])->toBe(1);
 
     $tenant = metrics()->statCards($a->id);

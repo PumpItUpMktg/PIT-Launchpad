@@ -26,6 +26,9 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Wizard;
+use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -408,37 +411,70 @@ class SiteResource extends Resource
     }
 
     /**
-     * The lightweight "stand up a tenant" create — name, URL, status. The §7a
-     * onboarding wizard is the full intake; this is the minimal path to get a Site
-     * row to wire a connection against and exercise the launch orchestrator without
-     * running the whole intake. (Sites have no scalar slug column — `domain_url`
-     * is the wireable "where it lives" field; `slug_conventions` is a separate
-     * content-slug pattern set during intake.)
+     * The New Site Wizard — stand up a complete, publishable tenant in two steps,
+     * no tinker: (1) the Site itself, led with one line defining what a site IS so
+     * the operator doesn't spin up a site per location; (2) the WordPress
+     * connection, verify-before-store, so content can publish immediately. The §7a
+     * onboarding wizard is the full brand intake; this is the operator's quick
+     * create. (Sites have no scalar slug column — `domain_url` is the wireable
+     * "where it lives" field; `slug_conventions` is a separate content-slug pattern
+     * set during intake. The WordPress fields are NOT Site columns — CreateSite's
+     * handleRecordCreation peels them off and wires the Connection.)
      */
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Select::make('account_id')
-                ->label('Account (brand)')
-                ->relationship('account', 'name')
-                ->searchable()
-                ->preload()
-                ->required()
-                ->createOptionForm([
-                    TextInput::make('name')->label('Account name')->required(),
-                ]),
-            TextInput::make('brand_name')
-                ->label('Site name')
-                ->required(),
-            TextInput::make('domain_url')
-                ->label('Site URL')
-                ->url()
-                ->placeholder('https://client-site.com')
-                ->helperText('Where the site lives — the WordPress base URL you will wire a connection to.'),
-            Select::make('status')
-                ->options(self::statusOptions())
-                ->default(SiteStatus::Onboarding->value)
-                ->required(),
+            Wizard::make([
+                Step::make('Site')
+                    ->icon('heroicon-o-building-office-2')
+                    ->description('One brand, one WordPress install')
+                    ->schema([
+                        Text::make('A site is one WordPress install — one brand\'s website. Locations (offices, service areas) live inside a site; don\'t create a separate site per location.'),
+                        Select::make('account_id')
+                            ->label('Account (brand)')
+                            ->relationship('account', 'name')
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->createOptionForm([
+                                TextInput::make('name')->label('Account name')->required(),
+                            ]),
+                        TextInput::make('brand_name')
+                            ->label('Site name')
+                            ->required(),
+                        TextInput::make('legal_name')
+                            ->label('Legal name')
+                            ->helperText('Optional — the registered business name, if it differs from the brand.'),
+                        TextInput::make('domain_url')
+                            ->label('Site URL')
+                            ->url()
+                            ->placeholder('https://client-site.com')
+                            ->helperText('Where the site lives — the WordPress base URL this site publishes to.'),
+                        Select::make('status')
+                            ->options(self::statusOptions())
+                            ->default(SiteStatus::Onboarding->value)
+                            ->required(),
+                    ]),
+                Step::make('WordPress connection')
+                    ->icon('heroicon-o-globe-alt')
+                    ->description('Wire publishing now (optional)')
+                    ->schema([
+                        Text::make('Connect the WordPress install so this site can publish with zero tinker. The credential is verified against the live site before it is saved. Leave the password blank to wire it later under Controls → Connections.'),
+                        TextInput::make('base_url')
+                            ->label('WordPress base URL')
+                            ->url()
+                            ->placeholder('https://client-site.com')
+                            ->helperText('Defaults to the Site URL above when left blank.'),
+                        TextInput::make('username')
+                            ->label('WP username')
+                            ->default('launchpad-sync'),
+                        TextInput::make('app_password')
+                            ->label('Application password')
+                            ->password()
+                            ->revealable()
+                            ->helperText('Generated for the launchpad-sync user (provider = WordPress).'),
+                    ]),
+            ]),
         ]);
     }
 
