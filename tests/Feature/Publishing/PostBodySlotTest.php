@@ -46,6 +46,35 @@ it('strips a leading <h1> from the post body (the Post Title widget renders it â
         ->and($payload['slot_payload']['body'])->not->toContain('<h1');
 });
 
+it('strips the article <h1> even when wrapped (post 181: <article><h1>â€¦)', function () {
+    $site = Site::factory()->create();
+    $post = Content::factory()->post()->create([
+        'site_id' => $site->id,
+        'body' => "<article>\n <h1>Same-Day Water Heater Repair</h1>\n<p>Worried?</p></article>",
+    ]);
+
+    $body = app(MetaBlobAssembler::class)->assemble($post, new Collection)['slot_payload']['body'];
+
+    expect($body)->not->toContain('<h1')
+        ->and($body)->toContain('<article>')   // the wrapper is preserved
+        ->and($body)->toContain('<p>Worried?</p>');
+});
+
+it('strips placeholder/citation/annotation tokens from the body (post 174: <sup>[review]</sup>)', function () {
+    $site = Site::factory()->create();
+    $post = Content::factory()->post()->create([
+        'site_id' => $site->id,
+        'body' => '<p>We stand behind our work<sup>[review]</sup> with a written warranty [warranty].</p>',
+    ]);
+
+    $body = app(MetaBlobAssembler::class)->assemble($post, new Collection)['slot_payload']['body'];
+
+    expect($body)->not->toContain('<sup')
+        ->and($body)->not->toContain('[review]')
+        ->and($body)->not->toContain('[warranty]')
+        ->and($body)->toContain('written warranty'); // the real prose survives
+});
+
 it('leaves a body with no leading <h1> unchanged (idempotent) and keeps a deeper <h1>', function () {
     $site = Site::factory()->create();
     $post = Content::factory()->post()->create([

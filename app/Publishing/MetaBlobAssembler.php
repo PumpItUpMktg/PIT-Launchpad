@@ -87,22 +87,50 @@ class MetaBlobAssembler
             && is_string($content->body)
             && trim($content->body) !== ''
             && ! array_key_exists('body', $slots)) {
-            $slots['body'] = $this->stripLeadingH1($content->body);
+            $slots['body'] = $this->normalizeBody($content->body);
         }
 
         return $slots;
     }
 
     /**
-     * Drop a leading <h1> from the article body: the native Post Title widget
-     * renders the title, so a body that opens with its own <h1> duplicates it.
-     * Idempotent (a body with no leading <h1> is returned unchanged), so it
-     * normalizes every existing draft on re-push without re-drafting. Only a
-     * LEADING <h1> is removed — an <h1> deeper in the body is left alone.
+     * Normalize the article body at publish — the GUARANTEE that re-pushing cleans
+     * existing posts (no re-draft). Idempotent: a clean body is returned unchanged.
+     */
+    private function normalizeBody(string $body): string
+    {
+        return $this->stripPlaceholderTokens($this->stripLeadingH1($body));
+    }
+
+    /**
+     * Drop the article's own opening <h1>: the native Post Title widget renders the
+     * title, so a body <h1> duplicates it. The <h1> is removed wherever it is the
+     * FIRST content — including inside a wrapper (`<article>`, `<section>`, …),
+     * which the old position-0 match missed (post 181 opened `<article><h1>…`).
+     * Leading wrappers/whitespace are preserved; an <h1> after real content stays.
      */
     private function stripLeadingH1(string $body): string
     {
-        return (string) preg_replace('/^\s*<h1\b[^>]*>.*?<\/h1>\s*/is', '', $body, 1);
+        return (string) preg_replace(
+            '/^(\s*(?:<(?:article|section|div|header|main|body)\b[^>]*>\s*)*)<h1\b[^>]*>.*?<\/h1>\s*/is',
+            '$1',
+            $body,
+            1,
+        );
+    }
+
+    /**
+     * Strip placeholder / citation / annotation markers the drafter must never emit
+     * — `<sup>[review]</sup>` / `<sup>[warranty]</sup>` annotation tokens (post 174)
+     * and bare single-word bracket tokens like `[warranty]`. Substantiated proof is
+     * written as natural prose, never spliced as a marker; the prompt enforces it,
+     * this guarantees it.
+     */
+    private function stripPlaceholderTokens(string $body): string
+    {
+        $body = (string) preg_replace('/<sup>\s*\[[^\]]*\]\s*<\/sup>/i', '', $body);
+
+        return (string) preg_replace('/\[[a-z][a-z0-9_-]*\]/', '', $body);
     }
 
     /**

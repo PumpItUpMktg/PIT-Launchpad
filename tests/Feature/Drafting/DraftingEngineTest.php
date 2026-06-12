@@ -17,6 +17,17 @@ test('the post drafting prompt forbids a body <h1> (the title is rendered separa
         ->and($claude->prompts[0])->toContain('<h2>');
 });
 
+test('the post drafting prompt forbids placeholder/citation tokens and verbatim proof splicing', function () {
+    ['site' => $site, 'claim' => $claim] = DraftingHarness::fixture();
+    $claude = new FakeClaudeClient(Draft::post($claim->id));
+
+    DraftingHarness::engine($claude)->run(DraftingHarness::postRequest($site));
+
+    expect($claude->prompts[0])->toContain('Do NOT emit ANY placeholder, citation, or annotation token')
+        ->and($claude->prompts[0])->toContain('never text to splice in')
+        ->and($claude->prompts[0])->toContain('omit that sentence entirely');
+});
+
 test('a post draft is emitted as needs_review with a body, pinned voice, SEO and verification', function () {
     ['site' => $site, 'claim' => $claim] = DraftingHarness::fixture();
     $claude = new FakeClaudeClient(Draft::post($claim->id));
