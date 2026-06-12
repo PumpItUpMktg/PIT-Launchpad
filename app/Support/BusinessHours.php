@@ -4,9 +4,14 @@ namespace App\Support;
 
 /**
  * Converts business hours between the stored per-day map
- * (`{"mon": {"open","close"}, "sun": "closed", …}`) and the flat 7-row list the
- * Filament repeater edits (`[{day, closed, open, close}, …]`). Kept here, pure and
- * tested, so the resource form stays a thin shell over it.
+ * (`{"mon": {"open","close"}, "sun": "closed", "sat": "24h", …}`) and the flat,
+ * day-named form fields the resource edits (`hours_mon_state`/`_open`/`_close`).
+ * `toFields`/`fromFields` are the form round-trip; `normalize` repairs any legacy
+ * persisted shape (incl. the numeric-keyed rows the old repeater wrote) back to
+ * the day-keyed map. Kept here — pure and tested — so the resource form stays a
+ * thin shell over it. The row-shaped helpers (`fromStored`/`toStored`/
+ * `sameEveryDay`/`alwaysOpen`) back the deferred "same every day" / "always open"
+ * shortcuts.
  */
 final class BusinessHours
 {
@@ -22,7 +27,7 @@ final class BusinessHours
      */
     public static function fromStored(?array $hours): array
     {
-        $hours ??= [];
+        $hours = self::normalize($hours);
         $rows = [];
 
         foreach (self::DAYS as $day) {
@@ -41,6 +46,123 @@ final class BusinessHours
         }
 
         return $rows;
+    }
+
+    /**
+     * Coerce ANY persisted shape back to the day-keyed map, repairing the legacy
+     * numeric-keyed rows the Filament repeater wrote before the round-trip was
+     * pinned (`[0 => "24h", …]` — positional in Mon..Sun order). Also tolerates a
+     * list of `{day, …}` repeater rows. The day-keyed map passes through cleaned.
+     *
+     * @param  array<mixed, mixed>|null  $stored
+     * @return array<string, mixed>
+     */
+    public static function normalize(?array $stored): array
+    {
+        $stored ??= [];
+
+        // Already day-keyed (the spec shape).
+        foreach ($stored as $key => $value) {
+            if (in_array($key, self::DAYS, true)) {
+                $out = [];
+                foreach (self::DAYS as $day) {
+                    if (array_key_exists($day, $stored)) {
+                        $out[$day] = self::cleanValue($stored[$day]);
+                    }
+                }
+
+                return $out;
+            }
+        }
+
+        // A list of repeater rows ({day, closed, all_day, open, close}).
+        foreach ($stored as $value) {
+            if (is_array($value) && isset($value['day'])) {
+                return self::toStored(array_values($stored));
+            }
+        }
+
+        // Legacy numeric list of values, positional Mon..Sun.
+        $values = array_values($stored);
+        $out = [];
+        foreach (self::DAYS as $index => $day) {
+            if (array_key_exists($index, $values)) {
+                $out[$day] = self::cleanValue($values[$index]);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Stored map → flat per-day form fields (`hours_mon_state` ∈ open|closed|24h,
+     * `hours_mon_open`, `hours_mon_close`). Flat + day-named, so there is no
+     * repeater re-indexing to lose the keys.
+     *
+     * @param  array<mixed, mixed>|null  $stored
+     * @return array<string, mixed>
+     */
+    public static function toFields(?array $stored): array
+    {
+        $map = self::normalize($stored);
+        $fields = [];
+
+        foreach (self::DAYS as $day) {
+            $value = $map[$day] ?? 'closed';
+
+            if ($value === '24h') {
+                $fields["hours_{$day}_state"] = '24h';
+                $fields["hours_{$day}_open"] = null;
+                $fields["hours_{$day}_close"] = null;
+            } elseif (is_array($value)) {
+                $fields["hours_{$day}_state"] = 'open';
+                $fields["hours_{$day}_open"] = $value['open'] ?? null;
+                $fields["hours_{$day}_close"] = $value['close'] ?? null;
+            } else {
+                $fields["hours_{$day}_state"] = 'closed';
+                $fields["hours_{$day}_open"] = null;
+                $fields["hours_{$day}_close"] = null;
+            }
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Flat per-day form fields → the stored day-keyed map.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function fromFields(array $data): array
+    {
+        $out = [];
+
+        foreach (self::DAYS as $day) {
+            $state = $data["hours_{$day}_state"] ?? 'closed';
+
+            if ($state === '24h') {
+                $out[$day] = '24h';
+            } elseif ($state === 'open' && ! empty($data["hours_{$day}_open"])) {
+                $out[$day] = ['open' => (string) $data["hours_{$day}_open"], 'close' => (string) ($data["hours_{$day}_close"] ?? '')];
+            } else {
+                $out[$day] = 'closed';
+            }
+        }
+
+        return $out;
+    }
+
+    private static function cleanValue(mixed $value): string|array
+    {
+        if ($value === '24h') {
+            return '24h';
+        }
+        if (is_array($value) && ! empty($value['open'])) {
+            return ['open' => (string) $value['open'], 'close' => (string) ($value['close'] ?? '')];
+        }
+
+        return 'closed';
     }
 
     /**
