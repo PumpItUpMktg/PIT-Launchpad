@@ -89,7 +89,7 @@ final class ContentStore
             : [];
 
         $this->store_meta($post_id, $content_id, $kind, $payload, $seo, $images);
-        TemplateRouter::assign($post_id, (string) ($payload['kit'] ?? ''), (string) ($payload['page_type'] ?? ''));
+        TemplateRouter::assign($post_id, (string) ($payload['kit'] ?? ''), (string) ($payload['page_type'] ?? ''), $kind);
         $this->assign_category($post_id, (string) ($payload['silo_id'] ?? ''));
 
         EditGuard::record_push($post_id, $this->fingerprint($payload));

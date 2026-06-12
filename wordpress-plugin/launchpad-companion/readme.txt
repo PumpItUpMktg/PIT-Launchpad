@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.4.3
+Stable tag: 0.4.4
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -50,6 +50,12 @@ they can never fatal page rendering — use the shortcodes there.
 Brand-neutral Elementor templates are built by the designer. Map each page type
 to a template via the `lp_templates` option (page_type => template); pages also
 carry `lp-page-type-{type}` and `lp-kit-{kit}` body classes.
+
+Posts get NO page template: `elementor_canvas` is a full-page Elementor template
+that bypasses Theme Builder *single* templates, so a post is left on the theme
+default and a Theme Builder single template (the post body design) drives it via
+its display condition. The document <title> is emitted once via core title-tag
+(filtered through pre_get_document_title), never a second hand-printed tag.
 
 Kit → template mapping is chosen in Launchpad (operator panel → Portfolio →
 Templates), against this site's live template inventory (GET /templates). Every
