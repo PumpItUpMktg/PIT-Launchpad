@@ -46,8 +46,8 @@ test('the post drafting prompt forbids placeholder/citation tokens and verbatim 
 
     DraftingHarness::engine($claude)->run(DraftingHarness::postRequest($site));
 
-    expect($claude->prompts[0])->toContain('Do NOT emit ANY placeholder, citation, or annotation token')
-        ->and($claude->prompts[0])->toContain('never text to splice in')
+    expect($claude->prompts[0])->toContain('NEVER emit a placeholder, citation, or annotation token')
+        ->and($claude->prompts[0])->toContain('NEVER splice an entity')
         ->and($claude->prompts[0])->toContain('omit that sentence entirely');
 });
 

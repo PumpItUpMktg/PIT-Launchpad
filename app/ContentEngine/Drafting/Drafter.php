@@ -102,12 +102,7 @@ class Drafter
 
         return 'SUBSTANTIATED CLAIMS pool — the ONLY facts you may assert about the business:'."\n"
             .implode("\n", $lines)."\n\n"
-            .'How to use them: a claim is a FACT to express in your own natural prose, never text to splice in '
-            .'verbatim and never a marker. Do NOT emit ANY placeholder, citation, or annotation token in the body — '
-            .'no <sup>…</sup>, no [review]/[warranty]/[citation]-style brackets, no footnote markers. Record each '
-            .'claim you used in the separate `claim` blocks (text + its id) — that is the ONLY place an id appears, '
-            .'NEVER inline. If a claim cannot be written as a clean, natural sentence from this set, omit that '
-            .'sentence entirely rather than padding it.';
+            .DraftCall::PROOF_RULES;
     }
 
     private function sourcesBlock(Grounding $grounding): string

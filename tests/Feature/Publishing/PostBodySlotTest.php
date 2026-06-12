@@ -19,6 +19,28 @@ it('carries a post body to WordPress as the body slot (so it renders and mirrors
     expect($payload['slot_payload']['body'])->toBe('<p>Worried about your water heater? Here is the fix.</p>');
 });
 
+it('scrubs placeholder tokens from page slot values (page 196: tokens in a FAQ answer)', function () {
+    $site = Site::factory()->create();
+    $page = Content::factory()->page()->create([
+        'site_id' => $site->id,
+        'slot_payload' => [
+            'hero_problem' => 'No hot water?',
+            'faq' => [
+                ['question' => 'Is it guaranteed?', 'answer' => 'Yes<sup>[warranty]</sup> — a written warranty [review].'],
+            ],
+        ],
+        'body' => null,
+    ]);
+
+    $slots = app(MetaBlobAssembler::class)->assemble($page, new Collection)['slot_payload'];
+
+    expect($slots['faq'][0]['answer'])->not->toContain('<sup')
+        ->and($slots['faq'][0]['answer'])->not->toContain('[warranty]')
+        ->and($slots['faq'][0]['answer'])->not->toContain('[review]')
+        ->and($slots['faq'][0]['answer'])->toContain('written warranty')
+        ->and($slots['hero_problem'])->toBe('No hot water?'); // untouched
+});
+
 it('does not invent a body slot for a page (kit slots pass through unchanged)', function () {
     $site = Site::factory()->create();
     $page = Content::factory()->page()->create([

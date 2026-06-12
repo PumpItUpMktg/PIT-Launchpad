@@ -91,7 +91,32 @@ class MetaBlobAssembler
             $slots['body'] = $this->normalizeBody($content->body);
         }
 
+        // Page slots get the same placeholder-token guarantee (a re-push cleans an
+        // existing page's FAQ answers / copy of stray <sup>[…]</sup> or [token]
+        // markers — page 196's FAQPage schema carried them). Recurses the slot
+        // tree, leaving structure intact and only scrubbing string leaves.
+        if ($content->kind === ContentKind::Page) {
+            $slots = $this->scrubTokens($slots);
+        }
+
         return $slots;
+    }
+
+    /**
+     * @param  array<mixed>  $value
+     * @return array<mixed>
+     */
+    private function scrubTokens(array $value): array
+    {
+        foreach ($value as $key => $item) {
+            if (is_string($item)) {
+                $value[$key] = $this->stripPlaceholderTokens($item);
+            } elseif (is_array($item)) {
+                $value[$key] = $this->scrubTokens($item);
+            }
+        }
+
+        return $value;
     }
 
     /**
