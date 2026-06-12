@@ -20,9 +20,18 @@ class LocationFactory extends Factory
             'site_id' => Site::factory(),
             'name' => fake()->city().' Office',
             'address' => fake()->streetAddress(),
-            'phone' => fake()->phoneNumber(),
+            'phone' => '+1'.fake()->numerify('##########'),
             'email' => fake()->companyEmail(),
-            'hours' => ['mon' => '8-5', 'tue' => '8-5', 'wed' => '8-5'],
+            // Per-day shape: {"mon": {"open","close"}, "sun": "closed", …}.
+            'hours' => [
+                'mon' => ['open' => '08:00', 'close' => '17:00'],
+                'tue' => ['open' => '08:00', 'close' => '17:00'],
+                'wed' => ['open' => '08:00', 'close' => '17:00'],
+                'thu' => ['open' => '08:00', 'close' => '17:00'],
+                'fri' => ['open' => '08:00', 'close' => '17:00'],
+                'sat' => 'closed',
+                'sun' => 'closed',
+            ],
             'is_storefront' => fake()->boolean(),
             'booking_url' => fake()->optional()->url(),
         ];
