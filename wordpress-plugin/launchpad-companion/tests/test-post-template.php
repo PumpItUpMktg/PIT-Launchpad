@@ -44,6 +44,30 @@ class Test_Post_Template extends WP_UnitTestCase
         $this->assertSame('', (string) get_post_meta($second['wp_post_id'], '_wp_page_template', true));
     }
 
+    public function test_a_re_push_clears_a_stale_canvas_left_on_a_page(): void
+    {
+        // The 196 case: a page carrying a pre-existing elementor_canvas (set before
+        // 0.4.7, or by an import) must have it cleared on re-push — idempotent,
+        // mirroring the post path. (A page manually edited in WP is instead
+        // protected by the locked/locally-edited guard and skipped.)
+        $store = new ContentStore();
+        $page = $this->payload([
+            'content_id' => '01JPOSTTEMPLATE0000000000D',
+            'kind' => 'page',
+            'page_type' => 'service',
+            'kit' => 'service-page',
+            'slug' => 'stale-canvas-page',
+            'slot_payload' => ['hero_problem' => 'No hot water'],
+        ]);
+        $first = $store->upsert($page);
+
+        update_post_meta($first['wp_post_id'], '_wp_page_template', 'elementor_canvas');
+        $second = $store->upsert($page);
+
+        $this->assertSame($first['wp_post_id'], $second['wp_post_id']);
+        $this->assertSame('', (string) get_post_meta($second['wp_post_id'], '_wp_page_template', true));
+    }
+
     public function test_a_kit_page_gets_no_canvas_so_its_theme_builder_template_renders(): void
     {
         // Page 196 regression: canvas on a kit page blocks the Theme Builder single
