@@ -43,6 +43,8 @@ use App\Integrations\News\MockOnDemandSourcePull;
 use App\Integrations\News\NewsApiProvider;
 use App\Integrations\News\NewsProvider;
 use App\Integrations\News\OnDemandSourcePull;
+use App\Integrations\Places\GooglePlacesClient;
+use App\Integrations\Places\PlacesProvider;
 use App\Integrations\Serp\SerpProvider;
 use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
@@ -57,6 +59,7 @@ use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
 use App\Support\CurrentSite;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
@@ -78,6 +81,14 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(GbpProvider::class, MockGbpProvider::class);
         $this->app->bind(CensusProvider::class, MockCensusProvider::class);
         $this->app->bind(VoiceSynthesizer::class, MockVoiceSynthesizer::class);
+
+        // §7 onboarding — the Google Places import (location enrichment) runs on
+        // the real adapter; tests bind MockPlacesProvider so no key/network.
+        $this->app->bind(PlacesProvider::class, fn () => new GooglePlacesClient(
+            $this->app->make(Factory::class),
+            (string) config('services.google.maps_api_key', ''),
+            (int) config('services.google.timeout', 15),
+        ));
 
         // §5 SERP + local-grid run on the real DataForSEO adapters (Step 2,
         // Adapter 1). They supply NORMALIZED signals only — opportunity scoring
