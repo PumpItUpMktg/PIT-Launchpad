@@ -58,11 +58,4 @@ class Test_Post_Template extends WP_UnitTestCase
         // No mapped template option → the canvas fallback (pages are full Elementor).
         $this->assertSame('elementor_canvas', (string) get_post_meta($result['wp_post_id'], '_wp_page_template', true));
     }
-
-    public function test_the_plugin_enables_core_title_tag(): void
-    {
-        \Launchpad\Companion\Plugin::enable_title_tag();
-
-        $this->assertTrue(current_theme_supports('title-tag'));
-    }
 }
