@@ -24,7 +24,7 @@ class PipelineStatsWidget extends StatsOverviewWidget
             Stat::make('Published this week', $m['published_this_week']),
             Stat::make('Render failed', $m['render_failed'])->color('danger'),
             Stat::make('Publish failed', $m['publish_failed'])->color('danger'),
-            Stat::make('Drafts in flight', $m['drafts_in_flight']),
+            Stat::make('Candidates', $m['candidates']),
         ];
     }
 }

@@ -35,9 +35,7 @@ class PipelineMetrics
                 ->count(),
             'render_failed' => $this->countStatus($siteId, ContentStatus::RenderFailed),
             'publish_failed' => $this->countStatus($siteId, ContentStatus::PublishFailed),
-            'drafts_in_flight' => $this->contents($siteId)
-                ->whereIn('status', self::inFlightValues())
-                ->count(),
+            'candidates' => $this->countStatus($siteId, ContentStatus::Candidate),
         ];
     }
 
@@ -183,23 +181,6 @@ class PipelineMetrics
             ->selectRaw('status, count(*) as aggregate')
             ->groupBy('status')
             ->pluck('aggregate', 'status');
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function inFlightValues(): array
-    {
-        return [
-            ContentStatus::Candidate->value,
-            ContentStatus::Scored->value,
-            ContentStatus::Drafted->value,
-            ContentStatus::NeedsReview->value,
-            ContentStatus::InReview->value,
-            ContentStatus::Approved->value,
-            ContentStatus::Rendering->value,
-            ContentStatus::Publishing->value,
-        ];
     }
 
     private function weekLabel(Carbon $date): string
