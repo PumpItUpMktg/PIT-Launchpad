@@ -47,6 +47,10 @@ class LocationResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Controls';
 
+    // Lead the Controls group — a site HAS locations, and burying this is what
+    // tempted the operator into spinning up a site per location.
+    protected static ?int $navigationSort = -1;
+
     public static function table(Table $table): Table
     {
         return $table
