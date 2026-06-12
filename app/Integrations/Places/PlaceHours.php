@@ -21,6 +21,12 @@ final class PlaceHours
     {
         $periods = is_array($openingHours['periods'] ?? null) ? $openingHours['periods'] : [];
 
+        // Open 24/7: Google returns a SINGLE period with open day 0, time 0000 and
+        // NO close. Every day is 24h — never 00:00–23:59.
+        if (self::isAlwaysOpen($periods)) {
+            return array_fill_keys(self::ORDER, '24h');
+        }
+
         $hours = [];
         foreach ($periods as $period) {
             if (! is_array($period)) {
@@ -38,9 +44,14 @@ final class PlaceHours
             }
 
             $close = $period['close'] ?? null;
-            $closeTime = is_array($close) && isset($close['time']) ? self::time((string) $close['time']) : '23:59';
 
-            $hours[$dayKey] = ['open' => self::time((string) $open['time']), 'close' => $closeTime];
+            // A period with no close = that day is open 24 hours (distinct from a
+            // real open/close pair) — map it, don't fabricate a 23:59 close.
+            if (! is_array($close) || ! isset($close['time'])) {
+                $hours[$dayKey] = '24h';
+            } else {
+                $hours[$dayKey] = ['open' => self::time((string) $open['time']), 'close' => self::time((string) $close['time'])];
+            }
         }
 
         $ordered = [];
@@ -49,6 +60,24 @@ final class PlaceHours
         }
 
         return $ordered;
+    }
+
+    /**
+     * @param  array<int, mixed>  $periods
+     */
+    private static function isAlwaysOpen(array $periods): bool
+    {
+        if (count($periods) !== 1) {
+            return false;
+        }
+
+        $period = reset($periods);
+        $open = is_array($period) ? ($period['open'] ?? null) : null;
+
+        return is_array($open)
+            && ($open['day'] ?? null) === 0
+            && ($open['time'] ?? null) === '0000'
+            && empty($period['close']);
     }
 
     private static function time(string $hhmm): string

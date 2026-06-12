@@ -18,7 +18,7 @@ final class BusinessHours
      * closed), so the form always renders every day.
      *
      * @param  array<string, mixed>|null  $hours
-     * @return list<array{day: string, closed: bool, open: string|null, close: string|null}>
+     * @return list<array{day: string, closed: bool, all_day: bool, open: string|null, close: string|null}>
      */
     public static function fromStored(?array $hours): array
     {
@@ -27,13 +27,16 @@ final class BusinessHours
 
         foreach (self::DAYS as $day) {
             $value = $hours[$day] ?? 'closed';
-            $closed = ! is_array($value);
+            $allDay = $value === '24h';
+            $open = is_array($value) ? ($value['open'] ?? null) : null;
+            $closed = ! is_array($value) && ! $allDay;
 
             $rows[] = [
                 'day' => $day,
                 'closed' => $closed,
-                'open' => $closed ? null : ($value['open'] ?? null),
-                'close' => $closed ? null : ($value['close'] ?? null),
+                'all_day' => $allDay,
+                'open' => $open,
+                'close' => is_array($value) ? ($value['close'] ?? null) : null,
             ];
         }
 
@@ -58,7 +61,11 @@ final class BusinessHours
                 continue;
             }
 
-            if (! empty($row['closed']) || empty($row['open'])) {
+            if (! empty($row['closed'])) {
+                $out[$day] = 'closed';
+            } elseif (! empty($row['all_day'])) {
+                $out[$day] = '24h';
+            } elseif (empty($row['open'])) {
                 $out[$day] = 'closed';
             } else {
                 $out[$day] = ['open' => (string) $row['open'], 'close' => (string) ($row['close'] ?? '')];
@@ -73,7 +80,7 @@ final class BusinessHours
      * every day (closed days stay closed).
      *
      * @param  array<int, array<string, mixed>>|null  $rows
-     * @return list<array{day: string, closed: bool, open: string|null, close: string|null}>
+     * @return list<array{day: string, closed: bool, all_day: bool, open: string|null, close: string|null}>
      */
     public static function sameEveryDay(?array $rows): array
     {
@@ -93,8 +100,25 @@ final class BusinessHours
         return array_map(fn (string $day): array => [
             'day' => $day,
             'closed' => false,
+            'all_day' => false,
             'open' => $template['open'],
             'close' => $template['close'],
+        ], self::DAYS);
+    }
+
+    /**
+     * "Always open" shortcut: every day open 24 hours.
+     *
+     * @return list<array{day: string, closed: bool, all_day: bool, open: string|null, close: string|null}>
+     */
+    public static function alwaysOpen(): array
+    {
+        return array_map(fn (string $day): array => [
+            'day' => $day,
+            'closed' => false,
+            'all_day' => true,
+            'open' => null,
+            'close' => null,
         ], self::DAYS);
     }
 }

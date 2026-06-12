@@ -34,6 +34,23 @@ it('round-trips a stored map losslessly', function () {
         ->and($back['sat'])->toBe('closed');
 });
 
+it('round-trips a 24h day as "24h", never 00:00–23:59', function () {
+    $rows = BusinessHours::fromStored(['mon' => '24h', 'sun' => 'closed']);
+
+    expect($rows[0])->toMatchArray(['day' => 'mon', 'closed' => false, 'all_day' => true, 'open' => null])
+        ->and($rows[6])->toMatchArray(['day' => 'sun', 'all_day' => false, 'closed' => true]);
+
+    expect(BusinessHours::toStored($rows))->toMatchArray(['mon' => '24h', 'sun' => 'closed']);
+});
+
+it('always-open sets every day to 24h', function () {
+    $rows = BusinessHours::alwaysOpen();
+
+    expect($rows)->toHaveCount(7)
+        ->and(collect($rows)->every(fn ($r) => $r['all_day'] === true && ! $r['closed']))->toBeTrue()
+        ->and(BusinessHours::toStored($rows))->toBe(array_fill_keys(BusinessHours::DAYS, '24h'));
+});
+
 it('applies the first open day to every day for "same every day"', function () {
     $rows = BusinessHours::fromStored(['tue' => ['open' => '10:00', 'close' => '16:00']]);
 

@@ -25,6 +25,20 @@ it('maps Google opening_hours periods to the per-day shape', function () {
         ->and(array_keys($hours))->toBe(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 });
 
+it('maps Google 24-hour days to "24h", not a fabricated 00:00–23:59', function () {
+    // A per-day open with no close = 24 hours.
+    $perDay = PlaceHours::fromGoogle(['periods' => [
+        ['open' => ['day' => 1, 'time' => '0000']], // mon, no close
+        ['open' => ['day' => 2, 'time' => '0800'], 'close' => ['day' => 2, 'time' => '1700']],
+    ]]);
+    expect($perDay['mon'])->toBe('24h')
+        ->and($perDay['tue'])->toBe(['open' => '08:00', 'close' => '17:00']);
+
+    // Open 24/7: a single period, day 0, time 0000, no close → every day 24h.
+    $always = PlaceHours::fromGoogle(['periods' => [['open' => ['day' => 0, 'time' => '0000']]]]);
+    expect(array_values(array_unique($always)))->toBe(['24h']);
+});
+
 it('normalizes a Maps URL or a plain name into a search query', function () {
     expect(PlaceQuery::normalize('https://www.google.com/maps/place/Apex+Plumbing/@30.2,-97.7,17z'))->toBe('Apex Plumbing')
         ->and(PlaceQuery::normalize('Apex Plumbing Austin'))->toBe('Apex Plumbing Austin')
