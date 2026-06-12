@@ -73,14 +73,27 @@ class DraftingEngine
 
         $verification = $this->verification->verify($payload, $grounding);
 
-        $candidate->fill([
+        $title = $this->candidateTitle($request, $payload);
+
+        $attributes = [
             ...$this->draftAttributes($request, $grounding, $payload, $verification),
             // Generate an original title from the draft rather than carrying the
             // news headline (which still trails its " - Source" attribution).
-            'title' => $this->candidateTitle($request, $payload),
+            'title' => $title,
             'draft_trigger' => $request->trigger,
             'draft_lane' => $this->lane($request),
-        ])->save();
+        ];
+
+        // Derive the slug from the drafted SEO title at FIRST draft only — the
+        // ingest slug carries the news source ("…-entrepreneurcom"). Immutable
+        // once the post has been published (a live URL must never change on a
+        // re-push), so we only set it while it has never reached WordPress.
+        if ($candidate->wp_post_id === null) {
+            $slugSource = $payload->seo->title !== '' ? $payload->seo->title : $title;
+            $attributes['slug'] = $this->uniqueSlug($candidate->site_id, $slugSource, $candidate->id);
+        }
+
+        $candidate->fill($attributes)->save();
 
         return new DraftResult($candidate, $payload, $verification, false);
     }
@@ -234,7 +247,7 @@ class DraftingEngine
         return $request->trigger->isReactive() ? 'reactive' : null;
     }
 
-    private function uniqueSlug(string $siteId, string $candidate): string
+    private function uniqueSlug(string $siteId, string $candidate, ?string $exceptId = null): string
     {
         $base = Str::slug($candidate) ?: 'draft';
         $slug = $base;
@@ -244,6 +257,7 @@ class DraftingEngine
             ->withTrashed()
             ->where('site_id', $siteId)
             ->where('slug', $slug)
+            ->when($exceptId !== null, fn ($q) => $q->whereKeyNot($exceptId))
             ->exists()
         ) {
             $slug = $base.'-'.(++$suffix);
