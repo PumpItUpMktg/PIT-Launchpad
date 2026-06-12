@@ -45,6 +45,9 @@ test('the assembled meta-blob matches the companion-plugin /content contract', f
     expect($payload['images']['hero_image'])->toHaveKey('url')
         ->and($payload['images']['hero_image']['alt'])->not->toBeEmpty();
 
+    // The featured image the plugin sets as the WP post thumbnail = the og/hero image.
+    expect($payload['featured_image'])->toBe($payload['images']['hero_image']['url']);
+
     // Engine-owned SEO, with canonical + the OG image driven by the kit's
     // og_image seo_binding (the hero).
     expect($payload['seo'])->toHaveKeys(['title', 'meta_description', 'canonical', 'robots', 'og', 'schema_type', 'breadcrumbs'])

@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.4.4
+Stable tag: 0.4.5
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -33,6 +33,11 @@ the classic editor, or none). Place these in a Theme Builder template:
 * [lp_image key="hero_image"]    an <img> from the R2/CDN image map
 Each accepts an optional id="<post_id>"; renders nothing for a non-managed post.
 Scalar slots also mirror to readable `lp_slot_<key>` post meta for native binding.
+
+Featured image: the push carries `featured_image` (the og/hero image URL); the
+plugin sideloads it (reusing the already-imported attachment) and sets it as the
+post thumbnail — so posts, which have no kit hero slot, still get a featured image.
+Image URLs must be absolute (the control plane's R2 public base) to resolve.
 
 Posts (news / reactive content) carry no kit: the article is the `body` slot. Bind
 it once in the single-post template with [lp_slot key="body"] (or the native Post
