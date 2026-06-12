@@ -49,7 +49,7 @@ class ImageRenderer
                 ]);
 
                 $filename = ($job->seo_filename !== null && $job->seo_filename !== '')
-                    ? $job->seo_filename
+                    ? $this->ensureExtension($job->seo_filename, $image->extension())
                     : $job->id.'.'.$image->extension();
 
                 $r2Key = $this->storage->put($site, $filename, $image->bytes);
@@ -86,5 +86,21 @@ class ImageRenderer
         }
 
         return $job;
+    }
+
+    /**
+     * Ensure the SEO filename carries a real image extension. A spec filename like
+     * "{slug}-hero" stored as-is yields an extension-less R2 key, whose public URL
+     * is a bare "/sites/{site}/{slug}-hero" — it won't sideload cleanly as a
+     * WordPress attachment and reads as a broken og:image. Append the rendered
+     * format's extension when one is missing.
+     */
+    private function ensureExtension(string $filename, string $extension): string
+    {
+        if ($extension === '' || preg_match('/\.[A-Za-z0-9]{2,4}$/', $filename) === 1) {
+            return $filename;
+        }
+
+        return $filename.'.'.$extension;
     }
 }

@@ -42,6 +42,7 @@ class MetaBlobAssembler
             'kit_definition' => $this->kitDefinition($content),
             'template_id' => $this->templateId($content),
             'images' => $images,
+            'featured_image' => $this->ogImageUrl($content, $images),
             'seo' => $this->seo($content, $images),
         ];
     }

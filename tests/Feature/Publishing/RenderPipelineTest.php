@@ -19,6 +19,21 @@ use Illuminate\Support\Facades\Storage;
 use Tests\Support\PublishHarness;
 use Tests\Support\ThrowingFalClient;
 
+test('a seo_filename with no extension gets the rendered format extension (a real R2 file, not a bare stub)', function () {
+    Storage::fake('r2');
+    $site = Site::factory()->create();
+    $job = RenderJob::factory()->create([
+        'site_id' => $site->id,
+        'slot' => 'hero',
+        'seo_filename' => 'water-heater-repair-hero', // no extension — the old stub source
+    ]);
+
+    (new ImageRenderer(new MockFalClient, new MockVisionClient, new TenantStorage))->render($job);
+
+    expect($job->refresh()->r2_key)->toBe("sites/{$site->id}/water-heater-repair-hero.webp")
+        ->and(Storage::disk('r2')->exists($job->r2_key))->toBeTrue();
+});
+
 test('a render mints an R2 object plus alt text from the vision pass', function () {
     Storage::fake('r2');
     $site = Site::factory()->create();

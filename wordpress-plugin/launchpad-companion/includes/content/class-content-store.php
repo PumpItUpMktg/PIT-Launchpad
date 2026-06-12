@@ -89,6 +89,7 @@ final class ContentStore
             : [];
 
         $this->store_meta($post_id, $content_id, $kind, $payload, $seo, $images);
+        $this->apply_featured_image($post_id, $payload, $images);
         TemplateRouter::assign($post_id, (string) ($payload['kit'] ?? ''), (string) ($payload['page_type'] ?? ''), $kind);
         $this->assign_category($post_id, (string) ($payload['silo_id'] ?? ''));
 
@@ -209,6 +210,46 @@ final class ContentStore
             }
 
             update_post_meta($post_id, Meta::SLOT_PREFIX.$suffix, (string) $value);
+        }
+    }
+
+    /**
+     * Set the post's featured image (post thumbnail) from the engine-designated
+     * `featured_image` (the og/hero image URL). It is normally already sideloaded
+     * in the images map — match it by source/local URL and reuse that attachment;
+     * otherwise sideload it directly. This is what makes a featured image land on
+     * posts (which have no kit hero slot) and gives the theme/og a real image.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, array<string, mixed>>  $images
+     */
+    private function apply_featured_image(int $post_id, array $payload, array $images): void
+    {
+        $featured = isset($payload['featured_image']) ? (string) $payload['featured_image'] : '';
+        if ($featured === '') {
+            return;
+        }
+
+        $attachment_id = 0;
+        foreach ($images as $image) {
+            if (! is_array($image)) {
+                continue;
+            }
+            $source = (string) ($image['source_url'] ?? '');
+            $local = (string) ($image['url'] ?? '');
+            if (($source !== '' && $source === $featured) || ($local !== '' && $local === $featured)) {
+                $attachment_id = (int) ($image['attachment_id'] ?? 0);
+                break;
+            }
+        }
+
+        if ($attachment_id === 0) {
+            $imported = ImageImporter::import(['url' => $featured], $post_id);
+            $attachment_id = (int) ($imported['attachment_id'] ?? 0);
+        }
+
+        if ($attachment_id > 0) {
+            set_post_thumbnail($post_id, $attachment_id);
         }
     }
 
