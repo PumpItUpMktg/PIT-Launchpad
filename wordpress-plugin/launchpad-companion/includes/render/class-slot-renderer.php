@@ -41,10 +41,30 @@ final class SlotRenderer
         return $out . '</div>';
     }
 
-    /** A call-to-action anchor from a {label, url} slot. */
+    /**
+     * The cta slot. The control-plane resolves it to one of three shapes:
+     *   - a dual CONVERSION BLOCK ({type:conversion_block, tel, call_label, phone,
+     *     form_embed?}) — the service-page "Call Now" button + optional GHL form;
+     *   - a NAP block ({type:nap, name, address, phone, hours?}) — contact_block;
+     *   - a legacy {label, url} anchor (back-compat).
+     */
     public static function cta(mixed $value): string
     {
-        if (! is_array($value) || empty($value['url'])) {
+        if (! is_array($value)) {
+            return '';
+        }
+
+        $type = isset($value['type']) ? (string) $value['type'] : '';
+
+        if ($type === 'conversion_block') {
+            return self::conversion_block($value);
+        }
+
+        if ($type === 'nap') {
+            return self::nap_block($value);
+        }
+
+        if (empty($value['url'])) {
             return '';
         }
 
@@ -53,6 +73,117 @@ final class SlotRenderer
             esc_url((string) $value['url']),
             esc_html((string) ($value['label'] ?? 'Learn more'))
         );
+    }
+
+    /**
+     * The dual conversion block: a "Call Now" tel: button (the always-present floor,
+     * derived from the location phone) + an optional embedded GHL lead form. No tel
+     * → nothing; no form → call-button-only (graceful).
+     *
+     * @param  array<string, mixed>  $value
+     */
+    private static function conversion_block(array $value): string
+    {
+        $tel = isset($value['tel']) ? trim((string) $value['tel']) : '';
+        if ($tel === '') {
+            return '';
+        }
+
+        $label = (string) ($value['call_label'] ?? 'Call Now');
+        $phone = trim((string) ($value['phone'] ?? ''));
+
+        $out = '<div class="lp-conversion-block">';
+        $out .= sprintf(
+            '<a class="lp-conversion-block__call lp-cta" href="%s">%s</a>',
+            esc_url($tel, ['tel', 'http', 'https']),
+            esc_html($phone !== '' ? $label . ' ' . $phone : $label)
+        );
+
+        $embed = isset($value['form_embed']) ? (string) $value['form_embed'] : '';
+        if (trim($embed) !== '') {
+            $out .= '<div class="lp-conversion-block__form">' . self::embed_html($embed) . '</div>';
+        }
+
+        return $out . '</div>';
+    }
+
+    /**
+     * The location NAP block (contact_block) — name / address / click-to-call phone
+     * / hours, each rendered only when present.
+     *
+     * @param  array<string, mixed>  $value
+     */
+    private static function nap_block(array $value): string
+    {
+        $rows = '';
+
+        if (! empty($value['name'])) {
+            $rows .= '<div class="lp-nap__name">' . esc_html((string) $value['name']) . '</div>';
+        }
+        if (! empty($value['address'])) {
+            $rows .= '<div class="lp-nap__address">' . esc_html((string) $value['address']) . '</div>';
+        }
+        if (! empty($value['phone'])) {
+            $phone = (string) $value['phone'];
+            $rows .= sprintf(
+                '<div class="lp-nap__phone"><a href="%s">%s</a></div>',
+                esc_url('tel:' . preg_replace('/[^0-9+]/', '', $phone), ['tel']),
+                esc_html($phone)
+            );
+        }
+        if (! empty($value['hours']) && is_array($value['hours'])) {
+            $rows .= self::nap_hours($value['hours']);
+        }
+
+        return $rows === '' ? '' : '<div class="lp-nap">' . $rows . '</div>';
+    }
+
+    /**
+     * The per-day hours map ({mon:{open,close}|"closed"|"24h", …}) as a simple list.
+     *
+     * @param  array<string, mixed>  $hours
+     */
+    private static function nap_hours(array $hours): string
+    {
+        $rows = '';
+        foreach ($hours as $day => $value) {
+            if (is_array($value) && isset($value['open'], $value['close'])) {
+                $label = $value['open'] . '–' . $value['close'];
+            } elseif ($value === '24h') {
+                $label = 'Open 24 hours';
+            } else {
+                $label = 'Closed';
+            }
+            $rows .= sprintf(
+                '<div class="lp-nap__hours-row"><span class="lp-nap__day">%s</span><span class="lp-nap__time">%s</span></div>',
+                esc_html(ucfirst((string) $day)),
+                esc_html((string) $label)
+            );
+        }
+
+        return '<div class="lp-nap__hours">' . $rows . '</div>';
+    }
+
+    /**
+     * Sanitize an operator-configured embed snippet (e.g. the GoHighLevel lead-form
+     * iframe + loader script). This is platform-controlled config, not visitor
+     * input, so the allowlist permits the iframe/script/div an embed needs.
+     */
+    private static function embed_html(string $embed): string
+    {
+        $allowed = [
+            'iframe' => [
+                'src' => true, 'id' => true, 'class' => true, 'style' => true, 'title' => true,
+                'width' => true, 'height' => true, 'scrolling' => true, 'frameborder' => true,
+                'allow' => true, 'loading' => true,
+                'data-layout' => true, 'data-trigger-type' => true, 'data-form-id' => true,
+                'data-height' => true, 'data-form-name' => true, 'data-deactivation-type' => true,
+            ],
+            'script' => ['src' => true, 'type' => true, 'async' => true, 'defer' => true],
+            'div' => ['class' => true, 'id' => true, 'style' => true],
+        ];
+
+        return wp_kses($embed, $allowed);
     }
 
     /** A lazy map embed from {embed_url} or {lat,lng}. */
