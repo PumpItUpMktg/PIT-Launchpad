@@ -98,6 +98,7 @@
             "source": "grounded",
             "cardinality": { "type": "single" },
             "constraints": { "required": true, "min_length": 80, "entity": "proof.substantiated", "min_entities": 1 },
+            "condition": { "field": "has_proof", "equals": true },
             "client_override": true,
             "generation_hint": "Write only from the substantiated-claims set.",
             "elementor_binding": "lp/text"
@@ -146,6 +147,7 @@
             "source": "entity",
             "cardinality": { "type": "single" },
             "constraints": { "required": true },
+            "condition": { "field": "has_location_phone", "equals": true },
             "client_override": false,
             "elementor_binding": "lp/cta"
         },

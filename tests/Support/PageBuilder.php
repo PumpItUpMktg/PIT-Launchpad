@@ -87,10 +87,20 @@ class PageBuilder
      */
     public static function context(array $backed, bool $storefront = true): ValidationContext
     {
+        // backedSite() wires every entity, so all the §3a condition flags are
+        // satisfied — the conditional slots (cta / contact_block / proof_strip /
+        // testimonial / why_us) all apply and validate against the backing data.
         return new ValidationContext(
             content: $backed['content'],
             market: $backed['market'],
-            flags: ['is_storefront' => $storefront],
+            flags: [
+                'is_storefront' => $storefront,
+                'has_reviews' => true,
+                'has_proof' => true,
+                'has_substantiated_proof' => true,
+                'has_location' => true,
+                'has_location_phone' => true,
+            ],
         );
     }
 

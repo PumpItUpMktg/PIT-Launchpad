@@ -104,10 +104,13 @@ class PublishEligibility
      * Build the publish-time context: the page's market (from market_id), and the
      * flags the kit conditions read:
      *  - `has_reviews`  — ≥1 substantiated review (service-page testimonial slot).
+     *  - `has_proof` — ≥1 substantiated proof item (why_us omits below that).
      *  - `has_substantiated_proof` — ≥2 substantiated proof items (proof_strip omits
-     *    below that, like testimonial, rather than blocking — never fabricate stats).
+     *    below that, like testimonial — never fabricate stats, never block).
      *  - `has_location` — ≥1 location (contact_block resolves NAP from the primary
      *    location; with none, the block omits gracefully).
+     *  - `has_location_phone` — ≥1 location WITH a phone (the dual-conversion cta
+     *    derives its "Call Now" tel: link from it — the always-present floor).
      *  - `is_storefront` — the site's location is walk-in (nap_block/map conditions).
      */
     public function contextFor(Content $content): ValidationContext
@@ -117,23 +120,36 @@ class PublishEligibility
             : null;
 
         $base = new ValidationContext($content);
-        $hasReviews = ($this->entities->count('reviews.site', $base) ?? 0) >= 1;
-        $hasSubstantiatedProof = ($this->entities->count('proof.substantiated', $base) ?? 0) >= 2;
-        $hasLocation = ($this->entities->count('location.nap', $base) ?? 0) >= 1;
-        $isStorefront = (bool) Location::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->value('is_storefront');
+        $proofCount = $this->entities->count('proof.substantiated', $base) ?? 0;
 
         return new ValidationContext(
             content: $content,
             market: $market,
             flags: [
-                'has_reviews' => $hasReviews,
-                'has_substantiated_proof' => $hasSubstantiatedProof,
-                'has_location' => $hasLocation,
-                'is_storefront' => $isStorefront,
+                'has_reviews' => ($this->entities->count('reviews.site', $base) ?? 0) >= 1,
+                'has_proof' => $proofCount >= 1,
+                'has_substantiated_proof' => $proofCount >= 2,
+                'has_location' => ($this->entities->count('location.nap', $base) ?? 0) >= 1,
+                'has_location_phone' => $this->hasLocationPhone($content->site_id),
+                'is_storefront' => $this->isStorefront($content->site_id),
             ],
         );
+    }
+
+    private function hasLocationPhone(string $siteId): bool
+    {
+        return Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->whereNotNull('phone')
+            ->where('phone', '!=', '')
+            ->exists();
+    }
+
+    private function isStorefront(string $siteId): bool
+    {
+        return (bool) Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->value('is_storefront');
     }
 
     private function isLocationPage(Content $content): bool

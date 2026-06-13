@@ -4,11 +4,14 @@ namespace App\Publishing;
 
 use App\Enums\ContentKind;
 use App\Models\Content;
+use App\Models\ConversionConfig;
+use App\Models\Location;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
 use App\PageBuilder\Schema\KitSchema;
+use App\PageBuilder\Validation\PublishEligibility;
 use App\Support\SeoTitle;
 use Illuminate\Support\Collection;
 
@@ -21,6 +24,8 @@ use Illuminate\Support\Collection;
  */
 class MetaBlobAssembler
 {
+    public function __construct(private readonly PublishEligibility $eligibility) {}
+
     /**
      * @param  Collection<int, RenderJob>  $renderJobs
      * @return array<string, mixed>
@@ -97,7 +102,127 @@ class MetaBlobAssembler
         // tree, leaving structure intact and only scrubbing string leaves.
         if ($content->kind === ContentKind::Page) {
             $slots = $this->scrubTokens($slots);
+
+            $schema = $content->wireframe_kit_id !== null ? $content->wireframeKit?->schema() : null;
+            if ($schema !== null) {
+                // Honor the kit's conditions: a slot whose condition isn't met by the
+                // publish-time flags is omitted (why_us with no proof, testimonial
+                // with no reviews, …) — generated copy for an unmet section never ships.
+                $slots = $this->dropUnmetConditionalSlots($content, $slots, $schema);
+                // Resolve the derived conversion slots AFTER the scrub so the GHL
+                // form-embed HTML is never token-stripped.
+                $slots = $this->resolveConversionSlots($content, $slots, $schema);
+            }
         }
+
+        return $slots;
+    }
+
+    /**
+     * Drop any slot whose kit condition is not satisfied by the page's publish-time
+     * flags (reusing §3a's single flag source). Entity slots the model never emits
+     * are already absent; this matters for generated/grounded conditional slots
+     * (e.g. why_us), so an unearned section's copy doesn't render.
+     *
+     * @param  array<string, mixed>  $slots
+     * @return array<string, mixed>
+     */
+    private function dropUnmetConditionalSlots(Content $content, array $slots, KitSchema $schema): array
+    {
+        $flags = $this->eligibility->contextFor($content)->flags;
+
+        foreach ($schema->slots as $slot) {
+            if (! $slot->appliesTo($flags) && array_key_exists($slot->key, $slots)) {
+                unset($slots[$slot->key]);
+            }
+        }
+
+        return $slots;
+    }
+
+    /**
+     * Fill the structural conversion slots from §1 data — these are platform-derived,
+     * not model copy, so they overwrite whatever the drafter emitted:
+     *
+     *  - `cta` → the dual conversion block: a "Call Now" tel: link derived from the
+     *    primary location's phone (the always-present floor) PLUS, when configured,
+     *    the site's GoHighLevel lead-form embed. No phone → the slot is omitted
+     *    (the has_location_phone floor wasn't met); no form → call-button-only.
+     *  - `contact_block` → the primary location's NAP. No location → omitted.
+     *
+     * Applied only when the page's kit declares the slot, so it is a no-op for kits
+     * that don't (e.g. a post body).
+     *
+     * @param  array<string, mixed>  $slots
+     * @return array<string, mixed>
+     */
+    private function resolveConversionSlots(Content $content, array $slots, KitSchema $schema): array
+    {
+        $slotKeys = array_map(fn ($slot) => $slot->key, $schema->slots);
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->orderBy('created_at')
+            ->first();
+
+        if (in_array('cta', $slotKeys, true)) {
+            $slots = $this->resolveCtaSlot($content, $location, $slots);
+        }
+
+        if (in_array('contact_block', $slotKeys, true)) {
+            $slots = $this->resolveContactBlock($location, $slots);
+        }
+
+        return $slots;
+    }
+
+    /**
+     * @param  array<string, mixed>  $slots
+     * @return array<string, mixed>
+     */
+    private function resolveCtaSlot(Content $content, ?Location $location, array $slots): array
+    {
+        $phone = $location?->phone;
+
+        if ($phone === null || trim($phone) === '') {
+            unset($slots['cta']); // no derivable phone → no conversion block
+
+            return $slots;
+        }
+
+        $formEmbed = ConversionConfig::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->value('ghl_form_embed');
+
+        $slots['cta'] = array_filter([
+            'type' => 'conversion_block',
+            'call_label' => 'Call Now',
+            'phone' => $phone,
+            'tel' => 'tel:'.preg_replace('/[^0-9+]/', '', $phone),
+            'form_embed' => is_string($formEmbed) && trim($formEmbed) !== '' ? $formEmbed : null,
+        ], static fn ($v) => $v !== null);
+
+        return $slots;
+    }
+
+    /**
+     * @param  array<string, mixed>  $slots
+     * @return array<string, mixed>
+     */
+    private function resolveContactBlock(?Location $location, array $slots): array
+    {
+        if ($location === null) {
+            unset($slots['contact_block']);
+
+            return $slots;
+        }
+
+        $slots['contact_block'] = array_filter([
+            'type' => 'nap',
+            'name' => $location->name,
+            'address' => $location->address,
+            'phone' => $location->phone,
+            'hours' => $location->hours,
+        ], static fn ($v) => $v !== null && $v !== '' && $v !== []);
 
         return $slots;
     }
