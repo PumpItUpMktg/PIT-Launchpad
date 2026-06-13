@@ -36,6 +36,21 @@ class Onboarding extends Page
 
     protected string $view = 'filament.pages.onboarding';
 
+    /**
+     * Hidden from the operator nav for now — a deliberate "don't walk here yet"
+     * gate, not a deletion. This 9-step §7a intake is the richer net-new-business
+     * flow, but its WordPress-connection step is still stubbed (stores app_password
+     * only, no username, unverified), so it would dead-end at publish. The hardened
+     * Create Site wizard (Portfolio → New site) is the canonical create path until
+     * the "unify onboarding" slice ports the verified connection (username + Test
+     * connection + three-key persistence) into here. Logic is untouched (the page
+     * still mounts) so that slice can re-enable it by flipping this back.
+     */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     /** @var array<string, mixed> */
     public array $data = [];
 
