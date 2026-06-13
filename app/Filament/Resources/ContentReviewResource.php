@@ -146,7 +146,8 @@ class ContentReviewResource extends Resource
             ->label('Generate post')
             ->icon('heroicon-o-sparkles')
             ->color('info')
-            ->visible(fn (Content $record): bool => ! $record->hasDraft() && ! $record->isGenerating())
+            // Post lane only — a page parked in in_review must not be re-kinded to a post.
+            ->visible(fn (Content $record): bool => $record->kind === ContentKind::Post && ! $record->hasDraft() && ! $record->isGenerating())
             ->requiresConfirmation()
             ->modalDescription('Queues the draft (Sonnet) + image render (fal) on the worker — the expensive step runs in the background, not in this request. The row shows "Generating" until the draft is ready.')
             ->action(function (Content $record): void {

@@ -4,8 +4,10 @@ namespace App\ContentEngine\Generation;
 
 use App\ContentEngine\Drafting\DraftingEngine;
 use App\ContentEngine\Drafting\DraftResult;
+use App\Enums\ContentKind;
 use App\Models\Content;
 use App\Publishing\RenderCoordinator;
+use InvalidArgumentException;
 
 /**
  * The on-demand "Generate post" flow for a single routed candidate: draft it
@@ -25,6 +27,16 @@ class PostGenerator
 
     public function generate(Content $candidate, ?string $marketId = null, ?string $sourceBody = null): DraftResult
     {
+        // The post lane must never touch a page. Drafting a candidate hard-codes
+        // kind=Post (DraftRequest::forCandidate), so running this on a §4 pillar
+        // (kind=page) would FLIP it to a post and publish it through the blog
+        // template. Pages have their own flow (PageGenerator / "Generate page").
+        if ($candidate->kind === ContentKind::Page) {
+            throw new InvalidArgumentException(
+                "Content [{$candidate->id}] is a page — generate it via the page flow (Generate page), not as a post."
+            );
+        }
+
         // Draft the candidate in place → needs_review.
         $result = $this->engine->draftCandidate($candidate, $marketId, $sourceBody);
 
