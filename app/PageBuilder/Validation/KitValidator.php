@@ -227,7 +227,10 @@ class KitValidator
         }
 
         return match ($type) {
-            SlotContentType::Cta => isset($value['label']) && (isset($value['url']) || isset($value['action'])),
+            // A CTA needs a label; its destination (url/action) is resolved from §1
+            // conversion data at publish for entity-sourced CTAs (the model writes
+            // the label, never invents a URL), so url/action are optional at draft.
+            SlotContentType::Cta => isset($value['label']) && $value['label'] !== '',
             SlotContentType::Stat => isset($value['value']) && isset($value['label']),
             SlotContentType::Testimonial => (isset($value['quote']) || isset($value['body'])) && isset($value['author']),
             SlotContentType::Map => (isset($value['lat']) && isset($value['lng'])) || isset($value['location_id']),

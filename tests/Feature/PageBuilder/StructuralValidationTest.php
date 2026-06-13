@@ -82,3 +82,26 @@ test('a media slot below the declared size fails', function () {
 
     expect($result->hasCode(ValidationCode::MediaSizeBelowMinimum))->toBeTrue();
 });
+
+test('an entity CTA with only a label passes — url/action resolve from §1 at publish, not at draft', function () {
+    // The live failure: the model drafted cta/contact_block (content_type=cta) with
+    // just a label, and the matcher demanded url|action — rejecting valid copy.
+    $payload = PageBuilder::validServicePayload();
+    $payload['cta'] = ['label' => 'Call now for same-day service'];
+    $payload['contact_block'] = ['label' => 'Contact our team'];
+
+    $result = $this->validator->validate($this->kit, $payload, $this->context);
+
+    expect($result->hasCode(ValidationCode::ContentTypeMismatch))->toBeFalse()
+        ->and($result->failuresFor('cta'))->toBe([])
+        ->and($result->failuresFor('contact_block'))->toBe([]);
+});
+
+test('a CTA with no label still fails the content-type check', function () {
+    $payload = PageBuilder::validServicePayload();
+    $payload['cta'] = ['url' => 'https://example.com/book']; // url but no label
+
+    $result = $this->validator->validate($this->kit, $payload, $this->context);
+
+    expect($result->hasCode(ValidationCode::ContentTypeMismatch))->toBeTrue();
+});
