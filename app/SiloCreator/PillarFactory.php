@@ -21,7 +21,7 @@ class PillarFactory
     public function ensurePillar(Silo $silo, SiloProposal $proposal): Content
     {
         $title = $proposal->isServicePillar() ? $proposal->name : 'Guide: '.$proposal->name;
-        $kit = $this->resolveKit($proposal->pillarPageType, $silo->site_id);
+        $kit = self::resolveKit($proposal->pillarPageType, $silo->site_id);
 
         $content = Content::create([
             'site_id' => $silo->site_id,
@@ -50,9 +50,10 @@ class PillarFactory
     /**
      * The library kit for a page_type, preferring a per-site override over the
      * shared library kit, newest version first. WireframeKit opts out of the site
-     * global scope, so this is an explicit, deterministic lookup.
+     * global scope, so this is an explicit, deterministic lookup. Public + static so
+     * the repair command re-pins exactly the kit a fresh pillar would get.
      */
-    private function resolveKit(PageType $pageType, string $siteId): ?WireframeKit
+    public static function resolveKit(PageType $pageType, string $siteId): ?WireframeKit
     {
         return WireframeKit::query()
             ->where('page_type', $pageType->value)
