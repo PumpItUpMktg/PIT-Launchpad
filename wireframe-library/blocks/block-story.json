@@ -1,0 +1,136 @@
+{
+    "version": "0.4",
+    "title": "Block - Story",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "4beea69",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-story",
+                "_css_classes": "wf-block wf-block-story"
+            },
+            "elements": [
+                {
+                    "id": "a68b51c",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Our story",
+                        "header_size": "h2",
+                        "_title": "story_heading",
+                        "_css_classes": "wf-story-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "aaf583f",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 34,
+                            "column": "34",
+                            "row": "34"
+                        },
+                        "flex_align_items": "center"
+                    },
+                    "elements": [
+                        {
+                            "id": "174f921",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 16,
+                                    "column": "16",
+                                    "row": "16"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 55,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "4ad1f8a",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Story body, 400–700 chars.</p>",
+                                        "_title": "story_body",
+                                        "_css_classes": "wf-story-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "ca1306e",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 16,
+                                    "column": "16",
+                                    "row": "16"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 45,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "de69803",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/story-800x600.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "600"
+                                        },
+                                        "_title": "story_image",
+                                        "_css_classes": "wf-story-image"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

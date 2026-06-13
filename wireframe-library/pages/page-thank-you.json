@@ -1,0 +1,70 @@
+{
+    "version": "0.4",
+    "title": "Page - Thank You",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "225767f",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-utility-message",
+                "_css_classes": "wf-block wf-block-utility-message",
+                "flex_align_items": "center"
+            },
+            "elements": [
+                {
+                    "id": "c4b78cd",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Thank you!",
+                        "header_size": "h1",
+                        "_title": "util_heading",
+                        "_css_classes": "wf-util-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "3913f1d",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>We've received your message and will be in touch shortly.</p>",
+                        "_title": "util_body",
+                        "_css_classes": "wf-util-body"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "c5553c8",
+                    "elType": "widget",
+                    "widgetType": "button",
+                    "settings": {
+                        "text": "Back to home",
+                        "_title": "util_cta",
+                        "_css_classes": "wf-util-cta"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}

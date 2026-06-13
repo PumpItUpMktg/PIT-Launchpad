@@ -1,0 +1,45 @@
+{
+    "version": "0.4",
+    "title": "Block - Article Body",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "c363b45",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-article-body",
+                "_css_classes": "wf-block wf-block-article-body"
+            },
+            "elements": [
+                {
+                    "id": "e12e935",
+                    "elType": "widget",
+                    "widgetType": "theme-post-content",
+                    "settings": {
+                        "_title": "article_body",
+                        "_css_classes": "wf-article-body"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}

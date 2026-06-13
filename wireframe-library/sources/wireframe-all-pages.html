@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Library — All Page Layouts</title>
+<style>
+  :root{
+    --anno:#4338CA;--anno-soft:#EEF0FB;
+    --new:#B45309;--new-soft:#FBF1E4;
+    --cond:#0F766E;--cond-soft:#E3F3F1;
+    --ink:#1F2530;--ink-2:#5A6573;--ink-3:#9AA4B0;
+    --bg:#FBFBFC;--panel:#FFFFFF;--line:#E3E7EC;--line-2:#CFD6DE;
+    --maxw:1080px;--gut:clamp(16px,4vw,44px);
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gut)}
+
+  /* key */
+  .key{background:var(--ink);color:#fff;padding:18px 0}
+  .key .wrap{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
+  .key h1{font-size:1.05rem;font-weight:700}
+  .key .legend{display:flex;flex-wrap:wrap;gap:14px;font-family:var(--mono);font-size:11px;color:#C4CBD4}
+  .key .legend b{color:#fff}
+  .key .legend .nw{color:#F2C181}.key .legend .cd{color:#7FD8CE}.key .legend .rp{color:#B9C0EE}
+
+  .page{padding-block:26px 60px}
+
+  /* page card */
+  .pcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:20px 0;overflow:hidden}
+  .phead{padding:18px 22px;border-bottom:1px solid var(--line);background:linear-gradient(var(--bg),#fff)}
+  .phead .pt{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .phead h2{font-size:1.35rem;font-weight:800;letter-spacing:-.01em}
+  .phead .url{font-family:var(--mono);font-size:11.5px;color:var(--anno)}
+  .phead .purpose{color:var(--ink-2);font-size:.92rem;margin-top:5px}
+  .pbody{padding:14px 16px 20px}
+
+  /* block row */
+  .brow{display:flex;align-items:flex-start;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--bg)}
+  .bnum{font-family:var(--mono);font-size:11px;color:var(--ink-3);font-weight:700;flex:0 0 auto;width:22px;text-align:right;padding-top:3px}
+  .bmain{flex:1 1 auto;min-width:0}
+  .bname{font-weight:700;font-size:.97rem;display:inline-flex;align-items:center;gap:8px}
+  .pill{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:4px;vertical-align:middle}
+  .pill.new{color:var(--new);background:var(--new-soft);border:1px solid #EAD6B8}
+  .pill.cond{color:var(--cond);background:var(--cond-soft);border:1px solid #BFE3DE}
+  .pill.reuse{color:var(--anno);background:var(--anno-soft);border:1px solid #D9DCF4}
+  .chips{margin-top:7px;display:flex;flex-wrap:wrap;gap:5px}
+  .chip{font-family:var(--mono);font-size:10.5px;color:var(--ink-2);background:#fff;border:1px solid var(--line);border-radius:5px;padding:2px 7px}
+  .chip b{color:var(--ink)}
+  .chip.img{color:var(--anno);border-color:#D9DCF4;background:var(--anno-soft)}
+  .chip.h{color:var(--ink);font-weight:700}
+
+  /* expanded new block */
+  .expand{margin:6px 0 8px 34px;border-left:2px solid var(--new);padding:10px 0 10px 14px}
+  .expand .lbl{font-family:var(--mono);font-size:10px;color:var(--new);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+  .mini-grid{display:grid;gap:9px}
+  .mg-3{grid-template-columns:repeat(3,1fr)}
+  .mg-4{grid-template-columns:repeat(4,1fr)}
+  .mg-2{grid-template-columns:1fr 1fr}
+  .card-ph{border:1px dashed var(--line-2);border-radius:8px;padding:0;overflow:hidden;background:#fff}
+  .card-ph .ci{aspect-ratio:3/2;background:repeating-linear-gradient(135deg,#EEF1F4 0 1px,transparent 1px 10px),#F4F6F8;display:grid;place-items:center;font-family:var(--mono);font-size:10px;color:var(--ink-3);border-bottom:1px dashed var(--line-2)}
+  .card-ph .ci.sq{aspect-ratio:1/1}
+  .card-ph .cb{padding:10px 11px 13px;display:grid;gap:5px}
+  .card-ph .cb .h{font-weight:700;font-size:.85rem}
+  .card-ph .cb .t{font-size:.76rem;color:var(--ink-2)}
+  .form-ph{display:grid;gap:8px;max-width:380px}
+  .field{border:1px solid var(--line-2);border-radius:7px;padding:9px 11px;font-family:var(--mono);font-size:11px;color:var(--ink-3);background:#fff}
+  .field.area{height:64px}
+  .map-ph{aspect-ratio:8/5;border:1px dashed var(--line-2);border-radius:8px;background:repeating-linear-gradient(135deg,#EEF1F4 0 1px,transparent 1px 10px),#F4F6F8;display:grid;place-items:center;font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+  .hours-ph{display:grid;gap:4px;font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+  .hours-ph div{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:3px 0;max-width:280px}
+
+  /* summary */
+  .summary{margin-top:34px}
+  .summary h2{font-size:1.3rem;margin-bottom:6px}
+  .summary .sub-h{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-bottom:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:20px}
+  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line)}
+  th{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);background:var(--bg)}
+  td:first-child{font-weight:600;color:var(--ink)}
+  td .m{font-family:var(--mono);color:var(--anno);font-size:12px}
+  tr:last-child td{border-bottom:0}
+
+  @media(max-width:720px){.mg-3,.mg-4{grid-template-columns:1fr 1fr}}
+  @media(max-width:460px){.mg-3,.mg-4,.mg-2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="key">
+  <div class="wrap">
+    <h1>Library — All Page Layouts</h1>
+    <div class="legend">
+      <span><b>chips</b> = block elements (H/TEXT/IMG/BTN)</span>
+      <span class="nw">▸ NEW = block to add to library</span>
+      <span class="rp">▸ REUSE = existing library block</span>
+      <span class="cd">▸ COND = conditional</span>
+    </div>
+  </div>
+</div>
+
+<div class="page wrap">
+
+  <!-- HOME -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Home</h2><span class="url">/</span></div><div class="purpose">Brand‑level entry. Routes to silos, markets, proof.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Hero — brand‑led <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H1 · 30–60</span><span class="chip">TEXT · 90–160</span><span class="chip">BTN ×2</span><span class="chip img">IMG · 1200×900</span></div></div></div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Trust bar <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip">TEXT ×4 pairs</span></div></div></div>
+      <div class="brow"><span class="bnum">04</span><div class="bmain"><span class="bname">Services overview <span class="pill new">new</span></span><div class="chips"><span class="chip h">H2 · 30–55</span><span class="chip">service cards ×N</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · services-grid — card ×N</div><div class="mini-grid mg-3">
+        <div class="card-ph"><div class="ci">IMG 600×400</div><div class="cb"><span class="h">H3 · 18–40</span><span class="t">TEXT · 60–120</span></div></div>
+        <div class="card-ph"><div class="ci">IMG 600×400</div><div class="cb"><span class="h">Service</span><span class="t">Blurb + link</span></div></div>
+        <div class="card-ph"><div class="ci">IMG 600×400</div><div class="cb"><span class="h">Service</span><span class="t">Blurb + link</span></div></div>
+      </div></div>
+      <div class="brow"><span class="bnum">05</span><div class="bmain"><span class="bname">Why us <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H2</span><span class="chip">3 × (H3 + TEXT)</span></div></div></div>
+      <div class="brow"><span class="bnum">06</span><div class="bmain"><span class="bname">Service areas teaser <span class="pill new">new</span></span><div class="chips"><span class="chip h">H2 · 30–55</span><span class="chip img">map 800×500</span><span class="chip">market links ×N</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · areas-teaser — map + market link list</div><div class="mini-grid mg-2">
+        <div class="map-ph">map embed / static 800×500</div>
+        <div class="hours-ph"><div>Market one <span>→</span></div><div>Market two <span>→</span></div><div>Market three <span>→</span></div><div>Market four <span>→</span></div><div>View all areas <span>→</span></div></div>
+      </div></div>
+      <div class="brow"><span class="bnum">07</span><div class="bmain"><span class="bname">Reviews <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H2</span><span class="chip">rating + 3 cards</span></div></div></div>
+      <div class="brow"><span class="bnum">08</span><div class="bmain"><span class="bname">Recent work (jobs) <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H2</span><span class="chip img">4 × IMG 800×600</span></div></div></div>
+      <div class="brow"><span class="bnum">09</span><div class="bmain"><span class="bname">FAQ <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">10</span><div class="bmain"><span class="bname">Final CTA <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">11</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- SERVICE HUB -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Service Hub</h2><span class="url">/services/[silo]</span></div><div class="purpose">Silo landing. The connective spine — lists every service in one category.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Hero — category‑led <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H1 · 30–60</span><span class="chip">TEXT · 90–160</span><span class="chip">BTN</span><span class="chip img">IMG · 1200×900</span></div></div></div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Category intro <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H2 · 30–55</span><span class="chip">TEXT · 180–320</span></div></div></div>
+      <div class="brow"><span class="bnum">04</span><div class="bmain"><span class="bname">Services grid <span class="pill new">new</span></span><div class="chips"><span class="chip h">H2</span><span class="chip">service cards ×N (this silo)</span></div></div></div>
+      <div class="brow"><span class="bnum">05</span><div class="bmain"><span class="bname">Why us <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">06</span><div class="bmain"><span class="bname">Reviews <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">07</span><div class="bmain"><span class="bname">Final CTA <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">08</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- SERVICE (reference) -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Service</h2><span class="url">/services/[silo]/[service]</span><span class="pill reuse">detailed</span></div><div class="purpose">Detailed in wireframe-service-page.html.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">—</span><div class="bmain"><span class="bname">Header → Hero (problem‑led) → Trust bar → Problem/Solution → Why us → Proof strip → Reviews (service) → Jobs (service) → FAQ → Final CTA → Footer</span></div></div>
+    </div>
+  </div>
+
+  <!-- SERVICE-IN-LOCATION -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Service‑in‑Location</h2><span class="url">/[market]/[service]</span><span class="pill new">silo money page</span></div><div class="purpose">The silo intersection — service × market. Merges Service + Location blocks; reviews & jobs are proximity‑scoped AND service‑filtered.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Hero — service + area <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H1 · 40–70</span><span class="chip">TEXT · 90–160</span><span class="chip">BTN ×2</span><span class="chip img">IMG · 1200×900 (brand)</span></div></div></div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Trust bar <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">04</span><div class="bmain"><span class="bname">Problem / Solution <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H2</span><span class="chip">2 × (H3 + TEXT + list)</span></div></div></div>
+      <div class="brow"><span class="bnum">05</span><div class="bmain"><span class="bname">Area intro <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H2</span><span class="chip">TEXT · 220–400</span></div></div></div>
+      <div class="brow"><span class="bnum">06</span><div class="bmain"><span class="bname">NAP &amp; map <span class="pill cond">cond · storefront</span></span><div class="chips"><span class="chip">TEXT · NAP</span><span class="chip img">map 800×500</span></div></div></div>
+      <div class="brow"><span class="bnum">07</span><div class="bmain"><span class="bname">Why us — local <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">08</span><div class="bmain"><span class="bname">Reviews <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip">proximity + service filter</span></div></div></div>
+      <div class="brow"><span class="bnum">09</span><div class="bmain"><span class="bname">Recent work (jobs) <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip">proximity + service filter</span></div></div></div>
+      <div class="brow"><span class="bnum">10</span><div class="bmain"><span class="bname">FAQ <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">11</span><div class="bmain"><span class="bname">Final CTA <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">12</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- SERVICE AREAS HUB -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Service Areas Hub</h2><span class="url">/service-areas</span></div><div class="purpose">Index of every market. Routes to each Location page.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Hero <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H1</span><span class="chip">TEXT</span><span class="chip img">IMG 1200×900</span></div></div></div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Intro <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H2</span><span class="chip">TEXT · 180–320</span></div></div></div>
+      <div class="brow"><span class="bnum">04</span><div class="bmain"><span class="bname">Markets grid <span class="pill new">new</span></span><div class="chips"><span class="chip img">map 800×500</span><span class="chip">market cards ×N</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · markets-grid — map + market cards</div><div class="mini-grid mg-4">
+        <div class="card-ph"><div class="cb"><span class="h">Market name</span><span class="t">TEXT · 8–24</span></div></div>
+        <div class="card-ph"><div class="cb"><span class="h">Market</span><span class="t">link →</span></div></div>
+        <div class="card-ph"><div class="cb"><span class="h">Market</span><span class="t">link →</span></div></div>
+        <div class="card-ph"><div class="cb"><span class="h">Market</span><span class="t">link →</span></div></div>
+      </div></div>
+      <div class="brow"><span class="bnum">05</span><div class="bmain"><span class="bname">Reviews <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">06</span><div class="bmain"><span class="bname">Final CTA <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">07</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- LOCATION (reference) -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Location</h2><span class="url">/[market]</span><span class="pill reuse">detailed</span></div><div class="purpose">Detailed in wireframe-location-page.html.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">—</span><div class="bmain"><span class="bname">Header → Hero (area‑led) → Area intro → NAP/map (cond) → Services in market → Why us (local) → Reviews (proximity) → Jobs (proximity) → FAQ (optional) → Final CTA → Footer</span></div></div>
+    </div>
+  </div>
+
+  <!-- ABOUT -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>About</h2><span class="url">/about</span></div><div class="purpose">Trust & story. Company narrative, team, values.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Hero — about <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H1</span><span class="chip">TEXT</span><span class="chip img">IMG 1200×900</span></div></div></div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Story <span class="pill new">new</span></span><div class="chips"><span class="chip h">H2 · 30–55</span><span class="chip">TEXT · 400–700</span><span class="chip img">IMG 800×600</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · story-block — text + supporting image</div><div class="mini-grid mg-2">
+        <div class="card-ph"><div class="cb"><span class="h">H2</span><span class="t">Long-form narrative · TEXT 400–700</span></div></div>
+        <div class="card-ph"><div class="ci">IMG 800×600</div></div>
+      </div></div>
+      <div class="brow"><span class="bnum">04</span><div class="bmain"><span class="bname">Trust bar <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">05</span><div class="bmain"><span class="bname">Team grid <span class="pill new">new</span></span><div class="chips"><span class="chip h">H2</span><span class="chip">member cards ×N</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · team-grid — member card ×N (square photo)</div><div class="mini-grid mg-4">
+        <div class="card-ph"><div class="ci sq">IMG 400×400</div><div class="cb"><span class="h">Name · 8–28</span><span class="t">Role · 8–32</span></div></div>
+        <div class="card-ph"><div class="ci sq">400×400</div><div class="cb"><span class="h">Name</span><span class="t">Role</span></div></div>
+        <div class="card-ph"><div class="ci sq">400×400</div><div class="cb"><span class="h">Name</span><span class="t">Role</span></div></div>
+        <div class="card-ph"><div class="ci sq">400×400</div><div class="cb"><span class="h">Name</span><span class="t">Role</span></div></div>
+      </div></div>
+      <div class="brow"><span class="bnum">06</span><div class="bmain"><span class="bname">Values / Why us <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">07</span><div class="bmain"><span class="bname">Proof strip <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">08</span><div class="bmain"><span class="bname">Reviews <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">09</span><div class="bmain"><span class="bname">Final CTA <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">10</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- CONTACT -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Contact</h2><span class="url">/contact</span></div><div class="purpose">Conversion / capture. Form, NAP, hours, map.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Hero — slim <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H1 · 20–45</span><span class="chip">TEXT · 60–120</span></div></div></div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Contact form + details <span class="pill new">new</span></span><div class="chips"><span class="chip">form fields</span><span class="chip">TEXT · NAP</span><span class="chip">hours</span></div></div></div>
+      <div class="expand"><div class="lbl">New blocks · contact-form + hours</div><div class="mini-grid mg-2">
+        <div class="form-ph"><div class="field">Name</div><div class="field">Email</div><div class="field">Phone</div><div class="field area">Message</div><div class="field" style="background:#E9ECEF;color:var(--ink);text-align:center;font-weight:700">Submit</div></div>
+        <div>
+          <div class="hours-ph" style="margin-bottom:12px"><div>Mon–Fri <span>00:00–00:00</span></div><div>Sat <span>00:00–00:00</span></div><div>Sun <span>Closed</span></div></div>
+          <div class="card-ph"><div class="cb"><span class="h">NAP</span><span class="t">name / address / city / phone</span></div></div>
+        </div>
+      </div></div>
+      <div class="brow"><span class="bnum">04</span><div class="bmain"><span class="bname">Map <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip img">map 800×500 (full width)</span></div></div></div>
+      <div class="brow"><span class="bnum">05</span><div class="bmain"><span class="bname">Final CTA <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">06</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- BLOG INDEX -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Blog Index</h2><span class="url">/blog</span></div><div class="purpose">Archive of posts from the news‑to‑blog engine. Routes to each post.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Page title <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H1 · 20–45</span><span class="chip">TEXT · 60–120</span></div></div></div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Post grid <span class="pill new">new</span></span><div class="chips"><span class="chip">post cards ×N</span><span class="chip">pagination</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · post-grid — post card ×N</div><div class="mini-grid mg-3">
+        <div class="card-ph"><div class="ci" style="aspect-ratio:16/9">IMG 640×360</div><div class="cb"><span class="t" style="color:var(--anno)">Category · date</span><span class="h">H3 title · 30–70</span><span class="t">Excerpt · 80–160</span></div></div>
+        <div class="card-ph"><div class="ci" style="aspect-ratio:16/9">640×360</div><div class="cb"><span class="t" style="color:var(--anno)">Category</span><span class="h">Title</span><span class="t">Excerpt</span></div></div>
+        <div class="card-ph"><div class="ci" style="aspect-ratio:16/9">640×360</div><div class="cb"><span class="t" style="color:var(--anno)">Category</span><span class="h">Title</span><span class="t">Excerpt</span></div></div>
+      </div></div>
+      <div class="brow"><span class="bnum">04</span><div class="bmain"><span class="bname">Final CTA <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">05</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- BLOG POST -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Blog Post</h2><span class="url">/blog/[post]</span><span class="pill new">article</span></div><div class="purpose">Single‑post template. Body copy + featured image are produced by the news‑to‑blog engine (AI), editable after.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Article header <span class="pill new">new</span></span><div class="chips"><span class="chip h">H1 · 30–80</span><span class="chip">meta: date · author · category</span><span class="chip img">featured 1200×675</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · article-header</div><div class="mini-grid mg-2">
+        <div class="card-ph"><div class="cb"><span class="t" style="color:var(--anno)">Category · date · read time</span><span class="h" style="font-size:1rem">H1 article title · 30–80</span><span class="t">Byline · author</span></div></div>
+        <div class="card-ph"><div class="ci" style="aspect-ratio:16/9">featured IMG 1200×675</div></div>
+      </div></div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Article body <span class="pill new">new</span></span><div class="chips"><span class="chip">rich content area</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · article-body — rich content region (the generated post renders here)</div>
+        <div class="chips"><span class="chip h">H2 subheads</span><span class="chip h">H3 subheads</span><span class="chip">TEXT paragraphs</span><span class="chip img">inline IMG 1000×667</span><span class="chip">lists</span><span class="chip">blockquote</span><span class="chip">inline CTA</span></div>
+      </div>
+      <div class="brow"><span class="bnum">04</span><div class="bmain"><span class="bname">Author + share <span class="pill new">new · opt</span></span><div class="chips"><span class="chip img">avatar 96×96</span><span class="chip">bio TEXT</span><span class="chip">share</span></div></div></div>
+      <div class="brow"><span class="bnum">05</span><div class="bmain"><span class="bname">Conversion CTA <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">06</span><div class="bmain"><span class="bname">Related posts <span class="pill new">new</span></span><div class="chips"><span class="chip">post cards ×3 (reuses post-grid)</span></div></div></div>
+      <div class="brow"><span class="bnum">07</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- BASIC CONTENT (plain jane) -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Basic Content Page</h2><span class="url">/privacy · /terms · /accessibility · /disclaimer</span><span class="pill new">plain</span></div><div class="purpose">One minimal template for every legal / housekeeping page. Title + rich text only — no marketing blocks.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Basic content <span class="pill new">new</span></span><div class="chips"><span class="chip h">H1 · 12–50</span><span class="chip">"last updated" TEXT</span><span class="chip">rich text body</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · basic-content — narrow column, inherits global type</div>
+        <div class="card-ph" style="max-width:520px"><div class="cb"><span class="h" style="font-size:1rem">H1 page title</span><span class="t" style="font-family:var(--mono)">Last updated: 00/00/0000</span><span class="t">Rich text content area — H2/H3 + paragraphs + lists. No char cap (legal copy).</span></div></div>
+      </div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- 404 -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>404 — Not Found</h2><span class="url">/404</span></div><div class="purpose">Recover the visitor — clear message + routes back into the site.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Utility message <span class="pill new">new</span></span><div class="chips"><span class="chip h">H1 · 8–40</span><span class="chip">TEXT · 40–120</span><span class="chip">BTN home</span><span class="chip">helpful links</span></div></div></div>
+      <div class="expand"><div class="lbl">New block · utility-message — centered, reused by 404 + Thank You</div>
+        <div class="card-ph" style="max-width:440px;text-align:center"><div class="cb" style="place-items:center"><span class="h" style="font-size:1rem">H1 headline</span><span class="t">TEXT message</span><span class="t" style="color:var(--ink);font-weight:700;border:1px solid var(--line-2);border-radius:7px;padding:7px 16px">BTN</span></div></div>
+      </div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- THANK YOU -->
+  <div class="pcard">
+    <div class="phead"><div class="pt"><h2>Thank You</h2><span class="url">/thank-you</span></div><div class="purpose">Post‑submission confirmation. Conversion tracking fires here.</div></div>
+    <div class="pbody">
+      <div class="brow"><span class="bnum">01</span><div class="bmain"><span class="bname">Header <span class="pill reuse">reuse</span></span></div></div>
+      <div class="brow"><span class="bnum">02</span><div class="bmain"><span class="bname">Utility message <span class="pill reuse">reuse</span></span><div class="chips"><span class="chip h">H1 · 8–40</span><span class="chip">TEXT · what happens next</span><span class="chip">BTN</span></div></div></div>
+      <div class="brow"><span class="bnum">03</span><div class="bmain"><span class="bname">Footer <span class="pill reuse">reuse</span></span></div></div>
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="summary">
+    <h2>New blocks added to the library</h2>
+    <div class="sub-h">Everything else reuses Service + Location blocks. These six extend the library.</div>
+    <table>
+      <tr><th>Block</th><th>Appears on</th><th>Key elements</th></tr>
+      <tr><td>services-grid</td><td>Home, Service Hub</td><td>H2 + service cards (IMG 600×400 · H3 · text · link)</td></tr>
+      <tr><td>areas-teaser</td><td>Home</td><td>H2 + map 800×500 + market link list</td></tr>
+      <tr><td>markets-grid</td><td>Service Areas Hub</td><td>map 800×500 + market cards ×N</td></tr>
+      <tr><td>story-block</td><td>About</td><td>H2 + text 400–700 + IMG 800×600</td></tr>
+      <tr><td>team-grid</td><td>About</td><td>H2 + member cards (IMG 400×400 · name · role)</td></tr>
+      <tr><td>contact-form + hours</td><td>Contact</td><td>name/email/phone/message + submit · hours rows</td></tr>
+      <tr><td>post-grid</td><td>Blog Index, Blog Post (related)</td><td>post cards (IMG 640×360 · category · H3 · excerpt) + pagination</td></tr>
+      <tr><td>article-header</td><td>Blog Post</td><td>H1 + meta (date/author/category) + featured IMG 1200×675</td></tr>
+      <tr><td>article-body</td><td>Blog Post</td><td>rich content area: H2/H3 + text + inline IMG 1000×667 + lists + quote</td></tr>
+      <tr><td>author-share (opt)</td><td>Blog Post</td><td>avatar 96×96 + bio text + share</td></tr>
+      <tr><td>basic-content</td><td>Privacy, Terms, Accessibility, Disclaimer</td><td>H1 + "last updated" + rich text (no char cap)</td></tr>
+      <tr><td>utility-message</td><td>404, Thank You</td><td>H1 + text + BTN (centered)</td></tr>
+    </table>
+
+    <h2>New image sizes</h2>
+    <table>
+      <tr><th>Element</th><th>Size (px)</th><th>Ratio</th><th>Source</th></tr>
+      <tr><td>Service card</td><td><span class="m">600 × 400</span></td><td>3:2</td><td>AI‑generated → real photo</td></tr>
+      <tr><td>Story image</td><td><span class="m">800 × 600</span></td><td>4:3</td><td>AI‑generated → real photo</td></tr>
+      <tr><td>Team member</td><td><span class="m">400 × 400</span></td><td>1:1</td><td>real photo (headshot)</td></tr>
+      <tr><td>Map</td><td><span class="m">800 × 500</span></td><td>8:5</td><td>embed / static</td></tr>
+      <tr><td>Featured image (post)</td><td><span class="m">1200 × 675</span></td><td>16:9</td><td>AI‑generated (news‑to‑blog)</td></tr>
+      <tr><td>Inline body image</td><td><span class="m">1000 × 667</span></td><td>3:2</td><td>AI‑generated / uploaded</td></tr>
+      <tr><td>Post card thumb</td><td><span class="m">640 × 360</span></td><td>16:9</td><td>AI‑generated</td></tr>
+      <tr><td>Author avatar</td><td><span class="m">96 × 96</span></td><td>1:1</td><td>real photo</td></tr>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

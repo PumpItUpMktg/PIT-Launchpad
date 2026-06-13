@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Header &amp; Footer — Structural Wireframe</title>
+<style>
+  :root{
+    --anno:#4338CA;--anno-soft:#EEF0FB;
+    --rec:#15803D;--rec-soft:#E6F4EA;
+    --ink:#1F2530;--ink-2:#5A6573;--ink-3:#9AA4B0;
+    --bg:#FBFBFC;--panel:#FFFFFF;--line:#E3E7EC;--line-2:#CFD6DE;
+    --slate:#222933;
+    --maxw:1140px;--gut:clamp(16px,4vw,44px);
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gut)}
+
+  .tag{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
+    color:var(--anno);background:var(--anno-soft);border:1px solid #D9DCF4;border-radius:5px;padding:1px 6px;white-space:nowrap}
+  .rec{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--rec);background:var(--rec-soft);border:1px solid #C6E6CF;border-radius:4px;padding:1px 5px;white-space:nowrap}
+
+  .key{background:var(--ink);color:#fff;padding:16px 0}
+  .key .wrap{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
+  .key h1{font-size:1.05rem;font-weight:700}
+  .key .legend{display:flex;flex-wrap:wrap;gap:14px;font-family:var(--mono);font-size:11px;color:#C4CBD4}
+  .key .legend b{color:#fff}.key .legend .g{color:#9FE8C7}.key .legend .r{color:#A7E3BC}
+
+  .page{padding-block:28px 60px}
+  .sec-title{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:30px 0 12px}
+  .frame{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+
+  /* ---- HEADER MOCK ---- */
+  .tier{position:relative}
+  .tier-lbl{position:absolute;left:10px;top:50%;transform:translateY(-50%);z-index:3}
+  .tier-lbl .tag{background:#fff}
+
+  .util{background:var(--slate);color:#cdd4dc}
+  .util .in{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 18px 8px 96px;font-size:12.5px;flex-wrap:wrap}
+  .util .grp{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .util .it{display:inline-flex;align-items:center;gap:6px;position:relative}
+  .util .ic{width:15px;height:15px;border-radius:3px;background:#3a434f;display:inline-block}
+  .util .soc{width:22px;height:22px;border-radius:5px;background:#3a434f;display:inline-grid;place-items:center}
+
+  .mainbar{background:#fff;border-bottom:1px solid var(--line)}
+  .mainbar .in{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 18px 16px 96px}
+  .logo-ph{width:170px;height:42px;border:1.5px dashed var(--line-2);border-radius:7px;display:grid;place-items:center;
+    font-family:var(--mono);font-size:11px;color:var(--ink-3);background:repeating-linear-gradient(135deg,#EEF1F4 0 1px,transparent 1px 10px),#F4F6F8;position:relative}
+  .nav{display:flex;align-items:center;gap:24px;color:var(--ink-2);font-weight:500;font-size:.95rem}
+  .nav .cur{color:var(--ink);font-weight:700}
+  .right{display:flex;align-items:center;gap:14px}
+  .cta-ph{background:#E9ECEF;border:1px solid var(--line-2);border-radius:8px;padding:11px 18px;font-weight:700;font-size:.9rem;color:var(--ink);position:relative}
+  .call-ph{font-family:var(--mono);font-weight:700;font-size:.9rem;color:var(--ink);position:relative}
+
+  .silobar{background:var(--bg);border-bottom:1px solid var(--line)}
+  .silobar .in{display:flex;align-items:center;gap:26px;padding:11px 18px 11px 96px;font-size:.9rem;color:var(--ink-2);font-weight:600;flex-wrap:wrap}
+  .silobar .si{display:inline-flex;align-items:center;gap:6px;position:relative}
+  .silobar .si .car{color:var(--ink-3);font-size:.7rem}
+
+  .micro{position:absolute;top:-8px;right:-6px;z-index:4}
+  .inl{position:relative}
+
+  .note{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin:10px 2px 0;line-height:1.7}
+  .note b{color:var(--ink-2)}
+
+  /* ---- FOOTER MOCK ---- */
+  .footmock{background:var(--slate);color:#c4ccd5;border-radius:12px;overflow:hidden;border:1px solid #2c3540}
+  .footmock .ftop{display:grid;grid-template-columns:1.6fr 1fr 1fr 1.1fr;gap:30px;padding:34px 30px}
+  .footmock h4{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8b96a3;margin-bottom:14px}
+  .footmock .logo-ph{background:repeating-linear-gradient(135deg,#2f3845 0 1px,transparent 1px 10px),#2a323d;border-color:#3a434f;color:#7f8a97;margin-bottom:14px}
+  .footmock p{font-size:.88rem;color:#aeb7c2;max-width:34ch}
+  .footmock .lst{list-style:none;display:grid;gap:9px;font-size:.9rem}
+  .footmock .lst li{position:relative}
+  .footmock .nap{font-family:var(--mono);font-size:.82rem;line-height:1.9;color:#aeb7c2;margin-top:12px}
+  .footmock .badges{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .footmock .badge{width:80px;height:40px;border:1px dashed #3a434f;border-radius:6px;display:grid;place-items:center;font-family:var(--mono);font-size:9px;color:#7f8a97}
+  .footmock .soc{display:flex;gap:8px;margin-top:14px}
+  .footmock .soc span{width:26px;height:26px;border-radius:6px;background:#2f3845;display:inline-block}
+  .footmock .fbot{border-top:1px solid #2f3845;padding:18px 30px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:.82rem;color:#8b96a3}
+  .footmock .fbot a{color:#c4ccd5}
+  .footmock .legal{display:flex;gap:14px;flex-wrap:wrap}
+  .inl .micro{top:-12px}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:14px 0 22px}
+  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line)}
+  th{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);background:var(--bg)}
+  td:first-child{font-weight:600;color:var(--ink)}
+  td .m{font-family:var(--mono);color:var(--anno);font-size:12px}
+  tr:last-child td{border-bottom:0}
+
+  @media(max-width:860px){
+    .footmock .ftop{grid-template-columns:1fr 1fr}
+    .nav{display:none}
+  }
+  @media(max-width:520px){.footmock .ftop{grid-template-columns:1fr}.util .in,.mainbar .in,.silobar .in{padding-left:18px}.tier-lbl{display:none}}
+</style>
+</head>
+<body>
+
+<div class="key">
+  <div class="wrap">
+    <h1>Header &amp; Footer — Theme Builder templates</h1>
+    <div class="legend">
+      <span><b>tag</b> = element type</span>
+      <span class="r">REC = recommended add (keep or cut)</span>
+      <span class="g">▸ color &amp; type inherit Global Kit</span>
+    </div>
+  </div>
+</div>
+
+<div class="page wrap">
+
+  <div class="sec-title">Header — clean / corporate · 3 tiers</div>
+  <div class="frame">
+
+    <!-- Tier 1: utility bar -->
+    <div class="tier util">
+      <span class="tier-lbl"><span class="tag">Tier 1 · Utility</span></span>
+      <div class="in">
+        <div class="grp">
+          <span class="it"><span class="ic"></span>(555) 240‑1180 <span class="micro"><span class="tag">TEXT · phone</span></span></span>
+          <span class="it"><span class="ic"></span>email@company.com <span class="micro"><span class="tag">TEXT · email</span></span></span>
+          <span class="it"><span class="ic"></span>City, ST <span class="micro"><span class="tag">TEXT · address</span></span></span>
+        </div>
+        <div class="grp">
+          <span class="it">★ 4.9 · 600+ <span class="micro"><span class="rec">REC rating</span></span></span>
+          <span class="it inl"><span class="soc"></span><span class="soc"></span><span class="soc"></span><span class="soc"></span><span class="micro"><span class="tag">social icons</span></span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tier 2: main bar -->
+    <div class="tier mainbar">
+      <span class="tier-lbl"><span class="tag">Tier 2 · Main</span></span>
+      <div class="in">
+        <div class="logo-ph">Logo<span class="micro"><span class="tag">IMG · 200×48</span></span></div>
+        <nav class="nav">
+          <span class="cur">Home</span><span>About</span><span>Services</span><span>Service Areas</span><span>Blog</span><span>Contact</span>
+          <span class="micro" style="position:static"><span class="tag">TEXT · main menu</span></span>
+        </nav>
+        <div class="right">
+          <span class="call-ph">☎ Call<span class="micro"><span class="rec">REC click‑to‑call</span></span></span>
+          <span class="cta-ph">Book inspection<span class="micro"><span class="rec">REC primary CTA</span></span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tier 3: silo bar -->
+    <div class="tier silobar">
+      <span class="tier-lbl"><span class="tag">Tier 3 · Silos</span></span>
+      <div class="in">
+        <span class="si">Silo One <span class="car">▾</span></span>
+        <span class="si">Silo Two <span class="car">▾</span></span>
+        <span class="si">Silo Three <span class="car">▾</span></span>
+        <span class="si">Silo Four <span class="car">▾</span>
+          <span class="micro" style="position:static;margin-left:10px"><span class="tag">TEXT · silo titles</span></span>
+          <span class="micro" style="position:static;margin-left:6px"><span class="rec">REC mega‑menu → services</span></span>
+        </span>
+      </div>
+    </div>
+
+  </div>
+  <div class="note">
+    <b>Mobile:</b> Tier 1 collapses to phone + tap‑to‑call; Tiers 2–3 fold into a hamburger → off‑canvas drawer holding full menu, silo list, contact, and CTA.<br>
+    <b>Logo:</b> two variants — standard (light bg, header) and reversed/white (dark footer). Same 200×48 box.
+  </div>
+
+  <div class="sec-title">Footer</div>
+  <div class="footmock">
+    <div class="ftop">
+      <div>
+        <div class="logo-ph">Logo (reversed)<span class="micro"><span class="tag">IMG · 200×48</span></span></div>
+        <p>Short company line — what you do and where, in one or two sentences. <span class="micro" style="position:static"><span class="tag">TEXT · 60–140</span></span></p>
+        <div class="nap">Company name<br>100 Main St, Suite 4<br>City, ST 00000<br>(555) 240‑1180 · email@company.com</div>
+        <div class="nap" style="margin-top:8px">License #00000 · Insured <span class="micro" style="position:static"><span class="rec">REC license / insurance</span></span></div>
+        <div class="soc inl"><span></span><span></span><span></span><span></span><span class="micro"><span class="rec">REC social</span></span></div>
+      </div>
+      <div>
+        <h4>Services</h4>
+        <ul class="lst"><li>Silo / service</li><li>Silo / service</li><li>Silo / service</li><li>Silo / service</li><li>Silo / service</li></ul>
+      </div>
+      <div>
+        <h4>Service Areas</h4>
+        <ul class="lst"><li>Market</li><li>Market</li><li>Market</li><li>Market</li><li>View all areas →</li></ul>
+      </div>
+      <div>
+        <h4>Company</h4>
+        <ul class="lst"><li>About</li><li>Blog</li><li>Reviews <span class="micro" style="position:static"><span class="rec">REC</span></span></li><li>Contact</li></ul>
+        <h4 style="margin-top:20px">Legal <span class="micro" style="position:static"><span class="rec">REC</span></span></h4>
+        <ul class="lst"><li>Privacy Policy</li><li>Terms</li><li>Accessibility</li><li>Disclaimer</li><li>Sitemap</li></ul>
+        <div class="badges"><span class="badge">badge</span><span class="badge">badge</span><span class="micro" style="position:static"><span class="rec">REC accreditations</span></span></div>
+      </div>
+    </div>
+    <div class="fbot">
+      <span>© 2026 Company name. All rights reserved. <span class="micro" style="position:static"><span class="tag">TEXT · copyright</span></span></span>
+      <span class="legal">
+        <a>Built &amp; managed by Pump It Up Marketing LLC →</a>
+        <span class="micro" style="position:static"><span class="tag">TEXT + link · agency credit</span></span>
+      </span>
+    </div>
+  </div>
+  <div class="note">Schema (Organization / LocalBusiness JSON‑LD) is injected by Launchpad via <code>wp_head</code>, site‑wide — not built into this template. No visual slot required.</div>
+
+  <!-- SPEC -->
+  <div class="sec-title">Spec — images</div>
+  <table>
+    <tr><th>Element</th><th>Size (px)</th><th>Ratio</th><th>Source / notes</th></tr>
+    <tr><td>Logo — standard</td><td><span class="m">200 × 48</span></td><td>~25:6</td><td>client‑supplied (header, light bg)</td></tr>
+    <tr><td>Logo — reversed</td><td><span class="m">200 × 48</span></td><td>~25:6</td><td>client‑supplied (footer, dark bg)</td></tr>
+    <tr><td>Social icons</td><td><span class="m">24 × 24</span></td><td>1:1</td><td>icon set (SVG)</td></tr>
+    <tr><td>Accreditation badge <span class="rec" style="font-size:8px">REC</span></td><td><span class="m">160 × 80</span></td><td>2:1</td><td>client‑supplied</td></tr>
+  </table>
+
+  <div class="sec-title">Element checklist</div>
+  <table>
+    <tr><th>Header</th><th>Footer</th></tr>
+    <tr><td>Logo (left) · main menu · utility bar (phone / email / address / social) · silo bar</td><td>Logo · company info · NAP · service areas · blog · copyright · agency credit (link)</td></tr>
+    <tr><td><span class="rec" style="font-size:8px">REC</span> primary CTA · click‑to‑call · mega‑menu · rating chip · 24/7 flag</td><td><span class="rec" style="font-size:8px">REC</span> legal links · license/insurance · social · accreditations · reviews link · hours</td></tr>
+  </table>
+
+</div>
+</body>
+</html>

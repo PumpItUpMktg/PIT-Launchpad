@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Location Page — Structural Wireframe</title>
+<style>
+  :root{
+    --anno:#4338CA;--anno-soft:#EEF0FB;
+    --cond:#0F766E;--cond-soft:#E3F3F1;
+    --ink:#1F2530;--ink-2:#5A6573;--ink-3:#9AA4B0;
+    --bg:#FBFBFC;--panel:#FFFFFF;--line:#E3E7EC;--line-2:#CFD6DE;
+    --maxw:1140px;--gut:clamp(18px,4vw,52px);
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gut)}
+
+  .tag{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--anno);background:var(--anno-soft);border:1px solid #D9DCF4;border-radius:5px;padding:2px 7px;display:inline-block;vertical-align:middle}
+  .el{position:relative;padding-top:6px}
+  .el > .tag{position:absolute;top:-9px;right:0;z-index:2}
+
+  .img-ph{position:relative;border:1.5px dashed var(--line-2);border-radius:8px;background:
+    repeating-linear-gradient(135deg,#EEF1F4 0 1px,transparent 1px 11px),#F4F6F8;
+    display:grid;place-items:center;text-align:center;color:var(--ink-3)}
+  .img-ph .dim{font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+  .img-ph .dim b{color:var(--ink);font-size:13px}
+  .img-ph .note{font-family:var(--mono);font-size:10px;margin-top:6px;color:var(--anno)}
+
+  .txt-ph{color:var(--ink-2)}
+  .h1-ph{font-size:clamp(2rem,4.6vw,3.2rem);font-weight:800;line-height:1.06;color:var(--ink);letter-spacing:-.02em}
+  .h2-ph{font-size:clamp(1.5rem,3vw,2.1rem);font-weight:700;line-height:1.12;color:var(--ink);letter-spacing:-.01em}
+  .h3-ph{font-size:1.12rem;font-weight:700;color:var(--ink)}
+  .btn-ph{display:inline-flex;align-items:center;gap:8px;border:1.5px solid var(--line-2);border-radius:8px;
+    padding:12px 20px;font-weight:600;font-size:.95rem;color:var(--ink);background:#fff}
+  .btn-ph.fill{background:#E9ECEF}
+
+  .block{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:14px 0;padding:clamp(22px,3vw,40px)}
+  .block.conditional{border-style:dashed;border-color:var(--cond)}
+  .block-label{position:absolute;top:-11px;left:18px;background:var(--ink);color:#fff;font-family:var(--mono);
+    font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border-radius:5px}
+  .cond-badge{position:absolute;top:-11px;right:18px;background:var(--cond);color:#fff;font-family:var(--mono);
+    font-size:10.5px;font-weight:600;letter-spacing:.04em;padding:3px 10px;border-radius:5px}
+  .block-note{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-bottom:18px}
+
+  .stack{display:grid;gap:20px}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .hero-2{display:grid;grid-template-columns:1.05fr .95fr;gap:34px;align-items:center}
+  .napmap{display:grid;grid-template-columns:.85fr 1.15fr;gap:24px;align-items:stretch}
+  .sub{border:1px solid var(--line);border-radius:9px;padding:18px 18px 22px;background:var(--bg)}
+  .eyebrow-ph{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--anno)}
+  ul.lst{list-style:none;display:grid;gap:9px;margin-top:14px}
+  ul.lst li{padding-left:18px;position:relative;color:var(--ink-2);font-size:.95rem}
+  ul.lst li::before{content:"–";position:absolute;left:0;color:var(--ink-3)}
+  .svc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .svc-item{border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:var(--bg);display:flex;justify-content:space-between;align-items:center;color:var(--ink);font-weight:600;font-size:.95rem}
+  .svc-item span{color:var(--ink-3)}
+
+  .key{background:var(--ink);color:#fff;padding:18px 0}
+  .key .wrap{display:flex;flex-wrap:wrap;gap:22px;align-items:center;justify-content:space-between}
+  .key h1{font-size:1rem;font-weight:700}
+  .key .legend{display:flex;flex-wrap:wrap;gap:16px;font-family:var(--mono);font-size:11px;color:#C4CBD4}
+  .key .legend b{color:#fff}
+  .key .gk{font-family:var(--mono);font-size:11px;color:#9FE8C7}
+  .key .cnd{font-family:var(--mono);font-size:11px;color:#7FD8CE}
+
+  .page{padding-block:18px 48px}
+
+  .spec{margin-top:30px}
+  .spec h2{font-size:1.3rem;margin-bottom:4px}
+  .spec .sub-h{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-bottom:16px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:22px}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);background:var(--bg)}
+  td:first-child{font-weight:600;color:var(--ink)}
+  td .m{font-family:var(--mono);color:var(--anno);font-size:12.5px}
+  td .c{font-family:var(--mono);color:var(--cond);font-size:12px}
+  tr:last-child td{border-bottom:0}
+
+  @media(max-width:880px){
+    .hero-2,.grid-2,.grid-3,.napmap{grid-template-columns:1fr}
+    .grid-4{grid-template-columns:1fr 1fr}
+    .svc-grid{grid-template-columns:1fr 1fr}
+  }
+  @media(max-width:540px){.grid-4,.svc-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="key">
+  <div class="wrap">
+    <h1>Location Page — Structural Wireframe</h1>
+    <div class="legend">
+      <span><b>H1/H2/H3</b> heading</span>
+      <span><b>TEXT</b> text area (char range)</span>
+      <span><b>IMG</b> image placeholder (px)</span>
+      <span><b>BTN</b> button</span>
+    </div>
+    <div class="gk">▸ Type &amp; color inherit Elementor Global Kit</div>
+    <div class="cnd">▸ Dashed teal block = conditional (storefront only; SAB suppresses)</div>
+  </div>
+</div>
+
+<div class="page wrap">
+
+  <!-- HEADER -->
+  <section class="block">
+    <span class="block-label">Block · Header (Theme Builder)</span>
+    <div class="row" style="justify-content:space-between">
+      <div class="el" style="flex:0 0 auto"><span class="tag">IMG · 160×40</span><div class="img-ph" style="width:150px;height:38px"><span class="dim">Logo</span></div></div>
+      <div class="el"><span class="tag">TEXT · nav links</span><div class="row" style="gap:24px;color:var(--ink-2)"><span>Services</span><span>Service areas</span><span>Reviews</span><span>Contact</span></div></div>
+      <div class="row" style="flex:0 0 auto">
+        <span class="txt-ph" style="font-family:var(--mono);font-size:.9rem">(555) 000‑0000</span>
+        <span class="btn-ph fill">Book inspection</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- HERO (area-led) -->
+  <section class="block">
+    <span class="block-label">Block · Hero (area‑led)</span>
+    <div class="block-note">Headline = area + primary service. Hero image is a brand/service image — never an AI‑fabricated local scene.</div>
+    <div class="hero-2">
+      <div class="stack">
+        <div class="el"><span class="tag">TEXT · 12–28</span><div class="eyebrow-ph">Market eyebrow (e.g. service area)</div></div>
+        <div class="el"><span class="tag">H1 · 40–70</span><div class="h1-ph">[Service] in [City/Market] headline</div></div>
+        <div class="el"><span class="tag">TEXT · 90–160</span><div class="txt-ph lead">One or two lines tying the service to this market and the most reassuring local proof point.</div></div>
+        <div class="row">
+          <span class="el btn-ph fill"><span class="tag">BTN</span>Primary CTA</span>
+          <span class="el btn-ph"><span class="tag">BTN</span>Phone CTA</span>
+        </div>
+      </div>
+      <div class="el"><span class="tag">IMG · 1200×900 · 4:3</span>
+        <div class="img-ph" style="aspect-ratio:4/3">
+          <div><div class="dim"><b>1200 × 900 px</b></div><div class="dim">4:3 · brand / service photo</div><div class="note">brand image — no AI local scene</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AREA INTRO -->
+  <section class="block">
+    <span class="block-label">Block · Area intro</span>
+    <div class="block-note">Generated, grounded on market data · client‑override.</div>
+    <div class="stack" style="max-width:74ch">
+      <div class="el"><span class="tag">H2 · 30–55</span><div class="h2-ph">Why local homeowners in [Market] choose us</div></div>
+      <div class="el"><span class="tag">TEXT · 220–400</span><div class="txt-ph">Two to three sentences placing the service in this specific market — local conditions, neighborhoods served, and what makes the work here distinct. Grounded in real market data, editable by the client.</div></div>
+    </div>
+  </section>
+
+  <!-- NAP / MAP (conditional) -->
+  <section class="block conditional">
+    <span class="block-label">Block · NAP &amp; map</span>
+    <span class="cond-badge">Conditional · storefront only</span>
+    <div class="block-note">Renders for storefront locations (emits PostalAddress + map). Suppressed for service‑area businesses — schema falls back to areaServed.</div>
+    <div class="napmap">
+      <div class="sub">
+        <div class="eyebrow-ph">Visit / contact</div>
+        <div class="el" style="margin-top:10px"><span class="tag">TEXT · NAP</span>
+          <div class="txt-ph" style="font-family:var(--mono);font-size:.86rem;line-height:1.9">
+            Business name · 8–40<br>Street address, suite<br>City, ST ZIP<br>(555) 000‑0000<br>Hours line
+          </div>
+        </div>
+      </div>
+      <div class="el"><span class="tag">IMG / EMBED · 800×500</span>
+        <div class="img-ph" style="aspect-ratio:8/5">
+          <div><div class="dim"><b>800 × 500 px</b></div><div class="dim">map embed or static map</div><div class="note">pin = store location</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SERVICE LIST -->
+  <section class="block">
+    <span class="block-label">Block · Services in this market</span>
+    <div class="block-note">Entity list · priority‑ordered. Each links to its service page.</div>
+    <div class="stack">
+      <div class="el" style="max-width:60ch"><span class="tag">H2 · 30–55</span><div class="h2-ph">Services we provide in [Market]</div></div>
+      <div class="el"><span class="tag">TEXT · item ×N · 12–32 ea</span>
+        <div class="svc-grid">
+          <div class="svc-item">Service one <span>→</span></div>
+          <div class="svc-item">Service two <span>→</span></div>
+          <div class="svc-item">Service three <span>→</span></div>
+          <div class="svc-item">Service four <span>→</span></div>
+          <div class="svc-item">Service five <span>→</span></div>
+          <div class="svc-item">Service six <span>→</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHY US (local) -->
+  <section class="block">
+    <span class="block-label">Block · Why us (local)</span>
+    <div class="block-note">Generated, grounded on market data · client‑override.</div>
+    <div class="stack">
+      <div class="el" style="max-width:60ch"><span class="tag">H2 · 30–55</span><div class="h2-ph">Local heading — trust in this market</div></div>
+      <div class="el" style="max-width:72ch"><span class="tag">TEXT · 120–220</span><div class="txt-ph lead">Short grounded paragraph on the company's presence and track record in this specific area.</div></div>
+      <div class="grid-3">
+        <div class="sub"><div class="el"><span class="tag">TEXT · 40–90</span><div class="txt-ph">Local proof point one.</div></div></div>
+        <div class="sub"><div class="txt-ph">Local proof point two.</div></div>
+        <div class="sub"><div class="txt-ph">Local proof point three.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REVIEWS (proximity) -->
+  <section class="block">
+    <span class="block-label">Block · Reviews (proximity)</span>
+    <div class="block-note">Scoped by geo_scope — 20 mi radius from store center, or county. No brand‑wide fallback.</div>
+    <div class="stack">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div class="el"><span class="tag">H2 · 30–55</span><div class="h2-ph">Reviews near [Market]</div></div>
+        <div class="el"><span class="tag">TEXT · rating</span><div class="row"><span class="h1-ph" style="font-size:2.2rem">0.0</span><div style="color:var(--ink-2);font-size:.9rem">★★★★★<br>00+ local reviews</div></div></div>
+      </div>
+      <div class="grid-3">
+        <div class="sub"><div style="color:var(--ink-3)">★★★★★</div>
+          <div class="el" style="margin-top:10px"><span class="tag">TEXT · 110–220</span><div class="txt-ph">Verified review from a customer in or near this market.</div></div>
+          <div class="el" style="margin-top:14px"><span class="tag">TEXT · name + loc</span><div class="h3-ph" style="font-size:.95rem">Reviewer name</div><div class="eyebrow-ph" style="color:var(--ink-3);margin-top:2px">Town · 6–18</div></div>
+        </div>
+        <div class="sub"><div style="color:var(--ink-3)">★★★★★</div><div class="txt-ph" style="margin-top:10px">Verified review from a customer in or near this market.</div><div class="h3-ph" style="font-size:.95rem;margin-top:14px">Reviewer name</div><div class="eyebrow-ph" style="color:var(--ink-3);margin-top:2px">Town</div></div>
+        <div class="sub"><div style="color:var(--ink-3)">★★★★★</div><div class="txt-ph" style="margin-top:10px">Verified review from a customer in or near this market.</div><div class="h3-ph" style="font-size:.95rem;margin-top:14px">Reviewer name</div><div class="eyebrow-ph" style="color:var(--ink-3);margin-top:2px">Town</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- JOBS (proximity) -->
+  <section class="block">
+    <span class="block-label">Block · Recent work (proximity)</span>
+    <div class="block-note">Job Capture posts within the same geo_scope as reviews. Drops when empty (feeds thin‑page guard).</div>
+    <div class="stack">
+      <div class="el" style="max-width:60ch"><span class="tag">H2 · 30–55</span><div class="h2-ph">Recent work near [Market]</div></div>
+      <div class="grid-4">
+        <div class="sub" style="padding:0;overflow:hidden">
+          <div class="el"><span class="tag" style="top:6px;right:6px">IMG · 800×600</span><div class="img-ph" style="aspect-ratio:4/3;border:0;border-bottom:1.5px dashed var(--line-2);border-radius:8px 8px 0 0"><div><div class="dim"><b>800 × 600 px</b></div><div class="note">AI‑gen → real photo</div></div></div></div>
+          <div style="padding:14px 15px 17px"><div class="eyebrow-ph">Town · 6–18</div><div class="el" style="margin-top:7px"><span class="tag">H3 · 18–40</span><div class="h3-ph" style="font-size:1rem">Job title</div></div><div class="el" style="margin-top:8px"><span class="tag">TEXT · 60–120</span><div class="txt-ph" style="font-size:.88rem">Short job description.</div></div></div>
+        </div>
+        <div class="sub" style="padding:0;overflow:hidden"><div class="img-ph" style="aspect-ratio:4/3;border:0;border-bottom:1.5px dashed var(--line-2);border-radius:8px 8px 0 0"><span class="dim">800×600</span></div><div style="padding:14px 15px 17px"><div class="eyebrow-ph">Town</div><div class="h3-ph" style="font-size:1rem;margin-top:7px">Job title</div><div class="txt-ph" style="font-size:.88rem;margin-top:8px">Short job description.</div></div></div>
+        <div class="sub" style="padding:0;overflow:hidden"><div class="img-ph" style="aspect-ratio:4/3;border:0;border-bottom:1.5px dashed var(--line-2);border-radius:8px 8px 0 0"><span class="dim">800×600</span></div><div style="padding:14px 15px 17px"><div class="eyebrow-ph">Town</div><div class="h3-ph" style="font-size:1rem;margin-top:7px">Job title</div><div class="txt-ph" style="font-size:.88rem;margin-top:8px">Short job description.</div></div></div>
+        <div class="sub" style="padding:0;overflow:hidden"><div class="img-ph" style="aspect-ratio:4/3;border:0;border-bottom:1.5px dashed var(--line-2);border-radius:8px 8px 0 0"><span class="dim">800×600</span></div><div style="padding:14px 15px 17px"><div class="eyebrow-ph">Town</div><div class="h3-ph" style="font-size:1rem;margin-top:7px">Job title</div><div class="txt-ph" style="font-size:.88rem;margin-top:8px">Short job description.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ (optional) -->
+  <section class="block conditional">
+    <span class="block-label">Block · FAQ</span>
+    <span class="cond-badge" style="background:var(--anno)">Optional · earned add‑on</span>
+    <div class="block-note">Local FAQ is an optional add‑on; off by default. Accordion widget when present.</div>
+    <div class="stack" style="max-width:880px">
+      <div class="el"><span class="tag">H2 · 30–55</span><div class="h2-ph">FAQ heading</div></div>
+      <div class="stack" style="gap:0">
+        <div class="sub" style="border-radius:9px 9px 0 0;border-bottom:0"><div class="el"><span class="tag">H3 · 35–80</span><div class="h3-ph">Local question one?</div></div><div class="el" style="margin-top:9px"><span class="tag">TEXT · 140–300</span><div class="txt-ph">Answer paragraph.</div></div></div>
+        <div class="sub" style="border-radius:0 0 9px 9px"><div class="h3-ph">Local question two?</div><div class="txt-ph" style="margin-top:9px">Answer paragraph.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="block">
+    <span class="block-label">Block · Final CTA</span>
+    <div class="grid-2" style="align-items:center">
+      <div class="stack">
+        <div class="el"><span class="tag">H2 · 25–50</span><div class="h2-ph">Closing call‑to‑action for [Market]</div></div>
+        <div class="el"><span class="tag">TEXT · 80–150</span><div class="txt-ph lead">Reassuring local closing line restating the offer and next step.</div></div>
+      </div>
+      <div class="stack" style="gap:12px">
+        <span class="el btn-ph fill" style="justify-content:center"><span class="tag">BTN</span>Primary CTA</span>
+        <span class="el btn-ph" style="justify-content:center"><span class="tag">BTN</span>Phone CTA</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <section class="block">
+    <span class="block-label">Block · Footer (Theme Builder)</span>
+    <div class="grid-4">
+      <div class="stack" style="gap:10px"><div class="img-ph" style="width:140px;height:36px"><span class="dim">Logo 160×40</span></div><div class="txt-ph" style="font-size:.9rem">Short brand line · TEXT 60–120</div></div>
+      <div><div class="eyebrow-ph">Services</div><div class="txt-ph" style="font-size:.9rem;margin-top:10px;line-height:2">Link · Link · Link · Link</div></div>
+      <div><div class="eyebrow-ph">Service areas</div><div class="txt-ph" style="font-size:.9rem;margin-top:10px;line-height:2">Link · Link · Link · Link</div></div>
+      <div><div class="eyebrow-ph">Contact</div><div class="el" style="margin-top:10px"><span class="tag">TEXT · NAP</span><div class="txt-ph" style="font-family:var(--mono);font-size:.82rem;line-height:1.8">Business name<br>Street, Suite<br>City, ST ZIP<br>(555) 000‑0000</div></div></div>
+    </div>
+  </section>
+
+  <!-- SPEC TABLES -->
+  <section class="spec">
+    <h2>Spec — image placeholders</h2>
+    <div class="sub-h">AI‑generation targets unless noted.</div>
+    <table>
+      <tr><th>Element</th><th>Size (px)</th><th>Ratio</th><th>Source</th></tr>
+      <tr><td>Hero photo</td><td><span class="m">1200 × 900</span></td><td>4:3</td><td>brand / service image — <span class="c">no AI local scene</span></td></tr>
+      <tr><td>Map (NAP block)</td><td><span class="m">800 × 500</span></td><td>8:5</td><td><span class="c">storefront only</span> · embed or static</td></tr>
+      <tr><td>Job photo (×4)</td><td><span class="m">800 × 600</span></td><td>4:3</td><td>AI‑generated → real photo</td></tr>
+      <tr><td>Logo (header/footer)</td><td><span class="m">160 × 40</span></td><td>4:1</td><td>client‑supplied</td></tr>
+    </table>
+
+    <h2>Spec — text areas</h2>
+    <div class="sub-h">Character ranges guide generation and the editor's fit warning.</div>
+    <table>
+      <tr><th>Element</th><th>Type</th><th>Char range</th><th>Note</th></tr>
+      <tr><td>Hero eyebrow</td><td>Text</td><td><span class="m">12–28</span></td><td></td></tr>
+      <tr><td>Hero headline</td><td>H1</td><td><span class="m">40–70</span></td><td>area + service</td></tr>
+      <tr><td>Hero subhead</td><td>Text</td><td><span class="m">90–160</span></td><td></td></tr>
+      <tr><td>Area intro heading</td><td>H2</td><td><span class="m">30–55</span></td><td></td></tr>
+      <tr><td>Area intro body</td><td>Text</td><td><span class="m">220–400</span></td><td>grounded · override</td></tr>
+      <tr><td>NAP block</td><td>Text</td><td><span class="m">name 8–40</span></td><td><span class="c">storefront only</span></td></tr>
+      <tr><td>Service list heading</td><td>H2</td><td><span class="m">30–55</span></td><td></td></tr>
+      <tr><td>Service item (×N)</td><td>Text</td><td><span class="m">12–32</span></td><td>priority‑ordered</td></tr>
+      <tr><td>Why‑us local heading</td><td>H2</td><td><span class="m">30–55</span></td><td></td></tr>
+      <tr><td>Why‑us local body</td><td>Text</td><td><span class="m">120–220</span></td><td>grounded · override</td></tr>
+      <tr><td>Local proof point (×3)</td><td>Text</td><td><span class="m">40–90</span></td><td></td></tr>
+      <tr><td>Review body</td><td>Text</td><td><span class="m">110–220</span></td><td>proximity‑scoped</td></tr>
+      <tr><td>Reviewer name / town</td><td>Text</td><td><span class="m">8–20 / 6–18</span></td><td></td></tr>
+      <tr><td>Job town</td><td>Text</td><td><span class="m">6–18</span></td><td></td></tr>
+      <tr><td>Job title</td><td>H3</td><td><span class="m">18–40</span></td><td></td></tr>
+      <tr><td>Job description</td><td>Text</td><td><span class="m">60–120</span></td><td></td></tr>
+      <tr><td>FAQ question</td><td>H3</td><td><span class="m">35–80</span></td><td><span class="m">optional</span></td></tr>
+      <tr><td>FAQ answer</td><td>Text</td><td><span class="m">140–300</span></td><td><span class="m">optional</span></td></tr>
+      <tr><td>Final CTA heading</td><td>H2</td><td><span class="m">25–50</span></td><td></td></tr>
+      <tr><td>Final CTA body</td><td>Text</td><td><span class="m">80–150</span></td><td></td></tr>
+    </table>
+  </section>
+
+</div>
+</body>
+</html>

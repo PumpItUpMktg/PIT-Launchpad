@@ -1,0 +1,348 @@
+{
+    "version": "0.4",
+    "title": "TB - Footer",
+    "type": "footer",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "24657f9",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "full",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 24,
+                    "column": "24",
+                    "row": "24"
+                },
+                "_title": "tb-footer",
+                "_css_classes": "wf-footer"
+            },
+            "elements": [
+                {
+                    "id": "0f3b208",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 28,
+                            "column": "28",
+                            "row": "28"
+                        },
+                        "flex_align_items": "flex-start"
+                    },
+                    "elements": [
+                        {
+                            "id": "083bf76",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 10,
+                                    "column": "10",
+                                    "row": "10"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 28,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "9071810",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/logo-reversed-200x48.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "200",
+                                            "height": "48"
+                                        },
+                                        "_title": "ft_logo",
+                                        "_css_classes": "wf-ft-logo"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "c35398c",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short about line, 60–140 chars.</p>",
+                                        "_title": "ft_about",
+                                        "_css_classes": "wf-ft-about"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "f09554f",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Name · Address · Phone</p>",
+                                        "_title": "ft_nap",
+                                        "_css_classes": "wf-ft-nap"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "7284102",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>License # · Insured</p>",
+                                        "_title": "ft_license",
+                                        "_css_classes": "wf-ft-license"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "8d6237d",
+                                    "elType": "widget",
+                                    "widgetType": "social-icons",
+                                    "settings": {
+                                        "_title": "ft_social",
+                                        "_css_classes": "wf-ft-social"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "08e028b",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 16,
+                                    "column": "16",
+                                    "row": "16"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 20,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "cad7014",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<strong>Services</strong><ul><li><a href=\"#\">Service</a></li></ul>",
+                                        "_title": "ft_services",
+                                        "_css_classes": "wf-ft-services"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "f0f11da",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 16,
+                                    "column": "16",
+                                    "row": "16"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 20,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "b36493e",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<strong>Service Areas</strong><ul><li><a href=\"#\">Area</a></li></ul>",
+                                        "_title": "ft_areas",
+                                        "_css_classes": "wf-ft-areas"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "a105ba5",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 10,
+                                    "column": "10",
+                                    "row": "10"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 20,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "40ce76f",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<strong>Company</strong><ul><li><a href=\"#\">About</a></li><li><a href=\"#\">Contact</a></li></ul>",
+                                        "_title": "ft_company",
+                                        "_css_classes": "wf-ft-company"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "469c61e",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<ul><li><a href=\"#\">Privacy</a></li><li><a href=\"#\">Terms</a></li><li><a href=\"#\">Accessibility</a></li><li><a href=\"#\">Disclaimer</a></li><li><a href=\"#\">Sitemap</a></li></ul>",
+                                        "_title": "ft_legal",
+                                        "_css_classes": "wf-ft-legal"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "id": "1ba1128",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 20,
+                            "column": "20",
+                            "row": "20"
+                        },
+                        "flex_align_items": "center"
+                    },
+                    "elements": [
+                        {
+                            "id": "3f77088",
+                            "elType": "widget",
+                            "widgetType": "image",
+                            "settings": {
+                                "image": {
+                                    "url": "https://PLACEHOLDER.local/wf/ft-badge-1-160x80.png",
+                                    "id": 0
+                                },
+                                "image_size": "custom",
+                                "image_custom_dimension": {
+                                    "width": "160",
+                                    "height": "80"
+                                },
+                                "_title": "ft_badge_1",
+                                "_css_classes": "wf-ft-badge-1"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "b370668",
+                            "elType": "widget",
+                            "widgetType": "image",
+                            "settings": {
+                                "image": {
+                                    "url": "https://PLACEHOLDER.local/wf/ft-badge-2-160x80.png",
+                                    "id": 0
+                                },
+                                "image_size": "custom",
+                                "image_custom_dimension": {
+                                    "width": "160",
+                                    "height": "80"
+                                },
+                                "_title": "ft_badge_2",
+                                "_css_classes": "wf-ft-badge-2"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "8b7d520",
+                            "elType": "widget",
+                            "widgetType": "image",
+                            "settings": {
+                                "image": {
+                                    "url": "https://PLACEHOLDER.local/wf/ft-badge-3-160x80.png",
+                                    "id": 0
+                                },
+                                "image_size": "custom",
+                                "image_custom_dimension": {
+                                    "width": "160",
+                                    "height": "80"
+                                },
+                                "_title": "ft_badge_3",
+                                "_css_classes": "wf-ft-badge-3"
+                            },
+                            "elements": []
+                        }
+                    ]
+                },
+                {
+                    "id": "92c8d76",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 16,
+                            "column": "16",
+                            "row": "16"
+                        },
+                        "flex_justify_content": "space-between",
+                        "flex_align_items": "center"
+                    },
+                    "elements": [
+                        {
+                            "id": "088719b",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>© Year Company. All rights reserved.</p>",
+                                "_title": "ft_copyright",
+                                "_css_classes": "wf-ft-copyright"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "5684253",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Built &amp; managed by <a href=\"https://pumpitupmarketing.com\">Pump It Up Marketing LLC</a></p>",
+                                "_title": "ft_credit",
+                                "_css_classes": "wf-ft-credit"
+                            },
+                            "elements": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

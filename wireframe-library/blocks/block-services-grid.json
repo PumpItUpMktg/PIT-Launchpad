@@ -1,0 +1,252 @@
+{
+    "version": "0.4",
+    "title": "Block - Services Grid",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "015eedf",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-services-grid",
+                "_css_classes": "wf-block wf-block-services-grid"
+            },
+            "elements": [
+                {
+                    "id": "26b5bdf",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Services",
+                        "header_size": "h2",
+                        "_title": "svcgrid_heading",
+                        "_css_classes": "wf-svcgrid-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "ff5c899",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "ce5798c",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "1114e1e",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/svccard-1-600x400.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "600",
+                                            "height": "400"
+                                        },
+                                        "_title": "svccard_1_image",
+                                        "_css_classes": "wf-svccard-1-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "2998e1b",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Service 1",
+                                        "header_size": "h3",
+                                        "_title": "svccard_1_title",
+                                        "_css_classes": "wf-svccard-1-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "8dbbd2f",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short blurb. <a href=\"#\">Learn more</a></p>",
+                                        "_title": "svccard_1_body",
+                                        "_css_classes": "wf-svccard-1-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "08e028b",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "b69d081",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/svccard-2-600x400.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "600",
+                                            "height": "400"
+                                        },
+                                        "_title": "svccard_2_image",
+                                        "_css_classes": "wf-svccard-2-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "a3a193c",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Service 2",
+                                        "header_size": "h3",
+                                        "_title": "svccard_2_title",
+                                        "_css_classes": "wf-svccard-2-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "a967dca",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short blurb. <a href=\"#\">Learn more</a></p>",
+                                        "_title": "svccard_2_body",
+                                        "_css_classes": "wf-svccard-2-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "3184f81",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "bc5fb2e",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/svccard-3-600x400.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "600",
+                                            "height": "400"
+                                        },
+                                        "_title": "svccard_3_image",
+                                        "_css_classes": "wf-svccard-3-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "1ace131",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Service 3",
+                                        "header_size": "h3",
+                                        "_title": "svccard_3_title",
+                                        "_css_classes": "wf-svccard-3-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "7222b78",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Short blurb. <a href=\"#\">Learn more</a></p>",
+                                        "_title": "svccard_3_body",
+                                        "_css_classes": "wf-svccard-3-body"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

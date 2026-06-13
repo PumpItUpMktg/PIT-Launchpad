@@ -1,0 +1,1411 @@
+{
+    "lp-conversion-block": {
+        "type": "plugin-target",
+        "note": "companion-plugin conversion-section wrapper"
+    },
+    "lp-nap": {
+        "type": "plugin-target",
+        "note": "companion-plugin (launchpad/v1) render-hook target"
+    },
+    "wf-area-body": {
+        "type": "text",
+        "char_range": [
+            220,
+            400
+        ]
+    },
+    "wf-area-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-areateaser-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-areateaser-link-1": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-areateaser-link-2": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-areateaser-link-3": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-areateaser-link-4": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-areateaser-link-5": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-areateaser-link-6": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-areateaser-link-7": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-areateaser-link-8": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-areateaser-map": {
+        "type": "image",
+        "image_size": "800x500",
+        "ratio": "8:5",
+        "source": "embed / static"
+    },
+    "wf-article-body": {
+        "type": "post-content",
+        "note": "Post Content widget (theme-post-content); inline body images 1000×667"
+    },
+    "wf-article-byline": {
+        "type": "text"
+    },
+    "wf-article-featured": {
+        "type": "image",
+        "image_size": "1200x675",
+        "ratio": "16:9",
+        "source": "AI-gen (news-to-blog)"
+    },
+    "wf-article-inline-image": {
+        "type": "image",
+        "image_size": "1000x667",
+        "ratio": "3:2",
+        "source": "AI-gen / upload",
+        "note": "inline body image target (authored inside Post Content)"
+    },
+    "wf-article-meta": {
+        "type": "text"
+    },
+    "wf-article-title": {
+        "type": "heading",
+        "char_range": [
+            30,
+            80
+        ],
+        "note": "header_size: h1"
+    },
+    "wf-author-avatar": {
+        "type": "image",
+        "image_size": "96x96",
+        "ratio": "1:1",
+        "source": "real"
+    },
+    "wf-author-bio": {
+        "type": "text"
+    },
+    "wf-author-share": {
+        "type": "share-buttons",
+        "note": "optional; Share Buttons widget (Pro)"
+    },
+    "wf-basic-body": {
+        "type": "rich_text",
+        "note": "editor region, no char cap"
+    },
+    "wf-basic-title": {
+        "type": "heading",
+        "char_range": [
+            12,
+            50
+        ],
+        "note": "header_size: h1"
+    },
+    "wf-basic-updated": {
+        "type": "text"
+    },
+    "wf-block": {
+        "type": "container",
+        "note": "generic block wrapper marker"
+    },
+    "wf-block-area-intro": {
+        "type": "container",
+        "note": "block-area-intro wrapper"
+    },
+    "wf-block-areas-teaser": {
+        "type": "container",
+        "note": "block-areas-teaser wrapper"
+    },
+    "wf-block-article-body": {
+        "type": "container",
+        "note": "block-article-body wrapper"
+    },
+    "wf-block-article-header": {
+        "type": "container",
+        "note": "block-article-header wrapper"
+    },
+    "wf-block-author-share": {
+        "type": "container",
+        "note": "block-author-share wrapper"
+    },
+    "wf-block-basic-content": {
+        "type": "container",
+        "note": "block-basic-content wrapper"
+    },
+    "wf-block-contact": {
+        "type": "container",
+        "note": "block-contact wrapper"
+    },
+    "wf-block-contact-form": {
+        "type": "container",
+        "note": "block-contact-form wrapper"
+    },
+    "wf-block-conversion": {
+        "type": "container",
+        "note": "block-conversion wrapper"
+    },
+    "wf-block-faq": {
+        "type": "container",
+        "note": "block-faq wrapper"
+    },
+    "wf-block-final-cta": {
+        "type": "container",
+        "note": "block-final-cta wrapper"
+    },
+    "wf-block-hero": {
+        "type": "container",
+        "note": "block-hero wrapper"
+    },
+    "wf-block-hours": {
+        "type": "container",
+        "note": "block-hours wrapper"
+    },
+    "wf-block-intro": {
+        "type": "container",
+        "note": "block-intro wrapper"
+    },
+    "wf-block-jobs": {
+        "type": "container",
+        "note": "block-jobs wrapper"
+    },
+    "wf-block-markets-grid": {
+        "type": "container",
+        "note": "block-markets-grid wrapper"
+    },
+    "wf-block-nap-map": {
+        "type": "container",
+        "note": "block-nap-map wrapper"
+    },
+    "wf-block-post-grid": {
+        "type": "container",
+        "note": "block-post-grid wrapper"
+    },
+    "wf-block-problem-solution": {
+        "type": "container",
+        "note": "block-problem-solution wrapper"
+    },
+    "wf-block-proof-strip": {
+        "type": "container",
+        "note": "block-proof-strip wrapper"
+    },
+    "wf-block-service-list": {
+        "type": "container",
+        "note": "block-service-list wrapper"
+    },
+    "wf-block-services-grid": {
+        "type": "container",
+        "note": "block-services-grid wrapper"
+    },
+    "wf-block-story": {
+        "type": "container",
+        "note": "block-story wrapper"
+    },
+    "wf-block-team-grid": {
+        "type": "container",
+        "note": "block-team-grid wrapper"
+    },
+    "wf-block-testimonials": {
+        "type": "container",
+        "note": "block-testimonials wrapper"
+    },
+    "wf-block-trust-bar": {
+        "type": "container",
+        "note": "block-trust-bar wrapper"
+    },
+    "wf-block-utility-message": {
+        "type": "container",
+        "note": "block-utility-message wrapper"
+    },
+    "wf-block-why-us": {
+        "type": "container",
+        "note": "block-why-us wrapper"
+    },
+    "wf-contact-form": {
+        "type": "form",
+        "note": "Form widget (Pro); posts to thank-you page"
+    },
+    "wf-conv-body": {
+        "type": "text",
+        "char_range": [
+            80,
+            150
+        ]
+    },
+    "wf-conv-cta-phone": {
+        "type": "button"
+    },
+    "wf-conv-cta-primary": {
+        "type": "button"
+    },
+    "wf-conv-heading": {
+        "type": "heading",
+        "char_range": [
+            25,
+            50
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-conv-nap": {
+        "type": "text"
+    },
+    "wf-cta-body": {
+        "type": "text",
+        "char_range": [
+            80,
+            150
+        ]
+    },
+    "wf-cta-heading": {
+        "type": "heading",
+        "char_range": [
+            25,
+            50
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-cta-phone": {
+        "type": "button"
+    },
+    "wf-cta-primary": {
+        "type": "button"
+    },
+    "wf-faq": {
+        "type": "accordion",
+        "note": "Accordion widget; items in tabs[] repeater"
+    },
+    "wf-faq-a-1": {
+        "type": "accordion_item_content",
+        "char_range": [
+            140,
+            300
+        ],
+        "note": "accordion tabs[1].tab_content"
+    },
+    "wf-faq-a-2": {
+        "type": "accordion_item_content",
+        "char_range": [
+            140,
+            300
+        ],
+        "note": "accordion tabs[2].tab_content"
+    },
+    "wf-faq-a-3": {
+        "type": "accordion_item_content",
+        "char_range": [
+            140,
+            300
+        ],
+        "note": "accordion tabs[3].tab_content"
+    },
+    "wf-faq-a-4": {
+        "type": "accordion_item_content",
+        "char_range": [
+            140,
+            300
+        ],
+        "note": "accordion tabs[4].tab_content"
+    },
+    "wf-faq-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-faq-q-1": {
+        "type": "accordion_item_title",
+        "char_range": [
+            35,
+            80
+        ],
+        "note": "accordion tabs[1].tab_title"
+    },
+    "wf-faq-q-2": {
+        "type": "accordion_item_title",
+        "char_range": [
+            35,
+            80
+        ],
+        "note": "accordion tabs[2].tab_title"
+    },
+    "wf-faq-q-3": {
+        "type": "accordion_item_title",
+        "char_range": [
+            35,
+            80
+        ],
+        "note": "accordion tabs[3].tab_title"
+    },
+    "wf-faq-q-4": {
+        "type": "accordion_item_title",
+        "char_range": [
+            35,
+            80
+        ],
+        "note": "accordion tabs[4].tab_title"
+    },
+    "wf-footer": {
+        "type": "container",
+        "note": "footer wrapper"
+    },
+    "wf-ft-about": {
+        "type": "text",
+        "char_range": [
+            60,
+            140
+        ]
+    },
+    "wf-ft-areas": {
+        "type": "text"
+    },
+    "wf-ft-badge-1": {
+        "type": "image",
+        "image_size": "160x80",
+        "ratio": "2:1",
+        "source": "client",
+        "note": "REC — accreditation badge"
+    },
+    "wf-ft-badge-2": {
+        "type": "image",
+        "image_size": "160x80",
+        "ratio": "2:1",
+        "source": "client",
+        "note": "REC — accreditation badge"
+    },
+    "wf-ft-badge-3": {
+        "type": "image",
+        "image_size": "160x80",
+        "ratio": "2:1",
+        "source": "client",
+        "note": "REC — accreditation badge"
+    },
+    "wf-ft-company": {
+        "type": "text"
+    },
+    "wf-ft-copyright": {
+        "type": "text"
+    },
+    "wf-ft-credit": {
+        "type": "text"
+    },
+    "wf-ft-legal": {
+        "type": "text"
+    },
+    "wf-ft-license": {
+        "type": "text"
+    },
+    "wf-ft-logo": {
+        "type": "image",
+        "image_size": "200x48",
+        "ratio": "~25:6",
+        "source": "client (reversed/dark)"
+    },
+    "wf-ft-nap": {
+        "type": "text"
+    },
+    "wf-ft-services": {
+        "type": "text"
+    },
+    "wf-ft-social": {
+        "type": "social-icons",
+        "source": "icon set",
+        "note": "REC"
+    },
+    "wf-hd-address": {
+        "type": "text"
+    },
+    "wf-hd-call": {
+        "type": "button"
+    },
+    "wf-hd-cta": {
+        "type": "button"
+    },
+    "wf-hd-email": {
+        "type": "text"
+    },
+    "wf-hd-logo": {
+        "type": "image",
+        "image_size": "200x48",
+        "ratio": "~25:6",
+        "source": "client (standard/light)"
+    },
+    "wf-hd-menu": {
+        "type": "nav-menu",
+        "note": "Nav Menu (Pro) — main menu; responsive hamburger → off-canvas"
+    },
+    "wf-hd-phone": {
+        "type": "text"
+    },
+    "wf-hd-rating": {
+        "type": "text"
+    },
+    "wf-hd-silo-1": {
+        "type": "text",
+        "char_range": [
+            8,
+            28
+        ]
+    },
+    "wf-hd-silo-2": {
+        "type": "text",
+        "char_range": [
+            8,
+            28
+        ]
+    },
+    "wf-hd-silo-3": {
+        "type": "text",
+        "char_range": [
+            8,
+            28
+        ]
+    },
+    "wf-hd-silo-4": {
+        "type": "text",
+        "char_range": [
+            8,
+            28
+        ]
+    },
+    "wf-hd-silo-5": {
+        "type": "text",
+        "char_range": [
+            8,
+            28
+        ]
+    },
+    "wf-hd-social": {
+        "type": "social-icons",
+        "image_size": "24x24",
+        "source": "icon set"
+    },
+    "wf-header": {
+        "type": "container",
+        "note": "header wrapper"
+    },
+    "wf-hero-cta-phone": {
+        "type": "button"
+    },
+    "wf-hero-cta-primary": {
+        "type": "button"
+    },
+    "wf-hero-eyebrow": {
+        "type": "text",
+        "char_range": [
+            12,
+            28
+        ]
+    },
+    "wf-hero-headline": {
+        "type": "heading",
+        "char_range": [
+            30,
+            70
+        ],
+        "note": "header_size: h1"
+    },
+    "wf-hero-image": {
+        "type": "image",
+        "image_size": "1200x900",
+        "ratio": "4:3",
+        "source": "AI-gen → real (brand image on area/brand variants)"
+    },
+    "wf-hero-subhead": {
+        "type": "text",
+        "char_range": [
+            90,
+            160
+        ]
+    },
+    "wf-hours-1-day": {
+        "type": "text"
+    },
+    "wf-hours-1-time": {
+        "type": "text"
+    },
+    "wf-hours-2-day": {
+        "type": "text"
+    },
+    "wf-hours-2-time": {
+        "type": "text"
+    },
+    "wf-hours-3-day": {
+        "type": "text"
+    },
+    "wf-hours-3-time": {
+        "type": "text"
+    },
+    "wf-hours-4-day": {
+        "type": "text"
+    },
+    "wf-hours-4-time": {
+        "type": "text"
+    },
+    "wf-hours-5-day": {
+        "type": "text"
+    },
+    "wf-hours-5-time": {
+        "type": "text"
+    },
+    "wf-hours-6-day": {
+        "type": "text"
+    },
+    "wf-hours-6-time": {
+        "type": "text"
+    },
+    "wf-hours-7-day": {
+        "type": "text"
+    },
+    "wf-hours-7-time": {
+        "type": "text"
+    },
+    "wf-intro-body": {
+        "type": "text",
+        "char_range": [
+            180,
+            320
+        ]
+    },
+    "wf-intro-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-job-1-body": {
+        "type": "text",
+        "char_range": [
+            60,
+            120
+        ]
+    },
+    "wf-job-1-image": {
+        "type": "image",
+        "image_size": "800x600",
+        "ratio": "4:3",
+        "source": "AI-gen → real"
+    },
+    "wf-job-1-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-job-1-town": {
+        "type": "text",
+        "char_range": [
+            6,
+            18
+        ]
+    },
+    "wf-job-2-body": {
+        "type": "text",
+        "char_range": [
+            60,
+            120
+        ]
+    },
+    "wf-job-2-image": {
+        "type": "image",
+        "image_size": "800x600",
+        "ratio": "4:3",
+        "source": "AI-gen → real"
+    },
+    "wf-job-2-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-job-2-town": {
+        "type": "text",
+        "char_range": [
+            6,
+            18
+        ]
+    },
+    "wf-job-3-body": {
+        "type": "text",
+        "char_range": [
+            60,
+            120
+        ]
+    },
+    "wf-job-3-image": {
+        "type": "image",
+        "image_size": "800x600",
+        "ratio": "4:3",
+        "source": "AI-gen → real"
+    },
+    "wf-job-3-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-job-3-town": {
+        "type": "text",
+        "char_range": [
+            6,
+            18
+        ]
+    },
+    "wf-job-4-body": {
+        "type": "text",
+        "char_range": [
+            60,
+            120
+        ]
+    },
+    "wf-job-4-image": {
+        "type": "image",
+        "image_size": "800x600",
+        "ratio": "4:3",
+        "source": "AI-gen → real"
+    },
+    "wf-job-4-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-job-4-town": {
+        "type": "text",
+        "char_range": [
+            6,
+            18
+        ]
+    },
+    "wf-jobs-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-map": {
+        "type": "image",
+        "image_size": "800x500",
+        "ratio": "8:5",
+        "source": "embed / static"
+    },
+    "wf-market-1": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-market-2": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-market-3": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-market-4": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-market-5": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-market-6": {
+        "type": "text",
+        "char_range": [
+            8,
+            24
+        ]
+    },
+    "wf-markets-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-markets-map": {
+        "type": "image",
+        "image_size": "800x500",
+        "ratio": "8:5",
+        "source": "embed / static"
+    },
+    "wf-nap": {
+        "type": "text"
+    },
+    "wf-post-1-excerpt": {
+        "type": "text",
+        "char_range": [
+            80,
+            160
+        ]
+    },
+    "wf-post-1-image": {
+        "type": "image",
+        "image_size": "640x360",
+        "ratio": "16:9",
+        "source": "AI-gen"
+    },
+    "wf-post-1-meta": {
+        "type": "text"
+    },
+    "wf-post-1-title": {
+        "type": "heading",
+        "char_range": [
+            30,
+            70
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-post-2-excerpt": {
+        "type": "text",
+        "char_range": [
+            80,
+            160
+        ]
+    },
+    "wf-post-2-image": {
+        "type": "image",
+        "image_size": "640x360",
+        "ratio": "16:9",
+        "source": "AI-gen"
+    },
+    "wf-post-2-meta": {
+        "type": "text"
+    },
+    "wf-post-2-title": {
+        "type": "heading",
+        "char_range": [
+            30,
+            70
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-post-3-excerpt": {
+        "type": "text",
+        "char_range": [
+            80,
+            160
+        ]
+    },
+    "wf-post-3-image": {
+        "type": "image",
+        "image_size": "640x360",
+        "ratio": "16:9",
+        "source": "AI-gen"
+    },
+    "wf-post-3-meta": {
+        "type": "text"
+    },
+    "wf-post-3-title": {
+        "type": "heading",
+        "char_range": [
+            30,
+            70
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-post-loop": {
+        "type": "posts",
+        "note": "Posts/Loop Grid widget (Pro), dynamic + pagination — swap to loop-grid when a loop-item template exists"
+    },
+    "wf-proof-logo-1": {
+        "type": "image",
+        "image_size": "200x80",
+        "ratio": "5:2",
+        "source": "client-supplied"
+    },
+    "wf-proof-logo-2": {
+        "type": "image",
+        "image_size": "200x80",
+        "ratio": "5:2",
+        "source": "client-supplied"
+    },
+    "wf-proof-logo-3": {
+        "type": "image",
+        "image_size": "200x80",
+        "ratio": "5:2",
+        "source": "client-supplied"
+    },
+    "wf-proof-logo-4": {
+        "type": "image",
+        "image_size": "200x80",
+        "ratio": "5:2",
+        "source": "client-supplied"
+    },
+    "wf-proof-logo-5": {
+        "type": "image",
+        "image_size": "200x80",
+        "ratio": "5:2",
+        "source": "client-supplied"
+    },
+    "wf-ps-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-ps-problem-body": {
+        "type": "text",
+        "char_range": [
+            180,
+            300
+        ]
+    },
+    "wf-ps-problem-eyebrow": {
+        "type": "text",
+        "char_range": [
+            8,
+            16
+        ]
+    },
+    "wf-ps-problem-list": {
+        "type": "text",
+        "char_range": [
+            25,
+            55
+        ]
+    },
+    "wf-ps-problem-sub": {
+        "type": "heading",
+        "char_range": [
+            18,
+            36
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-ps-solution-body": {
+        "type": "text",
+        "char_range": [
+            180,
+            300
+        ]
+    },
+    "wf-ps-solution-eyebrow": {
+        "type": "text",
+        "char_range": [
+            8,
+            16
+        ]
+    },
+    "wf-ps-solution-list": {
+        "type": "text",
+        "char_range": [
+            25,
+            55
+        ]
+    },
+    "wf-ps-solution-sub": {
+        "type": "heading",
+        "char_range": [
+            18,
+            36
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-review-1-body": {
+        "type": "text",
+        "char_range": [
+            110,
+            220
+        ]
+    },
+    "wf-review-1-name": {
+        "type": "text",
+        "char_range": [
+            8,
+            20
+        ]
+    },
+    "wf-review-1-town": {
+        "type": "text",
+        "char_range": [
+            6,
+            18
+        ]
+    },
+    "wf-review-2-body": {
+        "type": "text",
+        "char_range": [
+            110,
+            220
+        ]
+    },
+    "wf-review-2-name": {
+        "type": "text",
+        "char_range": [
+            8,
+            20
+        ]
+    },
+    "wf-review-2-town": {
+        "type": "text",
+        "char_range": [
+            6,
+            18
+        ]
+    },
+    "wf-review-3-body": {
+        "type": "text",
+        "char_range": [
+            110,
+            220
+        ]
+    },
+    "wf-review-3-name": {
+        "type": "text",
+        "char_range": [
+            8,
+            20
+        ]
+    },
+    "wf-review-3-town": {
+        "type": "text",
+        "char_range": [
+            6,
+            18
+        ]
+    },
+    "wf-reviews-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-reviews-rating": {
+        "type": "text"
+    },
+    "wf-story-body": {
+        "type": "text",
+        "char_range": [
+            400,
+            700
+        ]
+    },
+    "wf-story-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-story-image": {
+        "type": "image",
+        "image_size": "800x600",
+        "ratio": "4:3",
+        "source": "AI-gen → real"
+    },
+    "wf-svc-item-1": {
+        "type": "text",
+        "char_range": [
+            12,
+            32
+        ]
+    },
+    "wf-svc-item-2": {
+        "type": "text",
+        "char_range": [
+            12,
+            32
+        ]
+    },
+    "wf-svc-item-3": {
+        "type": "text",
+        "char_range": [
+            12,
+            32
+        ]
+    },
+    "wf-svc-item-4": {
+        "type": "text",
+        "char_range": [
+            12,
+            32
+        ]
+    },
+    "wf-svc-item-5": {
+        "type": "text",
+        "char_range": [
+            12,
+            32
+        ]
+    },
+    "wf-svc-item-6": {
+        "type": "text",
+        "char_range": [
+            12,
+            32
+        ]
+    },
+    "wf-svccard-1-body": {
+        "type": "text",
+        "char_range": [
+            60,
+            120
+        ]
+    },
+    "wf-svccard-1-image": {
+        "type": "image",
+        "image_size": "600x400",
+        "ratio": "3:2",
+        "source": "AI-gen → real"
+    },
+    "wf-svccard-1-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-svccard-2-body": {
+        "type": "text",
+        "char_range": [
+            60,
+            120
+        ]
+    },
+    "wf-svccard-2-image": {
+        "type": "image",
+        "image_size": "600x400",
+        "ratio": "3:2",
+        "source": "AI-gen → real"
+    },
+    "wf-svccard-2-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-svccard-3-body": {
+        "type": "text",
+        "char_range": [
+            60,
+            120
+        ]
+    },
+    "wf-svccard-3-image": {
+        "type": "image",
+        "image_size": "600x400",
+        "ratio": "3:2",
+        "source": "AI-gen → real"
+    },
+    "wf-svccard-3-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-svcgrid-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-svclist-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-team-1-image": {
+        "type": "image",
+        "image_size": "400x400",
+        "ratio": "1:1",
+        "source": "real headshot"
+    },
+    "wf-team-1-name": {
+        "type": "heading",
+        "char_range": [
+            8,
+            28
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-team-1-role": {
+        "type": "text",
+        "char_range": [
+            8,
+            32
+        ]
+    },
+    "wf-team-2-image": {
+        "type": "image",
+        "image_size": "400x400",
+        "ratio": "1:1",
+        "source": "real headshot"
+    },
+    "wf-team-2-name": {
+        "type": "heading",
+        "char_range": [
+            8,
+            28
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-team-2-role": {
+        "type": "text",
+        "char_range": [
+            8,
+            32
+        ]
+    },
+    "wf-team-3-image": {
+        "type": "image",
+        "image_size": "400x400",
+        "ratio": "1:1",
+        "source": "real headshot"
+    },
+    "wf-team-3-name": {
+        "type": "heading",
+        "char_range": [
+            8,
+            28
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-team-3-role": {
+        "type": "text",
+        "char_range": [
+            8,
+            32
+        ]
+    },
+    "wf-team-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-trust-label-1": {
+        "type": "text",
+        "char_range": [
+            6,
+            12
+        ]
+    },
+    "wf-trust-label-2": {
+        "type": "text",
+        "char_range": [
+            6,
+            12
+        ]
+    },
+    "wf-trust-label-3": {
+        "type": "text",
+        "char_range": [
+            6,
+            12
+        ]
+    },
+    "wf-trust-label-4": {
+        "type": "text",
+        "char_range": [
+            6,
+            12
+        ]
+    },
+    "wf-trust-value-1": {
+        "type": "heading",
+        "char_range": [
+            8,
+            18
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-trust-value-2": {
+        "type": "heading",
+        "char_range": [
+            8,
+            18
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-trust-value-3": {
+        "type": "heading",
+        "char_range": [
+            8,
+            18
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-trust-value-4": {
+        "type": "heading",
+        "char_range": [
+            8,
+            18
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-util-body": {
+        "type": "text",
+        "char_range": [
+            40,
+            120
+        ]
+    },
+    "wf-util-cta": {
+        "type": "button"
+    },
+    "wf-util-heading": {
+        "type": "heading",
+        "char_range": [
+            8,
+            40
+        ],
+        "note": "header_size: h1"
+    },
+    "wf-util-links": {
+        "type": "text",
+        "note": "helpful links (404 only)"
+    },
+    "wf-why-card-1-body": {
+        "type": "text",
+        "char_range": [
+            90,
+            150
+        ]
+    },
+    "wf-why-card-1-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-why-card-2-body": {
+        "type": "text",
+        "char_range": [
+            90,
+            150
+        ]
+    },
+    "wf-why-card-2-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-why-card-3-body": {
+        "type": "text",
+        "char_range": [
+            90,
+            150
+        ]
+    },
+    "wf-why-card-3-title": {
+        "type": "heading",
+        "char_range": [
+            18,
+            40
+        ],
+        "note": "header_size: h3"
+    },
+    "wf-why-heading": {
+        "type": "heading",
+        "char_range": [
+            30,
+            55
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-why-lead": {
+        "type": "text",
+        "char_range": [
+            120,
+            220
+        ]
+    }
+}

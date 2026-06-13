@@ -1,0 +1,241 @@
+{
+    "version": "0.4",
+    "title": "TB - Header",
+    "type": "header",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "7b98c21",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "full",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 0,
+                    "column": "0",
+                    "row": "0"
+                },
+                "_title": "tb-header",
+                "_css_classes": "wf-header"
+            },
+            "elements": [
+                {
+                    "id": "2f77ef8",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 16,
+                            "column": "16",
+                            "row": "16"
+                        },
+                        "flex_justify_content": "flex-end",
+                        "flex_align_items": "center"
+                    },
+                    "elements": [
+                        {
+                            "id": "420342e",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Phone</p>",
+                                "_title": "hd_phone",
+                                "_css_classes": "wf-hd-phone"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "6cfc362",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Email</p>",
+                                "_title": "hd_email",
+                                "_css_classes": "wf-hd-email"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "823211f",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Address</p>",
+                                "_title": "hd_address",
+                                "_css_classes": "wf-hd-address"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "29a14d5",
+                            "elType": "widget",
+                            "widgetType": "social-icons",
+                            "settings": {
+                                "_title": "hd_social",
+                                "_css_classes": "wf-hd-social"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "0e61b45",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>★ 5.0 rating</p>",
+                                "_title": "hd_rating",
+                                "_css_classes": "wf-hd-rating"
+                            },
+                            "elements": []
+                        }
+                    ]
+                },
+                {
+                    "id": "f9424c9",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 20,
+                            "column": "20",
+                            "row": "20"
+                        },
+                        "flex_align_items": "center",
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "25489d0",
+                            "elType": "widget",
+                            "widgetType": "image",
+                            "settings": {
+                                "image": {
+                                    "url": "https://PLACEHOLDER.local/wf/logo-standard-200x48.png",
+                                    "id": 0
+                                },
+                                "image_size": "custom",
+                                "image_custom_dimension": {
+                                    "width": "200",
+                                    "height": "48"
+                                },
+                                "_title": "hd_logo",
+                                "_css_classes": "wf-hd-logo"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "91d92fa",
+                            "elType": "widget",
+                            "widgetType": "nav-menu",
+                            "settings": {
+                                "layout": "horizontal",
+                                "_title": "hd_menu",
+                                "_css_classes": "wf-hd-menu"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "9b810f2",
+                            "elType": "widget",
+                            "widgetType": "button",
+                            "settings": {
+                                "text": "Get a quote",
+                                "_title": "hd_cta",
+                                "_css_classes": "wf-hd-cta"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "f8714e2",
+                            "elType": "widget",
+                            "widgetType": "button",
+                            "settings": {
+                                "text": "Call now",
+                                "_title": "hd_call",
+                                "_css_classes": "wf-hd-call"
+                            },
+                            "elements": []
+                        }
+                    ]
+                },
+                {
+                    "id": "464953e",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 20,
+                            "column": "20",
+                            "row": "20"
+                        },
+                        "flex_justify_content": "center"
+                    },
+                    "elements": [
+                        {
+                            "id": "942df9c",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Silo 1</a></p>",
+                                "_title": "hd_silo_1",
+                                "_css_classes": "wf-hd-silo-1"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "5aa4b2c",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Silo 2</a></p>",
+                                "_title": "hd_silo_2",
+                                "_css_classes": "wf-hd-silo-2"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "4411d61",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Silo 3</a></p>",
+                                "_title": "hd_silo_3",
+                                "_css_classes": "wf-hd-silo-3"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "2d52479",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Silo 4</a></p>",
+                                "_title": "hd_silo_4",
+                                "_css_classes": "wf-hd-silo-4"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "8c994f4",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p><a href=\"#\">Silo 5</a></p>",
+                                "_title": "hd_silo_5",
+                                "_css_classes": "wf-hd-silo-5"
+                            },
+                            "elements": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
