@@ -29,7 +29,10 @@ function siteWithoutProof(): array
     return ['context' => new ValidationContext($content, $market, ['is_storefront' => true])];
 }
 
-test('the grounded why_us slot fails when a site has no substantiated proof', function () {
+test('the grounded why_us slot is OMITTED (not failed) when a site has no substantiated proof', function () {
+    // §3a policy: why_us is conditional on has_proof — with no substantiated proof
+    // the section omits rather than failing the page (Eric: conditional-omit, not block).
+    // siteWithoutProof()'s context carries no has_proof flag, so the slot doesn't apply.
     ['context' => $context] = siteWithoutProof();
 
     $result = app(KitValidator::class)->validate(
@@ -38,11 +41,7 @@ test('the grounded why_us slot fails when a site has no substantiated proof', fu
         $context,
     );
 
-    expect($result->passed())->toBeFalse()
-        ->and($result->hasCode(ValidationCode::EntityBelowMinimum))->toBeTrue();
-
-    $whyUsCodes = array_map(fn ($f) => $f->code, $result->failuresFor('why_us'));
-    expect($whyUsCodes)->toContain(ValidationCode::EntityBelowMinimum);
+    expect($result->failuresFor('why_us'))->toBe([]); // omitted, never an EntityBelowMinimum block
 });
 
 test('the grounded why_us_local slot fails when a site has no substantiated proof', function () {
