@@ -447,6 +447,48 @@ function block_final_cta(Ids $ids): array
     ], ['flex_align_items' => 'center']);
 }
 
+/**
+ * Append a companion-plugin render-hook class (e.g. lp-nap) to an element
+ * alongside its stable wf-* hook, without disturbing the wf-* class the
+ * sidecar/_title are keyed on. The lp-* class is registered as a plugin target.
+ */
+function withTarget(array $el, string $lpClass): array
+{
+    spec($lpClass, 'plugin-target', ['note' => 'companion-plugin (launchpad/v1) render-hook target']);
+    $el['settings']['_css_classes'] = trim(($el['settings']['_css_classes'] ?? '').' '.$lpClass);
+
+    return $el;
+}
+
+/**
+ * Conversion section for the service page — the designer-placed/styled block the
+ * companion plugin targets. The wrapper carries lp-conversion-block and the NAP
+ * carries lp-nap (the plugin's render hooks), alongside the wf-* hooks. It
+ * combines the §3a kit's `cta` (conversion.primary_action) and `contact_block`
+ * (location.nap) slots into one closing conversion section.
+ */
+function block_conversion(Ids $ids): array
+{
+    spec('lp-conversion-block', 'plugin-target', ['note' => 'companion-plugin conversion-section wrapper']);
+
+    $ctaCol = col($ids, [
+        heading($ids, 'Ready to get started?', 'h2', 'wf-conv-heading', [25, 50]),
+        textEl($ids, 'Closing line that nudges the action, 80–150 chars.', 'wf-conv-body', [80, 150]),
+        row($ids, [
+            button($ids, 'Primary CTA', 'wf-conv-cta-primary'),
+            button($ids, 'Call now', 'wf-conv-cta-phone'),
+        ], ['flex_gap' => gap(12)]),
+    ], ['width' => widthPct(55), 'flex_gap' => gap(14)]);
+
+    $napCol = col($ids, [
+        withTarget(textEl($ids, 'Name · Address · City · Phone', 'wf-conv-nap'), 'lp-nap'),
+    ], ['width' => widthPct(45)]);
+
+    return block($ids, 'block-conversion', [
+        row($ids, [$ctaCol, $napCol], ['flex_gap' => gap(34), 'flex_align_items' => 'center']),
+    ], ['_css_classes' => 'wf-block wf-block-conversion lp-conversion-block']);
+}
+
 function block_intro(Ids $ids): array
 {
     return block($ids, 'block-intro', [
@@ -883,7 +925,7 @@ function page_service(Ids $ids): array
         block_testimonials($ids, 'service'),
         block_jobs($ids),
         block_faq($ids),
-        block_final_cta($ids),
+        block_conversion($ids),
     ]);
 }
 

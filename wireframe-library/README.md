@@ -90,6 +90,17 @@ Reconciled against the detailed service/location wireframes:
   page assemblies contain just the body blocks (in §6 order) and the
   `header →`/`→ footer` is delivered once as `tb-header` / `tb-footer`.
 
+- **Service page closes with a conversion block** carrying the companion
+  plugin's render hooks. `page-service` ends in a `block-conversion` section
+  (CTA + NAP) whose wrapper carries `lp-conversion-block` and whose NAP element
+  carries `lp-nap`, alongside the usual `wf-*` hooks. These `lp-*` classes are
+  the launchpad/v1 plugin's targets (sidecar `type: plugin-target`), so the
+  plugin's emitted conversion markup lands in the designer's placed/styled
+  section. It folds the §3a service kit's `cta` (conversion.primary_action) and
+  `contact_block` (location.nap) slots into one closing section, replacing the
+  bare `final-cta` on this page only. (The standalone block library stays the
+  locked 26 — `block-conversion` is a page-scoped section, not a 27th block.)
+
 - **FAQ uses the Accordion widget** (per §4). Accordion Q/A pairs are repeater
   rows, not first-class elements, so they can't each carry a `_css_classes`. The
   `wf-faq-q-{n}` / `wf-faq-a-{n}` hooks are therefore registered in the sidecar

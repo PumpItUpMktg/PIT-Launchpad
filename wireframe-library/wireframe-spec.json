@@ -1,4 +1,12 @@
 {
+    "lp-conversion-block": {
+        "type": "plugin-target",
+        "note": "companion-plugin conversion-section wrapper"
+    },
+    "lp-nap": {
+        "type": "plugin-target",
+        "note": "companion-plugin (launchpad/v1) render-hook target"
+    },
     "wf-area-body": {
         "type": "text",
         "char_range": [
@@ -179,6 +187,10 @@
         "type": "container",
         "note": "block-contact-form wrapper"
     },
+    "wf-block-conversion": {
+        "type": "container",
+        "note": "block-conversion wrapper"
+    },
     "wf-block-faq": {
         "type": "container",
         "note": "block-faq wrapper"
@@ -258,6 +270,30 @@
     "wf-contact-form": {
         "type": "form",
         "note": "Form widget (Pro); posts to thank-you page"
+    },
+    "wf-conv-body": {
+        "type": "text",
+        "char_range": [
+            80,
+            150
+        ]
+    },
+    "wf-conv-cta-phone": {
+        "type": "button"
+    },
+    "wf-conv-cta-primary": {
+        "type": "button"
+    },
+    "wf-conv-heading": {
+        "type": "heading",
+        "char_range": [
+            25,
+            50
+        ],
+        "note": "header_size: h2"
+    },
+    "wf-conv-nap": {
+        "type": "text"
     },
     "wf-cta-body": {
         "type": "text",
