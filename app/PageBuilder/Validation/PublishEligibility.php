@@ -102,9 +102,13 @@ class PublishEligibility
 
     /**
      * Build the publish-time context: the page's market (from market_id), and the
-     * flags the kit conditions read — `has_reviews` (the site has ≥1 substantiated
-     * review; the service-page testimonial slot is conditional on it) and
-     * `is_storefront` (the site's location; nap_block/map conditions).
+     * flags the kit conditions read:
+     *  - `has_reviews`  — ≥1 substantiated review (service-page testimonial slot).
+     *  - `has_substantiated_proof` — ≥2 substantiated proof items (proof_strip omits
+     *    below that, like testimonial, rather than blocking — never fabricate stats).
+     *  - `has_location` — ≥1 location (contact_block resolves NAP from the primary
+     *    location; with none, the block omits gracefully).
+     *  - `is_storefront` — the site's location is walk-in (nap_block/map conditions).
      */
     public function contextFor(Content $content): ValidationContext
     {
@@ -112,7 +116,10 @@ class PublishEligibility
             ? Market::withoutGlobalScope(SiteScope::class)->find($content->market_id)
             : null;
 
-        $hasReviews = ($this->entities->count('reviews.site', new ValidationContext($content)) ?? 0) >= 1;
+        $base = new ValidationContext($content);
+        $hasReviews = ($this->entities->count('reviews.site', $base) ?? 0) >= 1;
+        $hasSubstantiatedProof = ($this->entities->count('proof.substantiated', $base) ?? 0) >= 2;
+        $hasLocation = ($this->entities->count('location.nap', $base) ?? 0) >= 1;
         $isStorefront = (bool) Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
             ->value('is_storefront');
@@ -120,7 +127,12 @@ class PublishEligibility
         return new ValidationContext(
             content: $content,
             market: $market,
-            flags: ['has_reviews' => $hasReviews, 'is_storefront' => $isStorefront],
+            flags: [
+                'has_reviews' => $hasReviews,
+                'has_substantiated_proof' => $hasSubstantiatedProof,
+                'has_location' => $hasLocation,
+                'is_storefront' => $isStorefront,
+            ],
         );
     }
 
