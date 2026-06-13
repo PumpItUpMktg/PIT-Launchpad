@@ -1,0 +1,157 @@
+{
+    "version": "0.4",
+    "title": "Single Page – Service",
+    "type": "section",
+    "content": [
+        {
+            "id": "73d5342",
+            "elType": "section",
+            "settings": {},
+            "elements": [
+                {
+                    "id": "1afd328",
+                    "elType": "column",
+                    "settings": {
+                        "_column_size": 100,
+                        "_inline_size": null
+                    },
+                    "elements": [
+                        {
+                            "id": "795a61a",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-hero_problem",
+                                "shortcode": "[lp_slot key=\"hero_problem\"]"
+                            }
+                        },
+                        {
+                            "id": "d4f4950",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-hero_solution",
+                                "shortcode": "[lp_slot key=\"hero_solution\"]"
+                            }
+                        },
+                        {
+                            "id": "e490253",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-hero_image",
+                                "shortcode": "[lp_image key=\"hero_image\"]"
+                            }
+                        },
+                        {
+                            "id": "43946ef",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-problem_explainer",
+                                "shortcode": "[lp_slot key=\"problem_explainer\"]"
+                            }
+                        },
+                        {
+                            "id": "4ff5306",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-solution_overview",
+                                "shortcode": "[lp_slot key=\"solution_overview\"]"
+                            }
+                        },
+                        {
+                            "id": "03aa1d1",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-service_features",
+                                "shortcode": "[lp_repeater key=\"service_features\"]"
+                            }
+                        },
+                        {
+                            "id": "a662579",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-process_steps",
+                                "shortcode": "[lp_repeater key=\"process_steps\"]"
+                            }
+                        },
+                        {
+                            "id": "06fbe8d",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-why_us",
+                                "shortcode": "[lp_slot key=\"why_us\"]"
+                            }
+                        },
+                        {
+                            "id": "2588654",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-proof_strip",
+                                "shortcode": "[lp_repeater key=\"proof_strip\"]"
+                            }
+                        },
+                        {
+                            "id": "ecda465",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-testimonial",
+                                "shortcode": "[lp_repeater key=\"testimonial\"]"
+                            }
+                        },
+                        {
+                            "id": "da75cd6",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-faq",
+                                "shortcode": "[lp_repeater key=\"faq\"]"
+                            }
+                        },
+                        {
+                            "id": "06ce7d4",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-cta",
+                                "shortcode": "[lp_cta key=\"cta\"]"
+                            }
+                        },
+                        {
+                            "id": "7b5f61a",
+                            "elType": "widget",
+                            "elements": [],
+                            "widgetType": "shortcode",
+                            "settings": {
+                                "_css_classes": "wf-contact_block",
+                                "shortcode": "[lp_cta key=\"contact_block\"]"
+                            }
+                        }
+                    ],
+                    "isInner": false
+                }
+            ],
+            "isInner": false
+        }
+    ],
+    "page_settings": {}
+}
