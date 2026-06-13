@@ -47,6 +47,43 @@ it('wraps a lone repeater item into a list so cardinality is judged correctly', 
     expect($shaped['service_features'])->toBe(['Just one feature']);
 });
 
+it('converts Markdown in text slots to HTML (no literal **bold** or – bullets)', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'problem_explainer' => "A failing heater is **expensive**.\n\n- lukewarm showers\n- rising bills",
+        'hero_solution' => 'Same-day **guaranteed** repair.',
+        'hero_problem' => 'No **hot** water?', // heading stays plain
+    ]);
+
+    expect($shaped['problem_explainer'])->toContain('<strong>expensive</strong>')
+        ->and($shaped['problem_explainer'])->toContain('<li>lukewarm showers</li>')
+        ->and($shaped['problem_explainer'])->not->toContain('**')
+        ->and($shaped['hero_solution'])->toContain('<strong>guaranteed</strong>')
+        ->and($shaped['hero_solution'])->not->toContain('<p>')      // inline: no block wrap
+        ->and($shaped['hero_problem'])->toBe('No **hot** water?');  // heading untouched
+});
+
+it('splits a single bulleted block into separate list items', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'service_features' => "– Endless hot water\n– Lower bills\n– Compact footprint",
+    ]);
+
+    expect($shaped['service_features'])->toBe(['Endless hot water', 'Lower bills', 'Compact footprint']);
+});
+
+it('splits a labeled faq block into {question, answer} (the recurring q/a bug)', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'faq' => [
+            "Question: How long does install take?\nAnswer: Most installs are same-day.",
+            "Will it lower my bills?\nTankless heats on demand.",
+        ],
+    ]);
+
+    expect($shaped['faq'])->toBe([
+        ['question' => 'How long does install take?', 'answer' => 'Most installs are same-day.'],
+        ['question' => 'Will it lower my bills?', 'answer' => 'Tankless heats on demand.'],
+    ]);
+});
+
 it('drops off-schema keys (the slot key is the render contract)', function () {
     $shaped = (new SlotShaper)->shape(serviceSlots(), [
         'hero_problem' => 'kept',
