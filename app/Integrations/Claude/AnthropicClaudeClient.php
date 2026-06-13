@@ -4,6 +4,7 @@ namespace App\Integrations\Claude;
 
 use Anthropic\Client;
 use Anthropic\Messages\TextBlock;
+use Anthropic\Messages\Usage;
 
 /**
  * Anthropic-backed ClaudeClient using the official PHP SDK. The model and the
@@ -65,13 +66,38 @@ class AnthropicClaudeClient implements ClaudeClient
             }
         }
 
+        $usage = self::readUsage($message->usage);
+
         return new CompletionResult(
             text: $text,
             stopReason: $message->stopReason,
-            inputTokens: $message->usage->inputTokens,
-            outputTokens: $message->usage->outputTokens,
-            thinkingTokens: $message->usage->outputTokensDetails?->thinkingTokens,
+            inputTokens: $usage['input'],
+            outputTokens: $usage['output'],
+            thinkingTokens: $usage['thinking'],
         );
+    }
+
+    /**
+     * Read token counts off the SDK Usage object WITHOUT tripping
+     * "typed property must not be accessed before initialization". The Anthropic
+     * PHP SDK declares `outputTokensDetails` (and its `thinkingTokens`) as typed
+     * properties with no default; when the API response omits them, reading them
+     * directly throws — and a null-safe `?->` does NOT help, because it still reads
+     * the uninitialized property before checking for null. `??` uses isset-semantics
+     * and returns the fallback instead of throwing. A non-fatal usage detail must
+     * never crash a successful draft (this stranded SPG's pillar mid-generation).
+     *
+     * @return array{input: ?int, output: ?int, thinking: ?int}
+     */
+    public static function readUsage(Usage $usage): array
+    {
+        $details = $usage->outputTokensDetails ?? null;
+
+        return [
+            'input' => $usage->inputTokens ?? null,
+            'output' => $usage->outputTokens ?? null,
+            'thinking' => $details !== null ? ($details->thinkingTokens ?? null) : null,
+        ];
     }
 
     /**
