@@ -110,6 +110,7 @@
             "source": "entity",
             "cardinality": { "type": "repeater", "min": 2, "max": 6 },
             "constraints": { "required": true, "entity": "proof.substantiated", "min_entities": 2 },
+            "condition": { "field": "has_substantiated_proof", "equals": true },
             "client_override": false,
             "elementor_binding": "lp/repeater"
         },
@@ -144,7 +145,7 @@
             "role": "cta",
             "source": "entity",
             "cardinality": { "type": "single" },
-            "constraints": { "required": true, "entity": "conversion.primary_action", "min_entities": 1 },
+            "constraints": { "required": true },
             "client_override": false,
             "elementor_binding": "lp/cta"
         },
@@ -155,7 +156,8 @@
             "role": "contact",
             "source": "entity",
             "cardinality": { "type": "single" },
-            "constraints": { "required": true, "entity": "location.nap", "min_entities": 1 },
+            "constraints": { "required": true },
+            "condition": { "field": "has_location", "equals": true },
             "client_override": false,
             "elementor_binding": "lp/cta"
         }

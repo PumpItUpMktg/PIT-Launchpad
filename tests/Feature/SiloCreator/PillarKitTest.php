@@ -48,7 +48,10 @@ it('prefers a per-site kit override over the shared library kit', function () {
 });
 
 it('leaves the kit null when no kit exists for the page_type (surfaced at generation)', function () {
-    // No kits seeded → nothing to pin; the stub is still created, kit unresolved.
+    // No kit for the page_type → nothing to pin; the stub is still created, kit
+    // unresolved. (The reseed migration seeds the library kits, so clear them to
+    // exercise the genuinely-no-kit path.)
+    WireframeKit::query()->delete();
     $site = Site::factory()->create();
 
     app(ManualSiloCreator::class)->create($site, SiloType::ServicePillar, 'Water Heaters', ['water heater repair']);
