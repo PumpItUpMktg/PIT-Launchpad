@@ -59,6 +59,49 @@ class Test_Shortcodes extends WP_UnitTestCase
         $this->assertStringContainsString('Call now', $out);
     }
 
+    public function test_lp_cta_renders_the_dual_conversion_block(): void
+    {
+        update_post_meta($this->post_id, Meta::SLOTS, [
+            'cta' => [
+                'type' => 'conversion_block',
+                'call_label' => 'Call Now',
+                'phone' => '+15125550142',
+                'tel' => 'tel:+15125550142',
+                'form_embed' => '<iframe src="https://api.leadconnectorhq.com/widget/form/abc"></iframe>'
+                    . '<script src="https://link.msgsndr.com/js/form_embed.js"></script>',
+            ],
+        ]);
+
+        $out = $this->sc('lp_cta', 'cta');
+        $this->assertStringContainsString('lp-conversion-block', $out);
+        $this->assertStringContainsString('href="tel:+15125550142"', $out);
+        $this->assertStringContainsString('Call Now', $out);
+        $this->assertStringContainsString('leadconnectorhq.com/widget/form/abc', $out); // GHL embed rendered
+    }
+
+    public function test_lp_cta_conversion_block_is_call_only_without_a_form(): void
+    {
+        update_post_meta($this->post_id, Meta::SLOTS, [
+            'cta' => ['type' => 'conversion_block', 'call_label' => 'Call Now', 'phone' => '+15125550142', 'tel' => 'tel:+15125550142'],
+        ]);
+
+        $out = $this->sc('lp_cta', 'cta');
+        $this->assertStringContainsString('href="tel:+15125550142"', $out);
+        $this->assertStringNotContainsString('lp-conversion-block__form', $out); // no form → graceful call-only
+    }
+
+    public function test_lp_cta_renders_a_nap_contact_block(): void
+    {
+        update_post_meta($this->post_id, Meta::SLOTS, [
+            'contact_block' => ['type' => 'nap', 'name' => 'Trooper Plumbing', 'address' => '1 Main St', 'phone' => '+15125550142'],
+        ]);
+
+        $out = $this->sc('lp_cta', 'contact_block');
+        $this->assertStringContainsString('lp-nap', $out);
+        $this->assertStringContainsString('Trooper Plumbing', $out);
+        $this->assertStringContainsString('href="tel:+15125550142"', $out);
+    }
+
     public function test_lp_image_renders_an_img_from_the_r2_url(): void
     {
         $out = $this->sc('lp_image', 'hero_image');
