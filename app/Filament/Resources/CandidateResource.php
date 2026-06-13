@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Filament\Resources\CandidateResource\Pages\ListCandidates;
 use App\Jobs\GeneratePost;
@@ -38,6 +39,11 @@ class CandidateResource extends Resource
     {
         return parent::getEloquentQuery()
             ->withoutGlobalScope(SiteScope::class)
+            // POST lane only. §4 pillar stubs are kind=page + status=candidate; without
+            // this filter they leaked in here and "Generate post" flipped them to posts
+            // (DraftRequest::forCandidate hard-codes kind=Post), so a service pillar
+            // published through the blog template. Pages generate via PageResource.
+            ->where('kind', ContentKind::Post->value)
             ->whereIn('status', [ContentStatus::Candidate->value, ContentStatus::Scored->value])
             ->orderByDesc('relevance_score');
     }

@@ -2,7 +2,9 @@
 
 use App\ContentEngine\Drafting\DraftFailedException;
 use App\ContentEngine\Generation\PostGenerator;
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
@@ -78,6 +80,26 @@ it('does NOT flip a candidate to needs_review when the draft comes back empty �
         ->and($after->body)->toBeNull()
         ->and($after->hasDraft())->toBeFalse()
         ->and($after->draftError())->not->toBeNull(); // failure marker persisted for the surfaces
+});
+
+it('refuses to draft a page through the post lane — never flips kind=page to a post', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    // A §4 pillar stub: kind=page, status=candidate — must NOT be drafted as a post.
+    $page = Content::factory()->page()->create([
+        'site_id' => $site->id,
+        'silo_id' => $silo->id,
+        'status' => ContentStatus::Candidate,
+        'page_type' => PageType::Service,
+    ]);
+
+    $renders = Mockery::mock(RenderCoordinator::class);
+    $renders->shouldReceive('render')->never(); // guard fires before any draft/render
+
+    expect(fn () => (new PostGenerator(DraftingHarness::engine(new FakeClaudeClient('')), $renders))->generate($page->fresh()))
+        ->toThrow(InvalidArgumentException::class);
+
+    expect($page->fresh()->kind)->toBe(ContentKind::Page); // unflipped
 });
 
 it('titles the drafted post from the generated SEO title, not the carried news headline', function () {
