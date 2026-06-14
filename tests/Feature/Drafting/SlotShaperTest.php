@@ -113,3 +113,39 @@ it('drops off-schema keys (the slot key is the render contract)', function () {
     expect($shaped)->toHaveKey('hero_problem')
         ->and($shaped)->not->toHaveKey('totally_made_up');
 });
+
+it('splits a BARE-LABEL faq block (question/answer on their own lines) — the native-cutover bug', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'faq' => [
+            // The exact shape that produced {question:"question", answer:"...?\nanswer\n..."} live.
+            "question\nHow long does install take?\nanswer\nMost installs are same-day.",
+            // Single-letter bare labels.
+            "Q\nWill it lower my bills?\nA\nTankless heats on demand.",
+        ],
+    ]);
+
+    expect($shaped['faq'])->toBe([
+        ['question' => 'How long does install take?', 'answer' => 'Most installs are same-day.'],
+        ['question' => 'Will it lower my bills?', 'answer' => 'Tankless heats on demand.'],
+    ]);
+});
+
+it('never collapses the label word "question" into the title (regression guard)', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'faq' => ["question\nDo you offer financing?\nanswer\nYes, **0% APR**."],
+    ]);
+
+    expect($shaped['faq'][0]['question'])->toBe('Do you offer financing?')   // not "question"
+        ->and($shaped['faq'][0]['answer'])->toContain('<strong>0% APR</strong>')
+        ->and($shaped['faq'][0]['answer'])->not->toContain('answer');         // label line dropped
+});
+
+it('keeps a multi-line answer after a bare answer label', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'faq' => ["question\nWhat is included?\nanswer\nThe unit.\nThe install.\nHaul-away."],
+    ]);
+
+    expect($shaped['faq'][0]['question'])->toBe('What is included?')
+        ->and($shaped['faq'][0]['answer'])->toContain('The unit.')
+        ->and($shaped['faq'][0]['answer'])->toContain('Haul-away.');
+});
