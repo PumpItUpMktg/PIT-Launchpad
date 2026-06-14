@@ -66,6 +66,37 @@ test('upsertSilo and upsertRedirects hit their endpoints', function () {
     Http::assertSent(fn ($r) => str_contains($r->url(), '/launchpad/v1/redirects') && $r['redirects'][0]['from_url'] === '/a');
 });
 
+test('upsertKitTemplate posts the bound artifact to /kit-template', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/kit-template' => Http::response(
+            ['kit' => 'service-page', 'template_id' => 91, 'created' => true, 'condition_set' => false, 'pro' => false, 'condition' => ['rule' => 'include/singular/in_lp_kit/5']],
+            200,
+        ),
+    ]);
+
+    $result = wpClient()->upsertKitTemplate([
+        'kit' => 'service-page',
+        'template' => ['content' => [['widgetType' => 'heading']]],
+    ]);
+
+    expect($result['template_id'])->toBe(91)
+        ->and($result['created'])->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), '/wp-json/launchpad/v1/kit-template')
+            && $request['kit'] === 'service-page'
+            && $request['template']['content'][0]['widgetType'] === 'heading'
+            && $request->hasHeader('Authorization', 'Basic '.base64_encode('svc-user:app-pass'));
+    });
+});
+
+test('upsertKitTemplate surfaces a WordpressException on a non-2xx (e.g. a 422 reject)', function () {
+    Http::fake(['*/wp-json/launchpad/v1/kit-template' => Http::response(['error' => 'bad'], 422)]);
+
+    expect(fn () => wpClient()->upsertKitTemplate(['kit' => '', 'template' => []]))
+        ->toThrow(WordpressException::class);
+});
+
 test('ping returns true on an authed 200', function () {
     Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
 

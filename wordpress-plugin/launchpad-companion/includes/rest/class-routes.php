@@ -10,6 +10,7 @@
 namespace Launchpad\Companion\Rest;
 
 use Launchpad\Companion\Content\ContentStore;
+use Launchpad\Companion\Content\KitTemplateStore;
 use Launchpad\Companion\Content\RedirectStore;
 use Launchpad\Companion\Content\SiloStore;
 use Launchpad\Companion\ServiceUser;
@@ -43,6 +44,12 @@ final class Routes
         register_rest_route(self::NS, '/redirects', [
             'methods' => 'POST',
             'callback' => [$this, 'redirects'],
+            'permission_callback' => $auth,
+        ]);
+
+        register_rest_route(self::NS, '/kit-template', [
+            'methods' => 'POST',
+            'callback' => [$this, 'kit_template'],
             'permission_callback' => $auth,
         ]);
 
@@ -91,5 +98,12 @@ final class Routes
         $count = ( new RedirectStore() )->upsert($redirects);
 
         return new WP_REST_Response(['count' => $count], 200);
+    }
+
+    public function kit_template(WP_REST_Request $request): WP_REST_Response
+    {
+        $result = ( new KitTemplateStore() )->install((array) $request->get_json_params());
+
+        return new WP_REST_Response($result, isset($result['error']) ? 422 : 200);
     }
 }
