@@ -26,6 +26,10 @@
                                 "title": "",
                                 "__dynamic__": {
                                     "title": "[elementor-tag id=\"2091fd7\" name=\"lp-text\" settings=\"%7B%22slot%22%3A%22hero_problem%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "title_color": "globals/colors?id=primary",
+                                    "typography_typography": "globals/typography?id=primary"
                                 }
                             }
                         },
@@ -39,6 +43,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"1ac9398\" name=\"lp-text\" settings=\"%7B%22slot%22%3A%22hero_solution%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -68,6 +76,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"7185bb4\" name=\"lp-text\" settings=\"%7B%22slot%22%3A%22problem_explainer%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -81,6 +93,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"cad20ca\" name=\"lp-text\" settings=\"%7B%22slot%22%3A%22solution_overview%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -94,6 +110,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"6b80c54\" name=\"lp-repeater\" settings=\"%7B%22slot%22%3A%22service_features%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -107,6 +127,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"9072cb4\" name=\"lp-repeater\" settings=\"%7B%22slot%22%3A%22process_steps%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -120,6 +144,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"1aff261\" name=\"lp-text\" settings=\"%7B%22slot%22%3A%22why_us%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -133,6 +161,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"21a342a\" name=\"lp-repeater\" settings=\"%7B%22slot%22%3A%22proof_strip%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -146,6 +178,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"4a25417\" name=\"lp-repeater\" settings=\"%7B%22slot%22%3A%22testimonial%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -159,6 +195,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"f9623e8\" name=\"lp-repeater\" settings=\"%7B%22slot%22%3A%22faq%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -172,6 +212,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"948c9cc\" name=\"lp-cta\" settings=\"%7B%22slot%22%3A%22cta%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         },
@@ -185,6 +229,10 @@
                                 "editor": "",
                                 "__dynamic__": {
                                     "editor": "[elementor-tag id=\"a99602f\" name=\"lp-cta\" settings=\"%7B%22slot%22%3A%22contact_block%22%7D\"]"
+                                },
+                                "__globals__": {
+                                    "text_color": "globals/colors?id=text",
+                                    "typography_typography": "globals/typography?id=text"
                                 }
                             }
                         }

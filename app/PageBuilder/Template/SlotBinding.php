@@ -47,6 +47,34 @@ final class SlotBinding
     }
 
     /**
+     * The Elementor Global-Kit references a generated widget should carry, by widget
+     * type — color + typography pointed at the SYSTEM global ids (`primary`,
+     * `text`, `accent`), which exist in every Global Kit. So a tenant's intake-built
+     * brand (its Global Kit) cascades into the generated template with no hardcoded
+     * hex/px and no per-tenant styling. (The designer's own template carries its own
+     * globals; the binder never touches them — this is generator-only.)
+     *
+     * @return array<string, string> control => "globals/…?id=…"
+     */
+    public static function globalsFor(string $widgetType): array
+    {
+        return match ($widgetType) {
+            'heading' => [
+                'title_color' => 'globals/colors?id=primary',
+                'typography_typography' => 'globals/typography?id=primary',
+            ],
+            'text-editor' => [
+                'text_color' => 'globals/colors?id=text',
+                'typography_typography' => 'globals/typography?id=text',
+            ],
+            'button' => [
+                'background_color' => 'globals/colors?id=accent',
+            ],
+            default => [],
+        };
+    }
+
+    /**
      * The Elementor dynamic-tag string stored in a widget's `__dynamic__.<control>`:
      * `[elementor-tag id="…" name="lp-…" settings="<url-encoded {slot:key}>"]`.
      */

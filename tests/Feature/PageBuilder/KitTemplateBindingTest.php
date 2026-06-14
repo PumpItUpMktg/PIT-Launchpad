@@ -42,6 +42,17 @@ it('generates a NATIVE template that binds every required service-kit slot', fun
     $widgets = $section['elements'][0]['elements'];
     $classes = array_map(fn ($w) => $w['settings']['_css_classes'], $widgets);
     expect($classes)->toContain('wf-hero_problem', 'wf-cta', 'wf-contact_block', 'wf-hero_image');
+
+    // Brand layer: widgets reference the Global Kit (system globals), not hardcoded styles.
+    $byClass = collect($widgets)->keyBy(fn ($w) => $w['settings']['_css_classes']);
+    expect($byClass['wf-hero_problem']['settings']['__globals__'])->toMatchArray([
+        'title_color' => 'globals/colors?id=primary',
+        'typography_typography' => 'globals/typography?id=primary',
+    ])
+        ->and($byClass['wf-problem_explainer']['settings']['__globals__'])->toMatchArray([
+            'text_color' => 'globals/colors?id=text',
+        ])
+        ->and($byClass['wf-hero_image']['settings'])->not->toHaveKey('__globals__'); // image: no color/typography
 });
 
 it('generates a SHORTCODE template (proven fallback) that also binds every required slot', function () {
