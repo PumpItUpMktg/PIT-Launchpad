@@ -188,6 +188,11 @@ class PushKitTemplateCommand extends Command
         $verb = ! empty($result['created']) ? 'created' : 'updated';
         $id = (int) ($result['template_id'] ?? 0);
 
+        $cleared = array_values(array_filter(array_map('intval', (array) ($result['conditions_cleared'] ?? []))));
+        if ($cleared !== []) {
+            $this->warn("  {$kit}: cleared a conflicting lp_kit Display Condition from template(s) #".implode(', #', $cleared)." so #{$id} is the sole owner — verify the page resolves to #{$id} (Elementor Pro caches conditions; Elementor → Tools → Regenerate if a stale one persists).");
+        }
+
         if (! empty($result['condition_set'])) {
             $this->info("  {$kit}: {$verb} template #{$id}; lp_kit Display Condition set.");
 
