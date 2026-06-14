@@ -41,6 +41,9 @@ final class TemplateRouter
     public function register_templates(array $templates): array
     {
         $templates['elementor_canvas'] = 'Elementor Canvas';
+        // The native-body full-width template assign() stamps below — advertise it
+        // so core's re-validation accepts it without depending on Elementor Pro.
+        $templates['elementor_header_footer'] = 'Elementor Full Width';
 
         $map = get_option(Meta::OPTION_TEMPLATES, []);
         if (is_array($map)) {
@@ -60,6 +63,12 @@ final class TemplateRouter
      * selector (e.g. service-page, location-page); `page_type` is a fallback. An
      * explicit page-template FILE mapped via the `lp_templates` option still wins.
      *
+     * A native-body page (per-page `_elementor_data`) renders its OWN Elementor
+     * document, not a Theme Builder single template — so it gets Elementor's
+     * Full-Width template (`elementor_header_footer`): theme header/footer, but no
+     * theme `.page-header` entry-title (the hero H1 is the page's only H1) and
+     * full-width. An explicit `lp_templates` mapping still wins over it.
+     *
      * Otherwise NO page template is stamped — for kit PAGES as well as POSTS.
      * `elementor_canvas` is a full-page Elementor template that BYPASSES the Theme
      * Builder *single* template a kit renders through (its `lp_kit` display
@@ -78,6 +87,11 @@ final class TemplateRouter
                 $template = (string) $map[$key];
                 break;
             }
+        }
+
+        // An explicit operator mapping wins; else a native body gets full-width.
+        if ($template === '' && get_post_meta($post_id, '_elementor_data', true) !== '') {
+            $template = 'elementor_header_footer';
         }
 
         if ($template !== '') {

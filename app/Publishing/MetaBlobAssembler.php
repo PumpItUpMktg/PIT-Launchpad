@@ -389,7 +389,7 @@ class MetaBlobAssembler
         $ogImage = $this->ogImageUrl($content, $images);
 
         return array_filter([
-            'title' => SeoTitle::normalize((string) ($metaSeo['title'] ?? $content->title), $content->source_name),
+            'title' => $this->seoTitle($content),
             'meta_description' => $metaSeo['meta_description'] ?? null,
             'canonical' => $this->canonical($content),
             'robots' => 'index, follow',
@@ -449,12 +449,37 @@ class MetaBlobAssembler
         $crumbs = [['name' => 'Home', 'url' => $home]];
 
         if ($content->silo_id !== null && $content->silo !== null) {
-            $crumbs[] = ['name' => (string) $content->silo->name, 'url' => ''];
+            $crumbs[] = ['name' => (string) $content->silo->name, 'url' => $this->siloUrl($content, $home)];
         }
 
-        $crumbs[] = ['name' => (string) $content->title, 'url' => ''];
+        // Leaf = the CURRENT page title (the normalized SEO title), not the stale
+        // internal Content.title.
+        $crumbs[] = ['name' => $this->seoTitle($content), 'url' => ''];
 
         return $crumbs;
+    }
+
+    /**
+     * The silo crumb's link — its pillar page (the silo landing page). Empty when the
+     * silo has no pillar yet (the crumb then renders unlinked rather than broken).
+     */
+    private function siloUrl(Content $content, string $home): string
+    {
+        $pillar = $content->silo?->pillarContent;
+        $slug = $pillar !== null ? trim((string) $pillar->slug, '/') : '';
+
+        return $slug !== '' ? $home.$slug.'/' : '';
+    }
+
+    /**
+     * The page's normalized SEO/document title — the single source for the <title>,
+     * the OG title, and the breadcrumb leaf, so they never drift.
+     */
+    private function seoTitle(Content $content): string
+    {
+        $metaSeo = is_array($content->meta['seo'] ?? null) ? $content->meta['seo'] : [];
+
+        return SeoTitle::normalize((string) ($metaSeo['title'] ?? $content->title), $content->source_name);
     }
 
     private function kitName(Content $content): string

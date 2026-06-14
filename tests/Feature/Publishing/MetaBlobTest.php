@@ -3,6 +3,7 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
+use App\Models\Silo;
 use App\Operator\Controls\TemplateMapping;
 use App\Publishing\MetaBlobAssembler;
 use App\Publishing\RenderCoordinator;
@@ -139,4 +140,46 @@ test('a post carries NO native body — the single-post template renders it', fu
     $payload = app(MetaBlobAssembler::class)->assemble($post->fresh(), new Collection);
 
     expect($payload['elementor_data'])->toBe([]);              // posts → plugin no-op
+});
+
+test('the breadcrumb silo crumb links to its pillar page and the leaf uses the SEO title', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site(); // domain_url https://apex.example
+
+    // A silo whose landing page is its pillar Content.
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heater']);
+    $pillar = Content::factory()->page()->create([
+        'site_id' => $site->id,
+        'silo_id' => $silo->id,
+        'slug' => 'water-heater',
+    ]);
+    $silo->forceFill(['pillar_content_id' => $pillar->id])->save();
+
+    $content = PublishHarness::approvedPage($site);
+    // A stale internal title proves the leaf takes the normalized SEO title, not Content.title.
+    $content->forceFill(['silo_id' => $silo->id, 'title' => 'STALE INTERNAL TITLE'])->save();
+
+    $crumbs = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection)['seo']['breadcrumbs'];
+
+    // Position 2 (silo) now carries the pillar page URL — not an empty, unlinked crumb.
+    expect($crumbs[1])->toBe(['name' => 'Water Heater', 'url' => 'https://apex.example/water-heater/']);
+
+    // Leaf = the current page's normalized SEO title (branding suffix stripped), unlinked,
+    // NOT the stale Content.title.
+    $leaf = $crumbs[array_key_last($crumbs)];
+    expect($leaf)->toBe(['name' => 'Water Heater Repair in Austin', 'url' => ''])
+        ->and($leaf['name'])->not->toBe('STALE INTERNAL TITLE');
+});
+
+test('the silo crumb stays unlinked when the silo has no pillar page yet', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Plumbing']); // no pillar_content_id
+
+    $content = PublishHarness::approvedPage($site);
+    $content->forceFill(['silo_id' => $silo->id])->save();
+
+    $crumbs = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection)['seo']['breadcrumbs'];
+
+    expect($crumbs[1])->toBe(['name' => 'Plumbing', 'url' => '']); // unlinked, never a broken URL
 });

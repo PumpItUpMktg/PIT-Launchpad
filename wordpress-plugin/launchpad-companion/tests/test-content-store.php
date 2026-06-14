@@ -169,6 +169,26 @@ class Test_Content_Store extends WP_UnitTestCase
         $this->assertSame('', get_post_meta($result['wp_post_id'], '_elementor_data', true));
     }
 
+    public function test_a_native_body_sets_the_full_width_page_template(): void
+    {
+        $body = [[
+            'id' => 'abc1234', 'elType' => 'container', 'settings' => [], 'elements' => [], 'isInner' => false,
+        ]];
+
+        $result = (new ContentStore())->upsert($this->payload(['elementor_data' => $body]));
+
+        // Elementor Full-Width template: theme header/footer, but no theme .page-header
+        // entry-title — so the hero H1 is the page's only H1, rendered full-width.
+        $this->assertSame('elementor_header_footer', get_post_meta($result['wp_post_id'], '_wp_page_template', true));
+    }
+
+    public function test_no_native_body_leaves_the_page_template_on_the_theme_default(): void
+    {
+        $result = (new ContentStore())->upsert($this->payload()); // no elementor_data → dynamic-template path
+
+        $this->assertSame('', get_post_meta($result['wp_post_id'], '_wp_page_template', true), 'The non-native render path must not force a page template.');
+    }
+
     public function test_a_locally_edited_page_keeps_its_native_body(): void
     {
         $store = new ContentStore();

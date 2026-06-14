@@ -137,6 +137,10 @@ final class ContentStore
         update_post_meta($post_id, '_elementor_edit_mode', 'builder');
         update_post_meta($post_id, '_elementor_version', defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : LPC_VERSION);
 
+        // The page template (full-width chrome for a native body) is owned by
+        // TemplateRouter::assign(), the single authority on _wp_page_template — it
+        // runs right after this and reads the native body we just wrote.
+
         // Clear Elementor's generated CSS so the new body renders without a manual
         // regenerate. No-op when Elementor is absent.
         if (class_exists('\Elementor\Plugin')) {
