@@ -10,6 +10,7 @@ use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
+use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\PublishEligibility;
 use App\Support\SeoTitle;
@@ -24,7 +25,10 @@ use Illuminate\Support\Collection;
  */
 class MetaBlobAssembler
 {
-    public function __construct(private readonly PublishEligibility $eligibility) {}
+    public function __construct(
+        private readonly PublishEligibility $eligibility,
+        private readonly NativeComposer $composer,
+    ) {}
 
     /**
      * @param  Collection<int, RenderJob>  $renderJobs
@@ -33,6 +37,7 @@ class MetaBlobAssembler
     public function assemble(Content $content, Collection $renderJobs): array
     {
         $images = $this->images($renderJobs);
+        $slots = $this->slotPayload($content);
 
         return [
             'content_id' => $content->id,
@@ -44,13 +49,44 @@ class MetaBlobAssembler
             'slug' => $content->slug,
             'status' => 'published',
             'locked' => (bool) $content->locked,
-            'slot_payload' => $this->slotPayload($content),
+            // The RESOLVED slots stay the source of truth the plugin keys SEO/schema
+            // off (FAQPage reads slot_payload.faq) — retained ALONGSIDE the native
+            // body below, never replaced by it.
+            'slot_payload' => $slots,
             'kit_definition' => $this->kitDefinition($content),
             'template_id' => $this->templateId($content),
             'images' => $images,
             'featured_image' => $this->ogImageUrl($content, $images),
             'seo' => $this->seo($content, $images),
+            // Tier-1 native body: the page renders as native, editable Elementor
+            // widgets baked from the SAME resolved slots. Pages only; posts ([] →
+            // plugin no-op) keep the single-post template render.
+            'elementor_data' => $this->nativeBody($content, $slots, $images),
         ];
+    }
+
+    /**
+     * The per-page NATIVE Elementor body (the Tier-1 widget document) baked from the
+     * resolved slots — composed from the SAME values as slot_payload, so the native
+     * render and the SEO/schema source never diverge. Pages only; posts and
+     * schema-less content return [] (the plugin then writes no native body).
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  array<string, array<string, mixed>>  $images
+     * @return list<array<string, mixed>>
+     */
+    private function nativeBody(Content $content, array $slots, array $images): array
+    {
+        if ($content->kind !== ContentKind::Page) {
+            return [];
+        }
+
+        $schema = $this->schema($content);
+        if ($schema === null) {
+            return [];
+        }
+
+        return $this->composer->compose($schema, $slots, $images, $content->id);
     }
 
     /**

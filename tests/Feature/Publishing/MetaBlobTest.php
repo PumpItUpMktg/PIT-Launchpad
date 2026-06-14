@@ -1,8 +1,12 @@
 <?php
 
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Models\Content;
 use App\Operator\Controls\TemplateMapping;
 use App\Publishing\MetaBlobAssembler;
 use App\Publishing\RenderCoordinator;
+use Illuminate\Support\Collection;
 use Tests\Support\PublishHarness;
 
 test('the assembled meta-blob matches the companion-plugin /content contract', function () {
@@ -71,4 +75,53 @@ test('the blob carries the operator-mapped template id for the page kit (null wh
     app(TemplateMapping::class)->map($site, 'service-page', 77, 'Service Template');
 
     expect(app(MetaBlobAssembler::class)->assemble($content, $outcome->jobs)['template_id'])->toBe(77);
+});
+
+test('the meta-blob carries a native elementor_data body for a page AND retains slot_payload for schema (send-half)', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+
+    // Add a faq so we can prove the FAQPage schema SOURCE survives the native swap.
+    $content->slot_payload = array_merge($content->slot_payload, [
+        'faq' => [['question' => 'How long does it take?', 'answer' => 'Same <strong>day</strong>.']],
+    ]);
+    $content->save();
+
+    $outcome = app(RenderCoordinator::class)->render($content);
+    $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), $outcome->jobs);
+
+    // Native body present, container-based zones (hero ... faq).
+    expect($payload['elementor_data'])->toBeArray()->not->toBeEmpty();
+    $classes = array_map(fn ($z) => $z['settings']['_css_classes'] ?? '', $payload['elementor_data']);
+    expect($classes)->toContain('lp-zone lp-zone--hero')
+        ->and($classes)->toContain('lp-zone lp-zone--faq');
+
+    // FAQ is a native accordion baked from the slot...
+    $faqZone = collect($payload['elementor_data'])->firstWhere('settings._css_classes', 'lp-zone lp-zone--faq');
+    $accordion = $faqZone['elements'][0];
+    expect($accordion['widgetType'])->toBe('nested-accordion')
+        ->and($accordion['settings']['items'][0]['item_title'])->toBe('How long does it take?');
+
+    // ...AND the faq slot is RETAINED in slot_payload — the FAQPage JSON-LD source the
+    // plugin reads (schema survival, verified not assumed), with SEO still travelling.
+    expect($payload['slot_payload']['faq'])->toBe([
+        ['question' => 'How long does it take?', 'answer' => 'Same <strong>day</strong>.'],
+    ])->and($payload['seo'])->toHaveKey('schema_type');
+});
+
+test('a post carries NO native body — the single-post template renders it', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+
+    $post = Content::factory()->create([
+        'site_id' => $site->id,
+        'kind' => ContentKind::Post,
+        'status' => ContentStatus::Approved,
+        'body' => 'A reactive news post body.',
+    ]);
+
+    $payload = app(MetaBlobAssembler::class)->assemble($post->fresh(), new Collection);
+
+    expect($payload['elementor_data'])->toBe([]);              // posts → plugin no-op
 });
