@@ -80,19 +80,22 @@ final class KitTemplateGenerator
 
         [$widgetType, $control, $tag] = $this->nativeMap($slot);
 
-        $dynamic = SlotBinding::dynamicTag($tag, $slot->key, $this->id($slot->key.':tag'));
-
-        return [
-            ...$base,
-            'widgetType' => $widgetType,
-            'settings' => [
-                '_css_classes' => 'wf-'.$slot->key,
-                // A neutral static value so the widget is valid even before the tag
-                // resolves; Elementor uses the __dynamic__ value when present.
-                $control => $control === 'image' ? ['id' => 0, 'url' => ''] : '',
-                '__dynamic__' => [$control => $dynamic],
-            ],
+        $settings = [
+            '_css_classes' => 'wf-'.$slot->key,
+            // A neutral static value so the widget is valid even before the tag
+            // resolves; Elementor uses the __dynamic__ value when present.
+            $control => $control === 'image' ? ['id' => 0, 'url' => ''] : '',
+            '__dynamic__' => [$control => SlotBinding::dynamicTag($tag, $slot->key, $this->id($slot->key.':tag'))],
         ];
+
+        // Brand layer: reference the tenant's Global Kit (system color/typography
+        // globals) so the cascade paints it — no hardcoded hex/px.
+        $globals = SlotBinding::globalsFor($widgetType);
+        if ($globals !== []) {
+            $settings['__globals__'] = $globals;
+        }
+
+        return [...$base, 'widgetType' => $widgetType, 'settings' => $settings];
     }
 
     /**
