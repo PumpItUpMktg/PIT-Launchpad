@@ -38,4 +38,17 @@ return [
     // verify before the contact/blog page types adopt their blocks.
     'unverified_widgets' => ['form', 'share-buttons', 'social-icons', 'theme-post-content', 'posts', 'nav-menu'],
 
+    // Static section headings (design chrome, not §3a-fed): the AUTHORITATIVE real
+    // label per `wf-*-heading` hook. The injector sets these (overriding the library
+    // default, which can be scaffolding like "Problem & solution heading"). A kept
+    // heading NOT listed here is treated as scaffolding and hidden — so add a page's
+    // section headings here as it migrates. Audited against the service blocks.
+    'static_headings' => [
+        'wf-ps-heading' => 'The problem — and the fix',     // library default was scaffolding
+        'wf-why-heading' => 'Why choose us',
+        'wf-reviews-heading' => 'What customers say',
+        'wf-faq-heading' => 'Frequently asked questions',
+        'wf-cta-heading' => 'Ready to get started?',
+    ],
+
 ];
