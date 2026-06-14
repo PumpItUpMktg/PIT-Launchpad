@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.4.9
+Stable tag: 0.5.0
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -14,6 +14,12 @@ media-library import — images are served from R2/CDN URLs in the payload.
 * POST /silo       — ensure a hierarchical category mirrors a Silo
 * POST /content    — upsert a page/post (idempotent on content_id)
 * POST /redirects  — upsert 301s (idempotent on from_url)
+* POST /kit-template — import a bound Elementor template into Theme Builder
+                     (idempotent per kit): creates/updates an `elementor_library`
+                     "single" template from the pushed _elementor_data, ensures the
+                     `lp_kit` term, and sets its Display Condition (Singular → By
+                     Term → Launchpad Kit → {kit}) when Elementor Pro is present
+                     (advisory meta + condition_set:false when it is not)
 * GET  /status     — environment introspection (WP/PHP/Elementor/theme/plugin versions)
 * GET  /templates  — inventory of ALL Elementor saved templates across every Theme
                      Builder group (single-page / single-post / header / footer / page /

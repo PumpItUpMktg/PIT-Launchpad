@@ -44,6 +44,15 @@ final class Meta
      * this value. */
     public const TEMPLATE_ID = '_lp_template_id';
 
+    /** On an imported Theme Builder template (`elementor_library`): the kit it
+     * serves — the idempotency marker for /kit-template re-pushes. */
+    public const KIT_TEMPLATE = '_lp_kit_template';
+
+    /** On an imported template: the intended Display Condition (taxonomy/term/
+     * location/rule) — advisory reference the operator confirms when Elementor
+     * Pro is absent, set automatically when present. */
+    public const KIT_TEMPLATE_CONDITION = '_lp_kit_template_condition';
+
     /** Set true when a non-plugin save_post edits a managed post (edited-in-WP). */
     public const LOCALLY_EDITED = '_lp_locally_edited';
 
