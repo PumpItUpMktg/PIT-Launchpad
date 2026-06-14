@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.5.0
+Stable tag: 0.5.1
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -41,6 +41,14 @@ the classic editor, or none). Place these in a Theme Builder template:
 * [lp_image key="hero_image"]    an <img> from the R2/CDN image map
 Each accepts an optional id="<post_id>"; renders nothing for a non-managed post.
 Scalar slots also mirror to readable `lp_slot_<key>` post meta for native binding.
+
+Rendered markup (designer CSS hooks). Repeaters emit semantic, brand-neutral HTML
+the designer styles — Launchpad never inlines look-and-feel:
+* plain lists  → <ul class="lp-repeater lp-repeater--{key} lp-list"><li class="lp-list__item">
+* faq          → <details class="lp-faq"><summary class="lp-faq__q">…<div class="lp-faq__a">
+* stats        → <div class="lp-stat"><span class="lp-stat__value">…<span class="lp-stat__label">
+* testimonials → <figure class="lp-testimonial"><blockquote>…<figcaption>
+* nap / call   → .lp-nap (+ __name/__address/__phone/__hours) ; .lp-conversion-block (+ __call/__form)
 
 Featured image: the push carries `featured_image` (the og/hero image URL); the
 plugin sideloads it (reusing the already-imported attachment) and sets it as the

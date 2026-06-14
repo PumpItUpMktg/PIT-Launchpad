@@ -33,12 +33,61 @@ final class SlotRenderer
             return '';
         }
 
+        // A plain list (every item a string) renders as semantic, styleable list
+        // markup (<ul>/<li>) — accessible, and the designer's icon-list hook —
+        // rather than a stack of generic item divs. Mixed/object repeaters (faq,
+        // stats, testimonials, ctas, images) keep the inferred-per-item container.
+        if (self::is_plain_list($items)) {
+            return self::list_block($key, $items);
+        }
+
         $out = '<div class="lp-repeater lp-repeater--' . esc_attr($key) . '">';
         foreach ($items as $item) {
             $out .= self::repeater_item($item);
         }
 
         return $out . '</div>';
+    }
+
+    /**
+     * True when every repeater item is a string — i.e. a plain bulleted list.
+     *
+     * @param  array<int, mixed>  $items
+     */
+    private static function is_plain_list(array $items): bool
+    {
+        foreach ($items as $item) {
+            if (! is_string($item)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * A plain list rendered as a real <ul>/<li> carrying both the repeater BEM
+     * classes (back-compat: lp-repeater / lp-repeater__item) and list-specific
+     * hooks (lp-list / lp-list__item) the designer can style as an icon list.
+     * Blank items are skipped; collapses to '' when nothing remains.
+     *
+     * @param  array<int, mixed>  $items
+     */
+    private static function list_block(string $key, array $items): string
+    {
+        $rows = '';
+        foreach ($items as $item) {
+            if (! is_string($item) || trim($item) === '') {
+                continue;
+            }
+            $rows .= '<li class="lp-repeater__item lp-list__item">' . esc_html($item) . '</li>';
+        }
+
+        if ($rows === '') {
+            return '';
+        }
+
+        return '<ul class="lp-repeater lp-repeater--' . esc_attr($key) . ' lp-list">' . $rows . '</ul>';
     }
 
     /**

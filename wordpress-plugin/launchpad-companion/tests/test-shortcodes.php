@@ -45,6 +45,26 @@ class Test_Shortcodes extends WP_UnitTestCase
         $this->assertStringContainsString('Endless hot water', $out);
     }
 
+    public function test_a_plain_list_renders_as_semantic_ul_li_with_icon_list_hooks(): void
+    {
+        $out = $this->sc('lp_slot', 'service_features');
+
+        // Real list markup (accessible) carrying both the back-compat repeater BEM
+        // classes and the lp-list hooks a designer styles as an icon list.
+        $this->assertStringContainsString('<ul class="lp-repeater lp-repeater--service_features lp-list">', $out);
+        $this->assertStringContainsString('<li class="lp-repeater__item lp-list__item">Endless hot water</li>', $out);
+        $this->assertStringContainsString('Lower bills', $out);
+    }
+
+    public function test_an_object_repeater_keeps_the_div_container_not_a_list(): void
+    {
+        // The faq repeater (objects) must NOT become a <ul> — it keeps the
+        // inferred-per-item rendering (the <details> accordion).
+        $out = $this->sc('lp_repeater', 'faq');
+        $this->assertStringNotContainsString('lp-list', $out);
+        $this->assertStringContainsString('<details class="lp-faq">', $out);
+    }
+
     public function test_lp_repeater_renders_a_faq(): void
     {
         $out = $this->sc('lp_repeater', 'faq');
