@@ -97,6 +97,30 @@ test('upsertKitTemplate surfaces a WordpressException on a non-2xx (e.g. a 422 r
         ->toThrow(WordpressException::class);
 });
 
+test('upsertBrandKit posts the palette + typography to /brand-kit', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/brand-kit' => Http::response(
+            ['updated' => true, 'kit_id' => 7, 'colors_set' => 2, 'fonts_set' => 1],
+            200,
+        ),
+    ]);
+
+    $result = wpClient()->upsertBrandKit([
+        'colors' => ['primary' => '#0F62FE', 'accent' => '#FF6F00'],
+        'fonts' => ['primary' => ['family' => 'Inter']],
+    ]);
+
+    expect($result['updated'])->toBeTrue()
+        ->and($result['colors_set'])->toBe(2);
+
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), '/wp-json/launchpad/v1/brand-kit')
+            && $request['colors']['primary'] === '#0F62FE'
+            && $request['fonts']['primary']['family'] === 'Inter'
+            && $request->hasHeader('Authorization', 'Basic '.base64_encode('svc-user:app-pass'));
+    });
+});
+
 test('ping returns true on an authed 200', function () {
     Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
 

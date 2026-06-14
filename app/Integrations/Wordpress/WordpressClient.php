@@ -89,6 +89,19 @@ class WordpressClient
     }
 
     /**
+     * Write the tenant's brand kit (palette + typography) into the site's active
+     * Elementor Global Kit, so templates referencing the globals paint the client's
+     * brand. Idempotent (overwrites the same system slots).
+     *
+     * @param  array<string, mixed>  $payload  {colors:{…}, fonts:{…}}
+     * @return array<string, mixed>
+     */
+    public function upsertBrandKit(array $payload): array
+    {
+        return $this->post('/brand-kit', $payload);
+    }
+
+    /**
      * Read the companion plugin's environment introspection (WP/PHP/Elementor/
      * theme/plugin versions) through the same authed channel.
      *

@@ -2,11 +2,13 @@
 
 namespace App\Console\Commands;
 
+use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\PageBuilder\Template\KitTemplateArtifacts;
+use App\Publishing\BrandKitAssembler;
 use Illuminate\Console\Command;
 
 /**
@@ -30,11 +32,12 @@ class PushKitTemplateCommand extends Command
         {site : a Site id}
         {--kit= : a single kit (page_type name, e.g. service-page); default all kits with an artifact}
         {--mode=native : which generator fallback to use when no bound artifact exists (native|shortcode)}
-        {--in= : an explicit artifact JSON path (requires --kit)}';
+        {--in= : an explicit artifact JSON path (requires --kit)}
+        {--skip-brand : do not push the brand kit first (templates only)}';
 
     protected $description = 'Push bound kit template(s) into a tenant\'s WordPress Theme Builder via launchpad/v1.';
 
-    public function handle(WordpressClientFactory $factory, KitTemplateArtifacts $artifacts): int
+    public function handle(WordpressClientFactory $factory, KitTemplateArtifacts $artifacts, BrandKitAssembler $brandKit): int
     {
         $site = Site::query()->withoutGlobalScope(SiteScope::class)->find($this->argument('site'));
         if ($site === null) {
@@ -66,6 +69,13 @@ class PushKitTemplateCommand extends Command
         }
 
         $this->line('Site: '.($site->brand_name ?? $site->id).'  ('.$site->id.')');
+
+        // Brand first, so the templates we import below paint the client's brand in
+        // one pass. Best-effort: a brand failure is surfaced but never blocks the
+        // template import (the cascade just falls back to theme defaults).
+        if (! $this->option('skip-brand')) {
+            $this->pushBrand($client, $site, $brandKit);
+        }
 
         $explicitIn = (string) $this->option('in');
         $failed = false;
@@ -106,6 +116,41 @@ class PushKitTemplateCommand extends Command
         }
 
         return $failed ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * Push the tenant's brand kit into the site's Elementor Global Kit first, so
+     * the imported templates paint the brand in the same pass. Best-effort.
+     */
+    private function pushBrand(WordpressClient $client, Site $site, BrandKitAssembler $brandKit): void
+    {
+        $payload = $brandKit->forSite((string) $site->id);
+        if ($payload === null) {
+            $this->warn('  brand: nothing captured in intake yet (palette/typography) — templates will use theme defaults.');
+
+            return;
+        }
+
+        try {
+            $result = $client->upsertBrandKit($payload);
+        } catch (WordpressException $e) {
+            $this->warn('  brand: push failed (continuing with templates) — '.$e->getMessage());
+
+            return;
+        }
+
+        if (empty($result['updated'])) {
+            $this->warn('  brand: not applied — '.(string) ($result['error'] ?? 'no active Elementor Global Kit.'));
+
+            return;
+        }
+
+        $this->info(sprintf(
+            '  brand: applied %d color(s), %d font(s) to Global Kit #%d.',
+            (int) ($result['colors_set'] ?? 0),
+            (int) ($result['fonts_set'] ?? 0),
+            (int) ($result['kit_id'] ?? 0),
+        ));
     }
 
     /**
