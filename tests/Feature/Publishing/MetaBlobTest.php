@@ -77,10 +77,10 @@ test('the blob carries the operator-mapped template id for the page kit (null wh
     expect(app(MetaBlobAssembler::class)->assemble($content, $outcome->jobs)['template_id'])->toBe(77);
 });
 
-test('the meta-blob carries a native elementor_data body for a page AND retains slot_payload for schema (send-half)', function () {
+test('a service page renders off the wireframe LIBRARY AND retains slot_payload for schema (send-half)', function () {
     PublishHarness::fakeAdapters();
     $site = PublishHarness::site();
-    $content = PublishHarness::approvedPage($site);
+    $content = PublishHarness::approvedPage($site); // page_type = service
 
     // Add a faq so we can prove the FAQPage schema SOURCE survives the native swap.
     $content->slot_payload = array_merge($content->slot_payload, [
@@ -91,16 +91,31 @@ test('the meta-blob carries a native elementor_data body for a page AND retains 
     $outcome = app(RenderCoordinator::class)->render($content);
     $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), $outcome->jobs);
 
-    // Native body present, container-based zones (hero ... faq).
+    // Service body comes from the library (wf-block-*), NOT the legacy lp-zone composer.
     expect($payload['elementor_data'])->toBeArray()->not->toBeEmpty();
-    $classes = array_map(fn ($z) => $z['settings']['_css_classes'] ?? '', $payload['elementor_data']);
-    expect($classes)->toContain('lp-zone lp-zone--hero')
-        ->and($classes)->toContain('lp-zone lp-zone--faq');
+    $topClasses = array_map(fn ($b) => (string) ($b['settings']['_css_classes'] ?? ''), $payload['elementor_data']);
+    expect(collect($topClasses)->contains(fn ($c) => str_contains($c, 'wf-block-hero')))->toBeTrue()
+        ->and(collect($topClasses)->contains(fn ($c) => str_contains($c, 'wf-block-faq')))->toBeTrue()
+        ->and(collect($topClasses)->every(fn ($c) => ! str_contains($c, 'lp-zone')))->toBeTrue();
 
-    // FAQ is a native accordion baked from the slot...
-    $faqZone = collect($payload['elementor_data'])->firstWhere('settings._css_classes', 'lp-zone lp-zone--faq');
-    $accordion = $faqZone['elements'][0];
-    expect($accordion['widgetType'])->toBe('nested-accordion')
+    // FAQ → nested-accordion baked from the slot (found anywhere in the tree).
+    $findAccordion = function (array $els) use (&$findAccordion) {
+        foreach ($els as $el) {
+            if (($el['widgetType'] ?? null) === 'nested-accordion') {
+                return $el;
+            }
+            if (! empty($el['elements'])) {
+                $hit = $findAccordion($el['elements']);
+                if ($hit !== null) {
+                    return $hit;
+                }
+            }
+        }
+
+        return null;
+    };
+    $accordion = $findAccordion($payload['elementor_data']);
+    expect($accordion)->not->toBeNull()
         ->and($accordion['settings']['items'][0]['item_title'])->toBe('How long does it take?');
 
     // ...AND the faq slot is RETAINED in slot_payload — the FAQPage JSON-LD source the
