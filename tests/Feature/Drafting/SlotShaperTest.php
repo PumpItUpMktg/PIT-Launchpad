@@ -62,6 +62,28 @@ it('converts Markdown in text slots to HTML (no literal **bold** or – bullets)
         ->and($shaped['hero_problem'])->toBe('No **hot** water?');  // heading untouched
 });
 
+it('caps body-slot headings at H3 (the section already supplies the H2)', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        // ## → h2 (Markdown), a raw <h1>, and an existing <h3> that must stay put.
+        'problem_explainer' => "## What We Do\n\nWe fix it.\n\n<h1>Big claim</h1>\n\n### Fine print\n\nDetails.",
+    ]);
+
+    expect($shaped['problem_explainer'])
+        ->toContain('<h3>What We Do</h3>')   // ## (h2) demoted
+        ->toContain('<h3>Big claim</h3>')    // raw <h1> demoted
+        ->toContain('<h3>Fine print</h3>')   // ### (h3) untouched
+        ->not->toContain('<h1')
+        ->and($shaped['problem_explainer'])->not->toContain('<h2');
+});
+
+it('preserves heading attributes while demoting the level', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'problem_explainer' => '<h2 class="lead" id="x">Heading</h2>',
+    ]);
+
+    expect($shaped['problem_explainer'])->toContain('<h3 class="lead" id="x">Heading</h3>');
+});
+
 it('converts Markdown in list repeater items to HTML (no literal **bold**)', function () {
     $shaped = (new SlotShaper)->shape(serviceSlots(), [
         'process_steps' => ['**Step 1 — Inspect** the system', '**Step 2 — Quote** the work'],

@@ -113,6 +113,11 @@ final class SlotShaper
      * generator's **bold**, – bullets, etc. become real HTML, never literal text.
      * Existing HTML passes through (html_input=allow), so it's idempotent enough
      * for a re-draft.
+     *
+     * Rich body copy also has its heading levels capped at H3: the wireframe
+     * section already supplies the H2, so a body H1/H2 (from `#`/`##` Markdown or a
+     * raw tag) would double-stack the hierarchy. Enforced here in the shaper, not
+     * the renderer — a stray model heading can never leak past it.
      */
     private function renderText(SlotContentType $type, string $text): string
     {
@@ -124,8 +129,17 @@ final class SlotShaper
         return match ($type) {
             SlotContentType::Heading => $text,
             SlotContentType::ShortText => trim(Str::inlineMarkdown($text, ['html_input' => 'allow'])),
-            default => trim(Str::markdown($text, ['html_input' => 'allow'])),
+            default => $this->capHeadings(trim(Str::markdown($text, ['html_input' => 'allow']))),
         };
+    }
+
+    /**
+     * Demote any H1/H2 in body HTML to H3 (opening + closing tags, attributes
+     * preserved). Levels H3 and deeper are left alone.
+     */
+    private function capHeadings(string $html): string
+    {
+        return (string) preg_replace('/<(\/?)h[12]\b([^>]*)>/i', '<${1}h3${2}>', $html);
     }
 
     private function shapeItem(SlotContentType $type, mixed $item): mixed
