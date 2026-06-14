@@ -54,4 +54,32 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Brand generation (C5 — brand intake → Elementor Global Kit)
+    |--------------------------------------------------------------------------
+    |
+    | The AI brand generator (BrandGenerator) returns a palette + typography that
+    | is then pushed into the tenant's Elementor Global Kit. Every returned font
+    | family is validated against the real loadable Google Fonts catalog; any
+    | miss/hallucination falls back to a safe default below, so an invented or
+    | misspelled family can never silently break the cascade. The text color is
+    | also held to a WCAG-AA contrast floor against a light background.
+    |
+    */
+
+    'brand' => [
+        'safe_fonts' => [
+            'heading' => env('LAUNCHPAD_BRAND_SAFE_HEADING_FONT', 'Poppins'),
+            'body' => env('LAUNCHPAD_BRAND_SAFE_BODY_FONT', 'Inter'),
+        ],
+        'safe_colors' => [
+            'primary' => '#0F62FE',
+            'accent' => '#FF6F00',
+            'text' => '#1A1A1A',
+        ],
+        // Minimum WCAG contrast ratio for the text color against a light bg.
+        'min_text_contrast' => 4.5,
+    ],
+
 ];
