@@ -62,6 +62,26 @@ it('converts Markdown in text slots to HTML (no literal **bold** or – bullets)
         ->and($shaped['hero_problem'])->toBe('No **hot** water?');  // heading untouched
 });
 
+it('converts Markdown in list repeater items to HTML (no literal **bold**)', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'process_steps' => ['**Step 1 — Inspect** the system', '**Step 2 — Quote** the work'],
+    ]);
+
+    expect($shaped['process_steps'][0])->toContain('<strong>Step 1 — Inspect</strong>')
+        ->and($shaped['process_steps'][0])->not->toContain('**')
+        ->and($shaped['process_steps'][0])->not->toContain('<p>'); // inline: no block wrap
+});
+
+it('converts Markdown in a faq answer to HTML', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'faq' => ['Will it save money? || Yes — up to **40%** on bills.'],
+    ]);
+
+    expect($shaped['faq'][0]['answer'])->toContain('<strong>40%</strong>')
+        ->and($shaped['faq'][0]['answer'])->not->toContain('**')
+        ->and($shaped['faq'][0]['question'])->toBe('Will it save money?'); // question stays plain
+});
+
 it('splits a single bulleted block into separate list items', function () {
     $shaped = (new SlotShaper)->shape(serviceSlots(), [
         'service_features' => "– Endless hot water\n– Lower bills\n– Compact footprint",

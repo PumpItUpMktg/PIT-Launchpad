@@ -139,6 +139,10 @@ final class SlotShaper
 
         return match ($type) {
             SlotContentType::Faq => $this->faqItem($raw, $fields),
+            // List items are prose too — inline-Markdown each one so the generator's
+            // **bold** / [links] become real HTML, exactly like a text slot (a flat
+            // <li> showing literal **Step 1** was the gap).
+            SlotContentType::List => trim(Str::inlineMarkdown($raw, ['html_input' => 'allow'])),
             SlotContentType::Stat => ['value' => $fields[0], 'label' => $fields[1] ?? ''],
             SlotContentType::Testimonial => ['quote' => $fields[0], 'author' => $fields[1] ?? ''],
             SlotContentType::Cta => array_filter([
@@ -163,7 +167,7 @@ final class SlotShaper
     private function faqItem(string $raw, array $fields): array
     {
         if (count($fields) >= 2 && trim($fields[1]) !== '') {
-            return ['question' => trim($fields[0]), 'answer' => trim($fields[1])];
+            return ['question' => trim($fields[0]), 'answer' => $this->answerHtml($fields[1])];
         }
 
         // Drop a leading "Question:" / "Q:" label, then split on an "Answer:" label
@@ -173,9 +177,20 @@ final class SlotShaper
         if (preg_match('/^(.+?)(?:\s*a(?:nswer)?\s*[:.)\-]\s*|\s*\n+\s*)(.+)$/is', $text, $m)) {
             $answer = (string) preg_replace('/^\s*a(?:nswer)?\s*[:.)\-]\s*/i', '', trim($m[2]), 1);
 
-            return ['question' => trim($m[1]), 'answer' => trim($answer)];
+            return ['question' => trim($m[1]), 'answer' => $this->answerHtml($answer)];
         }
 
         return ['question' => $text, 'answer' => ''];
+    }
+
+    /**
+     * An FAQ answer is prose — inline-Markdown it (like a short-text slot) so **bold**
+     * / links render, not literal asterisks. The question stays plain (a label).
+     */
+    private function answerHtml(string $answer): string
+    {
+        $answer = trim($answer);
+
+        return $answer === '' ? '' : trim(Str::inlineMarkdown($answer, ['html_input' => 'allow']));
     }
 }
