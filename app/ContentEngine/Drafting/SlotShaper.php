@@ -155,11 +155,13 @@ final class SlotShaper
     }
 
     /**
-     * A faq item as {question, answer}. The intended form is `question || answer`;
-     * but the model recurrently emits a single labeled block ("Question: …\nAnswer:
-     * …" or just "Q\nA"). Honor the delimiter first, then fall back to a tolerant
-     * label/line split so the q/a never collapse into one field (which broke both
-     * the rendered FAQ and the FAQPage schema).
+     * A faq item as {question, answer}. The intended form is `question || answer`,
+     * but the model recurrently emits a single labeled block in several shapes:
+     * inline labels ("Question: … / Answer: …"), bare label LINES ("question" on its
+     * own line, then the text, then "answer", then the text), or just a question line
+     * followed by the answer ("Q\nA"). All must split into q/a — collapsing the label
+     * word "question" into the title broke the accordion AND the FAQPage schema
+     * (both read this slot), the native-cutover regression.
      *
      * @param  list<string>  $fields  the raw split on the `||` delimiter
      * @return array{question: string, answer: string}
@@ -170,17 +172,56 @@ final class SlotShaper
             return ['question' => trim($fields[0]), 'answer' => $this->answerHtml($fields[1])];
         }
 
-        // Drop a leading "Question:" / "Q:" label, then split on an "Answer:" label
-        // or the first line break.
-        $text = (string) preg_replace('/^\s*q(?:uestion)?\s*[:.)\-]\s*/i', '', trim($raw), 1);
+        // Line-based, label-tolerant parse for every non-delimited shape.
+        $questionParts = [];
+        $answerParts = [];
+        $mode = 'question';
+        $sawAnswerMarker = false;
 
-        if (preg_match('/^(.+?)(?:\s*a(?:nswer)?\s*[:.)\-]\s*|\s*\n+\s*)(.+)$/is', $text, $m)) {
-            $answer = (string) preg_replace('/^\s*a(?:nswer)?\s*[:.)\-]\s*/i', '', trim($m[2]), 1);
+        foreach (preg_split('/\r\n|\r|\n/', trim($raw)) ?: [] as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
 
-            return ['question' => trim($m[1]), 'answer' => $this->answerHtml($answer)];
+            // A line that is ONLY a "question"/"q" or "answer"/"a" label switches the
+            // bucket and is dropped (the model emits the field names on their own lines).
+            if (preg_match('/^q(?:uestion)?\s*[:.)\-]?$/i', $line)) {
+                $mode = 'question';
+
+                continue;
+            }
+            if (preg_match('/^a(?:nswer)?\s*[:.)\-]?$/i', $line)) {
+                $mode = 'answer';
+                $sawAnswerMarker = true;
+
+                continue;
+            }
+
+            // An inline "Question: …" / "Answer: …" label sets the bucket + keeps the text.
+            if (preg_match('/^q(?:uestion)?\s*[:.)\-]\s*(.+)$/i', $line, $m)) {
+                $mode = 'question';
+                $line = trim($m[1]);
+            } elseif (preg_match('/^a(?:nswer)?\s*[:.)\-]\s*(.+)$/i', $line, $m)) {
+                $mode = 'answer';
+                $sawAnswerMarker = true;
+                $line = trim($m[1]);
+            }
+
+            $mode === 'answer' ? $answerParts[] = $line : $questionParts[] = $line;
         }
 
-        return ['question' => $text, 'answer' => ''];
+        // No explicit answer marker but multiple question lines → first line is the
+        // question, the rest the answer (the unlabeled "Q\nA" shape).
+        if (! $sawAnswerMarker && $answerParts === [] && count($questionParts) > 1) {
+            $answerParts = array_slice($questionParts, 1);
+            $questionParts = array_slice($questionParts, 0, 1);
+        }
+
+        return [
+            'question' => trim(implode(' ', $questionParts)),
+            'answer' => $this->answerHtml(implode("\n", $answerParts)),
+        ];
     }
 
     /**
