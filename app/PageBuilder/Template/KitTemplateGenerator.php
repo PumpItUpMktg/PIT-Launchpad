@@ -2,6 +2,7 @@
 
 namespace App\PageBuilder\Template;
 
+use App\Enums\SlotRole;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Schema\SlotDefinition;
 use Illuminate\Support\Str;
@@ -13,7 +14,15 @@ use Illuminate\Support\Str;
  * bound; the designer only restyles in place). Generating it from the kit keeps the
  * binding ≡ the kit definition, so it never drifts.
  *
- * Two modes from the same map:
+ * The slots are grouped into DESIGNED ZONES — hero / explainer / features / proof /
+ * faq / cta — each emitted as its own full-width (stretched) Elementor section with
+ * its own content width, vertical rhythm, and alternating surface, so the page
+ * reads as distinct zones instead of one narrow column. The hero becomes a two-up
+ * (copy + image) when it carries an image. Brand (colors/typography) cascades
+ * through the widgets' `__globals__`; the block interiors are styled by the
+ * companion stylesheet — this layer is the structure.
+ *
+ * Two binding modes from the same map:
  *  - native    → styleable native widgets (Heading / Text Editor / Image) carrying
  *                a `__dynamic__` lp/* dynamic tag. The target — designer restyles it.
  *  - shortcode → a Shortcode widget per slot ([lp_*] …). The proven-live fallback;
@@ -24,35 +33,156 @@ use Illuminate\Support\Str;
  */
 final class KitTemplateGenerator
 {
+    /**
+     * Per-zone layout: boxed content width (px), vertical padding (px), and whether
+     * the zone gets the alternating surface tint. Ordering on the page follows the
+     * zone's first appearance in the kit's slot order.
+     */
+    private const ZONES = [
+        'hero' => ['width' => 1180, 'pad' => 96],
+        'explainer' => ['width' => 760, 'pad' => 72],
+        'features' => ['width' => 1180, 'pad' => 80],
+        'proof' => ['width' => 1000, 'pad' => 84],
+        'faq' => ['width' => 800, 'pad' => 64],
+        'cta' => ['width' => 940, 'pad' => 88],
+        'body' => ['width' => 860, 'pad' => 64],
+    ];
+
+    /** The alternating surface for tinted zones (neutral design chrome, not brand). */
+    private const ALT_SURFACE = '#f6f7f9';
+
     public function generate(KitSchema $kit, string $mode = 'native'): array
     {
-        $widgets = [];
-        foreach ($kit->slots as $slot) {
-            $widgets[] = $this->widget($slot, $mode);
+        $sections = [];
+        $index = 0;
+        foreach ($this->zonedSlots($kit) as $zone => $slots) {
+            $sections[] = $this->section($zone, $slots, $mode, $index % 2 === 1);
+            $index++;
         }
-
-        $column = [
-            'id' => $this->id('column'),
-            'elType' => 'column',
-            'settings' => ['_column_size' => 100, '_inline_size' => null],
-            'elements' => $widgets,
-            'isInner' => false,
-        ];
-
-        $section = [
-            'id' => $this->id('section'),
-            'elType' => 'section',
-            'settings' => (object) [],
-            'elements' => [$column],
-            'isInner' => false,
-        ];
 
         return [
             'version' => '0.4',
             'title' => $this->title($kit),
             'type' => 'section',
-            'content' => [$section],
+            'content' => $sections,
             'page_settings' => (object) [],
+        ];
+    }
+
+    /**
+     * Group the kit's slots into ordered design zones, preserving kit order within a
+     * zone and ordering zones by first appearance.
+     *
+     * @return array<string, list<SlotDefinition>>
+     */
+    private function zonedSlots(KitSchema $kit): array
+    {
+        $zones = [];
+        foreach ($kit->slots as $slot) {
+            $zones[$this->zoneFor($slot)][] = $slot;
+        }
+
+        return $zones;
+    }
+
+    private function zoneFor(SlotDefinition $slot): string
+    {
+        return match ($slot->role) {
+            SlotRole::HeroProblem, SlotRole::HeroSolution, SlotRole::Navigation => 'hero',
+            SlotRole::BodyExplainer => $slot->isRepeater() ? 'features' : 'explainer',
+            SlotRole::Proof => 'proof',
+            SlotRole::Faq => 'faq',
+            SlotRole::Cta, SlotRole::Contact => 'cta',
+            default => 'explainer',
+        };
+    }
+
+    /**
+     * A full-width zone section: stretched to the viewport with a boxed inner width,
+     * vertical padding for rhythm, and (on alternating zones) a neutral surface so
+     * the page reads as distinct bands. The hero is a two-up (copy | image) when it
+     * carries an image; every other zone is a single column.
+     *
+     * @param  list<SlotDefinition>  $slots
+     */
+    private function section(string $zone, array $slots, string $mode, bool $alt): array
+    {
+        $spec = self::ZONES[$zone] ?? self::ZONES['body'];
+
+        $settings = [
+            '_css_classes' => 'lp-zone lp-zone--'.$zone,
+            'stretch_section' => 'section-stretched',
+            'content_width' => ['unit' => 'px', 'size' => $spec['width']],
+            'padding' => [
+                'unit' => 'px', 'top' => $spec['pad'], 'bottom' => $spec['pad'],
+                'left' => 0, 'right' => 0, 'isLinked' => false,
+            ],
+        ];
+
+        if ($alt) {
+            $settings['background_background'] = 'classic';
+            $settings['background_color'] = self::ALT_SURFACE;
+        }
+
+        return [
+            'id' => $this->id('section:'.$zone),
+            'elType' => 'section',
+            'settings' => $settings,
+            'elements' => $zone === 'hero' ? $this->heroColumns($slots, $mode) : $this->singleColumn($zone, $slots, $mode),
+            'isInner' => false,
+        ];
+    }
+
+    /**
+     * A single full-width column holding the zone's widgets.
+     *
+     * @param  list<SlotDefinition>  $slots
+     * @return list<array<string, mixed>>
+     */
+    private function singleColumn(string $zone, array $slots, string $mode): array
+    {
+        return [$this->column($zone, $slots, $mode, 100)];
+    }
+
+    /**
+     * The hero as a two-up: copy on the left, image on the right. Falls back to a
+     * single column when the hero carries no image.
+     *
+     * @param  list<SlotDefinition>  $slots
+     * @return list<array<string, mixed>>
+     */
+    private function heroColumns(array $slots, string $mode): array
+    {
+        $images = array_values(array_filter($slots, fn (SlotDefinition $s) => $s->contentType->value === 'image'));
+        $copy = array_values(array_filter($slots, fn (SlotDefinition $s) => $s->contentType->value !== 'image'));
+
+        if ($images === [] || $copy === []) {
+            return $this->singleColumn('hero', $slots, $mode);
+        }
+
+        return [
+            $this->column('hero-copy', $copy, $mode, 60),
+            $this->column('hero-media', $images, $mode, 40),
+        ];
+    }
+
+    /**
+     * @param  list<SlotDefinition>  $slots
+     * @return array<string, mixed>
+     */
+    private function column(string $seed, array $slots, string $mode, int $size): array
+    {
+        $widgets = [];
+        foreach ($slots as $slot) {
+            $widgets[] = $this->widget($slot, $mode);
+        }
+
+        return [
+            'id' => $this->id('column:'.$seed),
+            'elType' => 'column',
+            'settings' => ['_column_size' => $size, '_inline_size' => null],
+            'elements' => $widgets,
+            'isInner' => false,
         ];
     }
 
