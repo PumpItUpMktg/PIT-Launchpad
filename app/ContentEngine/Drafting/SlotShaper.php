@@ -169,7 +169,7 @@ final class SlotShaper
     private function faqItem(string $raw, array $fields): array
     {
         if (count($fields) >= 2 && trim($fields[1]) !== '') {
-            return ['question' => trim($fields[0]), 'answer' => $this->answerHtml($fields[1])];
+            return ['question' => $this->plainTitle($fields[0]), 'answer' => $this->answerHtml($fields[1])];
         }
 
         // Line-based, label-tolerant parse for every non-delimited shape.
@@ -219,9 +219,20 @@ final class SlotShaper
         }
 
         return [
-            'question' => trim(implode(' ', $questionParts)),
+            'question' => $this->plainTitle(implode(' ', $questionParts)),
             'answer' => $this->answerHtml(implode("\n", $answerParts)),
         ];
+    }
+
+    /**
+     * A faq question is a plain LABEL (the accordion title + the FAQPage schema name)
+     * — it is never Markdown-rendered, so strip wrapping emphasis markers (** * __ _)
+     * the model leaves on, rather than convert them. Upstream of store, so the title
+     * and the schema heal together.
+     */
+    private function plainTitle(string $text): string
+    {
+        return trim((string) preg_replace('/^[*_]+|[*_]+$/', '', trim($text)));
     }
 
     /**
