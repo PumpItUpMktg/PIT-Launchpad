@@ -91,6 +91,7 @@ it('injects fed hooks and rebuilds the faq as a nested-accordion (plainTitle que
     expect(byHook($doc, 'wf-hero-headline')['settings']['title'])->toBe('Water heater leaking?')
         ->and(byHook($doc, 'wf-hero-subhead')['settings']['editor'])->toBe('Same-day repair, guaranteed.')
         ->and(byHook($doc, 'wf-hero-image')['settings']['image']['url'])->toBe('https://r2.example/hero.jpg')
+        ->and(byHook($doc, 'wf-hero-image')['settings']['image']['id'])->toBe('') // NOT 0 → no Elementor placeholder.png
         ->and(byHook($doc, 'wf-ps-problem-body')['settings']['editor'])->toContain('floods the garage')
         ->and(byHook($doc, 'wf-trust-value-1')['settings']['title'])->toBe('20+')
         ->and(byHook($doc, 'wf-trust-label-1')['settings']['editor'])->toBe('Years')
@@ -120,9 +121,18 @@ it('hides unfed per-tenant hooks but keeps static section headings', function ()
         ->and(byHook($doc, 'wf-why-card-2-body'))->toBeNull() // why_us → card 1 only
         ->and(byHook($doc, 'wf-why-card-1-title'))->toBeNull(); // card title unfed → hidden
 
-    // Static section headings stay (design chrome).
+    // Static section headings stay (design chrome) with the PROFILE's real label —
+    // the library's scaffolding default ("Problem & solution heading") never ships.
     expect(byHook($doc, 'wf-why-heading')['settings']['title'])->toBe('Why choose us')
-        ->and(byHook($doc, 'wf-faq-heading'))->not->toBeNull();
+        ->and(byHook($doc, 'wf-faq-heading'))->not->toBeNull()
+        ->and(byHook($doc, 'wf-ps-heading')['settings']['title'])->toBe('The problem — and the fix');
+});
+
+it('removes an unfed image widget (no Elementor placeholder.png fallback)', function () {
+    $slots = serviceSlotsFixture();
+    $doc = app(LibraryServiceComposer::class)->compose($slots, []); // NO hero_image
+
+    expect(byHook($doc, 'wf-hero-image'))->toBeNull();
 });
 
 it('never ships a library placeholder to a live page', function () {
@@ -131,6 +141,9 @@ it('never ships a library placeholder to a live page', function () {
     ]));
 
     expect($json)->not->toContain('PLACEHOLDER.local')
+        ->and($json)->not->toContain('placeholder.png')        // Elementor's built-in image fallback
+        ->and($json)->not->toContain('"id":0')                 // the id:0 that triggers placeholder.png
+        ->and($json)->not->toContain('Problem & solution heading') // scaffolding heading default
         ->and($json)->not->toContain('Reason 1')
         ->and($json)->not->toContain('Value 1')
         ->and($json)->not->toContain('Frequently asked question 1')

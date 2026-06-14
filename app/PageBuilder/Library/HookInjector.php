@@ -32,14 +32,15 @@ final class HookInjector
      * @param  array<string, array{mode: string, value: mixed}>  $values  hook => {mode,value}
      * @param  list<string>  $dropBlocks  wf-block-* classes to remove entirely
      * @param  list<array{question?: string, answer?: string}>  $faq
+     * @param  array<string, string>  $staticHeadings  *-heading hook => canonical label
      * @return list<array<string, mixed>>
      */
-    public function inject(array $elements, array $values, array $dropBlocks = [], array $faq = []): array
+    public function inject(array $elements, array $values, array $dropBlocks = [], array $faq = [], array $staticHeadings = []): array
     {
         $this->warnings = [];
         $out = [];
         foreach ($elements as $el) {
-            $node = $this->transform($el, $values, $dropBlocks, $faq);
+            $node = $this->transform($el, $values, $dropBlocks, $faq, $staticHeadings);
             if ($node !== null) {
                 $out[] = $node;
             }
@@ -61,9 +62,10 @@ final class HookInjector
      * @param  array<string, array{mode: string, value: mixed}>  $values
      * @param  list<string>  $dropBlocks
      * @param  list<array{question?: string, answer?: string}>  $faq
+     * @param  array<string, string>  $staticHeadings
      * @return array<string, mixed>|null
      */
-    private function transform(array $el, array $values, array $dropBlocks, array $faq): ?array
+    private function transform(array $el, array $values, array $dropBlocks, array $faq, array $staticHeadings): ?array
     {
         $classes = $this->classes($el);
 
@@ -84,7 +86,16 @@ final class HookInjector
                 return $this->setValue($el, $hook, $values[$hook]);
             }
             if (str_ends_with($hook, '-heading')) {
-                return $el; // static section title — design chrome, keep as authored
+                // Static section title — the profile is the authority for the real
+                // label (so the library's scaffolding default never ships). Unknown
+                // heading → scaffolding-grade, hide it.
+                if (isset($staticHeadings[$hook])) {
+                    $el['settings']['title'] = $staticHeadings[$hook];
+
+                    return $el;
+                }
+
+                return null;
             }
 
             return null; // unfed per-tenant content — hide (never ship a placeholder)
@@ -94,7 +105,7 @@ final class HookInjector
         if (isset($el['elements']) && is_array($el['elements'])) {
             $children = [];
             foreach ($el['elements'] as $child) {
-                $node = is_array($child) ? $this->transform($child, $values, $dropBlocks, $faq) : null;
+                $node = is_array($child) ? $this->transform($child, $values, $dropBlocks, $faq, $staticHeadings) : null;
                 if ($node !== null) {
                     $children[] = $node;
                 }
@@ -123,7 +134,11 @@ final class HookInjector
 
         if ($mode === 'image') {
             $url = is_array($binding['value']) ? (string) ($binding['value']['url'] ?? '') : (string) $binding['value'];
-            $el['settings']['image'] = ['url' => $url, 'id' => 0];
+            // External R2/CDN url → EMPTY id. `id: 0` makes Elementor resolve
+            // attachment 0, fail, and render its built-in placeholder.png instead of
+            // the url (a render-only leak the payload looked fine). image_size:custom
+            // + dimensions stay (sibling settings → box size preserved).
+            $el['settings']['image'] = ['url' => $url, 'id' => ''];
 
             return $el;
         }

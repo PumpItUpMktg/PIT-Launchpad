@@ -32,8 +32,9 @@ final class LibraryServiceComposer
         $page = $this->normalizer->normalize($this->library->page('service'));
 
         [$values, $faq, $dropBlocks] = $this->plan($slots, $images);
+        $staticHeadings = (array) config('elementor_target.static_headings', []);
 
-        return $this->injector->inject($page, $values, $dropBlocks, $faq);
+        return $this->injector->inject($page, $values, $dropBlocks, $faq, $staticHeadings);
     }
 
     public function warnings(): array
