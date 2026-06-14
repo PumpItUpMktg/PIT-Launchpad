@@ -137,10 +137,9 @@ final class ContentStore
         update_post_meta($post_id, '_elementor_edit_mode', 'builder');
         update_post_meta($post_id, '_elementor_version', defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : LPC_VERSION);
 
-        // Elementor's Full-Width page template: renders the theme header/footer (and
-        // Theme Builder chrome) but DROPS the theme's .page-header entry-title — so the
-        // hero H1 is the page's only H1 (no theme/hero duplicate), full-width.
-        update_post_meta($post_id, '_wp_page_template', 'elementor_header_footer');
+        // The page template (full-width chrome for a native body) is owned by
+        // TemplateRouter::assign(), the single authority on _wp_page_template — it
+        // runs right after this and reads the native body we just wrote.
 
         // Clear Elementor's generated CSS so the new body renders without a manual
         // regenerate. No-op when Elementor is absent.

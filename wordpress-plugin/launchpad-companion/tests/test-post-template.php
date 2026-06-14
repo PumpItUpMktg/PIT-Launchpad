@@ -101,4 +101,45 @@ class Test_Post_Template extends WP_UnitTestCase
 
         delete_option('lp_templates');
     }
+
+    public function test_a_native_body_page_gets_the_full_width_template(): void
+    {
+        // A page carrying a per-page _elementor_data renders its own document, so
+        // it gets Elementor Full-Width (no theme .page-header H1, full-width) — not
+        // the cleared Theme-Builder path a dynamic-tag kit page takes.
+        $result = ( new ContentStore() )->upsert($this->payload([
+            'content_id' => '01JPOSTTEMPLATE0000000000E',
+            'kind' => 'page',
+            'page_type' => 'service',
+            'kit' => 'service-page',
+            'slug' => 'native-body-page',
+            'slot_payload' => ['hero_problem' => 'No hot water'],
+            'elementor_data' => [[
+                'id' => 'aaa1111', 'elType' => 'container', 'settings' => [], 'elements' => [], 'isInner' => false,
+            ]],
+        ]));
+
+        $this->assertSame('elementor_header_footer', (string) get_post_meta($result['wp_post_id'], '_wp_page_template', true));
+    }
+
+    public function test_an_explicit_mapping_wins_over_a_native_body(): void
+    {
+        update_option('lp_templates', ['service-page' => 'tpl-service.php']);
+
+        $result = ( new ContentStore() )->upsert($this->payload([
+            'content_id' => '01JPOSTTEMPLATE0000000000F',
+            'kind' => 'page',
+            'page_type' => 'service',
+            'kit' => 'service-page',
+            'slug' => 'mapped-native-page',
+            'slot_payload' => ['hero_problem' => 'x'],
+            'elementor_data' => [[
+                'id' => 'bbb2222', 'elType' => 'container', 'settings' => [], 'elements' => [], 'isInner' => false,
+            ]],
+        ]));
+
+        $this->assertSame('tpl-service.php', (string) get_post_meta($result['wp_post_id'], '_wp_page_template', true), 'An operator mapping must win over the native-body default.');
+
+        delete_option('lp_templates');
+    }
 }

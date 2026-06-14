@@ -77,12 +77,18 @@ Brand-neutral Elementor templates are built by the designer. Map each page type
 to a template via the `lp_templates` option (page_type => template); pages also
 carry `lp-page-type-{type}` and `lp-kit-{kit}` body classes.
 
-Managed content gets NO page template (posts AND kit pages) unless an explicit
-`lp_templates` file mapping exists: `elementor_canvas` is a full-page Elementor
-template that bypasses Theme Builder *single* templates, so the content is left on
-the theme default and the Theme Builder single template (mapped via the lp_kit
-display condition) drives it. The document <title> is emitted once via core
-title-tag (filtered through pre_get_document_title), never a second hand-printed tag.
+A page carrying a per-page native Elementor body (`_elementor_data`) gets the
+Elementor Full-Width template (`elementor_header_footer`): the theme header/footer
+render, but the theme's `.page-header` entry-title is dropped (so the hero H1 is the
+page's only H1) and the content is full-width. An explicit `lp_templates` file
+mapping still wins over it.
+
+Otherwise managed content gets NO page template (posts AND dynamic-tag kit pages):
+`elementor_canvas` is a full-page Elementor template that bypasses Theme Builder
+*single* templates, so the content is left on the theme default and the Theme
+Builder single template (mapped via the lp_kit display condition) drives it. The
+document <title> is emitted once via core title-tag (filtered through
+pre_get_document_title), never a second hand-printed tag.
 
 Kit → template mapping is chosen in Launchpad (operator panel → Portfolio →
 Templates), against this site's live template inventory (GET /templates). Every
