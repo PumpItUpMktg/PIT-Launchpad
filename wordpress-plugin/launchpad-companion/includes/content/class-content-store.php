@@ -89,6 +89,7 @@ final class ContentStore
             : [];
 
         $this->store_meta($post_id, $content_id, $kind, $payload, $seo, $images);
+        $this->store_elementor_body($post_id, $payload);
         $this->apply_featured_image($post_id, $payload, $images);
         TemplateRouter::assign($post_id, (string) ($payload['kit'] ?? ''), (string) ($payload['page_type'] ?? ''));
         $this->assign_category($post_id, (string) ($payload['silo_id'] ?? ''));
@@ -111,6 +112,39 @@ final class ContentStore
         return ! empty($payload['locked'])
             || get_post_meta($post_id, Meta::LOCKED, true) === '1'
             || EditGuard::is_locally_edited($post_id);
+    }
+
+    /**
+     * Write the per-page NATIVE Elementor document (the Tier-1 native-widget body)
+     * when the push carries one, stored exactly as Elementor reads it back —
+     * wp_slash(wp_json_encode(...)) + builder edit-mode + version. It lives ALONGSIDE
+     * the slot payload (_lp_slots), which stays the source of truth for SEO/schema
+     * (e.g. FAQPage) and re-gen. Reaching here means the page was not locked or
+     * locally-edited (upsert guards that first), so a native edit is never clobbered.
+     * Absent `elementor_data` → no-op (backward compatible with the dynamic-template
+     * render path).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function store_elementor_body(int $post_id, array $payload): void
+    {
+        $data = $payload['elementor_data'] ?? null;
+        if (! is_array($data) || $data === []) {
+            return;
+        }
+
+        update_post_meta($post_id, '_elementor_data', wp_slash((string) wp_json_encode($data)));
+        update_post_meta($post_id, '_elementor_edit_mode', 'builder');
+        update_post_meta($post_id, '_elementor_version', defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : LPC_VERSION);
+
+        // Clear Elementor's generated CSS so the new body renders without a manual
+        // regenerate. No-op when Elementor is absent.
+        if (class_exists('\Elementor\Plugin')) {
+            $elementor = \Elementor\Plugin::$instance;
+            if (isset($elementor->files_manager) && method_exists($elementor->files_manager, 'clear_cache')) {
+                $elementor->files_manager->clear_cache();
+            }
+        }
     }
 
     /**

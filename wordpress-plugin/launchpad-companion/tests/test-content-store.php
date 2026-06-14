@@ -137,4 +137,54 @@ class Test_Content_Store extends WP_UnitTestCase
         $cats = wp_get_post_categories($result['wp_post_id']);
         $this->assertNotEmpty($cats, 'An unseen silo_id must lazily create a placeholder category, not fail.');
     }
+
+    public function test_a_native_elementor_body_is_written_and_slots_are_retained(): void
+    {
+        $body = [[
+            'id' => 'abc1234', 'elType' => 'container', 'isInner' => false,
+            'settings' => ['_css_classes' => 'lp-zone lp-zone--faq'],
+            'elements' => [[
+                'id' => 'def5678', 'elType' => 'widget', 'widgetType' => 'nested-accordion',
+                'settings' => ['items' => [['item_title' => 'Q1', '_id' => 'aaa1111']]],
+                'elements' => [], 'isInner' => false,
+            ]],
+        ]];
+
+        $result = (new ContentStore())->upsert($this->payload(['elementor_data' => $body]));
+        $id = $result['wp_post_id'];
+
+        // Native render: stored as Elementor reads it (decodes back to the tree) + builder mode.
+        $stored = json_decode((string) get_post_meta($id, '_elementor_data', true), true);
+        $this->assertSame($body, $stored);
+        $this->assertSame('builder', get_post_meta($id, '_elementor_edit_mode', true));
+
+        // Dual-write: the slot payload is RETAINED (source of truth for SEO/schema + re-gen).
+        $this->assertSame('Fast Water Heater Repair', get_post_meta($id, Meta::SLOTS, true)['hero_heading']);
+    }
+
+    public function test_no_elementor_data_in_payload_writes_no_native_body(): void
+    {
+        $result = (new ContentStore())->upsert($this->payload()); // no elementor_data key
+
+        $this->assertSame('', get_post_meta($result['wp_post_id'], '_elementor_data', true));
+    }
+
+    public function test_a_locally_edited_page_keeps_its_native_body(): void
+    {
+        $store = new ContentStore();
+        $first = $store->upsert($this->payload(['elementor_data' => [[
+            'id' => 'orig111', 'elType' => 'container', 'settings' => [], 'elements' => [], 'isInner' => false,
+        ]]]));
+        $id = $first['wp_post_id'];
+
+        update_post_meta($id, Meta::LOCALLY_EDITED, '1'); // operator edited the page in Elementor
+
+        $second = $store->upsert($this->payload(['elementor_data' => [[
+            'id' => 'new222', 'elType' => 'container', 'settings' => [], 'elements' => [], 'isInner' => false,
+        ]]]));
+
+        $this->assertTrue($second['skipped']);
+        $stored = json_decode((string) get_post_meta($id, '_elementor_data', true), true);
+        $this->assertSame('orig111', $stored[0]['id'], 'A re-push must not clobber the operator-edited native body.');
+    }
 }
