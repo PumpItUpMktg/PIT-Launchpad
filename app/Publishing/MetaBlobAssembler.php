@@ -10,6 +10,7 @@ use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
+use App\PageBuilder\Library\LibraryServiceComposer;
 use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\PublishEligibility;
@@ -28,6 +29,7 @@ class MetaBlobAssembler
     public function __construct(
         private readonly PublishEligibility $eligibility,
         private readonly NativeComposer $composer,
+        private readonly LibraryServiceComposer $libraryService,
     ) {}
 
     /**
@@ -79,6 +81,13 @@ class MetaBlobAssembler
     {
         if ($content->kind !== ContentKind::Page) {
             return [];
+        }
+
+        // Service pages render off the verified wireframe library (Tier-1 migration).
+        // NativeComposer stays the fallback for not-yet-migrated page types — it is
+        // NOT retired until the published service page confirms the publish path.
+        if ($content->page_type?->value === 'service') {
+            return $this->libraryService->compose($slots, $images);
         }
 
         $schema = $this->schema($content);
