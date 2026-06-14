@@ -112,7 +112,7 @@ final class HookInjector
             }
             $el['elements'] = $children;
 
-            if (($el['elType'] ?? null) === 'container' && ! $this->hasWidget($children)) {
+            if (($el['elType'] ?? null) === 'container' && ! $this->hasContentWidget($children)) {
                 return null;
             }
         }
@@ -283,15 +283,23 @@ final class HookInjector
     }
 
     /**
+     * Whether a subtree holds a real CONTENT widget — i.e. any widget that is not a
+     * static `*-heading`. A section left with only its heading (its body unfed) is
+     * content-less and gets pruned (an orphan "Why choose us" with nothing under it),
+     * the same outcome as a fully dropped block.
+     *
      * @param  list<array<string, mixed>>  $elements
      */
-    private function hasWidget(array $elements): bool
+    private function hasContentWidget(array $elements): bool
     {
         foreach ($elements as $el) {
             if (($el['elType'] ?? null) === 'widget') {
-                return true;
+                $hook = $this->contentHook($this->classes($el));
+                if ($hook === null || ! str_ends_with($hook, '-heading')) {
+                    return true;
+                }
             }
-            if (! empty($el['elements']) && is_array($el['elements']) && $this->hasWidget($el['elements'])) {
+            if (! empty($el['elements']) && is_array($el['elements']) && $this->hasContentWidget($el['elements'])) {
                 return true;
             }
         }

@@ -162,3 +162,29 @@ it('keeps the hero a two-column (copy + image) row', function () {
     expect($row)->not->toBeNull();
     expect(byHook($doc, 'wf-hero-image'))->not->toBeNull();
 });
+
+it('drops a section orphaned to only its static heading (unfed why-us / testimonials)', function () {
+    $slots = serviceSlotsFixture();
+    unset($slots['why_us'], $slots['testimonial']); // bodies unfed → heading-only sections
+
+    $doc = app(LibraryServiceComposer::class)->compose($slots, ['hero_image' => ['url' => 'https://r2.example/h.jpg']]);
+
+    $top = array_map(fn ($b) => (string) ($b['settings']['_css_classes'] ?? ''), $doc);
+    expect(collect($top)->contains(fn ($c) => str_contains($c, 'wf-block-why-us')))->toBeFalse()
+        ->and(collect($top)->contains(fn ($c) => str_contains($c, 'wf-block-testimonials')))->toBeFalse()
+        ->and(collect($top)->contains(fn ($c) => str_contains($c, 'wf-block-faq')))->toBeTrue(); // faq keeps its accordion
+
+    // the orphan heading text must not leak either
+    expect(json_encode($doc))->not->toContain('What customers say');
+});
+
+it('formats the phone button display while the tel: link keeps E.164', function () {
+    $slots = serviceSlotsFixture();
+    $slots['cta'] = ['type' => 'conversion_block', 'tel' => 'tel:+14848082225', 'call_label' => 'Call Now', 'phone' => '+14848082225'];
+
+    $doc = app(LibraryServiceComposer::class)->compose($slots, ['hero_image' => ['url' => 'https://r2.example/h.jpg']]);
+
+    $phoneBtn = byHook($doc, 'wf-cta-phone');
+    expect($phoneBtn['settings']['text'])->toBe('(484) 808-2225')          // formatted display
+        ->and($phoneBtn['settings']['link']['url'])->toBe('tel:+14848082225'); // raw link
+});
