@@ -19,7 +19,10 @@
  *     the heavy lifting — the styled, bound template — is installed.
  *
  * Idempotent on the kit: a re-push find-or-updates the same elementor_library post
- * (matched by the KIT_TEMPLATE meta marker), never duplicating templates.
+ * (matched by the KIT_TEMPLATE meta marker), never duplicating templates. It also
+ * guards against CONDITION collisions: any other template claiming the same kit's
+ * Display Condition (e.g. a hand-made template) has that condition stripped, so the
+ * pushed template is the sole owner and a stale design can never win the match.
  *
  * @package Launchpad\Companion
  */
@@ -46,7 +49,7 @@ final class KitTemplateStore
      * }
      *
      * @param  array<string, mixed>  $payload
-     * @return array{kit: string, template_id: int, created: bool, condition_set: bool, pro: bool, condition: array<string, mixed>, error?: string}
+     * @return array{kit: string, template_id: int, created: bool, condition_set: bool, pro: bool, condition: array<string, mixed>, conditions_cleared?: array<int, int>, error?: string}
      */
     public function install(array $payload): array
     {
@@ -125,7 +128,17 @@ final class KitTemplateStore
         $term_id = $this->ensure_kit_term($kit);
         $condition = $this->apply_condition($post_id, $kit, $term_id, $pro);
 
+        // Collision guard: make THIS template the sole owner of the kit's condition.
+        // Any OTHER template claiming the same lp_kit condition (a hand-made or
+        // legacy template) has that condition stripped — Elementor does not
+        // guarantee which of two identical conditions wins, so we don't rely on
+        // supersession; we remove the conflict deterministically.
+        $cleared = $this->clear_conflicting_conditions($kit, $term_id, $post_id);
+
         $this->flush_elementor_cache($post_id);
+        if ($cleared !== []) {
+            $this->flush_condition_cache();
+        }
 
         return [
             'kit' => $kit,
@@ -134,7 +147,86 @@ final class KitTemplateStore
             'condition_set' => (bool) ($condition['set'] ?? false),
             'pro' => $pro,
             'condition' => $condition,
+            'conditions_cleared' => $cleared,
         ];
+    }
+
+    /**
+     * Strip this kit's Display Condition from every elementor_library template
+     * EXCEPT the canonical one ($keep_post_id), so two templates can never both
+     * claim the kit and render a stale design. Matches the kit's term in the rule
+     * (`…/in_lp_kit/<term_id>`); other conditions on those templates are preserved,
+     * and our advisory marker for this kit is cleared too. Returns the ids touched.
+     *
+     * Operates purely on `_elementor_conditions` postmeta (Pro's own storage), so it
+     * runs whether or not Pro is active — a conflict can predate the current state.
+     *
+     * @return array<int, int>
+     */
+    private function clear_conflicting_conditions(string $kit, int $term_id, int $keep_post_id): array
+    {
+        if ($term_id <= 0) {
+            return [];
+        }
+
+        $needle = sprintf('in_%s/%d', KitTaxonomy::TAXONOMY, $term_id);
+
+        $candidates = get_posts([
+            'post_type' => 'elementor_library',
+            'post_status' => 'any',
+            'numberposts' => -1,
+            'fields' => 'ids',
+            'meta_key' => '_elementor_conditions',
+            'suppress_filters' => false,
+        ]);
+
+        $cleared = [];
+        foreach ($candidates as $candidate) {
+            $pid = (int) $candidate;
+            if ($pid === $keep_post_id) {
+                continue;
+            }
+
+            $conditions = get_post_meta($pid, '_elementor_conditions', true);
+            if (! is_array($conditions)) {
+                continue;
+            }
+
+            $kept = array_values(array_filter(
+                $conditions,
+                static fn ($rule): bool => ! is_string($rule) || ! str_contains($rule, $needle)
+            ));
+
+            if (count($kept) === count($conditions)) {
+                continue; // no rule for this kit on this template
+            }
+
+            if ($kept === []) {
+                delete_post_meta($pid, '_elementor_conditions');
+            } else {
+                update_post_meta($pid, '_elementor_conditions', $kept);
+            }
+
+            // Drop our advisory marker too when it pointed at this kit.
+            $advisory = get_post_meta($pid, Meta::KIT_TEMPLATE_CONDITION, true);
+            if (is_array($advisory) && (string) ($advisory['term_id'] ?? '') === (string) $term_id) {
+                delete_post_meta($pid, Meta::KIT_TEMPLATE_CONDITION);
+            }
+
+            $cleared[] = $pid;
+        }
+
+        return $cleared;
+    }
+
+    /**
+     * Best-effort flush of Elementor Pro's Theme Builder conditions cache so a
+     * reassignment takes effect without a manual rebuild. The option is Pro's own
+     * cache store; deleting it forces a rebuild and is a safe no-op when absent.
+     */
+    private function flush_condition_cache(): void
+    {
+        delete_option('elementor_pro_theme_builder_conditions');
     }
 
     /**

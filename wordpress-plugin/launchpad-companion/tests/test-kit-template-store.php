@@ -139,4 +139,52 @@ class Test_Kit_Template_Store extends WP_UnitTestCase
 
         $this->assertSame('single-post', get_post_meta($result['template_id'], '_elementor_template_type', true));
     }
+
+    public function test_it_clears_a_conflicting_kit_condition_from_another_template(): void
+    {
+        $store = new KitTemplateStore();
+        $first = $store->install($this->payload());
+        $term_id = (int) $first['condition']['term_id'];
+
+        // A rogue (e.g. hand-made) template claims the SAME kit condition, plus an
+        // unrelated one that must survive.
+        $rogue = wp_insert_post([
+            'post_type' => 'elementor_library',
+            'post_status' => 'publish',
+            'post_title' => 'Hand-made',
+        ]);
+        update_post_meta($rogue, '_elementor_conditions', ["include/singular/in_lp_kit/{$term_id}", 'include/general']);
+
+        // Re-push: the canonical template must become the sole owner of the kit.
+        $second = $store->install($this->payload());
+
+        $this->assertContains($rogue, $second['conditions_cleared']);
+        $this->assertSame(['include/general'], get_post_meta($rogue, '_elementor_conditions', true)); // only kit rule stripped
+    }
+
+    public function test_it_leaves_a_different_kits_condition_untouched(): void
+    {
+        $store = new KitTemplateStore();
+        $first = $store->install($this->payload());
+
+        // A template for a DIFFERENT kit term — must not be touched.
+        $other = wp_insert_post([
+            'post_type' => 'elementor_library',
+            'post_status' => 'publish',
+            'post_title' => 'Other kit',
+        ]);
+        update_post_meta($other, '_elementor_conditions', ['include/singular/in_lp_kit/999999']);
+
+        $second = $store->install($this->payload());
+
+        $this->assertNotContains($other, $second['conditions_cleared'] ?? []);
+        $this->assertSame(['include/singular/in_lp_kit/999999'], get_post_meta($other, '_elementor_conditions', true));
+    }
+
+    public function test_a_clean_install_clears_no_conditions(): void
+    {
+        $result = ( new KitTemplateStore() )->install($this->payload());
+
+        $this->assertSame([], $result['conditions_cleared']);
+    }
 }

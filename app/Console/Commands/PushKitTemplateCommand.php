@@ -188,6 +188,11 @@ class PushKitTemplateCommand extends Command
         $verb = ! empty($result['created']) ? 'created' : 'updated';
         $id = (int) ($result['template_id'] ?? 0);
 
+        $cleared = array_values(array_filter(array_map('intval', (array) ($result['conditions_cleared'] ?? []))));
+        if ($cleared !== []) {
+            $this->info("  {$kit}: cleared a conflicting lp_kit condition from template(s) #".implode(', #', $cleared).'.');
+        }
+
         if (! empty($result['condition_set'])) {
             $this->info("  {$kit}: {$verb} template #{$id}; lp_kit Display Condition set.");
 
