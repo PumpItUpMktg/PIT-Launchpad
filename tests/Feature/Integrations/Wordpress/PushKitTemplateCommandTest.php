@@ -3,6 +3,7 @@
 use App\Enums\ConnectionProvider;
 use App\Models\Connection;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use App\PageBuilder\Template\KitTemplateArtifacts;
 use Illuminate\Support\Facades\Http;
 
@@ -34,6 +35,35 @@ beforeEach(function () {
     // Bind the artifact resolver to a deterministic temp dir so the test does not
     // depend on the repo's committed artifacts.
     app()->bind(KitTemplateArtifacts::class, fn () => new KitTemplateArtifacts(tempArtifactDir()));
+});
+
+it('pushes the brand kit first (one-pass provisioning) when branding is captured', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/brand-kit' => Http::response(['updated' => true, 'kit_id' => 7, 'colors_set' => 1, 'fonts_set' => 0]),
+        '*/wp-json/launchpad/v1/kit-template' => Http::response(['kit' => 'service-page', 'template_id' => 91, 'created' => true, 'condition_set' => false, 'pro' => false, 'condition' => []]),
+    ]);
+
+    $site = pushSite();
+    SiteBranding::withoutGlobalScopes()->create(['site_id' => $site->id, 'palette' => ['primary' => '#0F62FE']]);
+
+    $this->artisan('launchpad:push-kit-template', ['site' => $site->id, '--kit' => 'service-page'])
+        ->expectsOutputToContain('brand: applied')
+        ->assertSuccessful();
+
+    Http::assertSent(fn ($r) => str_ends_with($r->url(), '/wp-json/launchpad/v1/brand-kit') && $r['colors']['primary'] === '#0F62FE');
+    Http::assertSent(fn ($r) => str_ends_with($r->url(), '/wp-json/launchpad/v1/kit-template'));
+});
+
+it('skips the brand push with --skip-brand', function () {
+    Http::fake(['*/wp-json/launchpad/v1/kit-template' => Http::response(['kit' => 'service-page', 'template_id' => 91, 'created' => true, 'condition_set' => false, 'pro' => false, 'condition' => []])]);
+
+    $site = pushSite();
+    SiteBranding::withoutGlobalScopes()->create(['site_id' => $site->id, 'palette' => ['primary' => '#0F62FE']]);
+
+    $this->artisan('launchpad:push-kit-template', ['site' => $site->id, '--kit' => 'service-page', '--skip-brand' => true])
+        ->assertSuccessful();
+
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), '/wp-json/launchpad/v1/brand-kit'));
 });
 
 it('pushes a kit artifact to /kit-template and reports the result', function () {

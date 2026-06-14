@@ -8,6 +8,17 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property string $site_id
+ * @property array<string, mixed>|null $logo_set
+ * @property array<string, mixed>|null $palette
+ * @property array<string, mixed>|null $typography
+ * @property string|null $imagery_style
+ * @property array<string, mixed>|null $social_handles
+ * @property string|null $entity_type
+ * @property array<int, string>|null $same_as
+ * @property array<string, mixed>|null $canonical_nap
+ */
 class SiteBranding extends Model
 {
     /** @use HasFactory<SiteBrandingFactory> */

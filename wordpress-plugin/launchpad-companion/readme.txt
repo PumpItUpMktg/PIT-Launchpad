@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.5.1
+Stable tag: 0.6.0
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -20,6 +20,11 @@ media-library import — images are served from R2/CDN URLs in the payload.
                      `lp_kit` term, and sets its Display Condition (Singular → By
                      Term → Launchpad Kit → {kit}) when Elementor Pro is present
                      (advisory meta + condition_set:false when it is not)
+* POST /brand-kit  — write the tenant's intake palette + typography into the active
+                     Elementor Global Kit (system colors + system typography, by _id:
+                     primary/secondary/text/accent) so templates referencing the
+                     globals via __globals__ paint the client's brand, not theme
+                     defaults. Idempotent (overwrites the same slots)
 * GET  /status     — environment introspection (WP/PHP/Elementor/theme/plugin versions)
 * GET  /templates  — inventory of ALL Elementor saved templates across every Theme
                      Builder group (single-page / single-post / header / footer / page /
