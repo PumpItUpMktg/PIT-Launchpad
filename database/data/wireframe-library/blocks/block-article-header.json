@@ -1,0 +1,88 @@
+{
+    "version": "0.4",
+    "title": "Block - Article Header",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "26d632f",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-article-header",
+                "_css_classes": "wf-block wf-block-article-header"
+            },
+            "elements": [
+                {
+                    "id": "58403fa",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>Date · Author · Category</p>",
+                        "_title": "article_meta",
+                        "_css_classes": "wf-article-meta"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "e44010e",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Article title",
+                        "header_size": "h1",
+                        "_title": "article_title",
+                        "_css_classes": "wf-article-title"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "fbe168a",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>By Author Name</p>",
+                        "_title": "article_byline",
+                        "_css_classes": "wf-article-byline"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "9af427e",
+                    "elType": "widget",
+                    "widgetType": "image",
+                    "settings": {
+                        "image": {
+                            "url": "https://PLACEHOLDER.local/wf/article-featured-1200x675.png",
+                            "id": 0
+                        },
+                        "image_size": "custom",
+                        "image_custom_dimension": {
+                            "width": "1200",
+                            "height": "675"
+                        },
+                        "_title": "article_featured",
+                        "_css_classes": "wf-article-featured"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}
