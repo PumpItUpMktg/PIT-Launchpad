@@ -149,3 +149,16 @@ it('keeps a multi-line answer after a bare answer label', function () {
         ->and($shaped['faq'][0]['answer'])->toContain('The unit.')
         ->and($shaped['faq'][0]['answer'])->toContain('Haul-away.');
 });
+
+it('strips wrapping markdown emphasis from faq questions (plain title + clean schema name)', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'faq' => [
+            '**How long does install take?** || Most installs are same-day.',     // ** via delimiter path
+            "question\n__Do you offer financing?__\nanswer\nYes, **0% APR**.",     // __ via bare-label path
+        ],
+    ]);
+
+    expect($shaped['faq'][0]['question'])->toBe('How long does install take?')   // no **
+        ->and($shaped['faq'][1]['question'])->toBe('Do you offer financing?')     // no __
+        ->and($shaped['faq'][1]['answer'])->toContain('<strong>0% APR</strong>'); // answer emphasis still rendered
+});
