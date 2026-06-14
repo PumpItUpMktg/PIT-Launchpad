@@ -11,6 +11,7 @@ namespace Launchpad\Companion;
 use Launchpad\Companion\Admin\SlotsScreen;
 use Launchpad\Companion\Content\EditGuard;
 use Launchpad\Companion\Content\KitTaxonomy;
+use Launchpad\Companion\Render\Assets;
 use Launchpad\Companion\Render\Shortcodes;
 use Launchpad\Companion\Render\TagManager;
 use Launchpad\Companion\Render\TemplateRouter;
@@ -59,6 +60,10 @@ final class Plugin
         ( new Shortcodes() )->register();
         add_action('elementor/dynamic_tags/register', [new TagManager(), 'register']);
         ( new TemplateRouter() )->register();
+
+        // Baseline design layer — styles the lp-* blocks (keyed to the Global Kit
+        // CSS variables) so a generated page is presentable without a designer.
+        ( new Assets() )->register();
 
         // SEO (native; suppress competing SEO plugins on managed posts).
         // Force core title-tag so the document <title> is emitted ONCE, through

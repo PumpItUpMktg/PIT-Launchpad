@@ -1,0 +1,295 @@
+/**
+ * Launchpad Companion — baseline design system (Path A).
+ *
+ * Styles the brand-neutral lp-* render blocks emitted by SlotRenderer so a
+ * generated/fallback page is presentable WITHOUT a human designer. Every color and
+ * font is keyed to the Elementor Global Kit CSS variables (--e-global-color-*,
+ * --e-global-typography-*) the brand-kit push populates — so the tenant's brand AND
+ * this design both cascade from the one source. Spacing/structure live here
+ * (Elementor exposes no widget-referenceable spacing globals); the scale is
+ * consistent so the page breathes.
+ *
+ * The designer-built production template (Path B) is the ceiling-raise; this is the
+ * baseline that makes every tenant presentable now.
+ */
+
+/* Design tokens — brand from the Global Kit, with safe fallbacks. Zero-specificity
+   :where() so a page/theme can still override per-element. */
+:where(
+    .lp-conversion-block, .lp-nap, .lp-list, .lp-repeater,
+    .lp-faq, .lp-stat, .lp-testimonial, .lp-cta, .lp-image, .lp-map
+) {
+    --lp-primary: var(--e-global-color-primary, #0f62fe);
+    --lp-accent: var(--e-global-color-accent, var(--e-global-color-primary, #ff6f00));
+    --lp-text: var(--e-global-color-text, #1a1a1a);
+    --lp-heading-font: var(--e-global-typography-primary-font-family, inherit);
+    --lp-body-font: var(--e-global-typography-text-font-family, inherit);
+    --lp-surface: #ffffff;
+    --lp-border: rgba(0, 0, 0, 0.10);
+    --lp-radius: 10px;
+    --lp-gap: clamp(1rem, 2.5vw, 1.75rem);
+    --lp-pad: clamp(1.1rem, 2.4vw, 1.6rem);
+}
+
+/* --- Conversion block + CTA button ------------------------------------------ */
+.lp-conversion-block {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--lp-gap);
+    margin: var(--lp-gap) 0;
+}
+
+.lp-conversion-block__form {
+    flex: 1 1 320px;
+    min-width: 280px;
+}
+
+/* The Call-Now CTA renders as a real button, not a text link. */
+.lp-cta,
+.lp-conversion-block__call {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5em;
+    padding: 0.9em 1.85em;
+    background: var(--lp-accent);
+    color: #ffffff !important;
+    font-family: var(--lp-heading-font);
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1.2;
+    text-decoration: none !important;
+    border: 0;
+    border-radius: var(--lp-radius);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+
+.lp-cta:hover,
+.lp-cta:focus,
+.lp-conversion-block__call:hover,
+.lp-conversion-block__call:focus {
+    filter: brightness(1.07);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    color: #ffffff !important;
+}
+
+/* --- NAP contact block ------------------------------------------------------ */
+.lp-nap {
+    display: grid;
+    gap: 0.4rem;
+    max-width: 420px;
+    padding: var(--lp-pad);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-border);
+    border-top: 4px solid var(--lp-primary);
+    border-radius: var(--lp-radius);
+    font-family: var(--lp-body-font);
+    color: var(--lp-text);
+}
+
+.lp-nap__name {
+    font-family: var(--lp-heading-font);
+    font-weight: 700;
+    font-size: 1.15rem;
+}
+
+.lp-nap__phone a {
+    color: var(--lp-primary);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.lp-nap__hours {
+    margin-top: 0.5rem;
+    display: grid;
+    gap: 0.15rem;
+}
+
+.lp-nap__hours-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.92rem;
+}
+
+.lp-nap__day {
+    font-weight: 600;
+}
+
+/* --- Feature / process lists as a card grid (not a flat <ul>) --------------- */
+.lp-list {
+    list-style: none;
+    margin: var(--lp-gap) 0;
+    padding: 0;
+    display: grid;
+    gap: var(--lp-gap);
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.lp-list__item {
+    position: relative;
+    padding: var(--lp-pad);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-border);
+    border-left: 4px solid var(--lp-accent);
+    border-radius: var(--lp-radius);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    font-family: var(--lp-body-font);
+    color: var(--lp-text);
+}
+
+/* Process steps: numbered cards via a CSS counter (no per-item markup needed). */
+.lp-repeater--process_steps {
+    counter-reset: lp-step;
+}
+
+.lp-repeater--process_steps .lp-list__item {
+    border-left: 1px solid var(--lp-border);
+    padding-top: 3.4rem;
+}
+
+.lp-repeater--process_steps .lp-list__item::before {
+    counter-increment: lp-step;
+    content: counter(lp-step);
+    position: absolute;
+    top: 1.1rem;
+    left: 1.1rem;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--lp-primary);
+    color: #ffffff;
+    font-family: var(--lp-heading-font);
+    font-weight: 700;
+}
+
+/* --- FAQ accordion (native <details>, styled) ------------------------------- */
+.lp-faq {
+    margin: 0.75rem 0;
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-border);
+    border-radius: var(--lp-radius);
+    overflow: hidden;
+}
+
+.lp-faq__q {
+    position: relative;
+    cursor: pointer;
+    list-style: none;
+    padding: 1rem 2.75rem 1rem 1.25rem;
+    font-family: var(--lp-heading-font);
+    font-weight: 600;
+    color: var(--lp-text);
+}
+
+.lp-faq__q::-webkit-details-marker {
+    display: none;
+}
+
+.lp-faq__q::after {
+    content: "+";
+    position: absolute;
+    top: 50%;
+    right: 1.25rem;
+    transform: translateY(-50%);
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--lp-primary);
+    transition: transform 0.2s ease;
+}
+
+.lp-faq[open] .lp-faq__q {
+    color: var(--lp-primary);
+}
+
+.lp-faq[open] .lp-faq__q::after {
+    content: "\2013"; /* en dash */
+}
+
+.lp-faq__a {
+    padding: 0 1.25rem 1.1rem;
+    font-family: var(--lp-body-font);
+    color: var(--lp-text);
+}
+
+/* --- Stats / proof strip ---------------------------------------------------- */
+.lp-repeater {
+    display: grid;
+    gap: var(--lp-gap);
+}
+
+.lp-repeater--proof_strip {
+    margin: var(--lp-gap) 0;
+    text-align: center;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.lp-stat__value {
+    display: block;
+    font-family: var(--lp-heading-font);
+    font-weight: 800;
+    font-size: 2.4rem;
+    line-height: 1;
+    color: var(--lp-primary);
+}
+
+.lp-stat__label {
+    display: block;
+    margin-top: 0.35rem;
+    font-family: var(--lp-body-font);
+    color: var(--lp-text);
+    opacity: 0.8;
+}
+
+/* --- Testimonial ------------------------------------------------------------ */
+.lp-testimonial {
+    margin: var(--lp-gap) 0;
+    padding: clamp(1.2rem, 3vw, 2rem);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-border);
+    border-radius: var(--lp-radius);
+}
+
+.lp-testimonial blockquote {
+    margin: 0;
+    font-family: var(--lp-heading-font);
+    font-size: 1.2rem;
+    line-height: 1.5;
+    color: var(--lp-text);
+}
+
+.lp-testimonial blockquote::before {
+    content: "\201C";
+    margin-right: 0.08em;
+    color: var(--lp-accent);
+    font-size: 2.4rem;
+    line-height: 0;
+    vertical-align: -0.3em;
+}
+
+.lp-testimonial figcaption {
+    margin-top: 0.8rem;
+    font-weight: 600;
+    color: var(--lp-primary);
+}
+
+/* --- Media ------------------------------------------------------------------ */
+.lp-image {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--lp-radius);
+}
+
+.lp-map {
+    width: 100%;
+    min-height: 320px;
+    border: 0;
+    border-radius: var(--lp-radius);
+}
