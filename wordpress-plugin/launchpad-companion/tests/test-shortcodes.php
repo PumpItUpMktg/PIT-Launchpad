@@ -56,6 +56,20 @@ class Test_Shortcodes extends WP_UnitTestCase
         $this->assertStringContainsString('Lower bills', $out);
     }
 
+    public function test_a_list_item_keeps_inline_html_rather_than_escaping_it(): void
+    {
+        // List items carry inline Markdown→HTML shaped engine-side; the renderer must
+        // not escape it (the literal **Step 1** / escaped-tag bug).
+        update_post_meta($this->post_id, Meta::SLOTS, [
+            'service_features' => ['<strong>Step 1</strong> inspect the system'],
+        ]);
+
+        $out = $this->sc('lp_slot', 'service_features');
+
+        $this->assertStringContainsString('<li class="lp-repeater__item lp-list__item"><strong>Step 1</strong> inspect the system</li>', $out);
+        $this->assertStringNotContainsString('&lt;strong&gt;', $out);
+    }
+
     public function test_an_object_repeater_keeps_the_div_container_not_a_list(): void
     {
         // The faq repeater (objects) must NOT become a <ul> — it keeps the

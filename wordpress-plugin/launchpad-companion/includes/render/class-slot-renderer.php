@@ -80,7 +80,9 @@ final class SlotRenderer
             if (! is_string($item) || trim($item) === '') {
                 continue;
             }
-            $rows .= '<li class="lp-repeater__item lp-list__item">' . esc_html($item) . '</li>';
+            // wp_kses_post (not esc_html): list items carry inline Markdown→HTML
+            // (<strong>/<em>/<a>) shaped engine-side; escaping would show the tags.
+            $rows .= '<li class="lp-repeater__item lp-list__item">' . wp_kses_post($item) . '</li>';
         }
 
         if ($rows === '') {
@@ -281,7 +283,8 @@ final class SlotRenderer
     private static function repeater_item(mixed $item): string
     {
         if (is_string($item)) {
-            return '<div class="lp-repeater__item">' . esc_html($item) . '</div>';
+            // Allow inline Markdown→HTML shaped engine-side (same as list items).
+            return '<div class="lp-repeater__item">' . wp_kses_post($item) . '</div>';
         }
 
         if (! is_array($item)) {
