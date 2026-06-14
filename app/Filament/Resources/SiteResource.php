@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources;
 
+use App\Branding\BrandBrief;
+use App\Branding\BrandStudio;
+use App\Branding\FontCatalog;
 use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
@@ -20,8 +23,10 @@ use App\Security\GateCheck;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
@@ -30,6 +35,7 @@ use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Schema;
@@ -91,6 +97,7 @@ class SiteResource extends Resource
             ->recordActions([
                 ActionGroup::make([
                     self::queueAction(),
+                    self::brandAction(),
                     self::launchAction(),
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
@@ -98,6 +105,132 @@ class SiteResource extends Resource
                     self::handoverAction(),
                 ]),
             ]);
+    }
+
+    /**
+     * C5 capture — generate a brand for the tenant. A short interview (industry
+     * pre-filled from the Service Catalog, an operator-editable trade) → the AI
+     * BrandGenerator → a review/adjust screen (palette swatches + font pickers +
+     * rationale + the validation guard's adjustments) → Save & push, which writes
+     * SiteBranding and pushes it into the Elementor Global Kit (the proven #105
+     * path). Works for new and existing tenants — no active wizard required.
+     */
+    private static function brandAction(): Action
+    {
+        return Action::make('brand')
+            ->label('Generate brand')
+            ->icon('heroicon-o-swatch')
+            ->modalHeading('Generate brand')
+            ->modalDescription('Answer a few questions, generate, then review and adjust before saving. Save pushes the brand into this site\'s Elementor Global Kit.')
+            ->modalSubmitActionLabel('Save & push')
+            ->fillForm(fn (Site $record): array => [
+                'industry' => app(BrandStudio::class)->industryFor($record),
+                'personality' => 'trustworthy',
+            ])
+            ->schema(self::brandSchema())
+            ->action(function (Site $record, array $data): void {
+                $palette = array_filter([
+                    'primary' => $data['primary'] ?? null,
+                    'accent' => $data['accent'] ?? null,
+                    'text' => $data['text'] ?? null,
+                ], fn ($v) => is_string($v) && $v !== '');
+
+                $typography = array_filter([
+                    'heading' => $data['heading_font'] ?? null,
+                    'body' => $data['body_font'] ?? null,
+                ], fn ($v) => is_string($v) && $v !== '');
+
+                if ($palette === [] && $typography === []) {
+                    Notification::make()->warning()->title('Nothing to save')
+                        ->body('Generate a brand first, then save.')->send();
+
+                    return;
+                }
+
+                $studio = app(BrandStudio::class);
+                $studio->save($record, $palette, $typography);
+                $result = $studio->push($record);
+
+                if (! empty($result['updated'])) {
+                    Notification::make()->success()->title('Brand saved & pushed')
+                        ->body(sprintf(
+                            'Global Kit #%d — %d color(s), %d font(s).',
+                            (int) ($result['kit_id'] ?? 0),
+                            (int) ($result['colors_set'] ?? 0),
+                            (int) ($result['fonts_set'] ?? 0),
+                        ))->send();
+                } else {
+                    Notification::make()->warning()->title('Brand saved — not pushed')
+                        ->body((string) ($result['error'] ?? 'Could not push to the site.'))->send();
+                }
+            });
+    }
+
+    /**
+     * The brand modal: the interview, an inline Generate action that fills the
+     * review fields below, and the editable review (palette pickers + catalog-backed
+     * font selects + rationale + guard adjustments). The submit is Save & push.
+     *
+     * @return list<Component>
+     */
+    private static function brandSchema(): array
+    {
+        $fonts = collect(app(FontCatalog::class)->all())->mapWithKeys(fn (string $f) => [$f => $f])->all();
+
+        return [
+            TextInput::make('industry')->label('Trade / industry')
+                ->helperText('Pre-filled from the service catalog — refine if needed.'),
+            Select::make('personality')->label('Brand personality')
+                ->options(BrandBrief::PERSONALITIES)->required(),
+            TextInput::make('emotional_goal')->label('How should a visitor feel?')
+                ->placeholder('e.g. confident they hired a real pro'),
+            TextInput::make('color_anchors_use')->label('Colors to use (optional)')
+                ->placeholder('comma-separated'),
+            TextInput::make('color_anchors_avoid')->label('Colors to avoid (optional)')
+                ->placeholder('comma-separated'),
+            TextInput::make('admired_brand')->label('A brand they admire (optional)'),
+
+            Actions::make([
+                Action::make('generate')
+                    ->label('Generate brand')
+                    ->icon('heroicon-o-sparkles')
+                    ->action(function (Get $get, Set $set): void {
+                        $brand = app(BrandStudio::class)->generateFromAnswers([
+                            'industry' => $get('industry'),
+                            'personality' => $get('personality'),
+                            'emotional_goal' => $get('emotional_goal'),
+                            'color_anchors_use' => $get('color_anchors_use'),
+                            'color_anchors_avoid' => $get('color_anchors_avoid'),
+                            'admired_brand' => $get('admired_brand'),
+                        ]);
+
+                        $set('primary', $brand->palette['primary']);
+                        $set('accent', $brand->palette['accent']);
+                        $set('text', $brand->palette['text']);
+                        $set('heading_font', $brand->typography['heading']);
+                        $set('body_font', $brand->typography['body']);
+                        $set('rationale', $brand->rationale);
+                        $set('adjustments', $brand->adjustments === []
+                            ? 'None — all fonts and colors validated.'
+                            : implode("\n", $brand->adjustments));
+
+                        Notification::make()->success()->title('Brand generated')
+                            ->body('Review and adjust below, then Save & push.')->send();
+                    }),
+            ]),
+
+            ColorPicker::make('primary')->label('Primary color'),
+            ColorPicker::make('accent')->label('Accent color'),
+            ColorPicker::make('text')->label('Text color'),
+            Select::make('heading_font')->label('Heading font')->options($fonts)->searchable(),
+            Select::make('body_font')->label('Body font')->options($fonts)->searchable(),
+            Textarea::make('rationale')->label('Why this brand')
+                ->readOnly()->dehydrated(false)->rows(3)
+                ->placeholder('Generate to see the rationale.'),
+            Textarea::make('adjustments')->label('Validation adjustments')
+                ->readOnly()->dehydrated(false)->rows(2)
+                ->placeholder('Any font/color the guard corrected will show here.'),
+        ];
     }
 
     /**
