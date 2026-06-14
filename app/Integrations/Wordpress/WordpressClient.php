@@ -76,6 +76,19 @@ class WordpressClient
     }
 
     /**
+     * Import a bound kit template into the site's Theme Builder. Idempotent per
+     * kit plugin-side (a re-push updates the same elementor_library template), so
+     * it is safe to send on every provision/refresh.
+     *
+     * @param  array<string, mixed>  $payload  {kit, template:{content,...}, template_type?, title?}
+     * @return array<string, mixed>
+     */
+    public function upsertKitTemplate(array $payload): array
+    {
+        return $this->post('/kit-template', $payload);
+    }
+
+    /**
      * Read the companion plugin's environment introspection (WP/PHP/Elementor/
      * theme/plugin versions) through the same authed channel.
      *
