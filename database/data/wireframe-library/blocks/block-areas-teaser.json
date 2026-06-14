@@ -1,0 +1,213 @@
+{
+    "version": "0.4",
+    "title": "Block - Areas Teaser",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "806945d",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-areas-teaser",
+                "_css_classes": "wf-block wf-block-areas-teaser"
+            },
+            "elements": [
+                {
+                    "id": "214967c",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Areas we serve",
+                        "header_size": "h2",
+                        "_title": "areateaser_heading",
+                        "_css_classes": "wf-areateaser-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "cd54dad",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "ec97b2e",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 16,
+                                    "column": "16",
+                                    "row": "16"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 55,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "83bcd61",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/areateaser-map-800x500.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "800",
+                                            "height": "500"
+                                        },
+                                        "_title": "areateaser_map",
+                                        "_css_classes": "wf-areateaser-map"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "68a7e5a",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "row",
+                                "flex_wrap": "wrap",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 12,
+                                    "column": "12",
+                                    "row": "12"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 45,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "6f635dd",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 1</a></p>",
+                                        "_title": "areateaser_link_1",
+                                        "_css_classes": "wf-areateaser-link-1"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "cef8681",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 2</a></p>",
+                                        "_title": "areateaser_link_2",
+                                        "_css_classes": "wf-areateaser-link-2"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "f90adc3",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 3</a></p>",
+                                        "_title": "areateaser_link_3",
+                                        "_css_classes": "wf-areateaser-link-3"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "fdf901e",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 4</a></p>",
+                                        "_title": "areateaser_link_4",
+                                        "_css_classes": "wf-areateaser-link-4"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "558b8bd",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 5</a></p>",
+                                        "_title": "areateaser_link_5",
+                                        "_css_classes": "wf-areateaser-link-5"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "196d903",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 6</a></p>",
+                                        "_title": "areateaser_link_6",
+                                        "_css_classes": "wf-areateaser-link-6"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "1b41a72",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 7</a></p>",
+                                        "_title": "areateaser_link_7",
+                                        "_css_classes": "wf-areateaser-link-7"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "b0e8a9f",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p><a href=\"#\">Area 8</a></p>",
+                                        "_title": "areateaser_link_8",
+                                        "_css_classes": "wf-areateaser-link-8"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

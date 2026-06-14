@@ -1,0 +1,81 @@
+{
+    "version": "0.4",
+    "title": "Block - Utility Message",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "11c0380",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-utility-message",
+                "_css_classes": "wf-block wf-block-utility-message",
+                "flex_align_items": "center"
+            },
+            "elements": [
+                {
+                    "id": "c4b78cd",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Page not found",
+                        "header_size": "h1",
+                        "_title": "util_heading",
+                        "_css_classes": "wf-util-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "3913f1d",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>The page you're looking for can't be found.</p>",
+                        "_title": "util_body",
+                        "_css_classes": "wf-util-body"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "c5553c8",
+                    "elType": "widget",
+                    "widgetType": "button",
+                    "settings": {
+                        "text": "Go to homepage",
+                        "_title": "util_cta",
+                        "_css_classes": "wf-util-cta"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "ad2fbc4",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<ul><li><a href=\"/\">Home</a></li><li><a href=\"/services\">Services</a></li><li><a href=\"/contact\">Contact</a></li></ul>",
+                        "_title": "util_links",
+                        "_css_classes": "wf-util-links"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}

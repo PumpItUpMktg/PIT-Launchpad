@@ -1,0 +1,58 @@
+{
+    "version": "0.4",
+    "title": "Block - Intro",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "9f48abd",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-intro",
+                "_css_classes": "wf-block wf-block-intro"
+            },
+            "elements": [
+                {
+                    "id": "1264bc9",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Intro heading",
+                        "header_size": "h2",
+                        "_title": "intro_heading",
+                        "_css_classes": "wf-intro-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "6429c35",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>Intro / category body, 180–320 chars.</p>",
+                        "_title": "intro_body",
+                        "_css_classes": "wf-intro-body"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}

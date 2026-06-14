@@ -1,0 +1,195 @@
+{
+    "version": "0.4",
+    "title": "Block - Problem Solution",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "41e3bc9",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-problem-solution",
+                "_css_classes": "wf-block wf-block-problem-solution"
+            },
+            "elements": [
+                {
+                    "id": "20feb38",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Problem & solution heading",
+                        "header_size": "h2",
+                        "_title": "ps_heading",
+                        "_css_classes": "wf-ps-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "244d646",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 34,
+                            "column": "34",
+                            "row": "34"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "083bf76",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 12,
+                                    "column": "12",
+                                    "row": "12"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 50,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "5d047a9",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>The problem</p>",
+                                        "_title": "ps_problem_eyebrow",
+                                        "_css_classes": "wf-ps-problem-eyebrow"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "a181a1f",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Problem subheading",
+                                        "header_size": "h3",
+                                        "_title": "ps_problem_sub",
+                                        "_css_classes": "wf-ps-problem-sub"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "c22cb76",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Body explaining the problem, 180–300 chars.</p>",
+                                        "_title": "ps_problem_body",
+                                        "_css_classes": "wf-ps-problem-body"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "8813923",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<ul><li>Point one</li><li>Point two</li><li>Point three</li></ul>",
+                                        "_title": "ps_problem_list",
+                                        "_css_classes": "wf-ps-problem-list"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "ec97b2e",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 12,
+                                    "column": "12",
+                                    "row": "12"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 50,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "2708309",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>The solution</p>",
+                                        "_title": "ps_solution_eyebrow",
+                                        "_css_classes": "wf-ps-solution-eyebrow"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "f5c9c02",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Solution subheading",
+                                        "header_size": "h3",
+                                        "_title": "ps_solution_sub",
+                                        "_css_classes": "wf-ps-solution-sub"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "a945587",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Body explaining the solution, 180–300 chars.</p>",
+                                        "_title": "ps_solution_body",
+                                        "_css_classes": "wf-ps-solution-body"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "9633a83",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<ul><li>Point one</li><li>Point two</li><li>Point three</li></ul>",
+                                        "_title": "ps_solution_list",
+                                        "_css_classes": "wf-ps-solution-list"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

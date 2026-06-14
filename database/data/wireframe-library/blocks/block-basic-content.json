@@ -1,0 +1,69 @@
+{
+    "version": "0.4",
+    "title": "Block - Basic Content",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "8a3348a",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-basic-content",
+                "_css_classes": "wf-block wf-block-basic-content"
+            },
+            "elements": [
+                {
+                    "id": "6ffd809",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Page title",
+                        "header_size": "h1",
+                        "_title": "basic_title",
+                        "_css_classes": "wf-basic-title"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "6d06ad4",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>Last updated: date</p>",
+                        "_title": "basic_updated",
+                        "_css_classes": "wf-basic-updated"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "acacd21",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>Rich body content. No character cap.</p>",
+                        "_title": "basic_body",
+                        "_css_classes": "wf-basic-body"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}
