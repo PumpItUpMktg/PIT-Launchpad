@@ -98,7 +98,7 @@ final class LibraryServiceComposer
         $phone = trim((string) ($cta['phone'] ?? ''));
         if ($tel !== '') {
             $primary = ['mode' => 'button', 'value' => ['text' => $label, 'url' => $tel]];
-            $phoneBtn = ['mode' => 'button', 'value' => ['text' => $phone !== '' ? $phone : $label, 'url' => $tel]];
+            $phoneBtn = ['mode' => 'button', 'value' => ['text' => $phone !== '' ? $this->displayPhone($phone) : $label, 'url' => $tel]];
             $values['wf-hero-cta-primary'] = $primary;
             $values['wf-cta-primary'] = $primary;
             if ($phone !== '') {
@@ -121,5 +121,22 @@ final class LibraryServiceComposer
     private function list(mixed $value): array
     {
         return is_array($value) ? array_values(array_filter($value, 'is_array')) : [];
+    }
+
+    /**
+     * A human-readable phone for the call BUTTON's text (the tel: link keeps the raw
+     * E.164). US 10/11-digit → (XXX) XXX-XXXX; anything else passes through unchanged.
+     */
+    private function displayPhone(string $phone): string
+    {
+        $digits = (string) preg_replace('/\D/', '', $phone);
+        if (strlen($digits) === 11 && str_starts_with($digits, '1')) {
+            $digits = substr($digits, 1);
+        }
+        if (strlen($digits) === 10) {
+            return sprintf('(%s) %s-%s', substr($digits, 0, 3), substr($digits, 3, 3), substr($digits, 6));
+        }
+
+        return trim($phone);
     }
 }
