@@ -80,12 +80,7 @@ final class KitTemplateGenerator
 
         [$widgetType, $control, $tag] = $this->nativeMap($slot);
 
-        $dynamic = sprintf(
-            '[elementor-tag id="%s" name="%s" settings="%s"]',
-            $this->id($slot->key.':tag'),
-            $tag,
-            rawurlencode((string) json_encode(['slot' => $slot->key])),
-        );
+        $dynamic = SlotBinding::dynamicTag($tag, $slot->key, $this->id($slot->key.':tag'));
 
         return [
             ...$base,
