@@ -45,6 +45,20 @@ class BrandStudio
             $industry = $this->industry->for($site);
         }
 
+        return $this->generateFromAnswers(['industry' => $industry] + $answers);
+    }
+
+    /**
+     * Generate from interview answers alone (industry already resolved/pre-filled).
+     * The inline review action calls this — the industry field is pre-filled at
+     * modal open, so no Site lookup is needed mid-form.
+     *
+     * @param  array<string, mixed>  $answers
+     */
+    public function generateFromAnswers(array $answers): GeneratedBrand
+    {
+        $industry = trim((string) ($answers['industry'] ?? ''));
+
         $brief = new BrandBrief(
             industry: $industry !== '' ? $industry : 'local service',
             personality: (string) ($answers['personality'] ?? 'trustworthy'),
