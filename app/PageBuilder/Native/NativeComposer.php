@@ -25,9 +25,6 @@ namespace App\PageBuilder\Native;
  */
 final class NativeComposer
 {
-    /** Boxed inner width for the FAQ zone (ported from #109's faq zone). */
-    private const FAQ_ZONE_WIDTH = 800;
-
     /**
      * The native `_elementor_data` tree for a page's FAQ, as a single zone
      * container holding a nested Accordion. Returns [] when there is no faq.
@@ -42,7 +39,7 @@ final class NativeComposer
             return [];
         }
 
-        return [$this->zone('faq', self::FAQ_ZONE_WIDTH, [$accordion], $seed)];
+        return [$this->zone('faq', [$accordion], $seed)];
     }
 
     /**
@@ -70,10 +67,9 @@ final class NativeComposer
 
             $items[] = [
                 'item_title' => $question,
-                'item_title_tag' => 'div',
                 '_id' => $this->shortId("{$seed}:item:{$i}"),
             ];
-            $panels[] = $this->panel($answer, "{$seed}:panel:{$i}");
+            $panels[] = $this->panel($answer, $question, "{$seed}:panel:{$i}");
             $i++;
         }
 
@@ -87,17 +83,19 @@ final class NativeComposer
             'widgetType' => 'nested-accordion',
             'settings' => ['items' => $items],
             'elements' => $panels,
+            'isInner' => false,
         ];
     }
 
     /**
-     * One nested-accordion content panel: a LOCKED, full-width child container whose
-     * inner container holds the answer as a text-editor. `isLocked` mirrors the
-     * export — Elementor manages these panels as accordion items.
+     * One nested-accordion content panel, mirroring the verified export flags: a
+     * LOCKED inner child container (`content_width:full`, `_title`) whose own inner
+     * column container (`flex_direction:column`) holds the answer as a text-editor.
+     * `isLocked` + `isInner` match how Elementor manages accordion item panels.
      *
      * @return array<string, mixed>
      */
-    private function panel(string $answerHtml, string $seed): array
+    private function panel(string $answerHtml, string $title, string $seed): array
     {
         $textEditor = [
             'id' => $this->id("{$seed}:text"),
@@ -105,42 +103,41 @@ final class NativeComposer
             'widgetType' => 'text-editor',
             'settings' => ['editor' => $answerHtml],
             'elements' => [],
+            'isInner' => false,
         ];
 
         $inner = [
             'id' => $this->id("{$seed}:inner"),
             'elType' => 'container',
-            'settings' => (object) [],
+            'settings' => ['flex_direction' => 'column'],
             'elements' => [$textEditor],
+            'isInner' => true,
         ];
 
         return [
             'id' => $this->id("{$seed}:container"),
             'elType' => 'container',
-            'settings' => ['content_width' => 'full'],
+            'settings' => ['content_width' => 'full', '_title' => $title],
             'elements' => [$inner],
+            'isInner' => true,
             'isLocked' => true,
         ];
     }
 
     /**
-     * A zone as a flex container (the container-based port of a #109 section): a
-     * boxed inner width so the page reads as a designed band, holding the zone's
-     * widgets. Carries the `lp-zone lp-zone--<name>` hook class.
+     * A zone as a flex container (the container-based port of a #109 section). Width
+     * is left to the `lp-zone lp-zone--<name>` class + plugin CSS (the 0.7.0 pattern)
+     * — no boxed-width emitted into JSON (unverified container key, kept out).
      *
      * @param  list<array<string, mixed>>  $children
      * @return array<string, mixed>
      */
-    private function zone(string $name, int $width, array $children, string $seed): array
+    private function zone(string $name, array $children, string $seed): array
     {
         return [
             'id' => $this->id("{$seed}:zone:{$name}"),
             'elType' => 'container',
-            'settings' => [
-                'content_width' => 'boxed',
-                'boxed_width' => ['unit' => 'px', 'size' => $width],
-                '_css_classes' => "lp-zone lp-zone--{$name}",
-            ],
+            'settings' => ['_css_classes' => "lp-zone lp-zone--{$name}"],
             'elements' => $children,
             'isInner' => false,
         ];
