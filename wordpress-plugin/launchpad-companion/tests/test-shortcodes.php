@@ -52,6 +52,14 @@ class Test_Shortcodes extends WP_UnitTestCase
         $this->assertStringContainsString('Same day', $out);
     }
 
+    public function test_lp_repeater_faq_is_a_native_details_accordion(): void
+    {
+        $out = $this->sc('lp_repeater', 'faq');
+        $this->assertStringContainsString('<details class="lp-faq">', $out);
+        $this->assertStringContainsString('<summary class="lp-faq__q">How long does install take?</summary>', $out);
+        $this->assertStringContainsString('lp-faq__a', $out);
+    }
+
     public function test_lp_cta_renders_an_anchor(): void
     {
         $out = $this->sc('lp_cta', 'cta');

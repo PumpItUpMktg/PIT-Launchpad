@@ -240,8 +240,10 @@ final class SlotRenderer
         }
 
         if (isset($item['question'], $item['answer'])) {
+            // Native <details>/<summary>: an accessible, zero-JS, fully CSS-styleable
+            // accordion (the designer targets .lp-faq / .lp-faq__q / .lp-faq__a).
             return sprintf(
-                '<div class="lp-faq"><h3 class="lp-faq__q">%s</h3><div class="lp-faq__a">%s</div></div>',
+                '<details class="lp-faq"><summary class="lp-faq__q">%s</summary><div class="lp-faq__a">%s</div></details>',
                 esc_html((string) $item['question']),
                 wp_kses_post((string) $item['answer'])
             );
