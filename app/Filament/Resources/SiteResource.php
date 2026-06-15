@@ -24,7 +24,6 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\CheckboxList;
-use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
@@ -238,19 +237,17 @@ class SiteResource extends Resource
                 ->placeholder('Generate to see the AI structure pick.')
                 ->visible($hasCandidates),
 
-            Radio::make('selected')->label('Choose a candidate')
-                ->options(fn (Get $get) => self::brandCandidateOptions($get('candidates')))
+            // The picker: each option is a swatch row + a rendered component preview on
+            // the candidate's own tokens/fonts/form — preview = reality. A non-native
+            // Select renders the HTML option (Radio can't); the recommended candidate
+            // is pre-selected, selection is Set-based.
+            Select::make('selected')->label('Choose a candidate')
+                ->options(fn (Get $get) => self::brandCandidateOptions($get('candidates'), (string) $get('resolved_structure')))
+                ->allowHtml()->native(false)->selectablePlaceholder(false)
                 ->live()
                 ->afterStateUpdated(fn (Get $get, Set $set) => self::fillBrandPreview($get, $set))
                 ->visible($hasCandidates),
 
-            ColorPicker::make('p_primary')->label('Primary')->disabled()->dehydrated(false)->visible($hasCandidates),
-            ColorPicker::make('p_secondary')->label('Secondary')->disabled()->dehydrated(false)->visible($hasCandidates),
-            ColorPicker::make('p_accent')->label('Accent (CTA)')->disabled()->dehydrated(false)->visible($hasCandidates),
-            ColorPicker::make('p_text')->label('Text')->disabled()->dehydrated(false)->visible($hasCandidates),
-            ColorPicker::make('p_bg')->label('Background')->disabled()->dehydrated(false)->visible($hasCandidates),
-            ColorPicker::make('p_bg_alt')->label('Section tint')->disabled()->dehydrated(false)->visible($hasCandidates),
-            TextInput::make('p_fonts')->label('Fonts (heading / body)')->disabled()->dehydrated(false)->visible($hasCandidates),
             Textarea::make('rationale')->label('Why this brand')->readOnly()->dehydrated(false)->rows(3)->visible($hasCandidates),
             Textarea::make('adjustments')->label('Validation adjustments')->readOnly()->dehydrated(false)->rows(2)->visible($hasCandidates),
         ];
@@ -323,24 +320,85 @@ class SiteResource extends Resource
     }
 
     /**
-     * Radio options: index => "Heading / Body (★ recommended)".
+     * The radio option per candidate: a swatch row + a rendered component preview, on
+     * the candidate's OWN tokens + fonts + the resolved form tokens. Same surface
+     * model as launchpad.css (bg/text/accent/on_accent/border/bg_alt + heading font/
+     * weight/transform + button radius) → preview = reality. allowHtml() renders it.
      *
      * @return array<int, string>
      */
-    private static function brandCandidateOptions(mixed $candidates): array
+    private static function brandCandidateOptions(mixed $candidates, string $structure): array
     {
         if (! is_array($candidates)) {
             return [];
         }
 
+        $form = self::brandFormTokens($structure);
         $options = [];
         foreach ($candidates as $i => $candidate) {
-            $type = is_array($candidate['typography'] ?? null) ? $candidate['typography'] : [];
-            $label = ($type['heading'] ?? '?').' / '.($type['body'] ?? '?');
-            $options[(int) $i] = $label.(! empty($candidate['recommended']) ? '  ★ recommended' : '');
+            $options[(int) $i] = self::brandPreviewHtml(is_array($candidate) ? $candidate : [], $form);
         }
 
         return $options;
+    }
+
+    /**
+     * The form (structure) tokens the preview inlines — mirrors the structure bundles
+     * in wireframe.css so the mini-mockup matches the live page.
+     *
+     * @return array{radius: string, button_radius: string, weight: string, transform: string, shadow: string}
+     */
+    private static function brandFormTokens(string $structure): array
+    {
+        return match ($structure) {
+            'bold' => ['radius' => '2px', 'button_radius' => '2px', 'weight' => '800', 'transform' => 'uppercase', 'shadow' => '0 8px 24px rgba(0,0,0,.18)'],
+            'warm' => ['radius' => '12px', 'button_radius' => '999px', 'weight' => '700', 'transform' => 'none', 'shadow' => '0 4px 16px rgba(0,0,0,.10)'],
+            default => ['radius' => '4px', 'button_radius' => '4px', 'weight' => '600', 'transform' => 'none', 'shadow' => '0 1px 2px rgba(0,0,0,.06)'],
+        };
+    }
+
+    /**
+     * One candidate's swatch row + component-preview mini-mockup as inline-styled HTML.
+     *
+     * @param  array<string, mixed>  $candidate
+     * @param  array{radius: string, button_radius: string, weight: string, transform: string, shadow: string}  $form
+     */
+    private static function brandPreviewHtml(array $candidate, array $form): string
+    {
+        $palette = is_array($candidate['palette'] ?? null) ? $candidate['palette'] : [];
+        $type = is_array($candidate['typography'] ?? null) ? $candidate['typography'] : [];
+
+        // Hex tokens (validated upstream); fonts (catalog families). esc for safety.
+        $c = fn (string $k, string $d): string => preg_replace('/[^#0-9A-Fa-f]/', '', (string) ($palette[$k] ?? $d)) ?: $d;
+        $f = fn (string $k, string $d): string => htmlspecialchars((string) ($type[$k] ?? $d), ENT_QUOTES);
+
+        [$primary, $secondary, $accent, $onAccent, $text, $muted, $bg, $bgAlt, $border] = [
+            $c('primary', '#1b3a5b'), $c('secondary', '#3e6e9e'), $c('accent', '#e8a23d'), $c('on_accent', '#1a1a1a'),
+            $c('text', '#1a1a1a'), $c('text_muted', '#5b6470'), $c('bg', '#ffffff'), $c('bg_alt', '#f4f6f8'), $c('border', '#e2e6eb'),
+        ];
+        $heading = $f('heading', 'Inter');
+        $body = $f('body', 'Inter');
+        $badge = ! empty($candidate['recommended'])
+            ? '<span style="margin-left:8px;font-size:11px;font-weight:700;color:#b45309">★ recommended</span>'
+            : '';
+
+        $swatch = function (string $label, string $hex): string {
+            return '<span title="'.$label.' '.$hex.'" style="display:inline-block;width:20px;height:20px;border-radius:4px;background:'.$hex.';border:1px solid rgba(0,0,0,.12)"></span>';
+        };
+
+        return '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:4px 0">'
+            .'<div style="display:flex;gap:5px">'
+                .$swatch('primary', $primary).$swatch('secondary', $secondary).$swatch('accent', $accent).$swatch('bg', $bg).$swatch('text', $text)
+            .'</div>'
+            .'<div style="flex:1;min-width:240px;background:'.$bg.';color:'.$text.';border:1px solid '.$border.';border-radius:'.$form['radius'].';padding:14px 16px;box-shadow:'.$form['shadow'].'">'
+                .'<div style="font-family:\''.$heading.'\',sans-serif;font-weight:'.$form['weight'].';text-transform:'.$form['transform'].';color:'.$text.';font-size:16px;line-height:1.2">Same-day service, guaranteed</div>'
+                .'<div style="color:'.$muted.';font-size:12px;margin:3px 0 8px">Trusted local pros</div>'
+                .'<p style="font-family:\''.$body.'\',sans-serif;color:'.$text.';font-size:12px;margin:0 0 10px">Fast, licensed, and fully warrantied work.</p>'
+                .'<span style="display:inline-block;background:'.$accent.';color:'.$onAccent.';border-radius:'.$form['button_radius'].';padding:6px 14px;font-family:\''.$heading.'\',sans-serif;font-weight:600;font-size:12px">Get a quote</span>'
+                .'<span style="display:inline-block;background:'.$bgAlt.';color:'.$muted.';border:1px solid '.$border.';border-radius:'.$form['radius'].';padding:6px 12px;margin-left:8px;font-size:11px">Why us</span>'
+            .'</div>'
+            .'<div style="font-size:12px;color:#6b7280;min-width:90px">'.$heading.' / '.$body.$badge.'</div>'
+            .'</div>';
     }
 
     private static function fillBrandPreview(Get $get, Set $set): void
@@ -351,14 +409,7 @@ class SiteResource extends Resource
             return;
         }
 
-        $palette = is_array($candidate['palette'] ?? null) ? $candidate['palette'] : [];
-        $type = is_array($candidate['typography'] ?? null) ? $candidate['typography'] : [];
         $adjustments = is_array($candidate['adjustments'] ?? null) ? $candidate['adjustments'] : [];
-
-        foreach (['primary', 'secondary', 'accent', 'text', 'bg', 'bg_alt'] as $slot) {
-            $set('p_'.$slot, $palette[$slot] ?? null);
-        }
-        $set('p_fonts', ($type['heading'] ?? '?').' / '.($type['body'] ?? '?'));
         $set('rationale', (string) ($candidate['rationale'] ?? ''));
         $set('adjustments', $adjustments === [] ? 'None — all fonts and colors validated.' : implode("\n", $adjustments));
     }
