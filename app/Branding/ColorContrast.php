@@ -41,6 +41,18 @@ final class ColorContrast
         return '#'.strtolower($hex);
     }
 
+    /**
+     * Is this a LIGHT color (relative luminance ≥ 0.5)? Backgrounds must be light and
+     * text dark — the brand never ships an inverted/dark theme (Bold's drama comes
+     * from the accent + structure tokens, not a dark surface). Invalid hex → false.
+     */
+    public static function isLight(string $hex): bool
+    {
+        $norm = self::normalize($hex);
+
+        return $norm !== null && self::luminance($norm) >= 0.5;
+    }
+
     private static function luminance(string $hex): float
     {
         $hex = ltrim($hex, '#');

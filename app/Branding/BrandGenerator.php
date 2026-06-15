@@ -114,6 +114,10 @@ class BrandGenerator
 
         $palette = $this->fullPalette($tokens, $adjustments);
 
+        // Backgrounds are ALWAYS light, text ALWAYS dark — for every structure
+        // including Bold (an inverted/dark theme is corrected, not shipped).
+        $palette = $this->enforceLightSurfaces($palette, $adjustments);
+
         // Hard gate: the accent must carry readable CTA text with its BEST (white or
         // dark) text color. Only a genuine mid-tone accent — where neither passes —
         // is dropped; a light accent is rescued by dark CTA text (below), not dropped.
@@ -174,6 +178,43 @@ class BrandGenerator
                 $hex = $fallback;
             }
             $palette[$key] = $hex;
+        }
+
+        return $palette;
+    }
+
+    /**
+     * Force the light-surface invariant: backgrounds light, text dark — for ALL
+     * structures. An inverted/dark palette (dark bg + light text, like a "Bold dark
+     * theme") is corrected to the safe light surfaces + dark text and flagged; the
+     * brand colors (primary/secondary/accent) are untouched, so Bold's punch survives
+     * via the accent + structure tokens.
+     *
+     * @param  array<string, string>  $palette
+     * @param  list<string>  $adjustments  (by ref)
+     * @return array<string, string>
+     */
+    private function enforceLightSurfaces(array $palette, array &$adjustments): array
+    {
+        $safe = (array) config('launchpad.brand.safe_colors', []);
+        $safeHex = fn (string $key, string $default) => $this->validateHex((string) ($safe[$key] ?? $default)) ?? $default;
+
+        if (! ColorContrast::isLight($palette['bg'])) {
+            $adjustments[] = "Background {$palette['bg']} is not light — backgrounds are always light (Bold's look comes from the accent + structure, not a dark theme); corrected.";
+            $palette['bg'] = $safeHex('bg', '#ffffff');
+            $palette['bg_alt'] = $safeHex('bg_alt', '#f4f6f8');
+            $palette['border'] = $safeHex('border', '#e2e6eb');
+        } elseif (! ColorContrast::isLight($palette['bg_alt'])) {
+            $adjustments[] = "Section tint {$palette['bg_alt']} is not light — corrected to a light tint.";
+            $palette['bg_alt'] = $safeHex('bg_alt', '#f4f6f8');
+        }
+
+        if (ColorContrast::isLight($palette['text'])) {
+            $adjustments[] = "Body text {$palette['text']} is not dark — text is always dark on light surfaces; corrected.";
+            $palette['text'] = $safeHex('text', '#1a1a1a');
+        }
+        if (ColorContrast::isLight($palette['text_muted'])) {
+            $palette['text_muted'] = $safeHex('text_muted', '#5b6470');
         }
 
         return $palette;
@@ -290,9 +331,9 @@ class BrandGenerator
     {
         $personality = $brief->descriptor();
         $character = [
-            'trust' => 'restrained and accent-led — mostly white/light backgrounds with a hairline border color and a single warm accent; navy/steel primaries read well here.',
-            'bold' => 'saturated and color-as-structure — expects a DARK or saturated bg_alt (the alternating blocks go dark), high contrast, a punchy accent.',
-            'warm' => 'muted and earthy — warm off-white bg/bg_alt tints, soft, inviting, approachable.',
+            'trust' => 'restrained and accent-led — light backgrounds with a hairline border color and a single warm accent; navy/steel primaries read well here.',
+            'bold' => 'confident and high-impact — its punch comes from a vivid, saturated ACCENT and a strong, dark PRIMARY against LIGHT backgrounds (the drama is the accent + the dense, sharp layout, NOT a dark theme); pick a bold accent.',
+            'warm' => 'muted and earthy — warm off-white (still light) bg/bg_alt tints, soft, inviting, approachable.',
         ][$structure] ?? 'clean and professional.';
 
         $shortlist = (array) config('launchpad.brand.font_pairings.'.$structure, []);
@@ -326,8 +367,9 @@ class BrandGenerator
 
         $lines[] = '';
         $lines[] = 'Requirements for EACH candidate (WCAG-AA — these are enforced, design to pass):';
-        $lines[] = '- A full 8-color palette in #RRGGBB. The text color MUST hit >= 4.5:1 on BOTH bg and bg_alt '
-            .'(so keep bg/bg_alt light when text is dark, or dark when text is light); muted text >= 3:1 on bg.';
+        $lines[] = '- A full 8-color palette in #RRGGBB. bg and bg_alt are ALWAYS LIGHT and text ALWAYS DARK — '
+            .'for every structure including Bold (NEVER an inverted/dark theme). Body text >= 4.5:1 on bg and '
+            .'bg_alt; muted text >= 3:1 on bg.';
         $lines[] = '- The accent is the CTA color. Its button text is auto-chosen (white OR dark) for max contrast, '
             .'so a light, punchy accent is fine — just make the accent itself a saturated, deliberate color (not a '
             .'near-bg tint), distinct from the primary.';
