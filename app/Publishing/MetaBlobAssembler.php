@@ -448,7 +448,9 @@ class MetaBlobAssembler
 
         $crumbs = [['name' => 'Home', 'url' => $home]];
 
-        if ($content->silo_id !== null && $content->silo !== null) {
+        // Skip the silo crumb when this page IS its silo's pillar — the crumb would
+        // link to (and be named the same as) this very page. Collapse to Home → Leaf.
+        if ($content->silo_id !== null && $content->silo !== null && ! $this->isOwnSiloPillar($content)) {
             $crumbs[] = ['name' => (string) $content->silo->name, 'url' => $this->siloUrl($content, $home)];
         }
 
@@ -457,6 +459,17 @@ class MetaBlobAssembler
         $crumbs[] = ['name' => $this->seoTitle($content), 'url' => ''];
 
         return $crumbs;
+    }
+
+    /**
+     * Is this page its own silo's pillar? Then the silo crumb resolves to this very
+     * page (same name, same URL) — a self-referential crumb. pillarContent is a
+     * belongsTo on pillar_content_id, so it equals the current page only when the
+     * silo's pillar IS this page (never a child page).
+     */
+    private function isOwnSiloPillar(Content $content): bool
+    {
+        return $content->silo?->pillarContent?->id === $content->id;
     }
 
     /**
