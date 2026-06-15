@@ -103,20 +103,26 @@ return [
         ],
         'default_structure' => 'trust',
 
-        // The curated pairing shortlist the generator is STEERED to (quality pairings
-        // that load well and pair by structure character). Generation is constrained
-        // to this pool in-prompt; every returned family is still validated against the
-        // full FontCatalog (so a real-but-off-list family is accepted, an invented one
-        // is rejected). Finalize against what the Global Kit serves. [CC redline]
-        'font_shortlist' => [
-            // grotesque / neutral sans (Trust + body workhorses)
-            'Inter', 'Work Sans', 'IBM Plex Sans', 'Public Sans', 'Source Sans 3', 'Mulish', 'Manrope',
-            // geometric / display sans (Bold headings)
-            'Archivo', 'Archivo Black', 'Sora', 'Space Grotesk', 'Montserrat', 'Poppins', 'Oswald', 'Barlow',
-            // humanist sans (Warm)
-            'Nunito Sans', 'Mulish', 'Lato', 'Karla', 'Rubik', 'DM Sans',
-            // serif heading accents (Warm / premium)
-            'Playfair Display', 'Lora', 'Bitter', 'Source Serif 4', 'Fraunces',
+        // The curated heading/body PAIRINGS the generator is STEERED to, per
+        // structure (the model picks one pairing per candidate, varying across the
+        // set). Generation is constrained to these in-prompt; every returned family
+        // is still validated against the full FontCatalog. [operator-redlined]
+        'font_pairings' => [
+            'trust' => [
+                ['heading' => 'Inter', 'body' => 'Inter'],                  // clean single-family workhorse
+                ['heading' => 'Archivo', 'body' => 'Inter'],                // heading w/ more character, neutral body
+                ['heading' => 'Libre Franklin', 'body' => 'Source Sans 3'],
+            ],
+            'bold' => [
+                ['heading' => 'Sora', 'body' => 'Inter'],
+                ['heading' => 'Space Grotesk', 'body' => 'Inter'],
+                ['heading' => 'Poppins', 'body' => 'Work Sans'],
+            ],
+            'warm' => [
+                ['heading' => 'Fraunces', 'body' => 'Source Sans 3'],       // serif head + humanist body
+                ['heading' => 'Bitter', 'body' => 'Karla'],
+                ['heading' => 'Nunito Sans', 'body' => 'Nunito Sans'],      // humanist single (warm w/o serif)
+            ],
         ],
 
         // Candidate count surfaced by default.

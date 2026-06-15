@@ -103,6 +103,16 @@ it('auto-nudges unreadable body text to a safe neutral and flags it (accent stil
         ->and(collect($c->adjustments)->contains(fn ($a) => str_contains($a, 'failed WCAG-AA')))->toBeTrue();
 });
 
+it('steers the prompt to the chosen structure\'s curated font pairings', function () {
+    $fake = new FakeClaudeClient(json_encode(['candidates' => [candidate()]]));
+    (new BrandGenerator($fake, new FontCatalog))->generateCandidates(brief(), 'warm', 1);
+
+    // The warm pairings (operator-redlined) reach the model; trust's do not.
+    expect($fake->prompts[0])->toContain('Fraunces / Source Sans 3')
+        ->toContain('Nunito Sans / Nunito Sans')
+        ->not->toContain('Space Grotesk'); // a bold-only pairing
+});
+
 it('ContrastMatrix flags the failing pairs and clears a clean palette', function () {
     expect(ContrastMatrix::failures([
         'text' => '#1a1a1a', 'text_muted' => '#5b6470', 'bg' => '#ffffff', 'bg_alt' => '#f4f6f8', 'accent' => '#b25c00',

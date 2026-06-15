@@ -276,7 +276,13 @@ class BrandGenerator
             'warm' => 'muted and earthy — warm off-white bg/bg_alt tints, soft, inviting, approachable.',
         ][$structure] ?? 'clean and professional.';
 
-        $shortlist = (array) config('launchpad.brand.font_shortlist', []);
+        $shortlist = (array) config('launchpad.brand.font_pairings.'.$structure, []);
+        $pairLines = [];
+        foreach ($shortlist as $pair) {
+            if (is_array($pair) && isset($pair['heading'], $pair['body'])) {
+                $pairLines[] = $pair['heading'].' / '.$pair['body'];
+            }
+        }
 
         $lines = [
             "Design {$count} distinct brand candidates for a {$brief->industry} business.",
@@ -303,7 +309,8 @@ class BrandGenerator
         $lines[] = 'Requirements for EACH candidate:';
         $lines[] = '- A full 8-color palette. WCAG-AA: body text >= 4.5:1 on BOTH bg and bg_alt; WHITE button '
             .'text >= 4.5:1 on the accent (the accent is the CTA color); muted text >= 3:1 on bg. Use #RRGGBB.';
-        $lines[] = '- A heading + body font pairing chosen ONLY from this list (spelled exactly): '.implode(', ', $shortlist).'.';
+        $lines[] = '- Use ONE of these vetted heading/body font pairings per candidate (spelled exactly; vary '
+            .'the pairing across candidates): '.implode('; ', $pairLines).'.';
         $lines[] = '- An industry-grounded, SPECIFIC rationale (name the trade and what the colors do for it); '
             .'never generic filler like "evokes trust and professionalism".';
         $lines[] = '- Mark exactly ONE candidate "recommended": true (best industry-fit + personality-match + accessibility).';
