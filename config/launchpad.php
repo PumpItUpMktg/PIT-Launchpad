@@ -73,13 +73,54 @@ return [
             'heading' => env('LAUNCHPAD_BRAND_SAFE_HEADING_FONT', 'Poppins'),
             'body' => env('LAUNCHPAD_BRAND_SAFE_BODY_FONT', 'Inter'),
         ],
+        // The full safe palette (Phase 3): every brand-token slot has a known-good,
+        // AA-passing default the generator falls back to per-slot. The wf-* stylesheet
+        // mirrors these as its own fallbacks.
         'safe_colors' => [
             'primary' => '#0F62FE',
+            'secondary' => '#3E6E9E',
             'accent' => '#FF6F00',
             'text' => '#1A1A1A',
+            'text_muted' => '#5B6470',
+            'bg' => '#FFFFFF',
+            'bg_alt' => '#F4F6F8',
+            'border' => '#E2E6EB',
         ],
         // Minimum WCAG contrast ratio for the text color against a light bg.
         'min_text_contrast' => 4.5,
+
+        // Phase 3 — multi-candidate generator.
+        //
+        // Deterministic personality → structure map: the AI recommends a structure,
+        // but an off-list answer falls back through this (the enforcer behind the
+        // proposer). Keys are BrandBrief::PERSONALITIES.
+        'structure_for_personality' => [
+            'trustworthy' => 'trust',
+            'modern-technical' => 'bold',
+            'friendly-local' => 'warm',
+            'premium' => 'trust',
+            'bold-urgent' => 'bold',
+        ],
+        'default_structure' => 'trust',
+
+        // The curated pairing shortlist the generator is STEERED to (quality pairings
+        // that load well and pair by structure character). Generation is constrained
+        // to this pool in-prompt; every returned family is still validated against the
+        // full FontCatalog (so a real-but-off-list family is accepted, an invented one
+        // is rejected). Finalize against what the Global Kit serves. [CC redline]
+        'font_shortlist' => [
+            // grotesque / neutral sans (Trust + body workhorses)
+            'Inter', 'Work Sans', 'IBM Plex Sans', 'Public Sans', 'Source Sans 3', 'Mulish', 'Manrope',
+            // geometric / display sans (Bold headings)
+            'Archivo', 'Archivo Black', 'Sora', 'Space Grotesk', 'Montserrat', 'Poppins', 'Oswald', 'Barlow',
+            // humanist sans (Warm)
+            'Nunito Sans', 'Mulish', 'Lato', 'Karla', 'Rubik', 'DM Sans',
+            // serif heading accents (Warm / premium)
+            'Playfair Display', 'Lora', 'Bitter', 'Source Serif 4', 'Fraunces',
+        ],
+
+        // Candidate count surfaced by default.
+        'candidate_count' => 4,
     ],
 
 ];
