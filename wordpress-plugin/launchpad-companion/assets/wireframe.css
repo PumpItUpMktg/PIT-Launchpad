@@ -126,10 +126,12 @@ body.wf-structure-warm {
     text-decoration: underline;
 }
 
-/* Buttons: EVERY button paints bg + fg from tokens (never the theme default
- * #32373c). The default/primary CTA is the accent + its paired on-accent text; the
- * phone CTA is an outline variant so the two read as primary/secondary. */
-.wf-block .elementor-button {
+/* Buttons: EVERY button owns BOTH background AND color from paired tokens, in both
+ * schemes. We match `.wp-element-button` too (the WP global
+ * `.wp-element-button{background:#32373c;color:#fff}` otherwise wins the color on a
+ * light fill = white-on-light washout). The primary CTA is the accent + its paired
+ * on-accent text; the phone CTA is an outline variant (text on transparent). */
+.wf-block :is(.elementor-button, .wp-element-button) {
     border-radius: var(--wf-button-radius);
     font-family: var(--wf-font-heading);
     font-weight: 600;
@@ -139,15 +141,15 @@ body.wf-structure-warm {
     box-shadow: var(--wf-shadow-sm);
     transition: filter 0.15s ease, transform 0.15s ease;
 }
-.wf-block .elementor-button:hover {
+.wf-block :is(.elementor-button, .wp-element-button):hover {
     filter: brightness(0.94);
     transform: translateY(-1px);
 }
-:is(.wf-hero-cta-primary, .wf-cta-primary) .elementor-button {
+:is(.wf-hero-cta-primary, .wf-cta-primary) :is(.elementor-button, .wp-element-button) {
     background-color: var(--wf-color-accent);
     color: var(--wf-color-on-accent, #fff);
 }
-:is(.wf-hero-cta-phone, .wf-cta-phone) .elementor-button {
+:is(.wf-hero-cta-phone, .wf-cta-phone) :is(.elementor-button, .wp-element-button) {
     background-color: transparent;
     color: var(--wf-color-text);
     border: var(--wf-border-width, 1px) solid var(--wf-color-text);
@@ -232,11 +234,22 @@ body.wf-structure-warm {
     margin-bottom: 0.75rem;
     overflow: hidden;
 }
+/* The accordion title OWNS its color (Elementor otherwise keeps a default dark
+ * title color → black-on-black in the dark scheme). Cover the title text span, the
+ * header wrapper, and the expand/collapse +/- icon so all are legible. */
 .wf-faq summary,
-.wf-faq .e-n-accordion-item-title {
+.wf-faq .e-n-accordion-item-title,
+.wf-faq .e-n-accordion-item-title-header,
+.wf-faq .e-n-accordion-item-title-text {
     color: var(--wf-color-text);
     font-family: var(--wf-font-heading);
     font-weight: var(--wf-heading-weight);
+}
+.wf-faq .e-n-accordion-item-title-icon,
+.wf-faq .e-n-accordion-item-title-icon svg {
+    color: var(--wf-color-text);
+    fill: var(--wf-color-text);
+    stroke: var(--wf-color-text);
 }
 
 /* Final CTA — kept on the alt tint; the accent button is the pop (contrast-safe). */
