@@ -12,6 +12,7 @@ class BrandBrief
     /**
      * @param  list<string>  $colorAnchorsUse  colors the client wants used (optional)
      * @param  list<string>  $colorAnchorsAvoid  colors to avoid (optional)
+     * @param  list<string>  $adjectives  multi-select personality adjectives (Phase 4; enrich generation)
      */
     public function __construct(
         public readonly string $industry,
@@ -20,6 +21,7 @@ class BrandBrief
         public readonly array $colorAnchorsUse = [],
         public readonly array $colorAnchorsAvoid = [],
         public readonly string $admiredBrand = '',
+        public readonly array $adjectives = [],
     ) {}
 
     /** The curated personality options surfaced in the interview. */
@@ -30,4 +32,35 @@ class BrandBrief
         'premium' => 'Premium & refined',
         'bold-urgent' => 'Bold & urgent',
     ];
+
+    /** The richer adjective set (multi-select) that refines generation. */
+    public const ADJECTIVES = [
+        'trustworthy' => 'Trustworthy',
+        'established' => 'Established',
+        'premium' => 'Premium',
+        'modern' => 'Modern',
+        'bold' => 'Bold',
+        'friendly' => 'Friendly',
+        'local-family' => 'Local / family',
+        'rugged' => 'Rugged',
+        'clinical' => 'Clinical / precise',
+        'approachable' => 'Approachable',
+    ];
+
+    /**
+     * The personality descriptor the generation prompts express — the coarse
+     * personality label, refined by any selected adjectives.
+     */
+    public function descriptor(): string
+    {
+        $base = self::PERSONALITIES[$this->personality] ?? $this->personality;
+
+        if ($this->adjectives === []) {
+            return $base;
+        }
+
+        $words = array_map(fn (string $a) => self::ADJECTIVES[$a] ?? $a, $this->adjectives);
+
+        return $base.' — '.implode(', ', $words);
+    }
 }

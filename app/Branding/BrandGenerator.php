@@ -248,7 +248,7 @@ class BrandGenerator
 
     private function structurePrompt(BrandBrief $brief): string
     {
-        $personality = BrandBrief::PERSONALITIES[$brief->personality] ?? $brief->personality;
+        $personality = $brief->descriptor();
 
         return implode("\n", [
             "Choose ONE layout structure for a {$brief->industry} business whose brand personality is: {$personality}.",
@@ -269,7 +269,7 @@ class BrandGenerator
 
     private function candidatePrompt(BrandBrief $brief, string $structure, int $count, array $avoid): string
     {
-        $personality = BrandBrief::PERSONALITIES[$brief->personality] ?? $brief->personality;
+        $personality = $brief->descriptor();
         $character = [
             'trust' => 'restrained and accent-led — mostly white/light backgrounds with a hairline border color and a single warm accent; navy/steel primaries read well here.',
             'bold' => 'saturated and color-as-structure — expects a DARK or saturated bg_alt (the alternating blocks go dark), high contrast, a punchy accent.',
@@ -333,7 +333,7 @@ class BrandGenerator
 
     private function prompt(BrandBrief $brief): string
     {
-        $personality = BrandBrief::PERSONALITIES[$brief->personality] ?? $brief->personality;
+        $personality = $brief->descriptor();
 
         $lines = [
             "Design a brand for a {$brief->industry} business.",

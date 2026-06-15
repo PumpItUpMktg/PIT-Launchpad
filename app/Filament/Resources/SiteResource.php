@@ -4,7 +4,6 @@ namespace App\Filament\Resources;
 
 use App\Branding\BrandBrief;
 use App\Branding\BrandStudio;
-use App\Branding\FontCatalog;
 use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
@@ -23,8 +22,11 @@ use App\Security\GateCheck;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\ColorPicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -121,43 +123,39 @@ class SiteResource extends Resource
             ->label('Generate brand')
             ->icon('heroicon-o-swatch')
             ->modalHeading('Generate brand')
-            ->modalDescription('Answer a few questions, generate, then review and adjust before saving. Save pushes the brand into this site\'s Elementor Global Kit.')
+            ->modalDescription('Answer a few questions, generate candidates, pick one, then Save & push. Save writes the brand tokens + structure the site renders with.')
             ->modalSubmitActionLabel('Save & push')
             ->fillForm(fn (Site $record): array => [
                 'industry' => app(BrandStudio::class)->industryFor($record),
                 'personality' => 'trustworthy',
+                'structure' => '',
             ])
             ->schema(self::brandSchema())
             ->action(function (Site $record, array $data): void {
-                $palette = array_filter([
-                    'primary' => $data['primary'] ?? null,
-                    'accent' => $data['accent'] ?? null,
-                    'text' => $data['text'] ?? null,
-                ], fn ($v) => is_string($v) && $v !== '');
+                $candidates = is_array($data['candidates'] ?? null) ? $data['candidates'] : [];
+                $chosen = $candidates[(int) ($data['selected'] ?? 0)] ?? null;
 
-                $typography = array_filter([
-                    'heading' => $data['heading_font'] ?? null,
-                    'body' => $data['body_font'] ?? null,
-                ], fn ($v) => is_string($v) && $v !== '');
-
-                if ($palette === [] && $typography === []) {
+                if (! is_array($chosen)) {
                     Notification::make()->warning()->title('Nothing to save')
-                        ->body('Generate a brand first, then save.')->send();
+                        ->body('Generate candidates and pick one first.')->send();
 
                     return;
                 }
 
+                $palette = is_array($chosen['palette'] ?? null) ? $chosen['palette'] : [];
+                $typography = is_array($chosen['typography'] ?? null) ? $chosen['typography'] : [];
+                $structure = (string) ($data['resolved_structure'] ?? '');
+
                 $studio = app(BrandStudio::class);
-                $studio->save($record, $palette, $typography);
+                $studio->save($record, $palette, $typography, $structure !== '' ? $structure : null);
                 $result = $studio->push($record);
 
                 if (! empty($result['updated'])) {
                     Notification::make()->success()->title('Brand saved & pushed')
                         ->body(sprintf(
-                            'Global Kit #%d — %d color(s), %d font(s).',
-                            (int) ($result['kit_id'] ?? 0),
-                            (int) ($result['colors_set'] ?? 0),
-                            (int) ($result['fonts_set'] ?? 0),
+                            '%s structure — %d brand token(s) live.',
+                            ucfirst($structure ?: 'trust'),
+                            (int) ($result['wf_tokens_set'] ?? 0),
                         ))->send();
                 } else {
                     Notification::make()->warning()->title('Brand saved — not pushed')
@@ -167,70 +165,194 @@ class SiteResource extends Resource
     }
 
     /**
-     * The brand modal: the interview, an inline Generate action that fills the
-     * review fields below, and the editable review (palette pickers + catalog-backed
-     * font selects + rationale + guard adjustments). The submit is Save & push.
+     * The brand modal: the interview (industry + personality + adjectives + optional
+     * anchors + a structure pick), an inline Generate (AI structure rec + 3–5
+     * candidates) and a "Show me 3 more" regenerate, then a candidate picker with a
+     * read-only preview. Submit is Save & push (the selected candidate's tokens +
+     * structure). All generation/validation is BrandGenerator/BrandStudio; this is
+     * thin over them.
      *
      * @return list<Component>
      */
     private static function brandSchema(): array
     {
-        $fonts = collect(app(FontCatalog::class)->all())->mapWithKeys(fn (string $f) => [$f => $f])->all();
+        $hasCandidates = fn (Get $get): bool => ! empty($get('candidates'));
 
         return [
             TextInput::make('industry')->label('Trade / industry')
                 ->helperText('Pre-filled from the service catalog — refine if needed.'),
             Select::make('personality')->label('Brand personality')
                 ->options(BrandBrief::PERSONALITIES)->required(),
+            CheckboxList::make('adjectives')->label('Personality adjectives')
+                ->options(BrandBrief::ADJECTIVES)->columns(2)
+                ->helperText('Pick 3–5 — they refine the palette + type.'),
             TextInput::make('emotional_goal')->label('How should a visitor feel?')
                 ->placeholder('e.g. confident they hired a real pro'),
             TextInput::make('color_anchors_use')->label('Colors to use (optional)')
-                ->placeholder('comma-separated'),
+                ->placeholder('comma-separated — existing brand colors are harmonized around'),
             TextInput::make('color_anchors_avoid')->label('Colors to avoid (optional)')
                 ->placeholder('comma-separated'),
             TextInput::make('admired_brand')->label('A brand they admire (optional)'),
+            Select::make('structure')->label('Layout structure')
+                ->options([
+                    '' => 'Let the AI recommend',
+                    'trust' => 'Trust — clean & established',
+                    'bold' => 'Bold — confident & dense',
+                    'warm' => 'Warm — friendly & rounded',
+                ])
+                ->default('')->selectablePlaceholder(false),
 
             Actions::make([
-                Action::make('generate')
-                    ->label('Generate brand')
-                    ->icon('heroicon-o-sparkles')
-                    ->action(function (Get $get, Set $set): void {
-                        $brand = app(BrandStudio::class)->generateFromAnswers([
-                            'industry' => $get('industry'),
-                            'personality' => $get('personality'),
-                            'emotional_goal' => $get('emotional_goal'),
-                            'color_anchors_use' => $get('color_anchors_use'),
-                            'color_anchors_avoid' => $get('color_anchors_avoid'),
-                            'admired_brand' => $get('admired_brand'),
-                        ]);
-
-                        $set('primary', $brand->palette['primary']);
-                        $set('accent', $brand->palette['accent']);
-                        $set('text', $brand->palette['text']);
-                        $set('heading_font', $brand->typography['heading']);
-                        $set('body_font', $brand->typography['body']);
-                        $set('rationale', $brand->rationale);
-                        $set('adjustments', $brand->adjustments === []
-                            ? 'None — all fonts and colors validated.'
-                            : implode("\n", $brand->adjustments));
-
-                        Notification::make()->success()->title('Brand generated')
-                            ->body('Review and adjust below, then Save & push.')->send();
-                    }),
+                Action::make('generate')->label('Generate candidates')->icon('heroicon-o-sparkles')
+                    ->action(fn (Get $get, Set $set) => self::runBrandGenerate($get, $set, [])),
+                Action::make('regenerate')->label('Show me 3 more')->icon('heroicon-o-arrow-path')->color('gray')
+                    ->visible($hasCandidates)
+                    ->action(fn (Get $get, Set $set) => self::runBrandGenerate($get, $set, self::brandAvoidFrom($get('candidates')))),
             ]),
 
-            ColorPicker::make('primary')->label('Primary color'),
-            ColorPicker::make('accent')->label('Accent color'),
-            ColorPicker::make('text')->label('Text color'),
-            Select::make('heading_font')->label('Heading font')->options($fonts)->searchable(),
-            Select::make('body_font')->label('Body font')->options($fonts)->searchable(),
-            Textarea::make('rationale')->label('Why this brand')
-                ->readOnly()->dehydrated(false)->rows(3)
-                ->placeholder('Generate to see the rationale.'),
-            Textarea::make('adjustments')->label('Validation adjustments')
+            Hidden::make('candidates'),
+            Hidden::make('resolved_structure'),
+            Textarea::make('structure_note')->label('Structure')
                 ->readOnly()->dehydrated(false)->rows(2)
-                ->placeholder('Any font/color the guard corrected will show here.'),
+                ->placeholder('Generate to see the AI structure pick.')
+                ->visible($hasCandidates),
+
+            Radio::make('selected')->label('Choose a candidate')
+                ->options(fn (Get $get) => self::brandCandidateOptions($get('candidates')))
+                ->live()
+                ->afterStateUpdated(fn (Get $get, Set $set) => self::fillBrandPreview($get, $set))
+                ->visible($hasCandidates),
+
+            ColorPicker::make('p_primary')->label('Primary')->disabled()->dehydrated(false)->visible($hasCandidates),
+            ColorPicker::make('p_secondary')->label('Secondary')->disabled()->dehydrated(false)->visible($hasCandidates),
+            ColorPicker::make('p_accent')->label('Accent (CTA)')->disabled()->dehydrated(false)->visible($hasCandidates),
+            ColorPicker::make('p_text')->label('Text')->disabled()->dehydrated(false)->visible($hasCandidates),
+            ColorPicker::make('p_bg')->label('Background')->disabled()->dehydrated(false)->visible($hasCandidates),
+            ColorPicker::make('p_bg_alt')->label('Section tint')->disabled()->dehydrated(false)->visible($hasCandidates),
+            TextInput::make('p_fonts')->label('Fonts (heading / body)')->disabled()->dehydrated(false)->visible($hasCandidates),
+            Textarea::make('rationale')->label('Why this brand')->readOnly()->dehydrated(false)->rows(3)->visible($hasCandidates),
+            Textarea::make('adjustments')->label('Validation adjustments')->readOnly()->dehydrated(false)->rows(2)->visible($hasCandidates),
         ];
+    }
+
+    /**
+     * Run generation (shared by Generate + regenerate): resolve the structure (the
+     * operator's pick, else the AI recommendation), generate the candidates, and
+     * select the recommended one into the preview.
+     *
+     * @param  list<string>  $avoid
+     */
+    private static function runBrandGenerate(Get $get, Set $set, array $avoid): void
+    {
+        $answers = self::brandAnswers($get);
+        $studio = app(BrandStudio::class);
+
+        $picked = (string) $get('structure');
+        if (in_array($picked, ['trust', 'bold', 'warm'], true)) {
+            $structure = $picked;
+            $note = 'Using your selected structure: '.ucfirst($structure).'.';
+        } else {
+            $rec = $studio->recommendStructure($answers);
+            $structure = $rec->slug;
+            $note = 'AI recommends '.ucfirst($structure).($rec->rationale !== '' ? ' — '.$rec->rationale : '').'.';
+        }
+
+        $set('candidates', $studio->generateCandidates($answers, $structure, $avoid)->toArray()['candidates']);
+        $set('resolved_structure', $structure);
+        $set('structure_note', $note);
+
+        // Select the recommended candidate (else the first) and fill the preview.
+        $candidates = is_array($get('candidates')) ? $get('candidates') : [];
+        $selected = 0;
+        foreach ($candidates as $i => $candidate) {
+            if (! empty($candidate['recommended'])) {
+                $selected = $i;
+                break;
+            }
+        }
+        $set('selected', (string) $selected);
+        self::fillBrandPreview($get, $set);
+
+        Notification::make()->success()->title('Candidates generated')
+            ->body('Pick one (the recommended is pre-selected), then Save & push.')->send();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function brandAnswers(Get $get): array
+    {
+        return [
+            'industry' => $get('industry'),
+            'personality' => $get('personality'),
+            'adjectives' => $get('adjectives'),
+            'emotional_goal' => $get('emotional_goal'),
+            'color_anchors_use' => $get('color_anchors_use'),
+            'color_anchors_avoid' => $get('color_anchors_avoid'),
+            'admired_brand' => $get('admired_brand'),
+        ];
+    }
+
+    /**
+     * Radio options: index => "Heading / Body (★ recommended)".
+     *
+     * @return array<int, string>
+     */
+    private static function brandCandidateOptions(mixed $candidates): array
+    {
+        if (! is_array($candidates)) {
+            return [];
+        }
+
+        $options = [];
+        foreach ($candidates as $i => $candidate) {
+            $type = is_array($candidate['typography'] ?? null) ? $candidate['typography'] : [];
+            $label = ($type['heading'] ?? '?').' / '.($type['body'] ?? '?');
+            $options[(int) $i] = $label.(! empty($candidate['recommended']) ? '  ★ recommended' : '');
+        }
+
+        return $options;
+    }
+
+    private static function fillBrandPreview(Get $get, Set $set): void
+    {
+        $candidates = is_array($get('candidates')) ? $get('candidates') : [];
+        $candidate = $candidates[(int) $get('selected')] ?? null;
+        if (! is_array($candidate)) {
+            return;
+        }
+
+        $palette = is_array($candidate['palette'] ?? null) ? $candidate['palette'] : [];
+        $type = is_array($candidate['typography'] ?? null) ? $candidate['typography'] : [];
+        $adjustments = is_array($candidate['adjustments'] ?? null) ? $candidate['adjustments'] : [];
+
+        foreach (['primary', 'secondary', 'accent', 'text', 'bg', 'bg_alt'] as $slot) {
+            $set('p_'.$slot, $palette[$slot] ?? null);
+        }
+        $set('p_fonts', ($type['heading'] ?? '?').' / '.($type['body'] ?? '?'));
+        $set('rationale', (string) ($candidate['rationale'] ?? ''));
+        $set('adjustments', $adjustments === [] ? 'None — all fonts and colors validated.' : implode("\n", $adjustments));
+    }
+
+    /**
+     * Short summaries of the current candidates so a regenerate varies from them.
+     *
+     * @return list<string>
+     */
+    private static function brandAvoidFrom(mixed $candidates): array
+    {
+        if (! is_array($candidates)) {
+            return [];
+        }
+
+        $summaries = [];
+        foreach ($candidates as $candidate) {
+            $palette = is_array($candidate['palette'] ?? null) ? $candidate['palette'] : [];
+            $type = is_array($candidate['typography'] ?? null) ? $candidate['typography'] : [];
+            $summaries[] = ($palette['primary'] ?? '?').'+'.($palette['accent'] ?? '?').' / '.($type['heading'] ?? '?');
+        }
+
+        return $summaries;
     }
 
     /**

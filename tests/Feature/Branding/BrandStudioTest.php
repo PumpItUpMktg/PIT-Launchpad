@@ -119,3 +119,39 @@ it('returns a non-fatal result when there is no brand to push', function () {
 
     expect($result['updated'])->toBeFalse()->and($result['error'])->toContain('No brand captured');
 });
+
+const CANDIDATES_JSON = '{"candidates":[{"tokens":{"--wf-color-primary":"#1B3A5B","--wf-color-secondary":"#3E6E9E","--wf-color-accent":"#B25C00","--wf-color-text":"#1A1A1A","--wf-color-text-muted":"#5B6470","--wf-color-bg":"#FFFFFF","--wf-color-bg-alt":"#F4F6F8","--wf-color-border":"#E2E6EB"},"fonts":{"--wf-font-heading":"Archivo","--wf-font-body":"Inter"},"rationale":"Navy and amber for plumbing.","recommended":true},{"tokens":{"--wf-color-primary":"#1B3A5B","--wf-color-secondary":"#3E6E9E","--wf-color-accent":"#B25C00","--wf-color-text":"#1A1A1A","--wf-color-text-muted":"#5B6470","--wf-color-bg":"#FFFFFF","--wf-color-bg-alt":"#F4F6F8","--wf-color-border":"#E2E6EB"},"fonts":{"--wf-font-heading":"Sora","--wf-font-body":"Inter"},"rationale":"Alternate.","recommended":false}]}';
+
+it('generates a candidate set for a pinned structure', function () {
+    [$studio] = brandStudio(CANDIDATES_JSON);
+
+    $set = $studio->generateCandidates(['industry' => 'plumbing', 'personality' => 'trustworthy'], 'bold');
+
+    expect($set->structure)->toBe('bold')
+        ->and($set->candidates)->toHaveCount(2)
+        ->and($set->recommended()->typography['heading'])->toBe('Archivo');
+});
+
+it('recommends a structure (model pick) and uses it when none is pinned', function () {
+    [$studio] = brandStudio('{"structure":"warm","rationale":"Friendly and local."}');
+
+    expect($studio->recommendStructure(['industry' => 'hvac', 'personality' => 'friendly-local'])->slug)->toBe('warm');
+});
+
+it('persists the chosen structure preset on save', function () {
+    $site = Site::factory()->create();
+
+    [$studio] = brandStudio();
+    $studio->save($site, ['primary' => '#0f62fe'], ['heading' => 'Inter', 'body' => 'Inter'], 'bold');
+
+    expect(SiteBranding::withoutGlobalScopes()->where('site_id', $site->id)->firstOrFail()->structure_preset)->toBe('bold');
+});
+
+it('threads the personality adjectives into the generation prompt', function () {
+    $site = Site::factory()->create();
+
+    [$studio, $fake] = brandStudio();
+    $studio->generate($site, ['industry' => 'roofing', 'personality' => 'trustworthy', 'adjectives' => ['rugged', 'established']]);
+
+    expect($fake->prompts[0])->toContain('Rugged')->toContain('Established');
+});
