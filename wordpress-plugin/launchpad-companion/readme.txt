@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.8.3
+Stable tag: 0.8.4
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -119,8 +119,15 @@ assets/wireframe.css, parameterized entirely by CSS custom properties in two tie
   values are charset-restricted (no CSS breakout). The tenant's heading/body Google
   Fonts are enqueued so the --wf-font-* tokens render. Both options are written by
   push-brand-kit. Every token has a safe fallback, so an un-branded page is presentable.
-  The CTA-button text uses `--wf-color-on-accent` (the engine picks white or dark per
-  accent for AA), so a light accent still carries readable button text.
+
+The brand tokens carry the COLOR SCHEME (Light or Dark) in their surface values — a
+light token set renders a light page, a dark set a dark page. Every surface paints
+both its background and foreground; foregrounds are ONLY the gated tokens
+(--wf-color-text / -text-muted / -on-accent — the CTA text the engine picks white-or-
+dark per accent). The brand hues --wf-color-primary/-secondary are fills/accents and
+--wf-color-accent is the CTA button fill — never a readable-text foreground. So both
+schemes render coherently and no element falls back to the theme white bg or the WP
+default #32373c button.
 
 Style only the `wf-*` classes — never the id-tied `.elementor-element-{id}` classes,
 which are rebuilt on every compose.

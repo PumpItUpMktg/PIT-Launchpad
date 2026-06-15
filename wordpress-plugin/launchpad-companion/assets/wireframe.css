@@ -1,18 +1,27 @@
 /*
- * Launchpad base wf-* stylesheet (Brand System, Phase 1).
+ * Launchpad base wf-* stylesheet (Brand System).
  *
  * Styles the native wireframe-library widgets by their stable `wf-*` hook classes
  * (NEVER the id-tied .elementor-element-{id} classes, which are rebuilt on every
  * compose). Parameterized ENTIRELY by CSS custom properties in two ownership tiers:
  *
  *   structure tokens (--wf-radius/-shadow/-section-gap/-pad-block/-button-radius/
- *     -heading-*)  ── set by one of three preset bundles: body.wf-structure-{slug}
- *   brand tokens   (--wf-color-* / --wf-font-*)  ── set per-tenant in a :root block
- *     the companion prints from the pushed brand kit (push-brand-kit)
+ *     -heading-*)  ── FORM: one of three preset bundles (body.wf-structure-{slug})
+ *   brand tokens   (--wf-color-* / --wf-font-*)  ── per-tenant :root block printed
+ *     from push-brand-kit; carries the SCHEME (light OR dark) in its surface tokens
  *
- * Every value below resolves through a var() with a safe fallback, so an
- * un-branded / un-structured page is still presentable. Brand never leaks into
- * structure; structure never hardcodes brand.
+ * SURFACE MODEL (the single contract the engine's contrast gate validates and the
+ * picker preview mirrors): every surface paints BOTH its background and its
+ * foreground from paired tokens — nothing inherits the theme white bg or the WP
+ * default #32373c button. Foregrounds are ONLY the gated tokens: --wf-color-text,
+ * --wf-color-text-muted, and --wf-color-on-accent (CTA text). The brand hues
+ * (--wf-color-primary/secondary) are FILLS/accents, never a foreground — and
+ * --wf-color-accent is the CTA button fill. This is scheme-agnostic: a light token
+ * set renders a light page, a dark token set a dark page, both coherent.
+ *
+ * Every value resolves through a var() with a safe fallback, so an un-branded page
+ * is still presentable. Brand never leaks into structure; structure never hardcodes
+ * brand; form never implies a scheme.
  */
 
 /* ---- Fallback token values (a tenant :root block + a structure bundle override these) ---- */
@@ -52,9 +61,8 @@
  * Base layer — applies to every wf-block on a managed page
  *
  * SURFACE OWNERSHIP: every surface sets BOTH its background and its foreground from
- * paired tokens, so nothing inherits the theme's default white bg or #32373c button.
- * Backgrounds are always light + text always dark (the engine guarantees the tokens),
- * so the page reads coherently regardless of the brand palette.
+ * paired tokens (see the header). The engine's gate guarantees those pairs pass
+ * contrast in the chosen scheme, so the page reads coherently in Light OR Dark.
  * =================================================================== */
 
 /* The page surface itself (managed pages) — so no theme bg shows between blocks. */
@@ -111,9 +119,11 @@ body.wf-structure-warm {
     color: var(--wf-color-text-muted);
 }
 
-/* Links. */
+/* Links — the gated text color, underlined to distinguish (a brand hue isn't a
+ * gated fg pair, so it's never used as a foreground). */
 .wf-block a:not(.elementor-button) {
-    color: var(--wf-color-primary);
+    color: var(--wf-color-text);
+    text-decoration: underline;
 }
 
 /* Buttons: EVERY button paints bg + fg from tokens (never the theme default
@@ -139,8 +149,8 @@ body.wf-structure-warm {
 }
 :is(.wf-hero-cta-phone, .wf-cta-phone) .elementor-button {
     background-color: transparent;
-    color: var(--wf-color-primary);
-    border: var(--wf-border-width, 1px) solid var(--wf-color-primary);
+    color: var(--wf-color-text);
+    border: var(--wf-border-width, 1px) solid var(--wf-color-text);
     box-shadow: none;
 }
 
@@ -158,7 +168,7 @@ body.wf-structure-warm {
 
 /* Hero — two-up copy/image (the library row container holds both). */
 .wf-hero-eyebrow {
-    color: var(--wf-color-accent);
+    color: var(--wf-color-text);
     font-family: var(--wf-font-heading);
     font-weight: 700;
     text-transform: uppercase;
@@ -167,7 +177,7 @@ body.wf-structure-warm {
 
 /* Trust bar — the value/label pairs read as stat cells. */
 :is(.wf-trust-value-1, .wf-trust-value-2, .wf-trust-value-3, .wf-trust-value-4) {
-    color: var(--wf-color-primary);
+    color: var(--wf-color-text);
     font-family: var(--wf-font-heading);
     font-weight: 800;
 }
@@ -177,7 +187,7 @@ body.wf-structure-warm {
 
 /* Problem / solution — the two columns get a hairline + radius card treatment. */
 :is(.wf-ps-problem-eyebrow, .wf-ps-solution-eyebrow) {
-    color: var(--wf-color-accent);
+    color: var(--wf-color-text);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -185,7 +195,7 @@ body.wf-structure-warm {
 
 /* Why-us cards. */
 :is(.wf-why-card-1-title, .wf-why-card-2-title, .wf-why-card-3-title) {
-    color: var(--wf-color-primary);
+    color: var(--wf-color-text);
 }
 :is(.wf-why-card-1-body, .wf-why-card-2-body, .wf-why-card-3-body) {
     border: var(--wf-border-width) solid var(--wf-color-border);
@@ -206,11 +216,11 @@ body.wf-structure-warm {
     padding: 1.5rem;
 }
 :is(.wf-review-1-name, .wf-review-2-name, .wf-review-3-name) {
-    color: var(--wf-color-primary);
+    color: var(--wf-color-text);
     font-weight: 700;
 }
 .wf-reviews-rating {
-    color: var(--wf-color-accent);
+    color: var(--wf-color-text);
 }
 
 /* FAQ — the nested-accordion items take the structure radius + hairline. */
@@ -224,7 +234,7 @@ body.wf-structure-warm {
 }
 .wf-faq summary,
 .wf-faq .e-n-accordion-item-title {
-    color: var(--wf-color-primary);
+    color: var(--wf-color-text);
     font-family: var(--wf-font-heading);
     font-weight: var(--wf-heading-weight);
 }
@@ -235,7 +245,7 @@ body.wf-structure-warm {
     text-align: center;
 }
 .wf-cta-heading {
-    color: var(--wf-color-primary);
+    color: var(--wf-color-text);
 }
 
 /* ===================================================================
