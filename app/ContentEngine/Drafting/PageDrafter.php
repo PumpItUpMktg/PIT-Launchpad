@@ -143,7 +143,9 @@ class PageDrafter
         return 'KIT SLOTS — emit one block per slot, keyed by its EXACT slot key. Respect content_type, role '
             ."(problem→solution arc), and cardinality (repeat a slot's block once per item):\n".implode("\n", $lines)."\n\n"
             .'For image/gallery slots: do NOT render. Emit an image SPEC block instead (image.<slot>) and leave the slot out. '
-            .'Entity-sourced slots (the platform fills them) you may omit.';
+            .'Entity-sourced slots (the platform fills them) you may omit. '
+            .'Inside a body/rich-text slot, do NOT use an H1 or H2 heading — the page section already supplies its '
+            .'heading; use H3 or lower for any sub-heading within the copy.';
     }
 
     private function slotLine(SlotDefinition $slot): string
