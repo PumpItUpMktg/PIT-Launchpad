@@ -94,7 +94,7 @@ class BrandGenerator
         }
 
         if ($candidates === []) {
-            $candidates = [$this->safeCandidate()];
+            $candidates = [$this->safeCandidate($structure)];
         }
 
         return new BrandCandidateSet($this->electRecommended($candidates), $structure);
@@ -114,11 +114,16 @@ class BrandGenerator
 
         $palette = $this->fullPalette($tokens, $adjustments);
 
-        // Hard gate: white CTA text must be readable on the accent. Un-nudgeable
-        // without changing the brand's action color, so drop the candidate.
+        // Hard gate: the accent must carry readable CTA text with its BEST (white or
+        // dark) text color. Only a genuine mid-tone accent — where neither passes —
+        // is dropped; a light accent is rescued by dark CTA text (below), not dropped.
         if (! ContrastMatrix::accentPassesButton($palette['accent'])) {
             return null;
         }
+
+        // The CTA text color for this accent (white or dark) → the on-accent token the
+        // stylesheet's button uses, so a light accent gets readable dark text.
+        $palette['on_accent'] = ContrastMatrix::onAccent($palette['accent']);
 
         // Soft gate: nudge body/muted text to a readable neutral when it fails on the
         // page or alt-tint background, and record it.
@@ -228,21 +233,35 @@ class BrandGenerator
         );
     }
 
-    /** A guaranteed-accessible fallback candidate from the safe palette + fonts. */
-    private function safeCandidate(): BrandCandidate
+    /**
+     * A guaranteed-accessible fallback for the chosen structure: the safe palette
+     * (with its CTA text auto-chosen for the accent) + the structure's first vetted
+     * font pairing, so the fallback is BOTH accessible and structure-matched. A
+     * self-check asserts it clears the same gate — a misconfigured safe palette would
+     * surface in tests, never ship a failing default.
+     */
+    private function safeCandidate(string $structure): BrandCandidate
     {
-        $adjustments = [];
+        $adjustments = ['All generated candidates were dropped by the contrast gate; using the safe default.'];
         $palette = $this->fullPalette([], $adjustments);
+        $palette['on_accent'] = ContrastMatrix::onAccent($palette['accent']);
+
+        // Self-check: the safe palette must itself pass (else the config is broken).
+        if (ContrastMatrix::failures($palette) !== []) {
+            $adjustments[] = 'WARNING: the configured safe palette does not pass the contrast gate — review launchpad.brand.safe_colors.';
+        }
+
+        $pairing = (array) config('launchpad.brand.font_pairings.'.$structure.'.0', []);
 
         return new BrandCandidate(
             palette: $palette,
             typography: [
-                'heading' => (string) config('launchpad.brand.safe_fonts.heading', 'Poppins'),
-                'body' => (string) config('launchpad.brand.safe_fonts.body', 'Inter'),
+                'heading' => (string) ($pairing['heading'] ?? config('launchpad.brand.safe_fonts.heading', 'Inter')),
+                'body' => (string) ($pairing['body'] ?? config('launchpad.brand.safe_fonts.body', 'Inter')),
             ],
             rationale: 'A safe, accessible default palette — the generated candidates did not pass the accessibility gate.',
             recommended: true,
-            adjustments: ['All generated candidates were dropped by the contrast gate; using the safe default.'],
+            adjustments: $adjustments,
         );
     }
 
@@ -306,9 +325,12 @@ class BrandGenerator
         }
 
         $lines[] = '';
-        $lines[] = 'Requirements for EACH candidate:';
-        $lines[] = '- A full 8-color palette. WCAG-AA: body text >= 4.5:1 on BOTH bg and bg_alt; WHITE button '
-            .'text >= 4.5:1 on the accent (the accent is the CTA color); muted text >= 3:1 on bg. Use #RRGGBB.';
+        $lines[] = 'Requirements for EACH candidate (WCAG-AA — these are enforced, design to pass):';
+        $lines[] = '- A full 8-color palette in #RRGGBB. The text color MUST hit >= 4.5:1 on BOTH bg and bg_alt '
+            .'(so keep bg/bg_alt light when text is dark, or dark when text is light); muted text >= 3:1 on bg.';
+        $lines[] = '- The accent is the CTA color. Its button text is auto-chosen (white OR dark) for max contrast, '
+            .'so a light, punchy accent is fine — just make the accent itself a saturated, deliberate color (not a '
+            .'near-bg tint), distinct from the primary.';
         $lines[] = '- Use ONE of these vetted heading/body font pairings per candidate (spelled exactly; vary '
             .'the pairing across candidates): '.implode('; ', $pairLines).'.';
         $lines[] = '- An industry-grounded, SPECIFIC rationale (name the trade and what the colors do for it); '

@@ -46,6 +46,7 @@ class BrandKitAssembler
         'primary' => '--wf-color-primary',
         'secondary' => '--wf-color-secondary',
         'accent' => '--wf-color-accent',
+        'on_accent' => '--wf-color-on-accent',
         'text' => '--wf-color-text',
         'text_muted' => '--wf-color-text-muted',
         'text-muted' => '--wf-color-text-muted',

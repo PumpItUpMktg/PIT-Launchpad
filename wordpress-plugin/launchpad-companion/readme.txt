@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.8.1
+Stable tag: 0.8.2
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -119,6 +119,8 @@ assets/wireframe.css, parameterized entirely by CSS custom properties in two tie
   values are charset-restricted (no CSS breakout). The tenant's heading/body Google
   Fonts are enqueued so the --wf-font-* tokens render. Both options are written by
   push-brand-kit. Every token has a safe fallback, so an un-branded page is presentable.
+  The CTA-button text uses `--wf-color-on-accent` (the engine picks white or dark per
+  accent for AA), so a light accent still carries readable button text.
 
 Style only the `wf-*` classes — never the id-tied `.elementor-element-{id}` classes,
 which are rebuilt on every compose.

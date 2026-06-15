@@ -65,7 +65,7 @@ it('returns a payload carrying just the captured primary color (today\'s thin in
 it('maps the palette + typography to the native --wf-* token set', function () {
     $site = brandingForSite([
         'palette' => [
-            'primary' => '#1B3A5B', 'secondary' => '#3E6E9E', 'accent' => '#E8A23D',
+            'primary' => '#1B3A5B', 'secondary' => '#3E6E9E', 'accent' => '#E8A23D', 'on_accent' => '#1A1A1A',
             'text' => '#1A1A1A', 'text_muted' => '#5B6470', 'bg' => '#FFFFFF',
             'bg_alt' => '#F4F6F8', 'border' => '#E2E6EB',
         ],
@@ -76,6 +76,7 @@ it('maps the palette + typography to the native --wf-* token set', function () {
         '--wf-color-primary' => '#1B3A5B',
         '--wf-color-secondary' => '#3E6E9E',
         '--wf-color-accent' => '#E8A23D',
+        '--wf-color-on-accent' => '#1A1A1A',
         '--wf-color-text' => '#1A1A1A',
         '--wf-color-text-muted' => '#5B6470',
         '--wf-color-bg' => '#FFFFFF',
