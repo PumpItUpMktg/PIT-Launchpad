@@ -73,13 +73,60 @@ return [
             'heading' => env('LAUNCHPAD_BRAND_SAFE_HEADING_FONT', 'Poppins'),
             'body' => env('LAUNCHPAD_BRAND_SAFE_BODY_FONT', 'Inter'),
         ],
+        // The full safe palette (Phase 3): every brand-token slot has a known-good,
+        // AA-passing default the generator falls back to per-slot. The wf-* stylesheet
+        // mirrors these as its own fallbacks.
         'safe_colors' => [
             'primary' => '#0F62FE',
+            'secondary' => '#3E6E9E',
             'accent' => '#FF6F00',
             'text' => '#1A1A1A',
+            'text_muted' => '#5B6470',
+            'bg' => '#FFFFFF',
+            'bg_alt' => '#F4F6F8',
+            'border' => '#E2E6EB',
         ],
         // Minimum WCAG contrast ratio for the text color against a light bg.
         'min_text_contrast' => 4.5,
+
+        // Phase 3 — multi-candidate generator.
+        //
+        // Deterministic personality → structure map: the AI recommends a structure,
+        // but an off-list answer falls back through this (the enforcer behind the
+        // proposer). Keys are BrandBrief::PERSONALITIES.
+        'structure_for_personality' => [
+            'trustworthy' => 'trust',
+            'modern-technical' => 'bold',
+            'friendly-local' => 'warm',
+            'premium' => 'trust',
+            'bold-urgent' => 'bold',
+        ],
+        'default_structure' => 'trust',
+
+        // The curated heading/body PAIRINGS the generator is STEERED to, per
+        // structure (the model picks one pairing per candidate, varying across the
+        // set). Generation is constrained to these in-prompt; every returned family
+        // is still validated against the full FontCatalog. [operator-redlined]
+        'font_pairings' => [
+            'trust' => [
+                ['heading' => 'Inter', 'body' => 'Inter'],                  // clean single-family workhorse
+                ['heading' => 'Archivo', 'body' => 'Inter'],                // heading w/ more character, neutral body
+                ['heading' => 'Libre Franklin', 'body' => 'Source Sans 3'],
+            ],
+            'bold' => [
+                ['heading' => 'Sora', 'body' => 'Inter'],
+                ['heading' => 'Space Grotesk', 'body' => 'Inter'],
+                ['heading' => 'Poppins', 'body' => 'Work Sans'],
+            ],
+            'warm' => [
+                ['heading' => 'Fraunces', 'body' => 'Source Sans 3'],       // serif head + humanist body
+                ['heading' => 'Bitter', 'body' => 'Karla'],
+                ['heading' => 'Nunito Sans', 'body' => 'Nunito Sans'],      // humanist single (warm w/o serif)
+            ],
+        ],
+
+        // Candidate count surfaced by default.
+        'candidate_count' => 4,
     ],
 
 ];
