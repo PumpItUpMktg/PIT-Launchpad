@@ -50,26 +50,39 @@
 
 /* ===================================================================
  * Base layer — applies to every wf-block on a managed page
+ *
+ * SURFACE OWNERSHIP: every surface sets BOTH its background and its foreground from
+ * paired tokens, so nothing inherits the theme's default white bg or #32373c button.
+ * Backgrounds are always light + text always dark (the engine guarantees the tokens),
+ * so the page reads coherently regardless of the brand palette.
  * =================================================================== */
 
+/* The page surface itself (managed pages) — so no theme bg shows between blocks. */
+body.wf-structure-trust,
+body.wf-structure-bold,
+body.wf-structure-warm {
+    background-color: var(--wf-color-bg);
+    color: var(--wf-color-text);
+}
+
 /* Section vertical rhythm + density (the library's baked padding is stripped on
- * compose, so the preset owns it here). */
+ * compose, so the preset owns it here). Each block paints bg + fg. */
 .wf-block {
     padding-block: var(--wf-pad-block);
     background-color: var(--wf-color-bg);
     color: var(--wf-color-text);
 }
 
-/* The alternating-tint blocks (the structure preset decides how strong the tint is;
- * Bold turns --wf-color-bg-alt into a dark/saturated block). */
+/* The alternating-tint blocks — a light section tint (bg + fg both set). */
 .wf-block-trust-bar,
 .wf-block-why-us,
 .wf-block-faq {
     background-color: var(--wf-color-bg-alt);
+    color: var(--wf-color-text);
 }
 
-/* Headings: brand font + structure transform/weight/tracking. Color inherits from
- * the block (so it stays legible on dark alt blocks once brand tokens are sane). */
+/* Headings: brand font + structure transform/weight/tracking. Color inherits the
+ * block's (dark) text token. */
 .wf-block :is(h1, h2, h3, h4, .elementor-heading-title) {
     font-family: var(--wf-font-heading);
     font-weight: var(--wf-heading-weight);
@@ -103,12 +116,16 @@
     color: var(--wf-color-primary);
 }
 
-/* Buttons: accent fill, structure corner. The primary CTA is the action color; the
+/* Buttons: EVERY button paints bg + fg from tokens (never the theme default
+ * #32373c). The default/primary CTA is the accent + its paired on-accent text; the
  * phone CTA is an outline variant so the two read as primary/secondary. */
 .wf-block .elementor-button {
     border-radius: var(--wf-button-radius);
     font-family: var(--wf-font-heading);
     font-weight: 600;
+    background-color: var(--wf-color-accent);
+    color: var(--wf-color-on-accent, #fff);
+    border: none;
     box-shadow: var(--wf-shadow-sm);
     transition: filter 0.15s ease, transform 0.15s ease;
 }
@@ -175,6 +192,7 @@
     border-radius: var(--wf-radius);
     box-shadow: var(--wf-shadow);
     background-color: var(--wf-color-bg);
+    color: var(--wf-color-text);
     padding: 1.5rem;
 }
 
@@ -184,6 +202,7 @@
     border-radius: var(--wf-radius);
     box-shadow: var(--wf-shadow);
     background-color: var(--wf-color-bg);
+    color: var(--wf-color-text);
     padding: 1.5rem;
 }
 :is(.wf-review-1-name, .wf-review-2-name, .wf-review-3-name) {
@@ -199,6 +218,7 @@
     border: var(--wf-border-width) solid var(--wf-color-border);
     border-radius: var(--wf-radius);
     background-color: var(--wf-color-bg);
+    color: var(--wf-color-text);
     margin-bottom: 0.75rem;
     overflow: hidden;
 }
@@ -242,7 +262,8 @@ body.wf-structure-trust {
 }
 
 /* Bold — confident, dense, conversion-forward; sharp corners, strong shadow,
- * color-as-structure (alt blocks go dark/saturated via --wf-color-bg-alt). */
+ * uppercase headings. Its impact is the saturated ACCENT + the dense/sharp layout
+ * on LIGHT surfaces — never a dark theme (the palette tokens stay light/dark). */
 body.wf-structure-bold {
     --wf-radius: 2px;
     --wf-radius-sm: 0px;
@@ -258,11 +279,6 @@ body.wf-structure-bold {
     --wf-heading-transform: uppercase;
     --wf-heading-weight: 800;
     --wf-heading-tracking: -0.01em;
-}
-/* On Bold's dark alt blocks, cards sit on the page bg so they stay readable. */
-body.wf-structure-bold :is(.wf-why-card-1-body, .wf-why-card-2-body, .wf-why-card-3-body, .wf-review-1-body, .wf-review-2-body, .wf-review-3-body) {
-    background-color: var(--wf-color-bg);
-    color: var(--wf-color-text);
 }
 
 /* Warm — friendly, human, local; rounded, soft shadows, comfortable spacing. */

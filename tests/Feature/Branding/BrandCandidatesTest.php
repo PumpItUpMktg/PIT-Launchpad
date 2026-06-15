@@ -2,6 +2,7 @@
 
 use App\Branding\BrandBrief;
 use App\Branding\BrandGenerator;
+use App\Branding\ColorContrast;
 use App\Branding\ContrastMatrix;
 use App\Branding\FontCatalog;
 use Tests\Support\FakeClaudeClient;
@@ -108,9 +109,40 @@ it('DROPS only a genuine mid-tone accent (neither white nor dark passes) → str
         ->and(ContrastMatrix::failures($safe->palette))->toBe([]);    // the fallback itself passes
 });
 
-it('auto-nudges unreadable body text to a safe neutral and flags it (accent still valid)', function () {
+it('corrects an inverted/dark theme to light surfaces for ALL structures (the Bold dark-theme bug)', function () {
+    // Eric's Bold run: a fully-inverted dark theme. bg/text must be forced light/dark;
+    // the brand accent + primary survive (Bold's punch comes from those + structure).
     $set = generator(json_encode(['candidates' => [
-        candidate(['tokens' => array_merge(candidate()['tokens'], ['--wf-color-text' => '#CCCCCC'])]), // fails on white bg
+        candidate(['tokens' => array_merge(candidate()['tokens'], [
+            '--wf-color-bg' => '#0F1B2D',
+            '--wf-color-bg-alt' => '#13233a',
+            '--wf-color-text' => '#F1F5F9',
+            '--wf-color-text-muted' => '#94A3B8',
+            '--wf-color-accent' => '#22D3EE', // cyan
+        ])]),
+    ]]))->generateCandidates(brief(), 'bold', 1);
+
+    $c = $set->candidates[0];
+    expect($c->palette['bg'])->toBe('#ffffff')          // forced light
+        ->and($c->palette['bg_alt'])->toBe('#f4f6f8')   // light tint
+        ->and($c->palette['text'])->toBe('#1a1a1a')     // forced dark
+        ->and($c->palette['accent'])->toBe('#22d3ee')   // brand accent preserved
+        ->and($c->palette['on_accent'])->toBe('#1a1a1a') // cyan is light → dark CTA text
+        ->and(collect($c->adjustments)->contains(fn ($a) => str_contains($a, 'backgrounds are always light')))->toBeTrue();
+});
+
+it('ColorContrast::isLight separates light backgrounds from dark', function () {
+    expect(ColorContrast::isLight('#ffffff'))->toBeTrue()
+        ->and(ColorContrast::isLight('#f4f6f8'))->toBeTrue()
+        ->and(ColorContrast::isLight('#0f1b2d'))->toBeFalse()
+        ->and(ColorContrast::isLight('#1a1a1a'))->toBeFalse();
+});
+
+it('auto-nudges low-contrast (but dark) body text to a safe neutral and flags it', function () {
+    // #777 is dark enough to pass the light-surface guard, but fails AA on the bg_alt
+    // tint — so nudgeText (not the light guard) corrects it.
+    $set = generator(json_encode(['candidates' => [
+        candidate(['tokens' => array_merge(candidate()['tokens'], ['--wf-color-text' => '#777777'])]),
     ]]))->generateCandidates(brief(), 'trust', 1);
 
     $c = $set->candidates[0];
