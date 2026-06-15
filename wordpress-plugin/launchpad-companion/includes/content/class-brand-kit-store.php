@@ -20,12 +20,16 @@
 
 namespace Launchpad\Companion\Content;
 
+use Launchpad\Companion\Meta;
+
 if (! defined('ABSPATH')) {
     exit;
 }
 
 final class BrandKitStore
 {
+    private const VALID_STRUCTURES = ['trust', 'bold', 'warm'];
+
     /** The Elementor system slots, in kit order, with their default titles. */
     private const SLOTS = [
         'primary' => 'Primary',
@@ -38,14 +42,94 @@ final class BrandKitStore
      * Apply the brand kit to the active Elementor Global Kit.
      *
      * Payload: {
-     *   colors: { primary?, secondary?, text?, accent? : "#hex" },
-     *   fonts:  { primary?, secondary?, text?, accent? : { family, weight? } }
+     *   colors:    { primary?, secondary?, text?, accent? : "#hex" },
+     *   fonts:     { primary?, secondary?, text?, accent? : { family, weight? } },
+     *   wf_tokens: { "--wf-color-primary"?: "#hex", "--wf-font-heading"?: "Inter", … },
+     *   structure: "trust" | "bold" | "warm"
      * }
+     *
+     * The wf_tokens + structure feed the NATIVE wf-* pages (the base wf-* stylesheet's
+     * :root block + body.wf-structure-{slug}); they are stored as options regardless of
+     * whether an Elementor Global Kit exists, so native pages get brand even on a site
+     * with no active kit. The colors/fonts feed the Elementor Global Kit (legacy/
+     * dynamic-tag path).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array{updated: bool, kit_id: int, colors_set: int, fonts_set: int, wf_tokens_set: int, structure_set: bool, error?: string}
+     */
+    public function install(array $payload): array
+    {
+        // Native wf-* layer first — independent of the Elementor Global Kit.
+        $wf_tokens_set = $this->store_wf_tokens($payload['wf_tokens'] ?? null);
+        $structure_set = $this->store_structure($payload['structure'] ?? null);
+
+        $result = $this->install_global_kit($payload);
+        $result['wf_tokens_set'] = $wf_tokens_set;
+        $result['structure_set'] = $structure_set;
+
+        // The native layer alone is a successful push even when there is no Elementor kit.
+        if (($wf_tokens_set > 0 || $structure_set) && ! $result['updated']) {
+            unset($result['error']);
+            $result['updated'] = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Store the per-tenant `--wf-*` brand tokens (lp_brand_tokens). Only valid
+     * `--wf-*` names with string values are kept. Returns how many were stored.
+     *
+     * @param  mixed  $tokens
+     */
+    private function store_wf_tokens($tokens): int
+    {
+        if (! is_array($tokens)) {
+            return 0;
+        }
+
+        $clean = [];
+        foreach ($tokens as $name => $value) {
+            if (is_string($name) && preg_match('/^--wf-[a-z0-9-]+$/', $name) && (is_string($value) || is_numeric($value))) {
+                $clean[$name] = (string) $value;
+            }
+        }
+
+        if ($clean === []) {
+            return 0;
+        }
+
+        update_option(Meta::OPTION_BRAND_TOKENS, $clean);
+
+        return count($clean);
+    }
+
+    /**
+     * Store the chosen structure preset (lp_structure_preset). Ignores anything not
+     * in the known set.
+     *
+     * @param  mixed  $structure
+     */
+    private function store_structure($structure): bool
+    {
+        if (! is_string($structure) || ! in_array($structure, self::VALID_STRUCTURES, true)) {
+            return false;
+        }
+
+        update_option(Meta::OPTION_STRUCTURE_PRESET, $structure);
+
+        return true;
+    }
+
+    /**
+     * The Elementor Global Kit write (system colors/typography). Unchanged behavior
+     * from the original install(); split out so the native wf-* layer can be stored
+     * even when there is no active kit.
      *
      * @param  array<string, mixed>  $payload
      * @return array{updated: bool, kit_id: int, colors_set: int, fonts_set: int, error?: string}
      */
-    public function install(array $payload): array
+    private function install_global_kit(array $payload): array
     {
         $kit_id = $this->active_kit_id();
         if ($kit_id <= 0) {

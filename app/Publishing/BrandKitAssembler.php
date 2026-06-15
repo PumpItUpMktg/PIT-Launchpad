@@ -37,7 +37,28 @@ class BrandKitAssembler
     private const COLOR_SLOTS = ['primary', 'secondary', 'text', 'accent'];
 
     /**
-     * @return array{colors: array<string, string>, fonts: array<string, array<string, string>>}|null
+     * Intake palette keys → the brand `--wf-color-*` custom properties the base wf-*
+     * stylesheet consumes on native pages. Accepts both `text_muted`/`bg_alt` and
+     * the hyphenated aliases. Any key absent simply falls back to the stylesheet
+     * default (degrade by omission).
+     */
+    private const WF_COLOR_TOKENS = [
+        'primary' => '--wf-color-primary',
+        'secondary' => '--wf-color-secondary',
+        'accent' => '--wf-color-accent',
+        'text' => '--wf-color-text',
+        'text_muted' => '--wf-color-text-muted',
+        'text-muted' => '--wf-color-text-muted',
+        'bg' => '--wf-color-bg',
+        'bg_alt' => '--wf-color-bg-alt',
+        'bg-alt' => '--wf-color-bg-alt',
+        'border' => '--wf-color-border',
+    ];
+
+    private const VALID_STRUCTURES = ['trust', 'bold', 'warm'];
+
+    /**
+     * @return array{colors: array<string, string>, fonts: array<string, array<string, string>>, wf_tokens: array<string, string>, structure: string}|null
      */
     public function forSite(string $siteId): ?array
     {
@@ -49,14 +70,55 @@ class BrandKitAssembler
             return null;
         }
 
-        $colors = $this->colors(is_array($branding->palette) ? $branding->palette : []);
-        $fonts = $this->fonts(is_array($branding->typography) ? $branding->typography : []);
+        $palette = is_array($branding->palette) ? $branding->palette : [];
+        $typography = is_array($branding->typography) ? $branding->typography : [];
+
+        $colors = $this->colors($palette);
+        $fonts = $this->fonts($typography);
 
         if ($colors === [] && $fonts === []) {
             return null;
         }
 
-        return ['colors' => $colors, 'fonts' => $fonts];
+        return [
+            'colors' => $colors,           // Elementor Global Kit system slots (legacy/dynamic-tag path)
+            'fonts' => $fonts,
+            'wf_tokens' => $this->wfTokens($palette, $typography), // --wf-* for native pages
+            'structure' => $this->structure($branding->structure_preset),
+        ];
+    }
+
+    /**
+     * The brand `--wf-*` token map for native pages: palette → `--wf-color-*`,
+     * typography heading/body → `--wf-font-*`. Only present values are emitted.
+     *
+     * @param  array<string, mixed>  $palette
+     * @param  array<string, mixed>  $typography
+     * @return array<string, string>
+     */
+    private function wfTokens(array $palette, array $typography): array
+    {
+        $tokens = [];
+        foreach (self::WF_COLOR_TOKENS as $key => $token) {
+            $value = $palette[$key] ?? null;
+            if (is_string($value) && trim($value) !== '' && ! isset($tokens[$token])) {
+                $tokens[$token] = trim($value);
+            }
+        }
+
+        foreach (['heading' => '--wf-font-heading', 'body' => '--wf-font-body'] as $key => $token) {
+            $font = $this->normalizeFont($typography[$key] ?? null);
+            if ($font !== null) {
+                $tokens[$token] = $font['family'];
+            }
+        }
+
+        return $tokens;
+    }
+
+    private function structure(mixed $preset): string
+    {
+        return is_string($preset) && in_array($preset, self::VALID_STRUCTURES, true) ? $preset : 'trust';
     }
 
     /**

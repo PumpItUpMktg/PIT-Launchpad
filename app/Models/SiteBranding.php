@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property array<string, mixed>|null $logo_set
  * @property array<string, mixed>|null $palette
  * @property array<string, mixed>|null $typography
+ * @property string|null $structure_preset
  * @property string|null $imagery_style
  * @property array<string, mixed>|null $social_handles
  * @property string|null $entity_type
