@@ -75,7 +75,8 @@ return [
         ],
         // The full safe palette (Phase 3): every brand-token slot has a known-good,
         // AA-passing default the generator falls back to per-slot. The wf-* stylesheet
-        // mirrors these as its own fallbacks.
+        // mirrors these as its own fallbacks. (The surface slots here are the LIGHT
+        // scheme; per-scheme surfaces live in `scheme_surfaces` below.)
         'safe_colors' => [
             'primary' => '#0F62FE',
             'secondary' => '#3E6E9E',
@@ -86,6 +87,28 @@ return [
             'bg_alt' => '#F4F6F8',
             'border' => '#E2E6EB',
         ],
+
+        // Per-SCHEME surface safe defaults (the two-axis model): the generator
+        // conforms a candidate's surfaces to the chosen scheme and falls back to these
+        // per slot. Light = dark text on light bg; Dark = light text on dark bg. Brand
+        // hues (primary/secondary/accent) are scheme-independent (safe_colors above).
+        'scheme_surfaces' => [
+            'light' => [
+                'bg' => '#FFFFFF',
+                'bg_alt' => '#F4F6F8',
+                'text' => '#1A1A1A',
+                'text_muted' => '#5B6470',
+                'border' => '#E2E6EB',
+            ],
+            'dark' => [
+                'bg' => '#0F172A',
+                'bg_alt' => '#1E293B',
+                'text' => '#F1F5F9',
+                'text_muted' => '#94A3B8',
+                'border' => '#334155',
+            ],
+        ],
+
         // Minimum WCAG contrast ratio for the text color against a light bg.
         'min_text_contrast' => 4.5,
 

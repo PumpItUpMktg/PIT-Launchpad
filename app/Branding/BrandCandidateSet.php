@@ -17,6 +17,7 @@ final class BrandCandidateSet
     public function __construct(
         public readonly array $candidates,
         public readonly string $structure,
+        public readonly Scheme $scheme = Scheme::Light,
     ) {}
 
     public function recommended(): ?BrandCandidate
@@ -36,12 +37,13 @@ final class BrandCandidateSet
     }
 
     /**
-     * @return array{structure: string, candidates: list<array<string, mixed>>}
+     * @return array{structure: string, scheme: string, candidates: list<array<string, mixed>>}
      */
     public function toArray(): array
     {
         return [
             'structure' => $this->structure,
+            'scheme' => $this->scheme->value,
             'candidates' => array_map(fn (BrandCandidate $c) => $c->toArray(), $this->candidates),
         ];
     }

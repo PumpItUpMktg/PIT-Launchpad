@@ -77,27 +77,27 @@ class BrandGenerator
      *
      * @param  list<string>  $avoid  prior palette summaries to vary from ("show me 3 more")
      */
-    public function generateCandidates(BrandBrief $brief, string $structure, ?int $count = null, array $avoid = []): BrandCandidateSet
+    public function generateCandidates(BrandBrief $brief, string $structure, Scheme $scheme = Scheme::Light, ?int $count = null, array $avoid = []): BrandCandidateSet
     {
         $count = $count ?? (int) config('launchpad.brand.candidate_count', 4);
         $raw = $this->parse($this->claude->complete(
-            $this->candidatePrompt($brief, $structure, $count, $avoid),
+            $this->candidatePrompt($brief, $structure, $scheme, $count, $avoid),
             $this->candidateSystem()
         ));
 
         $candidates = [];
         foreach (is_array($raw['candidates'] ?? null) ? $raw['candidates'] : [] as $rawCandidate) {
-            $candidate = is_array($rawCandidate) ? $this->validateCandidate($rawCandidate) : null;
+            $candidate = is_array($rawCandidate) ? $this->validateCandidate($rawCandidate, $scheme) : null;
             if ($candidate !== null) {
                 $candidates[] = $candidate;
             }
         }
 
         if ($candidates === []) {
-            $candidates = [$this->safeCandidate($structure)];
+            $candidates = [$this->safeCandidate($structure, $scheme)];
         }
 
-        return new BrandCandidateSet($this->electRecommended($candidates), $structure);
+        return new BrandCandidateSet($this->electRecommended($candidates), $structure, $scheme);
     }
 
     /**
@@ -106,7 +106,7 @@ class BrandGenerator
      *
      * @param  array<string, mixed>  $raw
      */
-    private function validateCandidate(array $raw): ?BrandCandidate
+    private function validateCandidate(array $raw, Scheme $scheme): ?BrandCandidate
     {
         $tokens = is_array($raw['tokens'] ?? null) ? $raw['tokens'] : [];
         $fonts = is_array($raw['fonts'] ?? null) ? $raw['fonts'] : [];
@@ -114,9 +114,10 @@ class BrandGenerator
 
         $palette = $this->fullPalette($tokens, $adjustments);
 
-        // Backgrounds are ALWAYS light, text ALWAYS dark — for every structure
-        // including Bold (an inverted/dark theme is corrected, not shipped).
-        $palette = $this->enforceLightSurfaces($palette, $adjustments);
+        // Surfaces conform to the CHOSEN scheme (Light: dark text on light bg; Dark:
+        // light text on dark bg) — form never flips the scheme. An off-scheme surface
+        // is corrected to the scheme's safe surface and flagged.
+        $palette = $this->conformToScheme($palette, $scheme, $adjustments);
 
         // Hard gate: the accent must carry readable CTA text with its BEST (white or
         // dark) text color. Only a genuine mid-tone accent — where neither passes —
@@ -129,9 +130,9 @@ class BrandGenerator
         // stylesheet's button uses, so a light accent gets readable dark text.
         $palette['on_accent'] = ContrastMatrix::onAccent($palette['accent']);
 
-        // Soft gate: nudge body/muted text to a readable neutral when it fails on the
-        // page or alt-tint background, and record it.
-        $palette = $this->nudgeText($palette, $adjustments);
+        // Soft gate: nudge body/muted text to the scheme's safe neutral when it fails
+        // contrast on a surface, and record it.
+        $palette = $this->nudgeText($palette, $scheme, $adjustments);
 
         $typography = [
             'heading' => $this->validateFont('heading', (string) ($fonts['--wf-font-heading'] ?? ''), $adjustments),
@@ -145,6 +146,23 @@ class BrandGenerator
             recommended: (bool) ($raw['recommended'] ?? false),
             adjustments: $adjustments,
         );
+    }
+
+    /**
+     * The scheme's safe surface defaults (bg/bg_alt/text/text_muted/border) from
+     * config — what conformToScheme + nudgeText fall back to.
+     *
+     * @return array<string, string>
+     */
+    private function schemeSurfaces(Scheme $scheme): array
+    {
+        $surfaces = (array) config('launchpad.brand.scheme_surfaces.'.$scheme->value, []);
+        $out = [];
+        foreach (['bg', 'bg_alt', 'text', 'text_muted', 'border'] as $slot) {
+            $out[$slot] = $this->validateHex((string) ($surfaces[$slot] ?? '')) ?? '#000000';
+        }
+
+        return $out;
     }
 
     /**
@@ -184,55 +202,56 @@ class BrandGenerator
     }
 
     /**
-     * Force the light-surface invariant: backgrounds light, text dark — for ALL
-     * structures. An inverted/dark palette (dark bg + light text, like a "Bold dark
-     * theme") is corrected to the safe light surfaces + dark text and flagged; the
-     * brand colors (primary/secondary/accent) are untouched, so Bold's punch survives
-     * via the accent + structure tokens.
+     * Conform the SURFACES to the chosen scheme — Light: light bg + dark text; Dark:
+     * dark bg + light text. An off-scheme surface (e.g. a dark bg in a Light scheme,
+     * or the inverted "Bold dark theme") is corrected to the scheme's safe surface and
+     * flagged. Brand hues (primary/secondary/accent) are untouched — form/hue never
+     * flip the scheme. (`isLight`: ≥0.5 luminance.)
      *
      * @param  array<string, string>  $palette
      * @param  list<string>  $adjustments  (by ref)
      * @return array<string, string>
      */
-    private function enforceLightSurfaces(array $palette, array &$adjustments): array
+    private function conformToScheme(array $palette, Scheme $scheme, array &$adjustments): array
     {
-        $safe = (array) config('launchpad.brand.safe_colors', []);
-        $safeHex = fn (string $key, string $default) => $this->validateHex((string) ($safe[$key] ?? $default)) ?? $default;
+        $surfaces = $this->schemeSurfaces($scheme);
+        $wantLightBg = $scheme === Scheme::Light;
 
-        if (! ColorContrast::isLight($palette['bg'])) {
-            $adjustments[] = "Background {$palette['bg']} is not light — backgrounds are always light (Bold's look comes from the accent + structure, not a dark theme); corrected.";
-            $palette['bg'] = $safeHex('bg', '#ffffff');
-            $palette['bg_alt'] = $safeHex('bg_alt', '#f4f6f8');
-            $palette['border'] = $safeHex('border', '#e2e6eb');
-        } elseif (! ColorContrast::isLight($palette['bg_alt'])) {
-            $adjustments[] = "Section tint {$palette['bg_alt']} is not light — corrected to a light tint.";
-            $palette['bg_alt'] = $safeHex('bg_alt', '#f4f6f8');
+        // bg/bg_alt must match the scheme's polarity.
+        if (ColorContrast::isLight($palette['bg']) !== $wantLightBg) {
+            $adjustments[] = "Background {$palette['bg']} is off-scheme ({$scheme->value}) — corrected to the {$scheme->value} surfaces.";
+            $palette['bg'] = $surfaces['bg'];
+            $palette['bg_alt'] = $surfaces['bg_alt'];
+            $palette['border'] = $surfaces['border'];
+        } elseif (ColorContrast::isLight($palette['bg_alt']) !== $wantLightBg) {
+            $palette['bg_alt'] = $surfaces['bg_alt'];
         }
 
-        if (ColorContrast::isLight($palette['text'])) {
-            $adjustments[] = "Body text {$palette['text']} is not dark — text is always dark on light surfaces; corrected.";
-            $palette['text'] = $safeHex('text', '#1a1a1a');
+        // text/text_muted must be the OPPOSITE polarity to the bg.
+        if (ColorContrast::isLight($palette['text']) === $wantLightBg) {
+            $adjustments[] = "Body text {$palette['text']} is off-scheme — corrected to the {$scheme->value} text color.";
+            $palette['text'] = $surfaces['text'];
         }
-        if (ColorContrast::isLight($palette['text_muted'])) {
-            $palette['text_muted'] = $safeHex('text_muted', '#5b6470');
+        if (ColorContrast::isLight($palette['text_muted']) === $wantLightBg) {
+            $palette['text_muted'] = $surfaces['text_muted'];
         }
 
         return $palette;
     }
 
     /**
-     * Correct body + muted text to a readable neutral when they fail the contrast
-     * matrix, recording each nudge. Accent/button is gated earlier (drop, not nudge).
+     * Correct body + muted text to the SCHEME's safe neutral when they fail the
+     * contrast matrix, recording each nudge. Accent/button is gated earlier (drop).
      *
      * @param  array<string, string>  $palette
      * @param  list<string>  $adjustments  (by ref)
      * @return array<string, string>
      */
-    private function nudgeText(array $palette, array &$adjustments): array
+    private function nudgeText(array $palette, Scheme $scheme, array &$adjustments): array
     {
-        $safe = (array) config('launchpad.brand.safe_colors', []);
-        $safeText = $this->validateHex((string) ($safe['text'] ?? '#1A1A1A')) ?? '#1a1a1a';
-        $safeMuted = $this->validateHex((string) ($safe['text_muted'] ?? '#5B6470')) ?? '#5b6470';
+        $surfaces = $this->schemeSurfaces($scheme);
+        $safeText = $surfaces['text'];
+        $safeMuted = $surfaces['text_muted'];
 
         foreach (ContrastMatrix::failures($palette) as $failure) {
             if ($failure['pair'] === 'text-on-bg' || $failure['pair'] === 'text-on-bg_alt') {
@@ -240,7 +259,7 @@ class BrandGenerator
                     $adjustments[] = "Body text {$palette['text']} failed WCAG-AA ({$failure['pair']}) — corrected to {$safeText}.";
                     $palette['text'] = $safeText;
                 }
-            } elseif ($failure['pair'] === 'text_muted-on-bg' && $palette['text_muted'] !== $safeMuted) {
+            } elseif (($failure['pair'] === 'text_muted-on-bg' || $failure['pair'] === 'text_muted-on-bg_alt') && $palette['text_muted'] !== $safeMuted) {
                 $adjustments[] = "Muted text {$palette['text_muted']} failed contrast — corrected to {$safeMuted}.";
                 $palette['text_muted'] = $safeMuted;
             }
@@ -281,15 +300,18 @@ class BrandGenerator
      * self-check asserts it clears the same gate — a misconfigured safe palette would
      * surface in tests, never ship a failing default.
      */
-    private function safeCandidate(string $structure): BrandCandidate
+    private function safeCandidate(string $structure, Scheme $scheme): BrandCandidate
     {
         $adjustments = ['All generated candidates were dropped by the contrast gate; using the safe default.'];
-        $palette = $this->fullPalette([], $adjustments);
+
+        // Safe brand hues + the SCHEME's safe surfaces — so the dark-scheme fallback is
+        // dark, not a light palette.
+        $palette = array_merge($this->fullPalette([], $adjustments), $this->schemeSurfaces($scheme));
         $palette['on_accent'] = ContrastMatrix::onAccent($palette['accent']);
 
         // Self-check: the safe palette must itself pass (else the config is broken).
         if (ContrastMatrix::failures($palette) !== []) {
-            $adjustments[] = 'WARNING: the configured safe palette does not pass the contrast gate — review launchpad.brand.safe_colors.';
+            $adjustments[] = 'WARNING: the configured safe palette does not pass the contrast gate — review launchpad.brand scheme_surfaces.';
         }
 
         $pairing = (array) config('launchpad.brand.font_pairings.'.$structure.'.0', []);
@@ -327,14 +349,20 @@ class BrandGenerator
             .'You return STRICT JSON only, never prose or code fences.';
     }
 
-    private function candidatePrompt(BrandBrief $brief, string $structure, int $count, array $avoid): string
+    private function candidatePrompt(BrandBrief $brief, string $structure, Scheme $scheme, int $count, array $avoid): string
     {
         $personality = $brief->descriptor();
+        // Form character only (radius/density/accent/layout) — the scheme decides
+        // light vs dark, independently.
         $character = [
-            'trust' => 'restrained and accent-led — light backgrounds with a hairline border color and a single warm accent; navy/steel primaries read well here.',
-            'bold' => 'confident and high-impact — its punch comes from a vivid, saturated ACCENT and a strong, dark PRIMARY against LIGHT backgrounds (the drama is the accent + the dense, sharp layout, NOT a dark theme); pick a bold accent.',
-            'warm' => 'muted and earthy — warm off-white (still light) bg/bg_alt tints, soft, inviting, approachable.',
+            'trust' => 'restrained and accent-led — a hairline border and a single deliberate accent; navy/steel primaries read well.',
+            'bold' => 'confident and high-impact — its punch is a vivid, saturated ACCENT + a strong primary and the dense, sharp layout (NOT the background).',
+            'warm' => 'muted and earthy — soft, inviting, approachable; gentle tints.',
         ][$structure] ?? 'clean and professional.';
+
+        $schemeRule = $scheme === Scheme::Dark
+            ? 'COLOR SCHEME = DARK: bg is DARK (e.g. ~#0F172A), bg_alt a slightly lighter dark, text LIGHT (~#F1F5F9), text_muted mid-light, border a dark-but-visible line. Brand hues stay vivid and legible on the dark base.'
+            : 'COLOR SCHEME = LIGHT: bg is LIGHT (white/near-white), bg_alt a light tint, text DARK (~#1A1A1A), text_muted mid-dark, border a light hairline. Brand hues stay vivid and legible on the light base.';
 
         $shortlist = (array) config('launchpad.brand.font_pairings.'.$structure, []);
         $pairLines = [];
@@ -347,7 +375,8 @@ class BrandGenerator
         $lines = [
             "Design {$count} distinct brand candidates for a {$brief->industry} business.",
             "Brand personality: {$personality}.",
-            "Chosen layout structure: \"{$structure}\" — palettes must fit its character: {$character}",
+            "Layout character (form only): \"{$structure}\" — {$character}",
+            $schemeRule,
         ];
         if ($brief->emotionalGoal !== '') {
             $lines[] = "It should make a visitor feel: {$brief->emotionalGoal}.";
@@ -367,9 +396,9 @@ class BrandGenerator
 
         $lines[] = '';
         $lines[] = 'Requirements for EACH candidate (WCAG-AA — these are enforced, design to pass):';
-        $lines[] = '- A full 8-color palette in #RRGGBB. bg and bg_alt are ALWAYS LIGHT and text ALWAYS DARK — '
-            .'for every structure including Bold (NEVER an inverted/dark theme). Body text >= 4.5:1 on bg and '
-            .'bg_alt; muted text >= 3:1 on bg.';
+        $lines[] = '- A full 8-color palette in #RRGGBB that matches the COLOR SCHEME above (bg/text polarity set '
+            .'by the scheme, NOT the form). Body text >= 4.5:1 on bg AND bg_alt; muted text + heading primary >= 3:1 '
+            .'on bg AND bg_alt.';
         $lines[] = '- The accent is the CTA color. Its button text is auto-chosen (white OR dark) for max contrast, '
             .'so a light, punchy accent is fine — just make the accent itself a saturated, deliberate color (not a '
             .'near-bg tint), distinct from the primary.';

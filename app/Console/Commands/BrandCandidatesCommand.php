@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Branding\BrandBrief;
 use App\Branding\BrandGenerator;
 use App\Branding\IndustryResolver;
+use App\Branding\Scheme;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteBranding;
@@ -23,6 +24,7 @@ class BrandCandidatesCommand extends Command
 {
     protected $signature = 'launchpad:brand-candidates {site : a Site id}
         {--personality=trustworthy : a BrandBrief personality key}
+        {--scheme=light : color scheme — light|dark}
         {--structure= : pin trust|bold|warm (else the AI recommends one)}
         {--count=4 : how many candidates}';
 
@@ -53,9 +55,10 @@ class BrandCandidatesCommand extends Command
             $this->info("Recommended structure: {$rec->slug} — {$rec->rationale}");
         }
 
-        $set = $generator->generateCandidates($brief, $structure, (int) $this->option('count'));
+        $scheme = Scheme::fromString((string) $this->option('scheme'));
+        $set = $generator->generateCandidates($brief, $structure, $scheme, (int) $this->option('count'));
 
-        $this->line("Industry: {$brief->industry}  ·  Structure: {$set->structure}");
+        $this->line("Industry: {$brief->industry}  ·  Scheme: {$set->scheme->value}  ·  Structure: {$set->structure}");
         foreach ($set->candidates as $i => $c) {
             $tag = $c->recommended ? ' [RECOMMENDED]' : '';
             $this->line('');
