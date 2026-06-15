@@ -4,6 +4,7 @@
  */
 
 use Launchpad\Companion\Content\BrandKitStore;
+use Launchpad\Companion\Meta;
 
 class Test_Brand_Kit_Store extends WP_UnitTestCase
 {
@@ -124,5 +125,51 @@ class Test_Brand_Kit_Store extends WP_UnitTestCase
 
         $this->assertFalse($result['updated']);
         $this->assertSame(0, $result['colors_set']);
+    }
+
+    public function test_it_stores_the_native_wf_tokens_and_structure_options(): void
+    {
+        $result = ( new BrandKitStore() )->install([
+            'wf_tokens' => [
+                '--wf-color-primary' => '#1B3A5B',
+                '--wf-font-heading' => 'Archivo',
+                'color' => 'red',          // not a --wf-* name → dropped
+                '--wf-bad' => ['x'],       // non-scalar → dropped
+            ],
+            'structure' => 'bold',
+        ]);
+
+        $this->assertSame(2, $result['wf_tokens_set']);
+        $this->assertTrue($result['structure_set']);
+        $this->assertSame(
+            ['--wf-color-primary' => '#1B3A5B', '--wf-font-heading' => 'Archivo'],
+            get_option(Meta::OPTION_BRAND_TOKENS)
+        );
+        $this->assertSame('bold', get_option(Meta::OPTION_STRUCTURE_PRESET));
+    }
+
+    public function test_an_invalid_structure_is_ignored(): void
+    {
+        $result = ( new BrandKitStore() )->install(['wf_tokens' => ['--wf-color-primary' => '#111'], 'structure' => 'nope']);
+
+        $this->assertFalse($result['structure_set']);
+        $this->assertFalse(get_option(Meta::OPTION_STRUCTURE_PRESET));
+    }
+
+    public function test_the_wf_layer_is_stored_even_with_no_active_kit(): void
+    {
+        delete_option('elementor_active_kit'); // no Elementor Global Kit
+
+        $result = ( new BrandKitStore() )->install([
+            'wf_tokens' => ['--wf-color-primary' => '#1B3A5B'],
+            'structure' => 'warm',
+        ]);
+
+        // The native wf-* layer alone is a successful push (native pages don't need
+        // the Elementor kit), even though the Global Kit write soft-failed.
+        $this->assertTrue($result['updated']);
+        $this->assertSame(1, $result['wf_tokens_set']);
+        $this->assertSame('warm', get_option(Meta::OPTION_STRUCTURE_PRESET));
+        $this->assertSame(['--wf-color-primary' => '#1B3A5B'], get_option(Meta::OPTION_BRAND_TOKENS));
     }
 }
