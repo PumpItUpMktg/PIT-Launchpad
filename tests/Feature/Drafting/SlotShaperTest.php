@@ -126,6 +126,33 @@ it('splits a labeled faq block into {question, answer} (the recurring q/a bug)',
     ]);
 });
 
+it('parses the labeled-|| faq shape — the model echoed the field-name hint (post-118 bug)', function () {
+    // Each item: the model emitted the `[fields: question || answer]` hint as two
+    // labeled lines. The old delimiter split produced {question:"question",
+    // answer:"<realQ>\nanswer"} and DROPPED the real answer.
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'faq' => [
+            "question || What is a sump pump?\nanswer || A pump that removes water.",
+            "question || How much does it cost?\nanswer || It varies by setup.",
+        ],
+    ]);
+
+    expect($shaped['faq'])->toBe([
+        ['question' => 'What is a sump pump?', 'answer' => 'A pump that removes water.'],
+        ['question' => 'How much does it cost?', 'answer' => 'It varies by setup.'],
+    ]);
+});
+
+it('never lets the literal label "question" become the faq title (post-118 regression guard)', function () {
+    $shaped = (new SlotShaper)->shape(serviceSlots(), [
+        'faq' => ["question || Do you offer financing?\nanswer || Yes, **0% APR**."],
+    ]);
+
+    expect($shaped['faq'][0]['question'])->toBe('Do you offer financing?')   // not "question"
+        ->and($shaped['faq'][0]['answer'])->toContain('<strong>0% APR</strong>') // real answer kept + rendered
+        ->and($shaped['faq'][0]['answer'])->not->toContain('answer');         // label fragment dropped
+});
+
 it('drops off-schema keys (the slot key is the render contract)', function () {
     $shaped = (new SlotShaper)->shape(serviceSlots(), [
         'hero_problem' => 'kept',

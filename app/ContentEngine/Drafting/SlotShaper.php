@@ -182,7 +182,13 @@ final class SlotShaper
      */
     private function faqItem(string $raw, array $fields): array
     {
-        if (count($fields) >= 2 && trim($fields[1]) !== '') {
+        // The clean single-line "question || answer" form — but NOT when fields[0] is
+        // itself the literal field-name label ("question"/"answer"). The model echoes
+        // the `[fields: question || answer]` hint as two labeled lines
+        // ("question || <q>\nanswer || <a>"); the naive delimiter split would then
+        // take "question" as the title and drop the real answer (post-118's bug).
+        // That shape falls through to the label-tolerant line parser below.
+        if (count($fields) >= 2 && trim($fields[1]) !== '' && ! $this->isFieldLabel($fields[0])) {
             return ['question' => $this->plainTitle($fields[0]), 'answer' => $this->answerHtml($fields[1])];
         }
 
@@ -200,23 +206,25 @@ final class SlotShaper
 
             // A line that is ONLY a "question"/"q" or "answer"/"a" label switches the
             // bucket and is dropped (the model emits the field names on their own lines).
-            if (preg_match('/^q(?:uestion)?\s*[:.)\-]?$/i', $line)) {
+            // The separator may be `:` `.` `)` `-` OR `||` (the field-hint delimiter).
+            if (preg_match('/^q(?:uestion)?\s*(?:[:.)\-]|\|\|)?$/i', $line)) {
                 $mode = 'question';
 
                 continue;
             }
-            if (preg_match('/^a(?:nswer)?\s*[:.)\-]?$/i', $line)) {
+            if (preg_match('/^a(?:nswer)?\s*(?:[:.)\-]|\|\|)?$/i', $line)) {
                 $mode = 'answer';
                 $sawAnswerMarker = true;
 
                 continue;
             }
 
-            // An inline "Question: …" / "Answer: …" label sets the bucket + keeps the text.
-            if (preg_match('/^q(?:uestion)?\s*[:.)\-]\s*(.+)$/i', $line, $m)) {
+            // An inline "Question: …" / "Answer: …" / "question || …" label sets the
+            // bucket + keeps the text (the `||` form is the post-118 label-echo shape).
+            if (preg_match('/^q(?:uestion)?\s*(?:[:.)\-]|\|\|)\s*(.+)$/i', $line, $m)) {
                 $mode = 'question';
                 $line = trim($m[1]);
-            } elseif (preg_match('/^a(?:nswer)?\s*[:.)\-]\s*(.+)$/i', $line, $m)) {
+            } elseif (preg_match('/^a(?:nswer)?\s*(?:[:.)\-]|\|\|)\s*(.+)$/i', $line, $m)) {
                 $mode = 'answer';
                 $sawAnswerMarker = true;
                 $line = trim($m[1]);
@@ -236,6 +244,16 @@ final class SlotShaper
             'question' => $this->plainTitle(implode(' ', $questionParts)),
             'answer' => $this->answerHtml(implode("\n", $answerParts)),
         ];
+    }
+
+    /**
+     * Is this `||`-field itself the literal field NAME ("question"/"q"/"answer"/"a")
+     * rather than real content? Then the model echoed the field-hint labels and the
+     * naive delimiter split must not be trusted.
+     */
+    private function isFieldLabel(string $field): bool
+    {
+        return (bool) preg_match('/^\s*(?:q(?:uestion)?|a(?:nswer)?)\s*$/i', $field);
     }
 
     /**

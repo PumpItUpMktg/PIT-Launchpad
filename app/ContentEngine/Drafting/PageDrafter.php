@@ -169,15 +169,18 @@ class PageDrafter
      */
     private function fieldOrder(SlotDefinition $slot): string
     {
+        // Angle-bracket PLACEHOLDERS, not bare field-name tokens: a literal
+        // "question || answer" hint got echoed by the model as labeled lines
+        // ("question || <q>\nanswer || <a>"), which the shaper then mis-split.
         $order = match ($slot->contentType) {
-            SlotContentType::Faq => 'question || answer',
-            SlotContentType::Stat => 'value || label',
-            SlotContentType::Testimonial => 'quote || author',
-            SlotContentType::Cta => 'label || url',
+            SlotContentType::Faq => '<question text> || <answer text>',
+            SlotContentType::Stat => '<value> || <label>',
+            SlotContentType::Testimonial => '<quote> || <author>',
+            SlotContentType::Cta => '<label> || <url>',
             default => null,
         };
 
-        return $order !== null ? " [fields: {$order}]" : '';
+        return $order !== null ? " [ONE line, fill in order: {$order} — do NOT write the field names]" : '';
     }
 
     private function outputContract(): string
