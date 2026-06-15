@@ -74,4 +74,12 @@ final class Meta
     /** "{kit}@{version}" => ['kit','version','slots'] — the contract kit defs the
      * Slots & Shortcodes reference screen reads (per kit/version, not observed data). */
     public const OPTION_KIT_DEFINITIONS = 'lp_kit_definitions';
+
+    /** "--wf-*" => value map — the per-tenant brand tokens (push-brand-kit), printed
+     * as a :root block by the wf-* base stylesheet (Assets). */
+    public const OPTION_BRAND_TOKENS = 'lp_brand_tokens';
+
+    /** trust|bold|warm — the chosen structure preset; emitted as a body.wf-structure-
+     * {slug} class by TemplateRouter so the matching token bundle applies. */
+    public const OPTION_STRUCTURE_PRESET = 'lp_structure_preset';
 }
