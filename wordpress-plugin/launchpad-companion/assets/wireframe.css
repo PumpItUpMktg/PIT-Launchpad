@@ -21,6 +21,7 @@
     --wf-color-primary: #1b3a5b;
     --wf-color-secondary: #3e6e9e;
     --wf-color-accent: #e8a23d;
+    --wf-color-on-accent: #1a1a1a; /* CTA text on the accent — engine picks white/dark per accent */
     --wf-color-text: #1a1a1a;
     --wf-color-text-muted: #5b6470;
     --wf-color-bg: #ffffff;
@@ -117,7 +118,7 @@
 }
 :is(.wf-hero-cta-primary, .wf-cta-primary) .elementor-button {
     background-color: var(--wf-color-accent);
-    color: #fff;
+    color: var(--wf-color-on-accent, #fff);
 }
 :is(.wf-hero-cta-phone, .wf-cta-phone) .elementor-button {
     background-color: transparent;
