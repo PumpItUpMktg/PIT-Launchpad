@@ -14,6 +14,7 @@ use App\PageBuilder\Library\LibraryServiceComposer;
 use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\PublishEligibility;
+use App\Publishing\Schema\ServiceSchemaBuilder;
 use App\Support\SeoTitle;
 use Illuminate\Support\Collection;
 
@@ -30,6 +31,7 @@ class MetaBlobAssembler
         private readonly PublishEligibility $eligibility,
         private readonly NativeComposer $composer,
         private readonly LibraryServiceComposer $libraryService,
+        private readonly ServiceSchemaBuilder $serviceSchema,
     ) {}
 
     /**
@@ -388,14 +390,16 @@ class MetaBlobAssembler
         $metaSeo = is_array($content->meta['seo'] ?? null) ? $content->meta['seo'] : [];
         $ogImage = $this->ogImageUrl($content, $images);
 
+        [$schemaType, $schemaPayload] = $this->seoSchema($content);
+
         return array_filter([
             'title' => $this->seoTitle($content),
             'meta_description' => $metaSeo['meta_description'] ?? null,
             'canonical' => $this->canonical($content),
             'robots' => 'index, follow',
             'og' => $ogImage !== null ? ['image' => $ogImage] : [],
-            'schema_type' => $content->schema_type,
-            'schema_payload' => $content->schema_payload,
+            'schema_type' => $schemaType,
+            'schema_payload' => $schemaPayload,
             'breadcrumbs' => $this->breadcrumbs($content),
         ], fn ($v) => $v !== null && $v !== [] && $v !== '');
     }
@@ -436,6 +440,29 @@ class MetaBlobAssembler
         }
 
         return rtrim($domain, '/').'/'.ltrim($content->slug, '/');
+    }
+
+    /**
+     * The page-type schema [type, payload] pushed as seo.schema_type/schema_payload.
+     * A service PAGE gets the live-composed Service node (ServiceSchemaBuilder, from
+     * §1 at assemble time); every other content keeps its stored Content columns.
+     *
+     * @return array{0: string|null, 1: array<string, mixed>|null}
+     */
+    private function seoSchema(Content $content): array
+    {
+        if ($content->kind === ContentKind::Page && $content->page_type?->value === 'service') {
+            $site = $this->site($content);
+            if ($site !== null) {
+                $home = is_string($site->domain_url) ? rtrim($site->domain_url, '/').'/' : '/';
+
+                return ['Service', $this->serviceSchema->build($content, $site, $home, $this->canonical($content))];
+            }
+        }
+
+        $payload = is_array($content->schema_payload) ? $content->schema_payload : null;
+
+        return [$content->schema_type, $payload];
     }
 
     /**
