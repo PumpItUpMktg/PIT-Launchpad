@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Branding\BrandBrief;
 use App\Branding\BrandStudio;
+use App\Branding\Scheme;
 use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
@@ -128,6 +129,7 @@ class SiteResource extends Resource
             ->fillForm(fn (Site $record): array => [
                 'industry' => app(BrandStudio::class)->industryFor($record),
                 'personality' => 'trustworthy',
+                'scheme' => 'light',
                 'structure' => '',
             ])
             ->schema(self::brandSchema())
@@ -181,6 +183,13 @@ class SiteResource extends Resource
         return [
             TextInput::make('industry')->label('Trade / industry')
                 ->helperText('Pre-filled from the service catalog — refine if needed.'),
+
+            // THE client-facing choice: Light or Dark, before generation.
+            Radio::make('scheme')->label('Light or Dark?')
+                ->options(['light' => 'Light', 'dark' => 'Dark'])
+                ->default('light')->required()->inline()
+                ->helperText('The color scheme. The layout style is recommended for you (below).'),
+
             Select::make('personality')->label('Brand personality')
                 ->options(BrandBrief::PERSONALITIES)->required(),
             CheckboxList::make('adjectives')->label('Personality adjectives')
@@ -193,12 +202,14 @@ class SiteResource extends Resource
             TextInput::make('color_anchors_avoid')->label('Colors to avoid (optional)')
                 ->placeholder('comma-separated'),
             TextInput::make('admired_brand')->label('A brand they admire (optional)'),
-            Select::make('structure')->label('Layout structure')
+            // Form is AI-recommended; this is an optional advanced override, not the
+            // primary pick (Trust/Bold/Warm retired as a client-facing choice).
+            Select::make('structure')->label('Layout style (auto-recommended — override optional)')
                 ->options([
-                    '' => 'Let the AI recommend',
-                    'trust' => 'Trust — clean & established',
-                    'bold' => 'Bold — confident & dense',
-                    'warm' => 'Warm — friendly & rounded',
+                    '' => 'Auto (recommended from personality)',
+                    'trust' => 'Clean & established',
+                    'bold' => 'Confident & dense',
+                    'warm' => 'Friendly & rounded',
                 ])
                 ->default('')->selectablePlaceholder(false),
 
@@ -208,6 +219,16 @@ class SiteResource extends Resource
                 Action::make('regenerate')->label('Show me 3 more')->icon('heroicon-o-arrow-path')->color('gray')
                     ->visible($hasCandidates)
                     ->action(fn (Get $get, Set $set) => self::runBrandGenerate($get, $set, self::brandAvoidFrom($get('candidates')))),
+                // Re-roll the OTHER scheme, keeping personality + form (the resolved
+                // structure is reused, not re-recommended).
+                Action::make('flipScheme')
+                    ->label(fn (Get $get): string => ($get('scheme') === 'dark' ? 'Switch to Light' : 'Switch to Dark'))
+                    ->icon('heroicon-o-swatch')->color('gray')
+                    ->visible($hasCandidates)
+                    ->action(function (Get $get, Set $set): void {
+                        $set('scheme', $get('scheme') === 'dark' ? 'light' : 'dark');
+                        self::runBrandGenerate($get, $set, []);
+                    }),
             ]),
 
             Hidden::make('candidates'),
@@ -246,18 +267,26 @@ class SiteResource extends Resource
     {
         $answers = self::brandAnswers($get);
         $studio = app(BrandStudio::class);
+        $scheme = Scheme::fromString((string) $get('scheme'));
 
+        // Structure stays STABLE across regenerate/scheme-flip: an explicit override
+        // wins; else the already-resolved one is reused; else recommend once.
         $picked = (string) $get('structure');
+        $resolved = (string) $get('resolved_structure');
         if (in_array($picked, ['trust', 'bold', 'warm'], true)) {
             $structure = $picked;
-            $note = 'Using your selected structure: '.ucfirst($structure).'.';
+            $note = 'Layout (your pick): '.ucfirst($structure).'.';
+        } elseif (in_array($resolved, ['trust', 'bold', 'warm'], true)) {
+            $structure = $resolved;
+            $note = 'Layout: '.ucfirst($structure).' (kept).';
         } else {
             $rec = $studio->recommendStructure($answers);
             $structure = $rec->slug;
-            $note = 'AI recommends '.ucfirst($structure).($rec->rationale !== '' ? ' — '.$rec->rationale : '').'.';
+            $note = 'Layout (AI-recommended): '.ucfirst($structure).($rec->rationale !== '' ? ' — '.$rec->rationale : '').'.';
         }
+        $note = ucfirst($scheme->value).' scheme · '.$note;
 
-        $set('candidates', $studio->generateCandidates($answers, structure: $structure, avoid: $avoid)->toArray()['candidates']);
+        $set('candidates', $studio->generateCandidates($answers, $scheme, structure: $structure, avoid: $avoid)->toArray()['candidates']);
         $set('resolved_structure', $structure);
         $set('structure_note', $note);
 
