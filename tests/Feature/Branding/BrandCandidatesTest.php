@@ -5,6 +5,7 @@ use App\Branding\BrandGenerator;
 use App\Branding\ColorContrast;
 use App\Branding\ContrastMatrix;
 use App\Branding\FontCatalog;
+use App\Branding\Scheme;
 use Tests\Support\FakeClaudeClient;
 
 function generator(string $json): BrandGenerator
@@ -57,7 +58,7 @@ it('generates validated candidates with the full token set and exactly one recom
         candidate(),
     ]]);
 
-    $set = generator($json)->generateCandidates(brief(), 'trust', 3);
+    $set = generator($json)->generateCandidates(brief(), 'trust', count: 3);
 
     expect($set->candidates)->toHaveCount(3)
         ->and($set->structure)->toBe('trust')
@@ -75,7 +76,7 @@ it('generates validated candidates with the full token set and exactly one recom
 it('falls back an invented font to the safe default and flags it', function () {
     $set = generator(json_encode(['candidates' => [
         candidate(['fonts' => ['--wf-font-heading' => 'Nonexistent Sans Ultra', '--wf-font-body' => 'Inter']]),
-    ]]))->generateCandidates(brief(), 'trust', 1);
+    ]]))->generateCandidates(brief(), 'trust', count: 1);
 
     $c = $set->candidates[0];
     expect($c->typography['heading'])->toBe('Poppins')
@@ -88,7 +89,7 @@ it('RESCUES a light accent with dark CTA text instead of dropping it', function 
     // candidate survives with on_accent = dark (the old all-drop regression).
     $set = generator(json_encode(['candidates' => [
         candidate(['tokens' => array_merge(candidate()['tokens'], ['--wf-color-accent' => '#FFEE33'])]),
-    ]]))->generateCandidates(brief(), 'bold', 1);
+    ]]))->generateCandidates(brief(), 'bold', count: 1);
 
     $c = $set->candidates[0];
     expect($c->palette['accent'])->toBe('#ffee33')
@@ -101,7 +102,7 @@ it('DROPS only a genuine mid-tone accent (neither white nor dark passes) → str
     // genuinely un-rescuable and the candidate is dropped.
     $set = generator(json_encode(['candidates' => [
         candidate(['tokens' => array_merge(candidate()['tokens'], ['--wf-color-accent' => '#7C7C7C'])]),
-    ]]))->generateCandidates(brief(), 'bold', 1);
+    ]]))->generateCandidates(brief(), 'bold', count: 1);
 
     $safe = $set->recommended();
     expect($safe->adjustments)->toContain('All generated candidates were dropped by the contrast gate; using the safe default.')
@@ -109,9 +110,10 @@ it('DROPS only a genuine mid-tone accent (neither white nor dark passes) → str
         ->and(ContrastMatrix::failures($safe->palette))->toBe([]);    // the fallback itself passes
 });
 
-it('corrects an inverted/dark theme to light surfaces for ALL structures (the Bold dark-theme bug)', function () {
-    // Eric's Bold run: a fully-inverted dark theme. bg/text must be forced light/dark;
-    // the brand accent + primary survive (Bold's punch comes from those + structure).
+it('conforms Eric\'s inverted dark palette to the chosen LIGHT scheme (the Bold dark-theme bug)', function () {
+    // Eric's Bold run: a fully-inverted dark theme requested under the LIGHT scheme →
+    // surfaces conform to light; the brand accent survives (Bold's punch is the accent
+    // + form, not the background).
     $set = generator(json_encode(['candidates' => [
         candidate(['tokens' => array_merge(candidate()['tokens'], [
             '--wf-color-bg' => '#0F1B2D',
@@ -120,15 +122,42 @@ it('corrects an inverted/dark theme to light surfaces for ALL structures (the Bo
             '--wf-color-text-muted' => '#94A3B8',
             '--wf-color-accent' => '#22D3EE', // cyan
         ])]),
-    ]]))->generateCandidates(brief(), 'bold', 1);
+    ]]))->generateCandidates(brief(), 'bold', Scheme::Light, count: 1);
 
     $c = $set->candidates[0];
-    expect($c->palette['bg'])->toBe('#ffffff')          // forced light
+    expect($c->palette['bg'])->toBe('#ffffff')          // conformed light
         ->and($c->palette['bg_alt'])->toBe('#f4f6f8')   // light tint
-        ->and($c->palette['text'])->toBe('#1a1a1a')     // forced dark
+        ->and($c->palette['text'])->toBe('#1a1a1a')     // conformed dark
         ->and($c->palette['accent'])->toBe('#22d3ee')   // brand accent preserved
         ->and($c->palette['on_accent'])->toBe('#1a1a1a') // cyan is light → dark CTA text
-        ->and(collect($c->adjustments)->contains(fn ($a) => str_contains($a, 'backgrounds are always light')))->toBeTrue();
+        ->and(collect($c->adjustments)->contains(fn ($a) => str_contains($a, 'off-scheme')))->toBeTrue();
+});
+
+it('generates a coherent DARK-scheme palette (light text on dark bg, gate passes)', function () {
+    // The model returns a light-ish palette; the Dark scheme conforms surfaces to dark.
+    $set = generator(json_encode(['candidates' => [candidate()]]))
+        ->generateCandidates(brief(), 'bold', Scheme::Dark, count: 1);
+
+    expect($set->scheme)->toBe(Scheme::Dark);
+    $c = $set->candidates[0];
+    expect(ColorContrast::isLight($c->palette['bg']))->toBeFalse()   // dark bg
+        ->and(ColorContrast::isLight($c->palette['text']))->toBeTrue() // light text
+        ->and($c->palette['accent'])->toBe('#b25c00')                 // brand accent preserved
+        ->and(ContrastMatrix::failures($c->palette))->toBe([]);       // every rendered pair passes
+});
+
+it('keeps a LIGHT-scheme palette light (and corrects an off-scheme dark one)', function () {
+    // Default scheme is Light; a model-returned dark bg is conformed back to light.
+    $set = generator(json_encode(['candidates' => [
+        candidate(['tokens' => array_merge(candidate()['tokens'], [
+            '--wf-color-bg' => '#0F1B2D', '--wf-color-text' => '#F1F5F9',
+        ])]),
+    ]]))->generateCandidates(brief(), 'trust', Scheme::Light, count: 1);
+
+    $c = $set->candidates[0];
+    expect(ColorContrast::isLight($c->palette['bg']))->toBeTrue()    // forced light
+        ->and(ColorContrast::isLight($c->palette['text']))->toBeFalse() // dark text
+        ->and(ContrastMatrix::failures($c->palette))->toBe([]);
 });
 
 it('ColorContrast::isLight separates light backgrounds from dark', function () {
@@ -143,7 +172,7 @@ it('auto-nudges low-contrast (but dark) body text to a safe neutral and flags it
     // tint — so nudgeText (not the light guard) corrects it.
     $set = generator(json_encode(['candidates' => [
         candidate(['tokens' => array_merge(candidate()['tokens'], ['--wf-color-text' => '#777777'])]),
-    ]]))->generateCandidates(brief(), 'trust', 1);
+    ]]))->generateCandidates(brief(), 'trust', count: 1);
 
     $c = $set->candidates[0];
     expect($c->palette['text'])->toBe('#1a1a1a') // corrected to safe neutral
@@ -152,7 +181,7 @@ it('auto-nudges low-contrast (but dark) body text to a safe neutral and flags it
 
 it('steers the prompt to the chosen structure\'s curated font pairings', function () {
     $fake = new FakeClaudeClient(json_encode(['candidates' => [candidate()]]));
-    (new BrandGenerator($fake, new FontCatalog))->generateCandidates(brief(), 'warm', 1);
+    (new BrandGenerator($fake, new FontCatalog))->generateCandidates(brief(), 'warm', count: 1);
 
     // The warm pairings (operator-redlined) reach the model; trust's do not.
     expect($fake->prompts[0])->toContain('Fraunces / Source Sans 3')

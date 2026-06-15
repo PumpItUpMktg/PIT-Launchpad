@@ -125,7 +125,7 @@ const CANDIDATES_JSON = '{"candidates":[{"tokens":{"--wf-color-primary":"#1B3A5B
 it('generates a candidate set for a pinned structure', function () {
     [$studio] = brandStudio(CANDIDATES_JSON);
 
-    $set = $studio->generateCandidates(['industry' => 'plumbing', 'personality' => 'trustworthy'], 'bold');
+    $set = $studio->generateCandidates(['industry' => 'plumbing', 'personality' => 'trustworthy'], structure: 'bold');
 
     expect($set->structure)->toBe('bold')
         ->and($set->candidates)->toHaveCount(2)

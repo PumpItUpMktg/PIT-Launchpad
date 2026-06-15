@@ -257,7 +257,7 @@ class SiteResource extends Resource
             $note = 'AI recommends '.ucfirst($structure).($rec->rationale !== '' ? ' — '.$rec->rationale : '').'.';
         }
 
-        $set('candidates', $studio->generateCandidates($answers, $structure, $avoid)->toArray()['candidates']);
+        $set('candidates', $studio->generateCandidates($answers, structure: $structure, avoid: $avoid)->toArray()['candidates']);
         $set('resolved_structure', $structure);
         $set('structure_note', $note);
 

@@ -72,21 +72,22 @@ class BrandStudio
     }
 
     /**
-     * Generate the 3–5 validated candidates for the chosen structure (or the AI's
-     * recommendation when none is pinned). `$avoid` carries prior palette summaries
-     * for the "show me 3 more" regenerate.
+     * Generate the 3–5 validated candidates for the chosen SCHEME (light|dark) and
+     * structure (or the AI's structure recommendation when none is pinned). All
+     * candidates come back in the chosen scheme. `$avoid` carries prior palette
+     * summaries for the "show me 3 more" / scheme-flip regenerate.
      *
      * @param  array<string, mixed>  $answers
      * @param  list<string>  $avoid
      */
-    public function generateCandidates(array $answers, ?string $structure = null, array $avoid = []): BrandCandidateSet
+    public function generateCandidates(array $answers, Scheme $scheme = Scheme::Light, ?string $structure = null, array $avoid = []): BrandCandidateSet
     {
         $brief = $this->briefFrom($answers);
         $structure = in_array($structure, ['trust', 'bold', 'warm'], true)
             ? $structure
             : $this->generator->recommendStructure($brief)->slug;
 
-        return $this->generator->generateCandidates($brief, $structure, avoid: $avoid);
+        return $this->generator->generateCandidates($brief, $structure, $scheme, avoid: $avoid);
     }
 
     /**
