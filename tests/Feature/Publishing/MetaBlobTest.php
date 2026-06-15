@@ -183,3 +183,23 @@ test('the silo crumb stays unlinked when the silo has no pillar page yet', funct
 
     expect($crumbs[1])->toBe(['name' => 'Plumbing', 'url' => '']); // unlinked, never a broken URL
 });
+
+test('a pillar page collapses its own silo crumb (no self-referential crumb)', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+
+    // This page IS its silo's pillar — the silo crumb would link to (and be named
+    // the same as) this very page.
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Installation']);
+    $content = PublishHarness::approvedPage($site);
+    $content->forceFill(['silo_id' => $silo->id])->save();
+    $silo->forceFill(['pillar_content_id' => $content->id])->save();
+
+    $crumbs = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection)['seo']['breadcrumbs'];
+
+    // Collapsed to Home → Leaf — the self-referential silo crumb is dropped.
+    expect($crumbs)->toHaveCount(2)
+        ->and($crumbs[0]['name'])->toBe('Home')
+        ->and($crumbs[1])->toBe(['name' => 'Water Heater Repair in Austin', 'url' => ''])
+        ->and(collect($crumbs)->pluck('name'))->not->toContain('Sump Pump Installation');
+});
