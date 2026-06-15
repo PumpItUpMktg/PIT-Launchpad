@@ -48,6 +48,15 @@ final class TargetNormalizer
             $el['elements'] = $this->normalize($el['elements']);
         }
 
+        // Strip the baked per-block padding so the base wf-* stylesheet's structure
+        // density tokens (--wf-pad-block) own it — a `wf-block` container's vertical
+        // rhythm is the chosen preset's job, not the library's.
+        if (($this->profile['strip_block_padding'] ?? false)
+            && ($el['elType'] ?? null) === 'container'
+            && $this->isWfBlock($el)) {
+            unset($el['settings']['padding']);
+        }
+
         if (($el['elType'] ?? null) === 'widget'
             && ($el['widgetType'] ?? null) === 'accordion'
             && ($this->profile['faq_widget'] ?? null) === 'nested-accordion') {
@@ -55,6 +64,16 @@ final class TargetNormalizer
         }
 
         return $el;
+    }
+
+    /**
+     * @param  array<string, mixed>  $el
+     */
+    private function isWfBlock(array $el): bool
+    {
+        $classes = $el['settings']['_css_classes'] ?? '';
+
+        return is_string($classes) && in_array('wf-block', explode(' ', $classes), true);
     }
 
     /**

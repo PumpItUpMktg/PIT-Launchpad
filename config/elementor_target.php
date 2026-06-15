@@ -38,6 +38,13 @@ return [
     // verify before the contact/blog page types adopt their blocks.
     'unverified_widgets' => ['form', 'share-buttons', 'social-icons', 'theme-post-content', 'posts', 'nav-menu'],
 
+    // Brand-system Phase 1: the library bakes per-block `padding` on every `wf-block`
+    // container. The companion's base wf-* stylesheet drives section density from the
+    // chosen structure preset (--wf-pad-block / --wf-section-gap), so the baked padding
+    // is stripped on load — otherwise Bold-dense / Warm-comfortable can't differentiate.
+    // Structure owns density; the block keeps only its internal flex_gaps.
+    'strip_block_padding' => true,
+
     // Static section headings (design chrome, not §3a-fed): the AUTHORITATIVE real
     // label per `wf-*-heading` hook. The injector sets these (overriding the library
     // default, which can be scaffolding like "Problem & solution heading"). A kept

@@ -1,0 +1,290 @@
+/*
+ * Launchpad base wf-* stylesheet (Brand System, Phase 1).
+ *
+ * Styles the native wireframe-library widgets by their stable `wf-*` hook classes
+ * (NEVER the id-tied .elementor-element-{id} classes, which are rebuilt on every
+ * compose). Parameterized ENTIRELY by CSS custom properties in two ownership tiers:
+ *
+ *   structure tokens (--wf-radius/-shadow/-section-gap/-pad-block/-button-radius/
+ *     -heading-*)  ── set by one of three preset bundles: body.wf-structure-{slug}
+ *   brand tokens   (--wf-color-* / --wf-font-*)  ── set per-tenant in a :root block
+ *     the companion prints from the pushed brand kit (push-brand-kit)
+ *
+ * Every value below resolves through a var() with a safe fallback, so an
+ * un-branded / un-structured page is still presentable. Brand never leaks into
+ * structure; structure never hardcodes brand.
+ */
+
+/* ---- Fallback token values (a tenant :root block + a structure bundle override these) ---- */
+:root {
+    /* brand-owned (push-brand-kit) */
+    --wf-color-primary: #1b3a5b;
+    --wf-color-secondary: #3e6e9e;
+    --wf-color-accent: #e8a23d;
+    --wf-color-text: #1a1a1a;
+    --wf-color-text-muted: #5b6470;
+    --wf-color-bg: #ffffff;
+    --wf-color-bg-alt: #f4f6f8;
+    --wf-color-border: #e2e6eb;
+    --wf-font-heading: inherit;
+    --wf-font-body: inherit;
+
+    /* structure-owned (defaults = Trust; a body.wf-structure-* bundle overrides) */
+    --wf-radius: 4px;
+    --wf-radius-sm: 2px;
+    --wf-radius-lg: 6px;
+    --wf-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    --wf-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --wf-shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --wf-border-width: 1px;
+    --wf-section-gap: 96px;
+    --wf-section-gap-mobile: 56px;
+    --wf-block-gap: 28px;
+    --wf-pad-block: 72px;
+    --wf-button-radius: 4px;
+    --wf-heading-transform: none;
+    --wf-heading-weight: 600;
+    --wf-heading-tracking: normal;
+}
+
+/* ===================================================================
+ * Base layer — applies to every wf-block on a managed page
+ * =================================================================== */
+
+/* Section vertical rhythm + density (the library's baked padding is stripped on
+ * compose, so the preset owns it here). */
+.wf-block {
+    padding-block: var(--wf-pad-block);
+    background-color: var(--wf-color-bg);
+    color: var(--wf-color-text);
+}
+
+/* The alternating-tint blocks (the structure preset decides how strong the tint is;
+ * Bold turns --wf-color-bg-alt into a dark/saturated block). */
+.wf-block-trust-bar,
+.wf-block-why-us,
+.wf-block-faq {
+    background-color: var(--wf-color-bg-alt);
+}
+
+/* Headings: brand font + structure transform/weight/tracking. Color inherits from
+ * the block (so it stays legible on dark alt blocks once brand tokens are sane). */
+.wf-block :is(h1, h2, h3, h4, .elementor-heading-title) {
+    font-family: var(--wf-font-heading);
+    font-weight: var(--wf-heading-weight);
+    letter-spacing: var(--wf-heading-tracking);
+    color: inherit;
+}
+/* Section headings carry the preset's case transform; body copy never does. */
+.wf-ps-heading,
+.wf-why-heading,
+.wf-reviews-heading,
+.wf-faq-heading,
+.wf-cta-heading,
+.wf-hero-headline {
+    text-transform: var(--wf-heading-transform);
+}
+
+/* Body copy + secondary text. */
+.wf-block :is(p, li, .elementor-widget-text-editor) {
+    font-family: var(--wf-font-body);
+}
+.wf-hero-subhead,
+.wf-why-lead,
+.wf-review-1-town,
+.wf-review-2-town,
+.wf-review-3-town {
+    color: var(--wf-color-text-muted);
+}
+
+/* Links. */
+.wf-block a:not(.elementor-button) {
+    color: var(--wf-color-primary);
+}
+
+/* Buttons: accent fill, structure corner. The primary CTA is the action color; the
+ * phone CTA is an outline variant so the two read as primary/secondary. */
+.wf-block .elementor-button {
+    border-radius: var(--wf-button-radius);
+    font-family: var(--wf-font-heading);
+    font-weight: 600;
+    box-shadow: var(--wf-shadow-sm);
+    transition: filter 0.15s ease, transform 0.15s ease;
+}
+.wf-block .elementor-button:hover {
+    filter: brightness(0.94);
+    transform: translateY(-1px);
+}
+:is(.wf-hero-cta-primary, .wf-cta-primary) .elementor-button {
+    background-color: var(--wf-color-accent);
+    color: #fff;
+}
+:is(.wf-hero-cta-phone, .wf-cta-phone) .elementor-button {
+    background-color: transparent;
+    color: var(--wf-color-primary);
+    border: var(--wf-border-width, 1px) solid var(--wf-color-primary);
+    box-shadow: none;
+}
+
+/* Images: structure radius + elevation. */
+.wf-block img {
+    border-radius: var(--wf-radius-lg);
+    box-shadow: var(--wf-shadow);
+    max-width: 100%;
+    height: auto;
+}
+
+/* ===================================================================
+ * Block specifics (service page type)
+ * =================================================================== */
+
+/* Hero — two-up copy/image (the library row container holds both). */
+.wf-hero-eyebrow {
+    color: var(--wf-color-accent);
+    font-family: var(--wf-font-heading);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* Trust bar — the value/label pairs read as stat cells. */
+:is(.wf-trust-value-1, .wf-trust-value-2, .wf-trust-value-3, .wf-trust-value-4) {
+    color: var(--wf-color-primary);
+    font-family: var(--wf-font-heading);
+    font-weight: 800;
+}
+:is(.wf-trust-label-1, .wf-trust-label-2, .wf-trust-label-3, .wf-trust-label-4) {
+    color: var(--wf-color-text-muted);
+}
+
+/* Problem / solution — the two columns get a hairline + radius card treatment. */
+:is(.wf-ps-problem-eyebrow, .wf-ps-solution-eyebrow) {
+    color: var(--wf-color-accent);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+/* Why-us cards. */
+:is(.wf-why-card-1-title, .wf-why-card-2-title, .wf-why-card-3-title) {
+    color: var(--wf-color-primary);
+}
+:is(.wf-why-card-1-body, .wf-why-card-2-body, .wf-why-card-3-body) {
+    border: var(--wf-border-width) solid var(--wf-color-border);
+    border-radius: var(--wf-radius);
+    box-shadow: var(--wf-shadow);
+    background-color: var(--wf-color-bg);
+    padding: 1.5rem;
+}
+
+/* Testimonials — quoted cards. */
+:is(.wf-review-1-body, .wf-review-2-body, .wf-review-3-body) {
+    border: var(--wf-border-width) solid var(--wf-color-border);
+    border-radius: var(--wf-radius);
+    box-shadow: var(--wf-shadow);
+    background-color: var(--wf-color-bg);
+    padding: 1.5rem;
+}
+:is(.wf-review-1-name, .wf-review-2-name, .wf-review-3-name) {
+    color: var(--wf-color-primary);
+    font-weight: 700;
+}
+.wf-reviews-rating {
+    color: var(--wf-color-accent);
+}
+
+/* FAQ — the nested-accordion items take the structure radius + hairline. */
+.wf-faq .e-n-accordion-item {
+    border: var(--wf-border-width) solid var(--wf-color-border);
+    border-radius: var(--wf-radius);
+    background-color: var(--wf-color-bg);
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+.wf-faq summary,
+.wf-faq .e-n-accordion-item-title {
+    color: var(--wf-color-primary);
+    font-family: var(--wf-font-heading);
+    font-weight: var(--wf-heading-weight);
+}
+
+/* Final CTA — kept on the alt tint; the accent button is the pop (contrast-safe). */
+.wf-block-final-cta {
+    background-color: var(--wf-color-bg-alt);
+    text-align: center;
+}
+.wf-cta-heading {
+    color: var(--wf-color-primary);
+}
+
+/* ===================================================================
+ * Structure presets — each sets the structure tokens; brand stays untouched.
+ * Applied via the body.wf-structure-{slug} class the companion prints.
+ * =================================================================== */
+
+/* Trust — clean, established, flat; borders define, color is accent. (Also :root default.) */
+body.wf-structure-trust {
+    --wf-radius: 4px;
+    --wf-radius-sm: 2px;
+    --wf-radius-lg: 6px;
+    --wf-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    --wf-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --wf-shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --wf-border-width: 1px;
+    --wf-section-gap: 96px;
+    --wf-section-gap-mobile: 56px;
+    --wf-pad-block: 72px;
+    --wf-button-radius: 4px;
+    --wf-heading-transform: none;
+    --wf-heading-weight: 600;
+    --wf-heading-tracking: normal;
+}
+
+/* Bold — confident, dense, conversion-forward; sharp corners, strong shadow,
+ * color-as-structure (alt blocks go dark/saturated via --wf-color-bg-alt). */
+body.wf-structure-bold {
+    --wf-radius: 2px;
+    --wf-radius-sm: 0px;
+    --wf-radius-lg: 4px;
+    --wf-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    --wf-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.12);
+    --wf-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.22);
+    --wf-border-width: 0px;
+    --wf-section-gap: 64px;
+    --wf-section-gap-mobile: 40px;
+    --wf-pad-block: 56px;
+    --wf-button-radius: 2px;
+    --wf-heading-transform: uppercase;
+    --wf-heading-weight: 800;
+    --wf-heading-tracking: -0.01em;
+}
+/* On Bold's dark alt blocks, cards sit on the page bg so they stay readable. */
+body.wf-structure-bold :is(.wf-why-card-1-body, .wf-why-card-2-body, .wf-why-card-3-body, .wf-review-1-body, .wf-review-2-body, .wf-review-3-body) {
+    background-color: var(--wf-color-bg);
+    color: var(--wf-color-text);
+}
+
+/* Warm — friendly, human, local; rounded, soft shadows, comfortable spacing. */
+body.wf-structure-warm {
+    --wf-radius: 12px;
+    --wf-radius-sm: 8px;
+    --wf-radius-lg: 16px;
+    --wf-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+    --wf-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --wf-shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.12);
+    --wf-border-width: 0px;
+    --wf-section-gap: 80px;
+    --wf-section-gap-mobile: 48px;
+    --wf-pad-block: 64px;
+    --wf-button-radius: 999px;
+    --wf-heading-transform: none;
+    --wf-heading-weight: 700;
+    --wf-heading-tracking: normal;
+}
+
+/* ---- Mobile rhythm ---- */
+@media (max-width: 767px) {
+    .wf-block {
+        padding-block: var(--wf-section-gap-mobile);
+    }
+}

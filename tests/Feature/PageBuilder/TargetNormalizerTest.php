@@ -3,6 +3,25 @@
 use App\PageBuilder\Library\BlockLibrary;
 use App\PageBuilder\Library\TargetNormalizer;
 
+/** Find the first container carrying the `wf-block` class anywhere in a tree. */
+function findWfBlock(array $elements): ?array
+{
+    foreach ($elements as $el) {
+        $classes = $el['settings']['_css_classes'] ?? '';
+        if (is_string($classes) && in_array('wf-block', explode(' ', $classes), true)) {
+            return $el;
+        }
+        if (! empty($el['elements'])) {
+            $found = findWfBlock($el['elements']);
+            if ($found !== null) {
+                return $found;
+            }
+        }
+    }
+
+    return null;
+}
+
 /** Find the first widget of a type anywhere in an element tree. */
 function findWidget(array $elements, string $type): ?array
 {
@@ -71,10 +90,46 @@ it('passes through the faq heading and other widgets unchanged', function () {
         ->and($heading['settings']['title'])->toBe('Frequently asked questions');
 });
 
-it('leaves a block with no accordion structurally identical', function () {
+it('strips the baked padding off wf-block containers (structure owns density)', function () {
     $hero = (new BlockLibrary)->block('hero');
 
-    expect((new TargetNormalizer)->normalize($hero))->toBe($hero);
+    // The library bakes padding on the wf-block container.
+    $block = findWfBlock($hero);
+    expect($block['settings']['padding'] ?? null)->not->toBeNull();
+
+    $normalized = (new TargetNormalizer)->normalize($hero);
+
+    // After normalize the wf-block padding is gone — the base wf-* stylesheet's
+    // --wf-pad-block drives it now — but everything else (gaps, classes) survives.
+    $normBlock = findWfBlock($normalized);
+    expect($normBlock['settings'])->not->toHaveKey('padding')
+        ->and($normBlock['settings']['_css_classes'])->toBe('wf-block wf-block-hero')
+        ->and($normBlock['settings']['flex_gap'])->toBe($block['settings']['flex_gap']);
+});
+
+it('only strips padding from wf-block containers, never inner ones', function () {
+    $tree = [[
+        'elType' => 'container',
+        'settings' => ['_css_classes' => 'wf-block wf-block-x', 'padding' => ['top' => '64']],
+        'elements' => [[
+            'elType' => 'container',
+            'settings' => ['padding' => ['top' => '20']], // inner, no wf-block class
+            'elements' => [],
+        ]],
+    ]];
+
+    $out = (new TargetNormalizer)->normalize($tree);
+
+    expect($out[0]['settings'])->not->toHaveKey('padding')              // wf-block stripped
+        ->and($out[0]['elements'][0]['settings']['padding'])->toBe(['top' => '20']); // inner kept
+});
+
+it('keeps the baked padding when strip_block_padding is off', function () {
+    $hero = (new BlockLibrary)->block('hero');
+
+    $normalized = (new TargetNormalizer(['strip_block_padding' => false]))->normalize($hero);
+
+    expect(findWfBlock($normalized)['settings'])->toHaveKey('padding');
 });
 
 it('exposes the full block roster', function () {

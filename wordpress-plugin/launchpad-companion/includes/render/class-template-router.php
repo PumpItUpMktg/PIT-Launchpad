@@ -125,6 +125,15 @@ final class TemplateRouter
             $classes[] = 'lp-kit-' . sanitize_html_class($kit);
         }
 
+        // The chosen structure preset → the body class that activates its token bundle
+        // in wireframe.css, on managed kit pages (where the wf-block widgets live).
+        // Defaults to 'trust' (also the :root default) when none has been pushed yet.
+        if ($page_type !== '' || $kit !== '') {
+            $preset = (string) get_option(Meta::OPTION_STRUCTURE_PRESET, '');
+            $preset = in_array($preset, ['trust', 'bold', 'warm'], true) ? $preset : 'trust';
+            $classes[] = 'wf-structure-' . $preset;
+        }
+
         return $classes;
     }
 }

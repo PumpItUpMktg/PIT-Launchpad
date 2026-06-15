@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.7.4
+Stable tag: 0.8.0
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -100,3 +100,22 @@ Shortcodes → "Kit templates" lists the exact condition + the resolved template
 per kit. (A taxonomy term is the condition target because Pro conditions match
 terms/post-types, not body classes; this is version-independent and works on the
 Atomic Editor where per-post page-template assignment does not.)
+
+== Brand system (wf-* native pages) ==
+Native library pages (per-page _elementor_data) render as wireframe widgets carrying
+stable `wf-*` hook classes and NO baked color/font/radius. The look is supplied by
+assets/wireframe.css, parameterized entirely by CSS custom properties in two tiers:
+
+* Structure tokens (--wf-radius / -shadow / -section-gap / -pad-block / -button-radius
+  / -heading-transform|weight|tracking) — one of three preset bundles selected by the
+  `body.wf-structure-{slug}` class (trust / bold / warm). The chosen slug is the
+  `lp_structure_preset` option, emitted as a body class on managed kit pages.
+* Brand tokens (--wf-color-* / --wf-font-*) — per-tenant values from the
+  `lp_brand_tokens` option, printed as a sanitized `:root { --wf-* }` inline block
+  before wireframe.css and survive republish. Only valid `--wf-*` names are emitted;
+  values are charset-restricted (no CSS breakout). The tenant's heading/body Google
+  Fonts are enqueued so the --wf-font-* tokens render. Both options are written by
+  push-brand-kit. Every token has a safe fallback, so an un-branded page is presentable.
+
+Style only the `wf-*` classes — never the id-tied `.elementor-element-{id}` classes,
+which are rebuilt on every compose.
