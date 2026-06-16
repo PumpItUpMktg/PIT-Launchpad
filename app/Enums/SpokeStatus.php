@@ -3,12 +3,16 @@
 namespace App\Enums;
 
 /**
- * The owner-confirmed routing of a spoke after the prune (Phase 4). Nothing becomes
- * a page without an explicit confirm + a chosen path — there is no "candidate"
- * status that silently ships.
+ * The lifecycle/routing of a spoke. Phase 2's expansion emits `candidate` (proposed,
+ * pre-prune — never ships as-is); Phase 4's prune resolves each candidate to an
+ * owner-confirmed routing (offered / future / content / skipped). Nothing becomes a
+ * page without that explicit confirm + chosen path.
  */
 enum SpokeStatus: string
 {
+    /** Proposed by the Phase 2 expansion — awaiting the owner prune. Ships nothing on its own. */
+    case Candidate = 'candidate';
+
     /** Yes, I offer this — or I'd add it now. Service page, built + live. */
     case Offered = 'offered';
 
@@ -24,6 +28,7 @@ enum SpokeStatus: string
     public function label(): string
     {
         return match ($this) {
+            self::Candidate => 'Candidate (proposed)',
             self::Offered => 'Offered (service page)',
             self::Future => 'Future (service page, live day one)',
             self::Content => 'Content path (capture)',

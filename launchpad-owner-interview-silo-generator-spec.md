@@ -54,6 +54,36 @@ other trades.
 GBP grounds what they **do**; the problem-chain reasoning generates what they could
 **capture**. Owner veto + the upside number keep it honest.
 
+### Phase 2 — implemented (headless `SiloExpander`)
+
+The expansion is a headless service (`app/Interview/Expansion/`): one strict-schema
+Claude call takes `SiloSeed + VoiceProfile` → a validated candidate tree
+(`ExpansionResult` = `CandidateSilo[]` + a `FringeCandidate[]` handoff set). Same
+discipline as `InterviewExtractor`: validate (`ExpansionValidator`), retry-then-throw
+(`ExpansionException`), no fabrication. It reasons across five dimensions, calibrated to
+SPG's ~6-service → ~40-page target:
+
+1. **Equipment × action matrix** (biggest multiplier) — each core equipment fans into
+   the actions that genuinely apply (install/replace/repair/maintenance/monitoring/
+   backup/emergency/troubleshooting); the model reasons which are real per type.
+2. **Problem-chain adjacencies** (cross-trade) — `connecting`, `connection_note` required.
+3. **Upstream content pages** — symptom/problem-aware, `page_type = content`.
+4. **Audience axis** — a secondary audience becomes a parallel **silo** (e.g. Commercial).
+5. **Brand axis** — named brands become a "Brands We Service" **silo**.
+
+Audience and brand are **silos, not new enum fields**. Granularity is the **maximal
+split** (`own_page`, volume-pending — Phase 3 folds the low-volume ones). `status =
+candidate` (pre-prune). **Fringe is tag-only**: out-of-lane items go to the
+`fringe_handoff` set (with `connection_note` + optional `sibling_brand` hint) for the
+separate **Routing layer** — Phase 2 builds no routing pages.
+
+- **Persistence** (`ExpansionPersister`, behind `--persist`): writes a pillar spoke per
+  silo + its candidate spokes + the fringe set (tag `fringe`, `silo = "Out of Lane"`,
+  `sibling_brand`) onto the site's one `SiloBlueprint`; re-running replaces the set.
+- **CLI** `launchpad:silo-expand {site} [--json] [--persist]` — **dry-run by default**;
+  the calibration gate is the human eyeball of the printed tree against the target.
+- **§1 additions:** `SpokeStatus::Candidate`; `spokes.sibling_brand` (Routing handoff hint).
+
 ## 3. Keyword grounding (DataForSEO)
 
 Pull search volume per candidate head keyword, **service-area-localized** to the

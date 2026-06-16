@@ -30,6 +30,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int|null $volume
  * @property SpokeStatus $status
  * @property string|null $connection_note
+ * @property string|null $sibling_brand
  * @property SpokeGranularity $granularity
  */
 class Spoke extends Model
