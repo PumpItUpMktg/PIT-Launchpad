@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $site_id
  * @property string|null $trade
  * @property array<string, mixed>|null $seed
+ * @property list<array{role: string, text: string}>|null $transcript
  */
 class SiloBlueprint extends Model
 {
@@ -47,6 +48,7 @@ class SiloBlueprint extends Model
     {
         return [
             'seed' => 'array',
+            'transcript' => 'array',
         ];
     }
 }

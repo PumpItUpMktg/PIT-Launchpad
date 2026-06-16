@@ -25,13 +25,19 @@ function extraction(string $trade = 'waterproofing'): ExtractionResult
     );
 }
 
-test('it persists the seed onto a blueprint and the voice as an active profile', function () {
+test('it persists the seed + transcript onto a blueprint and the voice as an active profile', function () {
     $site = Site::factory()->create();
 
-    $result = app(InterviewPersister::class)->persist($site, extraction());
+    $transcript = [
+        ['role' => 'assistant', 'text' => 'Tell me about your business.'],
+        ['role' => 'owner', 'text' => 'We waterproof basements around Tucson.'],
+    ];
+
+    $result = app(InterviewPersister::class)->persist($site, extraction(), $transcript);
 
     expect($result->blueprint->trade)->toBe('waterproofing')
         ->and($result->blueprint->seed['anchor_services'])->toContain('Sump Pump Installation')
+        ->and($result->blueprint->transcript)->toBe($transcript)
         ->and($result->blueprint->site_id)->toBe($site->id)
         ->and($result->voice->status)->toBe(VoiceStatus::Active)
         ->and($result->voice->version)->toBe(1)
@@ -39,6 +45,22 @@ test('it persists the seed onto a blueprint and the voice as an active profile',
         ->and($result->voice->cta_voice)->toBe('direct');
 
     expect(SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1);
+});
+
+test('genuinely-unprovided fields persist EMPTY, never fabricated', function () {
+    $site = Site::factory()->create();
+
+    // The owner gave a trade + one service but no markets and no exclusions.
+    $sparse = new ExtractionResult(
+        new SiloSeed('handyman', ['General Repairs'], [], []),
+        ['framing_model' => 'problem_solution', 'tone_axes' => []],
+    );
+
+    $result = app(InterviewPersister::class)->persist($site, $sparse);
+
+    expect($result->blueprint->seed['markets'])->toBe([])
+        ->and($result->blueprint->seed['exclusions'])->toBe([])
+        ->and($result->blueprint->trade)->toBe('handyman');
 });
 
 test('re-running updates the one blueprint and supersedes the active voice version', function () {

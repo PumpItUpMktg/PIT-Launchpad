@@ -82,7 +82,7 @@ class InterviewCommand extends Command
             return self::SUCCESS;
         }
 
-        $persisted = $persister->persist($site, $result);
+        $persisted = $persister->persist($site, $result, $session->toArray());
 
         $this->info("Saved blueprint {$persisted->blueprint->id}; voice v{$persisted->voice->version} is now active.");
 

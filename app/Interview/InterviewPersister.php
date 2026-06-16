@@ -18,17 +18,23 @@ use Illuminate\Support\Facades\DB;
  */
 final class InterviewPersister
 {
-    public function persist(Site $site, ExtractionResult $result): PersistResult
+    /**
+     * @param  list<array{role: string, text: string}>  $transcript  the raw conversation, kept for re-extraction
+     */
+    public function persist(Site $site, ExtractionResult $result, array $transcript = []): PersistResult
     {
-        return DB::transaction(function () use ($site, $result): PersistResult {
+        return DB::transaction(function () use ($site, $result, $transcript): PersistResult {
             return new PersistResult(
-                $this->persistSeed($site, $result->seed),
+                $this->persistSeed($site, $result->seed, $transcript),
                 $this->persistVoice($site, $result->voice),
             );
         });
     }
 
-    private function persistSeed(Site $site, SiloSeed $seed): SiloBlueprint
+    /**
+     * @param  list<array{role: string, text: string}>  $transcript
+     */
+    private function persistSeed(Site $site, SiloSeed $seed, array $transcript): SiloBlueprint
     {
         $blueprint = SiloBlueprint::withoutGlobalScope(SiteScope::class)
             ->firstOrNew(['site_id' => $site->id]);
@@ -36,6 +42,7 @@ final class InterviewPersister
         $blueprint->fill([
             'trade' => $seed->trade,
             'seed' => $seed->toArray(),
+            'transcript' => $transcript === [] ? $blueprint->transcript : $transcript,
         ])->save();
 
         return $blueprint;

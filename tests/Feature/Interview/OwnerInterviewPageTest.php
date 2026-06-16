@@ -3,6 +3,9 @@
 use App\Enums\UserRole;
 use App\Filament\Pages\OwnerInterview;
 use App\Integrations\Claude\ClaudeClient;
+use App\Interview\ExtractionResult;
+use App\Interview\InterviewPersister;
+use App\Interview\SiloSeed;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -17,7 +20,7 @@ beforeEach(function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
 });
 
-it('runs the chat from start to a persisted seed + voice', function () {
+it('runs the chat, lets the operator edit the seed, and persists seed + transcript + voice', function () {
     $site = Site::factory()->create();
 
     $this->app->instance(ClaudeClient::class, new SequencedClaudeClient([
@@ -43,12 +46,47 @@ it('runs the chat from start to a persisted seed + voice', function () {
         ->call('send')
         ->assertSet('ready', true)
         ->call('extract')
-        ->assertSet('preview.seed.trade', 'roofing')
+        ->assertSet('extracted', true)
+        ->assertSet('editTrade', 'roofing')
+        ->assertSet('editMarkets', 'Denver')
+        // operator sanity-edit: add an exclusion the owner mentioned in passing
+        ->set('editExclusions', 'Commercial work')
         ->call('persist')
         ->assertSet('persisted', true);
 
-    expect(SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('trade'))
-        ->toBe('roofing');
+    $blueprint = SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->firstOrFail();
+    expect($blueprint->trade)->toBe('roofing')
+        ->and($blueprint->seed['exclusions'])->toBe(['Commercial work']) // the edit won
+        ->and($blueprint->transcript)->toHaveCount(3); // assistant, owner, assistant
+
     expect(VoiceProfile::withoutGlobalScope(SiteScope::class)
         ->where('site_id', $site->id)->where('status', 'active')->count())->toBe(1);
+});
+
+it('resumes a saved interview — transcript, seed, and voice all reload', function () {
+    $site = Site::factory()->create();
+
+    $transcript = [
+        ['role' => 'assistant', 'text' => 'Tell me about your business.'],
+        ['role' => 'owner', 'text' => 'HVAC across Phoenix.'],
+    ];
+    app(InterviewPersister::class)->persist(
+        $site,
+        new ExtractionResult(
+            new SiloSeed('hvac', ['AC Repair'], ['Phoenix'], []),
+            ['framing_model' => 'problem_solution', 'tone_axes' => ['warmth' => 0.5], 'cta_voice' => 'direct'],
+        ),
+        $transcript,
+    );
+
+    Livewire::test(OwnerInterview::class)
+        ->set('siteId', $site->id)
+        ->assertSet('hasSaved', true)
+        ->call('resume')
+        ->assertSet('started', true)
+        ->assertSet('extracted', true)
+        ->assertSet('editTrade', 'hvac')
+        ->assertSet('editAnchors', 'AC Repair')
+        ->assertSet('voice.cta_voice', 'direct')
+        ->assertCount('messages', 2);
 });
