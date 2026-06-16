@@ -18,7 +18,7 @@ test('the command converses, extracts, and persists on confirm', function () {
             'seed' => [
                 'trade' => 'waterproofing',
                 'anchor_services' => ['Sump Pump Installation'],
-                'markets' => ['Tucson'],
+                'region' => 'NJ, eastern PA',
                 'exclusions' => [],
             ],
             'voice' => ['framing_model' => 'problem_solution', 'tone_axes' => ['warmth' => 0.8]],

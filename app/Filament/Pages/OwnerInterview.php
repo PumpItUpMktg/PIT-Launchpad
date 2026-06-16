@@ -53,12 +53,12 @@ class OwnerInterview extends Page
 
     public bool $extracted = false;
 
-    // Editable seed confirm (one item per line for the list fields).
+    // Editable seed confirm (anchors/exclusions one item per line; region is a single broad phrase).
     public string $editTrade = '';
 
     public string $editAnchors = '';
 
-    public string $editMarkets = '';
+    public string $editRegion = '';
 
     public string $editExclusions = '';
 
@@ -91,7 +91,7 @@ class OwnerInterview extends Page
             return;
         }
 
-        $this->reset(['messages', 'draft', 'ready', 'extracted', 'editTrade', 'editAnchors', 'editMarkets', 'editExclusions', 'voice', 'persisted']);
+        $this->reset(['messages', 'draft', 'ready', 'extracted', 'editTrade', 'editAnchors', 'editRegion', 'editExclusions', 'voice', 'persisted']);
 
         $session = InterviewSession::start(app(Interviewer::class));
         $this->messages = $session->toArray();
@@ -170,11 +170,11 @@ class OwnerInterview extends Page
             return;
         }
 
-        // Edited values are authoritative; genuinely-empty list fields persist empty (never fabricated).
+        // Edited values are authoritative; genuinely-empty fields persist empty (never fabricated).
         $seed = new SiloSeed(
             trim($this->editTrade),
             $this->parseList($this->editAnchors),
-            $this->parseList($this->editMarkets),
+            trim($this->editRegion),
             $this->parseList($this->editExclusions),
         );
 
@@ -200,7 +200,10 @@ class OwnerInterview extends Page
     {
         $this->editTrade = (string) ($seed['trade'] ?? '');
         $this->editAnchors = $this->toLines($seed['anchor_services'] ?? []);
-        $this->editMarkets = $this->toLines($seed['markets'] ?? []);
+        // region is the broad phrase; fall back to a joined legacy markets[] for older saved seeds.
+        $this->editRegion = array_key_exists('region', $seed)
+            ? (string) $seed['region']
+            : implode(', ', is_array($seed['markets'] ?? null) ? array_map('strval', $seed['markets']) : []);
         $this->editExclusions = $this->toLines($seed['exclusions'] ?? []);
     }
 

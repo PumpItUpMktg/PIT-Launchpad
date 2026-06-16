@@ -43,7 +43,7 @@ class InterviewExtractCommand extends Command
         $this->info('Silo Seed');
         $this->line('  Trade:      '.$seed->trade);
         $this->line('  Anchors:    '.$this->fmt($seed->anchorServices));
-        $this->line('  Markets:    '.$this->fmt($seed->markets));
+        $this->line('  Region:     '.($seed->region === '' ? '(none)' : $seed->region));
         $this->line('  Exclusions: '.$this->fmt($seed->exclusions));
         $this->line('  GBP:        '.($seed->gbpSignals === null ? '(none connected)' : $this->fmt($seed->gbpSignals)));
 

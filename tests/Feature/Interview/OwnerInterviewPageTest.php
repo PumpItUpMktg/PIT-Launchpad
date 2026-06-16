@@ -30,7 +30,7 @@ it('runs the chat, lets the operator edit the seed, and persists seed + transcri
             'seed' => [
                 'trade' => 'roofing',
                 'anchor_services' => ['Roof Replacement'],
-                'markets' => ['Denver'],
+                'region' => 'Denver metro',
                 'exclusions' => [],
             ],
             'voice' => ['framing_model' => 'problem_solution', 'tone_axes' => ['warmth' => 0.6]],
@@ -45,10 +45,13 @@ it('runs the chat, lets the operator edit the seed, and persists seed + transcri
         ->set('draft', 'We replace roofs across Denver.')
         ->call('send')
         ->assertSet('ready', true)
+        // wrap must TRANSITION, not dead-end: the forward CTA + next-step note are present.
+        ->assertSee('review the details below')
+        ->assertSee('Extract seed + voice')
         ->call('extract')
         ->assertSet('extracted', true)
         ->assertSet('editTrade', 'roofing')
-        ->assertSet('editMarkets', 'Denver')
+        ->assertSet('editRegion', 'Denver metro')
         // operator sanity-edit: add an exclusion the owner mentioned in passing
         ->set('editExclusions', 'Commercial work')
         ->call('persist')
@@ -63,6 +66,27 @@ it('runs the chat, lets the operator edit the seed, and persists seed + transcri
         ->where('site_id', $site->id)->where('status', 'active')->count())->toBe(1);
 });
 
+it('offers a persistent extract control before wrap so the owner can advance any time', function () {
+    $site = Site::factory()->create();
+
+    $this->app->instance(ClaudeClient::class, new SequencedClaudeClient([
+        (string) json_encode(['message' => 'Tell me about your business.', 'ready' => false]),
+        (string) json_encode([
+            'seed' => ['trade' => 'plumbing', 'anchor_services' => ['Drain Cleaning'], 'region' => '', 'exclusions' => []],
+            'voice' => ['framing_model' => 'problem_solution', 'tone_axes' => []],
+        ]),
+    ]));
+
+    Livewire::test(OwnerInterview::class)
+        ->set('siteId', $site->id)
+        ->call('start')
+        ->assertSet('ready', false)
+        ->assertSee('extract now')   // always-available forward action
+        ->call('extract')            // advancing mid-interview works (extract never requires ready)
+        ->assertSet('extracted', true)
+        ->assertSet('editTrade', 'plumbing');
+});
+
 it('resumes a saved interview — transcript, seed, and voice all reload', function () {
     $site = Site::factory()->create();
 
@@ -73,7 +97,7 @@ it('resumes a saved interview — transcript, seed, and voice all reload', funct
     app(InterviewPersister::class)->persist(
         $site,
         new ExtractionResult(
-            new SiloSeed('hvac', ['AC Repair'], ['Phoenix'], []),
+            new SiloSeed('hvac', ['AC Repair'], 'Phoenix area', []),
             ['framing_model' => 'problem_solution', 'tone_axes' => ['warmth' => 0.5], 'cta_voice' => 'direct'],
         ),
         $transcript,
@@ -87,6 +111,26 @@ it('resumes a saved interview — transcript, seed, and voice all reload', funct
         ->assertSet('extracted', true)
         ->assertSet('editTrade', 'hvac')
         ->assertSet('editAnchors', 'AC Repair')
+        ->assertSet('editRegion', 'Phoenix area')
         ->assertSet('voice.cta_voice', 'direct')
         ->assertCount('messages', 2);
+});
+
+it('resumes a legacy seed (markets[] before the region reframe) into the broad Region field', function () {
+    $site = Site::factory()->create();
+    SiloBlueprint::factory()->create([
+        'site_id' => $site->id,
+        'trade' => 'waterproofing',
+        'seed' => [
+            'trade' => 'waterproofing',
+            'anchor_services' => ['Sump Pump Installation'],
+            'markets' => ['NJ', 'eastern PA'], // legacy shape, no 'region' key
+            'exclusions' => [],
+        ],
+    ]);
+
+    Livewire::test(OwnerInterview::class)
+        ->set('siteId', $site->id)
+        ->call('resume')
+        ->assertSet('editRegion', 'NJ, eastern PA');
 });

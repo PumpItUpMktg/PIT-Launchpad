@@ -18,13 +18,21 @@ duty — one telling of the story, two outputs:
 - **Voice profile** (the existing `VoiceProfile`/`VoiceKit` shape): owner background,
   positioning, tone → versioned voice profile injected into all later generation.
 - **Silo seed**: trade / primary work, a few anchor services (not an exhaustive list),
-  service area / markets, and explicit **exclusions** (what they won't do).
+  the **broad region** served (positioning only — a short phrase like "NJ, eastern PA",
+  NOT a town-by-town list), and explicit **exclusions** (what they won't do).
+
+> **Region vs. service areas.** The seed's `region` is broad positioning only. The
+> specific towns/townships/municipalities that become location pages and localize
+> keyword volume are the authoritative **Locations** layer (owner base location(s) +
+> radius → Census enumerates the cities in range), read by Phase 3 + the location
+> pages — NOT this interview field. Nothing downstream treats `region` as the
+> service-area list.
 
 GBP connect is **offered, preferred, not required**: when connected it pulls categories
 + listed services to ground the expansion and reduce what we have to ask; when absent,
 the conversation plus the model's trade knowledge carry it.
 
-Output: `VoiceProfile` + `SiloSeed { trade, anchor_services[], markets[], exclusions[], gbp_signals? }`.
+Output: `VoiceProfile` + `SiloSeed { trade, anchor_services[], region, exclusions[], gbp_signals? }`.
 
 ## 2. AI expansion — problem-chain adjacency
 
