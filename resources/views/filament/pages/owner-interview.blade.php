@@ -46,29 +46,37 @@
                 @endforeach
             </div>
 
-            {{-- Composer --}}
-            @unless ($ready)
-                <form wire:submit="send" class="flex flex-col gap-2">
-                    <textarea
-                        wire:model="draft"
-                        rows="3"
-                        placeholder="Answer as the owner…"
-                        class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5"
-                    ></textarea>
-                    <div>
-                        <x-filament::button type="submit" icon="heroicon-m-paper-airplane">
-                            Send
-                        </x-filament::button>
-                    </div>
-                </form>
-            @elseunless ($extracted)
-                <div class="flex flex-wrap items-center gap-3">
-                    <span class="text-sm font-medium text-success-600 dark:text-success-400">
-                        Enough gathered — ready to extract.
-                    </span>
-                    <x-filament::button wire:click="extract" icon="heroicon-m-sparkles">
-                        Extract seed + voice
-                    </x-filament::button>
+            {{-- Composer + forward action (hidden once extracted → the confirm shows) --}}
+            @unless ($extracted)
+                <div class="flex flex-col gap-3">
+                    @if ($ready)
+                        <div class="rounded-lg bg-success-50 px-4 py-3 text-sm text-success-700 ring-1 ring-success-600/20 dark:bg-success-500/10 dark:text-success-300">
+                            I have what I need — review the details below.
+                        </div>
+                        <div>
+                            <x-filament::button wire:click="extract" size="lg" icon="heroicon-m-sparkles">
+                                Extract seed + voice — review what I captured →
+                            </x-filament::button>
+                        </div>
+                    @else
+                        <form wire:submit="send" class="flex flex-col gap-2">
+                            <textarea
+                                wire:model="draft"
+                                rows="3"
+                                placeholder="Answer as the owner…"
+                                class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5"
+                            ></textarea>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <x-filament::button type="submit" icon="heroicon-m-paper-airplane">
+                                    Send
+                                </x-filament::button>
+                                {{-- Always-available forward action so a wrap can never strand the operator. --}}
+                                <x-filament::button wire:click="extract" color="gray" icon="heroicon-m-check">
+                                    I'm done — extract now
+                                </x-filament::button>
+                            </div>
+                        </form>
+                    @endif
                 </div>
             @endunless
 

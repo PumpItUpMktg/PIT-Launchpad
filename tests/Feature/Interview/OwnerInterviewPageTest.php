@@ -45,6 +45,9 @@ it('runs the chat, lets the operator edit the seed, and persists seed + transcri
         ->set('draft', 'We replace roofs across Denver.')
         ->call('send')
         ->assertSet('ready', true)
+        // wrap must TRANSITION, not dead-end: the forward CTA + next-step note are present.
+        ->assertSee('review the details below')
+        ->assertSee('Extract seed + voice')
         ->call('extract')
         ->assertSet('extracted', true)
         ->assertSet('editTrade', 'roofing')
@@ -61,6 +64,27 @@ it('runs the chat, lets the operator edit the seed, and persists seed + transcri
 
     expect(VoiceProfile::withoutGlobalScope(SiteScope::class)
         ->where('site_id', $site->id)->where('status', 'active')->count())->toBe(1);
+});
+
+it('offers a persistent extract control before wrap so the owner can advance any time', function () {
+    $site = Site::factory()->create();
+
+    $this->app->instance(ClaudeClient::class, new SequencedClaudeClient([
+        (string) json_encode(['message' => 'Tell me about your business.', 'ready' => false]),
+        (string) json_encode([
+            'seed' => ['trade' => 'plumbing', 'anchor_services' => ['Drain Cleaning'], 'region' => '', 'exclusions' => []],
+            'voice' => ['framing_model' => 'problem_solution', 'tone_axes' => []],
+        ]),
+    ]));
+
+    Livewire::test(OwnerInterview::class)
+        ->set('siteId', $site->id)
+        ->call('start')
+        ->assertSet('ready', false)
+        ->assertSee('extract now')   // always-available forward action
+        ->call('extract')            // advancing mid-interview works (extract never requires ready)
+        ->assertSet('extracted', true)
+        ->assertSet('editTrade', 'plumbing');
 });
 
 it('resumes a saved interview — transcript, seed, and voice all reload', function () {
