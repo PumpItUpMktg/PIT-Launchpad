@@ -3,6 +3,8 @@
 namespace App\Publishing;
 
 use App\Enums\ContentKind;
+use App\Enums\ContentSource;
+use App\Enums\SlotContentType;
 use App\Models\Content;
 use App\Models\ConversionConfig;
 use App\Models\Location;
@@ -28,6 +30,9 @@ use Illuminate\Support\Collection;
  */
 class MetaBlobAssembler
 {
+    /** A neutral gray SVG box (data URI) the placeholder preview uses for image slots. */
+    private const PLACEHOLDER_IMAGE = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='1200'%20height='800'%3E%3Crect%20width='100%25'%20height='100%25'%20fill='%23e2e8f0'/%3E%3Ctext%20x='50%25'%20y='50%25'%20fill='%23475569'%20font-size='52'%20font-family='sans-serif'%20text-anchor='middle'%20dominant-baseline='middle'%3EImage%3C/text%3E%3C/svg%3E";
+
     /** @var array<string, PageConfig|null> memoized per content id */
     private array $pageConfigs = [];
 
@@ -49,6 +54,46 @@ class MetaBlobAssembler
         }
 
         return $this->pageConfigs[$content->id];
+    }
+
+    /**
+     * Length-representative placeholder slots for the page's kit (or a body stand-in
+     * for a post) — fed to the SAME composer so the preview is the real skeleton.
+     *
+     * @return array<string, mixed>
+     */
+    private function placeholderSlots(Content $content): array
+    {
+        $schema = $this->schema($content);
+        if ($schema !== null) {
+            return (new PlaceholderSlots)->forSchema($schema);
+        }
+
+        return ['body' => '<p>This is length-representative body copy that runs a realistic paragraph so the layout reads as it will with the real article in place.</p>'];
+    }
+
+    /**
+     * Placeholder image map — a stand-in box for each image slot the kit renders.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function placeholderImages(Content $content): array
+    {
+        $schema = $this->schema($content);
+        $images = [];
+        if ($schema !== null) {
+            foreach ($schema->slots as $slot) {
+                if (in_array($slot->contentType, [SlotContentType::Image, SlotContentType::Gallery], true)) {
+                    $images[$slot->key] = ['url' => self::PLACEHOLDER_IMAGE, 'alt' => 'Placeholder image'];
+                }
+            }
+        }
+
+        if ($images === []) {
+            $images['hero_image'] = ['url' => self::PLACEHOLDER_IMAGE, 'alt' => 'Placeholder image'];
+        }
+
+        return $images;
     }
 
     /**
@@ -75,10 +120,15 @@ class MetaBlobAssembler
      * @param  Collection<int, RenderJob>  $renderJobs
      * @return array<string, mixed>
      */
-    public function assemble(Content $content, Collection $renderJobs): array
+    public function assemble(Content $content, Collection $renderJobs, ContentSource $source = ContentSource::Generated): array
     {
-        $images = $this->heroImageOverride($content, $this->images($renderJobs));
-        $slots = $this->slotPayload($content);
+        // Placeholder = the SAME composed page with length-representative stand-ins +
+        // image/form boxes (preview = reality; only slot content differs).
+        $placeholder = $source === ContentSource::Placeholder;
+        $images = $placeholder
+            ? $this->placeholderImages($content)
+            : $this->heroImageOverride($content, $this->images($renderJobs));
+        $slots = $placeholder ? $this->placeholderSlots($content) : $this->slotPayload($content);
 
         return [
             'content_id' => $content->id,

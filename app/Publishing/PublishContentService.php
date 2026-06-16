@@ -4,6 +4,7 @@ namespace App\Publishing;
 
 use App\Enums\AuditAction;
 use App\Enums\ContentKind;
+use App\Enums\ContentSource;
 use App\Enums\ContentStatus;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
@@ -66,7 +67,7 @@ class PublishContentService
         return implode('; ', array_map(fn ($f) => $f->code->value, $result->failures));
     }
 
-    public function publish(Content $content, ?string $actorId = null): PublishResult
+    public function publish(Content $content, ?string $actorId = null, ContentSource $source = ContentSource::Generated): PublishResult
     {
         // State guard (the desync fix): only publish from a publishable status. An
         // unreviewed row — candidate / scored / drafted / needs_review / in_review,
@@ -116,7 +117,7 @@ class PublishContentService
         $content->forceFill(['status' => ContentStatus::Publishing])->save();
 
         $site = Site::withoutGlobalScope(SiteScope::class)->findOrFail($content->site_id);
-        $payload = $this->assembler->assemble($content, $outcome->jobs);
+        $payload = $this->assembler->assemble($content, $outcome->jobs, $source);
 
         try {
             $response = $this->wordpress->forSite($site)->upsertContent($payload);
