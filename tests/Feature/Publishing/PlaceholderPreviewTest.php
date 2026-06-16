@@ -1,0 +1,79 @@
+<?php
+
+use App\Enums\ContentSource;
+use App\Publishing\MetaBlobAssembler;
+use App\Publishing\PlaceholderSlots;
+use App\Publishing\RenderCoordinator;
+use Tests\Support\PublishHarness;
+
+/** Top-level wf-block-* classes in an elementor_data tree (the structural skeleton). */
+function wfBlocks(array $elements): array
+{
+    $blocks = [];
+    $walk = function (array $els) use (&$walk, &$blocks): void {
+        foreach ($els as $el) {
+            $cls = is_array($el) ? (string) ($el['settings']['_css_classes'] ?? '') : '';
+            foreach (explode(' ', $cls) as $c) {
+                if (str_starts_with($c, 'wf-block-')) {
+                    $blocks[] = $c;
+                }
+            }
+            if (is_array($el) && ! empty($el['elements'])) {
+                $walk($el['elements']);
+            }
+        }
+    };
+    $walk($elements);
+    sort($blocks);
+
+    return $blocks;
+}
+
+test('placeholder preview is the SAME skeleton as generated — only content swaps', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+    $jobs = app(RenderCoordinator::class)->render($content)->jobs;
+
+    $assembler = app(MetaBlobAssembler::class);
+    $generated = $assembler->assemble($content->fresh(), $jobs, ContentSource::Generated);
+    $placeholder = $assembler->assemble($content->fresh(), $jobs, ContentSource::Placeholder);
+
+    // Same composer/surface + kit; placeholder fills EVERY slot so it's the full
+    // skeleton (a superset of the sparse generated page, which prunes unfed sections).
+    $placeholderBlocks = wfBlocks($placeholder['elementor_data']);
+    expect($placeholder['kit'])->toBe($generated['kit'])
+        ->and($placeholderBlocks)->toContain('wf-block-hero', 'wf-block-faq', 'wf-block-final-cta', 'wf-block-trust-bar')
+        ->and(array_diff(wfBlocks($generated['elementor_data']), $placeholderBlocks))->toBe([]); // generated ⊆ placeholder
+
+    // Content swapped: stand-in copy + the placeholder image box, not the real ones.
+    expect($placeholder['slot_payload']['hero_problem'])->not->toBe($generated['slot_payload']['hero_problem'])
+        ->and($placeholder['images']['hero_image']['url'])->toStartWith('data:image/svg+xml')
+        ->and($generated['images']['hero_image']['url'])->not->toStartWith('data:image/svg+xml');
+});
+
+test('placeholder slots are length-representative and carry a labeled form box', function () {
+    $kit = PublishHarness::site(); // boot
+    $content = PublishHarness::approvedPage($kit);
+    $schema = $content->wireframeKit->schema();
+
+    $slots = (new PlaceholderSlots)->forSchema($schema);
+
+    expect((string) $slots['hero_problem'])->not->toBe('')
+        ->and(strlen((string) $slots['hero_problem']))->toBeGreaterThan(12)   // a real line, not one word
+        ->and($slots['cta']['form_embed'])->toContain('Form embed')           // labeled placeholder box
+        ->and($slots['cta']['phone'])->toBe('(555) 123-4567');
+});
+
+test('placeholder defaults are off — a normal assemble is unaffected', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+    $jobs = app(RenderCoordinator::class)->render($content)->jobs;
+
+    // Default source = generated → real hero image, real copy.
+    $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), $jobs);
+
+    expect($payload['images']['hero_image']['url'])->not->toStartWith('data:image/svg+xml')
+        ->and($payload['slot_payload']['hero_problem'])->toContain('Leaking');
+});
