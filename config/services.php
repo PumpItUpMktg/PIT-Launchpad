@@ -140,8 +140,9 @@ return [
 
     // US Census — demographics enrichment (§7a onboarding markets) + TIGERweb
     // service-area enumeration (Locations layer). TIGERweb is a public ArcGIS REST
-    // service (no key). Layer ids are vintage-specific; override via env if a vintage
-    // change moves them (current: Incorporated Places = 28, County Subdivisions = 22).
+    // service (no key). Layer ids are resolved by NAME at runtime; the configured ids
+    // are only a fallback if that lookup fails (tigerWMS_Current: Places = 28,
+    // County Subdivisions = 22). Keep the base URL on a current vintage.
     'census' => [
         'key' => env('CENSUS_API_KEY'),
         'tigerweb_url' => env('CENSUS_TIGERWEB_URL', 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Current/MapServer'),
