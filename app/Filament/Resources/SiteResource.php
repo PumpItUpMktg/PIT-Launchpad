@@ -202,47 +202,37 @@ class SiteResource extends Resource
                 ->placeholder('comma-separated'),
             TextInput::make('admired_brand')->label('A brand they admire (optional)'),
             // Form is AI-recommended; this is an optional advanced override, not the
-            // primary pick (Trust/Bold/Warm retired as a client-facing choice).
-            Select::make('structure')->label('Layout style (auto-recommended — override optional)')
-                ->options([
-                    '' => 'Auto (recommended from personality)',
-                    'trust' => 'Clean & established',
-                    'bold' => 'Confident & dense',
-                    'warm' => 'Friendly & rounded',
-                ])
-                ->default('')->selectablePlaceholder(false),
+            // primary pick. The layout style comes from the chosen library palette's
+            // form affinity — not an operator field.
 
             Actions::make([
-                Action::make('generate')->label('Generate candidates')->icon('heroicon-o-sparkles')
-                    ->action(fn (Get $get, Set $set) => self::runBrandGenerate($get, $set, [])),
-                Action::make('regenerate')->label('Show me 3 more')->icon('heroicon-o-arrow-path')->color('gray')
-                    ->visible($hasCandidates)
-                    ->action(fn (Get $get, Set $set) => self::runBrandGenerate($get, $set, self::brandAvoidFrom($get('candidates')))),
-                // Re-roll the OTHER scheme, keeping personality + form (the resolved
-                // structure is reused, not re-recommended).
+                Action::make('generate')->label('Show palettes')->icon('heroicon-o-sparkles')
+                    ->action(fn (Get $get, Set $set) => self::runBrandPalettes($get, $set)),
+                // Re-list the OTHER scheme's library, keeping personality (the AI
+                // re-recommends within that scheme).
                 Action::make('flipScheme')
                     ->label(fn (Get $get): string => ($get('scheme') === 'dark' ? 'Switch to Light' : 'Switch to Dark'))
                     ->icon('heroicon-o-swatch')->color('gray')
                     ->visible($hasCandidates)
                     ->action(function (Get $get, Set $set): void {
                         $set('scheme', $get('scheme') === 'dark' ? 'light' : 'dark');
-                        self::runBrandGenerate($get, $set, []);
+                        self::runBrandPalettes($get, $set);
                     }),
             ]),
 
             Hidden::make('candidates'),
             Hidden::make('resolved_structure'),
-            Textarea::make('structure_note')->label('Structure')
+            Textarea::make('structure_note')->label('Recommended palette')
                 ->readOnly()->dehydrated(false)->rows(2)
-                ->placeholder('Generate to see the AI structure pick.')
+                ->placeholder('Show palettes to see the AI recommendation.')
                 ->visible($hasCandidates),
 
             // The picker: each option is a swatch row + a rendered component preview on
             // the candidate's own tokens/fonts/form — preview = reality. A non-native
             // Select renders the HTML option (Radio can't); the recommended candidate
             // is pre-selected, selection is Set-based.
-            Select::make('selected')->label('Choose a candidate')
-                ->options(fn (Get $get) => self::brandCandidateOptions($get('candidates'), (string) $get('resolved_structure')))
+            Select::make('selected')->label('Choose a palette')
+                ->options(fn (Get $get) => self::brandCandidateOptions($get('candidates')))
                 ->allowHtml()->native(false)->selectablePlaceholder(false)
                 ->live()
                 ->afterStateUpdated(fn (Get $get, Set $set) => self::fillBrandPreview($get, $set))
@@ -254,53 +244,34 @@ class SiteResource extends Resource
     }
 
     /**
-     * Run generation (shared by Generate + regenerate): resolve the structure (the
-     * operator's pick, else the AI recommendation), generate the candidates, and
-     * select the recommended one into the preview.
-     *
-     * @param  list<string>  $avoid
+     * The curated-library flow: AI recommends one set for the answers + scheme, the
+     * whole scheme library is listed (recommended flagged + carrying the rationale),
+     * and the recommended one is pre-selected into the preview.
      */
-    private static function runBrandGenerate(Get $get, Set $set, array $avoid): void
+    private static function runBrandPalettes(Get $get, Set $set): void
     {
-        $answers = self::brandAnswers($get);
-        $studio = app(BrandStudio::class);
         $scheme = Scheme::fromString((string) $get('scheme'));
+        $library = app(BrandStudio::class)->paletteCandidates(self::brandAnswers($get), $scheme);
 
-        // Structure stays STABLE across regenerate/scheme-flip: an explicit override
-        // wins; else the already-resolved one is reused; else recommend once.
-        $picked = (string) $get('structure');
-        $resolved = (string) $get('resolved_structure');
-        if (in_array($picked, ['trust', 'bold', 'warm'], true)) {
-            $structure = $picked;
-            $note = 'Layout (your pick): '.ucfirst($structure).'.';
-        } elseif (in_array($resolved, ['trust', 'bold', 'warm'], true)) {
-            $structure = $resolved;
-            $note = 'Layout: '.ucfirst($structure).' (kept).';
-        } else {
-            $rec = $studio->recommendStructure($answers);
-            $structure = $rec->slug;
-            $note = 'Layout (AI-recommended): '.ucfirst($structure).($rec->rationale !== '' ? ' — '.$rec->rationale : '').'.';
-        }
-        $note = ucfirst($scheme->value).' scheme · '.$note;
+        $set('candidates', $library->toArray()['candidates']);
+        $set('resolved_structure', $library->structure); // the recommended set's form affinity
 
-        $set('candidates', $studio->generateCandidates($answers, $scheme, structure: $structure, avoid: $avoid)->toArray()['candidates']);
-        $set('resolved_structure', $structure);
-        $set('structure_note', $note);
-
-        // Select the recommended candidate (else the first) and fill the preview.
         $candidates = is_array($get('candidates')) ? $get('candidates') : [];
         $selected = 0;
+        $rationale = '';
         foreach ($candidates as $i => $candidate) {
             if (! empty($candidate['recommended'])) {
                 $selected = $i;
+                $rationale = (string) ($candidate['rationale'] ?? '');
                 break;
             }
         }
         $set('selected', (string) $selected);
+        $set('structure_note', ucfirst($scheme->value).' scheme'.($rationale !== '' ? ' · '.$rationale : '').'.');
         self::fillBrandPreview($get, $set);
 
-        Notification::make()->success()->title('Candidates generated')
-            ->body('Pick one (the recommended is pre-selected), then Save & push.')->send();
+        Notification::make()->success()->title('Palettes ready')
+            ->body('The recommended set is pre-selected — pick any, then Save & push.')->send();
     }
 
     /**
@@ -327,15 +298,16 @@ class SiteResource extends Resource
      *
      * @return array<int, string>
      */
-    private static function brandCandidateOptions(mixed $candidates, string $structure): array
+    private static function brandCandidateOptions(mixed $candidates): array
     {
         if (! is_array($candidates)) {
             return [];
         }
 
-        $form = self::brandFormTokens($structure);
         $options = [];
         foreach ($candidates as $i => $candidate) {
+            // Each library palette carries its own form affinity → its own preview form.
+            $form = self::brandFormTokens(is_array($candidate) ? (string) ($candidate['form'] ?? '') : '');
             $options[(int) $i] = self::brandPreviewHtml(is_array($candidate) ? $candidate : [], $form);
         }
 
@@ -412,27 +384,6 @@ class SiteResource extends Resource
         $adjustments = is_array($candidate['adjustments'] ?? null) ? $candidate['adjustments'] : [];
         $set('rationale', (string) ($candidate['rationale'] ?? ''));
         $set('adjustments', $adjustments === [] ? 'None — all fonts and colors validated.' : implode("\n", $adjustments));
-    }
-
-    /**
-     * Short summaries of the current candidates so a regenerate varies from them.
-     *
-     * @return list<string>
-     */
-    private static function brandAvoidFrom(mixed $candidates): array
-    {
-        if (! is_array($candidates)) {
-            return [];
-        }
-
-        $summaries = [];
-        foreach ($candidates as $candidate) {
-            $palette = is_array($candidate['palette'] ?? null) ? $candidate['palette'] : [];
-            $type = is_array($candidate['typography'] ?? null) ? $candidate['typography'] : [];
-            $summaries[] = ($palette['primary'] ?? '?').'+'.($palette['accent'] ?? '?').' / '.($type['heading'] ?? '?');
-        }
-
-        return $summaries;
     }
 
     /**

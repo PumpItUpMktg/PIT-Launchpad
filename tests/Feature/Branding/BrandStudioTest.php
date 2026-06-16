@@ -4,6 +4,7 @@ use App\Branding\BrandGenerator;
 use App\Branding\BrandStudio;
 use App\Branding\FontCatalog;
 use App\Branding\IndustryResolver;
+use App\Branding\Scheme;
 use App\Enums\ConnectionProvider;
 use App\Enums\ServiceSiloRole;
 use App\Integrations\Wordpress\WordpressClientFactory;
@@ -145,6 +146,35 @@ it('persists the chosen structure preset on save', function () {
     $studio->save($site, ['primary' => '#0f62fe'], ['heading' => 'Inter', 'body' => 'Inter'], 'bold');
 
     expect(SiteBranding::withoutGlobalScopes()->where('site_id', $site->id)->firstOrFail()->structure_preset)->toBe('bold');
+});
+
+it('recommends a curated palette by id from the library (closed set)', function () {
+    [$studio] = brandStudio('{"id":"carbon","rationale":"Modern, technical, high-contrast."}');
+
+    $rec = $studio->recommendPalette(['industry' => 'auto detailing', 'personality' => 'modern-technical'], Scheme::Dark);
+
+    expect($rec->palette->id)->toBe('carbon')
+        ->and($rec->palette->scheme)->toBe(Scheme::Dark)
+        ->and($rec->rationale)->toBe('Modern, technical, high-contrast.');
+});
+
+it('falls back to the scheme default when the model returns an off-list id', function () {
+    [$studio] = brandStudio('{"id":"not-a-palette"}');
+
+    expect($studio->recommendPalette(['industry' => 'plumbing', 'personality' => 'trustworthy'], Scheme::Dark)->palette->id)
+        ->toBe('midnight-current'); // the dark default
+});
+
+it('lists the whole scheme library as candidates with the recommended one flagged', function () {
+    [$studio] = brandStudio('{"id":"carbon","rationale":"x"}');
+
+    $set = $studio->paletteCandidates(['industry' => 'auto', 'personality' => 'modern-technical'], Scheme::Dark);
+
+    expect($set->scheme)->toBe(Scheme::Dark)
+        ->and($set->structure)->toBe('bold')                       // carbon's form affinity
+        ->and($set->candidates)->toHaveCount(3)                     // all dark seeds
+        ->and(collect($set->candidates)->where('recommended', true))->toHaveCount(1)
+        ->and($set->recommended()->palette['primary'])->toBe('#818cf8'); // carbon
 });
 
 it('threads the personality adjectives into the generation prompt', function () {

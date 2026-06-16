@@ -19,12 +19,17 @@ use App\Publishing\BrandKitAssembler;
  */
 class BrandStudio
 {
+    private readonly PaletteLibrary $library;
+
     public function __construct(
         private readonly BrandGenerator $generator,
         private readonly IndustryResolver $industry,
         private readonly BrandKitAssembler $assembler,
         private readonly WordpressClientFactory $factory,
-    ) {}
+        ?PaletteLibrary $library = null,
+    ) {
+        $this->library = $library ?? new PaletteLibrary;
+    }
 
     /** The trade descriptor pre-filled into the interview's industry field. */
     public function industryFor(Site $site): string
@@ -88,6 +93,42 @@ class BrandStudio
             : $this->generator->recommendStructure($brief)->slug;
 
         return $this->generator->generateCandidates($brief, $structure, $scheme, avoid: $avoid);
+    }
+
+    /**
+     * The curated-library flow: recommend one set for the answers + scheme, then
+     * return the WHOLE scheme library as candidates (the recommended one flagged +
+     * carrying the AI rationale) for the picker. Replaces raw generation as the
+     * default source.
+     *
+     * @param  array<string, mixed>  $answers
+     */
+    /**
+     * The AI's recommended curated palette for the answers + scheme (closed-set,
+     * deterministic fallback) — the highlighted set in the picker.
+     *
+     * @param  array<string, mixed>  $answers
+     */
+    public function recommendPalette(array $answers, Scheme $scheme): PaletteRecommendation
+    {
+        return $this->generator->recommendPalette($this->briefFrom($answers), $scheme);
+    }
+
+    public function paletteCandidates(array $answers, Scheme $scheme): BrandCandidateSet
+    {
+        $rec = $this->recommendPalette($answers, $scheme);
+
+        $candidates = [];
+        foreach ($this->library->forScheme($scheme) as $palette) {
+            $isRec = $palette->id === $rec->palette->id;
+            $candidates[] = $palette->toCandidate(
+                recommended: $isRec,
+                rationale: $isRec ? $rec->rationale : '',
+            );
+        }
+
+        // The recommended set's form_affinity is the set's structure label.
+        return new BrandCandidateSet($candidates, $rec->palette->formAffinity, $scheme);
     }
 
     /**

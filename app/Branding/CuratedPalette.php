@@ -75,6 +75,7 @@ final class CuratedPalette
             rationale: $rationale,
             recommended: $recommended,
             adjustments: [],
+            form: $this->formAffinity,
         );
     }
 
