@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use App\Models\Site;
 use App\Models\SiloBlueprint;
+use App\Models\Site;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**

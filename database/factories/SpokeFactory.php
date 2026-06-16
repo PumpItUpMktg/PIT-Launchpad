@@ -6,8 +6,8 @@ use App\Enums\SpokeGranularity;
 use App\Enums\SpokePageType;
 use App\Enums\SpokeStatus;
 use App\Enums\SpokeTag;
-use App\Models\Site;
 use App\Models\SiloBlueprint;
+use App\Models\Site;
 use App\Models\Spoke;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
