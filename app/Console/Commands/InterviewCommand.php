@@ -76,7 +76,7 @@ class InterviewCommand extends Command
         $this->line((string) json_encode($result->voice, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         $this->newLine();
 
-        if (! $this->confirm('Persist this seed + voice profile to '.($site->name ?? $site->id).'?', true)) {
+        if (! $this->confirm('Persist this seed + voice profile to '.($site->brand_name ?? $site->id).'?', true)) {
             $this->warn('Discarded — nothing was saved.');
 
             return self::SUCCESS;

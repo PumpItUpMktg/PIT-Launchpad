@@ -27,7 +27,7 @@ test('the command converses, extracts, and persists on confirm', function () {
 
     $this->artisan('launchpad:interview', ['site' => $site->id])
         ->expectsQuestion('You', 'We waterproof basements around Tucson.')
-        ->expectsConfirmation('Persist this seed + voice profile to '.($site->name ?? $site->id).'?', 'yes')
+        ->expectsConfirmation('Persist this seed + voice profile to '.($site->brand_name ?? $site->id).'?', 'yes')
         ->assertSuccessful();
 
     expect(SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('trade'))
