@@ -13,6 +13,7 @@ use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
+use App\PageBuilder\Library\FormHeroComposer;
 use App\PageBuilder\Library\LibraryServiceComposer;
 use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
@@ -152,7 +153,7 @@ class MetaBlobAssembler
             // Tier-1 native body: the page renders as native, editable Elementor
             // widgets baked from the SAME resolved slots. Pages only; posts ([] →
             // plugin no-op) keep the single-post template render.
-            'elementor_data' => $this->nativeBody($content, $slots, $images),
+            'elementor_data' => $this->nativeBody($content, $slots, $images, $source),
         ];
     }
 
@@ -166,7 +167,7 @@ class MetaBlobAssembler
      * @param  array<string, array<string, mixed>>  $images
      * @return list<array<string, mixed>>
      */
-    private function nativeBody(Content $content, array $slots, array $images): array
+    private function nativeBody(Content $content, array $slots, array $images, ContentSource $source = ContentSource::Generated): array
     {
         if ($content->kind !== ContentKind::Page) {
             return [];
@@ -176,7 +177,25 @@ class MetaBlobAssembler
         // NativeComposer stays the fallback for not-yet-migrated page types — it is
         // NOT retired until the published service page confirms the publish path.
         if ($content->page_type?->value === 'service') {
-            return $this->libraryService->compose($slots, $images);
+            $tree = $this->libraryService->compose($slots, $images);
+
+            // Form-hero variant (user-owned): swap the standard hero for the media
+            // hero + form card. The form embed = the page config's (or the placeholder
+            // box); the phone comes from the resolved cta slot.
+            $config = $this->pageConfig($content);
+            if ($config?->usesFormHero()) {
+                $cta = is_array($slots['cta'] ?? null) ? $slots['cta'] : [];
+                $formEmbed = $source === ContentSource::Placeholder
+                    ? PlaceholderSlots::FORM_BOX
+                    : ($config->form_embed ?: PlaceholderSlots::FORM_BOX);
+                $tree = (new FormHeroComposer)->swapHero(
+                    $tree, $slots, $images, $formEmbed,
+                    is_string($cta['phone'] ?? null) ? $cta['phone'] : null,
+                    is_string($cta['tel'] ?? null) ? $cta['tel'] : null,
+                );
+            }
+
+            return $tree;
         }
 
         $schema = $this->schema($content);
