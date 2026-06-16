@@ -80,7 +80,7 @@ final class InterviewExtractor
     {
         return 'You are an onboarding analyst for a multi-tenant local-business marketing platform. '
             .'From a business owner\'s description you extract two things: a silo seed (trade, a FEW anchor '
-            .'services — not exhaustive, service-area markets, explicit exclusions) and a voice profile '
+            .'services — not exhaustive, the BROAD region they serve, explicit exclusions) and a voice profile '
             .'(tone, persona, audience). You reason about the customer\'s problem, not just the stated '
             .'service category. You return STRICT JSON only — never prose, never markdown fences.';
     }
@@ -102,7 +102,7 @@ final class InterviewExtractor
             .'  "seed": {'."\n"
             .'    "trade": "primary trade, lowercase (e.g. plumbing, roofing, hvac, electrical)",'."\n"
             .'    "anchor_services": ["a few core services they named — NOT an exhaustive list"],'."\n"
-            .'    "markets": ["service-area cities/regions mentioned; [] if none stated"],'."\n"
+            .'    "region": "the BROAD region/area they serve as a short phrase (e.g. \"NJ, eastern PA\"), positioning only — NOT a town-by-town list; \"\" if not stated",'."\n"
             .'    "exclusions": ["work they explicitly will NOT do; [] if none stated"]'."\n"
             .'  },'."\n"
             .'  "voice": {'."\n"

@@ -12,7 +12,7 @@ use App\Models\VoiceProfile;
 function extraction(string $trade = 'waterproofing'): ExtractionResult
 {
     return new ExtractionResult(
-        new SiloSeed($trade, ['Sump Pump Installation', 'Basement Waterproofing'], ['Tucson'], ['Roofing']),
+        new SiloSeed($trade, ['Sump Pump Installation', 'Basement Waterproofing'], 'NJ, eastern PA', ['Roofing']),
         [
             'framing_model' => 'problem_solution',
             'tone_axes' => ['formality' => 0.3, 'warmth' => 0.8],
@@ -50,15 +50,15 @@ test('it persists the seed + transcript onto a blueprint and the voice as an act
 test('genuinely-unprovided fields persist EMPTY, never fabricated', function () {
     $site = Site::factory()->create();
 
-    // The owner gave a trade + one service but no markets and no exclusions.
+    // The owner gave a trade + one service but no region and no exclusions.
     $sparse = new ExtractionResult(
-        new SiloSeed('handyman', ['General Repairs'], [], []),
+        new SiloSeed('handyman', ['General Repairs'], '', []),
         ['framing_model' => 'problem_solution', 'tone_axes' => []],
     );
 
     $result = app(InterviewPersister::class)->persist($site, $sparse);
 
-    expect($result->blueprint->seed['markets'])->toBe([])
+    expect($result->blueprint->seed['region'])->toBe('')
         ->and($result->blueprint->seed['exclusions'])->toBe([])
         ->and($result->blueprint->trade)->toBe('handyman');
 });

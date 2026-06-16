@@ -69,7 +69,7 @@ test('a ready session extracts a seed + voice over the full transcript', functio
         'seed' => [
             'trade' => 'hvac',
             'anchor_services' => ['AC Repair', 'Furnace Installation'],
-            'markets' => ['Phoenix'],
+            'region' => 'Phoenix area',
             'exclusions' => [],
         ],
         'voice' => [
@@ -82,6 +82,6 @@ test('a ready session extracts a seed + voice over the full transcript', functio
     $result = $session->extract($extractor);
 
     expect($result->seed->trade)->toBe('hvac')
-        ->and($result->seed->markets)->toContain('Phoenix')
+        ->and($result->seed->region)->toBe('Phoenix area')
         ->and($result->voice['framing_model'])->toBe('problem_solution');
 });

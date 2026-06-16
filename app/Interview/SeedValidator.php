@@ -32,8 +32,8 @@ final class SeedValidator
             if (! $this->isNonEmptyStringList($seed['anchor_services'] ?? null)) {
                 $errors[] = 'seed.anchor_services must list at least one service.';
             }
-            if (! $this->isStringList($seed['markets'] ?? [])) {
-                $errors[] = 'seed.markets must be a list of strings.';
+            if (array_key_exists('region', $seed) && ! is_string($seed['region'])) {
+                $errors[] = 'seed.region must be a string.';
             }
             if (! $this->isStringList($seed['exclusions'] ?? [])) {
                 $errors[] = 'seed.exclusions must be a list of strings.';

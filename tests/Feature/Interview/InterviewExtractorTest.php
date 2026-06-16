@@ -6,13 +6,13 @@ use App\Interview\SeedValidator;
 use Tests\Support\FakeClaudeClient;
 
 /** Build a well-formed extractor payload for a trade. */
-function seedPayload(string $trade, array $anchors, array $markets = [], array $exclusions = []): string
+function seedPayload(string $trade, array $anchors, string $region = '', array $exclusions = []): string
 {
     return (string) json_encode([
         'seed' => [
             'trade' => $trade,
             'anchor_services' => $anchors,
-            'markets' => $markets,
+            'region' => $region,
             'exclusions' => $exclusions,
         ],
         'voice' => [
@@ -36,17 +36,17 @@ test('it extracts a well-formed seed + voice for a waterproofing business (no GB
     $json = seedPayload(
         'waterproofing',
         ['Sump Pump Installation', 'Basement Waterproofing'],
-        ['Tucson', 'Oro Valley'],
+        'NJ, eastern PA',
         ['Roofing'],
     );
 
     $result = extractorReturning($json)->extract(
-        'We keep basements dry — sump pumps and full waterproofing systems around Tucson. We do not do roofing.',
+        'We keep basements dry — sump pumps and full waterproofing systems around NJ and eastern PA. We do not do roofing.',
     );
 
     expect($result->seed->trade)->toBe('waterproofing')
         ->and($result->seed->anchorServices)->toContain('Sump Pump Installation')
-        ->and($result->seed->markets)->toContain('Tucson')
+        ->and($result->seed->region)->toBe('NJ, eastern PA')
         ->and($result->seed->exclusions)->toContain('Roofing')
         ->and($result->seed->gbpSignals)->toBeNull()
         ->and($result->voice['framing_model'])->toBe('problem_solution')
@@ -54,7 +54,7 @@ test('it extracts a well-formed seed + voice for a waterproofing business (no GB
 });
 
 test('it grounds a roofer against connected GBP signals and carries them onto the seed', function () {
-    $json = seedPayload('roofing', ['Roof Replacement', 'Roof Repair'], ['Denver']);
+    $json = seedPayload('roofing', ['Roof Replacement', 'Roof Repair'], 'Denver metro');
     $gbp = ['Roofing Contractor', 'Roof Repair', 'Gutter Service'];
 
     $result = extractorReturning($json)->extract('We replace and repair roofs across the Denver metro.', $gbp);
@@ -64,12 +64,21 @@ test('it grounds a roofer against connected GBP signals and carries them onto th
 });
 
 test('it extracts an HVAC business', function () {
-    $json = seedPayload('hvac', ['AC Repair', 'Furnace Installation'], ['Phoenix']);
+    $json = seedPayload('hvac', ['AC Repair', 'Furnace Installation'], 'Phoenix area');
 
     $result = extractorReturning($json)->extract('Heating and cooling — AC and furnace work in Phoenix.');
 
     expect($result->seed->trade)->toBe('hvac')
         ->and($result->seed->anchorServices)->toHaveCount(2);
+});
+
+test('region stays empty when the owner gives no area (broad region, never fabricated)', function () {
+    $json = seedPayload('plumbing', ['Drain Cleaning'], '', []);
+
+    $result = extractorReturning($json)->extract('We do drains. Did not mention where.');
+
+    expect($result->seed->region)->toBe('')
+        ->and($result->seed->exclusions)->toBe([]);
 });
 
 test('it rejects a malformed model output (no anchors) rather than emit a bad seed', function () {

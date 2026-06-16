@@ -74,41 +74,83 @@
 
             {{-- Editable confirm --}}
             @if ($extracted)
-                <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-                    <h3 class="mb-1 text-sm font-semibold text-gray-700 dark:text-gray-200">Here's what I captured</h3>
-                    <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
-                        Sanity-check and edit before saving. Leave markets or exclusions blank if the owner didn't give any.
-                    </p>
+                @php
+                    $tone = $voice['tone_axes'] ?? [];
+                    $persona = $voice['persona'] ?? [];
+                    $audience = $voice['audience'] ?? [];
+                    $lang = $voice['language_rules'] ?? [];
+                    $preferred = implode(', ', $lang['preferred'] ?? []);
+                    $banned = implode(', ', $lang['banned'] ?? []);
+                @endphp
 
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <label class="sm:col-span-2">
-                            <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Trade</span>
-                            <input type="text" wire:model="editTrade"
-                                class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5" />
-                        </label>
-                        <label>
-                            <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Anchor services <span class="text-gray-400">(one per line)</span></span>
-                            <textarea wire:model="editAnchors" rows="4"
-                                class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5"></textarea>
-                        </label>
-                        <label>
-                            <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Markets <span class="text-gray-400">(one per line)</span></span>
-                            <textarea wire:model="editMarkets" rows="4"
-                                class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5"></textarea>
-                        </label>
-                        <label class="sm:col-span-2">
-                            <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Exclusions <span class="text-gray-400">(one per line)</span></span>
-                            <textarea wire:model="editExclusions" rows="3"
-                                class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5"></textarea>
-                        </label>
+                <div class="flex flex-col gap-4">
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Here's what I captured</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                            Glance over each field, edit anything, then save. Empty is fine — blanks won't be invented.
+                        </p>
                     </div>
 
-                    <details class="mt-4">
-                        <summary class="cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300">Voice profile</summary>
-                        <pre class="mt-2 overflow-x-auto rounded-lg bg-gray-950/90 p-3 text-xs text-gray-100">{{ json_encode($voice, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
-                    </details>
+                    {{-- Seed fields, one labeled box each --}}
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <x-interview-field label="Trade">
+                            <input type="text" wire:model="editTrade"
+                                class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5" />
+                        </x-interview-field>
 
-                    <div class="mt-4">
+                        <x-interview-field label="Region (broad)"
+                            hint="Positioning only — the broad area served. Specific towns/service areas live in Locations, not here.">
+                            <input type="text" wire:model="editRegion" placeholder="e.g. NJ, eastern PA"
+                                class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5" />
+                        </x-interview-field>
+
+                        <x-interview-field label="Anchor services" hint="One per line — a few core services, not exhaustive.">
+                            <textarea wire:model="editAnchors" rows="5"
+                                class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5"></textarea>
+                        </x-interview-field>
+
+                        <x-interview-field label="Exclusions" hint="One per line — work they will NOT do.">
+                            <textarea wire:model="editExclusions" rows="5"
+                                class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5"></textarea>
+                        </x-interview-field>
+                    </div>
+
+                    {{-- Voice — readable summary --}}
+                    <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
+                        <h4 class="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">Voice profile</h4>
+                        <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                            <div class="flex flex-col">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Identity</dt>
+                                <dd class="text-gray-800 dark:text-gray-100">{{ $persona['identity'] ?? '—' }}@if (!empty($persona['credibility'])) <span class="text-gray-500">· {{ $persona['credibility'] }}</span>@endif</dd>
+                            </div>
+                            <div class="flex flex-col">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Audience</dt>
+                                <dd class="text-gray-800 dark:text-gray-100">{{ $audience['primary'] ?? '—' }}</dd>
+                            </div>
+                            <div class="flex flex-col">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Tone</dt>
+                                <dd class="text-gray-800 dark:text-gray-100">
+                                    @if (isset($tone['formality'])) formality {{ $tone['formality'] }}@endif@if (isset($tone['warmth'])) · warmth {{ $tone['warmth'] }}@endif
+                                    @if (!empty($voice['cta_voice'])) · CTA {{ $voice['cta_voice'] }}@endif
+                                    @if (!empty($voice['reading_level'])) · {{ str_replace('_', ' ', $voice['reading_level']) }}@endif
+                                </dd>
+                            </div>
+                            <div class="flex flex-col">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Framing</dt>
+                                <dd class="text-gray-800 dark:text-gray-100">{{ str_replace('_', ' ', $voice['framing_model'] ?? '—') }}</dd>
+                            </div>
+                            <div class="flex flex-col">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Preferred language</dt>
+                                <dd class="text-gray-800 dark:text-gray-100">{{ $preferred !== '' ? $preferred : '—' }}</dd>
+                            </div>
+                            <div class="flex flex-col">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Banned language</dt>
+                                <dd class="text-gray-800 dark:text-gray-100">{{ $banned !== '' ? $banned : '—' }}</dd>
+                            </div>
+                        </dl>
+                    </div>
+
+                    <div>
                         @if ($persisted)
                             <span class="text-sm font-medium text-success-600 dark:text-success-400">Saved to the site.</span>
                         @else

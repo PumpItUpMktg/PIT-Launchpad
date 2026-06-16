@@ -30,7 +30,7 @@ it('runs the chat, lets the operator edit the seed, and persists seed + transcri
             'seed' => [
                 'trade' => 'roofing',
                 'anchor_services' => ['Roof Replacement'],
-                'markets' => ['Denver'],
+                'region' => 'Denver metro',
                 'exclusions' => [],
             ],
             'voice' => ['framing_model' => 'problem_solution', 'tone_axes' => ['warmth' => 0.6]],
@@ -48,7 +48,7 @@ it('runs the chat, lets the operator edit the seed, and persists seed + transcri
         ->call('extract')
         ->assertSet('extracted', true)
         ->assertSet('editTrade', 'roofing')
-        ->assertSet('editMarkets', 'Denver')
+        ->assertSet('editRegion', 'Denver metro')
         // operator sanity-edit: add an exclusion the owner mentioned in passing
         ->set('editExclusions', 'Commercial work')
         ->call('persist')
@@ -73,7 +73,7 @@ it('resumes a saved interview — transcript, seed, and voice all reload', funct
     app(InterviewPersister::class)->persist(
         $site,
         new ExtractionResult(
-            new SiloSeed('hvac', ['AC Repair'], ['Phoenix'], []),
+            new SiloSeed('hvac', ['AC Repair'], 'Phoenix area', []),
             ['framing_model' => 'problem_solution', 'tone_axes' => ['warmth' => 0.5], 'cta_voice' => 'direct'],
         ),
         $transcript,
@@ -87,6 +87,26 @@ it('resumes a saved interview — transcript, seed, and voice all reload', funct
         ->assertSet('extracted', true)
         ->assertSet('editTrade', 'hvac')
         ->assertSet('editAnchors', 'AC Repair')
+        ->assertSet('editRegion', 'Phoenix area')
         ->assertSet('voice.cta_voice', 'direct')
         ->assertCount('messages', 2);
+});
+
+it('resumes a legacy seed (markets[] before the region reframe) into the broad Region field', function () {
+    $site = Site::factory()->create();
+    SiloBlueprint::factory()->create([
+        'site_id' => $site->id,
+        'trade' => 'waterproofing',
+        'seed' => [
+            'trade' => 'waterproofing',
+            'anchor_services' => ['Sump Pump Installation'],
+            'markets' => ['NJ', 'eastern PA'], // legacy shape, no 'region' key
+            'exclusions' => [],
+        ],
+    ]);
+
+    Livewire::test(OwnerInterview::class)
+        ->set('siteId', $site->id)
+        ->call('resume')
+        ->assertSet('editRegion', 'NJ, eastern PA');
 });
