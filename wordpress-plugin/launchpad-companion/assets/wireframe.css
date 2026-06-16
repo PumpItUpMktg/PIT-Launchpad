@@ -31,6 +31,7 @@
     --wf-color-secondary: #3e6e9e;
     --wf-color-accent: #e8a23d;
     --wf-color-on-accent: #1a1a1a; /* CTA text on the accent — engine picks white/dark per accent */
+    --wf-color-on-media: #ffffff;  /* text over the scrimmed hero image — fixed white, scheme-independent (the scrim guarantees contrast) */
     --wf-color-text: #1a1a1a;
     --wf-color-text-muted: #5b6470;
     --wf-color-bg: #ffffff;
@@ -259,6 +260,94 @@ body.wf-structure-warm {
 }
 .wf-cta-heading {
     color: var(--wf-color-text);
+}
+
+/* ===================================================================
+ * Form-hero variant (PageConfig.hero_variant = form) — a MEDIA surface.
+ *
+ * Full-bleed hero image + a mandatory left-weighted scrim + fixed white on-media
+ * text (--wf-color-on-media), SCHEME-INDEPENDENT: the scrim guarantees contrast for
+ * any photo, so white always passes (even on a light-scheme page) — the media surface
+ * is guaranteed-by-scrim, not a gated token pair. Copy on the left; the form embed in
+ * a contained LIGHT card on the right so it reads over the image. Stacks on mobile.
+ * =================================================================== */
+.wf-block-hero-form {
+    position: relative;
+    overflow: hidden;
+    padding-block: 0;
+    color: var(--wf-color-on-media);
+}
+/* Full-bleed background image (overrides the base img radius/shadow). */
+.wf-block-hero-form .wf-hero-image,
+.wf-block-hero-form .wf-hero-image img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+}
+/* The mandatory left-weighted scrim — dark gradient, heavier on the copy side. */
+.wf-block-hero-form::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0.55) 45%, rgba(0, 0, 0, 0.15) 100%);
+}
+/* Content sits above the scrim, two columns (copy | form). */
+.wf-block-hero-form .wf-hero-form-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 2.5rem;
+    align-items: center;
+    padding: var(--wf-pad-block) 6%;
+}
+.wf-block-hero-form .wf-hero-copy {
+    flex: 1 1 55%;
+}
+/* On-media copy is always white (scrim-backed). */
+.wf-block-hero-form .wf-hero-copy :is(h1, h2, h3, p, .elementor-heading-title),
+.wf-block-hero-form .wf-hero-eyebrow,
+.wf-block-hero-form .wf-hero-call,
+.wf-block-hero-form .wf-hero-call a {
+    color: var(--wf-color-on-media);
+}
+.wf-block-hero-form .wf-hero-call {
+    font-size: 0.95rem;
+    opacity: 0.9;
+}
+/* The form card — a contained LIGHT panel regardless of scheme, so the embed reads. */
+.wf-block-hero-form .wf-hero-form-card {
+    flex: 1 1 45%;
+    background: #ffffff;
+    color: #1a1a1a;
+    border-radius: var(--wf-radius);
+    box-shadow: var(--wf-shadow-lg);
+    padding: 1.5rem;
+}
+.wf-block-hero-form .wf-hero-form iframe {
+    width: 100%;
+    border: 0;
+    min-height: 480px;
+}
+.wf-block-hero-form .lp-form-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 420px;
+    border: 2px dashed currentColor;
+    opacity: 0.55;
+    font-weight: 600;
+}
+@media (max-width: 767px) {
+    .wf-block-hero-form .wf-hero-form-content {
+        flex-direction: column;
+        padding-block: var(--wf-section-gap-mobile);
+    }
 }
 
 /* ===================================================================
