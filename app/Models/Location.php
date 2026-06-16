@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $phone
  * @property float|null $lat
  * @property float|null $lng
- * @property int|null $coverage_radius  service radius in miles (preset {10,15,25}) for the Locations coverage engine
+ * @property int|null $coverage_radius service radius in miles (preset {10,15,25}) for the Locations coverage engine
  */
 class Location extends Model
 {
