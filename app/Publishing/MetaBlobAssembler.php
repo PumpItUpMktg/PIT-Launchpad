@@ -6,6 +6,7 @@ use App\Enums\ContentKind;
 use App\Models\Content;
 use App\Models\ConversionConfig;
 use App\Models\Location;
+use App\Models\PageConfig;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -27,6 +28,9 @@ use Illuminate\Support\Collection;
  */
 class MetaBlobAssembler
 {
+    /** @var array<string, PageConfig|null> memoized per content id */
+    private array $pageConfigs = [];
+
     public function __construct(
         private readonly PublishEligibility $eligibility,
         private readonly NativeComposer $composer,
@@ -35,12 +39,45 @@ class MetaBlobAssembler
     ) {}
 
     /**
+     * The page's user-owned config (operator overrides). Read by content_id on every
+     * compose so a repush re-injects it verbatim. Memoized per content.
+     */
+    private function pageConfig(Content $content): ?PageConfig
+    {
+        if (! array_key_exists($content->id, $this->pageConfigs)) {
+            $this->pageConfigs[$content->id] = PageConfig::query()->where('content_id', $content->id)->first();
+        }
+
+        return $this->pageConfigs[$content->id];
+    }
+
+    /**
+     * Apply the per-page hero image override (user-owned) onto the rendered image
+     * map — the operator-set URL wins over the generated hero. Alt text is preserved.
+     *
+     * @param  array<string, array<string, mixed>>  $images
+     * @return array<string, array<string, mixed>>
+     */
+    private function heroImageOverride(Content $content, array $images): array
+    {
+        $override = $this->pageConfig($content)?->hero_image_override;
+        if (is_string($override) && trim($override) !== '') {
+            $images['hero_image'] = [
+                'url' => trim($override),
+                'alt' => (string) ($images['hero_image']['alt'] ?? ''),
+            ];
+        }
+
+        return $images;
+    }
+
+    /**
      * @param  Collection<int, RenderJob>  $renderJobs
      * @return array<string, mixed>
      */
     public function assemble(Content $content, Collection $renderJobs): array
     {
-        $images = $this->images($renderJobs);
+        $images = $this->heroImageOverride($content, $this->images($renderJobs));
         $slots = $this->slotPayload($content);
 
         return [
@@ -228,7 +265,11 @@ class MetaBlobAssembler
      */
     private function resolveCtaSlot(Content $content, ?Location $location, array $slots): array
     {
-        $phone = $location?->phone;
+        $config = $this->pageConfig($content);
+
+        // The per-page phone override (user-owned) wins over the §1 location phone.
+        $override = $config?->phone_override;
+        $phone = is_string($override) && trim($override) !== '' ? $override : $location?->phone;
 
         if ($phone === null || trim($phone) === '') {
             unset($slots['cta']); // no derivable phone → no conversion block
@@ -236,9 +277,13 @@ class MetaBlobAssembler
             return $slots;
         }
 
-        $formEmbed = ConversionConfig::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->value('ghl_form_embed');
+        // The per-page form embed (user-owned) wins over the site GHL config.
+        $formEmbed = $config?->form_embed;
+        if (! is_string($formEmbed) || trim($formEmbed) === '') {
+            $formEmbed = ConversionConfig::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $content->site_id)
+                ->value('ghl_form_embed');
+        }
 
         $slots['cta'] = array_filter([
             'type' => 'conversion_block',
