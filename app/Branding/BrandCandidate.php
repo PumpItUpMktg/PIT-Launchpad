@@ -23,11 +23,12 @@ final class BrandCandidate
         public readonly string $rationale,
         public readonly bool $recommended = false,
         public readonly array $adjustments = [],
+        public readonly string $form = '',
     ) {}
 
     public function withRecommended(bool $recommended): self
     {
-        return new self($this->palette, $this->typography, $this->rationale, $recommended, $this->adjustments);
+        return new self($this->palette, $this->typography, $this->rationale, $recommended, $this->adjustments, $this->form);
     }
 
     /**
@@ -49,6 +50,7 @@ final class BrandCandidate
             'rationale' => $this->rationale,
             'recommended' => $this->recommended,
             'adjustments' => $this->adjustments,
+            'form' => $this->form,
         ];
     }
 }

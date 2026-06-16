@@ -22,10 +22,67 @@ use App\Integrations\Claude\ClaudeClient;
  */
 class BrandGenerator
 {
+    private readonly PaletteLibrary $library;
+
     public function __construct(
         private readonly ClaudeClient $claude,
         private readonly FontCatalog $fonts,
-    ) {}
+        ?PaletteLibrary $library = null,
+    ) {
+        $this->library = $library ?? new PaletteLibrary;
+    }
+
+    /**
+     * Recommend ONE palette from the curated library for the tenant + scheme. The
+     * model proposes a library id; we enforce the closed set (an off-list/empty id
+     * falls back to the scheme's default), mirroring recommendStructure. This
+     * replaces raw-hex generation in the default flow.
+     */
+    public function recommendPalette(BrandBrief $brief, Scheme $scheme): PaletteRecommendation
+    {
+        $options = $this->library->forScheme($scheme);
+        $default = $this->library->default($scheme);
+        if ($options === [] || $default === null) {
+            // No library for this scheme — should never happen (seeded), but never fatal.
+            throw new \RuntimeException("No curated palettes for scheme {$scheme->value}.");
+        }
+
+        $raw = $this->parse($this->claude->complete(
+            $this->palettePrompt($brief, $scheme, $options),
+            'You are a brand designer choosing from a fixed palette library. Reply STRICT JSON only.'
+        ));
+
+        $id = is_string($raw['id'] ?? null) ? trim($raw['id']) : '';
+        $palette = $this->library->find($id);
+        if ($palette === null || $palette->scheme !== $scheme) {
+            $palette = $default; // closed-set enforcement
+        }
+
+        $rationale = trim((string) ($raw['rationale'] ?? ''));
+
+        return new PaletteRecommendation($palette, $rationale);
+    }
+
+    /**
+     * @param  list<CuratedPalette>  $options
+     */
+    private function palettePrompt(BrandBrief $brief, Scheme $scheme, array $options): string
+    {
+        $lines = [];
+        foreach ($options as $p) {
+            $tags = $p->industryTags === [] ? '' : ' tags='.implode(',', $p->industryTags);
+            $lines[] = "- {$p->id}: \"{$p->name}\" (feel={$p->formAffinity}){$tags}";
+        }
+
+        return implode("\n", [
+            "Pick the ONE palette that best fits this {$brief->industry} business from the {$scheme->value} library below.",
+            "Brand personality: {$brief->descriptor()}.",
+            'Palettes:',
+            implode("\n", $lines),
+            'Match on industry + personality feel. Respond with ONLY this JSON: '
+                .'{"id":"<one id from the list>","rationale":"one industry-grounded sentence"}',
+        ]);
+    }
 
     public function generate(BrandBrief $brief): GeneratedBrand
     {
