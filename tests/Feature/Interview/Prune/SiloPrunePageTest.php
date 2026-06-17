@@ -41,6 +41,14 @@ function pspk(Site $site, string $name): Spoke
     return Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('name', $name)->first();
 }
 
+it('shows an empty-state for a site with no persisted candidate tree', function () {
+    $site = Site::factory()->create(); // no blueprint / spokes
+
+    Livewire::test(SiloPrune::class)
+        ->set('siteId', $site->id)
+        ->assertSee('No candidate tree yet');
+});
+
 it('opens the prune, pre-filling decisions from the tree (outcome blank, granularity from Phase 3)', function () {
     $site = prunePageSite();
     $install = pspk($site, 'Sump Pump Installation');

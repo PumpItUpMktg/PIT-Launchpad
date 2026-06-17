@@ -20,7 +20,12 @@ final class LocationCoverage
         private readonly MunicipalityGazetteer $gazetteer,
     ) {}
 
-    public function coverage(Site $site): CoverageResult
+    /**
+     * @param  int|null  $radiusOverride  apply this radius (miles) to every base for this
+     *                                    run instead of each Location's saved radius — the
+     *                                    CLI's --radius calibration path (no DB write).
+     */
+    public function coverage(Site $site, ?int $radiusOverride = null): CoverageResult
     {
         $locations = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -33,7 +38,9 @@ final class LocationCoverage
         foreach ($locations as $location) {
             $lat = $location->lat === null ? null : (float) $location->lat;
             $lng = $location->lng === null ? null : (float) $location->lng;
-            $radius = $location->coverage_radius === null ? 0.0 : (float) $location->coverage_radius;
+            $radius = $radiusOverride !== null
+                ? (float) $radiusOverride
+                : ($location->coverage_radius === null ? 0.0 : (float) $location->coverage_radius);
 
             if ($lat === null || $lng === null || $radius <= 0.0) {
                 continue; // unconfigured base — needs a geocoded point + radius

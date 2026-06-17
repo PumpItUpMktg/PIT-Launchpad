@@ -23,6 +23,16 @@ function baseLocation(Site $site, float $lat, float $lng, ?int $radius = 25): Lo
     ]);
 }
 
+test('a radius override applies to every base regardless of the saved radius', function () {
+    $site = Site::factory()->create();
+    baseLocation($site, CoverageFixture::A_LAT, CoverageFixture::A_LNG, radius: null); // no saved radius
+
+    $engine = new LocationCoverage(new MockMunicipalityGazetteer(CoverageFixture::municipalities()));
+
+    expect($engine->coverage($site)->perBase)->toBe([])            // unconfigured → skipped
+        ->and($engine->coverage($site, 25)->perBase)->not->toBe([]); // override makes it compute
+});
+
 test('it distance-filters the enumeration to the radius (drops far + null-centroid)', function () {
     $site = Site::factory()->create();
     baseLocation($site, CoverageFixture::A_LAT, CoverageFixture::A_LNG);

@@ -119,16 +119,15 @@ class LocationsSetup extends Page
 
     private function loadRadii(): void
     {
+        // Honor whatever is saved on the Location (the CLI --save writes the same field) —
+        // single source of truth, no drift. Default only when unset.
         foreach ($this->locations as $location) {
-            $radius = $location->coverage_radius ?? self::DEFAULT_RADIUS;
-            $this->radii[$location->id] = in_array($radius, self::RADII, true) ? $radius : self::DEFAULT_RADIUS;
+            $this->radii[$location->id] = $location->coverage_radius ?? self::DEFAULT_RADIUS;
         }
     }
 
     private function radiusFor(string $locationId): int
     {
-        $radius = (int) ($this->radii[$locationId] ?? self::DEFAULT_RADIUS);
-
-        return in_array($radius, self::RADII, true) ? $radius : self::DEFAULT_RADIUS;
+        return (int) ($this->radii[$locationId] ?? self::DEFAULT_RADIUS);
     }
 }
