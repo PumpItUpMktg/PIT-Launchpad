@@ -140,6 +140,24 @@ path — no fabricated coverage.
 **Granularity:** where volume makes it ambiguous, surface the split-vs-consolidate call
 (a head term as its own spoke page vs. folded into the pillar).
 
+### Phase 4 — implemented (headless `Pruner`)
+
+`app/Interview/Prune/` — the headless engine the conversational owner surface will sit
+on (iron law: prove the routing before the UI):
+
+- **The routing table is the `PruneOutcome` enum** — `offer`/`future` → `SpokeStatus`
+  `Offered`/`Future` (service page); `capture` → `Content` + converts the spoke's
+  `page_type` to the content-path guide; `skip` → `Skipped`. Resolves a `candidate` into
+  a confirmed status + page type.
+- **`Pruner`**: `plan()` (the visible candidate list — `PrunePlan`/`PruneRow`, volume +
+  tag + connection note + the Phase-3 granularity recommendation, decided vs pending);
+  `apply()` (route decisions keyed by spoke name|id); `acceptCore()` (bulk-confirm core
+  offerings — offer, or capture for a core content guide); `confirm()` (the **hard gate**
+  — stamps `confirmed_at` only when every **non-fringe** candidate is decided; fringe is
+  the Routing-layer handoff, excluded from the gate).
+- **CLI** `launchpad:silo-prune {site} [--accept-core] [--apply=decisions.json] [--confirm] [--json]`.
+- **§1 additions:** `silo_blueprints.confirmed_at`; enum `PruneOutcome`.
+
 ## 5. Output — the silo blueprint / page inventory
 
 The confirmed tree becomes:

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * The confirmed silo blueprint — the directed-coverage spine produced by the owner
@@ -19,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $trade
  * @property array<string, mixed>|null $seed
  * @property list<array{role: string, text: string}>|null $transcript
+ * @property Carbon|null $confirmed_at
  */
 class SiloBlueprint extends Model
 {
@@ -49,6 +51,7 @@ class SiloBlueprint extends Model
         return [
             'seed' => 'array',
             'transcript' => 'array',
+            'confirmed_at' => 'datetime',
         ];
     }
 }
