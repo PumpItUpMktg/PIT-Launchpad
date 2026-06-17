@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed>|null $seed
  * @property list<array{role: string, text: string}>|null $transcript
  * @property Carbon|null $confirmed_at
+ * @property array<string, mixed>|null $prune_draft
  */
 class SiloBlueprint extends Model
 {
@@ -52,6 +53,7 @@ class SiloBlueprint extends Model
             'seed' => 'array',
             'transcript' => 'array',
             'confirmed_at' => 'datetime',
+            'prune_draft' => 'array',
         ];
     }
 }

@@ -170,9 +170,23 @@ sits on (iron law: prove the routing before the UI):
   `launchpad:prune-apply {site} {decisions.json} [--accept-core] [--confirm] [--json]`
   (apply a decision-set: `{"silos":{...fold/rename/confirm},"spokes":{...outcome/tag/granularity}}`).
 - **§1 additions:** `silo_blueprints.confirmed_at`; enum `PruneOutcome`.
-- **PR-B (deferred):** the Filament prune UI — the grouped, volume-sorted, batch-confirm
-  surface that writes through `PruneEngine`; its live SPG walkthrough waits on the
-  validated `silo-volume` run.
+### Phase 4 — implemented, PR-B (Filament prune UI)
+
+`app/Filament/Pages/SiloPrune.php` (operator admin, sibling to Owner Interview). The
+asymmetry of effort made visual; UI owns **interaction only** — it collects a decision-set
+and applies it through `PruneEngine` (rules stay in the engine), data-driven with **no
+live-model call**:
+
+- Grouped by silo: per-silo header summary + structure controls (rename / fold-into /
+  confirm-all-core); a **core block** (batch-confirm), a **lean-in block** (volume-sorted,
+  connection notes), a **fringe panel** (refer-out / sibling-brand).
+- Per-spoke: routing (`PruneOutcome`), **re-tag** (core/adjacent/connecting), **granularity**
+  toggle pre-filled from the Phase-3 recommendation.
+- **Hard gate, visible:** a build-vs-drop preview ("X built · Y pending → dropped");
+  `finalize` drops undecided non-fringe (un-reviewed = not built) then confirms.
+- **Draft + resume:** the in-progress decision-set persists to `silo_blueprints.prune_draft`
+  (mirrors the interview); finalize is the explicit commit and clears it.
+- Engine support: `PruneEngine::finalize/saveDraft/loadDraft`; **§1** `silo_blueprints.prune_draft`.
 
 ## 5. Output — the silo blueprint / page inventory
 

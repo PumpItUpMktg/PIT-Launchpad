@@ -182,6 +182,63 @@ final class PruneEngine
     }
 
     /**
+     * Commit the prune (the UI's Finalize): apply the assembled decision-set, then
+     * explicitly skip every still-undecided non-fringe candidate — the hard gate's
+     * "un-reviewed = not built" made concrete (pending → dropped) — confirm the
+     * blueprint, and clear the draft.
+     *
+     * @param  array{spokes?: array<string, mixed>, silos?: array<string, mixed>}  $set
+     * @return array{built: int, skipped: int, confirmed: bool}
+     */
+    public function finalize(Site $site, array $set): array
+    {
+        return DB::transaction(function () use ($site, $set): array {
+            $this->applyDecisionSet($site, $set);
+
+            foreach ($this->spokes($site) as $spoke) {
+                if ($spoke->tag !== SpokeTag::Fringe && $spoke->status === SpokeStatus::Candidate) {
+                    $this->route($spoke, PruneOutcome::Skip); // pending → dropped
+                }
+            }
+
+            $confirmed = $this->confirm($site)['confirmed'];
+
+            $blueprint = $this->blueprint($site);
+            if ($blueprint !== null) {
+                $blueprint->forceFill(['prune_draft' => null])->save();
+            }
+
+            $rows = $this->plan($site)->decidable();
+
+            return [
+                'built' => count(array_filter($rows, fn (PruneRow $r) => in_array($r->status, [SpokeStatus::Offered, SpokeStatus::Future, SpokeStatus::Content], true))),
+                'skipped' => count(array_filter($rows, fn (PruneRow $r) => $r->status === SpokeStatus::Skipped)),
+                'confirmed' => $confirmed,
+            ];
+        });
+    }
+
+    /**
+     * Persist the operator's in-progress decision-set (draft/resume).
+     *
+     * @param  array<string, mixed>  $draft
+     */
+    public function saveDraft(Site $site, array $draft): void
+    {
+        $this->blueprint($site)?->forceFill(['prune_draft' => $draft])->save();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function loadDraft(Site $site): array
+    {
+        $draft = $this->blueprint($site)?->prune_draft;
+
+        return is_array($draft) ? $draft : [];
+    }
+
+    /**
      * Confirm the blueprint iff every non-fringe candidate has a decision (the hard
      * gate). Stamps confirmed_at; returns the gate result.
      *
