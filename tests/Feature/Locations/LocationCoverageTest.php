@@ -2,6 +2,7 @@
 
 use App\Enums\MunicipalityType;
 use App\Integrations\Census\MockMunicipalityGazetteer;
+use App\Integrations\Census\Municipality;
 use App\Locations\CoverageResult;
 use App\Locations\LocationCoverage;
 use App\Models\Location;
@@ -83,6 +84,38 @@ test('multi-location union dedupes a shared municipality and records both source
     expect($clinton->sourceLocationIds)->toHaveCount(2)
         ->and($clinton->sourceLocationIds)->toContain($a->id)
         ->and($clinton->sourceLocationIds)->toContain($b->id);
+});
+
+test('dedup is by GEOID, not name — same-named towns in different counties both count', function () {
+    $site = Site::factory()->create();
+    baseLocation($site, CoverageFixture::A_LAT, CoverageFixture::A_LNG);
+
+    // Two "Washington Twp" with DISTINCT GEOIDs, both in range — name-based dedup would
+    // wrongly merge them; GEOID-based keeps both.
+    $gazetteer = new MockMunicipalityGazetteer([
+        new Municipality('3400001', 'Washington Twp', MunicipalityType::CountySubdivision, 'NJ', 40.71, -74.49),
+        new Municipality('3400002', 'Washington Twp', MunicipalityType::CountySubdivision, 'NJ', 40.72, -74.51),
+    ]);
+
+    $union = (new LocationCoverage($gazetteer))->coverage($site)->union;
+
+    expect($union)->toHaveCount(2)
+        ->and(collect($union)->pluck('geoId')->all())->toEqualCanonicalizing(['3400001', '3400002']);
+});
+
+test('overlapByBase reports net-new vs already-covered per location', function () {
+    $site = Site::factory()->create();
+    $a = baseLocation($site, CoverageFixture::A_LAT, CoverageFixture::A_LNG);
+    $b = baseLocation($site, CoverageFixture::B_LAT, CoverageFixture::B_LNG);
+
+    $overlap = collect(coverageFor($site)->overlapByBase());
+    $aRow = $overlap->firstWhere('location_id', $a->id);
+    $bRow = $overlap->firstWhere('location_id', $b->id);
+
+    // A reaches Maplewood + Livingston + Clinton(shared); B reaches Easton + Clinton(shared).
+    expect($aRow['total'])->toBe(3)->and($aRow['new'])->toBe(2)->and($aRow['shared'])->toBe(1)
+        ->and($bRow['total'])->toBe(2)->and($bRow['new'])->toBe(1)->and($bRow['shared'])->toBe(1)
+        ->and($bRow['shared_with'])->toContain($a->name);
 });
 
 test('it skips base locations with no point or no radius', function () {

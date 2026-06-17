@@ -163,6 +163,19 @@
                     <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Towns you cover</h3>
                     <span class="text-xs text-gray-500 dark:text-gray-400">{{ count($union) }} towns · {{ $places }} places · {{ $mcds }} townships/boroughs</span>
                 </div>
+
+                {{-- Overlap transparency: net-new vs already-covered, per location --}}
+                @php $overlap = $this->coverage['overlap_by_base'] ?? []; @endphp
+                @if (count($overlap) > 1)
+                    <div class="flex flex-col gap-1 rounded-lg bg-gray-50 px-3 py-2 text-xs ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
+                        @foreach ($overlap as $b)
+                            <div class="text-gray-600 dark:text-gray-300">
+                                <span class="font-medium text-gray-800 dark:text-gray-100">{{ $b['location_name'] }}</span>:
+                                {{ $b['total'] }} towns — <span class="text-success-600 dark:text-success-400">{{ $b['new'] }} new</span>{{ $b['shared'] > 0 ? ', '.$b['shared'].' already in '.implode(' / ', $b['shared_with']).' area' : '' }}.
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
                 @if (count($union))
                     <div class="overflow-hidden rounded-lg ring-1 ring-gray-950/5 dark:ring-white/10">
                         <table class="min-w-full divide-y divide-gray-100 text-sm dark:divide-white/10">
