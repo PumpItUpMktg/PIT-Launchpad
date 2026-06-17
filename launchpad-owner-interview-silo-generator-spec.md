@@ -87,9 +87,36 @@ separate **Routing layer** — Phase 2 builds no routing pages.
 ## 3. Keyword grounding (DataForSEO)
 
 Pull search volume per candidate head keyword, **service-area-localized** to the
-tenant's priority market(s). Volume is attached to every candidate = the **lead-upside
-number** that drives the prune. Reuses the existing `DataForSeoSerpProvider` seam
-(`metrics()` / `warm()`); no new integration work.
+tenant's covered metros. Volume is attached to every candidate = the **lead-upside
+number** that drives the prune.
+
+### Phase 3 — implemented (headless `VolumeGrounder`)
+
+`app/Interview/Volume/` + `app/Locations/Dma/`. One explicit, paid command grounds the
+candidate tree:
+
+- **Grain: metro/DMA-aggregated** (not per-municipality — town-level service-keyword
+  volume is mostly zero-rounded). A consistent relative-prioritization signal, not an
+  absolute forecast.
+- **Coverage → metros** (`MetroResolver`): each coverage county subdivision's GEOID
+  encodes its county (`STATE+COUNTY` = first 5 digits) → Nielsen DMA → DataForSEO
+  `location_name`; deduped. Places (GEOID carries no county) and unmapped counties fall
+  back to the **state** location. The county→DMA + state tables are shipped data files
+  (`database/data/dma/`, NJ/eastern-PA calibration set; verify additions against the
+  DataForSEO catalog).
+- **Query:** DataForSEO Google Ads Search Volume **by location_name** (new
+  `liveSearchVolumeByName` on the existing client — avoids shipping unverifiable numeric
+  codes), **batched** per metro. A metro whose name doesn't resolve is skipped (warned),
+  never fatal.
+- **Aggregate:** **sum** each head keyword across the covered metros → `spoke.volume`;
+  the per-metro `volume_breakdown` is persisted alongside, `volume_at` stamped.
+- **Granularity resolved:** a non-pillar spoke under the tunable `fold_threshold`
+  (`config/launchpad.php`, default 50) → `folded`; else `own_page`. **Advisory** (Phase 4
+  + owner confirm); pillars are never folded; fringe/no-keyword spokes untouched.
+- **Cost-aware:** `launchpad:silo-volume {site} [--json]` is the explicit trigger —
+  queries + persists once on run; never on read. The gate is the human eyeball: sane
+  volumes, the right metros (NYC/Philly/Allentown), reasonable fold flags.
+- **§1 additions:** `spokes.volume_breakdown` + `spokes.volume_at`.
 
 ## 4. The prune (conversational, with a visible candidate list)
 

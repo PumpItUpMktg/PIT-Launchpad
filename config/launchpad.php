@@ -152,4 +152,23 @@ return [
         'candidate_count' => 4,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Phase 3 — service-area-localized silo volume
+    |--------------------------------------------------------------------------
+    |
+    | DataForSEO Google Ads search volume, summed across the covered DMAs, is the
+    | relative lead-upside signal that drives the Phase 4 prune. `language` is the
+    | Keyword Planner language. `fold_threshold` is the advisory granularity floor:
+    | a non-pillar spoke whose aggregated monthly volume is below it is recommended
+    | to fold into its pillar (own-page otherwise). Advisory only — Phase 4 + the
+    | owner confirm; a low-volume core offering can still be kept.
+    |
+    */
+
+    'silo_volume' => [
+        'language' => env('LAUNCHPAD_SILO_VOLUME_LANGUAGE', 'en'),
+        'fold_threshold' => (int) env('LAUNCHPAD_SILO_VOLUME_FOLD_THRESHOLD', 50),
+    ],
+
 ];

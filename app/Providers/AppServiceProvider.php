@@ -52,9 +52,11 @@ use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
 use App\Integrations\Voice\MockVoiceSynthesizer;
 use App\Integrations\Voice\VoiceSynthesizer;
+use App\Interview\Volume\VolumeGrounder;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
+use App\Locations\Dma\MetroResolver;
 use App\Models\User;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
@@ -93,6 +95,15 @@ class AppServiceProvider extends ServiceProvider
             (int) config('services.census.tigerweb_timeout', 30),
         ));
         $this->app->bind(VoiceSynthesizer::class, MockVoiceSynthesizer::class);
+
+        // Phase 3 — silo volume grounding (paid DataForSEO, explicit trigger). Reuses
+        // the real DataForSEO client; tests construct the grounder directly / Http::fake.
+        $this->app->bind(VolumeGrounder::class, fn ($app) => new VolumeGrounder(
+            $app->make(MetroResolver::class),
+            $app->make(DataForSeoClient::class),
+            (string) config('launchpad.silo_volume.language', 'en'),
+            (int) config('launchpad.silo_volume.fold_threshold', 50),
+        ));
 
         // §7 onboarding — the Google Places import (location enrichment) runs on
         // the real adapter; tests bind MockPlacesProvider so no key/network.

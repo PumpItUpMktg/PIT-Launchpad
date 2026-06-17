@@ -1,0 +1,38 @@
+{
+  "_comment": "5-digit county FIPS (STATE+COUNTY) -> DataForSEO Google Ads location_name (DMA region). Public Nielsen county-DMA assignments for the NJ / eastern-PA calibration region. VERIFY any addition against the DataForSEO Google Ads locations catalog (location_type 'DMA Region'); an unmatched name errors that one metro and the run skips it (state fallback still applies). Extend per tenant region.",
+
+  "34003": "New York,NY,United States",
+  "34013": "New York,NY,United States",
+  "34017": "New York,NY,United States",
+  "34019": "New York,NY,United States",
+  "34023": "New York,NY,United States",
+  "34025": "New York,NY,United States",
+  "34027": "New York,NY,United States",
+  "34029": "New York,NY,United States",
+  "34031": "New York,NY,United States",
+  "34035": "New York,NY,United States",
+  "34037": "New York,NY,United States",
+  "34039": "New York,NY,United States",
+  "34041": "New York,NY,United States",
+
+  "34001": "Philadelphia,PA,United States",
+  "34005": "Philadelphia,PA,United States",
+  "34007": "Philadelphia,PA,United States",
+  "34009": "Philadelphia,PA,United States",
+  "34011": "Philadelphia,PA,United States",
+  "34015": "Philadelphia,PA,United States",
+  "34021": "Philadelphia,PA,United States",
+  "34033": "Philadelphia,PA,United States",
+
+  "42017": "Philadelphia,PA,United States",
+  "42029": "Philadelphia,PA,United States",
+  "42045": "Philadelphia,PA,United States",
+  "42091": "Philadelphia,PA,United States",
+  "42101": "Philadelphia,PA,United States",
+  "42011": "Philadelphia,PA,United States",
+
+  "42077": "Allentown,PA,United States",
+  "42095": "Allentown,PA,United States",
+  "42025": "Allentown,PA,United States",
+  "42089": "Allentown,PA,United States"
+}

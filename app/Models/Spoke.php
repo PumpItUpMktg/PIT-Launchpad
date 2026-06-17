@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * A spoke in a SiloBlueprint. The silo grouping (blueprint → silos → spokes) is
@@ -28,6 +29,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property SpokeTag $tag
  * @property string|null $head_keyword
  * @property int|null $volume
+ * @property array<string, int>|null $volume_breakdown
+ * @property Carbon|null $volume_at
  * @property SpokeStatus $status
  * @property string|null $connection_note
  * @property string|null $sibling_brand
@@ -56,6 +59,8 @@ class Spoke extends Model
             'status' => SpokeStatus::class,
             'granularity' => SpokeGranularity::class,
             'volume' => 'integer',
+            'volume_breakdown' => 'array',
+            'volume_at' => 'datetime',
         ];
     }
 }
