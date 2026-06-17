@@ -136,6 +136,22 @@ it('warns loudly when geocoding will fall back to Census (no Google key)', funct
     Livewire::test(LocationsSetup::class)->assertDontSee('Google Geocoding isn’t enabled');
 });
 
+it('retries a previously-failed geocode and resolves it via the now-Google geocoder', function () {
+    // a base that failed under the old Census-only geocoder (geocode_failed = true)
+    app()->instance(Geocoder::class, new MockCensusGeocoder(40.1265, -75.4188)); // now resolves (Google stand-in)
+    $site = Site::factory()->create();
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'address' => '2753 W Main St, Trooper PA 19403', 'lat' => null, 'lng' => null, 'geocode_failed' => true]);
+
+    Livewire::test(LocationsSetup::class)
+        ->set('siteId', $site->id) // auto-geocode-on-open SKIPS a failed base — must not silently re-locate
+        ->assertSeeHtml('wire:click="retryGeocode(\''.$loc->id.'\')"')
+        ->call('retryGeocode', $loc->id);
+
+    $loc->refresh();
+    expect((float) $loc->lat)->toBe(40.1265)
+        ->and($loc->geocode_failed)->toBeFalse();
+});
+
 it('shows the empty-state for a site with no locations', function () {
     $site = Site::factory()->create();
 

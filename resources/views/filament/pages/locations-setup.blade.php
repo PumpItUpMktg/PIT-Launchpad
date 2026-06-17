@@ -134,18 +134,24 @@
                         @endforeach
                     </div>
 
-                    {{-- Manual override — fallback only when locating failed --}}
+                    {{-- Fallback only when locating failed: retry (now Google) or set the spot manually --}}
                     @if ($location->geocode_failed)
-                        <div class="flex flex-wrap items-end gap-2 border-t border-gray-100 pt-2 dark:border-white/10">
-                            <label>
-                                <span class="mb-1 block text-xs text-gray-500 dark:text-gray-400">Latitude</span>
-                                <input type="text" wire:model="manualLat.{{ $location->id }}" class="{{ $inputClass }} w-28" />
-                            </label>
-                            <label>
-                                <span class="mb-1 block text-xs text-gray-500 dark:text-gray-400">Longitude</span>
-                                <input type="text" wire:model="manualLng.{{ $location->id }}" class="{{ $inputClass }} w-28" />
-                            </label>
-                            <x-filament::button wire:click="saveManualPoint('{{ $location->id }}')" size="sm" color="gray">Set the spot</x-filament::button>
+                        <div class="flex flex-col gap-2 border-t border-gray-100 pt-2 dark:border-white/10">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-gray-500 dark:text-gray-400">Couldn’t locate this address automatically.</span>
+                                <x-filament::button wire:click="retryGeocode('{{ $location->id }}')" size="xs" color="gray" icon="heroicon-m-arrow-path">Retry locating</x-filament::button>
+                            </div>
+                            <div class="flex flex-wrap items-end gap-2">
+                                <label>
+                                    <span class="mb-1 block text-xs text-gray-500 dark:text-gray-400">Latitude</span>
+                                    <input type="text" wire:model="manualLat.{{ $location->id }}" class="{{ $inputClass }} w-28" />
+                                </label>
+                                <label>
+                                    <span class="mb-1 block text-xs text-gray-500 dark:text-gray-400">Longitude</span>
+                                    <input type="text" wire:model="manualLng.{{ $location->id }}" class="{{ $inputClass }} w-28" />
+                                </label>
+                                <x-filament::button wire:click="saveManualPoint('{{ $location->id }}')" size="sm" color="gray">Set the spot</x-filament::button>
+                            </div>
                         </div>
                     @endif
                 </div>
