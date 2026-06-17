@@ -151,15 +151,17 @@ it('feeds the shared map with color-matched, located bases only', function () {
         ->and($colors)->toHaveCount(3);
 });
 
-it('sets a location radius via the segmented control and persists it', function () {
+it('renders the radius control as a real wired button and the click sets + recomputes', function () {
     $site = Site::factory()->create();
     $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => 40.7, 'lng' => -74.5, 'coverage_radius' => 25]);
 
     Livewire::test(LocationsSetup::class)
         ->set('siteId', $site->id)
+        // the control is an actual wire:click button in the DOM (not a dead text span) — test the click target, not just the handler
+        ->assertSeeHtml('wire:click="setRadius(\''.$loc->id.'\', 15)"')
         ->call('setRadius', $loc->id, 15)
         ->assertSet("radii.{$loc->id}", 15)
-        ->assertDispatched('locations-updated'); // the map circle gets the resize signal
+        ->assertDispatched('locations-updated'); // recompute → the map circle gets the resize signal
 
     expect(Location::withoutGlobalScope(SiteScope::class)->where('id', $loc->id)->value('coverage_radius'))->toBe(15);
 });

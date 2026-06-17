@@ -217,24 +217,36 @@
     {{-- Leaflet (OSM/CARTO tiles, no API key) --}}
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script>
-        document.addEventListener('alpine:init', () => {
-            Alpine.data('coverageMap', (initial, initialManual) => ({
+        // Defined as a plain global at parse time (NOT via alpine:init) so x-data can never
+        // evaluate `coverageMap` before it exists — a "coverageMap is not defined" throw in
+        // x-data would halt Alpine and, with it, ALL Livewire interactivity (the radius
+        // buttons included). Every Leaflet touch is also guarded so a tile/lib failure
+        // degrades to "no map", never a thrown init.
+        window.coverageMap = (initial, initialManual) => ({
                 map: null,
                 group: null,
                 init() {
-                    this.ensureLeaflet(() => {
-                        this.map = L.map(this.$refs.map, { scrollWheelZoom: false }).setView([40.3, -74.6], 8);
-                        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                            attribution: '© OpenStreetMap, © CARTO', maxZoom: 19,
-                        }).addTo(this.map);
-                        this.render(initial, initialManual);
-                    });
+                    try {
+                        this.ensureLeaflet(() => {
+                            try {
+                                this.map = L.map(this.$refs.map, { scrollWheelZoom: false }).setView([40.3, -74.6], 8);
+                                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                                    attribution: '© OpenStreetMap, © CARTO', maxZoom: 19,
+                                }).addTo(this.map);
+                                this.render(initial, initialManual);
+                            } catch (e) { console.error('coverage map init', e); }
+                        });
+                    } catch (e) { console.error('coverage map', e); }
                 },
                 ensureLeaflet(cb) {
                     if (window.L) return cb();
+                    const existing = document.getElementById('lp-leaflet-js');
+                    if (existing) { existing.addEventListener('load', cb); return; }
                     const s = document.createElement('script');
+                    s.id = 'lp-leaflet-js';
                     s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
                     s.onload = cb;
+                    s.onerror = () => console.error('Leaflet failed to load');
                     document.head.appendChild(s);
                 },
                 render(data, manual) {
@@ -262,7 +274,6 @@
                     });
                     if (pts.length) this.map.fitBounds(L.latLngBounds(pts).pad(0.4));
                 },
-            }));
         });
     </script>
 </x-filament-panels::page>
