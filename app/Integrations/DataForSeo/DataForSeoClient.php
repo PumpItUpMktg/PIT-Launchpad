@@ -48,6 +48,25 @@ class DataForSeoClient
         return self::parseSearchVolume($this->firstTaskResult($json));
     }
 
+    /**
+     * Search volume for a batch of keywords by location NAME (e.g. a DMA region or
+     * state) — used by the Locations-grounded silo volume pass, which resolves metros
+     * by name rather than by a hardcoded numeric code.
+     *
+     * @param  list<string>  $keywords
+     * @return array<string, array{volume: int, cpc: float|null, competition: float|null}>
+     */
+    public function liveSearchVolumeByName(array $keywords, string $locationName, string $language): array
+    {
+        $json = $this->request('/v3/keywords_data/google_ads/search_volume/live', [[
+            'keywords' => $keywords,
+            'location_name' => $locationName,
+            'language_code' => $language,
+        ]]);
+
+        return self::parseSearchVolume($this->firstTaskResult($json));
+    }
+
     // --- Labs API (synchronous only): difficulty (batch) + related ---
 
     /**

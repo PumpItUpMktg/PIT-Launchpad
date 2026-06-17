@@ -1,0 +1,7 @@
+{
+  "_comment": "2-letter state -> DataForSEO Google Ads location_name (state region). The fallback when a coverage county doesn't map to a DMA (or a place GEOID carries no county). VERIFY against the DataForSEO catalog.",
+
+  "NJ": "New Jersey,United States",
+  "PA": "Pennsylvania,United States",
+  "NY": "New York,United States"
+}
