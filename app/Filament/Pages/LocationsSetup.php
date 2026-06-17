@@ -30,6 +30,8 @@ use Illuminate\Support\Collection;
  * @property-read array<string, string> $siteOptions
  * @property-read Collection<int, Location> $locations
  * @property-read bool $placesEnabled
+ * @property-read array<string, string> $colors
+ * @property-read list<array{name: string, lat: float, lng: float, radius: int, color: string}> $mapData
  */
 class LocationsSetup extends Page
 {
@@ -37,6 +39,9 @@ class LocationsSetup extends Page
     public const RADII = [10, 15, 25];
 
     public const DEFAULT_RADIUS = 25;
+
+    /** Card-swatch / map-circle colors, assigned per location by position. */
+    public const PALETTE = ['#2563eb', '#16a34a', '#db2777', '#d97706', '#7c3aed', '#0891b2'];
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-map-pin';
 
@@ -84,6 +89,7 @@ class LocationsSetup extends Page
         $this->addRadius = self::DEFAULT_RADIUS;
         $this->loadRadii();
         $this->autoGeocodePending();
+        $this->buildCoverage(notify: false); // show the map + reach immediately for located bases
     }
 
     public function startAdd(): void
@@ -208,19 +214,44 @@ class LocationsSetup extends Page
 
     public function compute(): void
     {
+        $this->buildCoverage(notify: true);
+    }
+
+    /** Segmented "how far you serve" — set + persist a location's radius, recompute quietly. */
+    public function setRadius(string $locationId, int $miles): void
+    {
+        if (! in_array($miles, self::RADII, true)) {
+            return;
+        }
+
+        $location = $this->location($locationId);
+        if ($location === null) {
+            return;
+        }
+
+        $this->radii[$locationId] = $miles;
+        $location->forceFill(['coverage_radius' => $miles])->save();
+        $this->buildCoverage(notify: false);
+    }
+
+    private function buildCoverage(bool $notify): void
+    {
         $site = $this->site();
         if ($site === null) {
             return;
         }
 
-        // Persist each location's "how far you serve" (the engine reads it from there).
         foreach ($this->locations as $location) {
             $location->forceFill(['coverage_radius' => $this->radiusFor($location->id)])->save();
         }
 
         $result = app(LocationCoverage::class)->coverage($site);
+        $this->dispatch('locations-updated', data: $this->mapData);
+
         if ($result->perBase === []) {
-            Notification::make()->title('Nothing to map yet')->body('Add a location and let it locate first.')->warning()->send();
+            if ($notify) {
+                Notification::make()->title('Nothing to map yet')->body('Add a location and let it locate first.')->warning()->send();
+            }
 
             return;
         }
@@ -229,7 +260,9 @@ class LocationsSetup extends Page
         $this->coverage = $result->toArray();
         $this->computed = true;
 
-        Notification::make()->title('Service area updated')->body("{$count} towns across ".count($result->perBase).' location(s).')->success()->send();
+        if ($notify) {
+            Notification::make()->title('Service area updated')->body("{$count} towns across ".count($result->perBase).' location(s).')->success()->send();
+        }
     }
 
     /**
@@ -260,13 +293,52 @@ class LocationsSetup extends Page
         return (string) config('services.google.maps_api_key', '') !== '';
     }
 
+    /**
+     * Stable color per location (card swatch ↔ map circle), assigned by position.
+     *
+     * @return array<string, string>
+     */
+    public function getColorsProperty(): array
+    {
+        $colors = [];
+        foreach ($this->locations->values() as $i => $location) {
+            $colors[$location->id] = self::PALETTE[$i % count(self::PALETTE)];
+        }
+
+        return $colors;
+    }
+
+    /**
+     * The located bases for the shared map: center + radius + matched color.
+     *
+     * @return list<array{name: string, lat: float, lng: float, radius: int, color: string}>
+     */
+    public function getMapDataProperty(): array
+    {
+        $colors = $this->colors;
+        $data = [];
+        foreach ($this->locations as $location) {
+            if ($location->lat !== null && $location->lng !== null) {
+                $data[] = [
+                    'name' => $location->name,
+                    'lat' => (float) $location->lat,
+                    'lng' => (float) $location->lng,
+                    'radius' => $this->radiusFor($location->id),
+                    'color' => $colors[$location->id] ?? self::PALETTE[0],
+                ];
+            }
+        }
+
+        return $data;
+    }
+
     private function finishAdd(string $message): void
     {
         $this->adding = false;
         $this->reset(['addName', 'addAddress', 'addQuery', 'placeResults']);
         $this->addRadius = self::DEFAULT_RADIUS;
         $this->loadRadii();
-        $this->compute(); // coverage refreshes immediately across all located bases
+        $this->buildCoverage(notify: false); // coverage refreshes immediately across all located bases
 
         Notification::make()->title($message)->success()->send();
     }

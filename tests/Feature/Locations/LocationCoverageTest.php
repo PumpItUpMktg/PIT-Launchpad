@@ -108,14 +108,18 @@ test('overlapByBase reports net-new vs already-covered per location', function (
     $a = baseLocation($site, CoverageFixture::A_LAT, CoverageFixture::A_LNG);
     $b = baseLocation($site, CoverageFixture::B_LAT, CoverageFixture::B_LNG);
 
-    $overlap = collect(coverageFor($site)->overlapByBase());
+    $result = coverageFor($site);
+    $overlap = collect($result->overlapByBase());
     $aRow = $overlap->firstWhere('location_id', $a->id);
     $bRow = $overlap->firstWhere('location_id', $b->id);
 
     // A reaches Maplewood + Livingston + Clinton(shared); B reaches Easton + Clinton(shared).
     expect($aRow['total'])->toBe(3)->and($aRow['new'])->toBe(2)->and($aRow['shared'])->toBe(1)
+        ->and($aRow['counties'])->toBeGreaterThan(0)->and($aRow['states'])->toContain('NJ')
         ->and($bRow['total'])->toBe(2)->and($bRow['new'])->toBe(1)->and($bRow['shared'])->toBe(1)
-        ->and($bRow['shared_with'])->toContain($a->name);
+        ->and($bRow['shared_with'])->toContain($a->name)
+        ->and($bRow['states'])->toContain('PA') // Easton
+        ->and($result->overlapCount())->toBe(1); // Clinton reached by both
 });
 
 test('it skips base locations with no point or no radius', function () {

@@ -35,6 +35,12 @@ final class CoverageResult
         return count(array_filter($this->union, fn (CoverageMunicipality $m) => $m->type === MunicipalityType::Place));
     }
 
+    /** How many union municipalities are reached by more than one base (the overlap lens). */
+    public function overlapCount(): int
+    {
+        return count(array_filter($this->union, fn (CoverageMunicipality $m) => count($m->sourceLocationIds) > 1));
+    }
+
     /**
      * Per-base net-new vs already-covered breakdown — overlap transparency. A municipality
      * this base reaches that ANOTHER base also reaches is "already covered" (counted once
@@ -58,6 +64,8 @@ final class CoverageResult
         foreach ($this->perBase as $base) {
             $shared = 0;
             $sharedWith = [];
+            $counties = [];
+            $states = [];
             foreach ($base->municipalities as $m) {
                 $others = array_values(array_diff($sources[$m->geoId] ?? [], [$base->locationId]));
                 if ($others !== []) {
@@ -65,6 +73,12 @@ final class CoverageResult
                     foreach ($others as $otherId) {
                         $sharedWith[$otherId] = $names[$otherId] ?? $otherId;
                     }
+                }
+                if ($m->type === MunicipalityType::CountySubdivision && strlen($m->geoId) >= 5) {
+                    $counties[substr($m->geoId, 0, 5)] = true; // GEOID county FIPS (state+county)
+                }
+                if ($m->state !== null) {
+                    $states[$m->state] = true;
                 }
             }
             $total = count($base->municipalities);
@@ -75,6 +89,8 @@ final class CoverageResult
                 'new' => $total - $shared,
                 'shared' => $shared,
                 'shared_with' => array_values($sharedWith),
+                'counties' => count($counties),
+                'states' => array_keys($states),
             ];
         }
 
@@ -88,6 +104,7 @@ final class CoverageResult
     {
         return [
             'union' => array_map(fn (CoverageMunicipality $m) => $m->toArray(), $this->union),
+            'overlap_count' => $this->overlapCount(),
             'overlap_by_base' => $this->overlapByBase(),
             'per_base' => array_map(fn (BaseCoverage $b) => [
                 'location_id' => $b->locationId,
