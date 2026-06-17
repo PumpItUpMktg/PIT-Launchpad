@@ -152,6 +152,18 @@ it('retries a previously-failed geocode and resolves it via the now-Google geoco
         ->and($loc->geocode_failed)->toBeFalse();
 });
 
+it('instruments Update — reports located count + radii + towns (proves coverage ran)', function () {
+    $site = Site::factory()->create();
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => CoverageFixture::A_LAT, 'lng' => CoverageFixture::A_LNG, 'coverage_radius' => 25]);
+
+    $page = Livewire::test(LocationsSetup::class)->set('siteId', $site->id)->call('compute');
+
+    expect($page->instance()->updateDiag)
+        ->toContain('1 located')
+        ->toContain('radii [25]')
+        ->toContain('towns');
+});
+
 it('shows the empty-state for a site with no locations', function () {
     $site = Site::factory()->create();
 

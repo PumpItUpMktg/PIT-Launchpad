@@ -88,6 +88,9 @@ class LocationsSetup extends Page
 
     public bool $computed = false;
 
+    /** TEMP: surfaces what the server received/computed on the last Update (diagnostics). */
+    public string $updateDiag = '';
+
     // "Add a town" (directed coverage) — per location card.
     /** @var array<string, string> locationId => town search query */
     public array $townQuery = [];
@@ -343,12 +346,28 @@ class LocationsSetup extends Page
             $location->forceFill(['coverage_radius' => $this->radiusFor($location->id)])->save();
         }
 
+        // TEMP diagnostics: what the server actually has when Update runs.
+        $located = $this->locations->filter(fn ($l) => $l->lat !== null && $l->lng !== null);
+        $radiiList = $this->locations->map(fn ($l) => $this->radiusFor($l->id))->implode(',');
+
         $result = app(LocationCoverage::class)->coverage($site);
         $this->dispatch('locations-updated', data: $this->mapData, manual: $this->manualMarkers);
 
+        $this->updateDiag = sprintf(
+            'Update: %d location(s), %d located, radii [%s] → %d base(s) mapped, %d towns.%s',
+            $this->locations->count(),
+            $located->count(),
+            $radiiList,
+            count($result->perBase),
+            $result->unionCount(),
+            ($located->count() > 0 && $result->perBase === [])
+                ? ' Coverage service ran but returned 0 — check the TIGERweb warning log (request URL + error).'
+                : '',
+        );
+
         if ($result->perBase === []) {
             if ($notify) {
-                Notification::make()->title('Nothing to map yet')->body('Add a location and let it locate first.')->warning()->send();
+                Notification::make()->title('Nothing to map yet')->body($this->updateDiag)->warning()->send();
             }
 
             return;
