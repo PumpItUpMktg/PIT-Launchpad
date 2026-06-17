@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Locations\CoverageResult;
 use App\Locations\CoverageWriter;
 use App\Locations\LocationCoverage;
+use App\Models\Location;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use Illuminate\Console\Command;
 
@@ -21,6 +23,8 @@ class LocationsCoverageCommand extends Command
 {
     protected $signature = 'launchpad:locations-coverage
         {site : the Site id}
+        {--radius= : apply this radius (miles) to ALL base locations for this run (calibration)}
+        {--save : persist the --radius onto the Location records (same field the UI reads)}
         {--json : emit the raw coverage set as JSON}
         {--persist : write the union as the site CoverageArea set (default is dry-run)}';
 
@@ -35,7 +39,22 @@ class LocationsCoverageCommand extends Command
             return self::FAILURE;
         }
 
-        $result = $coverage->coverage($site);
+        $radiusOpt = $this->option('radius');
+        $override = ($radiusOpt !== null && $radiusOpt !== '') ? (int) $radiusOpt : null;
+
+        if ($this->option('save')) {
+            if ($override === null) {
+                $this->error('--save requires --radius=N.');
+
+                return self::FAILURE;
+            }
+            Location::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)
+                ->update(['coverage_radius' => $override]);
+            $this->info("Saved radius {$override}mi onto the base locations.");
+        }
+
+        $result = $coverage->coverage($site, $override);
 
         if ($result->perBase === []) {
             $this->error('No configured base locations — each needs a geocoded point (lat/lng) and a coverage radius.');

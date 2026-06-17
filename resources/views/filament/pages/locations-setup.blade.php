@@ -42,8 +42,14 @@
                         </div>
                         <label class="flex items-center gap-2 text-sm">
                             <span class="text-gray-500 dark:text-gray-400">Radius</span>
+                            @php
+                                // Presets plus any non-preset value already saved (e.g. via the CLI) so it shows, not silently snaps.
+                                $opts = collect(\App\Filament\Pages\LocationsSetup::RADII)
+                                    ->push((int) ($radii[$location->id] ?? \App\Filament\Pages\LocationsSetup::DEFAULT_RADIUS))
+                                    ->unique()->sort()->values();
+                            @endphp
                             <select wire:model="radii.{{ $location->id }}" class="{{ $inputClass }} w-28">
-                                @foreach (\App\Filament\Pages\LocationsSetup::RADII as $r)
+                                @foreach ($opts as $r)
                                     <option value="{{ $r }}">{{ $r }} mi</option>
                                 @endforeach
                             </select>
