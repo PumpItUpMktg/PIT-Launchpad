@@ -117,3 +117,44 @@ it('shows the empty-state for a site with no locations', function () {
         ->set('siteId', $site->id)
         ->assertSee('No locations yet');
 });
+
+it('feeds the shared map with color-matched, located bases only', function () {
+    $site = Site::factory()->create();
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'lat' => 40.81, 'lng' => -74.22, 'coverage_radius' => 15]);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'lat' => 40.13, 'lng' => -75.41, 'coverage_radius' => 25]);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Unlocated', 'lat' => null, 'lng' => null]);
+
+    $page = Livewire::test(LocationsSetup::class)->set('siteId', $site->id)->instance();
+    $mapData = $page->mapData;
+    $colors = $page->colors;
+
+    expect($mapData)->toHaveCount(2) // the un-located base is excluded
+        ->and(collect($mapData)->pluck('name'))->toContain('Montclair', 'Trooper')
+        ->and(collect($mapData)->pluck('color')->unique())->toHaveCount(2) // distinct, matched colors
+        ->and($colors)->toHaveCount(3);
+});
+
+it('sets a location radius via the segmented control and persists it', function () {
+    $site = Site::factory()->create();
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => 40.7, 'lng' => -74.5, 'coverage_radius' => 25]);
+
+    Livewire::test(LocationsSetup::class)
+        ->set('siteId', $site->id)
+        ->call('setRadius', $loc->id, 15)
+        ->assertSet("radii.{$loc->id}", 15);
+
+    expect(Location::withoutGlobalScope(SiteScope::class)->where('id', $loc->id)->value('coverage_radius'))->toBe(15);
+});
+
+it('summary reflects overlap once coverage is computed', function () {
+    $site = Site::factory()->create();
+    // two located bases that share a municipality in the fixture (A + B) → 1 overlapping
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'A', 'lat' => CoverageFixture::A_LAT, 'lng' => CoverageFixture::A_LNG, 'coverage_radius' => 25]);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'B', 'lat' => CoverageFixture::B_LAT, 'lng' => CoverageFixture::B_LNG, 'coverage_radius' => 25]);
+
+    Livewire::test(LocationsSetup::class)
+        ->set('siteId', $site->id)
+        ->call('compute')
+        ->assertSet('computed', true)
+        ->assertSee('overlapping'); // Clinton Twp shared across A + B
+});

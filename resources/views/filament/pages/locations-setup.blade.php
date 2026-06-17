@@ -21,56 +21,88 @@
     @if ($siteId)
         @php
             $locations = $this->locations;
+            $colors = $this->colors;
             $locating = $locations->contains(fn ($l) => $l->lat === null && ! $l->geocode_failed);
+            $overlapByBase = collect($this->coverage['overlap_by_base'] ?? []);
         @endphp
 
-        {{-- Locations list (poll while anything is still locating) --}}
-        <div class="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10"
-            @if ($locating) wire:poll.3s @endif>
-            <div class="flex items-center justify-between">
-                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Your locations</h3>
-                @unless ($adding)
-                    <x-filament::button wire:click="startAdd" size="sm" icon="heroicon-m-plus">Add location</x-filament::button>
-                @endunless
+        {{-- Header summary --}}
+        @if ($computed)
+            @php $union = $this->coverage['union'] ?? []; $overlap = $this->coverage['overlap_count'] ?? 0; @endphp
+            <div class="flex items-center justify-between rounded-xl bg-white p-4 text-sm shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
+                <span class="font-semibold text-gray-800 dark:text-gray-100">{{ count($union) }} towns</span>
+                <span @class(['text-success-600 dark:text-success-400' => $overlap === 0, 'text-warning-600 dark:text-warning-400' => $overlap > 0])>
+                    {{ $overlap === 0 ? 'no overlap' : $overlap.' overlapping' }}
+                </span>
             </div>
+        @endif
 
-            @if ($locations->isEmpty() && ! $adding)
-                <p class="text-sm text-gray-500 dark:text-gray-400">No locations yet — add the first one.</p>
-            @endif
-
+        {{-- Location cards --}}
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2" @if ($locating) wire:poll.3s @endif>
             @foreach ($locations as $location)
-                @php $located = $location->lat !== null && $location->lng !== null; @endphp
-                <div class="flex flex-col gap-2 rounded-lg bg-gray-50 p-3 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <div class="font-medium text-gray-800 dark:text-gray-100">{{ $location->name }}</div>
-                            <div class="truncate text-xs text-gray-500 dark:text-gray-400">{{ $location->address ?: 'No address on file' }}</div>
-                            <div class="mt-1 text-xs">
-                                @if ($located)
-                                    <span class="text-success-600 dark:text-success-400">✓ located</span>
-                                @elseif ($location->geocode_failed)
-                                    <span class="text-danger-600 dark:text-danger-400">We couldn’t find this address — enter the spot below.</span>
-                                @else
-                                    <span class="text-gray-400">locating…</span>
-                                @endif
-                            </div>
+                @php
+                    $located = $location->lat !== null && $location->lng !== null;
+                    $color = $colors[$location->id] ?? '#2563eb';
+                    $reach = $overlapByBase->firstWhere('location_id', $location->id);
+                @endphp
+                <div class="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-block h-3 w-3 shrink-0 rounded-full" style="background: {{ $color }}"></span>
+                            <span class="font-semibold text-gray-800 dark:text-gray-100">{{ $location->name }}</span>
                         </div>
-                        <label class="flex shrink-0 flex-col items-end gap-1 text-sm">
-                            <span class="text-xs text-gray-500 dark:text-gray-400">How far do you serve?</span>
-                            @php
-                                $opts = collect(\App\Filament\Pages\LocationsSetup::RADII)
-                                    ->push((int) ($radii[$location->id] ?? \App\Filament\Pages\LocationsSetup::DEFAULT_RADIUS))
-                                    ->unique()->sort()->values();
-                            @endphp
-                            <select wire:model="radii.{{ $location->id }}" class="{{ $inputClass }} w-32">
-                                @foreach ($opts as $r)
-                                    <option value="{{ $r }}">{{ $r }} miles</option>
-                                @endforeach
-                            </select>
-                        </label>
+                        @if ($located)
+                            <span class="rounded-full bg-success-50 px-2 py-0.5 text-xs font-medium text-success-700 ring-1 ring-success-600/20 dark:bg-success-500/10 dark:text-success-300">● Located</span>
+                        @elseif ($location->geocode_failed)
+                            <span class="rounded-full bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-700 ring-1 ring-danger-600/20 dark:bg-danger-500/10 dark:text-danger-300">Couldn’t locate</span>
+                        @else
+                            <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-white/5 dark:text-gray-400">locating…</span>
+                        @endif
                     </div>
 
-                    {{-- Manual override — only when locating failed --}}
+                    <div>
+                        <div class="text-sm text-gray-600 dark:text-gray-300">{{ $location->address ?: 'No address on file' }}</div>
+                        @if ($located)
+                            <div class="text-xs text-gray-400">✓ Located automatically · {{ number_format((float) $location->lat, 3) }}, {{ number_format((float) $location->lng, 3) }}</div>
+                        @endif
+                    </div>
+
+                    {{-- How far you serve — segmented control --}}
+                    <div>
+                        <div class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">How far you serve</div>
+                        <div class="inline-flex overflow-hidden rounded-lg ring-1 ring-gray-300 dark:ring-white/10">
+                            @foreach (\App\Filament\Pages\LocationsSetup::RADII as $r)
+                                @php $active = (int) ($radii[$location->id] ?? 25) === $r; @endphp
+                                <button type="button" wire:click="setRadius('{{ $location->id }}', {{ $r }})"
+                                    @class([
+                                        'px-3 py-1 text-sm',
+                                        'bg-primary-600 text-white' => $active,
+                                        'bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300' => ! $active,
+                                    ])>{{ $r }} mi</button>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    {{-- Reach readout (from the computed coverage) --}}
+                    @if ($reach)
+                        @php
+                            $parts = ['~'.$reach['total'].' towns'];
+                            if ($reach['counties'] > 0) {
+                                $parts[] = $reach['counties'].' '.\Illuminate\Support\Str::plural('county', $reach['counties']);
+                            }
+                            if (! empty($reach['states'])) {
+                                $parts[] = implode(', ', $reach['states']);
+                            }
+                        @endphp
+                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                            {{ implode(' · ', $parts) }}
+                            @if ($reach['shared'] > 0)
+                                <span class="text-warning-600 dark:text-warning-400"> · {{ $reach['shared'] }} shared with {{ implode(' / ', $reach['shared_with']) }}</span>
+                            @endif
+                        </div>
+                    @endif
+
+                    {{-- Manual override — fallback only when locating failed --}}
                     @if ($location->geocode_failed)
                         <div class="flex flex-wrap items-end gap-2 border-t border-gray-100 pt-2 dark:border-white/10">
                             <label>
@@ -87,9 +119,17 @@
                 </div>
             @endforeach
 
-            {{-- Add-location flow --}}
-            @if ($adding)
-                <div class="flex flex-col gap-3 rounded-lg border border-primary-200 bg-primary-50/40 p-3 dark:border-primary-500/30 dark:bg-primary-500/5">
+            {{-- Add-location card --}}
+            <div class="flex flex-col gap-3 rounded-xl border-2 border-dashed border-gray-200 p-4 dark:border-white/10">
+                @if (! $adding)
+                    <button type="button" wire:click="startAdd" class="flex h-full min-h-28 w-full flex-col items-center justify-center gap-1 text-sm text-gray-500 hover:text-primary-600 dark:text-gray-400">
+                        <span class="text-2xl leading-none">＋</span>
+                        Add location
+                    </button>
+                    @if ($locations->isEmpty())
+                        <p class="text-center text-xs text-gray-400">No locations yet — add the first one.</p>
+                    @endif
+                @else
                     @if ($this->placesEnabled)
                         <div class="flex gap-2 text-sm">
                             <button type="button" wire:click="$set('addSource', 'places')" @class(['rounded-lg px-3 py-1', 'bg-primary-600 text-white' => $addSource === 'places', 'text-gray-600 dark:text-gray-300' => $addSource !== 'places'])>From Google</button>
@@ -98,109 +138,100 @@
                     @endif
 
                     @if ($addSource === 'places' && $this->placesEnabled)
-                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
-                            <label class="flex-1">
-                                <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Find your business</span>
-                                <input type="text" wire:model="addQuery" wire:keydown.enter="searchPlaces" placeholder="business name or address" class="{{ $inputClass }}" />
-                            </label>
-                            <x-filament::button wire:click="searchPlaces" color="gray" icon="heroicon-m-magnifying-glass">Search</x-filament::button>
+                        <div class="flex flex-col gap-2">
+                            <input type="text" wire:model="addQuery" wire:keydown.enter="searchPlaces" placeholder="business name or address" class="{{ $inputClass }}" />
+                            <x-filament::button wire:click="searchPlaces" color="gray" size="sm" icon="heroicon-m-magnifying-glass">Search</x-filament::button>
+                            @foreach ($placeResults as $r)
+                                <button type="button" wire:click="addFromPlace('{{ $r['place_id'] }}')" class="rounded-lg bg-gray-50 px-3 py-2 text-left text-sm ring-1 ring-gray-950/5 hover:bg-gray-100 dark:bg-white/5 dark:ring-white/10">
+                                    <span class="font-medium text-gray-800 dark:text-gray-100">{{ $r['name'] }}</span>
+                                    <span class="block text-xs text-gray-500">{{ $r['address'] }}</span>
+                                </button>
+                            @endforeach
                         </div>
-                        @foreach ($placeResults as $r)
-                            <button type="button" wire:click="addFromPlace('{{ $r['place_id'] }}')"
-                                class="flex flex-col items-start rounded-lg bg-white px-3 py-2 text-left text-sm ring-1 ring-gray-950/5 hover:bg-gray-50 dark:bg-gray-900 dark:ring-white/10">
-                                <span class="font-medium text-gray-800 dark:text-gray-100">{{ $r['name'] }}</span>
-                                <span class="text-xs text-gray-500 dark:text-gray-400">{{ $r['address'] }}</span>
-                            </button>
-                        @endforeach
                     @else
-                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <label>
-                                <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Location name</span>
-                                <input type="text" wire:model="addName" placeholder="e.g. Montclair" class="{{ $inputClass }}" />
-                            </label>
-                            <label>
-                                <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Where you are (address)</span>
-                                <input type="text" wire:model="addAddress" placeholder="123 Main St, Town, ST" class="{{ $inputClass }}" />
-                            </label>
-                        </div>
+                        <input type="text" wire:model="addName" placeholder="Location name (e.g. Montclair)" class="{{ $inputClass }}" />
+                        <input type="text" wire:model="addAddress" placeholder="Where you are (address)" class="{{ $inputClass }}" />
                     @endif
 
-                    {{-- Coverage question, asked at add-time in the owner's words --}}
-                    <label class="flex items-center gap-2 text-sm">
-                        <span class="text-gray-600 dark:text-gray-300">How far do you serve from here?</span>
-                        <select wire:model="addRadius" class="{{ $inputClass }} w-32">
+                    <label class="flex items-center justify-between text-sm">
+                        <span class="text-gray-600 dark:text-gray-300">How far do you serve?</span>
+                        <span class="inline-flex overflow-hidden rounded-lg ring-1 ring-gray-300 dark:ring-white/10">
                             @foreach (\App\Filament\Pages\LocationsSetup::RADII as $r)
-                                <option value="{{ $r }}">{{ $r }} miles</option>
+                                <button type="button" wire:click="$set('addRadius', {{ $r }})" @class(['px-3 py-1', 'bg-primary-600 text-white' => $addRadius === $r, 'bg-white text-gray-600 dark:bg-gray-900 dark:text-gray-300' => $addRadius !== $r])>{{ $r }} mi</button>
                             @endforeach
-                        </select>
+                        </span>
                     </label>
 
                     <div class="flex gap-2">
                         @if ($addSource !== 'places' || ! $this->placesEnabled)
-                            <x-filament::button wire:click="addManual" icon="heroicon-m-check">Add location</x-filament::button>
+                            <x-filament::button wire:click="addManual" size="sm" icon="heroicon-m-check">Add location</x-filament::button>
                         @endif
-                        <x-filament::button wire:click="cancelAdd" color="gray">Cancel</x-filament::button>
-                    </div>
-                </div>
-            @endif
-
-            @if (! $locations->isEmpty())
-                <div>
-                    <x-filament::button wire:click="compute" icon="heroicon-m-map">Update service area</x-filament::button>
-                </div>
-            @endif
-        </div>
-
-        {{-- Coverage union --}}
-        @if ($computed)
-            @php
-                $union = $this->coverage['union'] ?? [];
-                $places = collect($union)->where('type', 'place')->count();
-                $mcds = collect($union)->where('type', 'county_subdivision')->count();
-            @endphp
-            <div class="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-                <div class="flex items-baseline justify-between">
-                    <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Towns you cover</h3>
-                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ count($union) }} towns · {{ $places }} places · {{ $mcds }} townships/boroughs</span>
-                </div>
-
-                {{-- Overlap transparency: net-new vs already-covered, per location --}}
-                @php $overlap = $this->coverage['overlap_by_base'] ?? []; @endphp
-                @if (count($overlap) > 1)
-                    <div class="flex flex-col gap-1 rounded-lg bg-gray-50 px-3 py-2 text-xs ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
-                        @foreach ($overlap as $b)
-                            <div class="text-gray-600 dark:text-gray-300">
-                                <span class="font-medium text-gray-800 dark:text-gray-100">{{ $b['location_name'] }}</span>:
-                                {{ $b['total'] }} towns — <span class="text-success-600 dark:text-success-400">{{ $b['new'] }} new</span>{{ $b['shared'] > 0 ? ', '.$b['shared'].' already in '.implode(' / ', $b['shared_with']).' area' : '' }}.
-                            </div>
-                        @endforeach
-                    </div>
-                @endif
-                @if (count($union))
-                    <div class="overflow-hidden rounded-lg ring-1 ring-gray-950/5 dark:ring-white/10">
-                        <table class="min-w-full divide-y divide-gray-100 text-sm dark:divide-white/10">
-                            <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-400 dark:bg-white/5">
-                                <tr>
-                                    <th class="px-3 py-2 text-left font-medium">Town</th>
-                                    <th class="px-3 py-2 text-left font-medium">Type</th>
-                                    <th class="px-3 py-2 text-left font-medium">State</th>
-                                    <th class="px-3 py-2 text-right font-medium">Distance</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100 dark:divide-white/10">
-                                @foreach ($union as $m)
-                                    <tr>
-                                        <td class="px-3 py-1.5 text-gray-800 dark:text-gray-100">{{ $m['name'] }}</td>
-                                        <td class="px-3 py-1.5 text-gray-500 dark:text-gray-400">{{ \App\Enums\MunicipalityType::from($m['type'])->label() }}</td>
-                                        <td class="px-3 py-1.5 text-gray-500 dark:text-gray-400">{{ $m['state'] ?? '—' }}</td>
-                                        <td class="px-3 py-1.5 text-right text-gray-500 dark:text-gray-400">{{ number_format((float) $m['distance_miles'], 1) }} mi</td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                        <x-filament::button wire:click="cancelAdd" size="sm" color="gray">Cancel</x-filament::button>
                     </div>
                 @endif
             </div>
+        </div>
+
+        {{-- Shared coverage map --}}
+        @if (! $locations->isEmpty())
+            <div class="rounded-xl bg-white p-2 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
+                <div wire:ignore
+                    x-data="coverageMap(@js($this->mapData))"
+                    x-init="init()">
+                    <div x-ref="map" class="h-[420px] w-full rounded-lg" style="background:#e5e7eb"></div>
+                </div>
+            </div>
+            <div>
+                <x-filament::button wire:click="compute" icon="heroicon-m-map">Update service area</x-filament::button>
+            </div>
         @endif
     @endif
+
+    {{-- Leaflet (OSM/CARTO tiles, no API key) --}}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('coverageMap', (initial) => ({
+                map: null,
+                group: null,
+                init() {
+                    this.ensureLeaflet(() => {
+                        this.map = L.map(this.$refs.map, { scrollWheelZoom: false }).setView([40.3, -74.6], 8);
+                        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                            attribution: '© OpenStreetMap, © CARTO', maxZoom: 19,
+                        }).addTo(this.map);
+                        this.render(initial);
+                    });
+                    window.addEventListener('locations-updated', (e) => {
+                        const detail = e.detail ?? {};
+                        this.render(detail.data ?? (Array.isArray(detail) ? (detail[0]?.data ?? []) : []));
+                    });
+                },
+                ensureLeaflet(cb) {
+                    if (window.L) return cb();
+                    const s = document.createElement('script');
+                    s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+                    s.onload = cb;
+                    document.head.appendChild(s);
+                },
+                render(data) {
+                    if (!this.map || !window.L) return;
+                    if (this.group) this.map.removeLayer(this.group);
+                    this.group = L.layerGroup().addTo(this.map);
+                    const pts = [];
+                    (data || []).forEach((d) => {
+                        if (d.lat == null || d.lng == null) return;
+                        L.circle([d.lat, d.lng], {
+                            radius: d.radius * 1609.34,
+                            color: d.color, weight: 2, fillColor: d.color, fillOpacity: 0.16,
+                        }).addTo(this.group);
+                        L.circleMarker([d.lat, d.lng], { radius: 5, color: d.color, fillColor: d.color, fillOpacity: 1 })
+                            .bindTooltip(d.name, { permanent: false }).addTo(this.group);
+                        pts.push([d.lat, d.lng]);
+                    });
+                    if (pts.length) this.map.fitBounds(L.latLngBounds(pts).pad(0.4));
+                },
+            }));
+        });
+    </script>
 </x-filament-panels::page>
