@@ -140,23 +140,39 @@ path — no fabricated coverage.
 **Granularity:** where volume makes it ambiguous, surface the split-vs-consolidate call
 (a head term as its own spoke page vs. folded into the pillar).
 
-### Phase 4 — implemented (headless `Pruner`)
+### Phase 4 — implemented, PR-A (headless `PruneEngine`)
 
-`app/Interview/Prune/` — the headless engine the conversational owner surface will sit
-on (iron law: prove the routing before the UI):
+`app/Interview/Prune/` — the headless engine the conversational owner surface (PR-B)
+sits on (iron law: prove the routing before the UI):
 
 - **The routing table is the `PruneOutcome` enum** — `offer`/`future` → `SpokeStatus`
   `Offered`/`Future` (service page); `capture` → `Content` + converts the spoke's
   `page_type` to the content-path guide; `skip` → `Skipped`. Resolves a `candidate` into
   a confirmed status + page type.
-- **`Pruner`**: `plan()` (the visible candidate list — `PrunePlan`/`PruneRow`, volume +
-  tag + connection note + the Phase-3 granularity recommendation, decided vs pending);
-  `apply()` (route decisions keyed by spoke name|id); `acceptCore()` (bulk-confirm core
-  offerings — offer, or capture for a core content guide); `confirm()` (the **hard gate**
-  — stamps `confirmed_at` only when every **non-fringe** candidate is decided; fringe is
-  the Routing-layer handoff, excluded from the gate).
-- **CLI** `launchpad:silo-prune {site} [--accept-core] [--apply=decisions.json] [--confirm] [--json]`.
+- **`PruneEngine`** — per-spoke AND silo-level decisions:
+  - `plan()` → `PrunePlan`/`PruneRow`: the candidate list grouped by silo, **volume-sorted
+    within** (highest-upside lean-ins first) with a **per-silo summary** (stated core vs
+    lean-ins + their combined upside) — the asymmetry-of-effort view (batch-confirm core,
+    focus on the lean-ins).
+  - `applySpokes()` — route decisions keyed by spoke name|id, each `{outcome, tag?,
+    granularity?}`: routing **plus first-class re-tagging** (promote a mis-tagged
+    `connecting` the owner actually offers → `core`, self-correcting the expander) **plus
+    granularity override** (confirm/override the Phase-3 fold recommendation).
+  - `foldSilo()` / `renameSilo()` / `confirmSilo()` — silo-level structure: collapse a
+    thin silo under another pillar (e.g. sewage/grinder → pumps), rename a grouping, or
+    batch-confirm a silo's core.
+  - `applyDecisionSet()` — one transaction: spoke decisions first (stable keys), then
+    silo renames → folds → confirms.
+  - `acceptCore()` (bulk-confirm core) and `confirm()` — the **hard gate**: stamps
+    `confirmed_at` only when every **non-fringe** candidate is decided (un-reviewed =
+    not built; fringe is the Routing-layer handoff, excluded).
+- **CLIs:** `launchpad:silo-prune {site} [--json]` (the grouped/summarized viewer);
+  `launchpad:prune-apply {site} {decisions.json} [--accept-core] [--confirm] [--json]`
+  (apply a decision-set: `{"silos":{...fold/rename/confirm},"spokes":{...outcome/tag/granularity}}`).
 - **§1 additions:** `silo_blueprints.confirmed_at`; enum `PruneOutcome`.
+- **PR-B (deferred):** the Filament prune UI — the grouped, volume-sorted, batch-confirm
+  surface that writes through `PruneEngine`; its live SPG walkthrough waits on the
+  validated `silo-volume` run.
 
 ## 5. Output — the silo blueprint / page inventory
 
