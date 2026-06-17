@@ -127,6 +127,15 @@ it('adds a directed town to a location (priority page candidate) and marks it on
     expect(CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('source', 'manual')->count())->toBe(0);
 });
 
+it('warns loudly when geocoding will fall back to Census (no Google key)', function () {
+    config()->set('services.google.maps_api_key', '');
+
+    Livewire::test(LocationsSetup::class)->assertSee('Google Geocoding isn’t enabled');
+
+    config()->set('services.google.maps_api_key', 'a-key');
+    Livewire::test(LocationsSetup::class)->assertDontSee('Google Geocoding isn’t enabled');
+});
+
 it('shows the empty-state for a site with no locations', function () {
     $site = Site::factory()->create();
 
@@ -151,15 +160,17 @@ it('feeds the shared map with color-matched, located bases only', function () {
         ->and($colors)->toHaveCount(3);
 });
 
-it('sets a location radius via the segmented control and persists it', function () {
+it('renders the radius control as a real wired button and the click sets + recomputes', function () {
     $site = Site::factory()->create();
     $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => 40.7, 'lng' => -74.5, 'coverage_radius' => 25]);
 
     Livewire::test(LocationsSetup::class)
         ->set('siteId', $site->id)
+        // the control is an actual wire:click button in the DOM (not a dead text span) — test the click target, not just the handler
+        ->assertSeeHtml('wire:click="setRadius(\''.$loc->id.'\', 15)"')
         ->call('setRadius', $loc->id, 15)
         ->assertSet("radii.{$loc->id}", 15)
-        ->assertDispatched('locations-updated'); // the map circle gets the resize signal
+        ->assertDispatched('locations-updated'); // recompute → the map circle gets the resize signal
 
     expect(Location::withoutGlobalScope(SiteScope::class)->where('id', $loc->id)->value('coverage_radius'))->toBe(15);
 });

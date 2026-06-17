@@ -4,6 +4,8 @@ namespace App\Integrations\Census;
 
 use App\Enums\MunicipalityType;
 use Illuminate\Http\Client\Factory as Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Real municipality enumeration via the Census TIGERweb ArcGIS REST service. Runs a
@@ -94,23 +96,52 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
      */
     private function query(int $layer, float $lat, float $lng, float $radiusMiles, MunicipalityType $type): array
     {
-        $response = $this->http
-            ->timeout($this->timeout)
-            ->get(rtrim($this->baseUrl, '/')."/{$layer}/query", [
-                'f' => 'json',
-                'where' => '1=1',
-                'geometry' => (string) json_encode(['x' => $lng, 'y' => $lat, 'spatialReference' => ['wkid' => 4326]]),
-                'geometryType' => 'esriGeometryPoint',
-                'inSR' => 4326,
-                'outSR' => 4326,
-                'distance' => $radiusMiles,
-                'units' => 'esriSRUnit_StatuteMile',
-                'spatialRel' => 'esriSpatialRelIntersects',
-                'outFields' => 'GEOID,NAME,BASENAME,STUSAB,STATE,CENTLAT,CENTLON',
-                'returnGeometry' => 'false',
-            ]);
+        // inSR=4326 tells TIGERweb the point is lat/lng (its data is Web Mercator); WITHOUT
+        // it the point is read as meters and the query returns ZERO features. geodesic=true
+        // is required to buffer a geographic point by a linear (mile) distance — without it
+        // ArcGIS can't reconcile degrees vs miles and also yields zero.
+        return $this->mapFeatures($this->fetch($layer, [
+            'f' => 'json',
+            'where' => '1=1',
+            'geometry' => (string) json_encode(['x' => $lng, 'y' => $lat, 'spatialReference' => ['wkid' => 4326]]),
+            'geometryType' => 'esriGeometryPoint',
+            'inSR' => 4326,
+            'outSR' => 4326,
+            'distance' => $radiusMiles,
+            'units' => 'esriSRUnit_StatuteMile',
+            'geodesic' => 'true',
+            'spatialRel' => 'esriSpatialRelIntersects',
+            'outFields' => 'GEOID,NAME,BASENAME,STUSAB,STATE,CENTLAT,CENTLON',
+            'returnGeometry' => 'false',
+        ]), $type);
+    }
 
-        return $this->mapFeatures($response->json('features'), $type);
+    /**
+     * Issue a layer query and LOG the outcome — the raw URL + feature count, with a loud
+     * warning on zero features (the SR/vintage class of bug must never be a silent 0).
+     *
+     * @param  array<string, mixed>  $params
+     * @return mixed
+     */
+    private function fetch(int $layer, array $params)
+    {
+        $url = rtrim($this->baseUrl, '/')."/{$layer}/query";
+        $response = $this->http->timeout($this->timeout)->get($url, $params);
+        $features = is_array($response->json('features')) ? $response->json('features') : [];
+        $fullUrl = $url.'?'.http_build_query($params);
+
+        if ($features === []) {
+            Log::warning('TIGERweb returned 0 features', [
+                'url' => $fullUrl,
+                'status' => $response->status(),
+                'error' => $response->json('error'),
+                'body' => Str::limit((string) $response->body(), 400),
+            ]);
+        } else {
+            Log::debug('TIGERweb query ok', ['url' => $fullUrl, 'features' => count($features)]);
+        }
+
+        return $response->json('features');
     }
 
     /**
@@ -138,18 +169,14 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
     {
         $escaped = str_replace("'", "''", strtoupper($query));
 
-        $response = $this->http
-            ->timeout($this->timeout)
-            ->get(rtrim($this->baseUrl, '/')."/{$layer}/query", [
-                'f' => 'json',
-                'where' => "UPPER(BASENAME) LIKE '%{$escaped}%'",
-                'outFields' => 'GEOID,NAME,BASENAME,STUSAB,STATE,CENTLAT,CENTLON',
-                'returnGeometry' => 'false',
-                'orderByFields' => 'BASENAME',
-                'resultRecordCount' => 25,
-            ]);
-
-        return $this->mapFeatures($response->json('features'), $type);
+        return $this->mapFeatures($this->fetch($layer, [
+            'f' => 'json',
+            'where' => "UPPER(BASENAME) LIKE '%{$escaped}%'",
+            'outFields' => 'GEOID,NAME,BASENAME,STUSAB,STATE,CENTLAT,CENTLON',
+            'returnGeometry' => 'false',
+            'orderByFields' => 'BASENAME',
+            'resultRecordCount' => 25,
+        ]), $type);
     }
 
     /**
