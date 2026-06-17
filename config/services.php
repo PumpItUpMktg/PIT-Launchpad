@@ -130,6 +130,8 @@ return [
     'google' => [
         'project_id' => env('GOOGLE_PROJECT_ID'),
         'maps_api_key' => env('GOOGLE_MAPS_API_KEY'),
+        // Google Geocoding API (address → point) — uses the maps key (Geocoding API enabled).
+        'geocoder_url' => env('GOOGLE_GEOCODER_URL', 'https://maps.googleapis.com/maps/api/geocode/json'),
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect_uri' => env('GOOGLE_REDIRECT_URI'),

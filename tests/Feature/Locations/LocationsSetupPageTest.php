@@ -141,7 +141,8 @@ it('sets a location radius via the segmented control and persists it', function 
     Livewire::test(LocationsSetup::class)
         ->set('siteId', $site->id)
         ->call('setRadius', $loc->id, 15)
-        ->assertSet("radii.{$loc->id}", 15);
+        ->assertSet("radii.{$loc->id}", 15)
+        ->assertDispatched('locations-updated'); // the map circle gets the resize signal
 
     expect(Location::withoutGlobalScope(SiteScope::class)->where('id', $loc->id)->value('coverage_radius'))->toBe(15);
 });
