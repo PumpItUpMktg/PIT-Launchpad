@@ -12,7 +12,9 @@ use App\Enums\AuditAction;
 use App\Enums\DataForSeoMode;
 use App\Enums\EmbeddingsProvider as EmbeddingsProviderType;
 use App\Enums\NewsProvider as NewsProviderType;
+use App\Integrations\Census\CensusGeocoder;
 use App\Integrations\Census\CensusProvider;
+use App\Integrations\Census\Geocoder;
 use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Census\TigerwebGazetteer;
@@ -94,6 +96,14 @@ class AppServiceProvider extends ServiceProvider
             (int) config('services.census.tigerweb_places_layer'),
             (int) config('services.census.tigerweb_cousub_layer'),
             (int) config('services.census.tigerweb_timeout', 30),
+        ));
+        // Locations base geocoding runs on the keyless Census geocoder (same authority as
+        // the TIGERweb coverage); tests bind a Mock / Http::fake so CI makes no call.
+        $this->app->bind(Geocoder::class, fn () => new CensusGeocoder(
+            $this->app->make(Http::class),
+            (string) config('services.census.geocoder_url'),
+            (string) config('services.census.geocoder_benchmark', 'Public_AR_Current'),
+            (int) config('services.census.geocoder_timeout', 15),
         ));
         $this->app->bind(VoiceSynthesizer::class, MockVoiceSynthesizer::class);
 

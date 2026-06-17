@@ -152,6 +152,10 @@ return [
         'tigerweb_places_layer' => (int) env('CENSUS_TIGERWEB_PLACES_LAYER', 28),
         'tigerweb_cousub_layer' => (int) env('CENSUS_TIGERWEB_COUSUB_LAYER', 22),
         'tigerweb_timeout' => (int) env('CENSUS_TIGERWEB_TIMEOUT', 30),
+        // Census Geocoder (keyless, US-only) — address → point for the Locations base.
+        'geocoder_url' => env('CENSUS_GEOCODER_URL', 'https://geocoding.geo.census.gov/geocoder'),
+        'geocoder_benchmark' => env('CENSUS_GEOCODER_BENCHMARK', 'Public_AR_Current'),
+        'geocoder_timeout' => (int) env('CENSUS_GEOCODER_TIMEOUT', 15),
     ],
 
     // Krayin CRM — won-stage leads → conversions (self-hosted, shared instance;
