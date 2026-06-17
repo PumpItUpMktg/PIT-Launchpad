@@ -14,6 +14,8 @@ use App\Enums\EmbeddingsProvider as EmbeddingsProviderType;
 use App\Enums\NewsProvider as NewsProviderType;
 use App\Integrations\Census\CensusProvider;
 use App\Integrations\Census\MockCensusProvider;
+use App\Integrations\Census\MunicipalityGazetteer;
+use App\Integrations\Census\TigerwebGazetteer;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Claude\ClaudeClientFactory;
 use App\Integrations\Conversions\ConversionProvider;
@@ -80,6 +82,16 @@ class AppServiceProvider extends ServiceProvider
         // Claude voice synthesis). Real adapters bind here later.
         $this->app->bind(GbpProvider::class, MockGbpProvider::class);
         $this->app->bind(CensusProvider::class, MockCensusProvider::class);
+
+        // Locations layer — service-area enumeration runs on the real Census TIGERweb
+        // adapter (no key needed); tests bind a Mock / Http::fake so CI makes no call.
+        $this->app->bind(MunicipalityGazetteer::class, fn () => new TigerwebGazetteer(
+            $this->app->make(Http::class),
+            (string) config('services.census.tigerweb_url'),
+            (int) config('services.census.tigerweb_places_layer'),
+            (int) config('services.census.tigerweb_cousub_layer'),
+            (int) config('services.census.tigerweb_timeout', 30),
+        ));
         $this->app->bind(VoiceSynthesizer::class, MockVoiceSynthesizer::class);
 
         // §7 onboarding — the Google Places import (location enrichment) runs on

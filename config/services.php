@@ -138,9 +138,17 @@ return [
         'timeout' => (int) env('GOOGLE_TIMEOUT', 30),
     ],
 
-    // US Census — demographics enrichment (§7a onboarding markets).
+    // US Census — demographics enrichment (§7a onboarding markets) + TIGERweb
+    // service-area enumeration (Locations layer). TIGERweb is a public ArcGIS REST
+    // service (no key). Layer ids are resolved by NAME at runtime; the configured ids
+    // are only a fallback if that lookup fails (tigerWMS_Current: Places = 28,
+    // County Subdivisions = 22). Keep the base URL on a current vintage.
     'census' => [
         'key' => env('CENSUS_API_KEY'),
+        'tigerweb_url' => env('CENSUS_TIGERWEB_URL', 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Current/MapServer'),
+        'tigerweb_places_layer' => (int) env('CENSUS_TIGERWEB_PLACES_LAYER', 28),
+        'tigerweb_cousub_layer' => (int) env('CENSUS_TIGERWEB_COUSUB_LAYER', 22),
+        'tigerweb_timeout' => (int) env('CENSUS_TIGERWEB_TIMEOUT', 30),
     ],
 
     // Krayin CRM — won-stage leads → conversions (self-hosted, shared instance;
