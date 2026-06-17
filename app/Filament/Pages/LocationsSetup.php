@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\MunicipalityType;
 use App\Integrations\Census\Municipality;
+use App\Integrations\Census\TigerwebDebug;
 use App\Integrations\Places\PlacesProvider;
 use App\Jobs\GeocodeLocation;
 use App\Locations\CoverageWriter;
@@ -90,6 +91,11 @@ class LocationsSetup extends Page
 
     /** TEMP: surfaces what the server received/computed on the last Update (diagnostics). */
     public string $updateDiag = '';
+
+    /** TEMP: TIGERweb per-query outcome + the raw request URL (diagnose coverage-0). */
+    public string $tigerwebDiag = '';
+
+    public string $tigerwebUrl = '';
 
     // "Add a town" (directed coverage) — per location card.
     /** @var array<string, string> locationId => town search query */
@@ -350,8 +356,13 @@ class LocationsSetup extends Page
         $located = $this->locations->filter(fn ($l) => $l->lat !== null && $l->lng !== null);
         $radiiList = $this->locations->map(fn ($l) => $this->radiusFor($l->id))->implode(',');
 
+        $debug = app(TigerwebDebug::class);
+        $debug->queries = []; // fresh capture for this Update
         $result = app(LocationCoverage::class)->coverage($site);
         $this->dispatch('locations-updated', data: $this->mapData, manual: $this->manualMarkers);
+
+        $this->tigerwebDiag = $debug->summary();
+        $this->tigerwebUrl = (string) ($debug->lastUrl() ?? '');
 
         $this->updateDiag = sprintf(
             'Update: %d location(s), %d located, radii [%s] → %d base(s) mapped, %d towns.%s',

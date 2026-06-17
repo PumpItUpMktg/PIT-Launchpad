@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\MunicipalityType;
+use App\Integrations\Census\TigerwebDebug;
 use App\Integrations\Census\TigerwebGazetteer;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Http as HttpFacade;
@@ -86,6 +87,20 @@ test('it sends a statute-mile point-buffer spatial query in 4326, geodesic (the 
         && $request['geometryType'] === 'esriGeometryPoint'
         && (string) $request['inSR'] === '4326'   // point is lat/lng, not Web Mercator meters
         && $request['geodesic'] === 'true');       // buffer degrees by miles correctly
+});
+
+test('it records each query (URL + status + count) to TigerwebDebug for on-page surfacing', function () {
+    HttpFacade::fake([
+        TIGERWEB.'?f=json' => layerDefs(28, 22),
+        '*' => HttpFacade::response(['features' => []]),
+    ]);
+
+    (new TigerwebGazetteer(app(Http::class), TIGERWEB, 28, 22, 30))->near(40.70, -74.50, 25);
+
+    $debug = app(TigerwebDebug::class);
+    expect($debug->queries)->toHaveCount(2) // places + cousub
+        ->and($debug->lastUrl())->toContain('/query?')
+        ->and($debug->summary())->toContain('0 features');
 });
 
 test('a zero-feature response is logged loudly (never a silent 0)', function () {
