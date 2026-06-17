@@ -103,6 +103,25 @@ test('it records each query (URL + status + count) to TigerwebDebug for on-page 
         ->and($debug->summary())->toContain('0 features');
 });
 
+test('byName parses a trailing state, searches the bare name, and filters to that state', function () {
+    HttpFacade::fake([
+        TIGERWEB.'?f=json' => layerDefs(28, 22),
+        '*/28/query*' => HttpFacade::response(['features' => [
+            ['attributes' => ['GEOID' => '3469510', 'NAME' => 'Sparta', 'BASENAME' => 'Sparta', 'STUSAB' => 'NJ', 'CENTLAT' => '41.03', 'CENTLON' => '-74.64']],
+        ]]),
+        '*/22/query*' => HttpFacade::response(['features' => [
+            ['attributes' => ['GEOID' => '4272345', 'NAME' => 'Sparta', 'BASENAME' => 'Sparta', 'STUSAB' => 'PA', 'CENTLAT' => '41.0', 'CENTLON' => '-79.0']],
+        ]]),
+    ]);
+
+    $found = (new TigerwebGazetteer(app(Http::class), TIGERWEB, 28, 22, 30))->byName('Sparta, NJ');
+
+    // searched the bare name (not "SPARTA, NJ")...
+    HttpFacade::assertSent(fn ($r) => str_contains(urldecode($r->url()), "LIKE '%SPARTA%'"));
+    // ...and filtered to the given state (the PA Sparta is dropped)
+    expect(collect($found)->pluck('state')->unique()->values()->all())->toBe(['NJ']);
+});
+
 test('a zero-feature response is logged loudly (never a silent 0)', function () {
     HttpFacade::fake([
         TIGERWEB.'?f=json' => layerDefs(28, 22),

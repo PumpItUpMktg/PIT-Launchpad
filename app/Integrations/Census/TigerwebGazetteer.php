@@ -156,17 +156,28 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
      */
     public function byName(string $query): array
     {
-        $query = trim($query);
-        if ($query === '') {
+        // Operators type "Sparta, NJ" / "Doylestown, PA". BASENAME is just "Sparta", so a
+        // raw LIKE on the whole string never matches — split off a trailing 2-letter state,
+        // search the name, and filter results by that state.
+        $parts = array_map('trim', explode(',', trim($query)));
+        $name = $parts[0];
+        $state = (count($parts) > 1 && preg_match('/^[A-Za-z]{2}$/', (string) end($parts)))
+            ? strtoupper((string) end($parts))
+            : null;
+
+        if ($name === '') {
             return [];
         }
 
         $layers = $this->layers();
-
-        return [
-            ...$this->queryByName($layers['place'], $query, MunicipalityType::Place),
-            ...$this->queryByName($layers['cousub'], $query, MunicipalityType::CountySubdivision),
+        $results = [
+            ...$this->queryByName($layers['place'], $name, MunicipalityType::Place),
+            ...$this->queryByName($layers['cousub'], $name, MunicipalityType::CountySubdivision),
         ];
+
+        return $state === null
+            ? $results
+            : array_values(array_filter($results, fn (Municipality $m) => $m->state === $state));
     }
 
     /**
