@@ -73,7 +73,7 @@ test('it falls back to the configured ids when the layer lookup fails', function
     HttpFacade::assertSent(fn ($r) => str_contains($r->url(), '/22/query'));
 });
 
-test('it sends a statute-mile point-buffer spatial query in 4326 WITHOUT geodesic (TIGERweb 400s on it)', function () {
+test('it sends an ENVELOPE query in 4326 (TIGERweb has no distance-query support)', function () {
     HttpFacade::fake([
         TIGERWEB.'?f=json' => layerDefs(28, 22),
         '*' => HttpFacade::response(['features' => []]),
@@ -81,12 +81,19 @@ test('it sends a statute-mile point-buffer spatial query in 4326 WITHOUT geodesi
 
     (new TigerwebGazetteer(app(Http::class), TIGERWEB, 28, 22, 30))->near(40.70, -74.50, 15);
 
-    HttpFacade::assertSent(fn ($request) => str_contains($request->url(), '/28/query')
-        && $request['units'] === 'esriSRUnit_StatuteMile'
-        && (string) $request['distance'] === '15'
-        && $request['geometryType'] === 'esriGeometryPoint'
-        && (string) $request['inSR'] === '4326'        // point is lat/lng, not Web Mercator meters
-        && ! isset($request['geodesic']));             // TIGERweb's MapServer rejects geodesic (HTTP 400)
+    HttpFacade::assertSent(function ($request) {
+        if (! str_contains($request->url(), '/28/query') || ! isset($request['geometry'])) {
+            return false; // skip the layer-definition (?f=json) request, which has no geometry
+        }
+        $geometry = json_decode((string) $request['geometry'], true);
+
+        return $request['geometryType'] === 'esriGeometryEnvelope'
+            && (string) $request['inSR'] === '4326'     // bbox is lat/lng, not Web Mercator meters
+            && ! isset($request['distance'])            // no distance/units/geodesic — TIGERweb 400s on those
+            && ! isset($request['units'])
+            && ! isset($request['geodesic'])
+            && isset($geometry['xmin'], $geometry['ymin'], $geometry['xmax'], $geometry['ymax']);
+    });
 });
 
 test('it records each query (URL + status + count) to TigerwebDebug for on-page surfacing', function () {
