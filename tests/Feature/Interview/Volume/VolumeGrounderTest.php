@@ -118,6 +118,29 @@ test('a metro whose location_name does not resolve is skipped, not fatal', funct
         ->and(spoke($site, 'Sump Pump Installation')->volume)->toBe(250); // NY only
 });
 
+test('two coverage areas in the same DMA are queried and counted once (no double-cover)', function () {
+    // Two NJ counties that BOTH map to the New York DMA → one distinct metro.
+    $resolver = new MetroResolver(new DmaTable(
+        countyToDma: ['34003' => 'New York,NY,United States', '34013' => 'New York,NY,United States'],
+        stateToLocation: [],
+    ));
+    Http::fake(fn () => Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 20000, 'result' => [
+        ['keyword' => 'sump pump installation', 'search_volume' => 300],
+    ]]]]));
+
+    $site = Site::factory()->create();
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3400312345', 'type' => MunicipalityType::CountySubdivision, 'state' => 'NJ']); // county 34003 → NY
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3401354321', 'type' => MunicipalityType::CountySubdivision, 'state' => 'NJ']); // county 34013 → NY
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+    Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Sump Pumps', 'name' => 'Sump Pump Installation', 'head_keyword' => 'sump pump installation', 'tag' => SpokeTag::Core, 'status' => SpokeStatus::Candidate, 'granularity' => SpokeGranularity::OwnPage]);
+
+    $client = new DataForSeoClient(app(Factory::class), 'x', 'y', 'https://api.dataforseo.com', 30);
+    (new VolumeGrounder($resolver, $client, 'en', 50))->ground($site);
+
+    Http::assertSentCount(1); // the shared DMA is queried exactly once
+    expect(spoke($site, 'Sump Pump Installation')->volume)->toBe(300); // counted once, not 600
+});
+
 test('it throws when there are no covered metros', function () {
     fakeSearchVolume();
     $site = Site::factory()->create();
