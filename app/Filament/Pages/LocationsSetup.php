@@ -202,6 +202,26 @@ class LocationsSetup extends Page
         $this->finishAdd("{$name} added — locating it now.");
     }
 
+    /**
+     * Re-attempt geocoding a base that previously failed — clears the failed flag and
+     * re-dispatches the job, which runs the (Google-primary) geocoder. Lets an address
+     * that failed under the old Census-only geocoder (e.g. unincorporated "Trooper, PA")
+     * resolve via Google without re-adding the location.
+     */
+    public function retryGeocode(string $locationId): void
+    {
+        $location = $this->location($locationId);
+        if ($location === null) {
+            return;
+        }
+
+        $location->forceFill(['geocode_failed' => false])->save();
+        GeocodeLocation::dispatch($location->id);
+        $this->buildCoverage(notify: false);
+
+        Notification::make()->title("Locating {$location->name}…")->send();
+    }
+
     /** Manual override, surfaced only when background geocoding failed. */
     public function saveManualPoint(string $locationId): void
     {
