@@ -73,7 +73,7 @@ test('it falls back to the configured ids when the layer lookup fails', function
     HttpFacade::assertSent(fn ($r) => str_contains($r->url(), '/22/query'));
 });
 
-test('it sends a statute-mile point-buffer spatial query in 4326, geodesic (the zero-features fix)', function () {
+test('it sends a statute-mile point-buffer spatial query in 4326 WITHOUT geodesic (TIGERweb 400s on it)', function () {
     HttpFacade::fake([
         TIGERWEB.'?f=json' => layerDefs(28, 22),
         '*' => HttpFacade::response(['features' => []]),
@@ -85,8 +85,8 @@ test('it sends a statute-mile point-buffer spatial query in 4326, geodesic (the 
         && $request['units'] === 'esriSRUnit_StatuteMile'
         && (string) $request['distance'] === '15'
         && $request['geometryType'] === 'esriGeometryPoint'
-        && (string) $request['inSR'] === '4326'   // point is lat/lng, not Web Mercator meters
-        && $request['geodesic'] === 'true');       // buffer degrees by miles correctly
+        && (string) $request['inSR'] === '4326'        // point is lat/lng, not Web Mercator meters
+        && ! isset($request['geodesic']));             // TIGERweb's MapServer rejects geodesic (HTTP 400)
 });
 
 test('it records each query (URL + status + count) to TigerwebDebug for on-page surfacing', function () {

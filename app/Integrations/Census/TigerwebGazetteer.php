@@ -97,19 +97,17 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
     private function query(int $layer, float $lat, float $lng, float $radiusMiles, MunicipalityType $type): array
     {
         // inSR=4326 tells TIGERweb the point is lat/lng (its data is Web Mercator); WITHOUT
-        // it the point is read as meters and the query returns ZERO features. geodesic=true
-        // is required to buffer a geographic point by a linear (mile) distance — without it
-        // ArcGIS can't reconcile degrees vs miles and also yields zero.
+        // it the point is read as meters and the query returns ZERO features. distance +
+        // units = a linear (statute-mile) point buffer. (No `geodesic` — TIGERweb's
+        // MapServer rejects it with HTTP 400 "Failed to execute query".)
         return $this->mapFeatures($this->fetch($layer, [
             'f' => 'json',
             'where' => '1=1',
             'geometry' => (string) json_encode(['x' => $lng, 'y' => $lat, 'spatialReference' => ['wkid' => 4326]]),
             'geometryType' => 'esriGeometryPoint',
             'inSR' => 4326,
-            'outSR' => 4326,
             'distance' => $radiusMiles,
             'units' => 'esriSRUnit_StatuteMile',
-            'geodesic' => 'true',
             'spatialRel' => 'esriSpatialRelIntersects',
             'outFields' => 'GEOID,NAME,BASENAME,STUSAB,STATE,CENTLAT,CENTLON',
             'returnGeometry' => 'false',
