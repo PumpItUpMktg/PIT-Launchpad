@@ -1,6 +1,7 @@
 <?php
 
-use App\Integrations\Claude\ClaudeClient;
+use App\Interview\Expansion\ExpansionValidator;
+use App\Interview\Expansion\SiloExpander;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -27,7 +28,9 @@ function siteWithSeed(): Site
 
 function fakeExpansion(): void
 {
-    app()->instance(ClaudeClient::class, new FakeClaudeClient(ExpansionFixture::json()));
+    // SiloExpander has a contextual ClaudeClient binding (the prefilled expander client),
+    // so bind the expander itself with a fake to keep the command off the network.
+    app()->instance(SiloExpander::class, new SiloExpander(new FakeClaudeClient(ExpansionFixture::json()), new ExpansionValidator));
 }
 
 test('dry-run prints the tree and writes nothing', function () {

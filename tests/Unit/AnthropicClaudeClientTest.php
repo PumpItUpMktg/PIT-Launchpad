@@ -21,3 +21,14 @@ test('the drafting / default call site keeps adaptive thinking', function () {
         ->and($payload['system'])->toBe('a system prompt')
         ->and($payload['messages'][0]['content'])->toBe('draft this');
 });
+
+test('a prefilled call site appends an assistant turn and runs no thinking', function () {
+    $client = new AnthropicClaudeClient('test-key', 'claude-opus-4-8', 16000, thinking: null, prefill: '{');
+
+    $payload = $client->payload('expand this');
+
+    expect($payload)->not->toHaveKey('thinking')
+        ->and($payload['maxTokens'])->toBe(16000)
+        ->and($payload['messages'])->toHaveCount(2)
+        ->and($payload['messages'][1])->toBe(['role' => 'assistant', 'content' => '{']);
+});

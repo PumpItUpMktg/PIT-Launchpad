@@ -30,6 +30,7 @@ class AnthropicClaudeClient implements ClaudeClient
         private readonly int $maxTokens = 4096,
         private readonly ?string $thinking = 'adaptive',
         private readonly ?int $thinkingBudget = null,
+        private readonly ?string $prefill = null,
     ) {}
 
     /**
@@ -59,7 +60,9 @@ class AnthropicClaudeClient implements ClaudeClient
 
         $message = $client->messages->create(...$this->payload($prompt, $system));
 
-        $text = '';
+        // When the assistant turn is prefilled, the model continues raw from it —
+        // the response omits the prefill, so prepend it to reconstruct the full text.
+        $text = $this->prefill ?? '';
         foreach ($message->content as $block) {
             if ($block instanceof TextBlock) {
                 $text .= $block->text;
@@ -109,9 +112,17 @@ class AnthropicClaudeClient implements ClaudeClient
      */
     public function payload(string $prompt, ?string $system = null): array
     {
+        $messages = [['role' => 'user', 'content' => $prompt]];
+        if ($this->prefill !== null) {
+            // Prefilling the assistant turn forces a raw continuation (no markdown
+            // fences / preamble). It is incompatible with extended thinking, so a
+            // prefilled call site declares thinking: null.
+            $messages[] = ['role' => 'assistant', 'content' => $this->prefill];
+        }
+
         $payload = [
             'maxTokens' => $this->maxTokens,
-            'messages' => [['role' => 'user', 'content' => $prompt]],
+            'messages' => $messages,
             'model' => $this->model,
             'system' => $system,
         ];
