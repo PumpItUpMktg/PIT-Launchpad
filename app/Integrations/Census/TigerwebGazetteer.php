@@ -110,7 +110,55 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
                 'returnGeometry' => 'false',
             ]);
 
-        $features = is_array($response->json('features')) ? $response->json('features') : [];
+        return $this->mapFeatures($response->json('features'), $type);
+    }
+
+    /**
+     * @return list<Municipality>
+     */
+    public function byName(string $query): array
+    {
+        $query = trim($query);
+        if ($query === '') {
+            return [];
+        }
+
+        $layers = $this->layers();
+
+        return [
+            ...$this->queryByName($layers['place'], $query, MunicipalityType::Place),
+            ...$this->queryByName($layers['cousub'], $query, MunicipalityType::CountySubdivision),
+        ];
+    }
+
+    /**
+     * @return list<Municipality>
+     */
+    private function queryByName(int $layer, string $query, MunicipalityType $type): array
+    {
+        $escaped = str_replace("'", "''", strtoupper($query));
+
+        $response = $this->http
+            ->timeout($this->timeout)
+            ->get(rtrim($this->baseUrl, '/')."/{$layer}/query", [
+                'f' => 'json',
+                'where' => "UPPER(BASENAME) LIKE '%{$escaped}%'",
+                'outFields' => 'GEOID,NAME,BASENAME,STUSAB,STATE,CENTLAT,CENTLON',
+                'returnGeometry' => 'false',
+                'orderByFields' => 'BASENAME',
+                'resultRecordCount' => 25,
+            ]);
+
+        return $this->mapFeatures($response->json('features'), $type);
+    }
+
+    /**
+     * @param  mixed  $features
+     * @return list<Municipality>
+     */
+    private function mapFeatures($features, MunicipalityType $type): array
+    {
+        $features = is_array($features) ? $features : [];
 
         $out = [];
         foreach ($features as $feature) {

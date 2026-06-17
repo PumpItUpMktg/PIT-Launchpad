@@ -110,6 +110,23 @@ it('flags a failed geocode and accepts a manual override', function () {
         ->and($loc->geocode_failed)->toBeFalse();
 });
 
+it('adds a directed town to a location (priority page candidate) and marks it on the map', function () {
+    $site = Site::factory()->create();
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => CoverageFixture::A_LAT, 'lng' => CoverageFixture::A_LNG, 'coverage_radius' => 25]);
+
+    $page = Livewire::test(LocationsSetup::class)
+        ->set('siteId', $site->id)
+        ->set("townQuery.{$loc->id}", 'maplewood')
+        ->call('searchTowns', $loc->id)
+        ->call('addTown', $loc->id, '3445000'); // Maplewood from the fixture
+
+    expect(CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('source', 'manual')->where('geo_id', '3445000')->exists())->toBeTrue()
+        ->and(collect($page->instance()->manualMarkers)->pluck('name'))->toContain('Maplewood');
+
+    $page->call('removeTown', '3445000');
+    expect(CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('source', 'manual')->count())->toBe(0);
+});
+
 it('shows the empty-state for a site with no locations', function () {
     $site = Site::factory()->create();
 

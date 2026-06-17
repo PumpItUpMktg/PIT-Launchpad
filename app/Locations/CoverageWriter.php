@@ -16,11 +16,18 @@ final class CoverageWriter
     public function write(Site $site, CoverageResult $result): int
     {
         return DB::transaction(function () use ($site, $result): int {
+            // Rebuild ONLY the radius-derived rows; owner-added manual rows persist.
             CoverageArea::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $site->id)
+                ->where('source', 'radius')
                 ->delete();
 
+            $written = 0;
             foreach ($result->union as $m) {
+                if ($m->manual) {
+                    continue; // manual rows are owned by ManualCoverage, not rewritten here
+                }
+
                 CoverageArea::create([
                     'site_id' => $site->id, // explicit: no current-site scope in console/job context
                     'geo_id' => $m->geoId,
@@ -31,10 +38,12 @@ final class CoverageWriter
                     'lng' => $m->lng,
                     'distance_miles' => $m->distanceMiles,
                     'source_location_ids' => $m->sourceLocationIds,
+                    'source' => 'radius',
                 ]);
+                $written++;
             }
 
-            return $result->unionCount();
+            return $written;
         });
     }
 }
