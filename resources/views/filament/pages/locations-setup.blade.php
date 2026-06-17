@@ -3,6 +3,15 @@
         $inputClass = 'fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5';
     @endphp
 
+    {{-- TEMPORARY client-JS diagnostics (rip out once the radius control is confirmed). --}}
+    <div class="rounded-lg bg-yellow-100 p-3 font-mono text-xs text-yellow-900 ring-1 ring-yellow-600/30">
+        <div class="font-semibold">⚙ JS diagnostics (temporary)</div>
+        <div>Alpine: <span x-data x-init="$el.textContent = 'BOOTED'">NOT BOOTED</span></div>
+        <div>map init error: <span x-data x-text="($store.diag?.mapError) || '(none)'">(pending)</span></div>
+        <div>last radius tap: <span x-data x-text="($store.diag?.lastTap) ?? 'none'">none</span>
+            · radius (alpine) = <span x-data x-text="($store.diag?.radius) ?? '—'">—</span></div>
+    </div>
+
     <div class="fi-section rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
         <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
             Tell us where each location is and how far you serve from it — we work out the towns you cover.
@@ -80,6 +89,7 @@
                             @foreach (\App\Filament\Pages\LocationsSetup::RADII as $r)
                                 @php $active = (int) ($radii[$location->id] ?? 25) === $r; @endphp
                                 <button type="button" wire:click="setRadius('{{ $location->id }}', {{ $r }})"
+                                    x-on:click="$store.diag && ($store.diag.lastTap = {{ $r }}, $store.diag.radius = {{ $r }})"
                                     @class([
                                         'px-3 py-1 text-sm',
                                         'bg-primary-600 text-white' => $active,
@@ -229,6 +239,14 @@
     {{-- Leaflet (OSM/CARTO tiles, no API key) --}}
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script>
+        // TEMPORARY: diagnostics store so the page can surface client-JS state as text.
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('diag', { mapError: '', lastTap: 'none', radius: null });
+        });
+        function lpDiagError(message) {
+            try { if (window.Alpine && Alpine.store('diag')) Alpine.store('diag').mapError = message; } catch (_) {}
+        }
+
         // Defined as a plain global at parse time (NOT via alpine:init) so x-data can never
         // evaluate `coverageMap` before it exists — a "coverageMap is not defined" throw in
         // x-data would halt Alpine and, with it, ALL Livewire interactivity (the radius
@@ -246,9 +264,9 @@
                                     attribution: '© OpenStreetMap, © CARTO', maxZoom: 19,
                                 }).addTo(this.map);
                                 this.render(initial, initialManual);
-                            } catch (e) { console.error('coverage map init', e); }
+                            } catch (e) { console.error('coverage map init', e); lpDiagError(e.message); }
                         });
-                    } catch (e) { console.error('coverage map', e); }
+                    } catch (e) { console.error('coverage map', e); lpDiagError(e.message); }
                 },
                 ensureLeaflet(cb) {
                     if (window.L) return cb();
