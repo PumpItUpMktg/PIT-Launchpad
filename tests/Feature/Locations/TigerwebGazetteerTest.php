@@ -4,6 +4,7 @@ use App\Enums\MunicipalityType;
 use App\Integrations\Census\TigerwebGazetteer;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Http as HttpFacade;
+use Illuminate\Support\Facades\Log;
 
 const TIGERWEB = 'https://tigerweb.example/MapServer';
 
@@ -71,7 +72,7 @@ test('it falls back to the configured ids when the layer lookup fails', function
     HttpFacade::assertSent(fn ($r) => str_contains($r->url(), '/22/query'));
 });
 
-test('it sends a statute-mile point-buffer spatial query', function () {
+test('it sends a statute-mile point-buffer spatial query in 4326, geodesic (the zero-features fix)', function () {
     HttpFacade::fake([
         TIGERWEB.'?f=json' => layerDefs(28, 22),
         '*' => HttpFacade::response(['features' => []]),
@@ -82,5 +83,19 @@ test('it sends a statute-mile point-buffer spatial query', function () {
     HttpFacade::assertSent(fn ($request) => str_contains($request->url(), '/28/query')
         && $request['units'] === 'esriSRUnit_StatuteMile'
         && (string) $request['distance'] === '15'
-        && $request['geometryType'] === 'esriGeometryPoint');
+        && $request['geometryType'] === 'esriGeometryPoint'
+        && (string) $request['inSR'] === '4326'   // point is lat/lng, not Web Mercator meters
+        && $request['geodesic'] === 'true');       // buffer degrees by miles correctly
+});
+
+test('a zero-feature response is logged loudly (never a silent 0)', function () {
+    HttpFacade::fake([
+        TIGERWEB.'?f=json' => layerDefs(28, 22),
+        '*' => HttpFacade::response(['features' => []]),
+    ]);
+    Log::spy();
+
+    (new TigerwebGazetteer(app(Http::class), TIGERWEB, 28, 22, 30))->near(40.70, -74.50, 15);
+
+    Log::shouldHaveReceived('warning')->withArgs(fn ($msg) => str_contains($msg, '0 features'))->atLeast()->once();
 });

@@ -3,6 +3,7 @@
 namespace App\Integrations\Census;
 
 use Illuminate\Http\Client\Factory as Http;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -41,16 +42,23 @@ final class GoogleGeocoder implements Geocoder
                 ->timeout($this->timeout)
                 ->acceptJson()
                 ->get($this->endpoint, ['address' => $address, 'key' => $this->apiKey]);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            Log::warning('Geocoder: Google call failed, falling back to Census.', ['error' => $e->getMessage()]);
+
             return $this->fallback?->geocode($address);
         }
 
-        $result = $response->successful() && $response->json('status') === 'OK'
-            ? $response->json('results.0')
-            : null;
+        $status = $response->json('status');
+        $result = $response->successful() && $status === 'OK' ? $response->json('results.0') : null;
 
         if (! is_array($result)) {
-            return $this->fallback?->geocode($address); // ZERO_RESULTS / error → degrade
+            // status REQUEST_DENIED = Geocoding API not enabled on the key — never silent.
+            Log::warning('Geocoder: Google did not resolve, falling back to Census.', [
+                'status' => $status,
+                'error_message' => $response->json('error_message'),
+            ]);
+
+            return $this->fallback?->geocode($address);
         }
 
         $lat = $result['geometry']['location']['lat'] ?? null;

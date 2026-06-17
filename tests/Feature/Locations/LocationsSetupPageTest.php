@@ -127,6 +127,15 @@ it('adds a directed town to a location (priority page candidate) and marks it on
     expect(CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('source', 'manual')->count())->toBe(0);
 });
 
+it('warns loudly when geocoding will fall back to Census (no Google key)', function () {
+    config()->set('services.google.maps_api_key', '');
+
+    Livewire::test(LocationsSetup::class)->assertSee('Google Geocoding isn’t enabled');
+
+    config()->set('services.google.maps_api_key', 'a-key');
+    Livewire::test(LocationsSetup::class)->assertDontSee('Google Geocoding isn’t enabled');
+});
+
 it('shows the empty-state for a site with no locations', function () {
     $site = Site::factory()->create();
 

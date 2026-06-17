@@ -18,6 +18,12 @@
         </label>
     </div>
 
+    @if ($this->geocoderWarning)
+        <div class="rounded-xl bg-warning-50 px-4 py-3 text-sm text-warning-700 ring-1 ring-warning-600/20 dark:bg-warning-500/10 dark:text-warning-300">
+            ⚠ {{ $this->geocoderWarning }}
+        </div>
+    @endif
+
     @if ($siteId)
         @php
             $locations = $this->locations;

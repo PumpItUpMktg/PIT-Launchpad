@@ -33,6 +33,7 @@ use Illuminate\Support\Collection;
  * @property-read array<string, string> $siteOptions
  * @property-read Collection<int, Location> $locations
  * @property-read bool $placesEnabled
+ * @property-read string|null $geocoderWarning
  * @property-read array<string, string> $colors
  * @property-read list<array{name: string, lat: float, lng: float, radius: int, color: string}> $mapData
  * @property-read list<array{name: string, lat: float, lng: float}> $manualMarkers
@@ -368,6 +369,17 @@ class LocationsSetup extends Page
     public function getPlacesEnabledProperty(): bool
     {
         return (string) config('services.google.maps_api_key', '') !== '';
+    }
+
+    /**
+     * Loud notice when geocoding will run on the Census fallback (no Google key) — Census
+     * quietly misses unincorporated / edge addresses, so the operator should know.
+     */
+    public function getGeocoderWarningProperty(): ?string
+    {
+        return (string) config('services.google.maps_api_key', '') === ''
+            ? 'Google Geocoding isn’t enabled — using the Census geocoder, which can miss unincorporated or edge addresses. Set GOOGLE_MAPS_API_KEY (Geocoding API enabled) for best results.'
+            : null;
     }
 
     /**
