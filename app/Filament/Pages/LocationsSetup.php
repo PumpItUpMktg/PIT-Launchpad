@@ -2,7 +2,8 @@
 
 namespace App\Filament\Pages;
 
-use App\Integrations\Census\Geocoder;
+use App\Integrations\Places\PlacesProvider;
+use App\Jobs\GeocodeLocation;
 use App\Locations\CoverageWriter;
 use App\Locations\LocationCoverage;
 use App\Models\Location;
@@ -14,16 +15,21 @@ use Filament\Pages\Page;
 use Illuminate\Support\Collection;
 
 /**
- * Locations setup (operator admin) — the missing radius/coverage surface between expand
- * and volume. It connects a site's base Location records (geocoded point + place from the
- * Places import) to a service RADIUS, then computes + persists the municipality coverage
- * union via the proven {@see LocationCoverage} engine. The page IS the UI form of
- * `launchpad:locations-coverage`: set each radius, hit Compute, and eyeball the real
- * NJ/eastern-PA towns + townships (cross-border where the radius reaches), deduped across
- * bases. silo-volume reads the persisted coverage from here.
+ * Locations (operator admin) — the ONE locations surface per site. A list of base
+ * locations (each: where it is + how far it serves + located status) and a single
+ * "Add location" flow. Owner framing throughout — "where you are" / "how far you serve",
+ * never "radius / lat/lng".
+ *
+ * Add is one path, no manual geo: source (from Google/GBP, or name + address) → the point
+ * is geocoded in the BACKGROUND ({@see GeocodeLocation} via the keyless Census geocoder)
+ * → the owner is asked "how far do you serve?" (the {@see LocationCoverage} radius) inline
+ * → coverage computes across all bases. A manual lat/lng override surfaces ONLY when
+ * geocoding fails. Existing un-located bases auto-geocode on open. GBP/Places gives the
+ * point; the owner gives the reach (we never pull GBP's service-area list).
  *
  * @property-read array<string, string> $siteOptions
  * @property-read Collection<int, Location> $locations
+ * @property-read bool $placesEnabled
  */
 class LocationsSetup extends Page
 {
@@ -42,66 +48,143 @@ class LocationsSetup extends Page
 
     public ?string $siteId = null;
 
-    /** @var array<string, int> locationId => radius miles */
+    /** @var array<string, int> locationId => "how far you serve" (miles) */
     public array $radii = [];
 
-    /** @var array<string, string> locationId => editable address */
-    public array $addresses = [];
-
-    /** @var array<string, string> locationId => manual lat entry */
+    /** @var array<string, string> locationId => manual lat override (failure only) */
     public array $manualLat = [];
 
-    /** @var array<string, string> locationId => manual lng entry */
+    /** @var array<string, string> locationId => manual lng override (failure only) */
     public array $manualLng = [];
 
-    public string $newName = '';
+    // Add-location flow.
+    public bool $adding = false;
 
-    public string $newAddress = '';
+    public string $addSource = 'manual';
 
-    /** @var array<string, mixed> the computed coverage (CoverageResult::toArray), empty until Compute */
+    public string $addName = '';
+
+    public string $addAddress = '';
+
+    public int $addRadius = self::DEFAULT_RADIUS;
+
+    public string $addQuery = '';
+
+    /** @var list<array{place_id: string, name: string, address: string}> */
+    public array $placeResults = [];
+
+    /** @var array<string, mixed> the computed coverage (CoverageResult::toArray) */
     public array $coverage = [];
 
     public bool $computed = false;
 
     public function updatedSiteId(): void
     {
-        $this->reset(['radii', 'addresses', 'manualLat', 'manualLng', 'coverage', 'computed']);
-        $this->loadLocationState();
+        $this->reset(['radii', 'manualLat', 'manualLng', 'coverage', 'computed', 'adding', 'addName', 'addAddress', 'addQuery', 'placeResults']);
+        $this->addRadius = self::DEFAULT_RADIUS;
+        $this->loadRadii();
+        $this->autoGeocodePending();
     }
 
-    /** Geocode a base location from its (editable) address via the Census geocoder. */
-    public function geocode(string $locationId): void
+    public function startAdd(): void
     {
-        $location = $this->location($locationId);
-        if ($location === null) {
-            return;
-        }
-
-        $address = trim($this->addresses[$locationId] ?? (string) $location->address);
-        if ($address === '') {
-            Notification::make()->title('Enter an address to geocode.')->warning()->send();
-
-            return;
-        }
-
-        $result = app(Geocoder::class)->geocode($address);
-        if ($result === null) {
-            Notification::make()->title('No match')->body("The Census geocoder couldn't resolve that address — check it, or paste coordinates manually.")->warning()->send();
-
-            return;
-        }
-
-        $location->forceFill([
-            'address' => $result->matchedAddress,
-            'lat' => $result->lat,
-            'lng' => $result->lng,
-        ])->save();
-        $this->addresses[$locationId] = $result->matchedAddress;
-
-        Notification::make()->title('Geocoded')->body("{$result->matchedAddress} → {$result->lat}, {$result->lng}")->success()->send();
+        $this->reset(['addName', 'addAddress', 'addQuery', 'placeResults']);
+        $this->addRadius = self::DEFAULT_RADIUS;
+        $this->addSource = $this->placesEnabled ? 'places' : 'manual';
+        $this->adding = true;
     }
 
-    /** Manual fallback: store pasted coordinates directly. */
+    public function cancelAdd(): void
+    {
+        $this->adding = false;
+    }
+
+    /** "From Google/GBP": search for the listing. */
+    public function searchPlaces(): void
+    {
+        $this->placeResults = [];
+        if (trim($this->addQuery) === '') {
+            return;
+        }
+
+        foreach (app(PlacesProvider::class)->search($this->addQuery) as $candidate) {
+            $this->placeResults[] = [
+                'place_id' => $candidate->placeId,
+                'name' => $candidate->name,
+                'address' => $candidate->address,
+            ];
+        }
+
+        if ($this->placeResults === []) {
+            Notification::make()->title('No matches — try the address, or add it manually.')->warning()->send();
+        }
+    }
+
+    /** Pick a listing → pulls name, address, AND coordinates (no geocode needed). */
+    public function addFromPlace(string $placeId): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+
+        $details = app(PlacesProvider::class)->details($placeId);
+        if ($details === null) {
+            Notification::make()->title("Couldn't load that listing.")->warning()->send();
+
+            return;
+        }
+
+        $location = new Location;
+        $location->forceFill([
+            'site_id' => $site->id,
+            'name' => $details->name,
+            'address' => $details->address,
+            'place_id' => $details->placeId,
+            'gbp_url' => $details->gbpUrl,
+            'lat' => $details->lat,
+            'lng' => $details->lng,
+            'coverage_radius' => $this->addRadius,
+            'geocode_failed' => $details->lat === null || $details->lng === null,
+        ])->save();
+
+        if ($location->lat === null) {
+            GeocodeLocation::dispatch($location->id); // listing had no point — fall back to address geocode
+        }
+
+        $this->finishAdd("{$details->name} added.");
+    }
+
+    /** Manual: name + address → background geocode. */
+    public function addManual(): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+
+        $name = trim($this->addName);
+        if ($name === '') {
+            Notification::make()->title('Give the location a name.')->warning()->send();
+
+            return;
+        }
+
+        $address = trim($this->addAddress);
+        $location = new Location;
+        $location->forceFill([
+            'site_id' => $site->id,
+            'name' => $name,
+            'address' => $address === '' ? null : $address,
+            'coverage_radius' => $this->addRadius,
+        ])->save();
+
+        GeocodeLocation::dispatch($location->id); // located quietly in the background
+
+        $this->finishAdd("{$name} added — locating it now.");
+    }
+
+    /** Manual override, surfaced only when background geocoding failed. */
     public function saveManualPoint(string $locationId): void
     {
         $location = $this->location($locationId);
@@ -112,50 +195,41 @@ class LocationsSetup extends Page
         $lat = (float) ($this->manualLat[$locationId] ?? '');
         $lng = (float) ($this->manualLng[$locationId] ?? '');
         if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180 || ($lat === 0.0 && $lng === 0.0)) {
-            Notification::make()->title('Enter a valid lat/lng.')->warning()->send();
+            Notification::make()->title('Enter a valid location.')->warning()->send();
 
             return;
         }
 
-        $location->forceFill(['lat' => $lat, 'lng' => $lng])->save();
+        $location->forceFill(['lat' => $lat, 'lng' => $lng, 'geocode_failed' => false])->save();
         $this->manualLat[$locationId] = '';
         $this->manualLng[$locationId] = '';
-
-        Notification::make()->title('Point set')->body("{$lat}, {$lng}")->success()->send();
+        $this->compute();
     }
 
-    /** Add a base location (address → geocode) for a site that has none (or another). */
-    public function addLocation(): void
+    public function compute(): void
     {
-        $site = $this->siteId === null ? null : Site::query()->find($this->siteId);
+        $site = $this->site();
         if ($site === null) {
             return;
         }
 
-        $name = trim($this->newName);
-        if ($name === '') {
-            Notification::make()->title('Name the location first.')->warning()->send();
+        // Persist each location's "how far you serve" (the engine reads it from there).
+        foreach ($this->locations as $location) {
+            $location->forceFill(['coverage_radius' => $this->radiusFor($location->id)])->save();
+        }
+
+        $result = app(LocationCoverage::class)->coverage($site);
+        if ($result->perBase === []) {
+            Notification::make()->title('Nothing to map yet')->body('Add a location and let it locate first.')->warning()->send();
 
             return;
         }
 
-        $address = trim($this->newAddress);
-        $location = new Location;
-        $location->forceFill([
-            'site_id' => $site->id,
-            'name' => $name,
-            'address' => $address === '' ? null : $address,
-        ])->save();
+        $count = app(CoverageWriter::class)->write($site, $result);
+        $this->coverage = $result->toArray();
+        $this->computed = true;
 
-        if ($address !== '') {
-            $this->addresses[$location->id] = $address;
-            $this->geocode($location->id);
-        }
-
-        $this->reset(['newName', 'newAddress']);
-        $this->loadLocationState();
-
-        Notification::make()->title('Location added')->success()->send();
+        Notification::make()->title('Service area updated')->body("{$count} towns across ".count($result->perBase).' location(s).')->success()->send();
     }
 
     /**
@@ -181,52 +255,36 @@ class LocationsSetup extends Page
             ->get();
     }
 
-    public function compute(): void
+    public function getPlacesEnabledProperty(): bool
     {
-        $site = $this->siteId === null ? null : Site::query()->find($this->siteId);
-        if ($site === null) {
-            Notification::make()->title('Pick a site first.')->warning()->send();
-
-            return;
-        }
-
-        // Persist the chosen radius on each base location (the engine reads it from there).
-        foreach ($this->locations as $location) {
-            $location->forceFill(['coverage_radius' => $this->radiusFor($location->id)])->save();
-        }
-
-        $result = app(LocationCoverage::class)->coverage($site);
-
-        if ($result->perBase === []) {
-            Notification::make()
-                ->title('No computable base locations')
-                ->body('Each base needs a geocoded point (lat/lng from the Places import) and a radius.')
-                ->warning()
-                ->send();
-
-            return;
-        }
-
-        // Persist/cache the union as the authoritative CoverageArea set (the silo-volume dependency).
-        $count = app(CoverageWriter::class)->write($site, $result);
-
-        $this->coverage = $result->toArray();
-        $this->computed = true;
-
-        Notification::make()
-            ->title('Coverage computed')
-            ->body("{$count} municipalities across ".count($result->perBase).' base location(s) — saved.')
-            ->success()
-            ->send();
+        return (string) config('services.google.maps_api_key', '') !== '';
     }
 
-    private function loadLocationState(): void
+    private function finishAdd(string $message): void
     {
-        // Honor whatever is saved on the Location (the CLI --save writes the same field) —
-        // single source of truth, no drift. Default only when unset.
+        $this->adding = false;
+        $this->reset(['addName', 'addAddress', 'addQuery', 'placeResults']);
+        $this->addRadius = self::DEFAULT_RADIUS;
+        $this->loadRadii();
+        $this->compute(); // coverage refreshes immediately across all located bases
+
+        Notification::make()->title($message)->success()->send();
+    }
+
+    private function autoGeocodePending(): void
+    {
+        // Background-locate any existing base that has an address but no point yet.
+        foreach ($this->locations as $location) {
+            if ($location->lat === null && ! $location->geocode_failed && trim((string) $location->address) !== '') {
+                GeocodeLocation::dispatch($location->id);
+            }
+        }
+    }
+
+    private function loadRadii(): void
+    {
         foreach ($this->locations as $location) {
             $this->radii[$location->id] = $location->coverage_radius ?? self::DEFAULT_RADIUS;
-            $this->addresses[$location->id] = (string) $location->address;
         }
     }
 
@@ -241,5 +299,10 @@ class LocationsSetup extends Page
     private function radiusFor(string $locationId): int
     {
         return (int) ($this->radii[$locationId] ?? self::DEFAULT_RADIUS);
+    }
+
+    private function site(): ?Site
+    {
+        return $this->siteId === null ? null : Site::query()->find($this->siteId);
     }
 }
