@@ -15,6 +15,7 @@ use App\Enums\NewsProvider as NewsProviderType;
 use App\Integrations\Census\CensusGeocoder;
 use App\Integrations\Census\CensusProvider;
 use App\Integrations\Census\Geocoder;
+use App\Integrations\Census\GoogleGeocoder;
 use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Census\TigerwebGazetteer;
@@ -97,14 +98,30 @@ class AppServiceProvider extends ServiceProvider
             (int) config('services.census.tigerweb_cousub_layer'),
             (int) config('services.census.tigerweb_timeout', 30),
         ));
-        // Locations base geocoding runs on the keyless Census geocoder (same authority as
-        // the TIGERweb coverage); tests bind a Mock / Http::fake so CI makes no call.
-        $this->app->bind(Geocoder::class, fn () => new CensusGeocoder(
-            $this->app->make(Http::class),
-            (string) config('services.census.geocoder_url'),
-            (string) config('services.census.geocoder_benchmark', 'Public_AR_Current'),
-            (int) config('services.census.geocoder_timeout', 15),
-        ));
+        // Locations base geocoding: Google Geocoding API (resolves unincorporated /
+        // edge addresses Census misses) with the keyless Census geocoder as a no-key
+        // fallback. Tests bind a Mock so CI makes no call.
+        $this->app->bind(Geocoder::class, function () {
+            $census = new CensusGeocoder(
+                $this->app->make(Http::class),
+                (string) config('services.census.geocoder_url'),
+                (string) config('services.census.geocoder_benchmark', 'Public_AR_Current'),
+                (int) config('services.census.geocoder_timeout', 15),
+            );
+
+            $key = (string) config('services.google.maps_api_key', '');
+            if ($key === '') {
+                return $census;
+            }
+
+            return new GoogleGeocoder(
+                $this->app->make(Http::class),
+                $key,
+                (string) config('services.google.geocoder_url', 'https://maps.googleapis.com/maps/api/geocode/json'),
+                $census,
+                (int) config('services.census.geocoder_timeout', 15),
+            );
+        });
         $this->app->bind(VoiceSynthesizer::class, MockVoiceSynthesizer::class);
 
         // Phase 3 — silo volume grounding (paid DataForSEO, explicit trigger). Reuses

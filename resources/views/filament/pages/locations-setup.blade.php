@@ -177,7 +177,8 @@
             <div class="rounded-xl bg-white p-2 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                 <div wire:ignore
                     x-data="coverageMap(@js($this->mapData))"
-                    x-init="init()">
+                    x-init="init()"
+                    x-on:locations-updated.window="render($event.detail.data ?? [])">
                     <div x-ref="map" class="h-[420px] w-full rounded-lg" style="background:#e5e7eb"></div>
                 </div>
             </div>
@@ -201,10 +202,6 @@
                             attribution: '© OpenStreetMap, © CARTO', maxZoom: 19,
                         }).addTo(this.map);
                         this.render(initial);
-                    });
-                    window.addEventListener('locations-updated', (e) => {
-                        const detail = e.detail ?? {};
-                        this.render(detail.data ?? (Array.isArray(detail) ? (detail[0]?.data ?? []) : []));
                     });
                 },
                 ensureLeaflet(cb) {
