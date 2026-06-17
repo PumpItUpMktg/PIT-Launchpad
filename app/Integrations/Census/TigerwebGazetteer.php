@@ -96,18 +96,28 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
      */
     private function query(int $layer, float $lat, float $lng, float $radiusMiles, MunicipalityType $type): array
     {
-        // inSR=4326 tells TIGERweb the point is lat/lng (its data is Web Mercator); WITHOUT
-        // it the point is read as meters and the query returns ZERO features. distance +
-        // units = a linear (statute-mile) point buffer. (No `geodesic` — TIGERweb's
-        // MapServer rejects it with HTTP 400 "Failed to execute query".)
+        // TIGERweb's MapServer layers don't support a distance/units query buffer
+        // (supportsQueryWithDistance = false) — that combo returns HTTP 200 + a 400
+        // "Failed to execute query" (and `geodesic` is a geometry-service param, not a
+        // query one). Query an ENVELOPE (bounding box) around the point instead; the
+        // caller ({@see LocationCoverage}) then Haversine-clips the box to the true radius
+        // circle (the box over-returns in the corners). inSR=4326 = the bbox is lat/lng
+        // (the layer data is Web Mercator).
+        $dLat = $radiusMiles / 69.0;
+        $dLon = $radiusMiles / (69.0 * max(cos(deg2rad($lat)), 0.01));
+
         return $this->mapFeatures($this->fetch($layer, [
             'f' => 'json',
             'where' => '1=1',
-            'geometry' => (string) json_encode(['x' => $lng, 'y' => $lat, 'spatialReference' => ['wkid' => 4326]]),
-            'geometryType' => 'esriGeometryPoint',
+            'geometry' => (string) json_encode([
+                'xmin' => $lng - $dLon,
+                'ymin' => $lat - $dLat,
+                'xmax' => $lng + $dLon,
+                'ymax' => $lat + $dLat,
+                'spatialReference' => ['wkid' => 4326],
+            ]),
+            'geometryType' => 'esriGeometryEnvelope',
             'inSR' => 4326,
-            'distance' => $radiusMiles,
-            'units' => 'esriSRUnit_StatuteMile',
             'spatialRel' => 'esriSpatialRelIntersects',
             'outFields' => 'GEOID,NAME,BASENAME,STUSAB,STATE,CENTLAT,CENTLON',
             'returnGeometry' => 'false',
@@ -156,17 +166,28 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
      */
     public function byName(string $query): array
     {
-        $query = trim($query);
-        if ($query === '') {
+        // Operators type "Sparta, NJ" / "Doylestown, PA". BASENAME is just "Sparta", so a
+        // raw LIKE on the whole string never matches — split off a trailing 2-letter state,
+        // search the name, and filter results by that state.
+        $parts = array_map('trim', explode(',', trim($query)));
+        $name = $parts[0];
+        $state = (count($parts) > 1 && preg_match('/^[A-Za-z]{2}$/', (string) end($parts)))
+            ? strtoupper((string) end($parts))
+            : null;
+
+        if ($name === '') {
             return [];
         }
 
         $layers = $this->layers();
-
-        return [
-            ...$this->queryByName($layers['place'], $query, MunicipalityType::Place),
-            ...$this->queryByName($layers['cousub'], $query, MunicipalityType::CountySubdivision),
+        $results = [
+            ...$this->queryByName($layers['place'], $name, MunicipalityType::Place),
+            ...$this->queryByName($layers['cousub'], $name, MunicipalityType::CountySubdivision),
         ];
+
+        return $state === null
+            ? $results
+            : array_values(array_filter($results, fn (Municipality $m) => $m->state === $state));
     }
 
     /**
