@@ -11,6 +11,7 @@
         <div>map init error: <span x-data x-text="($store.diag?.mapError) || '(none)'">(pending)</span></div>
         <div>last radius tap: <span x-data x-text="($store.diag?.lastTap) ?? 'none'">none</span>
             · radius (alpine) = <span x-data x-text="($store.diag?.radius) ?? '—'">—</span></div>
+        <div>{{ $updateDiag !== '' ? $updateDiag : 'Update: (not run yet)' }}</div>
     </div>
 
     <div class="fi-section rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
@@ -85,7 +86,9 @@
 
                     {{-- How far you serve — segmented control --}}
                     <div>
-                        <div class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">How far you serve</div>
+                        <div class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">How far you serve
+                            <span class="ml-1 font-mono text-yellow-700">· radius (server) = {{ $radii[$location->id] ?? '—' }}</span>
+                        </div>
                         <div class="inline-flex overflow-hidden rounded-lg ring-1 ring-gray-300 dark:ring-white/10">
                             @foreach (\App\Filament\Pages\LocationsSetup::RADII as $r)
                                 @php $active = (int) ($radii[$location->id] ?? 25) === $r; @endphp
