@@ -2,6 +2,8 @@
 
 namespace App\Interview\Prune;
 
+use App\Enums\SpokeTag;
+
 /**
  * The prune plan: the candidate rows (volume-weighted, tagged) plus the completeness
  * state. The hard gate — a blueprint is confirmable only when every non-fringe spoke
@@ -45,6 +47,52 @@ final class PrunePlan
     public function isComplete(): bool
     {
         return $this->pending() === [];
+    }
+
+    /**
+     * Non-fringe rows grouped by silo, volume-sorted within each silo (pillar first,
+     * then highest upside first) — the asymmetry-of-effort view the prune surface reads:
+     * decision energy goes to the high-volume lean-ins.
+     *
+     * @return array<string, list<PruneRow>>
+     */
+    public function bySilo(): array
+    {
+        $grouped = [];
+        foreach ($this->decidable() as $row) {
+            $grouped[$row->silo][] = $row;
+        }
+
+        foreach ($grouped as &$rows) {
+            usort($rows, function (PruneRow $a, PruneRow $b) {
+                return [$b->isPillar, $b->volume ?? -1, $a->name] <=> [$a->isPillar, $a->volume ?? -1, $b->name];
+            });
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * Per-silo summary: stated core vs lean-ins (adjacent/connecting) and their combined
+     * upside, plus the decided/pending split.
+     *
+     * @return array<string, array{total: int, core: int, lean_ins: int, lean_in_volume: int, pending: int}>
+     */
+    public function siloSummaries(): array
+    {
+        $summaries = [];
+        foreach ($this->bySilo() as $silo => $rows) {
+            $leanIns = array_filter($rows, fn (PruneRow $r) => in_array($r->tag, [SpokeTag::Adjacent, SpokeTag::Connecting], true));
+            $summaries[$silo] = [
+                'total' => count($rows),
+                'core' => count(array_filter($rows, fn (PruneRow $r) => $r->tag === SpokeTag::Core)),
+                'lean_ins' => count($leanIns),
+                'lean_in_volume' => array_sum(array_map(fn (PruneRow $r) => $r->volume ?? 0, $leanIns)),
+                'pending' => count(array_filter($rows, fn (PruneRow $r) => ! $r->isDecided())),
+            ];
+        }
+
+        return $summaries;
     }
 
     /**
