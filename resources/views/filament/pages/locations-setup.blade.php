@@ -102,6 +102,32 @@
                         </div>
                     @endif
 
+                    {{-- Directed coverage: add a specific town beyond the radius --}}
+                    @php
+                        $myTowns = collect($this->coverage['union'] ?? [])
+                            ->filter(fn ($m) => ($m['manual'] ?? false) && in_array($location->id, $m['source_location_ids'] ?? [], true));
+                    @endphp
+                    <div class="flex flex-col gap-2 border-t border-gray-100 pt-2 dark:border-white/10">
+                        <div class="text-xs font-medium text-gray-500 dark:text-gray-400">Add a town (beyond the radius)</div>
+                        @foreach ($myTowns as $t)
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-gray-700 dark:text-gray-200">🚩 {{ $t['name'] }}@if ($t['state']) , {{ $t['state'] }}@endif <span class="text-warning-600 dark:text-warning-400">· priority page</span></span>
+                                <button type="button" wire:click="removeTown('{{ $t['geo_id'] }}')" class="text-gray-400 hover:text-danger-600">remove</button>
+                            </div>
+                        @endforeach
+                        <div class="flex gap-2">
+                            <input type="text" wire:model="townQuery.{{ $location->id }}" wire:keydown.enter="searchTowns('{{ $location->id }}')"
+                                placeholder="town name" class="{{ $inputClass }}" />
+                            <x-filament::button wire:click="searchTowns('{{ $location->id }}')" size="sm" color="gray">Search</x-filament::button>
+                        </div>
+                        @foreach ($townResults[$location->id] ?? [] as $res)
+                            <button type="button" wire:click="addTown('{{ $location->id }}', '{{ $res['geo_id'] }}')"
+                                class="rounded-lg bg-gray-50 px-3 py-1.5 text-left text-xs ring-1 ring-gray-950/5 hover:bg-gray-100 dark:bg-white/5 dark:ring-white/10">
+                                + {{ $res['name'] }}@if ($res['state']) , {{ $res['state'] }}@endif
+                            </button>
+                        @endforeach
+                    </div>
+
                     {{-- Manual override — fallback only when locating failed --}}
                     @if ($location->geocode_failed)
                         <div class="flex flex-wrap items-end gap-2 border-t border-gray-100 pt-2 dark:border-white/10">
@@ -176,9 +202,9 @@
         @if (! $locations->isEmpty())
             <div class="rounded-xl bg-white p-2 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                 <div wire:ignore
-                    x-data="coverageMap(@js($this->mapData))"
+                    x-data="coverageMap(@js($this->mapData), @js($this->manualMarkers))"
                     x-init="init()"
-                    x-on:locations-updated.window="render($event.detail.data ?? [])">
+                    x-on:locations-updated.window="render($event.detail.data ?? [], $event.detail.manual ?? [])">
                     <div x-ref="map" class="h-[420px] w-full rounded-lg" style="background:#e5e7eb"></div>
                 </div>
             </div>
@@ -192,7 +218,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script>
         document.addEventListener('alpine:init', () => {
-            Alpine.data('coverageMap', (initial) => ({
+            Alpine.data('coverageMap', (initial, initialManual) => ({
                 map: null,
                 group: null,
                 init() {
@@ -201,7 +227,7 @@
                         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                             attribution: '© OpenStreetMap, © CARTO', maxZoom: 19,
                         }).addTo(this.map);
-                        this.render(initial);
+                        this.render(initial, initialManual);
                     });
                 },
                 ensureLeaflet(cb) {
@@ -211,7 +237,7 @@
                     s.onload = cb;
                     document.head.appendChild(s);
                 },
-                render(data) {
+                render(data, manual) {
                     if (!this.map || !window.L) return;
                     if (this.group) this.map.removeLayer(this.group);
                     this.group = L.layerGroup().addTo(this.map);
@@ -224,6 +250,14 @@
                         }).addTo(this.group);
                         L.circleMarker([d.lat, d.lng], { radius: 5, color: d.color, fillColor: d.color, fillOpacity: 1 })
                             .bindTooltip(d.name, { permanent: false }).addTo(this.group);
+                        pts.push([d.lat, d.lng]);
+                    });
+                    // Manually-added towns: a distinct flag marker, NO circle — directed coverage reads differently.
+                    (manual || []).forEach((d) => {
+                        if (d.lat == null || d.lng == null) return;
+                        L.marker([d.lat, d.lng], {
+                            icon: L.divIcon({ html: '🚩', className: 'lp-flag', iconSize: [18, 18], iconAnchor: [4, 16] }),
+                        }).bindTooltip(d.name + ' (added)', { permanent: false }).addTo(this.group);
                         pts.push([d.lat, d.lng]);
                     });
                     if (pts.length) this.map.fitBounds(L.latLngBounds(pts).pad(0.4));

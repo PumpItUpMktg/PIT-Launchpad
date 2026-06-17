@@ -2,10 +2,13 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\MunicipalityType;
+use App\Integrations\Census\Municipality;
 use App\Integrations\Places\PlacesProvider;
 use App\Jobs\GeocodeLocation;
 use App\Locations\CoverageWriter;
 use App\Locations\LocationCoverage;
+use App\Locations\ManualCoverage;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -32,6 +35,7 @@ use Illuminate\Support\Collection;
  * @property-read bool $placesEnabled
  * @property-read array<string, string> $colors
  * @property-read list<array{name: string, lat: float, lng: float, radius: int, color: string}> $mapData
+ * @property-read list<array{name: string, lat: float, lng: float}> $manualMarkers
  */
 class LocationsSetup extends Page
 {
@@ -82,6 +86,13 @@ class LocationsSetup extends Page
     public array $coverage = [];
 
     public bool $computed = false;
+
+    // "Add a town" (directed coverage) — per location card.
+    /** @var array<string, string> locationId => town search query */
+    public array $townQuery = [];
+
+    /** @var array<string, list<array{geo_id: string, name: string, type: string, state: string|null, lat: float|null, lng: float|null}>> */
+    public array $townResults = [];
 
     public function updatedSiteId(): void
     {
@@ -217,6 +228,72 @@ class LocationsSetup extends Page
         $this->buildCoverage(notify: true);
     }
 
+    /** Search municipalities by name for a directed "add a town". */
+    public function searchTowns(string $locationId): void
+    {
+        $this->townResults[$locationId] = [];
+        $query = trim($this->townQuery[$locationId] ?? '');
+        if ($query === '') {
+            return;
+        }
+
+        foreach (app(ManualCoverage::class)->search($query) as $m) {
+            $this->townResults[$locationId][] = [
+                'geo_id' => $m->geoId,
+                'name' => $m->name,
+                'type' => $m->type->value,
+                'state' => $m->state,
+                'lat' => $m->lat,
+                'lng' => $m->lng,
+            ];
+        }
+
+        if ($this->townResults[$locationId] === []) {
+            Notification::make()->title('No towns matched that name.')->warning()->send();
+        }
+    }
+
+    /** Add a searched town to this location's coverage (directed → priority page candidate). */
+    public function addTown(string $locationId, string $geoId): void
+    {
+        $site = $this->site();
+        $location = $this->location($locationId);
+        if ($site === null || $location === null) {
+            return;
+        }
+
+        $row = collect($this->townResults[$locationId] ?? [])->firstWhere('geo_id', $geoId);
+        if ($row === null) {
+            return;
+        }
+
+        app(ManualCoverage::class)->add($site, $location, new Municipality(
+            geoId: $row['geo_id'],
+            name: $row['name'],
+            type: MunicipalityType::from($row['type']),
+            state: $row['state'],
+            lat: $row['lat'],
+            lng: $row['lng'],
+        ));
+
+        $this->townQuery[$locationId] = '';
+        $this->townResults[$locationId] = [];
+        $this->buildCoverage(notify: false);
+
+        Notification::make()->title("Added {$row['name']} — priority page candidate.")->success()->send();
+    }
+
+    public function removeTown(string $geoId): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+
+        app(ManualCoverage::class)->remove($site, $geoId);
+        $this->buildCoverage(notify: false);
+    }
+
     /** Segmented "how far you serve" — set + persist a location's radius, recompute quietly. */
     public function setRadius(string $locationId, int $miles): void
     {
@@ -246,7 +323,7 @@ class LocationsSetup extends Page
         }
 
         $result = app(LocationCoverage::class)->coverage($site);
-        $this->dispatch('locations-updated', data: $this->mapData);
+        $this->dispatch('locations-updated', data: $this->mapData, manual: $this->manualMarkers);
 
         if ($result->perBase === []) {
             if ($notify) {
@@ -330,6 +407,28 @@ class LocationsSetup extends Page
         }
 
         return $data;
+    }
+
+    /**
+     * Manually-added (directed) towns for the map — distinct flag markers, NO circle.
+     *
+     * @return list<array{name: string, lat: float, lng: float}>
+     */
+    public function getManualMarkersProperty(): array
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return [];
+        }
+
+        $markers = [];
+        foreach (app(ManualCoverage::class)->forSite($site) as $row) {
+            if ($row->lat !== null && $row->lng !== null) {
+                $markers[] = ['name' => $row->name, 'lat' => (float) $row->lat, 'lng' => (float) $row->lng];
+            }
+        }
+
+        return $markers;
     }
 
     private function finishAdd(string $message): void

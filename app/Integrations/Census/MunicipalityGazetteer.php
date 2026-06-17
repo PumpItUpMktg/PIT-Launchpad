@@ -15,4 +15,12 @@ interface MunicipalityGazetteer
      * @return list<Municipality>
      */
     public function near(float $lat, float $lng, float $radiusMiles): array;
+
+    /**
+     * Look up municipalities by name (places + MCDs) — for the owner's directed coverage
+     * additions ("add a town"). Returns candidates to resolve to a GEOID + point + county.
+     *
+     * @return list<Municipality>
+     */
+    public function byName(string $query): array;
 }

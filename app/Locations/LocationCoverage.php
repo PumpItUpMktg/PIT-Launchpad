@@ -3,6 +3,7 @@
 namespace App\Locations;
 
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -31,6 +32,14 @@ final class LocationCoverage
             ->where('site_id', $site->id)
             ->get();
 
+        // Owner-directed (manual) coverage persists across recompute; merge it into the
+        // union + the location it was added to (GEOID-keyed, sticky-manual on dedup).
+        $manualByLocation = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('source', 'manual')
+            ->get()
+            ->groupBy(fn (CoverageArea $a) => is_array($a->source_location_ids) ? ($a->source_location_ids[0] ?? '') : '');
+
         $perBase = [];
         /** @var array<string, CoverageMunicipality> $union */
         $union = [];
@@ -42,30 +51,50 @@ final class LocationCoverage
                 ? (float) $radiusOverride
                 : ($location->coverage_radius === null ? 0.0 : (float) $location->coverage_radius);
 
-            if ($lat === null || $lng === null || $radius <= 0.0) {
-                continue; // unconfigured base — needs a geocoded point + radius
-            }
-
             $found = [];
-            foreach ($this->gazetteer->near($lat, $lng, $radius) as $m) {
-                if ($m->lat === null || $m->lng === null) {
-                    continue;
+
+            if ($lat !== null && $lng !== null && $radius > 0.0) {
+                foreach ($this->gazetteer->near($lat, $lng, $radius) as $m) {
+                    if ($m->lat === null || $m->lng === null) {
+                        continue;
+                    }
+
+                    $distance = Distance::miles($lat, $lng, $m->lat, $m->lng);
+                    if ($distance > $radius) {
+                        continue; // centroid outside the radius
+                    }
+
+                    $found[] = CoverageMunicipality::fromMunicipality($m, $distance, $location->id);
+
+                    $union[$m->geoId] = isset($union[$m->geoId])
+                        ? $union[$m->geoId]->mergedWith($location->id, $distance)
+                        : CoverageMunicipality::fromMunicipality($m, $distance, $location->id);
                 }
 
-                $distance = Distance::miles($lat, $lng, $m->lat, $m->lng);
-                if ($distance > $radius) {
-                    continue; // centroid outside the radius
-                }
-
-                $found[] = CoverageMunicipality::fromMunicipality($m, $distance, $location->id);
-
-                $union[$m->geoId] = isset($union[$m->geoId])
-                    ? $union[$m->geoId]->mergedWith($location->id, $distance)
-                    : CoverageMunicipality::fromMunicipality($m, $distance, $location->id);
+                usort($found, fn (CoverageMunicipality $a, CoverageMunicipality $b) => $a->distanceMiles <=> $b->distanceMiles);
             }
 
-            usort($found, fn (CoverageMunicipality $a, CoverageMunicipality $b) => $a->distanceMiles <=> $b->distanceMiles);
-            $perBase[] = new BaseCoverage($location->id, $location->name, $radius, $found);
+            foreach ($manualByLocation[$location->id] ?? [] as $row) {
+                $manual = new CoverageMunicipality(
+                    geoId: $row->geo_id,
+                    name: $row->name,
+                    type: $row->type,
+                    state: $row->state,
+                    lat: $row->lat === null ? null : (float) $row->lat,
+                    lng: $row->lng === null ? null : (float) $row->lng,
+                    distanceMiles: 0.0,
+                    sourceLocationIds: [$location->id],
+                    manual: true,
+                );
+                $found[] = $manual;
+                $union[$row->geo_id] = isset($union[$row->geo_id])
+                    ? $union[$row->geo_id]->mergedWith($location->id, 0.0, true)
+                    : $manual;
+            }
+
+            if ($found !== []) {
+                $perBase[] = new BaseCoverage($location->id, $location->name, $radius, $found);
+            }
         }
 
         $unionList = array_values($union);

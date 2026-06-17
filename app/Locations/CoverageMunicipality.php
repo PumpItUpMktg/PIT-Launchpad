@@ -23,9 +23,10 @@ final class CoverageMunicipality
         public readonly ?float $lng,
         public readonly float $distanceMiles,
         public readonly array $sourceLocationIds,
+        public readonly bool $manual = false,
     ) {}
 
-    public static function fromMunicipality(Municipality $m, float $distanceMiles, string $sourceLocationId): self
+    public static function fromMunicipality(Municipality $m, float $distanceMiles, string $sourceLocationId, bool $manual = false): self
     {
         return new self(
             geoId: $m->geoId,
@@ -36,13 +37,16 @@ final class CoverageMunicipality
             lng: $m->lng,
             distanceMiles: round($distanceMiles, 2),
             sourceLocationIds: [$sourceLocationId],
+            manual: $manual,
         );
     }
 
     /**
-     * Union dedupe: keep the nearest distance and merge the reaching base locations.
+     * Union dedupe: keep the nearest distance, merge the reaching base locations, and
+     * sticky-OR the manual flag (a town that is both radius and manual stays manual →
+     * priority page candidate).
      */
-    public function mergedWith(string $sourceLocationId, float $distanceMiles): self
+    public function mergedWith(string $sourceLocationId, float $distanceMiles, bool $manual = false): self
     {
         return new self(
             geoId: $this->geoId,
@@ -53,6 +57,7 @@ final class CoverageMunicipality
             lng: $this->lng,
             distanceMiles: min($this->distanceMiles, round($distanceMiles, 2)),
             sourceLocationIds: array_values(array_unique([...$this->sourceLocationIds, $sourceLocationId])),
+            manual: $this->manual || $manual,
         );
     }
 
@@ -70,6 +75,7 @@ final class CoverageMunicipality
             'lng' => $this->lng,
             'distance_miles' => $this->distanceMiles,
             'source_location_ids' => $this->sourceLocationIds,
+            'manual' => $this->manual,
         ];
     }
 }

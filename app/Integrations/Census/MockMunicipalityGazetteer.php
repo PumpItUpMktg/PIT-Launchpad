@@ -27,4 +27,20 @@ class MockMunicipalityGazetteer implements MunicipalityGazetteer
 
         return $this->municipalities;
     }
+
+    /**
+     * @return list<Municipality>
+     */
+    public function byName(string $query): array
+    {
+        $query = trim(strtolower($query));
+        if ($query === '') {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $this->municipalities,
+            fn (Municipality $m) => str_contains(strtolower($m->name), $query),
+        ));
+    }
 }
