@@ -51,6 +51,9 @@ return [
         // below it so reasoning can never starve the output.
         'drafting_max_tokens' => (int) env('ANTHROPIC_DRAFTING_MAX_TOKENS', 12000),
         'drafting_thinking_budget' => (int) env('ANTHROPIC_DRAFTING_THINKING_BUDGET', 4000),
+        // The Phase-2 silo expansion emits a large dimensional JSON tree (SPG ≈ 40
+        // spokes). Give it a generous budget so the tree can't truncate mid-JSON.
+        'expander_max_tokens' => (int) env('ANTHROPIC_EXPANDER_MAX_TOKENS', 16000),
     ],
 
     // fal.ai image generation (§2 render pipeline). `provider` is the selected

@@ -52,6 +52,7 @@ use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
 use App\Integrations\Voice\MockVoiceSynthesizer;
 use App\Integrations\Voice\VoiceSynthesizer;
+use App\Interview\Expansion\SiloExpander;
 use App\Interview\Volume\VolumeGrounder;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
@@ -326,6 +327,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->when(RelevanceScorer::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
+
+        // The Phase-2 silo expander emits a large JSON tree: a generous token budget
+        // + an assistant "{" prefill (raw JSON, no fences) from the one factory.
+        $this->app->when(SiloExpander::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->expander());
 
         // The shared drafting MECHANISM (DraftCall) carries the budget-fixed
         // drafting client; every draft sibling (post Drafter, PageDrafter) depends

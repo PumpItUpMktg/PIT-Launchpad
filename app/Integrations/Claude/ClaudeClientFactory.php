@@ -47,7 +47,23 @@ class ClaudeClientFactory
         );
     }
 
-    private function make(string $model, ?string $thinking, ?int $maxTokens = null, ?int $thinkingBudget = null): AnthropicClaudeClient
+    /**
+     * Silo expansion (Phase 2) — Opus, a generous token budget for the large
+     * dimensional tree, and an assistant prefill of "{" so the model continues raw
+     * JSON (no fences / preamble). Prefill is incompatible with extended thinking, so
+     * thinking is null here; the tolerant parse + retry on the call site cover the rest.
+     */
+    public function expander(): AnthropicClaudeClient
+    {
+        return $this->make(
+            (string) config('services.anthropic.model', 'claude-opus-4-8'),
+            thinking: null,
+            maxTokens: (int) config('services.anthropic.expander_max_tokens', 16000),
+            prefill: '{',
+        );
+    }
+
+    private function make(string $model, ?string $thinking, ?int $maxTokens = null, ?int $thinkingBudget = null, ?string $prefill = null): AnthropicClaudeClient
     {
         return new AnthropicClaudeClient(
             (string) config('services.anthropic.key'),
@@ -55,6 +71,7 @@ class ClaudeClientFactory
             $maxTokens ?? (int) config('services.anthropic.max_tokens', 4096),
             thinking: $thinking,
             thinkingBudget: $thinkingBudget,
+            prefill: $prefill,
         );
     }
 }

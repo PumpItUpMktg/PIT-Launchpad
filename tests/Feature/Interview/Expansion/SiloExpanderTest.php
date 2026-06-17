@@ -9,6 +9,7 @@ use App\Interview\Expansion\SiloExpander;
 use App\Interview\SiloSeed;
 use Tests\Support\ExpansionFixture;
 use Tests\Support\FakeClaudeClient;
+use Tests\Support\SequencedClaudeClient;
 
 function expander(string $response): SiloExpander
 {
@@ -106,4 +107,49 @@ test('the validator flags structural problems', function () {
 
 test('status candidate is the pre-prune marker', function () {
     expect(SpokeStatus::Candidate->value)->toBe('candidate');
+});
+
+test('it tolerates markdown-fenced JSON from the live model', function () {
+    $fenced = "Here you go:\n```json\n".ExpansionFixture::json()."\n```";
+
+    $result = expander($fenced)->expand(seed());
+
+    expect($result->silos)->toHaveCount(4);
+});
+
+test('it reconciles a legitimate top-level array into the silos shape', function () {
+    // The model returns just the silos array (no wrapping object).
+    $silosOnly = (string) json_encode(ExpansionFixture::tree()['silos']);
+
+    $result = expander($silosOnly)->expand(seed());
+
+    expect($result->silos)->toHaveCount(4)
+        ->and($result->fringeHandoff)->toBe([]); // no fringe in a bare array
+});
+
+test('decomposed expansion plans silos then fills each with its own call', function () {
+    $plan = (string) json_encode([
+        'silos' => [
+            ['name' => 'Sump Pumps', 'head_keyword' => 'sump pump', 'page_type' => 'service', 'focus' => 'sump pump x action'],
+            ['name' => 'Brands We Service', 'head_keyword' => 'pump brands', 'page_type' => 'service'],
+        ],
+        'fringe_handoff' => [['name' => 'Mold Remediation', 'connection_note' => 'chronic moisture', 'sibling_brand' => 'Trusted Mold']],
+    ]);
+    $sumpSpokes = (string) json_encode(['spokes' => [
+        ['name' => 'Sump Pump Installation', 'page_type' => 'service', 'tag' => 'core', 'head_keyword' => 'sump pump installation', 'granularity' => 'own_page'],
+        ['name' => 'Battery Backup', 'page_type' => 'service', 'tag' => 'adjacent', 'head_keyword' => 'sump pump battery backup', 'granularity' => 'own_page'],
+    ]]);
+    $brandSpokes = (string) json_encode(['spokes' => [
+        ['name' => 'Zoeller', 'page_type' => 'service', 'tag' => 'core', 'head_keyword' => 'zoeller pumps', 'granularity' => 'own_page'],
+    ]]);
+
+    $expander = new SiloExpander(new SequencedClaudeClient([$plan, $sumpSpokes, $brandSpokes]), new ExpansionValidator);
+    $result = $expander->expandDecomposed(seed());
+
+    expect($result->silos)->toHaveCount(2)
+        ->and($result->silos[0]->name)->toBe('Sump Pumps')
+        ->and($result->silos[0]->spokes)->toHaveCount(2)
+        ->and($result->silos[1]->spokes)->toHaveCount(1)
+        ->and($result->fringeHandoff)->toHaveCount(1)
+        ->and($result->fringeHandoff[0]->siblingBrand)->toBe('Trusted Mold');
 });

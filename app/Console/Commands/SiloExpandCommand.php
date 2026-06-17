@@ -28,6 +28,7 @@ class SiloExpandCommand extends Command
     protected $signature = 'launchpad:silo-expand
         {site : the Site id}
         {--json : emit the raw candidate tree as JSON}
+        {--decompose : build the tree per-silo (smaller, more robust calls) instead of one call}
         {--persist : write the tree as a draft SiloBlueprint (default is dry-run)}';
 
     protected $description = 'Expand a site\'s confirmed seed into the problem-chain candidate tree (dry-run by default).';
@@ -51,8 +52,13 @@ class SiloExpandCommand extends Command
             return self::FAILURE;
         }
 
+        $seed = SiloSeed::fromArray($blueprint->seed);
+        $voice = $this->voice($site);
+
         try {
-            $result = $expander->expand(SiloSeed::fromArray($blueprint->seed), $this->voice($site));
+            $result = $this->option('decompose')
+                ? $expander->expandDecomposed($seed, $voice)
+                : $expander->expand($seed, $voice);
         } catch (ExpansionException $e) {
             $this->error($e->getMessage());
 

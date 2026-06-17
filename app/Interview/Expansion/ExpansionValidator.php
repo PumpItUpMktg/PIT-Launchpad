@@ -51,6 +51,56 @@ final class ExpansionValidator
     }
 
     /**
+     * Validate the decompose PLAN pass: silo headers only (name required), no spokes yet.
+     *
+     * @return list<string>
+     */
+    public function validatePlan(mixed $payload): array
+    {
+        if (! is_array($payload)) {
+            return ['Output is not a JSON object.'];
+        }
+
+        $silos = $payload['silos'] ?? null;
+        if (! is_array($silos) || $silos === []) {
+            return ['Missing "silos" — expected at least one planned silo.'];
+        }
+
+        $errors = [];
+        foreach (array_values($silos) as $i => $silo) {
+            if (! is_array($silo) || trim((string) ($silo['name'] ?? '')) === '') {
+                $errors[] = "silos[{$i}].name is empty.";
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate the decompose PER-SILO pass: a {"spokes":[...]} payload for one silo.
+     *
+     * @return list<string>
+     */
+    public function validateSpokes(mixed $payload): array
+    {
+        if (! is_array($payload)) {
+            return ['Output is not a JSON object.'];
+        }
+
+        $spokes = $payload['spokes'] ?? null;
+        if (! is_array($spokes) || $spokes === []) {
+            return ['Missing "spokes" — expected at least one spoke for the silo.'];
+        }
+
+        $errors = [];
+        foreach (array_values($spokes) as $j => $spoke) {
+            $this->validateSpoke($spoke, 'silo', $j, $errors);
+        }
+
+        return $errors;
+    }
+
+    /**
      * @param  list<string>  $errors
      */
     private function validateSilo(mixed $silo, int $i, array &$errors): void
