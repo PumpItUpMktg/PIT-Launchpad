@@ -193,8 +193,9 @@ final class SiloExpander
             .'you expand a deep, methodical candidate page tree by reasoning about the CUSTOMER\'S PROBLEM '
             .'(causes upstream → the core fix → effects downstream), not just the owner\'s stated service category. '
             .'A service the owner forgot to mention is a lost lead, so be generous: propose the maximal split now — '
-            .'a low-value page is pruned later, a missing one is gone forever. You return STRICT JSON only — never '
-            .'prose, never markdown fences.';
+            .'a low-value page is pruned later, a missing one is gone forever. '
+            .'OUTPUT CONTRACT: your ENTIRE response must be one raw JSON object — start with "{" and end with "}". '
+            .'No markdown, no code fences, no preamble, no commentary, no trailing text.';
     }
 
     /**
