@@ -12,6 +12,12 @@
         <div>last radius tap: <span x-data x-text="($store.diag?.lastTap) ?? 'none'">none</span>
             · radius (alpine) = <span x-data x-text="($store.diag?.radius) ?? '—'">—</span></div>
         <div>{{ $updateDiag !== '' ? $updateDiag : 'Update: (not run yet)' }}</div>
+        @if ($tigerwebDiag !== '')
+            <div>TIGERweb: {{ $tigerwebDiag }}</div>
+        @endif
+        @if ($tigerwebUrl !== '')
+            <div class="break-all">TIGERweb URL: <a href="{{ $tigerwebUrl }}" target="_blank" class="underline">{{ $tigerwebUrl }}</a></div>
+        @endif
     </div>
 
     <div class="fi-section rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
