@@ -37,6 +37,13 @@ function countyGazetteer(): MockMunicipalityGazetteer
                 new Municipality('3401321840', 'Essex Fells Boro', MunicipalityType::CountySubdivision, 'NJ', 40.82, -74.28),
             ],
         ],
+        polygons: [
+            '34013' => [[
+                ['lat' => 40.75, 'lng' => -74.30],
+                ['lat' => 40.85, 'lng' => -74.20],
+                ['lat' => 40.70, 'lng' => -74.10],
+            ]],
+        ],
     );
 }
 
@@ -206,6 +213,29 @@ it('feeds the shared map with color-matched, located bases only (pins, no radius
         ->and(collect($mapData)->pluck('color')->unique())->toHaveCount(2) // distinct, matched colors
         ->and(collect($mapData)->first())->not->toHaveKey('radius') // coverage is county-based, not radial
         ->and($colors)->toHaveCount(3);
+});
+
+it('outlines the served counties on the map (polygons, GEOID-deduped across bases)', function () {
+    $site = Site::factory()->create();
+    // two located bases both serving Essex County → the polygon is drawn once
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'A', 'lat' => 40.80, 'lng' => -74.20, 'home_county_geoid' => '34013', 'county_geoids' => ['34013']]);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'B', 'lat' => 40.82, 'lng' => -74.25, 'home_county_geoid' => '34013', 'county_geoids' => ['34013']]);
+
+    $page = Livewire::test(LocationsSetup::class)->set('siteId', $site->id)->instance();
+    $polys = $page->countyPolygons;
+
+    expect($polys)->toHaveCount(1) // GEOID-deduped across the two bases
+        ->and($polys[0]['geo_id'])->toBe('34013')
+        ->and($polys[0]['rings'][0])->not->toBeEmpty();
+});
+
+it('draws no county polygons when no base has a selected county', function () {
+    $site = Site::factory()->create();
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => 40.80, 'lng' => -74.20, 'home_county_geoid' => '34013', 'county_geoids' => []]);
+
+    $page = Livewire::test(LocationsSetup::class)->set('siteId', $site->id)->instance();
+
+    expect($page->countyPolygons)->toBe([]);
 });
 
 it('summary reflects overlap once coverage is computed', function () {
