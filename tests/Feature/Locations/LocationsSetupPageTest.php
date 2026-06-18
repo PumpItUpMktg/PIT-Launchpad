@@ -134,15 +134,13 @@ it('flags a failed geocode and accepts a manual override', function () {
         ->and($loc->home_county_geoid)->toBe('34013');
 });
 
-it('toggles a county a location serves, persists it, and recomputes', function () {
+it('sets the counties a location serves (whole array), persists it, and recomputes', function () {
     $site = Site::factory()->create();
     $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => 40.80, 'lng' => -74.20, 'home_county_geoid' => '34013', 'county_geoids' => []]);
 
     Livewire::test(LocationsSetup::class)
         ->set('siteId', $site->id)
-        // the county chip is an actual wire:click toggle in the DOM, not a dead label
-        ->assertSeeHtml('wire:click="toggleCounty(\''.$loc->id.'\', \'34013\')"')
-        ->call('toggleCounty', $loc->id, '34013')
+        ->call('setCounties', $loc->id, ['34013'])
         ->assertDispatched('locations-updated');
 
     expect(Location::withoutGlobalScope(SiteScope::class)->where('id', $loc->id)->value('county_geoids'))->toBe(['34013']);

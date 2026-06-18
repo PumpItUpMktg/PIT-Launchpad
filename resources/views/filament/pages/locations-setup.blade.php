@@ -70,6 +70,21 @@
         .lp-chip:hover { background:var(--surface-2); }
         .lp-chip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
 
+        /* Compact searchable county multi-select */
+        [x-cloak] { display:none !important; }
+        .lp-combo { position:relative; max-width:420px; }
+        .lp-combo-box { display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-height:40px; padding:6px 10px;
+            border:1px solid var(--line); border-radius:10px; background:var(--surface); cursor:pointer; }
+        .lp-tag { display:inline-flex; align-items:center; gap:6px; background:var(--accent); color:#fff; border-radius:999px;
+            padding:3px 6px 3px 10px; font-size:12px; }
+        .lp-tag-home { background:rgba(255,255,255,.25); border-radius:999px; padding:0 6px; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+        .lp-tag-x { background:none; border:0; color:#fff; cursor:pointer; font-size:14px; line-height:1; padding:0 2px; }
+        .lp-combo-menu { position:absolute; z-index:30; top:calc(100% + 4px); left:0; right:0; background:var(--surface);
+            border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 24px rgba(13,52,52,.14); padding:8px; }
+        .lp-combo-list { max-height:220px; overflow:auto; margin-top:8px; display:flex; flex-direction:column; gap:2px; }
+        .lp-combo-opt { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; font-size:13px; cursor:pointer; }
+        .lp-combo-opt:hover { background:var(--surface-2); }
+
         /* Locstat + minibar */
         .lp-locstat { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
         .lp-locstat .n { font-weight:600; }
@@ -244,8 +259,10 @@
             @elseif ($activeLoc)
                 @php
                     $located = $activeLoc->lat !== null && $activeLoc->lng !== null;
-                    $selectedCounties = is_array($activeLoc->county_geoids) ? $activeLoc->county_geoids : [];
+                    // countyOptions() self-heals the home county (may seed county_geoids) on the
+                    // same instance — read the selection AFTER it so the combo seeds correctly.
                     $countyOptions = $located ? $this->countyOptions($activeLoc) : [];
+                    $selectedCounties = is_array($activeLoc->county_geoids) ? array_values($activeLoc->county_geoids) : [];
                     $color = $colors[$activeLoc->id] ?? '#2563eb';
                 @endphp
                 <div class="lp-card lp-panel">
@@ -268,22 +285,48 @@
                         <span class="lp-status {{ $statusClass }}">{{ $statusText }}</span>
                     </div>
 
-                    {{-- Counties served --}}
+                    {{-- Counties served — compact searchable multi-select (sends the whole array,
+                         so adds accumulate natively; home is the initial seed, never a floor) --}}
                     @if ($located)
                         <div>
                             <div class="lp-seclbl">Counties you serve</div>
                             @if ($countyOptions === [])
                                 <div class="lp-muted">No counties found for this state.</div>
                             @else
-                                <div class="lp-chips">
-                                    @foreach ($countyOptions as $county)
-                                        @php
-                                            $checked = in_array($county['geo_id'], $selectedCounties, true);
-                                            $isHome = $county['geo_id'] === $activeLoc->home_county_geoid;
-                                            $countyLabel = ($checked ? '✓ ' : '').$county['name'].($isHome ? ' (home)' : '');
-                                        @endphp
-                                        <button type="button" wire:click="toggleCounty('{{ $activeLoc->id }}', '{{ $county['geo_id'] }}')" class="lp-chip {{ $checked ? 'on' : '' }}">{{ $countyLabel }}</button>
-                                    @endforeach
+                                <div class="lp-combo" wire:key="combo-{{ $activeLoc->id }}"
+                                    x-data="{
+                                        open: false, q: '',
+                                        sel: @js($selectedCounties),
+                                        home: @js((string) $activeLoc->home_county_geoid),
+                                        options: @js($countyOptions),
+                                        nameOf(g) { const o = this.options.find(o => o.geo_id === g); return o ? o.name : g; },
+                                        toggle(g) { this.sel = this.sel.includes(g) ? this.sel.filter(x => x !== g) : [...this.sel, g]; $wire.setCounties(@js($activeLoc->id), this.sel); },
+                                        filtered() { const q = this.q.toLowerCase(); return this.options.filter(o => o.name.toLowerCase().includes(q)); }
+                                    }"
+                                    x-on:click.outside="open = false">
+                                    <div class="lp-combo-box" x-on:click="open = ! open">
+                                        <template x-for="g in sel" :key="g">
+                                            <span class="lp-tag">
+                                                <span x-text="nameOf(g)"></span>
+                                                <template x-if="g === home"><span class="lp-tag-home">home</span></template>
+                                                <button type="button" class="lp-tag-x" x-on:click.stop="toggle(g)">×</button>
+                                            </span>
+                                        </template>
+                                        <span x-show="sel.length === 0" class="lp-muted">Select counties…</span>
+                                    </div>
+                                    <div class="lp-combo-menu" x-show="open" x-cloak>
+                                        <input type="text" x-model="q" placeholder="Search counties…" class="lp-input" x-on:click.stop>
+                                        <div class="lp-combo-list">
+                                            <template x-for="o in filtered()" :key="o.geo_id">
+                                                <label class="lp-combo-opt" x-on:click.stop>
+                                                    <input type="checkbox" :checked="sel.includes(o.geo_id)" x-on:change="toggle(o.geo_id)">
+                                                    <span x-text="o.name"></span>
+                                                    <template x-if="o.geo_id === home"><span class="lp-tag-home" style="background:var(--surface-2); color:var(--muted)">home</span></template>
+                                                </label>
+                                            </template>
+                                            <div x-show="filtered().length === 0" class="lp-muted" style="padding:8px">No match.</div>
+                                        </div>
+                                    </div>
                                 </div>
                             @endif
                         </div>
