@@ -25,7 +25,9 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
 
     private const COUSUB_LAYER_NAME = 'county subdivisions';
 
-    /** @var array{place: int, cousub: int}|null */
+    private const COUNTIES_LAYER_NAME = 'counties';
+
+    /** @var array{place: int, cousub: int, county: int}|null */
     private ?array $resolvedLayers = null;
 
     public function __construct(
@@ -34,7 +36,85 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
         private readonly int $placesLayerFallback,
         private readonly int $cousubLayerFallback,
         private readonly int $timeout = 30,
+        private readonly int $countiesLayerFallback = 82,
     ) {}
+
+    /** The county a point falls in (layer 82 point query). */
+    public function countyAt(float $lat, float $lng): ?County
+    {
+        $features = $this->fetch($this->layers()['county'], [
+            'f' => 'json',
+            'where' => '1=1',
+            'geometry' => (string) json_encode(['x' => $lng, 'y' => $lat, 'spatialReference' => ['wkid' => 4326]]),
+            'geometryType' => 'esriGeometryPoint',
+            'inSR' => 4326,
+            'spatialRel' => 'esriSpatialRelIntersects',
+            'outFields' => 'GEOID,NAME,STATE,COUNTY',
+            'returnGeometry' => 'false',
+        ]);
+
+        return $this->mapCounties($features)[0] ?? null;
+    }
+
+    /**
+     * @return list<County>
+     */
+    public function countiesInState(string $stateFips): array
+    {
+        return $this->mapCounties($this->fetch($this->layers()['county'], [
+            'f' => 'json',
+            'where' => "STATE='".$this->escape($stateFips)."'",
+            'outFields' => 'GEOID,NAME,STATE,COUNTY',
+            'returnGeometry' => 'false',
+            'orderByFields' => 'NAME',
+            'resultRecordCount' => 1000,
+        ]));
+    }
+
+    /**
+     * @return list<Municipality>
+     */
+    public function subdivisionsInCounty(string $stateFips, string $countyFips): array
+    {
+        return $this->mapFeatures($this->fetch($this->layers()['cousub'], [
+            'f' => 'json',
+            'where' => "STATE='".$this->escape($stateFips)."' AND COUNTY='".$this->escape($countyFips)."'",
+            'outFields' => 'GEOID,NAME,BASENAME,STATE,CENTLAT,CENTLON',
+            'returnGeometry' => 'false',
+            'orderByFields' => 'BASENAME',
+            'resultRecordCount' => 1000,
+        ]), MunicipalityType::CountySubdivision);
+    }
+
+    private function escape(string $value): string
+    {
+        return str_replace("'", "''", $value);
+    }
+
+    /**
+     * @param  mixed  $features
+     * @return list<County>
+     */
+    private function mapCounties($features): array
+    {
+        $features = is_array($features) ? $features : [];
+
+        $out = [];
+        foreach ($features as $feature) {
+            $a = is_array($feature['attributes'] ?? null) ? $feature['attributes'] : null;
+            if ($a === null || ($geoId = trim((string) ($a['GEOID'] ?? ''))) === '') {
+                continue;
+            }
+            $out[] = new County(
+                geoId: $geoId,
+                name: trim((string) ($a['NAME'] ?? '')),
+                stateFips: str_pad(trim((string) ($a['STATE'] ?? '')), 2, '0', STR_PAD_LEFT),
+                countyFips: str_pad(trim((string) ($a['COUNTY'] ?? '')), 3, '0', STR_PAD_LEFT),
+            );
+        }
+
+        return $out;
+    }
 
     /**
      * @return list<Municipality>
@@ -53,7 +133,7 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
      * Resolve the place + county-subdivision layer ids by name from the MapServer
      * definition (memoized), falling back to the configured ids if the lookup fails.
      *
-     * @return array{place: int, cousub: int}
+     * @return array{place: int, cousub: int, county: int}
      */
     private function layers(): array
     {
@@ -66,6 +146,7 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
         return $this->resolvedLayers = [
             'place' => $byName[self::PLACES_LAYER_NAME] ?? $this->placesLayerFallback,
             'cousub' => $byName[self::COUSUB_LAYER_NAME] ?? $this->cousubLayerFallback,
+            'county' => $byName[self::COUNTIES_LAYER_NAME] ?? $this->countiesLayerFallback,
         ];
     }
 
