@@ -16,18 +16,27 @@ final class CoverageWriter
     public function write(Site $site, CoverageResult $result): int
     {
         return DB::transaction(function () use ($site, $result): int {
-            // Rebuild ONLY the county-derived rows; owner-added manual rows persist.
-            CoverageArea::withoutGlobalScope(SiteScope::class)
-                ->where('site_id', $site->id)
-                ->where('source', 'county')
-                ->delete();
-
-            $written = 0;
+            // Dedup the incoming computed towns by GEOID (a town reached via multiple
+            // counties/locations is ONE row) — guards the (site_id, geo_id) unique index
+            // against in-batch dupes. Manual rows are owned by ManualCoverage, not rewritten.
+            $rows = [];
             foreach ($result->union as $m) {
                 if ($m->manual) {
-                    continue; // manual rows are owned by ManualCoverage, not rewritten here
+                    continue;
                 }
+                $rows[$m->geoId] = $m;
+            }
 
+            // Replace the whole auto-derived set: drop EVERY non-manual row — stale radius-era
+            // rows AND prior county rows. The unique index is (site_id, geo_id) regardless of
+            // `source`, so leaving stale radius rows behind collides on insert (the 500). NEVER
+            // delete manual rows — owner-added priority-page towns must survive a recompute.
+            CoverageArea::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)
+                ->where('source', '!=', 'manual')
+                ->delete();
+
+            foreach ($rows as $m) {
                 CoverageArea::create([
                     'site_id' => $site->id, // explicit: no current-site scope in console/job context
                     'geo_id' => $m->geoId,
@@ -41,10 +50,9 @@ final class CoverageWriter
                     'population' => $m->population,
                     'source' => 'county',
                 ]);
-                $written++;
             }
 
-            return $written;
+            return count($rows);
         });
     }
 }
