@@ -1,7 +1,121 @@
 <x-filament-panels::page>
+    {{-- Self-contained styling (namespaced .lp-*) — the custom page's classes aren't in
+         Filament's compiled app.css, and the deploy doesn't build a custom theme, so the
+         design ships inline here. Won't collide with Filament's fi-* classes. --}}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        .lp-wrap { --teal-major:#0A4F4F; --teal-large:#0E6B6B; --teal-medium:#4E9A98; --teal-small:#A6CFCD; --ungrouped:#C3CCD6;
+            --ink:#13343b; --muted:#5b7178; --line:#e3eaec; --surface:#ffffff; --surface-2:#f5f8f8; --accent:#0E6B6B;
+            font-family:'Inter',ui-sans-serif,system-ui,sans-serif; color:var(--ink); display:flex; flex-direction:column; gap:16px; }
+        .dark .lp-wrap { --ink:#e6eef0; --muted:#9fb3b8; --line:#23373c; --surface:#0f2226; --surface-2:#13292e; }
+        .lp-wrap *{ box-sizing:border-box; }
+        .lp-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:0 1px 2px rgba(13,52,52,.04); }
+        .lp-h { font-family:'Archivo',sans-serif; font-weight:700; }
+        .lp-muted { color:var(--muted); font-size:13px; }
+        .lp-label { display:block; font-size:13px; font-weight:600; color:var(--ink); margin-bottom:6px; }
+        .lp-select, .lp-input { width:100%; max-width:340px; padding:9px 12px; border:1px solid var(--line); border-radius:10px;
+            background:var(--surface); color:var(--ink); font-size:14px; font-family:inherit; }
+        .lp-input { max-width:none; }
+        .lp-warn { background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; border-radius:12px; padding:12px 16px; font-size:13px; }
+
+        /* Hero */
+        .lp-hero-row { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:18px; }
+        .lp-nums { display:flex; gap:34px; }
+        .lp-num { font-family:'Archivo',sans-serif; font-weight:700; font-size:30px; line-height:1; }
+        .lp-num.alt { color:var(--teal-large); }
+        .lp-num-lbl { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-top:6px; }
+        .lp-badge { border-radius:999px; padding:5px 12px; font-size:12px; font-weight:600; }
+        .lp-badge.ok { background:#e7f6ee; color:#1b7a47; }
+        .lp-badge.warn { background:#fdf3e2; color:#9a6a16; }
+        .lp-bar { display:flex; height:10px; width:100%; overflow:hidden; border-radius:999px; background:var(--surface-2); margin-top:16px; }
+        .lp-bar > span { display:block; height:100%; }
+        .lp-legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:10px; font-size:12px; color:var(--muted); }
+        .lp-legend span { display:inline-flex; align-items:center; gap:6px; }
+        .lp-sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
+
+        /* Tabs */
+        .lp-tabs { display:flex; flex-wrap:wrap; gap:8px; }
+        .lp-tab { display:inline-flex; align-items:center; gap:8px; padding:9px 13px; border-radius:11px; border:1px solid var(--line);
+            background:var(--surface-2); cursor:pointer; font-size:14px; color:var(--ink); }
+        .lp-tab:hover { background:var(--surface); }
+        .lp-tab.active { background:var(--surface); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+        .lp-tab.add { border-style:dashed; color:var(--muted); }
+        .lp-tab.add.on { border-color:var(--accent); color:var(--accent); }
+        .lp-dot { width:11px; height:11px; border-radius:999px; flex:0 0 auto; }
+        .lp-tab-name { font-weight:600; }
+        .lp-tab-count { font-size:12px; color:var(--muted); }
+        .lp-tab-badge { background:var(--teal-major); color:#fff; border-radius:999px; padding:1px 7px; font-size:11px; font-weight:700; }
+
+        /* Status pills */
+        .lp-status { border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; white-space:nowrap; }
+        .lp-status.ok { background:#e7f6ee; color:#1b7a47; }
+        .lp-status.bad { background:#fde8e8; color:#a23b3b; }
+        .lp-status.wait { background:var(--surface-2); color:var(--muted); }
+
+        /* Location panel */
+        .lp-panel { display:flex; flex-direction:column; gap:18px; }
+        .lp-loc-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+        .lp-loc-name { font-family:'Archivo',sans-serif; font-weight:600; font-size:16px; }
+        .lp-loc-addr { font-size:13px; color:var(--muted); margin-top:2px; }
+        .lp-loc-coords { font-size:11px; color:var(--muted); font-family:'Spline Sans Mono',monospace; margin-top:2px; }
+        .lp-rule { border-top:1px solid var(--line); padding-top:14px; }
+        .lp-seclbl { font-size:12px; font-weight:600; color:var(--muted); margin-bottom:7px; }
+
+        /* Chips (counties) */
+        .lp-chips { display:flex; flex-wrap:wrap; gap:7px; }
+        .lp-chip { border-radius:999px; padding:5px 11px; font-size:12px; border:1px solid var(--line); background:var(--surface);
+            color:var(--ink); cursor:pointer; }
+        .lp-chip:hover { background:var(--surface-2); }
+        .lp-chip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+        /* Locstat + minibar */
+        .lp-locstat { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+        .lp-locstat .n { font-weight:600; }
+        .lp-pill { background:var(--teal-major); color:#fff; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:700; }
+        .lp-mini { display:flex; height:8px; flex:1; min-width:120px; overflow:hidden; border-radius:999px; background:var(--surface-2); }
+        .lp-mini > span { display:block; height:100%; }
+
+        /* Tier groups */
+        .lp-tgroup { border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+        .lp-tgroup-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; }
+        .lp-tgroup-title { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; background:none; border:0; cursor:pointer; color:var(--ink); }
+        .lp-tgroup-frac { font-size:12px; color:var(--muted); font-weight:500; }
+        .lp-tgroup-actions { display:flex; gap:4px; font-size:12px; }
+        .lp-link { background:none; border:0; cursor:pointer; border-radius:6px; padding:2px 8px; color:var(--accent); }
+        .lp-link.dim { color:var(--muted); }
+        .lp-link:hover { background:var(--surface-2); }
+        .lp-towns { display:flex; flex-wrap:wrap; gap:7px; padding:12px; border-top:1px solid var(--line); }
+
+        /* Town checkbox chips */
+        .lp-town { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:5px 11px; font-size:12px;
+            border:1px solid var(--line); background:var(--surface); color:var(--ink); cursor:pointer; }
+        .lp-town:hover { background:var(--surface-2); }
+        .lp-town.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+        .lp-town-pop { opacity:.65; font-family:'Spline Sans Mono',monospace; font-size:11px; }
+
+        /* Buttons / results / map / bottom bar */
+        .lp-btn { display:inline-flex; align-items:center; gap:6px; border-radius:10px; padding:8px 14px; font-size:13px; font-weight:600;
+            background:var(--accent); color:#fff; border:0; cursor:pointer; }
+        .lp-btn:hover { filter:brightness(1.06); }
+        .lp-btn.ghost { background:var(--surface-2); color:var(--ink); border:1px solid var(--line); }
+        .lp-row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
+        .lp-result { display:block; width:100%; text-align:left; border:1px solid var(--line); background:var(--surface-2); border-radius:10px;
+            padding:8px 12px; font-size:13px; cursor:pointer; }
+        .lp-result:hover { background:var(--surface); }
+        .lp-map { height:380px; width:100%; border-radius:12px; background:#e5e7eb; }
+        .lp-bottom { position:sticky; bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+            background:var(--teal-major); color:#fff; border-radius:14px; padding:13px 18px; font-size:14px; box-shadow:0 6px 18px rgba(10,79,79,.25); }
+        .lp-bottom b { font-family:'Archivo',sans-serif; }
+        .lp-empty { text-align:center; color:var(--muted); padding:28px; }
+        .lp-add-stack { display:flex; flex-direction:column; gap:12px; }
+        .lp-seg { display:inline-flex; gap:6px; }
+        .lp-seg button { border:0; background:none; cursor:pointer; border-radius:8px; padding:5px 12px; font-size:13px; color:var(--muted); }
+        .lp-seg button.on { background:var(--accent); color:#fff; }
+    </style>
+
     @php
-        $inputClass = 'fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5';
-        // The 4-tier ramp (mockup v3) + ungrouped.
         $tierMeta = [
             'major' => ['label' => 'Major', 'color' => '#0A4F4F'],
             'large' => ['label' => 'Large', 'color' => '#0E6B6B'],
@@ -11,317 +125,275 @@
         ];
     @endphp
 
-    <div class="fi-section rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-        <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
-            Tell us where each location is and which counties you serve — then pick the towns you want location pages for.
-        </p>
-        <label class="block max-w-sm">
-            <span class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Site</span>
-            <select wire:model.live="siteId" class="{{ $inputClass }}">
-                <option value="">Select a site…</option>
-                @foreach ($this->siteOptions as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                @endforeach
-            </select>
-        </label>
-    </div>
-
-    @if ($this->geocoderWarning)
-        <div class="rounded-xl bg-warning-50 px-4 py-3 text-sm text-warning-700 ring-1 ring-warning-600/20 dark:bg-warning-500/10 dark:text-warning-300">
-            ⚠ {{ $this->geocoderWarning }}
-        </div>
-    @endif
-
-    @if ($siteId)
-        @php
-            $locations = $this->locations;
-            $colors = $this->colors;
-            $locating = $locations->contains(fn ($l) => $l->lat === null && ! $l->geocode_failed);
-            $vm = $this->panels;
-            $totals = $vm['totals'];
-            $tierTotals = $totals['tiers'] ?? [];
-            $activeLoc = $locations->firstWhere('id', $activeTab) ?? $locations->first();
-            $activePanel = $activeLoc ? ($vm['panels'][$activeLoc->id] ?? null) : null;
-        @endphp
-
-        {{-- Totals hero --}}
-        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-            <div class="flex flex-wrap items-end justify-between gap-4">
-                <div class="flex gap-8">
-                    <div>
-                        <div class="text-3xl font-bold text-gray-900 dark:text-gray-50">{{ $totals['covered'] }}</div>
-                        <div class="text-xs font-medium uppercase tracking-wide text-gray-500">towns covered</div>
-                    </div>
-                    <div>
-                        <div class="text-3xl font-bold" style="color:#0A4F4F">{{ $totals['selected'] }}</div>
-                        <div class="text-xs font-medium uppercase tracking-wide text-gray-500">selected for pages</div>
-                    </div>
-                </div>
-                @php $overlap = $totals['overlap'] ?? 0; @endphp
-                <span @class([
-                    'rounded-full px-3 py-1 text-xs font-medium ring-1',
-                    'bg-success-50 text-success-700 ring-success-600/20 dark:bg-success-500/10 dark:text-success-300' => $overlap === 0,
-                    'bg-warning-50 text-warning-700 ring-warning-600/20 dark:bg-warning-500/10 dark:text-warning-300' => $overlap > 0,
-                ])>{{ $overlap === 0 ? 'no overlap' : $overlap.' overlapping' }}</span>
-            </div>
-
-            {{-- 4-tier distribution bar + legend --}}
-            @if ($totals['covered'] > 0)
-                <div class="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-white/5">
-                    @foreach ($tierMeta as $key => $meta)
-                        @php $n = $tierTotals[$key] ?? 0; $pct = $totals['covered'] > 0 ? ($n / $totals['covered']) * 100 : 0; @endphp
-                        @if ($n > 0)
-                            <div style="width: {{ $pct }}%; background: {{ $meta['color'] }}" title="{{ $meta['label'] }}: {{ $n }}"></div>
-                        @endif
+    <div class="lp-wrap">
+        <div class="lp-card">
+            <p class="lp-muted" style="margin:0 0 14px">Tell us where each location is and which counties you serve — then pick the towns you want location pages for.</p>
+            <label>
+                <span class="lp-label">Site</span>
+                <select wire:model.live="siteId" class="lp-select">
+                    <option value="">Select a site…</option>
+                    @foreach ($this->siteOptions as $id => $name)
+                        <option value="{{ $id }}">{{ $name }}</option>
                     @endforeach
-                </div>
-                <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-                    @foreach ($tierMeta as $key => $meta)
-                        <span class="inline-flex items-center gap-1.5">
-                            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: {{ $meta['color'] }}"></span>
-                            {{ $meta['label'] }} {{ $tierTotals[$key] ?? 0 }}
-                        </span>
-                    @endforeach
-                </div>
-            @endif
+                </select>
+            </label>
         </div>
 
-        {{-- Location tabs --}}
-        <div class="flex flex-wrap items-center gap-2" @if ($locating) wire:poll.3s @endif>
-            @foreach ($locations as $location)
-                @php
-                    $isActive = $activeLoc && $location->id === $activeLoc->id && ! $adding;
-                    $color = $colors[$location->id] ?? '#2563eb';
-                    $p = $vm['panels'][$location->id] ?? ['town_count' => 0, 'selected_count' => 0];
-                @endphp
-                <button type="button" wire:click="$set('activeTab', '{{ $location->id }}')"
-                    @class([
-                        'flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 transition',
-                        'bg-white ring-primary-500 dark:bg-gray-900' => $isActive,
-                        'bg-gray-50 ring-gray-950/5 hover:bg-gray-100 dark:bg-white/5 dark:ring-white/10' => ! $isActive,
-                    ])>
-                    <span class="inline-block h-3 w-3 shrink-0 rounded-full" style="background: {{ $color }}"></span>
-                    <span class="font-medium text-gray-800 dark:text-gray-100">{{ $location->name }}</span>
-                    <span class="text-xs text-gray-400">{{ $p['town_count'] }}</span>
-                    @if ($p['selected_count'] > 0)
-                        <span class="rounded-full px-1.5 py-0.5 text-[11px] font-semibold text-white" style="background:#0A4F4F">{{ $p['selected_count'] }}</span>
-                    @endif
-                </button>
-            @endforeach
-            <button type="button" wire:click="startAdd"
-                @class(['flex items-center gap-1 rounded-lg border-2 border-dashed px-3 py-2 text-sm', 'border-primary-400 text-primary-600' => $adding, 'border-gray-200 text-gray-500 hover:text-primary-600 dark:border-white/10' => ! $adding])>
-                ＋ Add location
-            </button>
-        </div>
+        @if ($this->geocoderWarning)
+            <div class="lp-warn">⚠ {{ $this->geocoderWarning }}</div>
+        @endif
 
-        {{-- Add-location panel --}}
-        @if ($adding)
-            <div class="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-                @if ($this->placesEnabled)
-                    <div class="flex gap-2 text-sm">
-                        <button type="button" wire:click="$set('addSource', 'places')" @class(['rounded-lg px-3 py-1', 'bg-primary-600 text-white' => $addSource === 'places', 'text-gray-600 dark:text-gray-300' => $addSource !== 'places'])>From Google</button>
-                        <button type="button" wire:click="$set('addSource', 'manual')" @class(['rounded-lg px-3 py-1', 'bg-primary-600 text-white' => $addSource === 'manual', 'text-gray-600 dark:text-gray-300' => $addSource !== 'manual'])>Enter manually</button>
-                    </div>
-                @endif
-
-                @if ($addSource === 'places' && $this->placesEnabled)
-                    <div class="flex flex-col gap-2">
-                        <input type="text" wire:model="addQuery" wire:keydown.enter="searchPlaces" placeholder="business name or address" class="{{ $inputClass }}" />
-                        <x-filament::button wire:click="searchPlaces" color="gray" size="sm" icon="heroicon-m-magnifying-glass">Search</x-filament::button>
-                        @foreach ($placeResults as $r)
-                            <button type="button" wire:click="addFromPlace('{{ $r['place_id'] }}')" class="rounded-lg bg-gray-50 px-3 py-2 text-left text-sm ring-1 ring-gray-950/5 hover:bg-gray-100 dark:bg-white/5 dark:ring-white/10">
-                                <span class="font-medium text-gray-800 dark:text-gray-100">{{ $r['name'] }}</span>
-                                <span class="block text-xs text-gray-500">{{ $r['address'] }}</span>
-                            </button>
-                        @endforeach
-                    </div>
-                @else
-                    <input type="text" wire:model="addName" placeholder="Location name (e.g. Montclair)" class="{{ $inputClass }}" />
-                    <input type="text" wire:model="addAddress" placeholder="Where you are (address)" class="{{ $inputClass }}" />
-                @endif
-
-                <p class="text-xs text-gray-400">We’ll locate it and pre-tick its home county — adjust the counties you serve on the tab.</p>
-
-                <div class="flex gap-2">
-                    @if ($addSource !== 'places' || ! $this->placesEnabled)
-                        <x-filament::button wire:click="addManual" size="sm" icon="heroicon-m-check">Add location</x-filament::button>
-                    @endif
-                    <x-filament::button wire:click="cancelAdd" size="sm" color="gray">Cancel</x-filament::button>
-                </div>
-            </div>
-        @elseif ($activeLoc)
-            {{-- Active location panel --}}
+        @if ($siteId)
             @php
-                $located = $activeLoc->lat !== null && $activeLoc->lng !== null;
-                $selectedCounties = is_array($activeLoc->county_geoids) ? $activeLoc->county_geoids : [];
-                $countyOptions = $located ? $this->countyOptions($activeLoc) : [];
-                $color = $colors[$activeLoc->id] ?? '#2563eb';
+                $locations = $this->locations;
+                $colors = $this->colors;
+                $locating = $locations->contains(fn ($l) => $l->lat === null && ! $l->geocode_failed);
+                $vm = $this->panels;
+                $totals = $vm['totals'];
+                $tierTotals = $totals['tiers'] ?? [];
+                $activeLoc = $locations->firstWhere('id', $activeTab) ?? $locations->first();
+                $activePanel = $activeLoc ? ($vm['panels'][$activeLoc->id] ?? null) : null;
+                $overlap = $totals['overlap'] ?? 0;
             @endphp
-            <div class="flex flex-col gap-4 rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-                {{-- Located header --}}
-                <div class="flex items-start justify-between gap-2">
-                    <div class="flex items-center gap-2">
-                        <span class="inline-block h-3 w-3 shrink-0 rounded-full" style="background: {{ $color }}"></span>
+
+            {{-- Totals hero --}}
+            <div class="lp-card">
+                <div class="lp-hero-row">
+                    <div class="lp-nums">
                         <div>
-                            <div class="font-semibold text-gray-800 dark:text-gray-100">{{ $activeLoc->name }}</div>
-                            <div class="text-sm text-gray-500 dark:text-gray-400">{{ $activeLoc->address ?: 'No address on file' }}</div>
-                            @if ($located)
-                                <div class="text-xs text-gray-400">✓ Located · {{ number_format((float) $activeLoc->lat, 3) }}, {{ number_format((float) $activeLoc->lng, 3) }}</div>
-                            @endif
+                            <div class="lp-num">{{ $totals['covered'] }}</div>
+                            <div class="lp-num-lbl">towns covered</div>
+                        </div>
+                        <div>
+                            <div class="lp-num alt">{{ $totals['selected'] }}</div>
+                            <div class="lp-num-lbl">selected for pages</div>
                         </div>
                     </div>
-                    @if ($located)
-                        <span class="rounded-full bg-success-50 px-2 py-0.5 text-xs font-medium text-success-700 ring-1 ring-success-600/20 dark:bg-success-500/10 dark:text-success-300">● Located</span>
-                    @elseif ($activeLoc->geocode_failed)
-                        <span class="rounded-full bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-700 ring-1 ring-danger-600/20 dark:bg-danger-500/10 dark:text-danger-300">Couldn’t locate</span>
-                    @else
-                        <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-white/5 dark:text-gray-400">locating…</span>
-                    @endif
+                    <span class="lp-badge {{ $overlap === 0 ? 'ok' : 'warn' }}">{{ $overlap === 0 ? 'no overlap' : $overlap.' overlapping' }}</span>
                 </div>
 
-                {{-- Counties served --}}
-                @if ($located)
-                    <div>
-                        <div class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">Counties you serve</div>
-                        @if ($countyOptions === [])
-                            <div class="text-xs text-gray-400">No counties found for this state.</div>
-                        @else
-                            <div class="flex flex-wrap gap-1.5">
-                                @foreach ($countyOptions as $county)
-                                    @php
-                                        $checked = in_array($county['geo_id'], $selectedCounties, true);
-                                        $isHome = $county['geo_id'] === $activeLoc->home_county_geoid;
-                                        $countyLabel = ($checked ? '✓ ' : '').$county['name'].($isHome ? ' (home)' : '');
-                                    @endphp
-                                    <button type="button" wire:click="toggleCounty('{{ $activeLoc->id }}', '{{ $county['geo_id'] }}')"
-                                        @class([
-                                            'rounded-full px-2.5 py-1 text-xs ring-1 transition',
-                                            'bg-primary-600 text-white ring-primary-600' => $checked,
-                                            'bg-white text-gray-600 ring-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:ring-white/10' => ! $checked,
-                                        ])>{{ $countyLabel }}</button>
-                                @endforeach
-                            </div>
-                        @endif
+                @if ($totals['covered'] > 0)
+                    <div class="lp-bar">
+                        @foreach ($tierMeta as $key => $meta)
+                            @php $n = $tierTotals[$key] ?? 0; $pct = $totals['covered'] > 0 ? ($n / $totals['covered']) * 100 : 0; @endphp
+                            @if ($n > 0)
+                                <span style="width: {{ $pct }}%; background: {{ $meta['color'] }}" title="{{ $meta['label'] }}: {{ $n }}"></span>
+                            @endif
+                        @endforeach
+                    </div>
+                    <div class="lp-legend">
+                        @foreach ($tierMeta as $key => $meta)
+                            <span><span class="lp-sw" style="background: {{ $meta['color'] }}"></span>{{ $meta['label'] }} {{ $tierTotals[$key] ?? 0 }}</span>
+                        @endforeach
                     </div>
                 @endif
+            </div>
 
-                {{-- locstat + tier minibar --}}
-                @if ($activePanel && $activePanel['town_count'] > 0)
-                    @php $pt = $activePanel['tiers']; @endphp
-                    <div class="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3 text-sm dark:border-white/10">
-                        <span class="font-medium text-gray-700 dark:text-gray-200">{{ $activePanel['town_count'] }} towns</span>
-                        <span class="rounded-full px-2 py-0.5 text-xs font-semibold text-white" style="background:#0A4F4F">{{ $activePanel['selected_count'] }} selected</span>
-                        <div class="flex h-2 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-white/5" style="min-width:120px">
+            {{-- Location tabs --}}
+            <div class="lp-tabs" @if ($locating) wire:poll.3s @endif>
+                @foreach ($locations as $location)
+                    @php
+                        $isActive = $activeLoc && $location->id === $activeLoc->id && ! $adding;
+                        $color = $colors[$location->id] ?? '#2563eb';
+                        $p = $vm['panels'][$location->id] ?? ['town_count' => 0, 'selected_count' => 0];
+                    @endphp
+                    <button type="button" wire:click="$set('activeTab', '{{ $location->id }}')" class="lp-tab {{ $isActive ? 'active' : '' }}">
+                        <span class="lp-dot" style="background: {{ $color }}"></span>
+                        <span class="lp-tab-name">{{ $location->name }}</span>
+                        <span class="lp-tab-count">{{ $p['town_count'] }}</span>
+                        @if ($p['selected_count'] > 0)
+                            <span class="lp-tab-badge">{{ $p['selected_count'] }}</span>
+                        @endif
+                    </button>
+                @endforeach
+                <button type="button" wire:click="startAdd" class="lp-tab add {{ $adding ? 'on' : '' }}">＋ Add location</button>
+            </div>
+
+            {{-- Add-location panel --}}
+            @if ($adding)
+                <div class="lp-card lp-add-stack">
+                    @if ($this->placesEnabled)
+                        <div class="lp-seg">
+                            <button type="button" wire:click="$set('addSource', 'places')" class="{{ $addSource === 'places' ? 'on' : '' }}">From Google</button>
+                            <button type="button" wire:click="$set('addSource', 'manual')" class="{{ $addSource === 'manual' ? 'on' : '' }}">Enter manually</button>
+                        </div>
+                    @endif
+
+                    @if ($addSource === 'places' && $this->placesEnabled)
+                        <input type="text" wire:model="addQuery" wire:keydown.enter="searchPlaces" placeholder="business name or address" class="lp-input" />
+                        <div class="lp-row"><button type="button" wire:click="searchPlaces" class="lp-btn ghost">Search</button></div>
+                        @foreach ($placeResults as $r)
+                            <button type="button" wire:click="addFromPlace('{{ $r['place_id'] }}')" class="lp-result">
+                                <strong>{{ $r['name'] }}</strong><br><span class="lp-muted">{{ $r['address'] }}</span>
+                            </button>
+                        @endforeach
+                    @else
+                        <input type="text" wire:model="addName" placeholder="Location name (e.g. Montclair)" class="lp-input" />
+                        <input type="text" wire:model="addAddress" placeholder="Where you are (address)" class="lp-input" />
+                    @endif
+
+                    <p class="lp-muted" style="margin:0">We’ll locate it and pre-tick its home county — adjust the counties you serve on the tab.</p>
+
+                    <div class="lp-row">
+                        @if ($addSource !== 'places' || ! $this->placesEnabled)
+                            <button type="button" wire:click="addManual" class="lp-btn">Add location</button>
+                        @endif
+                        <button type="button" wire:click="cancelAdd" class="lp-btn ghost">Cancel</button>
+                    </div>
+                </div>
+            @elseif ($activeLoc)
+                @php
+                    $located = $activeLoc->lat !== null && $activeLoc->lng !== null;
+                    $selectedCounties = is_array($activeLoc->county_geoids) ? $activeLoc->county_geoids : [];
+                    $countyOptions = $located ? $this->countyOptions($activeLoc) : [];
+                    $color = $colors[$activeLoc->id] ?? '#2563eb';
+                @endphp
+                <div class="lp-card lp-panel">
+                    {{-- Located header --}}
+                    <div class="lp-loc-head">
+                        <div style="display:flex; gap:10px; align-items:flex-start">
+                            <span class="lp-dot" style="background: {{ $color }}; margin-top:4px"></span>
+                            <div>
+                                <div class="lp-loc-name">{{ $activeLoc->name }}</div>
+                                <div class="lp-loc-addr">{{ $activeLoc->address ?: 'No address on file' }}</div>
+                                @if ($located)
+                                    <div class="lp-loc-coords">✓ Located · {{ number_format((float) $activeLoc->lat, 3) }}, {{ number_format((float) $activeLoc->lng, 3) }}</div>
+                                @endif
+                            </div>
+                        </div>
+                        @php
+                            $statusClass = $located ? 'ok' : ($activeLoc->geocode_failed ? 'bad' : 'wait');
+                            $statusText = $located ? '● Located' : ($activeLoc->geocode_failed ? 'Couldn’t locate' : 'locating…');
+                        @endphp
+                        <span class="lp-status {{ $statusClass }}">{{ $statusText }}</span>
+                    </div>
+
+                    {{-- Counties served --}}
+                    @if ($located)
+                        <div>
+                            <div class="lp-seclbl">Counties you serve</div>
+                            @if ($countyOptions === [])
+                                <div class="lp-muted">No counties found for this state.</div>
+                            @else
+                                <div class="lp-chips">
+                                    @foreach ($countyOptions as $county)
+                                        @php
+                                            $checked = in_array($county['geo_id'], $selectedCounties, true);
+                                            $isHome = $county['geo_id'] === $activeLoc->home_county_geoid;
+                                            $countyLabel = ($checked ? '✓ ' : '').$county['name'].($isHome ? ' (home)' : '');
+                                        @endphp
+                                        <button type="button" wire:click="toggleCounty('{{ $activeLoc->id }}', '{{ $county['geo_id'] }}')" class="lp-chip {{ $checked ? 'on' : '' }}">{{ $countyLabel }}</button>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+
+                    {{-- locstat + minibar --}}
+                    @if ($activePanel && $activePanel['town_count'] > 0)
+                        @php $pt = $activePanel['tiers']; @endphp
+                        <div class="lp-locstat lp-rule">
+                            <span class="n">{{ $activePanel['town_count'] }} towns</span>
+                            <span class="lp-pill">{{ $activePanel['selected_count'] }} selected</span>
+                            <div class="lp-mini">
+                                @foreach ($tierMeta as $key => $meta)
+                                    @php $n = $pt[$key] ?? 0; $pct = $activePanel['town_count'] > 0 ? ($n / $activePanel['town_count']) * 100 : 0; @endphp
+                                    @if ($n > 0)
+                                        <span style="width: {{ $pct }}%; background: {{ $meta['color'] }}"></span>
+                                    @endif
+                                @endforeach
+                            </div>
+                        </div>
+
+                        {{-- Town groups by tier --}}
+                        <div style="display:flex; flex-direction:column; gap:9px">
                             @foreach ($tierMeta as $key => $meta)
-                                @php $n = $pt[$key] ?? 0; $pct = $activePanel['town_count'] > 0 ? ($n / $activePanel['town_count']) * 100 : 0; @endphp
-                                @if ($n > 0)
-                                    <div style="width: {{ $pct }}%; background: {{ $meta['color'] }}"></div>
+                                @php $towns = $activePanel['groups'][$key] ?? []; @endphp
+                                @if (count($towns) > 0)
+                                    @php $selInTier = collect($towns)->where('page_selected', true)->count(); @endphp
+                                    <div x-data="{ open: true }" class="lp-tgroup">
+                                        <div class="lp-tgroup-head">
+                                            <button type="button" x-on:click="open = ! open" class="lp-tgroup-title">
+                                                <span class="lp-sw" style="background: {{ $meta['color'] }}"></span>
+                                                {{ $meta['label'] }}
+                                                <span class="lp-tgroup-frac">{{ $selInTier }} / {{ count($towns) }}</span>
+                                            </button>
+                                            <div class="lp-tgroup-actions">
+                                                <button type="button" wire:click="selectTier('{{ $activeLoc->id }}', '{{ $key }}', true)" class="lp-link">Select all</button>
+                                                <button type="button" wire:click="selectTier('{{ $activeLoc->id }}', '{{ $key }}', false)" class="lp-link dim">Clear</button>
+                                            </div>
+                                        </div>
+                                        <div class="lp-towns" x-show="open">
+                                            @foreach ($towns as $town)
+                                                @php $pop = $town['population'] !== null ? number_format($town['population']) : '—'; @endphp
+                                                <button type="button" wire:click="togglePageSelection('{{ $town['geo_id'] }}')" class="lp-town {{ $town['page_selected'] ? 'on' : '' }}">
+                                                    {{ $town['page_selected'] ? '✓' : '+' }} {{ $town['name'] }}@if ($town['manual']) 🚩 @endif
+                                                    <span class="lp-town-pop">{{ $pop }}</span>
+                                                </button>
+                                            @endforeach
+                                        </div>
+                                    </div>
                                 @endif
                             @endforeach
                         </div>
-                    </div>
+                    @elseif ($located)
+                        <div class="lp-rule lp-muted">Tick a county above to enumerate its towns.</div>
+                    @endif
 
-                    {{-- Town groups by tier --}}
-                    <div class="flex flex-col gap-2">
-                        @foreach ($tierMeta as $key => $meta)
-                            @php $towns = $activePanel['groups'][$key] ?? []; @endphp
-                            @if (count($towns) > 0)
-                                @php $selInTier = collect($towns)->where('page_selected', true)->count(); @endphp
-                                <div x-data="{ open: true }" class="rounded-lg ring-1 ring-gray-950/5 dark:ring-white/10">
-                                    <div class="flex items-center justify-between gap-2 px-3 py-2">
-                                        <button type="button" x-on:click="open = ! open" class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                                            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: {{ $meta['color'] }}"></span>
-                                            {{ $meta['label'] }}
-                                            <span class="text-xs text-gray-400">{{ $selInTier }} / {{ count($towns) }}</span>
-                                        </button>
-                                        <div class="flex gap-1 text-xs">
-                                            <button type="button" wire:click="selectTier('{{ $activeLoc->id }}', '{{ $key }}', true)" class="rounded px-2 py-0.5 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10">Select all</button>
-                                            <button type="button" wire:click="selectTier('{{ $activeLoc->id }}', '{{ $key }}', false)" class="rounded px-2 py-0.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5">Clear</button>
-                                        </div>
-                                    </div>
-                                    <div x-show="open" class="flex flex-wrap gap-1.5 border-t border-gray-100 p-3 dark:border-white/10">
-                                        @foreach ($towns as $town)
-                                            @php $pop = $town['population'] !== null ? number_format($town['population']) : '—'; @endphp
-                                            <button type="button" wire:click="togglePageSelection('{{ $town['geo_id'] }}')"
-                                                @class([
-                                                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 transition',
-                                                    'bg-primary-600 text-white ring-primary-600' => $town['page_selected'],
-                                                    'bg-white text-gray-600 ring-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:ring-white/10' => ! $town['page_selected'],
-                                                ])>
-                                                {{ $town['page_selected'] ? '✓' : '+' }} {{ $town['name'] }}
-                                                @if ($town['manual'])<span class="opacity-70">🚩</span>@endif
-                                                <span class="opacity-60">{{ $pop }}</span>
-                                            </button>
-                                        @endforeach
-                                    </div>
-                                </div>
-                            @endif
-                        @endforeach
-                    </div>
-                @elseif ($located)
-                    <div class="border-t border-gray-100 pt-3 text-sm text-gray-400 dark:border-white/10">Tick a county above to enumerate its towns.</div>
-                @endif
-
-                {{-- Add a town beyond the served counties --}}
-                @if ($located)
-                    <div class="flex flex-col gap-2 border-t border-gray-100 pt-3 dark:border-white/10">
-                        <div class="text-xs font-medium text-gray-500 dark:text-gray-400">Add a town (beyond the served counties)</div>
-                        <div class="flex gap-2">
-                            <input type="text" wire:model="townQuery.{{ $activeLoc->id }}" wire:keydown.enter="searchTowns('{{ $activeLoc->id }}')" placeholder="town name" class="{{ $inputClass }}" />
-                            <x-filament::button wire:click="searchTowns('{{ $activeLoc->id }}')" size="sm" color="gray">Search</x-filament::button>
+                    {{-- Add a town beyond the served counties --}}
+                    @if ($located)
+                        <div class="lp-rule">
+                            <div class="lp-seclbl">Add a town (beyond the served counties)</div>
+                            <div class="lp-row">
+                                <input type="text" wire:model="townQuery.{{ $activeLoc->id }}" wire:keydown.enter="searchTowns('{{ $activeLoc->id }}')" placeholder="town name" class="lp-input" style="max-width:260px" />
+                                <button type="button" wire:click="searchTowns('{{ $activeLoc->id }}')" class="lp-btn ghost">Search</button>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px">
+                                @foreach ($townResults[$activeLoc->id] ?? [] as $res)
+                                    <button type="button" wire:click="addTown('{{ $activeLoc->id }}', '{{ $res['geo_id'] }}')" class="lp-result">+ {{ $res['name'] }}@if ($res['state']) , {{ $res['state'] }}@endif</button>
+                                @endforeach
+                            </div>
                         </div>
-                        @foreach ($townResults[$activeLoc->id] ?? [] as $res)
-                            <button type="button" wire:click="addTown('{{ $activeLoc->id }}', '{{ $res['geo_id'] }}')"
-                                class="rounded-lg bg-gray-50 px-3 py-1.5 text-left text-xs ring-1 ring-gray-950/5 hover:bg-gray-100 dark:bg-white/5 dark:ring-white/10">
-                                + {{ $res['name'] }}@if ($res['state']) , {{ $res['state'] }}@endif
-                            </button>
-                        @endforeach
-                    </div>
-                @endif
+                    @endif
 
-                {{-- Failed-geocode fallback --}}
-                @if ($activeLoc->geocode_failed)
-                    <div class="flex flex-col gap-2 border-t border-gray-100 pt-3 dark:border-white/10">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs text-gray-500 dark:text-gray-400">Couldn’t locate this address automatically.</span>
-                            <x-filament::button wire:click="retryGeocode('{{ $activeLoc->id }}')" size="xs" color="gray" icon="heroicon-m-arrow-path">Retry locating</x-filament::button>
+                    {{-- Failed-geocode fallback --}}
+                    @if ($activeLoc->geocode_failed)
+                        <div class="lp-rule">
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px">
+                                <span class="lp-muted">Couldn’t locate this address automatically.</span>
+                                <button type="button" wire:click="retryGeocode('{{ $activeLoc->id }}')" class="lp-btn ghost">↻ Retry locating</button>
+                            </div>
+                            <div class="lp-row" style="margin-top:8px">
+                                <label><span class="lp-seclbl">Latitude</span><input type="text" wire:model="manualLat.{{ $activeLoc->id }}" class="lp-input" style="max-width:130px" /></label>
+                                <label><span class="lp-seclbl">Longitude</span><input type="text" wire:model="manualLng.{{ $activeLoc->id }}" class="lp-input" style="max-width:130px" /></label>
+                                <button type="button" wire:click="saveManualPoint('{{ $activeLoc->id }}')" class="lp-btn ghost">Set the spot</button>
+                            </div>
                         </div>
-                        <div class="flex flex-wrap items-end gap-2">
-                            <label>
-                                <span class="mb-1 block text-xs text-gray-500 dark:text-gray-400">Latitude</span>
-                                <input type="text" wire:model="manualLat.{{ $activeLoc->id }}" class="{{ $inputClass }} w-28" />
-                            </label>
-                            <label>
-                                <span class="mb-1 block text-xs text-gray-500 dark:text-gray-400">Longitude</span>
-                                <input type="text" wire:model="manualLng.{{ $activeLoc->id }}" class="{{ $inputClass }} w-28" />
-                            </label>
-                            <x-filament::button wire:click="saveManualPoint('{{ $activeLoc->id }}')" size="sm" color="gray">Set the spot</x-filament::button>
-                        </div>
-                    </div>
-                @endif
-            </div>
-        @elseif ($locations->isEmpty())
-            <p class="rounded-xl bg-white p-6 text-center text-sm text-gray-400 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">No locations yet — add the first one.</p>
-        @endif
-
-        {{-- Shared coverage map (pins per base + flagged directed towns) --}}
-        @if (! $locations->isEmpty())
-            <div class="rounded-xl bg-white p-2 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-                <div wire:ignore
-                    x-data="coverageMap(@js($this->mapData), @js($this->manualMarkers), @js($this->countyPolygons))"
-                    x-init="init()"
-                    x-on:locations-updated.window="render($event.detail.data ?? [], $event.detail.manual ?? [], $event.detail.polygons ?? [])">
-                    <div x-ref="map" class="h-[380px] w-full rounded-lg" style="background:#e5e7eb"></div>
+                    @endif
                 </div>
-            </div>
+            @elseif ($locations->isEmpty())
+                <div class="lp-card lp-empty">No locations yet — add the first one.</div>
+            @endif
 
-            {{-- Bottom bar: live selected · covered (from the persisted rows — counts agree with the hero) --}}
-            <div class="sticky bottom-2 flex items-center justify-between rounded-xl bg-gray-900 px-4 py-3 text-sm text-white shadow-lg dark:bg-gray-800">
-                <span><span class="font-bold">{{ $totals['selected'] }}</span> selected · <span class="font-bold">{{ $totals['covered'] }}</span> covered</span>
-                <x-filament::button wire:click="compute" icon="heroicon-m-map" size="sm">Update service area</x-filament::button>
-            </div>
+            {{-- Shared coverage map (pins per base + flagged directed towns) --}}
+            @if (! $locations->isEmpty())
+                <div class="lp-card" style="padding:8px">
+                    <div wire:ignore
+                        x-data="coverageMap(@js($this->mapData), @js($this->manualMarkers), @js($this->countyPolygons))"
+                        x-init="init()"
+                        x-on:locations-updated.window="render($event.detail.data ?? [], $event.detail.manual ?? [], $event.detail.polygons ?? [])">
+                        <div x-ref="map" class="lp-map"></div>
+                    </div>
+                </div>
+
+                {{-- Bottom bar: live selected · covered (persisted rows — counts agree with the hero) --}}
+                <div class="lp-bottom">
+                    <span><b>{{ $totals['selected'] }}</b> selected · <b>{{ $totals['covered'] }}</b> covered</span>
+                    <button type="button" wire:click="compute" class="lp-btn ghost" style="background:rgba(255,255,255,.16); color:#fff; border:0">Update service area</button>
+                </div>
+            @endif
         @endif
-    @endif
+    </div>
 
     {{-- Leaflet (OSM/CARTO tiles, no API key) --}}
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -368,7 +440,6 @@
                     if (this.group) this.map.removeLayer(this.group);
                     this.group = L.layerGroup().addTo(this.map);
                     const pts = [];
-                    // Served counties: outline each county's boundary (no radius circles).
                     (polygons || []).forEach((c) => {
                         (c.rings || []).forEach((ring) => {
                             if (!ring || !ring.length) return;
@@ -378,14 +449,12 @@
                             latlngs.forEach((ll) => pts.push(ll));
                         });
                     });
-                    // Base locations: a colored pin.
                     (data || []).forEach((d) => {
                         if (d.lat == null || d.lng == null) return;
                         L.circleMarker([d.lat, d.lng], { radius: 6, color: d.color, fillColor: d.color, fillOpacity: 1 })
                             .bindTooltip(d.name, { permanent: false }).addTo(this.group);
                         pts.push([d.lat, d.lng]);
                     });
-                    // Manually-added towns: a distinct flag marker.
                     (manual || []).forEach((d) => {
                         if (d.lat == null || d.lng == null) return;
                         L.marker([d.lat, d.lng], {
