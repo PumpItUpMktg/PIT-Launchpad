@@ -9,8 +9,10 @@ use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Places\PlacesProvider;
 use App\Jobs\GeocodeLocation;
 use App\Locations\CountyCoverage;
+use App\Locations\CoveragePanels;
 use App\Locations\CoverageWriter;
 use App\Locations\ManualCoverage;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -18,6 +20,7 @@ use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\Url;
 
 /**
  * Locations (operator admin) — the ONE locations surface per site. A list of base
@@ -43,6 +46,7 @@ use Illuminate\Support\Collection;
  * @property-read list<array{name: string, lat: float, lng: float, color: string}> $mapData
  * @property-read list<array{name: string, lat: float, lng: float}> $manualMarkers
  * @property-read list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}> $countyPolygons
+ * @property-read array{totals: array{covered: int, selected: int, overlap: int, tiers: array<string, int>}, panels: array<string, array<string, mixed>>} $panels
  */
 class LocationsSetup extends Page
 {
@@ -58,6 +62,10 @@ class LocationsSetup extends Page
     protected string $view = 'filament.pages.locations-setup';
 
     public ?string $siteId = null;
+
+    /** Active location tab (persisted in the query string). */
+    #[Url(as: 'loc')]
+    public ?string $activeTab = null;
 
     /** @var array<string, string> locationId => manual lat override (failure only) */
     public array $manualLat = [];
@@ -79,9 +87,6 @@ class LocationsSetup extends Page
     /** @var list<array{place_id: string, name: string, address: string}> */
     public array $placeResults = [];
 
-    /** @var array<string, mixed> the computed coverage (CoverageResult::toArray) */
-    public array $coverage = [];
-
     public bool $computed = false;
 
     // "Add a town" (directed coverage) — per location card.
@@ -96,9 +101,10 @@ class LocationsSetup extends Page
 
     public function updatedSiteId(): void
     {
-        $this->reset(['manualLat', 'manualLng', 'coverage', 'computed', 'adding', 'addName', 'addAddress', 'addQuery', 'placeResults']);
+        $this->reset(['manualLat', 'manualLng', 'computed', 'adding', 'addName', 'addAddress', 'addQuery', 'placeResults', 'activeTab']);
         $this->autoGeocodePending();
         $this->buildCoverage(notify: false); // show the map + reach immediately for located bases
+        $this->activeTab ??= $this->locations->first()?->id; // default to the first location tab
     }
 
     public function startAdd(): void
@@ -343,6 +349,68 @@ class LocationsSetup extends Page
         $this->buildCoverage(notify: false);
     }
 
+    /** Toggle a single town into / out of the location-page drip pool (persisted immediately). */
+    public function togglePageSelection(string $geoId): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+
+        $area = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('geo_id', $geoId)
+            ->first();
+
+        if ($area !== null) {
+            $area->forceFill(['page_selected' => ! $area->page_selected])->save();
+        }
+    }
+
+    /**
+     * Select / deselect every town in one tier for one location (the per-tier "select all").
+     * `$tier` is a SizeTier value or 'ungrouped' (size_tier null). Pool-only — no ordering.
+     */
+    public function selectTier(string $locationId, string $tier, bool $selected): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+
+        // Filter in PHP (not whereJsonContains) so it works identically on SQLite + Postgres.
+        $areas = CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
+        foreach ($areas as $area) {
+            $ids = is_array($area->source_location_ids) ? $area->source_location_ids : [];
+            if (! in_array($locationId, $ids, true)) {
+                continue;
+            }
+            if (($area->size_tier ?? 'ungrouped') !== $tier) {
+                continue;
+            }
+            if ((bool) $area->page_selected !== $selected) {
+                $area->forceFill(['page_selected' => $selected])->save();
+            }
+        }
+    }
+
+    /**
+     * The tabbed page-selection view-model from the PERSISTED coverage rows (totals + per-location
+     * panels grouped by tier). Hero, tab badges, and the bottom bar all read this, so the counts
+     * agree.
+     *
+     * @return array{totals: array{covered: int, selected: int, overlap: int, tiers: array<string, int>}, panels: array<string, array<string, mixed>>}
+     */
+    public function getPanelsProperty(): array
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return ['totals' => ['covered' => 0, 'selected' => 0, 'overlap' => 0, 'tiers' => []], 'panels' => []];
+        }
+
+        return app(CoveragePanels::class)->build($site, $this->locations);
+    }
+
     private function buildCoverage(bool $notify): void
     {
         $site = $this->site();
@@ -354,7 +422,6 @@ class LocationsSetup extends Page
         $this->dispatch('locations-updated', data: $this->mapData, manual: $this->manualMarkers, polygons: $this->countyPolygons);
 
         if ($result->perBase === []) {
-            $this->coverage = [];
             $this->computed = false;
             if ($notify) {
                 Notification::make()->title('Nothing to map yet')->body('Add a location and tick the counties it serves.')->warning()->send();
@@ -364,7 +431,6 @@ class LocationsSetup extends Page
         }
 
         $count = app(CoverageWriter::class)->write($site, $result);
-        $this->coverage = $result->toArray();
         $this->computed = true;
 
         if ($notify) {

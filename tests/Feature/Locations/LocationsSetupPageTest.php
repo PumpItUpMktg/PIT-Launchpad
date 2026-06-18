@@ -256,6 +256,63 @@ it('draws no county polygons when no base has a selected county', function () {
     expect($page->countyPolygons)->toBe([]);
 });
 
+it('toggles a town into / out of the page-selection pool (persisted immediately)', function () {
+    $site = Site::factory()->create();
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => 40.80, 'lng' => -74.20, 'home_county_geoid' => '34013', 'county_geoids' => ['34013']]);
+
+    $page = Livewire::test(LocationsSetup::class)->set('siteId', $site->id); // writes the 3 Essex towns
+
+    $selected = fn () => CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('geo_id', '3401305580')->value('page_selected');
+
+    $page->call('togglePageSelection', '3401305580');
+    expect($selected())->toBe(true);
+    $page->call('togglePageSelection', '3401305580');
+    expect($selected())->toBe(false);
+});
+
+it('per-tier select-all / clear sets every town in that tier for the location', function () {
+    $site = Site::factory()->create();
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => 40.80, 'lng' => -74.20, 'home_county_geoid' => '34013', 'county_geoids' => ['34013']]);
+
+    $page = Livewire::test(LocationsSetup::class)->set('siteId', $site->id);
+    $poolCount = fn () => CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('page_selected', true)->count();
+
+    // no census key in tests → all 3 towns are ungrouped
+    $page->call('selectTier', $loc->id, 'ungrouped', true);
+    expect($poolCount())->toBe(3);
+
+    $page->call('selectTier', $loc->id, 'ungrouped', false);
+    expect($poolCount())->toBe(0);
+});
+
+it('hero / tab-badge / bottom-bar counts all read the persisted rows (counts agree)', function () {
+    $site = Site::factory()->create();
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => 40.80, 'lng' => -74.20, 'home_county_geoid' => '34013', 'county_geoids' => ['34013']]);
+
+    $page = Livewire::test(LocationsSetup::class)->set('siteId', $site->id);
+    $page->call('togglePageSelection', '3401305580');
+    $page->call('togglePageSelection', '3401351210');
+
+    $vm = $page->instance()->panels;
+    expect($vm['totals']['covered'])->toBe(3)
+        ->and($vm['totals']['selected'])->toBe(2)                       // matches the persisted rows exactly
+        ->and($vm['panels'][$loc->id]['town_count'])->toBe(3)
+        ->and($vm['panels'][$loc->id]['selected_count'])->toBe(2);      // tab badge == bottom bar
+});
+
+it('a manually added town defaults into the page-selection pool (priority page)', function () {
+    $site = Site::factory()->create();
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => CoverageFixture::A_LAT, 'lng' => CoverageFixture::A_LNG]);
+
+    Livewire::test(LocationsSetup::class)
+        ->set('siteId', $site->id)
+        ->set("townQuery.{$loc->id}", 'maplewood')
+        ->call('searchTowns', $loc->id)
+        ->call('addTown', $loc->id, '3445000');
+
+    expect(CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('geo_id', '3445000')->value('page_selected'))->toBe(true);
+});
+
 it('summary reflects overlap once coverage is computed', function () {
     $site = Site::factory()->create();
     // two located bases that both serve Essex County → they share every subdivision
