@@ -13,6 +13,7 @@ use App\Enums\DataForSeoMode;
 use App\Enums\EmbeddingsProvider as EmbeddingsProviderType;
 use App\Enums\NewsProvider as NewsProviderType;
 use App\Integrations\Census\CensusGeocoder;
+use App\Integrations\Census\CensusPopulation;
 use App\Integrations\Census\CensusProvider;
 use App\Integrations\Census\Geocoder;
 use App\Integrations\Census\GoogleGeocoder;
@@ -99,6 +100,15 @@ class AppServiceProvider extends ServiceProvider
             (int) config('services.census.tigerweb_places_layer'),
             (int) config('services.census.tigerweb_cousub_layer'),
             (int) config('services.census.tigerweb_timeout', 30),
+            (int) config('services.census.tigerweb_counties_layer', 82),
+        ));
+        // ACS population for the county-coverage town grouping (keyed + cached; degrades
+        // to ungrouped without CENSUS_API_KEY). Tests Http::fake the ACS array.
+        $this->app->bind(CensusPopulation::class, fn () => new CensusPopulation(
+            $this->app->make(Http::class),
+            $this->app->make(CacheRepository::class),
+            (string) config('services.census.key', ''),
+            (string) config('services.census.acs_year', '2022'),
         ));
         // Locations base geocoding: Google Geocoding API (resolves unincorporated /
         // edge addresses Census misses) with the keyless Census geocoder as a no-key

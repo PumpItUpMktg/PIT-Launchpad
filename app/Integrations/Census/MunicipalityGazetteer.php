@@ -3,11 +3,9 @@
 namespace App\Integrations\Census;
 
 /**
- * Capability role: enumerate the municipalities near a geocoded point — BOTH
- * incorporated places AND county subdivisions (MCDs), so NJ/PA townships/boroughs are
- * never missed. The radius is NOT pre-filtered to a single state; the buffer crosses
- * state lines. Returns candidate records near the point; the coverage engine applies
- * the exact Haversine distance filter + the multi-base union.
+ * Capability role: Census geography lookups for the Locations layer. Coverage is
+ * county-based: resolve a point's home county, list a state's counties, and enumerate a
+ * county's subdivisions (MCDs). `byName` backs the owner's directed "add a town".
  */
 interface MunicipalityGazetteer
 {
@@ -15,6 +13,23 @@ interface MunicipalityGazetteer
      * @return list<Municipality>
      */
     public function near(float $lat, float $lng, float $radiusMiles): array;
+
+    /** The county a point falls in (TIGERweb layer 82 point query), or null. */
+    public function countyAt(float $lat, float $lng): ?County;
+
+    /**
+     * Every county in a state (for the per-location county multi-select).
+     *
+     * @return list<County>
+     */
+    public function countiesInState(string $stateFips): array;
+
+    /**
+     * Every county subdivision (municipality) in a county — the coverage unit.
+     *
+     * @return list<Municipality>
+     */
+    public function subdivisionsInCounty(string $stateFips, string $countyFips): array;
 
     /**
      * Look up municipalities by name (places + MCDs) — for the owner's directed coverage

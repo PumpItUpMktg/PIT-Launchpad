@@ -153,6 +153,10 @@ return [
         'tigerweb_url' => env('CENSUS_TIGERWEB_URL', 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Current/MapServer'),
         'tigerweb_places_layer' => (int) env('CENSUS_TIGERWEB_PLACES_LAYER', 28),
         'tigerweb_cousub_layer' => (int) env('CENSUS_TIGERWEB_COUSUB_LAYER', 22),
+        'tigerweb_counties_layer' => (int) env('CENSUS_TIGERWEB_COUNTIES_LAYER', 82),
+        // ACS5 population (county-subdivision grouping). REQUIRES a key — keyless requests
+        // redirect to a "Missing Key" page; without it, towns come back ungrouped.
+        'acs_year' => env('CENSUS_ACS_YEAR', '2022'),
         'tigerweb_timeout' => (int) env('CENSUS_TIGERWEB_TIMEOUT', 30),
         // Census Geocoder (keyless, US-only) — address → point for the Locations base.
         'geocoder_url' => env('CENSUS_GEOCODER_URL', 'https://geocoding.geo.census.gov/geocoder'),

@@ -171,4 +171,22 @@ return [
         'fold_threshold' => (int) env('LAUNCHPAD_SILO_VOLUME_FOLD_THRESHOLD', 50),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Locations — county-based coverage
+    |--------------------------------------------------------------------------
+    |
+    | Covered towns are grouped by ACS population into Large / Medium / Small for
+    | the operator's at-a-glance read. Thresholds are inclusive at the Medium floor:
+    | Large > large, Medium >= medium, Small below.
+    |
+    */
+
+    'locations' => [
+        'population_buckets' => [
+            'large' => (int) env('LAUNCHPAD_POP_LARGE', 25000),
+            'medium' => (int) env('LAUNCHPAD_POP_MEDIUM', 15000),
+        ],
+    ],
+
 ];

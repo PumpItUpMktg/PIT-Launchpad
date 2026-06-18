@@ -15,8 +15,14 @@ class MockMunicipalityGazetteer implements MunicipalityGazetteer
 
     /**
      * @param  list<Municipality>  $municipalities
+     * @param  list<County>  $counties  returned by countiesInState/countyAt
+     * @param  array<string, list<Municipality>>  $subdivisions  "stateFips:countyFips" => municipalities
      */
-    public function __construct(private readonly array $municipalities = []) {}
+    public function __construct(
+        private readonly array $municipalities = [],
+        private readonly array $counties = [],
+        private readonly array $subdivisions = [],
+    ) {}
 
     /**
      * @return list<Municipality>
@@ -26,6 +32,27 @@ class MockMunicipalityGazetteer implements MunicipalityGazetteer
         $this->queries[] = ['lat' => $lat, 'lng' => $lng, 'radius' => $radiusMiles];
 
         return $this->municipalities;
+    }
+
+    public function countyAt(float $lat, float $lng): ?County
+    {
+        return $this->counties[0] ?? null;
+    }
+
+    /**
+     * @return list<County>
+     */
+    public function countiesInState(string $stateFips): array
+    {
+        return array_values(array_filter($this->counties, fn (County $c) => $c->stateFips === $stateFips));
+    }
+
+    /**
+     * @return list<Municipality>
+     */
+    public function subdivisionsInCounty(string $stateFips, string $countyFips): array
+    {
+        return $this->subdivisions["{$stateFips}:{$countyFips}"] ?? [];
     }
 
     /**
