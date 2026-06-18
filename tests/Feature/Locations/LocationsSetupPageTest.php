@@ -215,6 +215,24 @@ it('feeds the shared map with color-matched, located bases only (pins, no radius
         ->and($colors)->toHaveCount(3);
 });
 
+it('self-heals a located base with no home county and lists its state counties (FIPS, not abbreviation)', function () {
+    $site = Site::factory()->create();
+    // a base geocoded before home-county resolution existed: located, but no home county yet
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'lat' => 40.82, 'lng' => -74.21, 'home_county_geoid' => null, 'county_geoids' => null]);
+
+    $page = Livewire::test(LocationsSetup::class)->set('siteId', $site->id)->instance();
+    // the mock's countiesInState filters by FIPS '34' — a non-empty list proves the FIPS
+    // (not a 'NJ' abbreviation, which the live STATE filter matches to zero) reached the query
+    $options = $page->countyOptions($loc->refresh());
+
+    expect($options)->not->toBeEmpty()
+        ->and(collect($options)->pluck('geo_id'))->toContain('34013');
+
+    $loc->refresh();
+    expect($loc->home_county_geoid)->toBe('34013') // resolved from the point + persisted
+        ->and($loc->county_geoids)->toBe(['34013']); // home county default-ticked
+});
+
 it('outlines the served counties on the map (polygons, GEOID-deduped across bases)', function () {
     $site = Site::factory()->create();
     // two located bases both serving Essex County → the polygon is drawn once
