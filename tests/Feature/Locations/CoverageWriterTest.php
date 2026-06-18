@@ -47,3 +47,23 @@ test('re-running replaces the prior coverage set (no duplication)', function () 
 
     expect(areasFor($site)->count())->toBe(3); // not doubled
 });
+
+test('it replaces stale radius-era rows (same + dropped GEOIDs) without a unique-key 500, manual survives', function () {
+    $site = Site::factory()->create();
+    Location::factory()->create(['site_id' => $site->id, 'lat' => CoverageFixture::A_LAT, 'lng' => CoverageFixture::A_LNG, 'coverage_radius' => 25]);
+
+    // stale radius-era row sharing a GEOID the new county set will also produce (the collision)
+    CoverageArea::create(['site_id' => $site->id, 'geo_id' => '3441310', 'name' => 'Old Livingston', 'type' => MunicipalityType::CountySubdivision, 'state' => 'NJ', 'source' => 'radius']);
+    // a stale radius row NOT in the new set — must be dropped
+    CoverageArea::create(['site_id' => $site->id, 'geo_id' => '9999999', 'name' => 'Gone', 'type' => MunicipalityType::Place, 'state' => 'NJ', 'source' => 'radius']);
+    // an owner manual add — must survive the recompute
+    CoverageArea::create(['site_id' => $site->id, 'geo_id' => '4299999', 'name' => 'East Newark', 'type' => MunicipalityType::CountySubdivision, 'state' => 'NJ', 'source' => 'manual']);
+
+    $count = writeCoverage($site); // fixture union → Maplewood, Livingston (3441310), Clinton
+
+    expect($count)->toBe(3)
+        ->and(areasFor($site)->where('source', 'radius')->count())->toBe(0)        // stale radius rows gone
+        ->and(areasFor($site)->where('geo_id', '3441310')->count())->toBe(1)        // shared GEOID written once (no 500)
+        ->and(areasFor($site)->where('geo_id', '9999999')->exists())->toBeFalse()   // no-longer-covered row dropped
+        ->and(areasFor($site)->where('source', 'manual')->where('geo_id', '4299999')->count())->toBe(1); // manual survives
+});
