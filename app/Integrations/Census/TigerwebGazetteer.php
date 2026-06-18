@@ -86,6 +86,69 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
         ]), MunicipalityType::CountySubdivision);
     }
 
+    /**
+     * @param  list<string>  $geoIds
+     * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
+     */
+    public function countyPolygons(array $geoIds): array
+    {
+        $geoIds = array_values(array_filter(array_map(fn ($g) => trim((string) $g), $geoIds), fn ($g) => $g !== ''));
+        if ($geoIds === []) {
+            return [];
+        }
+
+        $in = implode(',', array_map(fn (string $g) => "'".$this->escape($g)."'", $geoIds));
+
+        return $this->mapPolygons($this->fetch($this->layers()['county'], [
+            'f' => 'json',
+            'where' => "GEOID IN ({$in})",
+            'outFields' => 'GEOID,NAME',
+            'returnGeometry' => 'true',
+            'outSR' => 4326, // return rings as lng/lat (layer data is Web Mercator)
+            'resultRecordCount' => 1000,
+        ]));
+    }
+
+    /**
+     * @param  mixed  $features
+     * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
+     */
+    private function mapPolygons($features): array
+    {
+        $features = is_array($features) ? $features : [];
+
+        $out = [];
+        foreach ($features as $feature) {
+            $a = is_array($feature['attributes'] ?? null) ? $feature['attributes'] : null;
+            $geometry = is_array($feature['geometry'] ?? null) ? $feature['geometry'] : null;
+            if ($a === null || $geometry === null || ($geoId = trim((string) ($a['GEOID'] ?? ''))) === '') {
+                continue;
+            }
+
+            $rings = [];
+            foreach (is_array($geometry['rings'] ?? null) ? $geometry['rings'] : [] as $ring) {
+                if (! is_array($ring)) {
+                    continue;
+                }
+                $points = [];
+                foreach ($ring as $pt) {
+                    if (is_array($pt) && isset($pt[0], $pt[1])) {
+                        $points[] = ['lat' => (float) $pt[1], 'lng' => (float) $pt[0]]; // esri [x=lng, y=lat]
+                    }
+                }
+                if ($points !== []) {
+                    $rings[] = $points;
+                }
+            }
+
+            if ($rings !== []) {
+                $out[] = ['geo_id' => $geoId, 'name' => trim((string) ($a['NAME'] ?? '')), 'rings' => $rings];
+            }
+        }
+
+        return $out;
+    }
+
     private function escape(string $value): string
     {
         return str_replace("'", "''", $value);

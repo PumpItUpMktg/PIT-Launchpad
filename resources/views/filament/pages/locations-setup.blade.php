@@ -228,9 +228,9 @@
         @if (! $locations->isEmpty())
             <div class="rounded-xl bg-white p-2 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                 <div wire:ignore
-                    x-data="coverageMap(@js($this->mapData), @js($this->manualMarkers))"
+                    x-data="coverageMap(@js($this->mapData), @js($this->manualMarkers), @js($this->countyPolygons))"
                     x-init="init()"
-                    x-on:locations-updated.window="render($event.detail.data ?? [], $event.detail.manual ?? [])">
+                    x-on:locations-updated.window="render($event.detail.data ?? [], $event.detail.manual ?? [], $event.detail.polygons ?? [])">
                     <div x-ref="map" class="h-[420px] w-full rounded-lg" style="background:#e5e7eb"></div>
                 </div>
             </div>
@@ -247,7 +247,7 @@
         // evaluate `coverageMap` before it exists — a "coverageMap is not defined" throw in
         // x-data would halt Alpine and, with it, ALL Livewire interactivity. Every Leaflet
         // touch is guarded so a failure degrades to "no map", never a thrown init.
-        window.coverageMap = (initial, initialManual) => ({
+        window.coverageMap = (initial, initialManual, initialPolygons) => ({
                 map: null,
                 group: null,
                 init() {
@@ -268,7 +268,7 @@
                                     }).addTo(this.map);
                                     el._lpMap = this.map;
                                 }
-                                this.render(initial, initialManual);
+                                this.render(initial, initialManual, initialPolygons);
                             } catch (e) { console.error('coverage map init', e); }
                         });
                     } catch (e) { console.error('coverage map', e); }
@@ -284,11 +284,21 @@
                     s.onerror = () => console.error('Leaflet failed to load');
                     document.head.appendChild(s);
                 },
-                render(data, manual) {
+                render(data, manual, polygons) {
                     if (!this.map || !window.L) return;
                     if (this.group) this.map.removeLayer(this.group);
                     this.group = L.layerGroup().addTo(this.map);
                     const pts = [];
+                    // Served counties: outline each county's boundary (replaces the old radius circles).
+                    (polygons || []).forEach((c) => {
+                        (c.rings || []).forEach((ring) => {
+                            if (!ring || !ring.length) return;
+                            const latlngs = ring.map((p) => [p.lat, p.lng]);
+                            L.polygon(latlngs, { color: '#2563eb', weight: 2, fillColor: '#2563eb', fillOpacity: 0.08 })
+                                .bindTooltip((c.name ? c.name + ' County' : 'County'), { permanent: false }).addTo(this.group);
+                            latlngs.forEach((ll) => pts.push(ll));
+                        });
+                    });
                     // Base locations: a colored pin (no circle — coverage is county-based).
                     (data || []).forEach((d) => {
                         if (d.lat == null || d.lng == null) return;

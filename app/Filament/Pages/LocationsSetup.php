@@ -42,6 +42,7 @@ use Illuminate\Support\Collection;
  * @property-read array<string, string> $colors
  * @property-read list<array{name: string, lat: float, lng: float, color: string}> $mapData
  * @property-read list<array{name: string, lat: float, lng: float}> $manualMarkers
+ * @property-read list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}> $countyPolygons
  */
 class LocationsSetup extends Page
 {
@@ -350,7 +351,7 @@ class LocationsSetup extends Page
         }
 
         $result = app(CountyCoverage::class)->coverage($site);
-        $this->dispatch('locations-updated', data: $this->mapData, manual: $this->manualMarkers);
+        $this->dispatch('locations-updated', data: $this->mapData, manual: $this->manualMarkers, polygons: $this->countyPolygons);
 
         if ($result->perBase === []) {
             $this->coverage = [];
@@ -493,6 +494,32 @@ class LocationsSetup extends Page
         }
 
         return $markers;
+    }
+
+    /**
+     * Boundary polygons for every county served across the located bases — the map outlines
+     * them (replacing the old radius circles). GEOID-deduped so a county served by two
+     * locations is drawn once.
+     *
+     * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
+     */
+    public function getCountyPolygonsProperty(): array
+    {
+        $geoIds = [];
+        foreach ($this->locations as $location) {
+            if ($location->lat === null || $location->lng === null) {
+                continue;
+            }
+            foreach (is_array($location->county_geoids) ? $location->county_geoids : [] as $g) {
+                $geoIds[(string) $g] = true;
+            }
+        }
+
+        if ($geoIds === []) {
+            return [];
+        }
+
+        return app(MunicipalityGazetteer::class)->countyPolygons(array_keys($geoIds));
     }
 
     private function finishAdd(string $message): void

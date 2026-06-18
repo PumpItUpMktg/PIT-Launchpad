@@ -32,6 +32,16 @@ interface MunicipalityGazetteer
     public function subdivisionsInCounty(string $stateFips, string $countyFips): array;
 
     /**
+     * Boundary polygons for the given county GEOIDs (layer 82, returnGeometry) — for
+     * outlining the served counties on the map. Each ring is a list of {lat, lng} vertices
+     * (the first ring is the outer boundary; any further rings are holes).
+     *
+     * @param  list<string>  $geoIds
+     * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
+     */
+    public function countyPolygons(array $geoIds): array;
+
+    /**
      * Look up municipalities by name (places + MCDs) — for the owner's directed coverage
      * additions ("add a town"). Returns candidates to resolve to a GEOID + point + county.
      *
