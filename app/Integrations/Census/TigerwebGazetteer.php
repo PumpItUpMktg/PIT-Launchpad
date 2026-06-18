@@ -219,15 +219,6 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
         $features = is_array($response->json('features')) ? $response->json('features') : [];
         $fullUrl = $url.'?'.http_build_query($params);
 
-        // TEMP: surface the raw request + outcome to the Locations page (diagnose coverage-0).
-        app(TigerwebDebug::class)->record([
-            'layer' => $layer,
-            'url' => $fullUrl,
-            'status' => $response->status(),
-            'count' => count($features),
-            'error' => $response->json('error'),
-        ]);
-
         if ($features === []) {
             Log::warning('TIGERweb returned 0 features', [
                 'url' => $fullUrl,

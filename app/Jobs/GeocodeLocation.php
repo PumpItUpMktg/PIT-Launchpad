@@ -31,26 +31,38 @@ class GeocodeLocation implements ShouldQueue
             return;
         }
 
-        $address = trim((string) $location->address);
-        $result = $address === '' ? null : $geocoder->geocode($address);
+        $lat = $location->lat === null ? null : (float) $location->lat;
+        $lng = $location->lng === null ? null : (float) $location->lng;
+        $fill = [];
 
-        if ($result === null) {
-            $location->forceFill(['geocode_failed' => true])->save();
+        // Geocode only when the point is missing — a listing-supplied point is kept as-is;
+        // we still resolve the home county for it below.
+        if ($lat === null || $lng === null) {
+            $address = trim((string) $location->address);
+            $result = $address === '' ? null : $geocoder->geocode($address);
 
-            return;
+            if ($result === null) {
+                $location->forceFill(['geocode_failed' => true])->save();
+
+                return;
+            }
+
+            $lat = $result->lat;
+            $lng = $result->lng;
+            $fill['address'] = $result->matchedAddress;
         }
 
         // Resolve the home county; default-select it if the owner hasn't chosen counties yet.
-        $county = $gazetteer->countyAt($result->lat, $result->lng);
+        $county = $gazetteer->countyAt($lat, $lng);
         $selected = is_array($location->county_geoids) ? $location->county_geoids : [];
         if ($county !== null && $selected === []) {
             $selected = [$county->geoId];
         }
 
         $location->forceFill([
-            'address' => $result->matchedAddress,
-            'lat' => $result->lat,
-            'lng' => $result->lng,
+            ...$fill,
+            'lat' => $lat,
+            'lng' => $lng,
             'geocode_failed' => false,
             'home_county_geoid' => $county?->geoId,
             'county_geoids' => $selected,
