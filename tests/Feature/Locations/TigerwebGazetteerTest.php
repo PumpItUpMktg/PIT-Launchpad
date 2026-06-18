@@ -45,6 +45,35 @@ test('it resolves layer ids by name then queries both layers and normalizes feat
         ->and($mcd->name)->toBe('Clinton'); // BASENAME preferred
 });
 
+test('countyPolygons queries layer 82 with returnGeometry and normalizes esri rings to lat/lng', function () {
+    HttpFacade::fake([
+        TIGERWEB.'?f=json' => layerDefs(28, 22), // no Counties entry → falls back to id 82
+        '*/82/query*' => HttpFacade::response(['features' => [
+            ['attributes' => ['GEOID' => '34013', 'NAME' => 'Essex'], 'geometry' => ['rings' => [
+                [[-74.30, 40.75], [-74.20, 40.85], [-74.10, 40.70], [-74.30, 40.75]],
+            ]]],
+            ['attributes' => ['GEOID' => '', 'NAME' => 'junk'], 'geometry' => ['rings' => [[[0, 0]]]]], // no GEOID → skipped
+            ['attributes' => ['GEOID' => '34027', 'NAME' => 'Morris']], // no geometry → skipped
+        ]]),
+    ]);
+
+    $polys = (new TigerwebGazetteer(app(Http::class), TIGERWEB, 28, 22, 30))->countyPolygons(['34013', '34027']);
+
+    HttpFacade::assertSent(fn ($r) => str_contains(urldecode($r->url()), 'GEOID IN (') && str_contains($r->url(), 'returnGeometry=true'));
+
+    expect($polys)->toHaveCount(1)
+        ->and($polys[0]['geo_id'])->toBe('34013')
+        ->and($polys[0]['name'])->toBe('Essex')
+        ->and($polys[0]['rings'][0][0])->toBe(['lat' => 40.75, 'lng' => -74.30]); // esri [x=lng, y=lat] → {lat, lng}
+});
+
+test('countyPolygons short-circuits (no query) for an empty geoid list', function () {
+    HttpFacade::fake(['*' => HttpFacade::response('should not be called', 500)]);
+
+    expect((new TigerwebGazetteer(app(Http::class), TIGERWEB, 28, 22, 30))->countyPolygons([]))->toBe([]);
+    HttpFacade::assertNothingSent();
+});
+
 test('name resolution beats the hardcoded fallback when a vintage moves the ids', function () {
     // The dedicated Places_CouSub service numbers Places = 4, County Subdivisions = 1.
     HttpFacade::fake([

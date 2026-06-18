@@ -17,11 +17,13 @@ class MockMunicipalityGazetteer implements MunicipalityGazetteer
      * @param  list<Municipality>  $municipalities
      * @param  list<County>  $counties  returned by countiesInState/countyAt
      * @param  array<string, list<Municipality>>  $subdivisions  "stateFips:countyFips" => municipalities
+     * @param  array<string, list<list<array{lat: float, lng: float}>>>  $polygons  geoId => rings
      */
     public function __construct(
         private readonly array $municipalities = [],
         private readonly array $counties = [],
         private readonly array $subdivisions = [],
+        private readonly array $polygons = [],
     ) {}
 
     /**
@@ -53,6 +55,30 @@ class MockMunicipalityGazetteer implements MunicipalityGazetteer
     public function subdivisionsInCounty(string $stateFips, string $countyFips): array
     {
         return $this->subdivisions["{$stateFips}:{$countyFips}"] ?? [];
+    }
+
+    /**
+     * @param  list<string>  $geoIds
+     * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
+     */
+    public function countyPolygons(array $geoIds): array
+    {
+        $out = [];
+        foreach ($geoIds as $geoId) {
+            $geoId = (string) $geoId;
+            if (isset($this->polygons[$geoId])) {
+                $name = '';
+                foreach ($this->counties as $c) {
+                    if ($c->geoId === $geoId) {
+                        $name = $c->name;
+                        break;
+                    }
+                }
+                $out[] = ['geo_id' => $geoId, 'name' => $name, 'rings' => $this->polygons[$geoId]];
+            }
+        }
+
+        return $out;
     }
 
     /**
