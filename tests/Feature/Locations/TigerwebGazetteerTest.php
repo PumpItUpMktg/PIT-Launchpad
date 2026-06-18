@@ -23,10 +23,10 @@ test('it resolves layer ids by name then queries both layers and normalizes feat
     HttpFacade::fake([
         TIGERWEB.'?f=json' => layerDefs(28, 22),
         '*/28/query*' => HttpFacade::response(['features' => [
-            ['attributes' => ['GEOID' => '3445000', 'NAME' => 'Maplewood', 'BASENAME' => 'Maplewood', 'STUSAB' => 'NJ', 'CENTLAT' => '40.7312', 'CENTLON' => '-74.4710']],
+            ['attributes' => ['GEOID' => '3445000', 'NAME' => 'Maplewood', 'BASENAME' => 'Maplewood', 'STATE' => '34', 'CENTLAT' => '40.7312', 'CENTLON' => '-74.4710']],
         ]]),
         '*/22/query*' => HttpFacade::response(['features' => [
-            ['attributes' => ['GEOID' => '3401990', 'NAME' => 'Clinton township', 'BASENAME' => 'Clinton', 'STUSAB' => 'NJ', 'CENTLAT' => '40.61', 'CENTLON' => '-74.90']],
+            ['attributes' => ['GEOID' => '3401990', 'NAME' => 'Clinton township', 'BASENAME' => 'Clinton', 'STATE' => '34', 'CENTLAT' => '40.61', 'CENTLON' => '-74.90']],
             ['attributes' => ['GEOID' => '', 'NAME' => 'junk']], // no GEOID → skipped
         ]]),
     ]);
@@ -92,8 +92,27 @@ test('it sends an ENVELOPE query in 4326 (TIGERweb has no distance-query support
             && ! isset($request['distance'])            // no distance/units/geodesic — TIGERweb 400s on those
             && ! isset($request['units'])
             && ! isset($request['geodesic'])
+            && ! str_contains((string) $request['outFields'], 'STUSAB') // layers 22/28 have no STUSAB → fails the whole query
+            && str_contains((string) $request['outFields'], 'STATE')
             && isset($geometry['xmin'], $geometry['ymin'], $geometry['xmax'], $geometry['ymax']);
     });
+});
+
+test('it maps STATE FIPS to a USPS abbreviation (no STUSAB field on these layers)', function () {
+    HttpFacade::fake([
+        TIGERWEB.'?f=json' => layerDefs(28, 22),
+        '*/28/query*' => HttpFacade::response(['features' => [
+            ['attributes' => ['GEOID' => '3445000', 'NAME' => 'Maplewood', 'BASENAME' => 'Maplewood', 'STATE' => '34', 'CENTLAT' => '40.73', 'CENTLON' => '-74.47']],
+        ]]),
+        '*/22/query*' => HttpFacade::response(['features' => [
+            ['attributes' => ['GEOID' => '4272345', 'NAME' => 'Norristown', 'BASENAME' => 'Norristown', 'STATE' => '42', 'CENTLAT' => '40.12', 'CENTLON' => '-75.34']],
+        ]]),
+    ]);
+
+    $found = collect((new TigerwebGazetteer(app(Http::class), TIGERWEB, 28, 22, 30))->near(40.5, -75.0, 25));
+
+    expect($found->firstWhere('name', 'Maplewood')->state)->toBe('NJ')   // FIPS 34 → NJ
+        ->and($found->firstWhere('name', 'Norristown')->state)->toBe('PA'); // FIPS 42 → PA
 });
 
 test('it records each query (URL + status + count) to TigerwebDebug for on-page surfacing', function () {
@@ -114,10 +133,10 @@ test('byName parses a trailing state, searches the bare name, and filters to tha
     HttpFacade::fake([
         TIGERWEB.'?f=json' => layerDefs(28, 22),
         '*/28/query*' => HttpFacade::response(['features' => [
-            ['attributes' => ['GEOID' => '3469510', 'NAME' => 'Sparta', 'BASENAME' => 'Sparta', 'STUSAB' => 'NJ', 'CENTLAT' => '41.03', 'CENTLON' => '-74.64']],
+            ['attributes' => ['GEOID' => '3469510', 'NAME' => 'Sparta', 'BASENAME' => 'Sparta', 'STATE' => '34', 'CENTLAT' => '41.03', 'CENTLON' => '-74.64']],
         ]]),
         '*/22/query*' => HttpFacade::response(['features' => [
-            ['attributes' => ['GEOID' => '4272345', 'NAME' => 'Sparta', 'BASENAME' => 'Sparta', 'STUSAB' => 'PA', 'CENTLAT' => '41.0', 'CENTLON' => '-79.0']],
+            ['attributes' => ['GEOID' => '4272345', 'NAME' => 'Sparta', 'BASENAME' => 'Sparta', 'STATE' => '42', 'CENTLAT' => '41.0', 'CENTLON' => '-79.0']],
         ]]),
     ]);
 
