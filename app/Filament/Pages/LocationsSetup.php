@@ -381,11 +381,27 @@ class LocationsSetup extends Page
     public function countyOptions(Location $location): array
     {
         $home = (string) $location->home_county_geoid;
+
+        // Self-heal: a base located before home-county resolution existed (or whose geocode
+        // predates it) has a point but no home county, so the list would be empty. Resolve
+        // it now from the point and default-tick it. The state filter is then ALWAYS the
+        // 2-digit FIPS (the GEOID prefix) — never the geocode's USPS abbreviation.
+        if ($home === '' && $location->lat !== null && $location->lng !== null) {
+            $county = app(MunicipalityGazetteer::class)->countyAt((float) $location->lat, (float) $location->lng);
+            if ($county !== null) {
+                $selected = is_array($location->county_geoids) && $location->county_geoids !== []
+                    ? $location->county_geoids
+                    : [$county->geoId];
+                $location->forceFill(['home_county_geoid' => $county->geoId, 'county_geoids' => $selected])->save();
+                $home = $county->geoId;
+            }
+        }
+
         if (strlen($home) < 2) {
             return [];
         }
 
-        $stateFips = substr($home, 0, 2);
+        $stateFips = substr($home, 0, 2); // 2-digit FIPS from the point query's GEOID, e.g. '34'
         if (! isset($this->countyOptionsCache[$stateFips])) {
             $this->countyOptionsCache[$stateFips] = array_map(
                 fn (County $c) => ['geo_id' => $c->geoId, 'name' => $c->name],
