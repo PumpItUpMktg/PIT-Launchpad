@@ -42,10 +42,13 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
     /** The county a point falls in (layer 82 point query). */
     public function countyAt(float $lat, float $lng): ?County
     {
+        // Match the proven-live URL exactly: a plain `{lon,lat}` coordinate pair (NOT a JSON
+        // geometry object) with inSR=4326. The JSON-object form silently returned nothing
+        // in-app even though the same point resolves via the plain pair, leaving the home
+        // county (and the whole county multi-select keyed off its STATE FIPS) empty.
         $features = $this->fetch($this->layers()['county'], [
             'f' => 'json',
-            'where' => '1=1',
-            'geometry' => (string) json_encode(['x' => $lng, 'y' => $lat, 'spatialReference' => ['wkid' => 4326]]),
+            'geometry' => "{$lng},{$lat}",
             'geometryType' => 'esriGeometryPoint',
             'inSR' => 4326,
             'spatialRel' => 'esriSpatialRelIntersects',

@@ -36,7 +36,9 @@ test('countyAt resolves the home county from a point (layer 82, no STUSAB)', fun
         ->and($county->stateFips)->toBe('34')
         ->and($county->countyFips)->toBe('013');
 
+    // matches the proven-live URL: plain `{lon,lat}` pair, inSR=4326, no JSON geometry object
     HttpFacade::assertSent(fn ($r) => str_contains($r->url(), '/82/query')
+        && $r['geometry'] === '-74.22,40.814'
         && $r['geometryType'] === 'esriGeometryPoint'
         && (string) $r['inSR'] === '4326'
         && ! str_contains((string) $r['outFields'], 'STUSAB'));
