@@ -48,6 +48,7 @@ final class ManualCoverage
             'lat' => $municipality->lat,
             'lng' => $municipality->lng,
             'source_location_ids' => array_values(array_unique([...$ids, $location->id])),
+            'page_selected' => true, // a manual add is a priority page — selected by default
             'source' => 'manual',
         ];
 

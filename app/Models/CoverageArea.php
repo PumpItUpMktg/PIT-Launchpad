@@ -26,6 +26,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property float|null $distance_miles
  * @property list<string>|null $source_location_ids
  * @property int|null $population ACS5 total population (for Large/Medium/Small grouping)
+ * @property string|null $size_tier major|large|medium|small (derived from population; null = ungrouped)
+ * @property bool $page_selected in the location-page drip pool
  * @property string $source county (auto) | manual (owner-added, directed → priority page candidate)
  */
 class CoverageArea extends Model
@@ -44,6 +46,7 @@ class CoverageArea extends Model
             'lng' => 'decimal:7',
             'distance_miles' => 'decimal:2',
             'source_location_ids' => 'array',
+            'page_selected' => 'boolean',
         ];
     }
 }

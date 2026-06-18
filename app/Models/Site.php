@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 /**
  * @property SiteStatus $status
  * @property int|null $budget_ceiling
+ * @property array<string, int>|null $coverage_thresholds
  * @property string|null $domain_url
  * @property string $brand_name
  */
@@ -161,6 +162,25 @@ class Site extends Model
         return $this->status === SiteStatus::Live;
     }
 
+    /**
+     * The tenant's 4-tier coverage thresholds, merged over the platform defaults — drives
+     * the size_tier grouping of covered towns. Per-site overrides live in the
+     * `coverage_thresholds` JSON column; any missing key falls back to config.
+     *
+     * @return array{major: int, large: int, medium: int}
+     */
+    public function coverageThresholds(): array
+    {
+        $defaults = (array) config('launchpad.locations.size_tiers', []);
+        $override = is_array($this->coverage_thresholds) ? $this->coverage_thresholds : [];
+
+        return [
+            'major' => (int) ($override['major'] ?? $defaults['major'] ?? 50000),
+            'large' => (int) ($override['large'] ?? $defaults['large'] ?? 30000),
+            'medium' => (int) ($override['medium'] ?? $defaults['medium'] ?? 15000),
+        ];
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -168,6 +188,7 @@ class Site extends Model
             'slug_conventions' => 'array',
             'status' => SiteStatus::class,
             'budget_ceiling' => 'integer',
+            'coverage_thresholds' => 'array',
         ];
     }
 }

@@ -187,6 +187,16 @@ return [
             'large' => (int) env('LAUNCHPAD_POP_LARGE', 25000),
             'medium' => (int) env('LAUNCHPAD_POP_MEDIUM', 15000),
         ],
+
+        // The 4-tier page-selection grouping (major/large/medium/small + ungrouped). Per-tenant
+        // overridable on the Site (coverage_thresholds JSON); these are the platform defaults.
+        // Inclusive floors: Major >= major, Large >= large, Medium >= medium, else Small;
+        // population null => ungrouped (no tier).
+        'size_tiers' => [
+            'major' => (int) env('LAUNCHPAD_TIER_MAJOR', 50000),
+            'large' => (int) env('LAUNCHPAD_TIER_LARGE', 30000),
+            'medium' => (int) env('LAUNCHPAD_TIER_MEDIUM', 15000),
+        ],
     ],
 
 ];
