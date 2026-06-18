@@ -42,6 +42,23 @@ final class CoverageResult
     }
 
     /**
+     * Union town counts grouped by population bucket (Large/Medium/Small/Unknown).
+     *
+     * @param  list<CoverageMunicipality>  $municipalities
+     * @return array{large: int, medium: int, small: int, unknown: int}
+     */
+    public static function bucketCounts(array $municipalities): array
+    {
+        $counts = ['large' => 0, 'medium' => 0, 'small' => 0, 'unknown' => 0];
+        $thresholds = (array) config('launchpad.locations.population_buckets', []);
+        foreach ($municipalities as $m) {
+            $counts[$m->bucket($thresholds)->value]++;
+        }
+
+        return $counts;
+    }
+
+    /**
      * Per-base net-new vs already-covered breakdown — overlap transparency. A municipality
      * this base reaches that ANOTHER base also reaches is "already covered" (counted once
      * in the union; never double-counted). Lets the operator see redundancy when adding a
@@ -91,6 +108,7 @@ final class CoverageResult
                 'shared_with' => array_values($sharedWith),
                 'counties' => count($counties),
                 'states' => array_keys($states),
+                'buckets' => self::bucketCounts($base->municipalities),
             ];
         }
 
@@ -105,6 +123,7 @@ final class CoverageResult
         return [
             'union' => array_map(fn (CoverageMunicipality $m) => $m->toArray(), $this->union),
             'overlap_count' => $this->overlapCount(),
+            'buckets' => self::bucketCounts($this->union),
             'overlap_by_base' => $this->overlapByBase(),
             'per_base' => array_map(fn (BaseCoverage $b) => [
                 'location_id' => $b->locationId,

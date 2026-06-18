@@ -55,7 +55,7 @@ test('a manual add is net-new in the union, flagged manual, and outside the radi
         ->and($faraway->manual)->toBeTrue();
 });
 
-test('manual coverage survives a radius recompute (CoverageWriter rebuilds only radius rows)', function () {
+test('manual coverage survives a coverage recompute (CoverageWriter rebuilds only county rows)', function () {
     $site = Site::factory()->create();
     $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => CoverageFixture::A_LAT, 'lng' => CoverageFixture::A_LNG, 'coverage_radius' => 25]);
     manualCoverage()->add($site, $loc, farawayTown());
@@ -66,5 +66,5 @@ test('manual coverage survives a radius recompute (CoverageWriter rebuilds only 
     $writer->write($site, $engine->coverage($site)); // recompute #2 — must not wipe the manual add
 
     expect(CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('source', 'manual')->where('geo_id', '4299999')->count())->toBe(1)
-        ->and(CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('source', 'radius')->count())->toBe(3);
+        ->and(CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('source', 'county')->count())->toBe(3);
 });

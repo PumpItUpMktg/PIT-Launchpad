@@ -6,8 +6,9 @@ use App\Enums\MunicipalityType;
 use App\Integrations\Census\Municipality;
 
 /**
- * A municipality in the coverage set with its distance to the nearest reaching base
- * location and the set of base locations that reach it (the union may merge several).
+ * A municipality in the coverage set: which base locations reach it (the union may merge
+ * several), whether it was an owner-directed manual add, and its ACS population (for the
+ * Large/Medium/Small grouping; null when unknown).
  */
 final class CoverageMunicipality
 {
@@ -24,7 +25,24 @@ final class CoverageMunicipality
         public readonly float $distanceMiles,
         public readonly array $sourceLocationIds,
         public readonly bool $manual = false,
+        public readonly ?int $population = null,
     ) {}
+
+    /**
+     * @param  array{large?: int, medium?: int}  $thresholds
+     */
+    public function bucket(array $thresholds = []): PopulationBucket
+    {
+        return PopulationBucket::for($this->population, $thresholds);
+    }
+
+    public function withPopulation(?int $population): self
+    {
+        return new self(
+            $this->geoId, $this->name, $this->type, $this->state, $this->lat, $this->lng,
+            $this->distanceMiles, $this->sourceLocationIds, $this->manual, $population,
+        );
+    }
 
     public static function fromMunicipality(Municipality $m, float $distanceMiles, string $sourceLocationId, bool $manual = false): self
     {
@@ -58,6 +76,7 @@ final class CoverageMunicipality
             distanceMiles: min($this->distanceMiles, round($distanceMiles, 2)),
             sourceLocationIds: array_values(array_unique([...$this->sourceLocationIds, $sourceLocationId])),
             manual: $this->manual || $manual,
+            population: $this->population,
         );
     }
 
@@ -76,6 +95,8 @@ final class CoverageMunicipality
             'distance_miles' => $this->distanceMiles,
             'source_location_ids' => $this->sourceLocationIds,
             'manual' => $this->manual,
+            'population' => $this->population,
+            'bucket' => $this->bucket()->value,
         ];
     }
 }

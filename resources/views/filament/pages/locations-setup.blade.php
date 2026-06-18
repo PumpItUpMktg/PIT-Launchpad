@@ -3,26 +3,9 @@
         $inputClass = 'fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5';
     @endphp
 
-    {{-- TEMPORARY client-JS diagnostics — verifying the Leaflet double-init fix; remove once confirmed.
-         Boot flag lives in the Alpine store (survives Livewire morphs) so it can't false-read NOT BOOTED. --}}
-    <div class="rounded-lg bg-yellow-100 p-3 font-mono text-xs text-yellow-900 ring-1 ring-yellow-600/30">
-        <div class="font-semibold">⚙ JS diagnostics (temporary)</div>
-        <div>Alpine: <span x-data x-init="$store.diag && ($store.diag.booted = true)" x-text="$store.diag?.booted ? 'BOOTED' : 'NOT BOOTED'">NOT BOOTED</span></div>
-        <div>map init error: <span x-data x-text="($store.diag?.mapError) || '(none)'">(pending)</span></div>
-        <div>last radius tap: <span x-data x-text="($store.diag?.lastTap) ?? 'none'">none</span>
-            · radius (alpine) = <span x-data x-text="($store.diag?.radius) ?? '—'">—</span></div>
-        <div>{{ $updateDiag !== '' ? $updateDiag : 'Update: (not run yet)' }}</div>
-        @if ($tigerwebDiag !== '')
-            <div>TIGERweb: {{ $tigerwebDiag }}</div>
-        @endif
-        @if ($tigerwebUrl !== '')
-            <div class="break-all">TIGERweb URL: <a href="{{ $tigerwebUrl }}" target="_blank" class="underline">{{ $tigerwebUrl }}</a></div>
-        @endif
-    </div>
-
     <div class="fi-section rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
         <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
-            Tell us where each location is and how far you serve from it — we work out the towns you cover.
+            Tell us where each location is and which counties you serve — we work out the towns you cover.
         </p>
         <label class="block max-w-sm">
             <span class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Site</span>
@@ -51,9 +34,15 @@
 
         {{-- Header summary --}}
         @if ($computed)
-            @php $union = $this->coverage['union'] ?? []; $overlap = $this->coverage['overlap_count'] ?? 0; @endphp
-            <div class="flex items-center justify-between rounded-xl bg-white p-4 text-sm shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
+            @php
+                $union = $this->coverage['union'] ?? [];
+                $overlap = $this->coverage['overlap_count'] ?? 0;
+                $buckets = $this->coverage['buckets'] ?? ['large' => 0, 'medium' => 0, 'small' => 0, 'unknown' => 0];
+                $bucketLine = $buckets['large'].' large · '.$buckets['medium'].' medium · '.$buckets['small'].' small'.($buckets['unknown'] > 0 ? ' · '.$buckets['unknown'].' ungrouped' : '');
+            @endphp
+            <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white p-4 text-sm shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                 <span class="font-semibold text-gray-800 dark:text-gray-100">{{ count($union) }} towns</span>
+                <span class="text-gray-500 dark:text-gray-400">{{ $bucketLine }}</span>
                 <span @class(['text-success-600 dark:text-success-400' => $overlap === 0, 'text-warning-600 dark:text-warning-400' => $overlap > 0])>
                     {{ $overlap === 0 ? 'no overlap' : $overlap.' overlapping' }}
                 </span>
@@ -67,6 +56,8 @@
                     $located = $location->lat !== null && $location->lng !== null;
                     $color = $colors[$location->id] ?? '#2563eb';
                     $reach = $overlapByBase->firstWhere('location_id', $location->id);
+                    $selectedCounties = is_array($location->county_geoids) ? $location->county_geoids : [];
+                    $countyOptions = $located ? $this->countyOptions($location) : [];
                 @endphp
                 <div class="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                     <div class="flex items-start justify-between gap-2">
@@ -90,51 +81,61 @@
                         @endif
                     </div>
 
-                    {{-- How far you serve — segmented control --}}
-                    <div>
-                        <div class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">How far you serve
-                            <span class="ml-1 font-mono text-yellow-700">· radius (server) = {{ $radii[$location->id] ?? '—' }}</span>
+                    {{-- Counties you serve — multi-select (home county pre-ticked) --}}
+                    @if ($located)
+                        <div>
+                            <div class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">Counties you serve</div>
+                            @if ($countyOptions === [])
+                                <div class="text-xs text-gray-400">No counties found for this state.</div>
+                            @else
+                                <div class="flex flex-wrap gap-1.5">
+                                    @foreach ($countyOptions as $county)
+                                        @php
+                                            $checked = in_array($county['geo_id'], $selectedCounties, true);
+                                            $isHome = $county['geo_id'] === $location->home_county_geoid;
+                                            $countyLabel = ($checked ? '✓ ' : '').$county['name'].($isHome ? ' (home)' : '');
+                                        @endphp
+                                        <button type="button" wire:click="toggleCounty('{{ $location->id }}', '{{ $county['geo_id'] }}')"
+                                            @class([
+                                                'rounded-full px-2.5 py-1 text-xs ring-1 transition',
+                                                'bg-primary-600 text-white ring-primary-600' => $checked,
+                                                'bg-white text-gray-600 ring-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:ring-white/10' => ! $checked,
+                                            ])>{{ $countyLabel }}</button>
+                                    @endforeach
+                                </div>
+                            @endif
                         </div>
-                        <div class="inline-flex overflow-hidden rounded-lg ring-1 ring-gray-300 dark:ring-white/10">
-                            @foreach (\App\Filament\Pages\LocationsSetup::RADII as $r)
-                                @php $active = (int) ($radii[$location->id] ?? 25) === $r; @endphp
-                                <button type="button" wire:click="setRadius('{{ $location->id }}', {{ $r }})"
-                                    x-on:click="$store.diag && ($store.diag.lastTap = {{ $r }}, $store.diag.radius = {{ $r }})"
-                                    @class([
-                                        'px-3 py-1 text-sm',
-                                        'bg-primary-600 text-white' => $active,
-                                        'bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300' => ! $active,
-                                    ])>{{ $r }} mi</button>
-                            @endforeach
-                        </div>
-                    </div>
+                    @endif
 
-                    {{-- Reach readout (from the computed coverage) --}}
+                    {{-- Reach readout (from the computed coverage) — town count + L/M/S split --}}
                     @if ($reach)
                         @php
-                            $parts = ['~'.$reach['total'].' towns'];
+                            $b = $reach['buckets'] ?? ['large' => 0, 'medium' => 0, 'small' => 0, 'unknown' => 0];
+                            $parts = [$reach['total'].' towns'];
                             if ($reach['counties'] > 0) {
                                 $parts[] = $reach['counties'].' '.\Illuminate\Support\Str::plural('county', $reach['counties']);
                             }
                             if (! empty($reach['states'])) {
                                 $parts[] = implode(', ', $reach['states']);
                             }
+                            $reachBuckets = $b['large'].' large · '.$b['medium'].' medium · '.$b['small'].' small'.(($b['unknown'] ?? 0) > 0 ? ' · '.$b['unknown'].' ungrouped' : '');
                         @endphp
-                        <div class="text-xs text-gray-500 dark:text-gray-400">
-                            {{ implode(' · ', $parts) }}
+                        <div class="flex flex-col gap-0.5 text-xs text-gray-500 dark:text-gray-400">
+                            <span>{{ implode(' · ', $parts) }}</span>
+                            <span>{{ $reachBuckets }}</span>
                             @if ($reach['shared'] > 0)
-                                <span class="text-warning-600 dark:text-warning-400"> · {{ $reach['shared'] }} shared with {{ implode(' / ', $reach['shared_with']) }}</span>
+                                <span class="text-warning-600 dark:text-warning-400">{{ $reach['shared'] }} shared with {{ implode(' / ', $reach['shared_with']) }}</span>
                             @endif
                         </div>
                     @endif
 
-                    {{-- Directed coverage: add a specific town beyond the radius --}}
+                    {{-- Directed coverage: add a specific town beyond the served counties --}}
                     @php
                         $myTowns = collect($this->coverage['union'] ?? [])
                             ->filter(fn ($m) => ($m['manual'] ?? false) && in_array($location->id, $m['source_location_ids'] ?? [], true));
                     @endphp
                     <div class="flex flex-col gap-2 border-t border-gray-100 pt-2 dark:border-white/10">
-                        <div class="text-xs font-medium text-gray-500 dark:text-gray-400">Add a town (beyond the radius)</div>
+                        <div class="text-xs font-medium text-gray-500 dark:text-gray-400">Add a town (beyond the served counties)</div>
                         @foreach ($myTowns as $t)
                             <div class="flex items-center justify-between text-xs">
                                 <span class="text-gray-700 dark:text-gray-200">🚩 {{ $t['name'] }}@if ($t['state']) , {{ $t['state'] }}@endif <span class="text-warning-600 dark:text-warning-400">· priority page</span></span>
@@ -211,14 +212,7 @@
                         <input type="text" wire:model="addAddress" placeholder="Where you are (address)" class="{{ $inputClass }}" />
                     @endif
 
-                    <label class="flex items-center justify-between text-sm">
-                        <span class="text-gray-600 dark:text-gray-300">How far do you serve?</span>
-                        <span class="inline-flex overflow-hidden rounded-lg ring-1 ring-gray-300 dark:ring-white/10">
-                            @foreach (\App\Filament\Pages\LocationsSetup::RADII as $r)
-                                <button type="button" wire:click="$set('addRadius', {{ $r }})" @class(['px-3 py-1', 'bg-primary-600 text-white' => $addRadius === $r, 'bg-white text-gray-600 dark:bg-gray-900 dark:text-gray-300' => $addRadius !== $r])>{{ $r }} mi</button>
-                            @endforeach
-                        </span>
-                    </label>
+                    <p class="text-xs text-gray-400">We’ll locate it and pre-tick its home county — adjust the counties you serve on the card.</p>
 
                     <div class="flex gap-2">
                         @if ($addSource !== 'places' || ! $this->placesEnabled)
@@ -230,7 +224,7 @@
             </div>
         </div>
 
-        {{-- Shared coverage map --}}
+        {{-- Shared coverage map (pins per base + flagged directed towns) --}}
         @if (! $locations->isEmpty())
             <div class="rounded-xl bg-white p-2 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                 <div wire:ignore
@@ -249,19 +243,10 @@
     {{-- Leaflet (OSM/CARTO tiles, no API key) --}}
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script>
-        // TEMPORARY: diagnostics store (boot flag + map-init error + radius tap echo).
-        document.addEventListener('alpine:init', () => {
-            Alpine.store('diag', { booted: false, mapError: '', lastTap: 'none', radius: null });
-        });
-        function lpDiagError(message) {
-            try { if (window.Alpine && Alpine.store('diag')) Alpine.store('diag').mapError = message; } catch (_) {}
-        }
-
         // Defined as a plain global at parse time (NOT via alpine:init) so x-data can never
         // evaluate `coverageMap` before it exists — a "coverageMap is not defined" throw in
-        // x-data would halt Alpine and, with it, ALL Livewire interactivity (the radius
-        // buttons included). Every Leaflet touch is guarded so a failure degrades to
-        // "no map", never a thrown init.
+        // x-data would halt Alpine and, with it, ALL Livewire interactivity. Every Leaflet
+        // touch is guarded so a failure degrades to "no map", never a thrown init.
         window.coverageMap = (initial, initialManual) => ({
                 map: null,
                 group: null,
@@ -284,9 +269,9 @@
                                     el._lpMap = this.map;
                                 }
                                 this.render(initial, initialManual);
-                            } catch (e) { console.error('coverage map init', e); lpDiagError(e.message); }
+                            } catch (e) { console.error('coverage map init', e); }
                         });
-                    } catch (e) { console.error('coverage map', e); lpDiagError(e.message); }
+                    } catch (e) { console.error('coverage map', e); }
                 },
                 ensureLeaflet(cb) {
                     if (window.L) return cb();
@@ -304,17 +289,14 @@
                     if (this.group) this.map.removeLayer(this.group);
                     this.group = L.layerGroup().addTo(this.map);
                     const pts = [];
+                    // Base locations: a colored pin (no circle — coverage is county-based).
                     (data || []).forEach((d) => {
                         if (d.lat == null || d.lng == null) return;
-                        L.circle([d.lat, d.lng], {
-                            radius: d.radius * 1609.34,
-                            color: d.color, weight: 2, fillColor: d.color, fillOpacity: 0.16,
-                        }).addTo(this.group);
-                        L.circleMarker([d.lat, d.lng], { radius: 5, color: d.color, fillColor: d.color, fillOpacity: 1 })
+                        L.circleMarker([d.lat, d.lng], { radius: 6, color: d.color, fillColor: d.color, fillOpacity: 1 })
                             .bindTooltip(d.name, { permanent: false }).addTo(this.group);
                         pts.push([d.lat, d.lng]);
                     });
-                    // Manually-added towns: a distinct flag marker, NO circle — directed coverage reads differently.
+                    // Manually-added towns: a distinct flag marker — directed coverage reads differently.
                     (manual || []).forEach((d) => {
                         if (d.lat == null || d.lng == null) return;
                         L.marker([d.lat, d.lng], {

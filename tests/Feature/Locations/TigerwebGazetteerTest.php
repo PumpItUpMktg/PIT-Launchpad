@@ -1,7 +1,6 @@
 <?php
 
 use App\Enums\MunicipalityType;
-use App\Integrations\Census\TigerwebDebug;
 use App\Integrations\Census\TigerwebGazetteer;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Http as HttpFacade;
@@ -113,20 +112,6 @@ test('it maps STATE FIPS to a USPS abbreviation (no STUSAB field on these layers
 
     expect($found->firstWhere('name', 'Maplewood')->state)->toBe('NJ')   // FIPS 34 → NJ
         ->and($found->firstWhere('name', 'Norristown')->state)->toBe('PA'); // FIPS 42 → PA
-});
-
-test('it records each query (URL + status + count) to TigerwebDebug for on-page surfacing', function () {
-    HttpFacade::fake([
-        TIGERWEB.'?f=json' => layerDefs(28, 22),
-        '*' => HttpFacade::response(['features' => []]),
-    ]);
-
-    (new TigerwebGazetteer(app(Http::class), TIGERWEB, 28, 22, 30))->near(40.70, -74.50, 25);
-
-    $debug = app(TigerwebDebug::class);
-    expect($debug->queries)->toHaveCount(2) // places + cousub
-        ->and($debug->lastUrl())->toContain('/query?')
-        ->and($debug->summary())->toContain('0 features');
 });
 
 test('byName parses a trailing state, searches the bare name, and filters to that state', function () {

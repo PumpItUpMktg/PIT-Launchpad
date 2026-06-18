@@ -3,12 +3,13 @@
 namespace App\Filament\Pages;
 
 use App\Enums\MunicipalityType;
+use App\Integrations\Census\County;
 use App\Integrations\Census\Municipality;
-use App\Integrations\Census\TigerwebDebug;
+use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Places\PlacesProvider;
 use App\Jobs\GeocodeLocation;
+use App\Locations\CountyCoverage;
 use App\Locations\CoverageWriter;
-use App\Locations\LocationCoverage;
 use App\Locations\ManualCoverage;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -20,33 +21,31 @@ use Illuminate\Support\Collection;
 
 /**
  * Locations (operator admin) — the ONE locations surface per site. A list of base
- * locations (each: where it is + how far it serves + located status) and a single
- * "Add location" flow. Owner framing throughout — "where you are" / "how far you serve",
+ * locations (each: where it is + which counties it serves + located status) and a single
+ * "Add location" flow. Owner framing throughout — "where you are" / "counties you serve",
  * never "radius / lat/lng".
  *
+ * Coverage is COUNTY-based: each base is geocoded for its map pin, the home county is
+ * auto-resolved + default-selected, and the owner ticks the counties they serve. Coverage
+ * is every county subdivision (town) in those counties, joined to ACS population for a
+ * Large / Medium / Small split, unioned + GEOID-deduped across all bases.
+ *
  * Add is one path, no manual geo: source (from Google/GBP, or name + address) → the point
- * is geocoded in the BACKGROUND ({@see GeocodeLocation} via the keyless Census geocoder)
- * → the owner is asked "how far do you serve?" (the {@see LocationCoverage} radius) inline
- * → coverage computes across all bases. A manual lat/lng override surfaces ONLY when
- * geocoding fails. Existing un-located bases auto-geocode on open. GBP/Places gives the
- * point; the owner gives the reach (we never pull GBP's service-area list).
+ * is geocoded in the BACKGROUND ({@see GeocodeLocation}) → the home county is resolved and
+ * pre-ticked → the owner adjusts counties inline → coverage computes across all bases. A
+ * manual lat/lng override surfaces ONLY when geocoding fails.
  *
  * @property-read array<string, string> $siteOptions
  * @property-read Collection<int, Location> $locations
  * @property-read bool $placesEnabled
  * @property-read string|null $geocoderWarning
  * @property-read array<string, string> $colors
- * @property-read list<array{name: string, lat: float, lng: float, radius: int, color: string}> $mapData
+ * @property-read list<array{name: string, lat: float, lng: float, color: string}> $mapData
  * @property-read list<array{name: string, lat: float, lng: float}> $manualMarkers
  */
 class LocationsSetup extends Page
 {
-    /** @var list<int> */
-    public const RADII = [10, 15, 25];
-
-    public const DEFAULT_RADIUS = 25;
-
-    /** Card-swatch / map-circle colors, assigned per location by position. */
+    /** Card-swatch / map-pin colors, assigned per location by position. */
     public const PALETTE = ['#2563eb', '#16a34a', '#db2777', '#d97706', '#7c3aed', '#0891b2'];
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-map-pin';
@@ -58,9 +57,6 @@ class LocationsSetup extends Page
     protected string $view = 'filament.pages.locations-setup';
 
     public ?string $siteId = null;
-
-    /** @var array<string, int> locationId => "how far you serve" (miles) */
-    public array $radii = [];
 
     /** @var array<string, string> locationId => manual lat override (failure only) */
     public array $manualLat = [];
@@ -77,8 +73,6 @@ class LocationsSetup extends Page
 
     public string $addAddress = '';
 
-    public int $addRadius = self::DEFAULT_RADIUS;
-
     public string $addQuery = '';
 
     /** @var list<array{place_id: string, name: string, address: string}> */
@@ -89,14 +83,6 @@ class LocationsSetup extends Page
 
     public bool $computed = false;
 
-    /** TEMP: surfaces what the server received/computed on the last Update (diagnostics). */
-    public string $updateDiag = '';
-
-    /** TEMP: TIGERweb per-query outcome + the raw request URL (diagnose coverage-0). */
-    public string $tigerwebDiag = '';
-
-    public string $tigerwebUrl = '';
-
     // "Add a town" (directed coverage) — per location card.
     /** @var array<string, string> locationId => town search query */
     public array $townQuery = [];
@@ -104,11 +90,12 @@ class LocationsSetup extends Page
     /** @var array<string, list<array{geo_id: string, name: string, type: string, state: string|null, lat: float|null, lng: float|null}>> */
     public array $townResults = [];
 
+    /** Per-request memo: stateFips => the state's counties (avoids re-querying on each render). */
+    private array $countyOptionsCache = [];
+
     public function updatedSiteId(): void
     {
-        $this->reset(['radii', 'manualLat', 'manualLng', 'coverage', 'computed', 'adding', 'addName', 'addAddress', 'addQuery', 'placeResults']);
-        $this->addRadius = self::DEFAULT_RADIUS;
-        $this->loadRadii();
+        $this->reset(['manualLat', 'manualLng', 'coverage', 'computed', 'adding', 'addName', 'addAddress', 'addQuery', 'placeResults']);
         $this->autoGeocodePending();
         $this->buildCoverage(notify: false); // show the map + reach immediately for located bases
     }
@@ -116,7 +103,6 @@ class LocationsSetup extends Page
     public function startAdd(): void
     {
         $this->reset(['addName', 'addAddress', 'addQuery', 'placeResults']);
-        $this->addRadius = self::DEFAULT_RADIUS;
         $this->addSource = $this->placesEnabled ? 'places' : 'manual';
         $this->adding = true;
     }
@@ -171,13 +157,11 @@ class LocationsSetup extends Page
             'gbp_url' => $details->gbpUrl,
             'lat' => $details->lat,
             'lng' => $details->lng,
-            'coverage_radius' => $this->addRadius,
             'geocode_failed' => $details->lat === null || $details->lng === null,
         ])->save();
 
-        if ($location->lat === null) {
-            GeocodeLocation::dispatch($location->id); // listing had no point — fall back to address geocode
-        }
+        // Resolve the home county for a point that came straight from the listing.
+        GeocodeLocation::dispatch($location->id);
 
         $this->finishAdd("{$details->name} added.");
     }
@@ -203,10 +187,9 @@ class LocationsSetup extends Page
             'site_id' => $site->id,
             'name' => $name,
             'address' => $address === '' ? null : $address,
-            'coverage_radius' => $this->addRadius,
         ])->save();
 
-        GeocodeLocation::dispatch($location->id); // located quietly in the background
+        GeocodeLocation::dispatch($location->id); // located + home county resolved in the background
 
         $this->finishAdd("{$name} added — locating it now.");
     }
@@ -247,10 +230,45 @@ class LocationsSetup extends Page
             return;
         }
 
-        $location->forceFill(['lat' => $lat, 'lng' => $lng, 'geocode_failed' => false])->save();
+        // Resolve the home county for the hand-set point + default-select it.
+        $county = app(MunicipalityGazetteer::class)->countyAt($lat, $lng);
+        $selected = is_array($location->county_geoids) ? $location->county_geoids : [];
+        if ($county !== null && $selected === []) {
+            $selected = [$county->geoId];
+        }
+
+        $location->forceFill([
+            'lat' => $lat,
+            'lng' => $lng,
+            'geocode_failed' => false,
+            'home_county_geoid' => $county?->geoId,
+            'county_geoids' => $selected,
+        ])->save();
         $this->manualLat[$locationId] = '';
         $this->manualLng[$locationId] = '';
         $this->compute();
+    }
+
+    /**
+     * Tick / untick a county this location serves — persists the selection and recomputes
+     * coverage quietly. Default-selected counties (the home county) start ticked.
+     */
+    public function toggleCounty(string $locationId, string $countyGeoId): void
+    {
+        $location = $this->location($locationId);
+        if ($location === null) {
+            return;
+        }
+
+        $selected = is_array($location->county_geoids) ? $location->county_geoids : [];
+        if (in_array($countyGeoId, $selected, true)) {
+            $selected = array_values(array_filter($selected, fn ($g) => $g !== $countyGeoId));
+        } else {
+            $selected[] = $countyGeoId;
+        }
+
+        $location->forceFill(['county_geoids' => $selected])->save();
+        $this->buildCoverage(notify: false);
     }
 
     public function compute(): void
@@ -324,23 +342,6 @@ class LocationsSetup extends Page
         $this->buildCoverage(notify: false);
     }
 
-    /** Segmented "how far you serve" — set + persist a location's radius, recompute quietly. */
-    public function setRadius(string $locationId, int $miles): void
-    {
-        if (! in_array($miles, self::RADII, true)) {
-            return;
-        }
-
-        $location = $this->location($locationId);
-        if ($location === null) {
-            return;
-        }
-
-        $this->radii[$locationId] = $miles;
-        $location->forceFill(['coverage_radius' => $miles])->save();
-        $this->buildCoverage(notify: false);
-    }
-
     private function buildCoverage(bool $notify): void
     {
         $site = $this->site();
@@ -348,37 +349,14 @@ class LocationsSetup extends Page
             return;
         }
 
-        foreach ($this->locations as $location) {
-            $location->forceFill(['coverage_radius' => $this->radiusFor($location->id)])->save();
-        }
-
-        // TEMP diagnostics: what the server actually has when Update runs.
-        $located = $this->locations->filter(fn ($l) => $l->lat !== null && $l->lng !== null);
-        $radiiList = $this->locations->map(fn ($l) => $this->radiusFor($l->id))->implode(',');
-
-        $debug = app(TigerwebDebug::class);
-        $debug->queries = []; // fresh capture for this Update
-        $result = app(LocationCoverage::class)->coverage($site);
+        $result = app(CountyCoverage::class)->coverage($site);
         $this->dispatch('locations-updated', data: $this->mapData, manual: $this->manualMarkers);
 
-        $this->tigerwebDiag = $debug->summary();
-        $this->tigerwebUrl = (string) ($debug->lastUrl() ?? '');
-
-        $this->updateDiag = sprintf(
-            'Update: %d location(s), %d located, radii [%s] → %d base(s) mapped, %d towns.%s',
-            $this->locations->count(),
-            $located->count(),
-            $radiiList,
-            count($result->perBase),
-            $result->unionCount(),
-            ($located->count() > 0 && $result->perBase === [])
-                ? ' Coverage service ran but returned 0 — check the TIGERweb warning log (request URL + error).'
-                : '',
-        );
-
         if ($result->perBase === []) {
+            $this->coverage = [];
+            $this->computed = false;
             if ($notify) {
-                Notification::make()->title('Nothing to map yet')->body($this->updateDiag)->warning()->send();
+                Notification::make()->title('Nothing to map yet')->body('Add a location and tick the counties it serves.')->warning()->send();
             }
 
             return;
@@ -391,6 +369,30 @@ class LocationsSetup extends Page
         if ($notify) {
             Notification::make()->title('Service area updated')->body("{$count} towns across ".count($result->perBase).' location(s).')->success()->send();
         }
+    }
+
+    /**
+     * The counties available for a location's multi-select — every county in the state its
+     * geocoded point fell in (the home county's state). Empty until the base is located.
+     *
+     * @return list<array{geo_id: string, name: string}>
+     */
+    public function countyOptions(Location $location): array
+    {
+        $home = (string) $location->home_county_geoid;
+        if (strlen($home) < 2) {
+            return [];
+        }
+
+        $stateFips = substr($home, 0, 2);
+        if (! isset($this->countyOptionsCache[$stateFips])) {
+            $this->countyOptionsCache[$stateFips] = array_map(
+                fn (County $c) => ['geo_id' => $c->geoId, 'name' => $c->name],
+                app(MunicipalityGazetteer::class)->countiesInState($stateFips),
+            );
+        }
+
+        return $this->countyOptionsCache[$stateFips];
     }
 
     /**
@@ -433,7 +435,7 @@ class LocationsSetup extends Page
     }
 
     /**
-     * Stable color per location (card swatch ↔ map circle), assigned by position.
+     * Stable color per location (card swatch ↔ map pin), assigned by position.
      *
      * @return array<string, string>
      */
@@ -448,9 +450,10 @@ class LocationsSetup extends Page
     }
 
     /**
-     * The located bases for the shared map: center + radius + matched color.
+     * The located bases for the shared map: a colored pin per base (no circle — coverage is
+     * county-based, not radial).
      *
-     * @return list<array{name: string, lat: float, lng: float, radius: int, color: string}>
+     * @return list<array{name: string, lat: float, lng: float, color: string}>
      */
     public function getMapDataProperty(): array
     {
@@ -462,7 +465,6 @@ class LocationsSetup extends Page
                     'name' => $location->name,
                     'lat' => (float) $location->lat,
                     'lng' => (float) $location->lng,
-                    'radius' => $this->radiusFor($location->id),
                     'color' => $colors[$location->id] ?? self::PALETTE[0],
                 ];
             }
@@ -472,7 +474,7 @@ class LocationsSetup extends Page
     }
 
     /**
-     * Manually-added (directed) towns for the map — distinct flag markers, NO circle.
+     * Manually-added (directed) towns for the map — distinct flag markers.
      *
      * @return list<array{name: string, lat: float, lng: float}>
      */
@@ -497,8 +499,6 @@ class LocationsSetup extends Page
     {
         $this->adding = false;
         $this->reset(['addName', 'addAddress', 'addQuery', 'placeResults']);
-        $this->addRadius = self::DEFAULT_RADIUS;
-        $this->loadRadii();
         $this->buildCoverage(notify: false); // coverage refreshes immediately across all located bases
 
         Notification::make()->title($message)->success()->send();
@@ -514,24 +514,12 @@ class LocationsSetup extends Page
         }
     }
 
-    private function loadRadii(): void
-    {
-        foreach ($this->locations as $location) {
-            $this->radii[$location->id] = $location->coverage_radius ?? self::DEFAULT_RADIUS;
-        }
-    }
-
     private function location(string $locationId): ?Location
     {
         return $this->siteId === null ? null : Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $this->siteId)
             ->whereKey($locationId)
             ->first();
-    }
-
-    private function radiusFor(string $locationId): int
-    {
-        return (int) ($this->radii[$locationId] ?? self::DEFAULT_RADIUS);
     }
 
     private function site(): ?Site

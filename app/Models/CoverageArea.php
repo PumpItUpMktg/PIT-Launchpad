@@ -25,7 +25,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property float|null $lng
  * @property float|null $distance_miles
  * @property list<string>|null $source_location_ids
- * @property string $source radius (auto) | manual (owner-added, directed → priority page candidate)
+ * @property int|null $population ACS5 total population (for Large/Medium/Small grouping)
+ * @property string $source county (auto) | manual (owner-added, directed → priority page candidate)
  */
 class CoverageArea extends Model
 {

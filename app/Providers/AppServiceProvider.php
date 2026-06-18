@@ -19,7 +19,6 @@ use App\Integrations\Census\Geocoder;
 use App\Integrations\Census\GoogleGeocoder;
 use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Census\MunicipalityGazetteer;
-use App\Integrations\Census\TigerwebDebug;
 use App\Integrations\Census\TigerwebGazetteer;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Claude\ClaudeClientFactory;
@@ -82,7 +81,6 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(CurrentSite::class);
-        $this->app->singleton(TigerwebDebug::class);
 
         $this->app->bind(ClaudeClient::class, fn ($app) => $app->make(ClaudeClientFactory::class)->default());
 
