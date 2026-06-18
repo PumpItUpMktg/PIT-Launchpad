@@ -257,24 +257,26 @@ class LocationsSetup extends Page
     }
 
     /**
-     * Tick / untick a county this location serves — persists the selection and recomputes
-     * coverage quietly. Default-selected counties (the home county) start ticked.
+     * Set the counties a location serves to EXACTLY this list (the compact multi-select sends
+     * the whole array, so adds accumulate natively and nothing is ever reseeded to [home] —
+     * home is the initial seed, not a floor). Persists + recomputes. Per-location: each
+     * location's set is independent. page_selected survives via {@see CoverageWriter}.
+     *
+     * @param  list<string>  $geoIds
      */
-    public function toggleCounty(string $locationId, string $countyGeoId): void
+    public function setCounties(string $locationId, array $geoIds): void
     {
         $location = $this->location($locationId);
         if ($location === null) {
             return;
         }
 
-        $selected = is_array($location->county_geoids) ? $location->county_geoids : [];
-        if (in_array($countyGeoId, $selected, true)) {
-            $selected = array_values(array_filter($selected, fn ($g) => $g !== $countyGeoId));
-        } else {
-            $selected[] = $countyGeoId;
-        }
+        $clean = array_values(array_unique(array_filter(array_map(
+            fn ($g) => trim((string) $g),
+            $geoIds,
+        ), fn ($g) => $g !== '')));
 
-        $location->forceFill(['county_geoids' => $selected])->save();
+        $location->forceFill(['county_geoids' => $clean])->save();
         $this->buildCoverage(notify: false);
     }
 
