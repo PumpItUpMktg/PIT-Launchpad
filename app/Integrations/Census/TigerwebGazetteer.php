@@ -119,7 +119,7 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
             'geometryType' => 'esriGeometryEnvelope',
             'inSR' => 4326,
             'spatialRel' => 'esriSpatialRelIntersects',
-            'outFields' => 'GEOID,NAME,BASENAME,STUSAB,STATE,CENTLAT,CENTLON',
+            'outFields' => 'GEOID,NAME,BASENAME,STATE,CENTLAT,CENTLON',
             'returnGeometry' => 'false',
         ]), $type);
     }
@@ -200,7 +200,7 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
         return $this->mapFeatures($this->fetch($layer, [
             'f' => 'json',
             'where' => "UPPER(BASENAME) LIKE '%{$escaped}%'",
-            'outFields' => 'GEOID,NAME,BASENAME,STUSAB,STATE,CENTLAT,CENTLON',
+            'outFields' => 'GEOID,NAME,BASENAME,STATE,CENTLAT,CENTLON',
             'returnGeometry' => 'false',
             'orderByFields' => 'BASENAME',
             'resultRecordCount' => 25,
@@ -226,12 +226,43 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
                 geoId: $geoId,
                 name: trim((string) ($a['BASENAME'] ?? $a['NAME'] ?? '')),
                 type: $type,
-                state: ($s = trim((string) ($a['STUSAB'] ?? ''))) !== '' ? $s : null,
+                state: $this->stateAbbr($a, $geoId),
                 lat: isset($a['CENTLAT']) ? (float) $a['CENTLAT'] : null,
                 lng: isset($a['CENTLON']) ? (float) $a['CENTLON'] : null,
             );
         }
 
         return $out;
+    }
+
+    /** Census state FIPS → USPS abbreviation. Layers expose STATE (FIPS), not STUSAB. */
+    private const STATE_FIPS = [
+        '01' => 'AL', '02' => 'AK', '04' => 'AZ', '05' => 'AR', '06' => 'CA', '08' => 'CO',
+        '09' => 'CT', '10' => 'DE', '11' => 'DC', '12' => 'FL', '13' => 'GA', '15' => 'HI',
+        '16' => 'ID', '17' => 'IL', '18' => 'IN', '19' => 'IA', '20' => 'KS', '21' => 'KY',
+        '22' => 'LA', '23' => 'ME', '24' => 'MD', '25' => 'MA', '26' => 'MI', '27' => 'MN',
+        '28' => 'MS', '29' => 'MO', '30' => 'MT', '31' => 'NE', '32' => 'NV', '33' => 'NH',
+        '34' => 'NJ', '35' => 'NM', '36' => 'NY', '37' => 'NC', '38' => 'ND', '39' => 'OH',
+        '40' => 'OK', '41' => 'OR', '42' => 'PA', '44' => 'RI', '45' => 'SC', '46' => 'SD',
+        '47' => 'TN', '48' => 'TX', '49' => 'UT', '50' => 'VT', '51' => 'VA', '53' => 'WA',
+        '54' => 'WV', '55' => 'WI', '56' => 'WY', '60' => 'AS', '66' => 'GU', '69' => 'MP',
+        '72' => 'PR', '78' => 'VI',
+    ];
+
+    /**
+     * USPS abbreviation from the STATE FIPS attribute, falling back to the GEOID prefix
+     * (both place and county-subdivision GEOIDs begin with the 2-digit state FIPS).
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    private function stateAbbr(array $attributes, string $geoId): ?string
+    {
+        $fips = trim((string) ($attributes['STATE'] ?? ''));
+        if ($fips === '' && strlen($geoId) >= 2) {
+            $fips = substr($geoId, 0, 2);
+        }
+        $fips = str_pad($fips, 2, '0', STR_PAD_LEFT);
+
+        return self::STATE_FIPS[$fips] ?? null;
     }
 }
