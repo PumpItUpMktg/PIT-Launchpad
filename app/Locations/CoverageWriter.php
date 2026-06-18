@@ -16,10 +16,10 @@ final class CoverageWriter
     public function write(Site $site, CoverageResult $result): int
     {
         return DB::transaction(function () use ($site, $result): int {
-            // Rebuild ONLY the radius-derived rows; owner-added manual rows persist.
+            // Rebuild ONLY the county-derived rows; owner-added manual rows persist.
             CoverageArea::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $site->id)
-                ->where('source', 'radius')
+                ->where('source', 'county')
                 ->delete();
 
             $written = 0;
@@ -38,7 +38,8 @@ final class CoverageWriter
                     'lng' => $m->lng,
                     'distance_miles' => $m->distanceMiles,
                     'source_location_ids' => $m->sourceLocationIds,
-                    'source' => 'radius',
+                    'population' => $m->population,
+                    'source' => 'county',
                 ]);
                 $written++;
             }
