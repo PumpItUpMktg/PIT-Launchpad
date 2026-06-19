@@ -79,13 +79,46 @@ class SiloPrune extends Page
         }
 
         $this->reset(['spokeDecisions', 'siloDecisions', 'finalized']);
+        $this->seedDecisions($site);
+        $this->started = true;
+    }
 
+    /**
+     * Apply the pending decisions and re-derive the tree WITHOUT committing (the "Update"
+     * action, before Finalize): persist the silo folds / promote-demote / fold-target / re-tag
+     * to the spokes + the draft, then re-seed from the now-restructured persisted state so a
+     * folded silo collapses into its absorber and the summaries recompute. Reuses the same
+     * draft snapshot the re-ground preservation (§10) reads — clicking Update IS confirming the
+     * current decisions. Finalize stays the terminal commit (skip pending + stamp + clear draft).
+     */
+    public function applyUpdate(): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+
+        $this->engine()->applyDecisionSet($site, $this->decisionSet());
+        $this->engine()->saveDraft($site, ['spokes' => $this->spokeDecisions, 'silos' => $this->siloDecisions]);
+        $this->seedDecisions($site); // re-derive layout + toggles from persisted state
+
+        Notification::make()->title('Updated — tree re-derived.')->success()->send();
+    }
+
+    /**
+     * Seed the decision-set from the pre-decided defaults, then resume the saved draft over them
+     * (the draft wins, so an Update/re-ground never resets an owner choice). Shared by the
+     * initial open and the Update re-derive.
+     */
+    private function seedDecisions(Site $site): void
+    {
         // Pre-decided defaults the owner reviews (opt-out), not a blank slate: pillar → hub page,
         // core ≥ bar → own page, core < bar → fold into pillar, supporting → fold into most-related
         // core. Stated services are offered (the floor); only page-vs-section differs. Fringe stays
         // a handoff (blank outcome). The tag rides along as metadata.
         $plan = $this->engine()->plan($site);
         $defaults = $plan->defaults();
+        $this->spokeDecisions = [];
         foreach ($plan->rows as $row) {
             $default = $defaults[$row->id] ?? null;
             if ($default === null) { // fringe — Routing handoff
@@ -101,12 +134,9 @@ class SiloPrune extends Page
             ];
         }
 
-        // Resume any saved draft over the defaults.
         $draft = $this->engine()->loadDraft($site);
         $this->spokeDecisions = array_replace($this->spokeDecisions, is_array($draft['spokes'] ?? null) ? $draft['spokes'] : []);
         $this->siloDecisions = is_array($draft['silos'] ?? null) ? $draft['silos'] : [];
-
-        $this->started = true;
     }
 
     /** Batch-confirm a silo's core: verify, don't deliberate. */
