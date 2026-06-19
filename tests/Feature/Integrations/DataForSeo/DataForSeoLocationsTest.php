@@ -60,6 +60,20 @@ test('a City,ST whose DMA is not in the catalog falls back to the postal state c
     expect(locations()->resolve('Allentown,PA,United States'))->toBe(21152); // PA state, not zero/null
 });
 
+test('it resolves DMA names whose state is space-separated, not comma-delimited', function () {
+    // DataForSEO's Google Ads DMA Region names are commonly "City ST" (space, no comma).
+    Http::fake([
+        '*/keywords_data/google_ads/locations*' => Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 20000, 'result' => [
+            ['location_code' => 1023191, 'location_name' => 'New York NY, United States', 'location_type' => 'DMA Region'],
+            ['location_code' => 1022000, 'location_name' => 'Philadelphia PA, United States', 'location_type' => 'DMA Region'],
+            ['location_code' => 21152, 'location_name' => 'Pennsylvania,United States', 'location_type' => 'State'],
+        ]]]]),
+    ]);
+
+    expect(locations()->resolve('New York,NY,United States'))->toBe(1023191)
+        ->and(locations()->resolve('Philadelphia,PA,United States'))->toBe(1022000); // distinct DMA, NOT the PA state fallback
+});
+
 test('an unknown metro with no resolvable state is null', function () {
     fakeLocationsCatalog();
 
