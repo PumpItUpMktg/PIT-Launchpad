@@ -29,6 +29,7 @@ use Filament\Pages\Page;
  *
  * @property-read array<string, string> $siteOptions
  * @property-read bool $hasCandidates
+ * @property-read list<string> $deadSilos
  */
 class SiloPrune extends Page
 {
@@ -46,7 +47,7 @@ class SiloPrune extends Page
 
     public bool $finalized = false;
 
-    /** @var array<string, array{outcome?: string, tag?: string, granularity?: string}> keyed by spoke id */
+    /** @var array<string, array{outcome?: string, tag?: string, granularity?: string, fold_into?: string|null}> keyed by spoke id */
     public array $spokeDecisions = [];
 
     /** @var array<string, array{rename?: string, fold_into?: string, confirm?: bool}> keyed by silo name */
@@ -79,13 +80,24 @@ class SiloPrune extends Page
 
         $this->reset(['spokeDecisions', 'siloDecisions', 'finalized']);
 
-        // Pre-fill each spoke with its current tag + the Phase-3 granularity recommendation
-        // (both overridable); outcome starts empty (= undecided → not built).
-        foreach ($this->engine()->plan($site)->rows as $row) {
+        // Pre-decided defaults the owner reviews (opt-out), not a blank slate: pillar → hub page,
+        // core ≥ bar → own page, core < bar → fold into pillar, supporting → fold into most-related
+        // core. Stated services are offered (the floor); only page-vs-section differs. Fringe stays
+        // a handoff (blank outcome). The tag rides along as metadata.
+        $plan = $this->engine()->plan($site);
+        $defaults = $plan->defaults();
+        foreach ($plan->rows as $row) {
+            $default = $defaults[$row->id] ?? null;
+            if ($default === null) { // fringe — Routing handoff
+                $this->spokeDecisions[$row->id] = ['outcome' => '', 'tag' => $row->tag->value, 'granularity' => $row->granularity->value, 'fold_into' => ''];
+
+                continue;
+            }
             $this->spokeDecisions[$row->id] = [
-                'outcome' => '',
+                'outcome' => PruneOutcome::Offer->value,
                 'tag' => $row->tag->value,
-                'granularity' => $row->granularity->value,
+                'granularity' => $default['disposition'] === 'fold' ? SpokeGranularity::Folded->value : SpokeGranularity::OwnPage->value,
+                'fold_into' => $default['fold_into'] ?? '',
             ];
         }
 
@@ -141,27 +153,52 @@ class SiloPrune extends Page
     }
 
     /**
-     * Build-vs-drop preview from the current draft (the hard gate, transparent):
-     * built = routed to a page, dropped = skipped or still undecided.
+     * Live disposition preview from the current decisions: own pages vs folded sections vs
+     * dropped. `built` (pages + folded) and `pending`/`skipped` are kept for back-compat.
      *
-     * @return array{built: int, skipped: int, pending: int}
+     * @return array{built: int, pages: int, folded: int, dropped: int, pending: int, skipped: int}
      */
     public function getPreviewProperty(): array
     {
-        $built = 0;
-        $skipped = 0;
+        $pages = 0;
+        $folded = 0;
+        $dropped = 0;
         $pending = 0;
 
         foreach ($this->decidableRows() as $row) {
-            $outcome = $this->spokeDecisions[$row->id]['outcome'] ?? '';
-            match ($outcome) {
-                PruneOutcome::Offer->value, PruneOutcome::Future->value, PruneOutcome::Capture->value => $built++,
-                PruneOutcome::Skip->value => $skipped++,
-                default => $pending++,
-            };
+            $decision = $this->spokeDecisions[$row->id] ?? [];
+            $outcome = $decision['outcome'] ?? '';
+            if ($outcome === '') {
+                $pending++;
+
+                continue;
+            }
+            if ($outcome === PruneOutcome::Skip->value) {
+                $dropped++;
+
+                continue;
+            }
+            if (($decision['granularity'] ?? '') === SpokeGranularity::Folded->value) {
+                $folded++;
+            } else {
+                $pages++;
+            }
         }
 
-        return ['built' => $built, 'skipped' => $skipped, 'pending' => $pending];
+        return ['built' => $pages + $folded, 'pages' => $pages, 'folded' => $folded, 'dropped' => $dropped, 'pending' => $pending, 'skipped' => $dropped];
+    }
+
+    /**
+     * Silos the engine flags as dead (advisory) — the operator confirms the fold via the
+     * silo's fold-into control. See {@see PrunePlan::deadSilos()}.
+     *
+     * @return list<string>
+     */
+    public function getDeadSilosProperty(): array
+    {
+        $site = $this->site();
+
+        return $site === null ? [] : $this->engine()->plan($site)->deadSilos();
     }
 
     /**
@@ -235,6 +272,9 @@ class SiloPrune extends Page
             }
             if (! empty($d['granularity'])) {
                 $spec['granularity'] = $d['granularity'];
+            }
+            if (array_key_exists('fold_into', $d)) {
+                $spec['fold_into'] = $d['fold_into']; // '' → pillar (null) in the engine
             }
             $spokes[$id] = $spec;
         }

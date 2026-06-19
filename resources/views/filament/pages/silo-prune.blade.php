@@ -118,9 +118,9 @@
             {{-- Summary stat strip + actions --}}
             <div class="lp-summary">
                 <div class="lp-stats">
-                    <div class="lp-stat build"><div class="n">{{ $p['built'] }}</div><div class="l">pages to build</div></div>
-                    <div class="lp-stat"><div class="n">{{ $p['skipped'] }}</div><div class="l">skipped</div></div>
-                    <div class="lp-stat pending"><div class="n">{{ $p['pending'] }}</div><div class="l">pending → dropped</div></div>
+                    <div class="lp-stat build"><div class="n">{{ $p['pages'] }}</div><div class="l">pages to build</div></div>
+                    <div class="lp-stat"><div class="n">{{ $p['folded'] }}</div><div class="l">folded sections</div></div>
+                    <div class="lp-stat"><div class="n">{{ $p['dropped'] }}</div><div class="l">handoff / dropped</div></div>
                 </div>
                 <div style="display:flex; gap:8px">
                     <button type="button" wire:click="saveDraft" class="lp-btn ghost">⌖ Save draft</button>
@@ -132,28 +132,35 @@
             @foreach ($this->bySilo as $silo => $rows)
                 @php
                     $s = $this->summaries[$silo];
-                    $core = array_filter($rows, fn ($r) => $r->tag->value === 'core');
-                    $leanIns = array_filter($rows, fn ($r) => in_array($r->tag->value, ['adjacent', 'connecting'], true));
-                    $foldTargets = array_values(array_diff(array_keys($this->bySilo), [$silo]));
-                    $spine = $spinePalette[$loop->index % count($spinePalette)];
                     $pillar = collect($rows)->firstWhere('isPillar', true);
+                    $core = array_filter($rows, fn ($r) => $r->tag->value === 'core' && ! $r->isPillar);
+                    $supporting = array_filter($rows, fn ($r) => in_array($r->tag->value, ['adjacent', 'connecting'], true));
+                    $siloFoldTargets = array_values(array_diff(array_keys($this->bySilo), [$silo]));
+                    $spine = $spinePalette[$loop->index % count($spinePalette)];
                     $maxVol = max(1, (int) collect($rows)->max(fn ($r) => (int) $r->volume));
+                    $isDead = in_array($silo, $this->deadSilos, true);
+                    // section fold targets within this silo: its core pages (+ the pillar)
+                    $foldOptions = [];
+                    if ($pillar) { $foldOptions[$pillar->id] = $pillar->name.' (pillar)'; }
+                    foreach ($core as $c) { $foldOptions[$c->id] = $c->name; }
                 @endphp
 
                 <div class="lp-silo" style="--spine: {{ $spine }}">
                     <div class="lp-silo-head">
                         <div>
-                            <div class="lp-silo-title">{{ $silo }}</div>
+                            @php $deadTag = $isDead ? ' — dead, fold suggested' : ''; @endphp
+                            <div class="lp-silo-title">{{ $silo }}<span class="lp-muted" style="font-weight:500">{{ $deadTag }}</span></div>
                             @if ($pillar)
-                                <div class="lp-silo-pillar">{{ $pillar->name }}@if ($pillar->volume !== null) · {{ number_format((int) $pillar->volume) }} searches @endif</div>
+                                @php $pillarVol = $pillar->volume !== null ? ' · '.number_format((int) $pillar->volume).' searches' : ''; @endphp
+                                <div class="lp-silo-pillar">⬡ {{ $pillar->name }} · category hub · always built{{ $pillarVol }}</div>
                             @endif
-                            <div class="lp-silo-meta">{{ $s['total'] }} spokes · {{ $s['core'] }} core · {{ $s['lean_ins'] }} lean-in @ {{ number_format((int) $s['lean_in_volume']) }} searches</div>
+                            <div class="lp-silo-meta">{{ $s['total'] }} spokes · {{ $s['core'] }} core · {{ $s['lean_ins'] }} supporting @ {{ number_format((int) $s['lean_in_volume']) }} searches</div>
                         </div>
                         <div class="lp-silo-actions">
                             <input type="text" wire:model="siloDecisions.{{ $silo }}.rename" placeholder="rename…" class="lp-input" style="width:130px" />
-                            <select wire:model="siloDecisions.{{ $silo }}.fold_into" class="lp-select" style="width:150px">
-                                <option value="">fold into…</option>
-                                @foreach ($foldTargets as $target)
+                            <select wire:model="siloDecisions.{{ $silo }}.fold_into" @class(['lp-select', 'pending' => $isDead]) style="width:150px">
+                                <option value="">fold silo into…</option>
+                                @foreach ($siloFoldTargets as $target)
                                     <option value="{{ $target }}">{{ $target }}</option>
                                 @endforeach
                             </select>
@@ -163,20 +170,20 @@
                     @if (count($core))
                         <div class="lp-core">
                             <div class="lp-sec">
-                                <span class="lp-sec-h core">Stated core — verify</span>
+                                <span class="lp-sec-h core">Stated core — own page above the bar, else a folded section (never absent)</span>
                                 <button type="button" wire:click="confirmCore('{{ $silo }}')" class="lp-btn ghost" style="padding:5px 11px">✓ Confirm all core</button>
                             </div>
                             @foreach ($core as $row)
-                                @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta])
+                                @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
                             @endforeach
                         </div>
                     @endif
 
-                    @if (count($leanIns))
+                    @if (count($supporting))
                         <div class="lp-leanins">
-                            <span class="lp-sec-h">Lean-ins — the focus (highest volume first)</span>
-                            @foreach ($leanIns as $row)
-                                @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta])
+                            <span class="lp-sec-h">Supporting — fold into a core page by default; promote to its own page (highest volume first)</span>
+                            @foreach ($supporting as $row)
+                                @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
                             @endforeach
                         </div>
                     @endif
