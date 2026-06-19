@@ -3,6 +3,7 @@
 namespace App\Interview\Arrange;
 
 use App\Enums\ArrangeFlagType;
+use App\Enums\ArrangementSource;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -37,8 +38,9 @@ final class SubClusterDetector
 
         foreach ($candidates->groupBy(fn (Spoke $s) => (string) $s->silo) as $silo => $rows) {
             $pillar = $pillars->get((string) $silo);
-            // Skip silos with no pillar, or already-demoted sub-hubs (already placed).
-            if (! $pillar instanceof Spoke || $pillar->isSubHub()) {
+            // Skip silos with no pillar, already-demoted sub-hubs (already placed), or a pillar
+            // whose structure the operator confirmed (e.g. dismissed a prior demotion) — don't re-flag.
+            if (! $pillar instanceof Spoke || $pillar->isSubHub() || $pillar->arrangement_source === ArrangementSource::Confirmed) {
                 continue;
             }
 

@@ -5,11 +5,15 @@ namespace App\Filament\Pages;
 use App\Enums\PruneOutcome;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokeTag;
+use App\Interview\Arrange\AutoArrangeRunner;
+use App\Interview\Arrange\FlagResolver;
 use App\Interview\Prune\PruneEngine;
 use App\Interview\Prune\PruneRow;
+use App\Models\ArrangementFlag;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
+use App\Models\Spoke;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -30,6 +34,7 @@ use Filament\Pages\Page;
  * @property-read array<string, string> $siteOptions
  * @property-read bool $hasCandidates
  * @property-read list<string> $deadSilos
+ * @property-read list<array{id: string, type: string, message: string, score: float|null, spoke: string}> $arrangeFlags
  */
 class SiloPrune extends Page
 {
@@ -449,6 +454,94 @@ class SiloPrune extends Page
         $site = $this->site();
 
         return $site === null ? [] : $this->engine()->plan($site)->decidable();
+    }
+
+    /**
+     * auto-arrange (§4b) recommendations awaiting operator confirm, newest grouping first.
+     * Each carries the affected spoke's name + the rationale score for an at-a-glance read.
+     *
+     * @return list<array{id: string, type: string, message: string, score: float|null, spoke: string}>
+     */
+    public function getArrangeFlagsProperty(): array
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return [];
+        }
+
+        $names = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->pluck('name', 'id');
+
+        return ArrangementFlag::query()
+            ->where('site_id', $site->id)
+            ->orderBy('type')
+            ->get()
+            ->map(fn (ArrangementFlag $f) => [
+                'id' => $f->id,
+                'type' => $f->type->label(),
+                'message' => $f->message,
+                'score' => $f->score,
+                'spoke' => (string) ($names[$f->spoke_id] ?? ''),
+            ])
+            ->all();
+    }
+
+    /** Run auto-arrange (B→C→A→D→E) for the site, persisting the recommended structure + flags. */
+    public function runAutoArrange(): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            Notification::make()->title('Pick a site first.')->warning()->send();
+
+            return;
+        }
+
+        $result = app(AutoArrangeRunner::class)->run($site);
+        if ($this->started) {
+            $this->seedDecisions($site);
+        }
+
+        Notification::make()
+            ->title('Auto-arrange applied')
+            ->body(count($result->flags).' recommendation(s) to review.')
+            ->success()
+            ->send();
+    }
+
+    /** Accept a flagged recommendation — applies the move (where not already applied) and confirms it. */
+    public function acceptFlag(string $id): void
+    {
+        $this->resolveFlag($id, accept: true);
+    }
+
+    /** Dismiss a flagged recommendation — leaves the current structure and confirms it (won't re-flag). */
+    public function dismissFlag(string $id): void
+    {
+        $this->resolveFlag($id, accept: false);
+    }
+
+    private function resolveFlag(string $id, bool $accept): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+
+        $flag = ArrangementFlag::query()->where('site_id', $site->id)->whereKey($id)->first();
+        if ($flag === null) {
+            return;
+        }
+
+        $resolver = app(FlagResolver::class);
+        $ok = $accept ? $resolver->accept($site, $flag) : $resolver->dismiss($site, $flag);
+
+        if ($this->started) {
+            $this->seedDecisions($site);
+        }
+
+        Notification::make()
+            ->title($ok ? ($accept ? 'Accepted.' : 'Dismissed.') : 'Could not resolve that flag.')
+            ->{$ok ? 'success' : 'warning'}()
+            ->send();
     }
 
     private function site(): ?Site

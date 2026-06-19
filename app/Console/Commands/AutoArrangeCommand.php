@@ -6,6 +6,7 @@ use App\Enums\ArrangeFlagType;
 use App\Enums\SpokeGranularity;
 use App\Interview\Arrange\ArrangeResult;
 use App\Interview\Arrange\AutoArranger;
+use App\Interview\Arrange\AutoArrangeRunner;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -36,7 +37,7 @@ class AutoArrangeCommand extends Command
 
     protected $description = 'Run auto-arrange (B→C→A→D→E) for a site; --dry-run previews without writing.';
 
-    public function handle(AutoArranger $arranger): int
+    public function handle(AutoArranger $arranger, AutoArrangeRunner $runner): int
     {
         $site = Site::query()->find($this->argument('site'));
         if ($site === null) {
@@ -45,32 +46,35 @@ class AutoArrangeCommand extends Command
             return self::FAILURE;
         }
 
-        $dryRun = (bool) $this->option('dry-run');
-
-        // Both paths run in a transaction — committed on write, rolled back on dry-run so the
-        // preview is read-only by construction.
-        DB::beginTransaction();
-        try {
-            $result = $arranger->arrange($site);
-            $spokes = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
-            $this->printTree($spokes);
-            $this->printSummary($result);
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            throw $e;
-        }
-
-        if ($dryRun) {
-            DB::rollBack();
+        if ($this->option('dry-run')) {
+            // Read-only by construction: run the passes in a transaction we always roll back.
+            DB::beginTransaction();
+            try {
+                $result = $arranger->arrange($site);
+                $this->report($site, $result);
+            } finally {
+                DB::rollBack();
+            }
             $this->newLine();
             $this->comment('Dry run — nothing was written.');
-        } else {
-            DB::commit();
-            $this->newLine();
-            $this->info('Applied — structure written.');
+
+            return self::SUCCESS;
         }
 
+        // Write path: the runner commits the passes and persists the flag list for the prune surface.
+        $result = $runner->run($site);
+        $this->report($site, $result);
+        $this->newLine();
+        $this->info('Applied — structure written.');
+
         return self::SUCCESS;
+    }
+
+    private function report(Site $site, ArrangeResult $result): void
+    {
+        $spokes = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
+        $this->printTree($spokes);
+        $this->printSummary($result);
     }
 
     /**
