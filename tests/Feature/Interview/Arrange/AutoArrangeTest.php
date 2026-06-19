@@ -11,6 +11,7 @@ use App\Interview\Arrange\AutoArranger;
 use App\Interview\Arrange\CrossSiloDedup;
 use App\Interview\Arrange\FoldTargetAssigner;
 use App\Interview\Arrange\SpokeEmbeddings;
+use App\Interview\Arrange\SubClusterDetector;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -180,7 +181,7 @@ test('a confirmed arrangement is preserved — neither pass overwrites it', func
         'arrangement_source' => ArrangementSource::Confirmed,
     ]);
 
-    $result = (new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new FoldTargetAssigner(0.70)))->arrange($site);
+    $result = (new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new SubClusterDetector(0.60), new FoldTargetAssigner(0.70)))->arrange($site);
 
     expect($result->applied['dedup'])->toBe(0)
         ->and(aspk($site, 'Battery Backup System')->silo)->toBe('Backup Power'); // untouched
@@ -199,7 +200,7 @@ test('a re-run does not thrash: the second arrange is a no-op', function () {
     arrangeSpoke($site, $bp, ['silo' => 'Backup Power', 'name' => 'Backup Power', 'is_pillar' => true]);
     arrangeSpoke($site, $bp, ['silo' => 'Backup Power', 'name' => 'Battery Backup System', 'volume' => 20]);
 
-    $arranger = new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new FoldTargetAssigner(0.70));
+    $arranger = new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new SubClusterDetector(0.60), new FoldTargetAssigner(0.70));
     $arranger->arrange($site);
     $firstTargets = aspk($site, 'Water-Powered Backup')->fold_into_id;
 
@@ -223,7 +224,7 @@ test('AutoArranger runs B then A: dedup merges the pair AND water-powered nests 
     arrangeSpoke($site, $bp, ['silo' => 'Backup Power', 'name' => 'Backup Power', 'is_pillar' => true]);
     arrangeSpoke($site, $bp, ['silo' => 'Backup Power', 'name' => 'Battery Backup System', 'volume' => 20]);
 
-    $result = (new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new FoldTargetAssigner(0.70)))->arrange($site);
+    $result = (new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new SubClusterDetector(0.60), new FoldTargetAssigner(0.70)))->arrange($site);
 
     $battery = aspk($site, 'Battery Backup');
 

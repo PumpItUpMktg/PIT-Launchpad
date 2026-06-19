@@ -95,8 +95,8 @@ final class FoldTargetAssigner
      * The top-level silo of a (possibly sub-hub) silo: walk the one-level parent link to
      * the root, else the silo itself.
      *
-     * @param  Collection<int, Spoke>  $pillarsBySilo
-     * @param  Collection<int, Spoke>  $byId
+     * @param  Collection<string, Spoke>  $pillarsBySilo
+     * @param  Collection<string, Spoke>  $byId
      */
     private function rootSilo(string $silo, Collection $pillarsBySilo, Collection $byId): string
     {
