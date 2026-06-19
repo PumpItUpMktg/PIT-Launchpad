@@ -2,6 +2,7 @@
 
 namespace App\Interview\Arrange;
 
+use App\Console\Commands\AutoArrangeCommand;
 use App\Integrations\Embedding\EmbeddingProvider;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -19,12 +20,16 @@ use App\Models\Spoke;
  *   - Pass A {@see FoldTargetAssigner}: nest each folded spoke under its most-related core
  *     anywhere in its silo subtree.
  *   - Pass D {@see KeywordAssigner}: give each page a distinct primary keyword (cannibalization-safe).
+ *   - Pass E {@see FloorReconciler}: enforce the floor (every folded spoke has a valid home)
+ *     and re-emit the dead-silo advisory — auto-arrange never silently drops a service.
  *
- * Order matters — C runs on the post-dedup set, A before D so keywords are assigned over
- * the final page set. A single shared {@see SpokeEmbeddings} memoizes every vector across
- * the passes. It only ever sets defaults on undecided spokes (Pass C mutates nothing);
- * operator-confirmed structure is preserved (the §10 twin), so a re-run never wipes a
- * decision. Pass E reconciliation + the writing command land in increment 4.
+ * Order matters — C runs on the post-dedup set, A before D, E last to reconcile invariants.
+ * A single shared {@see SpokeEmbeddings} memoizes every vector across the passes. It only
+ * ever sets defaults on undecided spokes (Pass C mutates nothing); operator-confirmed
+ * structure is preserved (the §10 twin) and an auto default only re-flips when the new
+ * signal beats the current by a margin, so a re-run is stable and never wipes a decision.
+ * The passes write directly; {@see AutoArrangeCommand} wraps the run
+ * in a committed transaction (or a rolled-back one for --dry-run).
  */
 final class AutoArranger
 {
@@ -34,6 +39,7 @@ final class AutoArranger
         private readonly SubClusterDetector $subClusters,
         private readonly FoldTargetAssigner $nesting,
         private readonly KeywordAssigner $keywords,
+        private readonly FloorReconciler $floor,
     ) {}
 
     public function arrange(Site $site): ArrangeResult
@@ -44,7 +50,8 @@ final class AutoArranger
         return $this->dedup->run($site, $vectors)
             ->merge($this->subClusters->run($site, $vectors))
             ->merge($this->nesting->run($site, $vectors))
-            ->merge($this->keywords->run($site, $vectors));
+            ->merge($this->keywords->run($site, $vectors))
+            ->merge($this->floor->run($site, $vectors));
     }
 
     /**

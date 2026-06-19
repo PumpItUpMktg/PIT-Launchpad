@@ -286,6 +286,7 @@ class AppServiceProvider extends ServiceProvider
         ));
         $this->app->bind(FoldTargetAssigner::class, fn () => new FoldTargetAssigner(
             (float) config('launchpad.auto_arrange.nest_floor', 0.70),
+            (float) config('launchpad.auto_arrange.reflip_margin', 0.05),
         ));
         $this->app->bind(SubClusterDetector::class, fn () => new SubClusterDetector(
             (float) config('launchpad.auto_arrange.sub_hub_overlap', 0.60),

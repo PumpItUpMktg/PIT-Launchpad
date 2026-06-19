@@ -25,6 +25,9 @@ enum ArrangeFlagType: string
     /** Pass D: a sub-hub's umbrella keyword still collides with a child — don't silently collapse the demotion. */
     case SubHubKeywordCollision = 'sub_hub_keyword_collision';
 
+    /** Pass E: a silo no core clears the bar for and whose total volume is below it — advisory fold candidate. */
+    case DeadSilo = 'dead_silo';
+
     public function label(): string
     {
         return match ($this) {
@@ -33,6 +36,7 @@ enum ArrangeFlagType: string
             self::SubHubDemotion => 'Sub-hub demotion',
             self::KeywordCollision => 'Keyword collision',
             self::SubHubKeywordCollision => 'Sub-hub keyword collision',
+            self::DeadSilo => 'Dead silo',
         };
     }
 }

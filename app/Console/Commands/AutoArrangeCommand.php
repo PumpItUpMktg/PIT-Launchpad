@@ -14,18 +14,19 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * auto-arrange — run the structural passes (B→C→A→D) and show the recommended tree.
+ * auto-arrange — run the structural passes (B→C→A→D→E) for a site and show the resulting tree.
  *
- * This increment ships the **--dry-run** path only: it runs the passes in a rolled-back
- * transaction (writes nothing) and prints the proposed structure — pillars, sub-hubs,
- * own-page cores, nested folded spokes — each page with its primary keyword, plus a summary
- * of the dedup merges, the demotion recommendations, and every flag with its score. It is
- * the output-check surface for tuning the four cosine thresholds against live numbers.
+ * Default writes the recommended structure (in a committed transaction). With **--dry-run**
+ * the same run executes in a rolled-back transaction (writes nothing) — the output-check
+ * surface for tuning the four cosine thresholds against live numbers. Either way it prints
+ * the tree — pillars, sub-hubs, own-page cores, nested folded spokes, each page with its
+ * primary keyword — plus a summary of the dedup merges, the demotion recommendations, and
+ * every flag with its score.
  *
- * The real (writing) path + Pass E reconciliation land in increment 4; without --dry-run
- * the command refuses for now.
+ * Auto-arrange only sets defaults on undecided/auto nodes; operator-confirmed structure is
+ * preserved and an auto default re-flips only past the margin, so re-running is safe.
  *
- *   launchpad:auto-arrange {site} --dry-run
+ *   launchpad:auto-arrange {site} [--dry-run]
  */
 class AutoArrangeCommand extends Command
 {
@@ -33,7 +34,7 @@ class AutoArrangeCommand extends Command
         {site : the Site id}
         {--dry-run : preview the recommended structure without writing}';
 
-    protected $description = 'Preview the auto-arrange structure (B→C→A→D) for a site (read-only --dry-run).';
+    protected $description = 'Run auto-arrange (B→C→A→D→E) for a site; --dry-run previews without writing.';
 
     public function handle(AutoArranger $arranger): int
     {
@@ -44,25 +45,30 @@ class AutoArrangeCommand extends Command
             return self::FAILURE;
         }
 
-        if (! $this->option('dry-run')) {
-            $this->error('The writing path lands in increment 4. Re-run with --dry-run to preview.');
+        $dryRun = (bool) $this->option('dry-run');
 
-            return self::FAILURE;
-        }
-
-        // Run the passes in a transaction we always roll back: read-only by construction.
+        // Both paths run in a transaction — committed on write, rolled back on dry-run so the
+        // preview is read-only by construction.
         DB::beginTransaction();
         try {
             $result = $arranger->arrange($site);
             $spokes = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
             $this->printTree($spokes);
             $this->printSummary($result);
-        } finally {
+        } catch (\Throwable $e) {
             DB::rollBack();
+            throw $e;
         }
 
-        $this->newLine();
-        $this->comment('Dry run — nothing was written.');
+        if ($dryRun) {
+            DB::rollBack();
+            $this->newLine();
+            $this->comment('Dry run — nothing was written.');
+        } else {
+            DB::commit();
+            $this->newLine();
+            $this->info('Applied — structure written.');
+        }
 
         return self::SUCCESS;
     }

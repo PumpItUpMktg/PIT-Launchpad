@@ -203,6 +203,10 @@ return [
 
         // Pass D — two pages whose primary keywords are nearer than this collide (cannibalize).
         'collision_cosine' => (float) env('LAUNCHPAD_ARRANGE_COLLISION_COSINE', 0.90),
+
+        // Pass A re-runs — an existing auto fold target only re-flips when a new candidate
+        // beats the current score by at least this band (anti-thrash; a hair never moves it).
+        'reflip_margin' => (float) env('LAUNCHPAD_ARRANGE_REFLIP_MARGIN', 0.05),
     ],
 
     /*

@@ -65,12 +65,20 @@ test('the dry-run prints the proposed tree + summary and writes nothing', functi
         ->and($core->keyword_source)->toBeNull();
 });
 
-test('the command refuses to write without --dry-run (the write path is increment 4)', function () {
+test('without --dry-run the command writes the structure (committed)', function () {
     $site = Site::factory()->create();
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+
+    cmdSpoke($site, $bp, ['silo' => 'Sump Pumps', 'name' => 'Sump Pumps', 'is_pillar' => true]);
+    cmdSpoke($site, $bp, ['silo' => 'Sump Pumps', 'name' => 'Battery Backup Sump Pump', 'head_keyword' => 'battery backup', 'volume' => 300]);
 
     $this->artisan('launchpad:auto-arrange', ['site' => $site->id])
-        ->assertFailed()
-        ->expectsOutputToContain('increment 4');
+        ->assertSuccessful()
+        ->expectsOutputToContain('Applied — structure written.');
+
+    // committed: the keyword persisted
+    $core = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('name', 'Battery Backup Sump Pump')->first();
+    expect($core->primary_keyword)->toBe('battery backup');
 });
 
 test('an unknown site fails cleanly', function () {
