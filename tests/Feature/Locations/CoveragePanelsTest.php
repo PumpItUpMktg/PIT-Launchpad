@@ -51,6 +51,25 @@ test('builds totals + per-location panels grouped by tier from persisted rows', 
         ->and($vm['panels'][$b->id]['groups']['ungrouped'][0]['name'])->toBe('Ung1');
 });
 
+test('town groups are population-desc (name tiebreak) and the order is stable across a selection toggle', function () {
+    $site = Site::factory()->create();
+    $a = Location::factory()->create(['site_id' => $site->id, 'name' => 'A']);
+
+    // all Major; 90k then a 60k tie resolved by name (Alpha before Beta)
+    seedArea($site, ['geo_id' => '1', 'name' => 'Zeta', 'population' => 90000, 'size_tier' => 'major', 'source_location_ids' => [$a->id]]);
+    seedArea($site, ['geo_id' => '2', 'name' => 'Alpha', 'population' => 60000, 'size_tier' => 'major', 'source_location_ids' => [$a->id]]);
+    seedArea($site, ['geo_id' => '3', 'name' => 'Beta', 'population' => 60000, 'size_tier' => 'major', 'source_location_ids' => [$a->id]]);
+
+    $order = fn () => collect(panelsFor($site)['panels'][$a->id]['groups']['major'])->pluck('name')->all();
+
+    expect($order())->toBe(['Zeta', 'Alpha', 'Beta']);
+
+    // flipping page_selected must NOT reorder (the click path uses the same canonical sort)
+    CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('geo_id', '2')->update(['page_selected' => true]);
+
+    expect($order())->toBe(['Zeta', 'Alpha', 'Beta']);
+});
+
 test('the selected total counts distinct persisted rows (no overlap double-count)', function () {
     $site = Site::factory()->create();
     $a = Location::factory()->create(['site_id' => $site->id, 'name' => 'A']);

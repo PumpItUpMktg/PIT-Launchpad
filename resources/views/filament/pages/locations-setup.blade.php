@@ -354,7 +354,7 @@
                                 @php $towns = $activePanel['groups'][$key] ?? []; @endphp
                                 @if (count($towns) > 0)
                                     @php $selInTier = collect($towns)->where('page_selected', true)->count(); @endphp
-                                    <div x-data="{ open: true }" class="lp-tgroup">
+                                    <div x-data="{ open: true }" class="lp-tgroup" wire:key="lp-tgroup-{{ $activeLoc->id }}-{{ $key }}">
                                         <div class="lp-tgroup-head">
                                             <button type="button" x-on:click="open = ! open" class="lp-tgroup-title">
                                                 <span class="lp-sw" style="background: {{ $meta['color'] }}"></span>
@@ -369,7 +369,7 @@
                                         <div class="lp-towns" x-show="open">
                                             @foreach ($towns as $town)
                                                 @php $pop = $town['population'] !== null ? number_format($town['population']) : '—'; @endphp
-                                                <button type="button" wire:click="togglePageSelection('{{ $town['geo_id'] }}')" class="lp-town {{ $town['page_selected'] ? 'on' : '' }}">
+                                                <button type="button" wire:key="lp-town-{{ $town['geo_id'] }}" wire:click="togglePageSelection('{{ $town['geo_id'] }}')" class="lp-town {{ $town['page_selected'] ? 'on' : '' }}">
                                                     {{ $town['page_selected'] ? '✓' : '+' }} {{ $town['name'] }}@if ($town['manual']) 🚩 @endif
                                                     <span class="lp-town-pop">{{ $pop }}</span>
                                                 </button>
