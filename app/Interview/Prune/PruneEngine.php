@@ -151,6 +151,38 @@ final class PruneEngine
     }
 
     /**
+     * Canonical single-spoke relocate (the one mutation behind the fold dropdown, the
+     * own-page↔fold toggle, and drag): move a non-pillar spoke to `$targetSilo` (null = keep
+     * its silo), set its disposition (own page vs folded section), and its fold target. The
+     * stated-service floor holds — a relocate always lands the spoke somewhere (Offered as a
+     * page or a section), never deletes it. Returns false for a missing spoke or a pillar
+     * (pillars are structural hubs, relocated via {@see foldSilo}).
+     */
+    public function moveSpoke(Site $site, string $spokeId, ?string $targetSilo, SpokeGranularity $granularity, ?string $foldIntoId): bool
+    {
+        $spoke = Spoke::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereKey($spokeId)
+            ->first();
+
+        if ($spoke === null || $spoke->is_pillar) {
+            return false;
+        }
+
+        $attributes = [
+            'status' => SpokeStatus::Offered,            // floor: always lands as a page or section
+            'granularity' => $granularity,
+            'fold_into_id' => $granularity === SpokeGranularity::OwnPage ? null : $foldIntoId,
+        ];
+        if ($targetSilo !== null && $targetSilo !== $spoke->silo) {
+            $attributes['silo'] = $targetSilo;
+        }
+        $spoke->update($attributes);
+
+        return true;
+    }
+
+    /**
      * Fold one silo into another: its spokes move under the target pillar and its own
      * pillar becomes a regular member there. Collapses thin silos (e.g. sewage / grinder
      * under a single pumps pillar) when volume shows them too light to stand alone.

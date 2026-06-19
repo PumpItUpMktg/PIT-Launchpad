@@ -139,6 +139,118 @@ class SiloPrune extends Page
         $this->siloDecisions = is_array($draft['silos'] ?? null) ? $draft['silos'] : [];
     }
 
+    /**
+     * The canonical relocate (one mutation, three triggers: the fold dropdown, the own-page↔fold
+     * toggle, and drag). Moves a spoke and re-derives the tree so it physically re-nests:
+     *  - `own_page` → promote to its own page (clears the fold target);
+     *  - `core` (targetId = a core spoke id) → fold into that core page, re-homing to its silo if cross-silo;
+     *  - `silo` (targetId = a silo name) → fold into that silo at its default (most-related) core;
+     *  - `fold` → demote into its own silo's default core.
+     * Persists to the draft (so it survives Update / a re-ground — §10) and re-renders.
+     */
+    public function moveSpoke(string $spokeId, string $targetType, ?string $targetId = null): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+
+        $plan = $this->engine()->plan($site);
+        [$targetSilo, $granularity, $foldInto] = match ($targetType) {
+            'own_page' => [null, SpokeGranularity::OwnPage, null],
+            'core' => [$this->siloOfSpoke($plan, (string) $targetId), SpokeGranularity::Folded, $targetId],
+            'silo' => [(string) $targetId, SpokeGranularity::Folded, $this->siloDefaultCore($plan, (string) $targetId)],
+            'fold' => [null, SpokeGranularity::Folded, $this->siloDefaultCore($plan, $this->siloOfSpoke($plan, $spokeId) ?? '')],
+            default => [null, SpokeGranularity::OwnPage, null],
+        };
+
+        if (! $this->engine()->moveSpoke($site, $spokeId, $targetSilo, $granularity, $foldInto)) {
+            return;
+        }
+
+        // Mirror the decision into the draft so the re-derive (and a later re-ground) keeps it.
+        $this->spokeDecisions[$spokeId] = [
+            'outcome' => PruneOutcome::Offer->value,
+            'tag' => $this->spokeDecisions[$spokeId]['tag'] ?? '',
+            'granularity' => $granularity->value,
+            'fold_into' => $foldInto ?? '',
+        ];
+        $this->persistAndRederive($site);
+    }
+
+    /** Fold an entire silo into another (the dropdown / a silo-header drop) — canonical + re-derive. */
+    public function foldSiloInto(string $silo, string $targetSilo): void
+    {
+        $site = $this->site();
+        if ($site === null || $silo === '' || $targetSilo === '' || $silo === $targetSilo) {
+            return;
+        }
+
+        $this->engine()->foldSilo($site, $silo, $targetSilo);
+        $this->siloDecisions[$silo]['fold_into'] = $targetSilo;
+        $this->persistAndRederive($site);
+    }
+
+    /** Auto-apply a silo fold the moment the "fold silo into…" dropdown changes. */
+    public function updatedSiloDecisions(mixed $value, ?string $key = null): void
+    {
+        if (is_string($key) && is_string($value) && $value !== '' && str_ends_with($key, '.fold_into')) {
+            $this->foldSiloInto(substr($key, 0, -strlen('.fold_into')), $value);
+        }
+    }
+
+    /** Auto-apply a spoke promote/demote or fold-target change the moment its control changes. */
+    public function updatedSpokeDecisions(mixed $value, ?string $key = null): void
+    {
+        if (! is_string($key)) {
+            return;
+        }
+        if (str_ends_with($key, '.granularity')) {
+            $id = substr($key, 0, -strlen('.granularity'));
+            $this->moveSpoke($id, $value === SpokeGranularity::OwnPage->value ? 'own_page' : 'fold');
+        } elseif (str_ends_with($key, '.fold_into') && is_string($value) && $value !== '') {
+            $this->moveSpoke(substr($key, 0, -strlen('.fold_into')), 'core', $value);
+        }
+    }
+
+    private function persistAndRederive(Site $site): void
+    {
+        $this->engine()->saveDraft($site, ['spokes' => $this->spokeDecisions, 'silos' => $this->siloDecisions]);
+        $this->seedDecisions($site); // re-read the restructured tree + draft so the view re-nests
+    }
+
+    /** The silo a spoke currently belongs to (from the freshly-derived plan). */
+    private function siloOfSpoke(\App\Interview\Prune\PrunePlan $plan, string $spokeId): ?string
+    {
+        foreach ($plan->rows as $row) {
+            if ($row->id === $spokeId) {
+                return $row->silo;
+            }
+        }
+
+        return null;
+    }
+
+    /** A silo's default fold target — its most-related (highest-volume) core page, else its pillar. */
+    private function siloDefaultCore(\App\Interview\Prune\PrunePlan $plan, string $silo): ?string
+    {
+        $rows = $plan->bySilo()[$silo] ?? [];
+        $pillar = null;
+        $bestCore = null;
+        foreach ($rows as $row) {
+            if ($row->isPillar) {
+                $pillar = $row;
+
+                continue;
+            }
+            if ($row->tag === SpokeTag::Core && ($bestCore === null || ($row->volume ?? -1) > ($bestCore->volume ?? -1))) {
+                $bestCore = $row;
+            }
+        }
+
+        return ($bestCore ?? $pillar)?->id;
+    }
+
     /** Batch-confirm a silo's core: verify, don't deliberate. */
     public function confirmCore(string $silo): void
     {

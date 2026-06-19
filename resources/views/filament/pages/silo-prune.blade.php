@@ -67,6 +67,12 @@
         .lp-fringe-grid { display:flex; flex-direction:column; gap:8px; }
         .lp-fringe-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; font-size:14px; }
         @media (max-width: 720px) { .lp-spoke { grid-template-columns: 1fr; } .lp-controls { justify-content:flex-start; } }
+
+        /* Drag-to-re-home */
+        .lp-spoke-list { display:flex; flex-direction:column; gap:8px; min-height:8px; }
+        .lp-drag { cursor:grab; color:var(--muted); font-size:13px; user-select:none; }
+        .lp-spoke.lp-ghost { opacity:.4; }
+        .lp-silo.lp-drop { box-shadow:0 0 0 2px var(--accent); }
     </style>
 
     @php
@@ -145,7 +151,7 @@
                     foreach ($core as $c) { $foldOptions[$c->id] = $c->name; }
                 @endphp
 
-                <div class="lp-silo" style="--spine: {{ $spine }}">
+                <div class="lp-silo" style="--spine: {{ $spine }}" wire:key="lp-silo-{{ \Illuminate\Support\Str::slug($silo) }}">
                     <div class="lp-silo-head">
                         <div>
                             @php $deadTag = $isDead ? ' — dead, fold suggested' : ''; @endphp
@@ -158,7 +164,7 @@
                         </div>
                         <div class="lp-silo-actions">
                             <input type="text" wire:model="siloDecisions.{{ $silo }}.rename" placeholder="rename…" class="lp-input" style="width:130px" />
-                            <select wire:model="siloDecisions.{{ $silo }}.fold_into" @class(['lp-select', 'pending' => $isDead]) style="width:150px">
+                            <select wire:model.live="siloDecisions.{{ $silo }}.fold_into" @class(['lp-select', 'pending' => $isDead]) style="width:150px">
                                 <option value="">fold silo into…</option>
                                 @foreach ($siloFoldTargets as $target)
                                     <option value="{{ $target }}">{{ $target }}</option>
@@ -173,18 +179,22 @@
                                 <span class="lp-sec-h core">Stated core — own page above the bar, else a folded section (never absent)</span>
                                 <button type="button" wire:click="confirmCore('{{ $silo }}')" class="lp-btn ghost" style="padding:5px 11px">✓ Confirm all core</button>
                             </div>
-                            @foreach ($core as $row)
-                                @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
-                            @endforeach
+                            <div class="lp-spoke-list" data-prune-list data-silo-name="{{ $silo }}">
+                                @foreach ($core as $row)
+                                    @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
+                                @endforeach
+                            </div>
                         </div>
                     @endif
 
                     @if (count($supporting))
                         <div class="lp-leanins">
                             <span class="lp-sec-h">Supporting — fold into a core page by default; promote to its own page (highest volume first)</span>
-                            @foreach ($supporting as $row)
-                                @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
-                            @endforeach
+                            <div class="lp-spoke-list" data-prune-list data-silo-name="{{ $silo }}">
+                                @foreach ($supporting as $row)
+                                    @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
+                                @endforeach
+                            </div>
                         </div>
                     @endif
                 </div>
@@ -209,4 +219,56 @@
             @endif
         @endif
     </div>
+
+    {{-- Drag-to-re-home (SortableJS, CDN-loaded like the Locations map — custom-page assets
+         aren't reliably bundled). Dragging a spoke's ⠿ handle into ANOTHER silo's list re-homes
+         it (fold into that silo) via the canonical moveSpoke. Promote/demote + precise core
+         retarget stay on the auto-applying controls. Fully guarded: a load failure degrades to
+         "no drag", never a thrown init, and the controls remain the reliable path. --}}
+    <script>
+        window.lpPruneSortable = () => ({
+            init() {
+                this.ensure(() => this.bind());
+                // Re-bind after every Livewire morph (the lists are re-rendered on re-derive).
+                if (window.Livewire && ! this._hooked) {
+                    this._hooked = true;
+                    window.Livewire.hook('morph.updated', () => queueMicrotask(() => this.bind()));
+                }
+            },
+            ensure(cb) {
+                if (window.Sortable) return cb();
+                const id = 'lp-sortablejs';
+                const existing = document.getElementById(id);
+                if (existing) { existing.addEventListener('load', cb); return; }
+                const s = document.createElement('script');
+                s.id = id;
+                s.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js';
+                s.onload = cb;
+                s.onerror = () => console.error('SortableJS failed to load — drag disabled, controls still work');
+                document.head.appendChild(s);
+            },
+            bind() {
+                try {
+                    document.querySelectorAll('[data-prune-list]').forEach((el) => {
+                        if (el._lpSortable) return; // already bound this DOM node
+                        el._lpSortable = window.Sortable.create(el, {
+                            group: 'lp-prune-spokes',
+                            handle: '.lp-drag',
+                            animation: 150,
+                            ghostClass: 'lp-ghost',
+                            onEnd: (evt) => {
+                                const from = evt.from?.getAttribute('data-silo-name');
+                                const to = evt.to?.getAttribute('data-silo-name');
+                                const id = evt.item?.getAttribute('data-spoke-id');
+                                if (! id || ! to || from === to) return; // same-silo reorder = cosmetic, ignore
+                                // Cross-silo: re-home + fold into the destination silo (canonical mutation).
+                                this.$wire.moveSpoke(id, 'silo', to);
+                            },
+                        });
+                    });
+                } catch (e) { console.error('prune sortable bind', e); }
+            },
+        });
+    </script>
+    <div x-data="lpPruneSortable()" x-init="init()"></div>
 </x-filament-panels::page>
