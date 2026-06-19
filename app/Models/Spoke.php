@@ -35,6 +35,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $connection_note
  * @property string|null $sibling_brand
  * @property SpokeGranularity $granularity
+ * @property string|null $fold_into_id the core spoke this folds into as a section (null = pillar)
  */
 class Spoke extends Model
 {

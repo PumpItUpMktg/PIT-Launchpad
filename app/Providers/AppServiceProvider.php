@@ -142,7 +142,6 @@ class AppServiceProvider extends ServiceProvider
             $app->make(DataForSeoClient::class),
             $app->make(DataForSeoLocations::class),
             (string) config('launchpad.silo_volume.language', 'en'),
-            (int) config('launchpad.silo_volume.fold_threshold', 50),
         ));
 
         // The Google Ads locations catalog used to resolve covered metros to a numeric

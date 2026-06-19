@@ -35,7 +35,7 @@ final class PruneEngine
             ->map(fn (Spoke $s) => PruneRow::fromSpoke($s))
             ->all();
 
-        return new PrunePlan($rows, $this->blueprint($site)?->confirmed_at !== null);
+        return new PrunePlan($rows, $this->blueprint($site)?->confirmed_at !== null, $site->ownPageBar());
     }
 
     /**
@@ -124,9 +124,10 @@ final class PruneEngine
 
             $tag = isset($decision['tag']) ? SpokeTag::tryFrom((string) $decision['tag']) : null;
             $granularity = isset($decision['granularity']) ? SpokeGranularity::tryFrom((string) $decision['granularity']) : null;
+            $foldInto = array_key_exists('fold_into', $decision) ? ($decision['fold_into'] === '' ? null : (string) $decision['fold_into']) : false;
 
             foreach ($targets as $spoke) {
-                $this->route($spoke, $outcome, $tag, $granularity);
+                $this->route($spoke, $outcome, $tag, $granularity, $foldInto);
                 $applied++;
             }
         }
@@ -195,9 +196,19 @@ final class PruneEngine
         return DB::transaction(function () use ($site, $set): array {
             $this->applyDecisionSet($site, $set);
 
+            // Apply the pre-decided default to anything still undecided — pillars become hubs,
+            // core/supporting fold into their target (the stated-service floor: a stated service
+            // is never dropped, only page-vs-section). Fringe stays the Routing handoff.
+            $defaults = $this->plan($site)->defaults();
             foreach ($this->spokes($site) as $spoke) {
-                if ($spoke->tag !== SpokeTag::Fringe && $spoke->status === SpokeStatus::Candidate) {
-                    $this->route($spoke, PruneOutcome::Skip); // pending → dropped
+                if ($spoke->tag === SpokeTag::Fringe || $spoke->status !== SpokeStatus::Candidate) {
+                    continue;
+                }
+                $default = $defaults[$spoke->id] ?? ['disposition' => 'fold', 'fold_into' => null];
+                if (in_array($default['disposition'], ['hub', 'page'], true)) {
+                    $this->route($spoke, PruneOutcome::Offer, null, SpokeGranularity::OwnPage);
+                } else {
+                    $this->route($spoke, PruneOutcome::Offer, null, SpokeGranularity::Folded, $default['fold_into']);
                 }
             }
 
@@ -276,7 +287,11 @@ final class PruneEngine
         return $applied;
     }
 
-    private function route(Spoke $spoke, PruneOutcome $outcome, ?SpokeTag $tag = null, ?SpokeGranularity $granularity = null): void
+    /**
+     * @param  string|null|false  $foldInto  the fold-target spoke id; `false` = leave as-is. An
+     *                                       own-page granularity always clears the fold target.
+     */
+    private function route(Spoke $spoke, PruneOutcome $outcome, ?SpokeTag $tag = null, ?SpokeGranularity $granularity = null, string|null|false $foldInto = false): void
     {
         $attributes = ['status' => $outcome->status()];
         if ($outcome->pageType() !== null) {
@@ -287,6 +302,12 @@ final class PruneEngine
         }
         if ($granularity !== null) {
             $attributes['granularity'] = $granularity;
+            if ($granularity === SpokeGranularity::OwnPage) {
+                $attributes['fold_into_id'] = null; // an own page isn't folded anywhere
+            }
+        }
+        if ($foldInto !== false && ($granularity === null || $granularity === SpokeGranularity::Folded)) {
+            $attributes['fold_into_id'] = $foldInto;
         }
 
         $spoke->update($attributes);

@@ -49,21 +49,24 @@ it('shows an empty-state for a site with no persisted candidate tree', function 
         ->assertSee('No candidate tree yet');
 });
 
-it('opens the prune, pre-filling decisions from the tree (outcome blank, granularity from Phase 3)', function () {
+it('opens the prune pre-decided: core ≥ bar pre-checked own page, supporting pre-folded', function () {
     $site = prunePageSite();
-    $install = pspk($site, 'Sump Pump Installation');
+    $install = pspk($site, 'Sump Pump Installation'); // core, volume 300 ≥ 100 bar → own page
+    $gutter = pspk($site, 'Gutter Installation');     // connecting (supporting) → fold
 
     Livewire::test(SiloPrune::class)
         ->set('siteId', $site->id)
         ->call('start')
         ->assertSet('started', true)
-        ->assertSet("spokeDecisions.{$install->id}.outcome", '')
-        ->assertSet("spokeDecisions.{$install->id}.granularity", 'own_page')
+        ->assertSet("spokeDecisions.{$install->id}.outcome", 'offer')      // stated service → offered (floor)
+        ->assertSet("spokeDecisions.{$install->id}.granularity", 'own_page') // ≥ bar → own page
+        ->assertSet("spokeDecisions.{$gutter->id}.outcome", 'offer')        // supporting kept (folded section)
+        ->assertSet("spokeDecisions.{$gutter->id}.granularity", 'folded')   // default fold
         ->assertSee('Sump Pump Installation')
         ->assertSee('gutters cause basement water'); // connecting note shown
 });
 
-it('batch-confirms a silo core via confirmCore', function () {
+it('batch-confirms a silo core via confirmCore; supporting keeps its folded default', function () {
     $site = prunePageSite();
     $pillar = pspk($site, 'Sump Pumps');
     $install = pspk($site, 'Sump Pump Installation');
@@ -75,7 +78,7 @@ it('batch-confirms a silo core via confirmCore', function () {
         ->call('confirmCore', 'Sump Pumps')
         ->assertSet("spokeDecisions.{$pillar->id}.outcome", 'offer')
         ->assertSet("spokeDecisions.{$install->id}.outcome", 'offer')
-        ->assertSet("spokeDecisions.{$gutter->id}.outcome", ''); // connecting lean-in untouched
+        ->assertSet("spokeDecisions.{$gutter->id}.granularity", 'folded'); // supporting untouched at its fold default
 });
 
 it('saves a resumable draft and reloads it on the next open', function () {
@@ -123,19 +126,19 @@ it('previews build-vs-drop from the draft and finalizes through the engine, drop
         ->and(SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('prune_draft'))->toBeNull();
 });
 
-it('finalize drops an undecided candidate (un-reviewed = not built)', function () {
+it('finalize applies the pre-decided default to an untouched supporting spoke (folded, never dropped)', function () {
     $site = prunePageSite();
-    $install = pspk($site, 'Sump Pump Installation');
 
-    // decide only the pillar + install; leave Gutter Installation undecided
+    // Touch nothing beyond opening — the seeded defaults carry. Gutter (supporting) defaults to fold.
     Livewire::test(SiloPrune::class)
         ->set('siteId', $site->id)
         ->call('start')
-        ->set("spokeDecisions.{$install->id}.outcome", 'offer')
-        ->set('spokeDecisions.'.pspk($site, 'Sump Pumps')->id.'.outcome', 'offer')
         ->call('finalize');
 
-    expect(pspk($site, 'Gutter Installation')->status)->toBe(SpokeStatus::Skipped) // pending → dropped
+    $gutter = pspk($site, 'Gutter Installation');
+    expect($gutter->status)->toBe(SpokeStatus::Offered)                  // built as a folded section, NOT dropped (stated-service floor)
+        ->and($gutter->granularity)->toBe(SpokeGranularity::Folded)
+        ->and($gutter->fold_into_id)->not->toBeNull()                    // folded into its most-related core page
         ->and(SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('confirmed_at'))->not->toBeNull();
 });
 
