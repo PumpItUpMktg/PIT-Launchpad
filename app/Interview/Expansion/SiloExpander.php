@@ -206,7 +206,7 @@ final class SiloExpander
         return $this->seedContext($seed, $voice)."\n\n"
             .$this->dimensions()."\n\n"
             .$this->tagging()."\n\n"
-            .'RULES: every spoke needs a concise, geo-neutral head_keyword. granularity = "own_page" for all (maximal split; volume folds later). Audience and brand are SILOS, not flags. Do not invent services that contradict the exclusions.'."\n\n"
+            .'RULES: every spoke needs a concise, geo-neutral head_keyword. '.$this->keywordIntentRule().' granularity = "own_page" for all (maximal split; volume folds later). Audience and brand are SILOS, not flags. Do not invent services that contradict the exclusions.'."\n\n"
             .'Respond with ONLY this JSON shape:'."\n"
             .'{"silos":[{"name":"Sump Pumps","head_keyword":"sump pump","page_type":"service","spokes":[{"name":"Sump Pump Installation","page_type":"service","tag":"core","head_keyword":"sump pump installation","connection_note":null,"granularity":"own_page"}]}],"fringe_handoff":[{"name":"Mold Remediation","connection_note":"mold from chronic basement moisture","sibling_brand":"Trusted Mold"}]}';
     }
@@ -218,7 +218,7 @@ final class SiloExpander
     {
         return $this->seedContext($seed, $voice)."\n\n"
             .$this->dimensions()."\n\n"
-            .'PLAN ONLY: list the SILOS you will build (pillar headers — including the audience and brand silos) and the fringe handoff set. Do NOT list spokes yet.'."\n\n"
+            .'PLAN ONLY: list the SILOS you will build (pillar headers — including the audience and brand silos) and the fringe handoff set. Do NOT list spokes yet. '.$this->keywordIntentRule()."\n\n"
             .'Respond with ONLY this JSON shape:'."\n"
             .'{"silos":[{"name":"Sump Pumps","head_keyword":"sump pump","page_type":"service","focus":"sump pump equipment x action"}],"fringe_handoff":[{"name":"Mold Remediation","connection_note":"mold from chronic basement moisture","sibling_brand":"Trusted Mold"}]}';
     }
@@ -237,7 +237,7 @@ final class SiloExpander
             ."- Silo: {$name}\n"
             .($focus !== '' ? "- Focus: {$focus}\n" : '')
             .'Apply the equipment×action matrix and problem-chain adjacencies WITHIN this silo. '.$this->tagging()."\n\n"
-            .'RULES: every spoke needs a concise, geo-neutral head_keyword; granularity = "own_page"; a connecting spoke REQUIRES a connection_note.'."\n\n"
+            .'RULES: every spoke needs a concise, geo-neutral head_keyword; '.$this->keywordIntentRule().' granularity = "own_page"; a connecting spoke REQUIRES a connection_note.'."\n\n"
             .'Respond with ONLY this JSON shape:'."\n"
             .'{"spokes":[{"name":"Sump Pump Installation","page_type":"service","tag":"core","head_keyword":"sump pump installation","connection_note":null,"granularity":"own_page"}]}';
     }
@@ -276,6 +276,21 @@ final class SiloExpander
             4. AUDIENCE axis: if a secondary audience is signaled, emit a PARALLEL audience silo (e.g. "Commercial & Industrial") with its own equipment×action spokes.
             5. BRAND axis: if the owner names brands, emit a "Brands We Service" silo with a spoke per brand.
             PROMPT;
+    }
+
+    /**
+     * Head keywords must name the hire-able SERVICE, not a bare product the user would shop for.
+     * A product/equipment noun ("dehumidifier", "french drain") pulls retail/shopping volume
+     * that misrepresents service demand and must never anchor an own-page spoke. (E.g.
+     * "basement dehumidification", not "basement dehumidifier"; "french drain installation",
+     * not "french drain".)
+     */
+    private function keywordIntentRule(): string
+    {
+        return 'SERVICE-INTENT head_keyword: name the SERVICE a customer hires for (the action/outcome), '
+            .'NOT a bare product/equipment noun a shopper buys — a product noun (e.g. "dehumidifier", '
+            .'"french drain") pulls retail/shopping volume that misrepresents service demand. Anchor on the '
+            .'service phrase ("basement dehumidification", "french drain installation"), never the product alone.';
     }
 
     private function tagging(): string
