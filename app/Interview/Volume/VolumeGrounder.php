@@ -5,6 +5,7 @@ namespace App\Interview\Volume;
 use App\Enums\SpokeGranularity;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\DataForSeo\DataForSeoException;
+use App\Integrations\DataForSeo\DataForSeoLocations;
 use App\Locations\Dma\Metro;
 use App\Locations\Dma\MetroResolver;
 use App\Models\CoverageArea;
@@ -30,6 +31,7 @@ final class VolumeGrounder
     public function __construct(
         private readonly MetroResolver $metros,
         private readonly DataForSeoClient $client,
+        private readonly DataForSeoLocations $locations,
         private readonly string $language,
         private readonly int $foldThreshold,
     ) {}
@@ -63,7 +65,7 @@ final class VolumeGrounder
 
         [$byMetro, $used, $skipped] = $this->query($metros, $keywords);
         if ($used === []) {
-            throw new VolumeException('Every metro query failed — verify the DMA location_name mappings against the DataForSEO catalog.');
+            throw new VolumeException('Every metro failed to resolve / query — verify the DMA mappings resolve to a DataForSEO location_code (Google Ads locations catalog).');
         }
 
         return $this->write($spokes, $used, $skipped, $byMetro);
@@ -79,12 +81,28 @@ final class VolumeGrounder
         $byMetro = [];
         $used = [];
         $skipped = [];
+        $queriedCodes = []; // resolved location_code => true (don't query/count one code twice)
 
         foreach ($metros as $metro) {
+            // Resolve to a DataForSEO location_code (DMA Region preferred) — name strings don't
+            // match the location database. An unresolved metro is skipped (no spend on a 0).
+            $code = $this->locations->resolve($metro->locationName);
+            if ($code === null) {
+                $skipped[] = $metro;
+
+                continue;
+            }
+
+            // Two metros can resolve to the same code (e.g. both fall back to one state) — count once.
+            if (isset($queriedCodes[$code])) {
+                continue;
+            }
+            $queriedCodes[$code] = true;
+
             try {
-                $volumes = $this->client->liveSearchVolumeByName($keywords, $metro->locationName, $this->language);
+                $volumes = $this->client->liveSearchVolume($keywords, $code, $this->language);
             } catch (DataForSeoException) {
-                $skipped[] = $metro; // an unmatched location_name errors only its own metro
+                $skipped[] = $metro;
 
                 continue;
             }

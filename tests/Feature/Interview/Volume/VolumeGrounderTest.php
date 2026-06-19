@@ -5,6 +5,7 @@ use App\Enums\SpokeGranularity;
 use App\Enums\SpokeStatus;
 use App\Enums\SpokeTag;
 use App\Integrations\DataForSeo\DataForSeoClient;
+use App\Integrations\DataForSeo\DataForSeoLocations;
 use App\Interview\Volume\VolumeException;
 use App\Interview\Volume\VolumeGrounder;
 use App\Locations\Dma\DmaTable;
@@ -14,26 +15,46 @@ use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
+use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Http;
 
-/** Per-metro fake volumes keyed by DataForSEO location_name. */
-const FAKE_VOLUMES = [
-    'New York,NY,United States' => ['sump pump' => 20, 'sump pump installation' => 300, 'niche thing' => 20],
-    'Philadelphia,PA,United States' => ['sump pump' => 10, 'sump pump installation' => 100, 'niche thing' => 10],
+const NY_DMA = 1023191;
+const PHL_DMA = 1022000;
+
+/** The DMA Region + State catalog rows the metros resolve against. */
+const FAKE_CATALOG = [
+    ['location_code' => NY_DMA, 'location_name' => 'New York, NY, United States', 'location_type' => 'DMA Region'],
+    ['location_code' => PHL_DMA, 'location_name' => 'Philadelphia, PA, United States', 'location_type' => 'DMA Region'],
+    ['location_code' => 21138, 'location_name' => 'New Jersey,United States', 'location_type' => 'State'],
 ];
 
-function fakeSearchVolume(?array $override = null): void
+/** Per-metro fake volumes keyed by the resolved DataForSEO location_code. */
+const FAKE_VOLUMES = [
+    NY_DMA => ['sump pump' => 20, 'sump pump installation' => 300, 'niche thing' => 20],
+    PHL_DMA => ['sump pump' => 10, 'sump pump installation' => 100, 'niche thing' => 10],
+];
+
+/**
+ * Fake BOTH endpoints: the Google Ads locations catalog (for code resolution) and the
+ * search-volume call (keyed by location_code). `$volumes`/`$catalog` override per test.
+ */
+function fakeSearchVolume(?array $volumes = null, ?array $catalog = null): void
 {
-    $volumes = $override ?? FAKE_VOLUMES;
-    Http::fake(function ($request) use ($volumes) {
-        $loc = $request->data()[0]['location_name'] ?? '';
-        if (! array_key_exists($loc, $volumes)) {
-            // an unmatched location_name → DataForSEO task error envelope
+    $volumes ??= FAKE_VOLUMES;
+    $catalog ??= FAKE_CATALOG;
+
+    Http::fake(function ($request) use ($volumes, $catalog) {
+        if (str_contains($request->url(), '/keywords_data/google_ads/locations')) {
+            return Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 20000, 'result' => $catalog]]]);
+        }
+
+        $code = (int) ($request->data()[0]['location_code'] ?? 0);
+        if (! array_key_exists($code, $volumes)) {
             return Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 40501, 'status_message' => 'no location']]]);
         }
         $result = [];
-        foreach ($volumes[$loc] as $kw => $v) {
+        foreach ($volumes[$code] as $kw => $v) {
             $result[] = ['keyword' => $kw, 'search_volume' => $v];
         }
 
@@ -48,8 +69,9 @@ function grounderFor(int $threshold = 50): VolumeGrounder
         stateToLocation: ['NJ' => 'New Jersey,United States'],
     ));
     $client = new DataForSeoClient(app(Factory::class), 'x', 'y', 'https://api.dataforseo.com', 30);
+    $locations = new DataForSeoLocations($client, app(Cache::class), 'US');
 
-    return new VolumeGrounder($resolver, $client, 'en', $threshold);
+    return new VolumeGrounder($resolver, $client, $locations, 'en', $threshold);
 }
 
 function groundedSite(): Site
@@ -107,9 +129,12 @@ test('fringe / no-keyword spokes are left untouched', function () {
         ->and($fringe->volume_at)->toBeNull();
 });
 
-test('a metro whose location_name does not resolve is skipped, not fatal', function () {
-    // Only NY resolves; Philadelphia returns an error envelope → skipped.
-    fakeSearchVolume(['New York,NY,United States' => ['sump pump installation' => 250]]);
+test('a metro that does not resolve to a location_code is skipped, not fatal', function () {
+    // Catalog without Philadelphia → it resolves to null and is skipped; NY still grounds.
+    fakeSearchVolume(
+        volumes: [NY_DMA => ['sump pump installation' => 250]],
+        catalog: [['location_code' => NY_DMA, 'location_name' => 'New York, NY, United States', 'location_type' => 'DMA Region']],
+    );
     $site = groundedSite();
 
     $result = grounderFor()->ground($site);
@@ -119,26 +144,37 @@ test('a metro whose location_name does not resolve is skipped, not fatal', funct
 });
 
 test('two coverage areas in the same DMA are queried and counted once (no double-cover)', function () {
-    // Two NJ counties that BOTH map to the New York DMA → one distinct metro.
     $resolver = new MetroResolver(new DmaTable(
         countyToDma: ['34003' => 'New York,NY,United States', '34013' => 'New York,NY,United States'],
         stateToLocation: [],
     ));
-    Http::fake(fn () => Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 20000, 'result' => [
-        ['keyword' => 'sump pump installation', 'search_volume' => 300],
-    ]]]]));
+
+    $volumeCalls = 0;
+    Http::fake(function ($request) use (&$volumeCalls) {
+        if (str_contains($request->url(), '/keywords_data/google_ads/locations')) {
+            return Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 20000, 'result' => [
+                ['location_code' => NY_DMA, 'location_name' => 'New York, NY, United States', 'location_type' => 'DMA Region'],
+            ]]]]);
+        }
+        $volumeCalls++;
+
+        return Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 20000, 'result' => [
+            ['keyword' => 'sump pump installation', 'search_volume' => 300],
+        ]]]]);
+    });
 
     $site = Site::factory()->create();
-    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3400312345', 'type' => MunicipalityType::CountySubdivision, 'state' => 'NJ']); // county 34003 → NY
-    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3401354321', 'type' => MunicipalityType::CountySubdivision, 'state' => 'NJ']); // county 34013 → NY
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3400312345', 'type' => MunicipalityType::CountySubdivision, 'state' => 'NJ']); // 34003 → NY
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3401354321', 'type' => MunicipalityType::CountySubdivision, 'state' => 'NJ']); // 34013 → NY
     $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
     Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Sump Pumps', 'name' => 'Sump Pump Installation', 'head_keyword' => 'sump pump installation', 'tag' => SpokeTag::Core, 'status' => SpokeStatus::Candidate, 'granularity' => SpokeGranularity::OwnPage]);
 
     $client = new DataForSeoClient(app(Factory::class), 'x', 'y', 'https://api.dataforseo.com', 30);
-    (new VolumeGrounder($resolver, $client, 'en', 50))->ground($site);
+    $locations = new DataForSeoLocations($client, app(Cache::class), 'US');
+    (new VolumeGrounder($resolver, $client, $locations, 'en', 50))->ground($site);
 
-    Http::assertSentCount(1); // the shared DMA is queried exactly once
-    expect(spoke($site, 'Sump Pump Installation')->volume)->toBe(300); // counted once, not 600
+    expect($volumeCalls)->toBe(1) // the shared DMA is queried exactly once
+        ->and(spoke($site, 'Sump Pump Installation')->volume)->toBe(300); // counted once, not 600
 });
 
 test('it throws when there are no covered metros', function () {
