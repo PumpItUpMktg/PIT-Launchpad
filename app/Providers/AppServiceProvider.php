@@ -57,6 +57,8 @@ use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
 use App\Integrations\Voice\MockVoiceSynthesizer;
 use App\Integrations\Voice\VoiceSynthesizer;
+use App\Interview\Arrange\CrossSiloDedup;
+use App\Interview\Arrange\FoldTargetAssigner;
 use App\Interview\Expansion\SiloExpander;
 use App\Interview\Volume\VolumeGrounder;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
@@ -273,6 +275,16 @@ class AppServiceProvider extends ServiceProvider
                 ),
             };
         });
+
+        // auto-arrange structural passes — config-driven cosine thresholds (per-site
+        // overridable later). Every relatedness call rides on the EmbeddingProvider above.
+        $this->app->bind(CrossSiloDedup::class, fn () => new CrossSiloDedup(
+            (float) config('launchpad.auto_arrange.dedup_cosine', 0.85),
+            (float) config('launchpad.auto_arrange.dedup_ambiguity_margin', 0.15),
+        ));
+        $this->app->bind(FoldTargetAssigner::class, fn () => new FoldTargetAssigner(
+            (float) config('launchpad.auto_arrange.nest_floor', 0.70),
+        ));
 
         // Google (Step 2, Adapter 4): per-tenant OAuth backing GSC (§5) + GA4
         // (§7c). Platform OAuth app creds are env; per-client tokens live in the

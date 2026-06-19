@@ -50,6 +50,15 @@ class Spoke extends Model
         return $this->belongsTo(SiloBlueprint::class, 'silo_blueprint_id');
     }
 
+    /**
+     * Still an undecided candidate — no owner routing yet. auto-arrange only sets
+     * defaults on these; a decided spoke is an operator-confirmed structure it preserves.
+     */
+    public function isCandidate(): bool
+    {
+        return $this->status === SpokeStatus::Candidate;
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
