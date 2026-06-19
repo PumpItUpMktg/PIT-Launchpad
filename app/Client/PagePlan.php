@@ -165,8 +165,8 @@ class PagePlan
      * The top-level silo a spoke rolls up to: a demoted sub-hub (and anything under it) rolls
      * up to its parent silo; everything else is its own silo.
      *
-     * @param  Collection<int, Spoke>  $pillarsBySilo  keyed by silo name
-     * @param  Collection<int, Spoke>  $pillarsById
+     * @param  Collection<string, Spoke>  $pillarsBySilo  keyed by silo name
+     * @param  Collection<string, Spoke>  $pillarsById  keyed by spoke id
      */
     private function rootSilo(Spoke $s, Collection $pillarsBySilo, Collection $pillarsById): string
     {
