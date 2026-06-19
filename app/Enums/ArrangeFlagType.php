@@ -19,12 +19,20 @@ enum ArrangeFlagType: string
     /** Pass C: a silo whose spokes mostly cluster into one other silo — recommend demoting it to a sub-hub. */
     case SubHubDemotion = 'sub_hub_demotion';
 
+    /** Pass D: two pages resolve to the same query and the resolution isn't mechanical — operator confirms. */
+    case KeywordCollision = 'keyword_collision';
+
+    /** Pass D: a sub-hub's umbrella keyword still collides with a child — don't silently collapse the demotion. */
+    case SubHubKeywordCollision = 'sub_hub_keyword_collision';
+
     public function label(): string
     {
         return match ($this) {
             self::DedupAmbiguous => 'Ambiguous duplicate',
             self::NestLowConfidence => 'Uncertain nesting',
             self::SubHubDemotion => 'Sub-hub demotion',
+            self::KeywordCollision => 'Keyword collision',
+            self::SubHubKeywordCollision => 'Sub-hub keyword collision',
         };
     }
 }

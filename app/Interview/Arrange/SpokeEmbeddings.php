@@ -33,6 +33,23 @@ final class SpokeEmbeddings
         return Vectors::cosine($this->vector($a), $this->vector($b));
     }
 
+    /**
+     * Embed an arbitrary text (e.g. a candidate primary keyword), memoized by the text so
+     * Pass D's collision checks re-use vectors. Cached under a distinct key space from spokes.
+     *
+     * @return list<float>
+     */
+    public function embedText(string $text): array
+    {
+        return $this->cache['text:'.$text] ??= $this->embeddings->embed($text);
+    }
+
+    /** Cosine similarity of two arbitrary texts. */
+    public function textSimilarity(string $a, string $b): float
+    {
+        return Vectors::cosine($this->embedText($a), $this->embedText($b));
+    }
+
     private function text(Spoke $spoke): string
     {
         return trim($spoke->name.' '.(string) ($spoke->head_keyword ?? ''));

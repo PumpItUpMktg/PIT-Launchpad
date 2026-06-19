@@ -39,6 +39,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $fold_into_id the core spoke this folds into as a section (null = pillar)
  * @property string|null $parent_silo_id the parent silo's pillar spoke id when this is a sub-hub
  * @property bool $is_sub_hub this (pillar) silo has been demoted to a sub-hub under its parent
+ * @property string|null $primary_keyword the distinct target query for this page (Pass D)
+ * @property float|null $keyword_collision_score the cosine behind a detected keyword collision
  * @property ArrangementSource|null $arrangement_source auto-arrange provenance (null = untouched)
  * @property float|null $arrangement_score the cosine/overlap behind the arrangement decision
  */
@@ -89,6 +91,7 @@ class Spoke extends Model
             'status' => SpokeStatus::class,
             'granularity' => SpokeGranularity::class,
             'is_sub_hub' => 'boolean',
+            'keyword_collision_score' => 'float',
             'arrangement_source' => ArrangementSource::class,
             'arrangement_score' => 'float',
             'volume' => 'integer',

@@ -59,6 +59,7 @@ use App\Integrations\Voice\MockVoiceSynthesizer;
 use App\Integrations\Voice\VoiceSynthesizer;
 use App\Interview\Arrange\CrossSiloDedup;
 use App\Interview\Arrange\FoldTargetAssigner;
+use App\Interview\Arrange\KeywordAssigner;
 use App\Interview\Arrange\SubClusterDetector;
 use App\Interview\Expansion\SiloExpander;
 use App\Interview\Volume\VolumeGrounder;
@@ -288,6 +289,9 @@ class AppServiceProvider extends ServiceProvider
         ));
         $this->app->bind(SubClusterDetector::class, fn () => new SubClusterDetector(
             (float) config('launchpad.auto_arrange.sub_hub_overlap', 0.60),
+        ));
+        $this->app->bind(KeywordAssigner::class, fn () => new KeywordAssigner(
+            (float) config('launchpad.auto_arrange.collision_cosine', 0.90),
         ));
 
         // Google (Step 2, Adapter 4): per-tenant OAuth backing GSC (§5) + GA4
