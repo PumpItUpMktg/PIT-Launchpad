@@ -86,6 +86,9 @@ return [
         'grid_step' => (float) env('DATAFORSEO_GRID_STEP', 0.018),
         // Cache TTL (hours) guarding against re-fetch inside the refresh cadence.
         'cache_ttl_hours' => (int) env('DATAFORSEO_CACHE_TTL_HOURS', 168),
+        // Google Ads locations catalog (metro → location_code resolution): country scope + cache.
+        'locations_country' => env('DATAFORSEO_LOCATIONS_COUNTRY', 'US'),
+        'locations_cache_days' => (int) env('DATAFORSEO_LOCATIONS_CACHE_DAYS', 30),
     ],
 
     // News feeds (§6a candidate funnel). `provider` selects the source: `gdelt`

@@ -67,6 +67,23 @@ class DataForSeoClient
         return self::parseSearchVolume($this->firstTaskResult($json));
     }
 
+    // --- Keywords Data API: Google Ads locations reference (for code resolution) ---
+
+    /**
+     * The Google Ads locations catalog (DMA regions, states, cities, …), optionally scoped
+     * to one country (e.g. 'US'). Each row carries `location_code` / `location_name` /
+     * `location_type`. A GET, no body. Used to resolve a covered metro to its numeric
+     * `location_code` (string `location_name`s are fragile and silently un-matched).
+     *
+     * @return array<int, mixed>
+     */
+    public function googleAdsLocations(?string $country = null): array
+    {
+        $path = '/v3/keywords_data/google_ads/locations'.($country !== null && $country !== '' ? '/'.$country : '');
+
+        return $this->firstTaskResult($this->requestGet($path));
+    }
+
     // --- Labs API (synchronous only): difficulty (batch) + related ---
 
     /**

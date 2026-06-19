@@ -29,6 +29,7 @@ use App\Integrations\Conversions\KrayinConversionProvider;
 use App\Integrations\Conversions\MauticConversionProvider;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\DataForSeo\DataForSeoLocalGridProvider;
+use App\Integrations\DataForSeo\DataForSeoLocations;
 use App\Integrations\DataForSeo\DataForSeoSerpProvider;
 use App\Integrations\DataForSeo\SerpTaskDispatcher;
 use App\Integrations\Embedding\EmbeddingProvider;
@@ -139,8 +140,18 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(VolumeGrounder::class, fn ($app) => new VolumeGrounder(
             $app->make(MetroResolver::class),
             $app->make(DataForSeoClient::class),
+            $app->make(DataForSeoLocations::class),
             (string) config('launchpad.silo_volume.language', 'en'),
             (int) config('launchpad.silo_volume.fold_threshold', 50),
+        ));
+
+        // The Google Ads locations catalog used to resolve covered metros to a numeric
+        // location_code (cached). Tests Http::fake the locations endpoint.
+        $this->app->singleton(DataForSeoLocations::class, fn ($app) => new DataForSeoLocations(
+            $app->make(DataForSeoClient::class),
+            $app->make(CacheRepository::class),
+            (string) config('services.dataforseo.locations_country', 'US'),
+            (int) config('services.dataforseo.locations_cache_days', 30),
         ));
 
         // §7 onboarding — the Google Places import (location enrichment) runs on

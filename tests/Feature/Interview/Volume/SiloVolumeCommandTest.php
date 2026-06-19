@@ -11,12 +11,21 @@ use App\Models\Spoke;
 use Illuminate\Support\Facades\Http;
 
 // The command resolves VolumeGrounder via the container → the real file-backed DmaTable
-// (NJ county 34003 → "New York,NY,United States").
+// (NJ county 34003 → "New York,NY,United States") → resolved to a location_code against the
+// faked Google Ads locations catalog.
 function fakeCommandVolume(): void
 {
-    Http::fake(fn ($request) => Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 20000, 'result' => [
-        ['keyword' => 'sump pump installation', 'search_volume' => 480],
-    ]]]]));
+    Http::fake(function ($request) {
+        if (str_contains($request->url(), '/keywords_data/google_ads/locations')) {
+            return Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 20000, 'result' => [
+                ['location_code' => 1023191, 'location_name' => 'New York, NY, United States', 'location_type' => 'DMA Region'],
+            ]]]]);
+        }
+
+        return Http::response(['status_code' => 20000, 'tasks' => [['status_code' => 20000, 'result' => [
+            ['keyword' => 'sump pump installation', 'search_volume' => 480],
+        ]]]]);
+    });
 }
 
 function commandSite(): Site
