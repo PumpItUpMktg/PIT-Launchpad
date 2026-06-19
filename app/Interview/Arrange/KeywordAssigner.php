@@ -28,8 +28,10 @@ use Illuminate\Support\Collection;
  *     (never silently collapse an operator-confirmed demotion);
  *   - anything else ambiguous → flag {@see ArrangeFlagType::KeywordCollision}.
  *
- * Writes `primary_keyword` + the collision score with `arrangement_source` provenance; only
- * arrangeable pages are (re)written, so a confirmed keyword survives a re-run.
+ * Writes `primary_keyword` + the collision score with its own `keyword_source` provenance
+ * (separate from the structural `arrangement_source`, so a confirmed demotion doesn't freeze
+ * the keyword); a confirmed keyword survives a re-run. A collision *fold* is a structural
+ * change, so it gates on the structural `isArrangeable()` instead.
  */
 final class KeywordAssigner
 {
@@ -72,6 +74,7 @@ final class KeywordAssigner
                         'granularity' => SpokeGranularity::Folded,
                         'fold_into_id' => $rival->id,
                         'primary_keyword' => null,
+                        'keyword_source' => null,
                         'keyword_collision_score' => $score,
                         'arrangement_source' => ArrangementSource::Auto,
                     ]);
@@ -109,13 +112,13 @@ final class KeywordAssigner
 
     private function assign(Spoke $page, string $keyword, ?float $score): void
     {
-        if (! $page->isArrangeable()) {
-            return; // preserve an operator-confirmed keyword
+        if ($page->keyword_source === ArrangementSource::Confirmed) {
+            return; // preserve an operator-confirmed keyword (its own provenance, not the structural one)
         }
         $page->update([
             'primary_keyword' => $keyword,
+            'keyword_source' => ArrangementSource::Auto,
             'keyword_collision_score' => $score,
-            'arrangement_source' => ArrangementSource::Auto,
         ]);
     }
 

@@ -10,6 +10,7 @@ use App\Integrations\Embedding\EmbeddingProvider;
 use App\Interview\Arrange\AutoArranger;
 use App\Interview\Arrange\CrossSiloDedup;
 use App\Interview\Arrange\FoldTargetAssigner;
+use App\Interview\Arrange\KeywordAssigner;
 use App\Interview\Arrange\SpokeEmbeddings;
 use App\Interview\Arrange\SubClusterDetector;
 use App\Interview\Arrange\SubHubDemoter;
@@ -122,7 +123,7 @@ test('a confirmed demotion is not reverted on a re-run', function () {
     spgSite($site);
     demoter($this->fake)->demote($site, 'Backup Power', 'Sump Pumps', ArrangementSource::Confirmed);
 
-    $result = (new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new SubClusterDetector(0.60), new FoldTargetAssigner(0.70)))->arrange($site);
+    $result = (new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new SubClusterDetector(0.60), new FoldTargetAssigner(0.70), new KeywordAssigner(0.90)))->arrange($site);
 
     $pillar = sspk($site, 'Backup Power');
     expect($pillar->is_sub_hub)->toBeTrue()

@@ -10,8 +10,11 @@ use Illuminate\Support\Facades\Schema;
  * same query — pillar = category head, sub-hub = umbrella distinct from its children,
  * own-page core = its specific term. `keyword_collision_score` persists the cosine behind
  * a detected collision so the collision threshold can be tuned from live output.
- * Provenance rides on the existing `arrangement_source` (a confirmed keyword survives a
- * re-run). The keyword also feeds generation later — every page knows its target query.
+ *
+ * The keyword carries its OWN provenance (`keyword_source`: auto|confirmed) — separate from
+ * the structural `arrangement_source`, since a confirmed *demotion* must not freeze the
+ * sub-hub's keyword (a distinct decision). Pass D writes only over a non-confirmed keyword,
+ * so a confirmed keyword survives a re-run. The keyword also feeds generation later.
  */
 return new class extends Migration
 {
@@ -19,14 +22,15 @@ return new class extends Migration
     {
         Schema::table('spokes', function (Blueprint $table) {
             $table->string('primary_keyword')->nullable()->after('is_sub_hub');
-            $table->double('keyword_collision_score')->nullable()->after('primary_keyword');
+            $table->string('keyword_source')->nullable()->after('primary_keyword');
+            $table->double('keyword_collision_score')->nullable()->after('keyword_source');
         });
     }
 
     public function down(): void
     {
         Schema::table('spokes', function (Blueprint $table) {
-            $table->dropColumn(['primary_keyword', 'keyword_collision_score']);
+            $table->dropColumn(['primary_keyword', 'keyword_source', 'keyword_collision_score']);
         });
     }
 };
