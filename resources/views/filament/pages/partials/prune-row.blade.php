@@ -1,30 +1,37 @@
-{{-- One spoke row: name + volume + (connecting) note, with outcome / re-tag / granularity controls. --}}
-@php $decided = ($this->spokeDecisions[$row->id]['outcome'] ?? '') !== ''; @endphp
-<div @class([
-    'flex flex-col gap-2 rounded-lg px-3 py-2 ring-1 sm:flex-row sm:items-center sm:justify-between',
-    'bg-gray-50 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10' => $decided,
-    'bg-warning-50/40 ring-warning-600/20 dark:bg-warning-500/5' => ! $decided,
-])>
-    <div class="min-w-0 flex-1 text-sm">
-        <span class="font-medium text-gray-800 dark:text-gray-100">{{ $row->name }}</span>
-        <span class="ml-2 text-xs text-gray-400">{{ $row->volume === null ? '—' : $row->volume.' searches' }}</span>
+{{-- One spoke row (lp-): name + (connecting) note, density bar scaled to the silo max + volume,
+     tag badge, and the outcome / re-tag / granularity controls (styled forms of the same bindings). --}}
+@php
+    $decided = ($this->spokeDecisions[$row->id]['outcome'] ?? '') !== '';
+    $vol = $row->volume === null ? null : (int) $row->volume;
+    $pct = $row->isPillar ? 100 : ($vol !== null && $maxVol > 0 ? min(100, ($vol / $maxVol) * 100) : 0);
+    $tm = $tagMeta[$row->tag->value] ?? ['label' => ucfirst($row->tag->value), 'color' => '#94a3b8'];
+    $volLabel = $vol === null ? '—' : number_format($vol);
+@endphp
+<div @class(['lp-spoke', 'pending' => ! $decided])>
+    <div class="lp-spoke-main">
+        <div class="lp-spoke-name">{{ $row->name }}</div>
         @if ($row->connectionNote)
-            <div class="text-xs text-gray-500 dark:text-gray-400">↳ {{ $row->connectionNote }}</div>
+            <div class="lp-spoke-note">↳ {{ $row->connectionNote }}</div>
         @endif
     </div>
-    <div class="flex flex-wrap items-center gap-2">
-        <select wire:model="spokeDecisions.{{ $row->id }}.outcome" class="{{ $inputClass }} w-44">
+    <div class="lp-density">
+        <div class="lp-density-track"><span style="width: {{ $pct }}%; background: var(--spine)"></span></div>
+        <span class="lp-vol">{{ $volLabel }}</span>
+    </div>
+    <span class="lp-badge" style="--bg: {{ $tm['color'] }}">{{ $tm['label'] }}</span>
+    <div class="lp-controls">
+        <select wire:model="spokeDecisions.{{ $row->id }}.outcome" @class(['lp-select', 'pending' => ! $decided]) style="width:148px">
             <option value="">— not decided —</option>
             @foreach ($this->outcomeOptions as $value => $label)
                 <option value="{{ $value }}">{{ $label }}</option>
             @endforeach
         </select>
-        <select wire:model="spokeDecisions.{{ $row->id }}.tag" class="{{ $inputClass }} w-32" title="re-tag">
+        <select wire:model="spokeDecisions.{{ $row->id }}.tag" class="lp-select" title="re-tag" style="width:118px">
             @foreach ($this->tagOptions as $value => $label)
                 <option value="{{ $value }}">{{ $label }}</option>
             @endforeach
         </select>
-        <select wire:model="spokeDecisions.{{ $row->id }}.granularity" class="{{ $inputClass }} w-32" title="granularity">
+        <select wire:model="spokeDecisions.{{ $row->id }}.granularity" class="lp-select" title="granularity" style="width:118px">
             @foreach ($this->granularityOptions as $value => $label)
                 <option value="{{ $value }}">{{ $label }}</option>
             @endforeach
