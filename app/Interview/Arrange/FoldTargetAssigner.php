@@ -69,27 +69,34 @@ final class FoldTargetAssigner
                 continue; // keep the current target + score
             }
 
-            if (! $cleared && $cores->isNotEmpty()) {
-                // there were cores to consider but none cleared the floor — flag it
+            $lowConfidence = ! $cleared && $cores->isNotEmpty();
+            if ($lowConfidence) {
+                // No core cleared the floor — parked on the pillar (the pick). Dismiss keeps it
+                // there; accept folds it into the best below-floor core (the alternative).
                 $flags[] = new ArrangeFlag(
                     ArrangeFlagType::NestLowConfidence,
                     $spoke->id,
-                    "No strong parent for \"{$spoke->name}\"; parked on the {$spoke->silo} pillar — confirm where it nests.",
+                    "No strong parent for \"{$spoke->name}\"; parked on the {$spoke->silo} pillar — accept to nest under \"{$best?->name}\", or dismiss to keep it on the pillar.",
                     $cores->take(3)->map(fn (Spoke $c) => [
                         'id' => $c->id,
                         'name' => $c->name,
                         'score' => round($vectors->similarity($spoke, $c), 3),
                     ])->all(),
+                    $best !== null ? ['spoke_id' => $best->id] : [], // accept → fold into the best core
                 );
             }
 
             $targetId = $target?->id;
             $changed = $spoke->fold_into_id !== $targetId;
-            $spoke->update([
+            $attrs = [
                 'fold_into_id' => $targetId,
                 'arrangement_source' => ArrangementSource::Auto,
                 'arrangement_score' => max($score, 0.0), // -1.0 when no cores existed → 0.0
-            ]);
+            ];
+            if ($lowConfidence) {
+                $attrs['flagged'] = true; // only ever SET (AutoArranger resets at run start)
+            }
+            $spoke->update($attrs);
             if ($changed) {
                 $applied++;
             }

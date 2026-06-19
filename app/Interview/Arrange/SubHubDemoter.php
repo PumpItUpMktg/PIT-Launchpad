@@ -71,6 +71,30 @@ final class SubHubDemoter
         return true;
     }
 
+    /**
+     * Reverse a demotion (the dismiss of a sub-hub flag): restore the silo to top-level and
+     * re-nest its spokes within itself (Pass A, now that its subtree is just itself again).
+     */
+    public function promote(Site $site, string $silo, ArrangementSource $source = ArrangementSource::Confirmed, ?SpokeEmbeddings $vectors = null): bool
+    {
+        $pillar = $this->pillar($site, $silo);
+        if ($pillar === null || ! $pillar->isSubHub()) {
+            return false;
+        }
+
+        DB::transaction(function () use ($site, $pillar, $source, $vectors): void {
+            $pillar->update([
+                'parent_silo_id' => null,
+                'is_sub_hub' => false,
+                'arrangement_source' => $source,
+                'flagged' => false,
+            ]);
+            $this->nesting->run($site, $vectors ?? new SpokeEmbeddings($this->embeddings));
+        });
+
+        return true;
+    }
+
     private function hasSubHubChildren(Site $site, string $pillarId): bool
     {
         return Spoke::withoutGlobalScope(SiteScope::class)

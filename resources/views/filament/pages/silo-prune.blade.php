@@ -115,6 +115,7 @@
                         </select>
                     </label>
                     @if ($this->hasCandidates)
+                        <button type="button" wire:click="runAutoArrange" class="lp-btn ghost">⚙ Run auto-arrange</button>
                         <button type="button" wire:click="start" class="lp-btn">✂ Open prune</button>
                     @endif
                 </div>
@@ -140,11 +141,36 @@
                     <div class="lp-stat"><div class="n">{{ $p['dropped'] }}</div><div class="l">handoff / dropped</div></div>
                 </div>
                 <div style="display:flex; gap:8px">
+                    <button type="button" wire:click="runAutoArrange" class="lp-btn ghost">⚙ Auto-arrange</button>
                     <button type="button" wire:click="applyUpdate" class="lp-btn ghost">↻ Update</button>
                     <button type="button" wire:click="finalize" class="lp-btn go"
                         wire:confirm="Finalize? {{ $p['pending'] }} pending candidate(s) will be dropped (not built).">✓ Finalize</button>
                 </div>
             </div>
+
+            {{-- auto-arrange (§4b): recommendations awaiting accept/dismiss. Eager-apply model —
+                 the change is already the default; Accept locks it (or applies a sub-hub demotion),
+                 Dismiss leaves the current structure and stops re-flagging. --}}
+            @if (count($this->arrangeFlags))
+                <div class="lp-card" style="border-left:5px solid var(--connecting)">
+                    <strong style="font-family:'Archivo',sans-serif">Auto-arrange — {{ count($this->arrangeFlags) }} to review</strong>
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px">
+                        @foreach ($this->arrangeFlags as $flag)
+                            @php $scoreLabel = $flag['score'] !== null ? ' · '.number_format($flag['score'], 2) : ''; @endphp
+                            <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; border:1px solid var(--line); border-radius:10px; padding:9px 12px">
+                                <div style="min-width:240px; flex:1">
+                                    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--connecting)">{{ $flag['type'].$scoreLabel }}</div>
+                                    <div style="font-size:13px; margin-top:2px">{{ $flag['message'] }}</div>
+                                </div>
+                                <div style="display:flex; gap:6px">
+                                    <button type="button" wire:click="acceptFlag('{{ $flag['id'] }}')" class="lp-btn" style="padding:6px 12px">Accept</button>
+                                    <button type="button" wire:click="dismissFlag('{{ $flag['id'] }}')" class="lp-btn ghost" style="padding:6px 12px">Dismiss</button>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
 
             @foreach ($this->bySilo as $silo => $rows)
                 @php

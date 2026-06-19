@@ -47,6 +47,10 @@ final class AutoArranger
         $vectors = new SpokeEmbeddings($this->embeddings);
         $this->prewarmEmbeddings($site, $vectors);
 
+        // Clear last run's flags so this run recomputes them; passes only ever SET flagged=true,
+        // so a no-longer-flagged spoke clears here, and confirmed spokes (never flagged) stay clean.
+        Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->update(['flagged' => false]);
+
         return $this->dedup->run($site, $vectors)
             ->merge($this->subClusters->run($site, $vectors))
             ->merge($this->nesting->run($site, $vectors))

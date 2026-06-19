@@ -84,25 +84,29 @@ final class KeywordAssigner
                 continue;
             }
 
-            // A sub-hub whose umbrella still collides — flag, never collapse the demotion.
+            // Dismiss reverts to the umbrella/silo framing as the distinct fallback keyword.
+            $fallback = ['keyword' => (string) $page->silo];
+
             if ($page->isSubHub()) {
                 $flags[] = new ArrangeFlag(
                     ArrangeFlagType::SubHubKeywordCollision,
                     $page->id,
-                    "Sub-hub \"{$page->name}\" umbrella \"{$keyword}\" still collides with \"{$rival->name}\" — confirm a distinct term.",
+                    "Sub-hub \"{$page->name}\" umbrella \"{$keyword}\" still collides with \"{$rival->name}\" — accept, or dismiss to use \"{$page->silo}\".",
                     [['id' => $rival->id, 'name' => $rival->name, 'score' => round($score, 3)]],
+                    $fallback,
                 );
             } else {
                 $flags[] = new ArrangeFlag(
                     ArrangeFlagType::KeywordCollision,
                     $page->id,
-                    "\"{$page->name}\" targets the same query as \"{$rival->name}\" — confirm a distinct keyword.",
+                    "\"{$page->name}\" targets the same query as \"{$rival->name}\" — accept, or dismiss to use \"{$page->silo}\".",
                     [['id' => $rival->id, 'name' => $rival->name, 'score' => round($score, 3)]],
+                    $fallback,
                 );
             }
 
-            // Assign the preferred keyword anyway (advisory flag) + record the collision score.
-            $this->assign($page, $keyword, $score);
+            // Keep the preferred keyword as the applied pick + flag it (accept/dismiss resolves).
+            $this->assign($page, $keyword, $score, flagged: true);
             $taken[] = ['spoke' => $page, 'keyword' => $keyword];
             $assigned++;
         }
@@ -110,16 +114,20 @@ final class KeywordAssigner
         return new ArrangeResult(['keyword' => $assigned, 'keyword_fold' => $folds], $flags);
     }
 
-    private function assign(Spoke $page, string $keyword, ?float $score): void
+    private function assign(Spoke $page, string $keyword, ?float $score, bool $flagged = false): void
     {
         if ($page->keyword_source === ArrangementSource::Confirmed) {
             return; // preserve an operator-confirmed keyword (its own provenance, not the structural one)
         }
-        $page->update([
+        $attrs = [
             'primary_keyword' => $keyword,
             'keyword_source' => ArrangementSource::Auto,
             'keyword_collision_score' => $score,
-        ]);
+        ];
+        if ($flagged) {
+            $attrs['flagged'] = true; // only ever SET (AutoArranger resets at run start) — never clear another pass's flag
+        }
+        $page->update($attrs);
     }
 
     private function preferredKeyword(Spoke $page): string
