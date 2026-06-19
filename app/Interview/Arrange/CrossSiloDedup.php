@@ -3,6 +3,7 @@
 namespace App\Interview\Arrange;
 
 use App\Enums\ArrangeFlagType;
+use App\Enums\ArrangementSource;
 use App\Enums\SpokeGranularity;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -40,11 +41,17 @@ final class CrossSiloDedup
         $flags = [];
 
         foreach ($this->clusters($candidates, $vectors) as $cluster) {
+            // Stable order: highest volume, then strongest silo fit, then name — so the
+            // home pick is deterministic across re-runs (no thrash on near-ties).
             usort($cluster, function (Spoke $a, Spoke $b) use ($vectors, $pillars) {
-                return $this->rank($b, $vectors, $pillars) <=> $this->rank($a, $vectors, $pillars);
+                $ra = $this->rank($a, $vectors, $pillars);
+                $rb = $this->rank($b, $vectors, $pillars);
+
+                return [$rb['volume'], $rb['fit'], $ra['name']] <=> [$ra['volume'], $ra['fit'], $rb['name']];
             });
 
             $winner = $cluster[0];
+            $cohesion = $this->maxSimilarity($winner, $cluster, $vectors);
 
             if ($this->ambiguous($cluster)) {
                 $flags[] = new ArrangeFlag(
@@ -60,18 +67,25 @@ final class CrossSiloDedup
             }
 
             // The winner is the home page; make it a valid own-page fold target (only if undecided).
-            if ($winner->isCandidate()) {
-                $winner->update(['granularity' => SpokeGranularity::OwnPage, 'fold_into_id' => null]);
+            if ($winner->isArrangeable()) {
+                $winner->update([
+                    'granularity' => SpokeGranularity::OwnPage,
+                    'fold_into_id' => null,
+                    'arrangement_source' => ArrangementSource::Auto,
+                    'arrangement_score' => $cohesion,
+                ]);
             }
 
             foreach (array_slice($cluster, 1) as $loser) {
-                if (! $loser->isCandidate()) {
-                    continue; // preserve an operator-confirmed spoke
+                if (! $loser->isArrangeable()) {
+                    continue; // preserve an operator-routed or operator-confirmed spoke
                 }
                 $loser->update([
                     'silo' => $winner->silo,
                     'granularity' => SpokeGranularity::Folded,
                     'fold_into_id' => $winner->id,
+                    'arrangement_source' => ArrangementSource::Auto,
+                    'arrangement_score' => $vectors->similarity($winner, $loser),
                 ]);
                 $applied++;
             }
@@ -123,18 +137,36 @@ final class CrossSiloDedup
     }
 
     /**
-     * Sort key: volume first, then silo fit (cosine to the spoke's own pillar). Null
-     * volume sinks to the bottom.
+     * Sort key: volume first, then silo fit (cosine to the spoke's own pillar), then name
+     * (the stable tie-break). Null volume sinks to the bottom.
      *
      * @param  Collection<int, Spoke>  $pillars  keyed by silo
-     * @return array{0: int, 1: float}
+     * @return array{volume: int, fit: float, name: string}
      */
     private function rank(Spoke $spoke, SpokeEmbeddings $vectors, Collection $pillars): array
     {
         $pillar = $pillars->get((string) $spoke->silo);
         $fit = $pillar instanceof Spoke ? $vectors->similarity($spoke, $pillar) : 0.0;
 
-        return [$spoke->volume ?? -1, $fit];
+        return ['volume' => $spoke->volume ?? -1, 'fit' => $fit, 'name' => $spoke->name];
+    }
+
+    /**
+     * The strongest similarity between the home spoke and any other cluster member — the
+     * dedup's confidence, persisted as the home's arrangement score.
+     *
+     * @param  list<Spoke>  $cluster
+     */
+    private function maxSimilarity(Spoke $spoke, array $cluster, SpokeEmbeddings $vectors): float
+    {
+        $best = 0.0;
+        foreach ($cluster as $other) {
+            if ($other->id !== $spoke->id) {
+                $best = max($best, $vectors->similarity($spoke, $other));
+            }
+        }
+
+        return $best;
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ArrangeFlagType;
+use App\Enums\ArrangementSource;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokePageType;
 use App\Enums\SpokeStatus;
@@ -148,6 +149,65 @@ test('Pass A falls back to the pillar and flags when no core clears the relatedn
     expect($result->flags)->toHaveCount(1)
         ->and($result->flags[0]->type)->toBe(ArrangeFlagType::NestLowConfidence)
         ->and(aspk($site, 'Water Alarm')->fold_into_id)->toBe($pillar->id); // safe fallback
+});
+
+test('passes stamp arrangement provenance (source=auto) + the cosine score', function () {
+    $site = Site::factory()->create();
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+
+    arrangeSpoke($site, $bp, ['silo' => 'Sump Pumps', 'name' => 'Sump Pumps', 'is_pillar' => true]);
+    arrangeSpoke($site, $bp, ['silo' => 'Sump Pumps', 'name' => 'Battery Backup', 'volume' => 300]);
+    arrangeSpoke($site, $bp, ['silo' => 'Backup Power', 'name' => 'Backup Power', 'is_pillar' => true]);
+    arrangeSpoke($site, $bp, ['silo' => 'Backup Power', 'name' => 'Battery Backup System', 'volume' => 20]);
+
+    (new CrossSiloDedup(0.85, 0.15))->run($site, new SpokeEmbeddings($this->fake));
+
+    $loser = aspk($site, 'Battery Backup System');
+    expect($loser->arrangement_source)->toBe(ArrangementSource::Auto)
+        ->and($loser->arrangement_score)->toBe(1.0); // identical battery vectors
+});
+
+test('a confirmed arrangement is preserved — neither pass overwrites it', function () {
+    $site = Site::factory()->create();
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+
+    arrangeSpoke($site, $bp, ['silo' => 'Sump Pumps', 'name' => 'Sump Pumps', 'is_pillar' => true]);
+    arrangeSpoke($site, $bp, ['silo' => 'Sump Pumps', 'name' => 'Battery Backup', 'volume' => 300]);
+    arrangeSpoke($site, $bp, ['silo' => 'Backup Power', 'name' => 'Backup Power', 'is_pillar' => true]);
+    // operator-confirmed (e.g. dismissed the dedup) but still a routing candidate
+    arrangeSpoke($site, $bp, [
+        'silo' => 'Backup Power', 'name' => 'Battery Backup System', 'volume' => 20,
+        'arrangement_source' => ArrangementSource::Confirmed,
+    ]);
+
+    $result = (new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new FoldTargetAssigner(0.70)))->arrange($site);
+
+    expect($result->applied['dedup'])->toBe(0)
+        ->and(aspk($site, 'Battery Backup System')->silo)->toBe('Backup Power'); // untouched
+});
+
+test('a re-run does not thrash: the second arrange is a no-op', function () {
+    $site = Site::factory()->create();
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+
+    arrangeSpoke($site, $bp, ['silo' => 'Sump Pumps', 'name' => 'Sump Pumps', 'is_pillar' => true]);
+    arrangeSpoke($site, $bp, ['silo' => 'Sump Pumps', 'name' => 'Battery Backup', 'volume' => 300]);
+    arrangeSpoke($site, $bp, [
+        'silo' => 'Sump Pumps', 'name' => 'Water-Powered Backup', 'volume' => 10,
+        'tag' => SpokeTag::Adjacent, 'granularity' => SpokeGranularity::Folded,
+    ]);
+    arrangeSpoke($site, $bp, ['silo' => 'Backup Power', 'name' => 'Backup Power', 'is_pillar' => true]);
+    arrangeSpoke($site, $bp, ['silo' => 'Backup Power', 'name' => 'Battery Backup System', 'volume' => 20]);
+
+    $arranger = new AutoArranger($this->fake, new CrossSiloDedup(0.85, 0.15), new FoldTargetAssigner(0.70));
+    $arranger->arrange($site);
+    $firstTargets = aspk($site, 'Water-Powered Backup')->fold_into_id;
+
+    $second = $arranger->arrange($site);
+
+    expect($second->applied['dedup'])->toBe(0)
+        ->and($second->applied['nest'])->toBe(0)
+        ->and(aspk($site, 'Water-Powered Backup')->fold_into_id)->toBe($firstTargets);
 });
 
 test('AutoArranger runs B then A: dedup merges the pair AND water-powered nests under battery', function () {

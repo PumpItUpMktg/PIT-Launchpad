@@ -3,6 +3,7 @@
 namespace App\Interview\Arrange;
 
 use App\Enums\ArrangeFlagType;
+use App\Enums\ArrangementSource;
 use App\Enums\SpokeGranularity;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -42,7 +43,7 @@ final class FoldTargetAssigner
 
             $folded = $rows
                 ->reject(fn (Spoke $s) => $s->is_pillar)
-                ->filter(fn (Spoke $s) => $s->granularity === SpokeGranularity::Folded && $s->isCandidate());
+                ->filter(fn (Spoke $s) => $s->granularity === SpokeGranularity::Folded && $s->isArrangeable());
 
             foreach ($folded as $spoke) {
                 [$best, $score] = $this->bestCore($spoke, $cores, $vectors);
@@ -67,8 +68,13 @@ final class FoldTargetAssigner
                 }
 
                 $targetId = $target?->id;
-                if ($spoke->fold_into_id !== $targetId) {
-                    $spoke->update(['fold_into_id' => $targetId]);
+                $changed = $spoke->fold_into_id !== $targetId;
+                $spoke->update([
+                    'fold_into_id' => $targetId,
+                    'arrangement_source' => ArrangementSource::Auto,
+                    'arrangement_score' => max($score, 0.0), // -1.0 when no cores existed → 0.0
+                ]);
+                if ($changed) {
                     $applied++;
                 }
             }
