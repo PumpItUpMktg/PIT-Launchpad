@@ -78,10 +78,14 @@ final class CoveragePanels
     private function groups(Collection $areas): array
     {
         $groups = array_fill_keys(self::TIERS, []);
-        $sorted = $areas->sortBy([
-            fn (CoverageArea $a) => -1 * (int) $a->population, // population desc (nulls → 0, sink within their tier)
-            fn (CoverageArea $a) => $a->name,
-        ]);
+        // Canonical town order — the SINGLE comparator used everywhere: population descending
+        // (no-population sinks last), name as the tiebreak. Identical on initial render and after
+        // any toggle, so a click never moves a town.
+        $sorted = $areas->sort(function (CoverageArea $a, CoverageArea $b) {
+            $popDelta = ($b->population ?? -1) <=> ($a->population ?? -1);
+
+            return $popDelta !== 0 ? $popDelta : strcmp($a->name, $b->name);
+        })->values();
 
         foreach ($sorted as $a) {
             $groups[$this->tierKey($a)][] = [
