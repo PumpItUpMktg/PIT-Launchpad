@@ -196,6 +196,10 @@ return [
         'dedup_cosine' => (float) env('LAUNCHPAD_ARRANGE_DEDUP_COSINE', 0.85),
         'dedup_ambiguity_margin' => (float) env('LAUNCHPAD_ARRANGE_DEDUP_MARGIN', 0.15),
         'nest_floor' => (float) env('LAUNCHPAD_ARRANGE_NEST_FLOOR', 0.70),
+
+        // Pass C — fraction of a silo's spokes whose nearest neighbor sits in one other
+        // silo, above which the silo is flagged to demote to a sub-hub under it (advisory).
+        'sub_hub_overlap' => (float) env('LAUNCHPAD_ARRANGE_SUBHUB_OVERLAP', 0.60),
     ],
 
     /*

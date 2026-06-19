@@ -11,21 +11,26 @@ use App\Models\Spoke;
  * auto-arrange — turns the raw silo-volume output into the recommended, cannibalization-
  * safe, properly-nested structure, auto-resolving the mechanical decisions and flagging
  * the judgment calls for operator confirm. The full pipeline is B→C→A→D→E; this increment
- * ships the two structural passes that reuse the §6a embeddings:
+ * ships the structural passes that reuse the §6a embeddings:
  *
  *   - Pass B {@see CrossSiloDedup}: one keyword, one home (fold cross-silo near-dups in).
- *   - Pass A {@see FoldTargetAssigner}: nest each folded spoke under its most-related core.
+ *   - Pass C {@see SubClusterDetector}: flag a silo whose spokes cluster into another as a
+ *     sub-hub demotion candidate (advisory only — applied by {@see SubHubDemoter} on accept).
+ *   - Pass A {@see FoldTargetAssigner}: nest each folded spoke under its most-related core
+ *     anywhere in its silo subtree.
  *
- * Order matters — A runs after B so it sees the final silo membership. A single shared
- * {@see SpokeEmbeddings} memoizes every vector across both passes (names don't change).
- * It only ever sets defaults on undecided spokes; operator-confirmed structure is
- * preserved (the §10 twin), so a re-run never wipes a decision.
+ * Order matters — C runs on the post-dedup set, A last so it sees final membership. A
+ * single shared {@see SpokeEmbeddings} memoizes every vector across the passes. It only
+ * ever sets defaults on undecided spokes (Pass C mutates nothing); operator-confirmed
+ * structure is preserved (the §10 twin), so a re-run never wipes a decision. D/E and the
+ * orchestration command land in increment 4.
  */
 final class AutoArranger
 {
     public function __construct(
         private readonly EmbeddingProvider $embeddings,
         private readonly CrossSiloDedup $dedup,
+        private readonly SubClusterDetector $subClusters,
         private readonly FoldTargetAssigner $nesting,
     ) {}
 
@@ -35,6 +40,7 @@ final class AutoArranger
         $this->prewarmEmbeddings($site, $vectors);
 
         return $this->dedup->run($site, $vectors)
+            ->merge($this->subClusters->run($site, $vectors))
             ->merge($this->nesting->run($site, $vectors));
     }
 
