@@ -16,11 +16,15 @@ enum ArrangeFlagType: string
     /** Pass A: a folded spoke that cleared no core's relatedness floor — parked on the pillar. */
     case NestLowConfidence = 'nest_low_confidence';
 
+    /** Pass C: a silo whose spokes mostly cluster into one other silo — recommend demoting it to a sub-hub. */
+    case SubHubDemotion = 'sub_hub_demotion';
+
     public function label(): string
     {
         return match ($this) {
             self::DedupAmbiguous => 'Ambiguous duplicate',
             self::NestLowConfidence => 'Uncertain nesting',
+            self::SubHubDemotion => 'Sub-hub demotion',
         };
     }
 }
