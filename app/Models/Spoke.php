@@ -42,6 +42,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $primary_keyword the distinct target query for this page (Pass D)
  * @property ArrangementSource|null $keyword_source provenance of the primary keyword (own, not the structural one)
  * @property float|null $keyword_collision_score the cosine behind a detected keyword collision
+ * @property bool $flagged an auto-applied judgment call awaiting operator accept/dismiss (blocks Finalize)
  * @property ArrangementSource|null $arrangement_source auto-arrange provenance (null = untouched)
  * @property float|null $arrangement_score the cosine/overlap behind the arrangement decision
  */
@@ -92,6 +93,7 @@ class Spoke extends Model
             'status' => SpokeStatus::class,
             'granularity' => SpokeGranularity::class,
             'is_sub_hub' => 'boolean',
+            'flagged' => 'boolean',
             'keyword_source' => ArrangementSource::class,
             'keyword_collision_score' => 'float',
             'arrangement_source' => ArrangementSource::class,

@@ -31,16 +31,34 @@ final class SubClusterDetector
     public function run(Site $site, SpokeEmbeddings $vectors): ArrangeResult
     {
         $spokes = $this->spokes($site);
+        $byId = $spokes->keyBy('id');
         $pillars = $spokes->filter(fn (Spoke $s) => $s->is_pillar)->keyBy('silo');
         $candidates = $spokes->reject(fn (Spoke $s) => $s->is_pillar)->values();
 
         $flags = [];
+        $applied = 0;
 
         foreach ($candidates->groupBy(fn (Spoke $s) => (string) $s->silo) as $silo => $rows) {
             $pillar = $pillars->get((string) $silo);
-            // Skip silos with no pillar, already-demoted sub-hubs (already placed), or a pillar
-            // whose structure the operator confirmed (e.g. dismissed a prior demotion) — don't re-flag.
-            if (! $pillar instanceof Spoke || $pillar->isSubHub() || $pillar->arrangement_source === ArrangementSource::Confirmed) {
+            if (! $pillar instanceof Spoke || $pillar->arrangement_source === ArrangementSource::Confirmed) {
+                continue; // no pillar, or operator already signed off (confirmed/dismissed) — never re-flag
+            }
+
+            // An auto sub-hub from a prior run is still UNRESOLVED — re-raise its flag (keep it
+            // blocking Finalize) without re-detecting; resolving it (accept/dismiss) confirms it.
+            if ($pillar->isSubHub()) {
+                $parentPillar = $pillar->parent_silo_id !== null ? $byId->get($pillar->parent_silo_id) : null;
+                $parentSilo = $parentPillar instanceof Spoke ? (string) $parentPillar->silo : '';
+                $pillar->update(['flagged' => true]);
+                $applied++;
+                $flags[] = new ArrangeFlag(
+                    ArrangeFlagType::SubHubDemotion,
+                    $pillar->id,
+                    "{$silo} is a sub-hub under {$parentSilo} (auto) — accept, or dismiss to keep it separate.",
+                    $parentPillar instanceof Spoke ? [['id' => (string) $parentPillar->id, 'name' => $parentSilo, 'score' => 1.0]] : [],
+                    ['keep_separate' => true],
+                );
+
                 continue;
             }
 
@@ -68,24 +86,51 @@ final class SubClusterDetector
             $fraction = $intoSilo[$targetSilo] / $rows->count();
 
             $targetPillar = $pillars->get($targetSilo);
-            // Respect the one-level cap up front: a target that is itself a sub-hub can't host one.
-            if ($fraction <= $this->overlapBar || ! $targetPillar instanceof Spoke || $targetPillar->isSubHub()) {
+            // One-level cap: a sub-hub target can't host one, and a silo that already hosts
+            // sub-hubs can't itself be demoted (pillar → sub-hub → leaf only).
+            if ($fraction <= $this->overlapBar
+                || ! $targetPillar instanceof Spoke
+                || $targetPillar->isSubHub()
+                || $this->hasSubHubChildren($pillars, $pillar->id)) {
                 continue;
             }
+
+            // Auto-apply the demotion (uniform rule: apply + flag), but never auto-CONFIRM it —
+            // it's flagged and blocks Finalize until the operator accepts (keep) or dismisses
+            // (un-demote). Pass A (next) re-nests its spokes subtree-aware under the parent.
+            $pillar->update([
+                'parent_silo_id' => $targetPillar->id,
+                'is_sub_hub' => true,
+                'arrangement_source' => ArrangementSource::Auto,
+                'flagged' => true,
+            ]);
+            $applied++;
 
             $flags[] = new ArrangeFlag(
                 ArrangeFlagType::SubHubDemotion,
                 $pillar->id,
-                "Most of {$silo}'s spokes cluster into {$targetSilo} — consider demoting {$silo} to a sub-hub under {$targetSilo}.",
+                "Most of {$silo}'s spokes cluster into {$targetSilo}; auto-arrange demoted {$silo} to a sub-hub under {$targetSilo} — accept, or dismiss to keep it separate.",
                 [[
                     'id' => $targetPillar->id,
                     'name' => $targetSilo,
                     'score' => round($fraction, 3),
                 ]],
+                ['keep_separate' => true], // dismiss → un-demote (revert to a top-level silo)
             );
         }
 
-        return new ArrangeResult(['sub_cluster' => count($flags)], $flags);
+        return new ArrangeResult(['sub_cluster' => $applied], $flags);
+    }
+
+    /**
+     * Whether any pillar is already parented under this one (it hosts a sub-hub) — so demoting
+     * it would breach the one-level cap.
+     *
+     * @param  Collection<int, Spoke>  $pillars
+     */
+    private function hasSubHubChildren(Collection $pillars, string $pillarId): bool
+    {
+        return $pillars->contains(fn (Spoke $p) => $p->parent_silo_id === $pillarId);
     }
 
     /**

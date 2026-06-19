@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property ArrangeFlagType $type
  * @property string $message
  * @property array<int, array{id: string, name: string, score: float}>|null $candidates
+ * @property array<string, mixed>|null $alternative
  * @property float|null $score
  */
 class ArrangementFlag extends Model
@@ -35,6 +36,7 @@ class ArrangementFlag extends Model
         return [
             'type' => ArrangeFlagType::class,
             'candidates' => 'array',
+            'alternative' => 'array',
             'score' => 'float',
         ];
     }

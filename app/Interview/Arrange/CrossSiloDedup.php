@@ -51,29 +51,36 @@ final class CrossSiloDedup
             });
 
             $winner = $cluster[0];
+            $runnerUp = $cluster[1];
             $cohesion = $this->maxSimilarity($winner, $cluster, $vectors);
+            $ambiguous = $this->ambiguous($cluster);
 
-            if ($this->ambiguous($cluster)) {
+            if ($ambiguous) {
                 $flags[] = new ArrangeFlag(
                     ArrangeFlagType::DedupAmbiguous,
                     $winner->id,
-                    "Near-duplicate of {$cluster[1]->name}; auto-arrange kept \"{$winner->name}\" as the home — confirm.",
+                    "Near-duplicate of {$runnerUp->name}; auto-arrange kept \"{$winner->name}\" as the home — confirm, or dismiss to use \"{$runnerUp->name}\".",
                     array_map(fn (Spoke $s) => [
                         'id' => $s->id,
                         'name' => $s->name,
                         'score' => round((float) ($s->volume ?? 0), 2),
                     ], $cluster),
+                    ['spoke_id' => $runnerUp->id], // dismiss → re-home onto the runner-up
                 );
             }
 
             // The winner is the home page; make it a valid own-page fold target (only if undecided).
             if ($winner->isArrangeable()) {
-                $winner->update([
+                $attrs = [
                     'granularity' => SpokeGranularity::OwnPage,
                     'fold_into_id' => null,
                     'arrangement_source' => ArrangementSource::Auto,
                     'arrangement_score' => $cohesion,
-                ]);
+                ];
+                if ($ambiguous) {
+                    $attrs['flagged'] = true; // a close call is the home judgment; accept/dismiss resolves it
+                }
+                $winner->update($attrs);
             }
 
             foreach (array_slice($cluster, 1) as $loser) {

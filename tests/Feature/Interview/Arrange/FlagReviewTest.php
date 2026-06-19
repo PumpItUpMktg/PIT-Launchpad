@@ -11,6 +11,7 @@ use App\Interview\Arrange\AutoArrangeRunner;
 use App\Interview\Arrange\FlagResolver;
 use App\Interview\Arrange\FoldTargetAssigner;
 use App\Interview\Arrange\SubHubDemoter;
+use App\Interview\Prune\PruneEngine;
 use App\Models\ArrangementFlag;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
@@ -79,20 +80,22 @@ function frSite(Site $site): void
 
 function flagResolver(EmbeddingProvider $fake): FlagResolver
 {
-    return new FlagResolver(new SubHubDemoter($fake, new FoldTargetAssigner(0.70, 0.05)));
+    return new FlagResolver(new SubHubDemoter($fake, new FoldTargetAssigner(0.70, 0.05)), app(PruneEngine::class));
 }
 
 test('the runner persists the flag list (replace-on-run, not duplicated)', function () {
     $site = Site::factory()->create();
     frSite($site);
 
-    app(AutoArrangeRunner::class)->run($site);
-    $first = ArrangementFlag::query()->where('site_id', $site->id)->where('type', ArrangeFlagType::SubHubDemotion)->count();
+    $result = app(AutoArrangeRunner::class)->run($site);
+
+    // This fixture produces exactly the two sub-hub demotions (Backup Power + Pump Protection).
+    expect($result->flagsOfType(ArrangeFlagType::SubHubDemotion))->toHaveCount(2)
+        ->and(ArrangementFlag::query()->where('site_id', $site->id)->count())->toBe(2);
 
     app(AutoArrangeRunner::class)->run($site); // re-run
 
-    expect($first)->toBe(2) // Backup Power + Pump Protection
-        ->and(ArrangementFlag::query()->where('site_id', $site->id)->where('type', ArrangeFlagType::SubHubDemotion)->count())->toBe(2); // replaced, not 4
+    expect(ArrangementFlag::query()->where('site_id', $site->id)->count())->toBe(2); // replaced, not 4
 });
 
 test('accepting a sub-hub demotion flag demotes the silo and clears the flag', function () {
@@ -141,19 +144,37 @@ test('FlagResolver confirms a keyword flag (own keyword provenance)', function (
         ->and($core->arrangement_source)->toBeNull(); // structural provenance untouched
 });
 
-test('FlagResolver confirms a structural flag and its folded child', function () {
+test('accepting a dedup flag confirms the winner home and its folded child', function () {
     $site = Site::factory()->create();
     $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
-    $winner = frSpoke($site, $bp, ['silo' => 'A', 'name' => 'Winner']);
+    $winner = frSpoke($site, $bp, ['silo' => 'A', 'name' => 'Winner', 'flagged' => true]);
     $loser = frSpoke($site, $bp, ['silo' => 'A', 'name' => 'Loser', 'granularity' => SpokeGranularity::Folded, 'fold_into_id' => $winner->id]);
 
     $flag = ArrangementFlag::query()->create([
         'site_id' => $site->id, 'spoke_id' => $winner->id, 'type' => ArrangeFlagType::DedupAmbiguous,
-        'message' => 'x', 'candidates' => [], 'score' => 0.9,
+        'message' => 'x', 'candidates' => [], 'alternative' => [], 'score' => 0.9,
     ]);
 
-    flagResolver($this->fake)->dismiss($site, $flag);
-
-    expect($winner->refresh()->arrangement_source)->toBe(ArrangementSource::Confirmed)
+    expect(flagResolver($this->fake)->accept($site, $flag))->toBeTrue()
+        ->and($winner->refresh()->arrangement_source)->toBe(ArrangementSource::Confirmed)
+        ->and($winner->flagged)->toBeFalse()                                      // cleared (no other flags)
         ->and($loser->refresh()->arrangement_source)->toBe(ArrangementSource::Confirmed); // the merged section is locked too
+});
+
+test('dismissing a dedup flag re-homes onto the runner-up', function () {
+    $site = Site::factory()->create();
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+    $winner = frSpoke($site, $bp, ['silo' => 'A', 'name' => 'Winner', 'flagged' => true]);
+    $runnerUp = frSpoke($site, $bp, ['silo' => 'B', 'name' => 'Runner Up', 'granularity' => SpokeGranularity::Folded, 'fold_into_id' => $winner->id]);
+
+    $flag = ArrangementFlag::query()->create([
+        'site_id' => $site->id, 'spoke_id' => $winner->id, 'type' => ArrangeFlagType::DedupAmbiguous,
+        'message' => 'x', 'candidates' => [], 'alternative' => ['spoke_id' => $runnerUp->id], 'score' => 0.9,
+    ]);
+
+    expect(flagResolver($this->fake)->dismiss($site, $flag))->toBeTrue()
+        ->and($runnerUp->refresh()->granularity)->toBe(SpokeGranularity::OwnPage)     // runner-up becomes the home
+        ->and($runnerUp->fold_into_id)->toBeNull()
+        ->and($winner->refresh()->fold_into_id)->toBe($runnerUp->id)                  // winner folds onto it
+        ->and($winner->granularity)->toBe(SpokeGranularity::Folded);
 });

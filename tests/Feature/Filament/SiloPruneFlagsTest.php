@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\ArrangeFlagType;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokePageType;
 use App\Enums\SpokeStatus;
@@ -64,7 +63,7 @@ test('the prune page runs auto-arrange and lists the flags', function () {
         ->call('runAutoArrange');
 
     expect($page->instance()->arrangeFlags)->not->toBeEmpty()
-        ->and(ArrangementFlag::query()->where('site_id', $this->site->id)->where('type', ArrangeFlagType::SubHubDemotion)->count())->toBe(2);
+        ->and(ArrangementFlag::query()->where('site_id', $this->site->id)->count())->toBe(2);
 });
 
 test('dismissing a flag from the page removes it', function () {

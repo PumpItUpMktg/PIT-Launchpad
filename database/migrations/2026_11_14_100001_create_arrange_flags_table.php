@@ -22,6 +22,9 @@ return new class extends Migration
             $table->string('type');
             $table->text('message');
             $table->json('candidates')->nullable();
+            // The concrete revert target a dismiss applies (per flag type): the runner-up home
+            // spoke, the best below-floor core, the umbrella keyword, the sibling to fold into, …
+            $table->json('alternative')->nullable();
             $table->double('score')->nullable();
             $table->timestamps();
         });
