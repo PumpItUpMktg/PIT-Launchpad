@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ArrangementSource;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokePageType;
 use App\Enums\SpokeStatus;
@@ -36,6 +37,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $sibling_brand
  * @property SpokeGranularity $granularity
  * @property string|null $fold_into_id the core spoke this folds into as a section (null = pillar)
+ * @property ArrangementSource|null $arrangement_source auto-arrange provenance (null = untouched)
+ * @property float|null $arrangement_score the cosine/overlap behind the arrangement decision
  */
 class Spoke extends Model
 {
@@ -50,6 +53,24 @@ class Spoke extends Model
         return $this->belongsTo(SiloBlueprint::class, 'silo_blueprint_id');
     }
 
+    /**
+     * Still an undecided candidate — no owner routing yet.
+     */
+    public function isCandidate(): bool
+    {
+        return $this->status === SpokeStatus::Candidate;
+    }
+
+    /**
+     * Whether auto-arrange may (re)write this spoke's structure: it must be an undecided
+     * candidate (no owner routing yet) AND not a confirmed arrangement (the operator hasn't
+     * accepted/dismissed a recommendation on it). Either touch preserves it across re-runs.
+     */
+    public function isArrangeable(): bool
+    {
+        return $this->isCandidate() && $this->arrangement_source !== ArrangementSource::Confirmed;
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -59,6 +80,8 @@ class Spoke extends Model
             'tag' => SpokeTag::class,
             'status' => SpokeStatus::class,
             'granularity' => SpokeGranularity::class,
+            'arrangement_source' => ArrangementSource::class,
+            'arrangement_score' => 'float',
             'volume' => 'integer',
             'volume_breakdown' => 'array',
             'volume_at' => 'datetime',

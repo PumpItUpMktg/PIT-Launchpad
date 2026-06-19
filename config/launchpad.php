@@ -173,6 +173,33 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | auto-arrange — structural auto-arrangement of the silo-volume output
+    |--------------------------------------------------------------------------
+    |
+    | auto-arrange takes the raw silo-volume tree and produces the recommended,
+    | cannibalization-safe, properly-nested structure automatically: it auto-
+    | resolves the mechanical decisions and flags the judgment calls for operator
+    | confirm (the same advisory pattern as the dead-silo flag). Every relatedness
+    | decision rides on the §6a EmbeddingProvider — never hand-rolled string match.
+    | These cosine thresholds are sane starting points to tune from live output;
+    | each is per-site overridable (later). Pass keys:
+    |
+    |  - dedup_cosine: Pass B — two spokes nearer than this are one keyword/one home.
+    |  - dedup_ambiguity_margin: relative volume gap below which a dedup winner is
+    |    "close" → flag for operator confirm (still applied as the default).
+    |  - nest_floor: Pass A — a folded spoke nests under its most-related own-page
+    |    core only above this; below it falls back to the pillar (safe) + flags.
+    |
+    */
+
+    'auto_arrange' => [
+        'dedup_cosine' => (float) env('LAUNCHPAD_ARRANGE_DEDUP_COSINE', 0.85),
+        'dedup_ambiguity_margin' => (float) env('LAUNCHPAD_ARRANGE_DEDUP_MARGIN', 0.15),
+        'nest_floor' => (float) env('LAUNCHPAD_ARRANGE_NEST_FLOOR', 0.70),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Locations — county-based coverage
     |--------------------------------------------------------------------------
     |
