@@ -2,6 +2,7 @@
 
 namespace App\Interview\Arrange;
 
+use App\Console\Commands\AutoArrangeCommand;
 use App\Integrations\Embedding\EmbeddingProvider;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -27,7 +28,7 @@ use App\Models\Spoke;
  * ever sets defaults on undecided spokes (Pass C mutates nothing); operator-confirmed
  * structure is preserved (the §10 twin) and an auto default only re-flips when the new
  * signal beats the current by a margin, so a re-run is stable and never wipes a decision.
- * The passes write directly; {@see \App\Console\Commands\AutoArrangeCommand} wraps the run
+ * The passes write directly; {@see AutoArrangeCommand} wraps the run
  * in a committed transaction (or a rolled-back one for --dry-run).
  */
 final class AutoArranger

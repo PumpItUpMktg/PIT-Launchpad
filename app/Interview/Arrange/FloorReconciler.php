@@ -3,10 +3,9 @@
 namespace App\Interview\Arrange;
 
 use App\Enums\ArrangeFlagType;
-use App\Enums\ArrangementSource;
 use App\Enums\SpokeGranularity;
-use App\Interview\Prune\PruneRow;
 use App\Interview\Prune\PrunePlan;
+use App\Interview\Prune\PruneRow;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -81,7 +80,9 @@ final class FloorReconciler
         $flags = [];
         foreach ($plan->deadSilos() as $silo) {
             $pillar = $pillarsBySilo->get($silo);
-            if (! $pillar instanceof Spoke) {
+            // Skip a silo with no pillar, or one already placed as a sub-hub (its spokes nest
+            // into the parent on purpose — it isn't a fold candidate).
+            if (! $pillar instanceof Spoke || $pillar->isSubHub()) {
                 continue;
             }
             $flags[] = new ArrangeFlag(
