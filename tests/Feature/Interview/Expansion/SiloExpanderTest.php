@@ -69,6 +69,23 @@ test('audience and brand manifest as their own silos, not new fields', function 
         ->and($names)->toContain('Brands We Service');     // brand axis
 });
 
+test('the expansion prompts steer head_keyword to service intent (not shopping/product nouns)', function () {
+    $fake = new FakeClaudeClient(ExpansionFixture::json());
+    (new SiloExpander($fake, new ExpansionValidator))->expand(seed());
+
+    expect($fake->prompts[0])->toContain('SERVICE-INTENT head_keyword')
+        ->and($fake->prompts[0])->toContain('dehumidification'); // the product-noun trap is called out by example
+
+    // the decomposed path carries the same rule on its plan + per-silo prompts
+    $fake2 = new FakeClaudeClient((string) json_encode([
+        'silos' => [['name' => 'Sump Pumps', 'head_keyword' => 'sump pump', 'page_type' => 'service', 'focus' => 'x']],
+        'fringe_handoff' => [],
+        'spokes' => [['name' => 'Sump Pump Installation', 'page_type' => 'service', 'tag' => 'core', 'head_keyword' => 'sump pump installation', 'connection_note' => null, 'granularity' => 'own_page']],
+    ]));
+    (new SiloExpander($fake2, new ExpansionValidator))->expandDecomposed(seed());
+    expect(collect($fake2->prompts)->every(fn (string $p) => str_contains($p, 'SERVICE-INTENT head_keyword')))->toBeTrue();
+});
+
 test('it normalizes enum drift (own-page, capitalized tags)', function () {
     $tree = ExpansionFixture::tree();
     $tree['silos'][0]['spokes'][0]['granularity'] = 'own-page';
