@@ -3,6 +3,7 @@
 namespace App\Interview\Volume;
 
 use App\Enums\SpokeGranularity;
+use App\Enums\SpokeStatus;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\DataForSeo\DataForSeoException;
 use App\Integrations\DataForSeo\DataForSeoLocations;
@@ -33,7 +34,6 @@ final class VolumeGrounder
         private readonly DataForSeoClient $client,
         private readonly DataForSeoLocations $locations,
         private readonly string $language,
-        private readonly int $foldThreshold,
     ) {}
 
     public function ground(Site $site): VolumeResult
@@ -68,7 +68,7 @@ final class VolumeGrounder
             throw new VolumeException('Every metro failed to resolve / query — verify the DMA mappings resolve to a DataForSEO location_code (Google Ads locations catalog).');
         }
 
-        return $this->write($spokes, $used, $skipped, $byMetro);
+        return $this->write($spokes, $used, $skipped, $byMetro, $site->ownPageBar());
     }
 
     /**
@@ -124,12 +124,12 @@ final class VolumeGrounder
      * @param  list<Metro>  $skipped
      * @param  array<string, array<string, int>>  $byMetro
      */
-    private function write($spokes, array $used, array $skipped, array $byMetro): VolumeResult
+    private function write($spokes, array $used, array $skipped, array $byMetro, int $bar): VolumeResult
     {
         $now = now();
         $results = [];
 
-        DB::transaction(function () use ($spokes, $used, $byMetro, $now, &$results): void {
+        DB::transaction(function () use ($spokes, $used, $byMetro, $now, $bar, &$results): void {
             foreach ($spokes as $spoke) {
                 $keyword = is_string($spoke->head_keyword) ? strtolower(trim($spoke->head_keyword)) : '';
                 if ($keyword === '') {
@@ -144,9 +144,14 @@ final class VolumeGrounder
                     $sum += $v;
                 }
 
-                $granularity = $spoke->is_pillar
+                // Decision-preservation (§10): a pillar — or any spoke the owner has already
+                // decided in the prune (status left Candidate) — keeps its granularity. The
+                // re-ground only sets the recommendation for still-undecided candidates, so a
+                // flipped recommendation never overrides a confirmed owner choice.
+                $locked = $spoke->is_pillar || $spoke->status !== SpokeStatus::Candidate;
+                $granularity = $locked
                     ? $spoke->granularity
-                    : ($sum < $this->foldThreshold ? SpokeGranularity::Folded : SpokeGranularity::OwnPage);
+                    : ($sum < $bar ? SpokeGranularity::Folded : SpokeGranularity::OwnPage);
 
                 $spoke->update([
                     'volume' => $sum,

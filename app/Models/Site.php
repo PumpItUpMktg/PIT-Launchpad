@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 /**
  * @property SiteStatus $status
  * @property int|null $budget_ceiling
+ * @property int|null $silo_own_page_bar
  * @property array<string, int>|null $coverage_thresholds
  * @property string|null $domain_url
  * @property string $brand_name
@@ -181,6 +182,17 @@ class Site extends Model
         ];
     }
 
+    /**
+     * The silo own-page bar — the volume floor at/above which a core spoke pre-checks for its
+     * own page in the prune (below it folds into the pillar). Per-site override over the single
+     * platform knob (config launchpad.silo_volume.fold_threshold). Same value the volume
+     * re-ground uses for its granularity recommendation — no parallel knob.
+     */
+    public function ownPageBar(): int
+    {
+        return (int) ($this->silo_own_page_bar ?? config('launchpad.silo_volume.fold_threshold', 100));
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -188,6 +200,7 @@ class Site extends Model
             'slug_conventions' => 'array',
             'status' => SiteStatus::class,
             'budget_ceiling' => 'integer',
+            'silo_own_page_bar' => 'integer',
             'coverage_thresholds' => 'array',
         ];
     }

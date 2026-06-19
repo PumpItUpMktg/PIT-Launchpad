@@ -168,7 +168,7 @@ return [
 
     'silo_volume' => [
         'language' => env('LAUNCHPAD_SILO_VOLUME_LANGUAGE', 'en'),
-        'fold_threshold' => (int) env('LAUNCHPAD_SILO_VOLUME_FOLD_THRESHOLD', 50),
+        'fold_threshold' => (int) env('LAUNCHPAD_SILO_VOLUME_FOLD_THRESHOLD', 100),
     ],
 
     /*

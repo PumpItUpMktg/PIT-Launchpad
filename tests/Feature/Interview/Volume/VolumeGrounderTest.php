@@ -62,7 +62,7 @@ function fakeSearchVolume(?array $volumes = null, ?array $catalog = null): void
     });
 }
 
-function grounderFor(int $threshold = 50): VolumeGrounder
+function grounderFor(): VolumeGrounder
 {
     $resolver = new MetroResolver(new DmaTable(
         countyToDma: ['34003' => 'New York,NY,United States', '34005' => 'Philadelphia,PA,United States'],
@@ -71,7 +71,7 @@ function grounderFor(int $threshold = 50): VolumeGrounder
     $client = new DataForSeoClient(app(Factory::class), 'x', 'y', 'https://api.dataforseo.com', 30);
     $locations = new DataForSeoLocations($client, app(Cache::class), 'US');
 
-    return new VolumeGrounder($resolver, $client, $locations, 'en', $threshold);
+    return new VolumeGrounder($resolver, $client, $locations, 'en');
 }
 
 function groundedSite(): Site
@@ -110,7 +110,7 @@ test('a low-volume non-pillar spoke is advised to fold; a pillar never folds', f
     fakeSearchVolume();
     $site = groundedSite();
 
-    grounderFor(threshold: 50)->ground($site);
+    grounderFor()->ground($site);
 
     expect(spoke($site, 'Niche Thing')->granularity)->toBe(SpokeGranularity::Folded)        // 30 < 50
         ->and(spoke($site, 'Sump Pump Installation')->granularity)->toBe(SpokeGranularity::OwnPage) // 400 ≥ 50
@@ -171,7 +171,7 @@ test('two coverage areas in the same DMA are queried and counted once (no double
 
     $client = new DataForSeoClient(app(Factory::class), 'x', 'y', 'https://api.dataforseo.com', 30);
     $locations = new DataForSeoLocations($client, app(Cache::class), 'US');
-    (new VolumeGrounder($resolver, $client, $locations, 'en', 50))->ground($site);
+    (new VolumeGrounder($resolver, $client, $locations, 'en'))->ground($site);
 
     expect($volumeCalls)->toBe(1) // the shared DMA is queried exactly once
         ->and(spoke($site, 'Sump Pump Installation')->volume)->toBe(300); // counted once, not 600
