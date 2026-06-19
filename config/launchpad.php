@@ -200,6 +200,9 @@ return [
         // Pass C — fraction of a silo's spokes whose nearest neighbor sits in one other
         // silo, above which the silo is flagged to demote to a sub-hub under it (advisory).
         'sub_hub_overlap' => (float) env('LAUNCHPAD_ARRANGE_SUBHUB_OVERLAP', 0.60),
+
+        // Pass D — two pages whose primary keywords are nearer than this collide (cannibalize).
+        'collision_cosine' => (float) env('LAUNCHPAD_ARRANGE_COLLISION_COSINE', 0.90),
     ],
 
     /*

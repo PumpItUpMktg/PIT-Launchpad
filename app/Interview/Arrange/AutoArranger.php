@@ -18,12 +18,13 @@ use App\Models\Spoke;
  *     sub-hub demotion candidate (advisory only — applied by {@see SubHubDemoter} on accept).
  *   - Pass A {@see FoldTargetAssigner}: nest each folded spoke under its most-related core
  *     anywhere in its silo subtree.
+ *   - Pass D {@see KeywordAssigner}: give each page a distinct primary keyword (cannibalization-safe).
  *
- * Order matters — C runs on the post-dedup set, A last so it sees final membership. A
- * single shared {@see SpokeEmbeddings} memoizes every vector across the passes. It only
- * ever sets defaults on undecided spokes (Pass C mutates nothing); operator-confirmed
- * structure is preserved (the §10 twin), so a re-run never wipes a decision. D/E and the
- * orchestration command land in increment 4.
+ * Order matters — C runs on the post-dedup set, A before D so keywords are assigned over
+ * the final page set. A single shared {@see SpokeEmbeddings} memoizes every vector across
+ * the passes. It only ever sets defaults on undecided spokes (Pass C mutates nothing);
+ * operator-confirmed structure is preserved (the §10 twin), so a re-run never wipes a
+ * decision. Pass E reconciliation + the writing command land in increment 4.
  */
 final class AutoArranger
 {
@@ -32,6 +33,7 @@ final class AutoArranger
         private readonly CrossSiloDedup $dedup,
         private readonly SubClusterDetector $subClusters,
         private readonly FoldTargetAssigner $nesting,
+        private readonly KeywordAssigner $keywords,
     ) {}
 
     public function arrange(Site $site): ArrangeResult
@@ -41,7 +43,8 @@ final class AutoArranger
 
         return $this->dedup->run($site, $vectors)
             ->merge($this->subClusters->run($site, $vectors))
-            ->merge($this->nesting->run($site, $vectors));
+            ->merge($this->nesting->run($site, $vectors))
+            ->merge($this->keywords->run($site, $vectors));
     }
 
     /**
