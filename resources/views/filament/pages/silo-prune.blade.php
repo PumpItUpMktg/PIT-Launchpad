@@ -123,7 +123,7 @@
                     <div class="lp-stat"><div class="n">{{ $p['dropped'] }}</div><div class="l">handoff / dropped</div></div>
                 </div>
                 <div style="display:flex; gap:8px">
-                    <button type="button" wire:click="saveDraft" class="lp-btn ghost">⌖ Save draft</button>
+                    <button type="button" wire:click="applyUpdate" class="lp-btn ghost">↻ Update</button>
                     <button type="button" wire:click="finalize" class="lp-btn go"
                         wire:confirm="Finalize? {{ $p['pending'] }} pending candidate(s) will be dropped (not built).">✓ Finalize</button>
                 </div>

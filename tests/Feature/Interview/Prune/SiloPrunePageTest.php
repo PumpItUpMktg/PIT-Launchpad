@@ -142,6 +142,25 @@ it('finalize applies the pre-decided default to an untouched supporting spoke (f
         ->and(SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('confirmed_at'))->not->toBeNull();
 });
 
+it('Update applies a silo fold + decisions and re-derives the tree without finalizing', function () {
+    $site = prunePageSite();
+    $bp = SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+    Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Backup Power', 'name' => 'Backup Power', 'is_pillar' => true, 'tag' => SpokeTag::Core, 'page_type' => SpokePageType::Service, 'status' => SpokeStatus::Candidate]);
+    Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Backup Power', 'name' => 'Battery Backup', 'tag' => SpokeTag::Core, 'page_type' => SpokePageType::Service, 'status' => SpokeStatus::Candidate, 'volume' => 20]);
+
+    $page = Livewire::test(SiloPrune::class)
+        ->set('siteId', $site->id)
+        ->call('start')
+        ->set('siloDecisions.Backup Power.fold_into', 'Sump Pumps')
+        ->call('applyUpdate');
+
+    expect(pspk($site, 'Battery Backup')->silo)->toBe('Sump Pumps')          // moved under the absorber
+        ->and(pspk($site, 'Backup Power')->is_pillar)->toBeFalse()            // its pillar demoted to a member
+        ->and(array_keys($page->instance()->bySilo))->not->toContain('Backup Power') // card collapsed
+        ->and(SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('confirmed_at'))->toBeNull()   // NOT committed
+        ->and(SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('prune_draft'))->not->toBeNull(); // draft persisted
+});
+
 it('folds a thin silo from the decision-set on finalize', function () {
     $site = prunePageSite();
     // add a second thin silo
