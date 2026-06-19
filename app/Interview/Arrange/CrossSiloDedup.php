@@ -94,7 +94,7 @@ final class CrossSiloDedup
         $n = count($list);
         $parent = range(0, max(0, $n - 1));
 
-        $find = function (int $i) use (&$parent, &$find): int {
+        $find = function (int $i) use (&$parent): int {
             while ($parent[$i] !== $i) {
                 $parent[$i] = $parent[$parent[$i]];
                 $i = $parent[$i];
