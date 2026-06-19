@@ -11,9 +11,9 @@
     $tm = $tagMeta[$row->tag->value] ?? ['label' => ucfirst($row->tag->value), 'color' => '#94a3b8'];
     $volLabel = $vol === null ? '—' : number_format($vol);
 @endphp
-<div @class(['lp-spoke', 'pending' => $pending])>
+<div @class(['lp-spoke', 'pending' => $pending]) wire:key="lp-spoke-{{ $row->id }}" data-spoke-id="{{ $row->id }}">
     <div class="lp-spoke-main">
-        <div class="lp-spoke-name">{{ $row->name }}</div>
+        <div class="lp-spoke-name"><span class="lp-drag" title="drag to another silo to re-home">⠿</span> {{ $row->name }}</div>
         @if ($row->connectionNote)
             <div class="lp-spoke-note">↳ {{ $row->connectionNote }}</div>
         @endif
@@ -32,7 +32,7 @@
         </select>
         {{-- fold target (when folded): which core page absorbs the longtail --}}
         @if ($folded && ! empty($foldOptions))
-            <select wire:model="spokeDecisions.{{ $row->id }}.fold_into" class="lp-select" title="fold into" style="width:150px">
+            <select wire:model.live="spokeDecisions.{{ $row->id }}.fold_into" class="lp-select" title="fold into" style="width:150px">
                 @foreach ($foldOptions as $value => $label)
                     <option value="{{ $value }}">↳ {{ $label }}</option>
                 @endforeach
