@@ -117,22 +117,25 @@ final class DataForSeoLocations
     }
 
     /**
-     * "City, ST, United States" → [normalized city, 'st']; a full state name (no 2-letter
-     * trailing token) → [normalized name, null].
+     * "City, ST, United States" / "City ST, United States" / "City ST" → [normalized city, 'st'];
+     * a full state name (no 2-letter trailing token) → [normalized name, null]. The trailing
+     * state may be separated by a comma OR a space — DataForSEO's DMA Region names are commonly
+     * "City ST" (e.g. "Philadelphia PA"), not comma-delimited.
      *
      * @return array{0: string, 1: string|null}
      */
     private function parse(string $name): array
     {
         $name = (string) preg_replace('/,?\s*united states\s*$/i', '', trim($name));
-        $parts = array_values(array_filter(array_map('trim', explode(',', $name)), fn ($p) => $p !== ''));
+        $name = trim($name, " \t,");
 
         $state = null;
-        if (count($parts) > 1 && preg_match('/^[A-Za-z]{2}$/', (string) end($parts))) {
-            $state = strtolower((string) array_pop($parts));
+        if (preg_match('/[,\s]([A-Za-z]{2})$/', $name, $m) === 1) {
+            $state = strtolower($m[1]);
+            $name = substr($name, 0, -strlen($m[0]));
         }
 
-        return [$this->norm(implode(' ', $parts)), $state];
+        return [$this->norm($name), $state];
     }
 
     private function stateKey(string $name): string
