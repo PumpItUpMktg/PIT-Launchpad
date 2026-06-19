@@ -21,6 +21,8 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed>|null $seed
  * @property list<array{role: string, text: string}>|null $transcript
  * @property Carbon|null $confirmed_at
+ * @property Carbon|null $client_approved_at the §7c client sign-off on the proposed page plan
+ * @property string|null $client_approved_by the client user who signed off
  * @property array<string, mixed>|null $prune_draft
  */
 class SiloBlueprint extends Model
@@ -46,6 +48,12 @@ class SiloBlueprint extends Model
         return $this->spokes()->where('is_pillar', true);
     }
 
+    /** Whether the client has signed off on the proposed page plan (§7c). */
+    public function isClientApproved(): bool
+    {
+        return $this->client_approved_at !== null;
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -53,6 +61,7 @@ class SiloBlueprint extends Model
             'seed' => 'array',
             'transcript' => 'array',
             'confirmed_at' => 'datetime',
+            'client_approved_at' => 'datetime',
             'prune_draft' => 'array',
         ];
     }
