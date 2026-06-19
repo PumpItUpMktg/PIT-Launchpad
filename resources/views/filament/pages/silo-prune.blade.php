@@ -68,10 +68,21 @@
         .lp-fringe-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; font-size:14px; }
         @media (max-width: 720px) { .lp-spoke { grid-template-columns: 1fr; } .lp-controls { justify-content:flex-start; } }
 
-        /* Drag-to-re-home */
+        /* Drag-to-re-home + aligned grid rows */
         .lp-spoke-list { display:flex; flex-direction:column; gap:8px; min-height:8px; }
         .lp-drag { cursor:grab; color:var(--muted); font-size:13px; user-select:none; }
-        .lp-spoke.lp-ghost { opacity:.4; }
+        .lp-row { display:grid; grid-template-columns: minmax(0,1fr) 84px 110px 164px; align-items:center; column-gap:12px;
+            padding:7px 12px; border:1px solid var(--line); border-radius:9px; background:var(--surface); }
+        .lp-row.pending { background:#fffaf2; border-color:#f0d9b8; }
+        .dark .lp-row.pending { background:rgba(180,83,9,.08); border-color:rgba(180,83,9,.3); }
+        .lp-row.lp-ghost { opacity:.4; }
+        .lp-row-head { background:none; border:0; padding:2px 12px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+        .lp-cell-name { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; }
+        .lp-row-name { font-size:14px; font-weight:500; }
+        .lp-row-note { flex-basis:100%; font-size:12px; color:var(--muted); }
+        .lp-cell-vol { font-family:'Spline Sans Mono',monospace; font-size:12px; color:var(--muted); text-align:right; }
+        .lp-cell-page { display:flex; flex-wrap:wrap; gap:6px; }
+        .lp-cell-page .lp-select { width:100%; }
         .lp-silo.lp-drop { box-shadow:0 0 0 2px var(--accent); }
     </style>
 
@@ -139,16 +150,39 @@
                 @php
                     $s = $this->summaries[$silo];
                     $pillar = collect($rows)->firstWhere('isPillar', true);
-                    $core = array_filter($rows, fn ($r) => $r->tag->value === 'core' && ! $r->isPillar);
-                    $supporting = array_filter($rows, fn ($r) => in_array($r->tag->value, ['adjacent', 'connecting'], true));
                     $siloFoldTargets = array_values(array_diff(array_keys($this->bySilo), [$silo]));
                     $spine = $spinePalette[$loop->index % count($spinePalette)];
-                    $maxVol = max(1, (int) collect($rows)->max(fn ($r) => (int) $r->volume));
                     $isDead = in_array($silo, $this->deadSilos, true);
-                    // section fold targets within this silo: its core pages (+ the pillar)
+
+                    // Disposition comes from the live decision-set (granularity + fold_into per id),
+                    // not just the persisted spoke — so a toggle/drag re-nests immediately.
+                    $dispositionOf = fn ($r) => $this->spokeDecisions[$r->id]['granularity'] ?? $r->granularity->value;
+                    $targetOf = fn ($r) => $this->spokeDecisions[$r->id]['fold_into'] ?? '';
+
+                    // Parents = own-page cores (volume desc). The pillar is the silo-hub parent.
+                    $parents = array_values(array_filter($rows, fn ($r) => ! $r->isPillar && $dispositionOf($r) === 'own_page'));
+                    usort($parents, fn ($a, $b) => ($b->volume ?? -1) <=> ($a->volume ?? -1));
+                    $pillarId = $pillar?->id ?? '';
+                    $parentIds = array_merge([$pillarId], array_map(fn ($p) => $p->id, $parents));
+
+                    // Folded children grouped under their fold target; a target that isn't a valid
+                    // parent (it folded too) re-points to the pillar — can't nest under a folded page.
+                    $childrenByParent = [];
+                    foreach ($rows as $r) {
+                        if ($r->isPillar || $dispositionOf($r) === 'own_page') { continue; }
+                        $target = $targetOf($r);
+                        if ($target === '' || ! in_array($target, $parentIds, true)) { $target = $pillarId; }
+                        $childrenByParent[$target][] = $r;
+                    }
+                    foreach ($childrenByParent as &$kids) {
+                        usort($kids, fn ($a, $b) => ($b->volume ?? -1) <=> ($a->volume ?? -1));
+                    }
+                    unset($kids);
+
+                    // Re-target options: the pillar + the own-page cores (a folded page can't be a parent).
                     $foldOptions = [];
                     if ($pillar) { $foldOptions[$pillar->id] = $pillar->name.' (pillar)'; }
-                    foreach ($core as $c) { $foldOptions[$c->id] = $c->name; }
+                    foreach ($parents as $p) { $foldOptions[$p->id] = $p->name; }
                 @endphp
 
                 <div class="lp-silo" style="--spine: {{ $spine }}" wire:key="lp-silo-{{ \Illuminate\Support\Str::slug($silo) }}">
@@ -170,33 +204,33 @@
                                     <option value="{{ $target }}">{{ $target }}</option>
                                 @endforeach
                             </select>
+                            <button type="button" wire:click="confirmCore('{{ $silo }}')" class="lp-btn ghost" style="padding:5px 11px">✓ Confirm all core</button>
                         </div>
                     </div>
 
-                    @if (count($core))
-                        <div class="lp-core">
-                            <div class="lp-sec">
-                                <span class="lp-sec-h core">Stated core — own page above the bar, else a folded section (never absent)</span>
-                                <button type="button" wire:click="confirmCore('{{ $silo }}')" class="lp-btn ghost" style="padding:5px 11px">✓ Confirm all core</button>
-                            </div>
-                            <div class="lp-spoke-list" data-prune-list data-silo-name="{{ $silo }}">
-                                @foreach ($core as $row)
-                                    @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
-                                @endforeach
-                            </div>
-                        </div>
-                    @endif
+                    {{-- Column header --}}
+                    <div class="lp-row lp-row-head">
+                        <div class="lp-cell-name">Keyword</div>
+                        <div class="lp-cell-vol">Searches</div>
+                        <div class="lp-cell-tag">Tag</div>
+                        <div class="lp-cell-page">Page</div>
+                    </div>
 
-                    @if (count($supporting))
-                        <div class="lp-leanins">
-                            <span class="lp-sec-h">Supporting — fold into a core page by default; promote to its own page (highest volume first)</span>
-                            <div class="lp-spoke-list" data-prune-list data-silo-name="{{ $silo }}">
-                                @foreach ($supporting as $row)
-                                    @include('filament.pages.partials.prune-row', ['row' => $row, 'maxVol' => $maxVol, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
-                                @endforeach
-                            </div>
-                        </div>
-                    @endif
+                    {{-- Parents (own-page cores + the pillar hub) with their folded children nested beneath.
+                         One sortable list per silo so a row can still be dragged to another silo. --}}
+                    <div class="lp-spoke-list" data-prune-list data-silo-name="{{ $silo }}">
+                        {{-- Pillar group: spokes folding into the hub --}}
+                        @foreach ($childrenByParent[$pillarId] ?? [] as $row)
+                            @include('filament.pages.partials.prune-row', ['row' => $row, 'depth' => 1, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
+                        @endforeach
+
+                        @foreach ($parents as $parent)
+                            @include('filament.pages.partials.prune-row', ['row' => $parent, 'depth' => 0, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
+                            @foreach ($childrenByParent[$parent->id] ?? [] as $row)
+                                @include('filament.pages.partials.prune-row', ['row' => $row, 'depth' => 1, 'tagMeta' => $tagMeta, 'foldOptions' => $foldOptions])
+                            @endforeach
+                        @endforeach
+                    </div>
                 </div>
             @endforeach
 
