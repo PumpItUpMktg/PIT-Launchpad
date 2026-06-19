@@ -53,3 +53,33 @@ test('an unmapped county falls back to its state', function () {
     expect($metros)->toHaveCount(1)
         ->and($metros[0]->locationName)->toBe('New Jersey,United States');
 });
+
+test('the state fallback is suppressed when DMAs already cover that state (no double-count)', function () {
+    $site = Site::factory()->create();
+    area($site, '3400312345', MunicipalityType::CountySubdivision);  // county 34003 → NY DMA (an NJ county)
+    area($site, '3400599999', MunicipalityType::CountySubdivision);  // county 34005 → Philadelphia DMA (an NJ county)
+    area($site, '3445000', MunicipalityType::Place);                 // an NJ place → would fall back to NJ state
+    area($site, '3499912345', MunicipalityType::CountySubdivision);  // an unmapped NJ county → would fall back to NJ state
+
+    $metros = resolver()->forCoverage(CoverageArea::all());
+
+    // NJ is fully covered by the NY + Philadelphia DMAs → no "New Jersey (state)" target
+    expect(collect($metros)->pluck('locationName'))->not->toContain('New Jersey,United States')
+        ->and(collect($metros)->pluck('locationName'))->toContain('New York,NY,United States', 'Philadelphia,PA,United States')
+        ->and($metros)->toHaveCount(2);
+});
+
+test('a state with no DMA coverage still gets its state-level fallback', function () {
+    $site = Site::factory()->create();
+    area($site, '3400312345', MunicipalityType::CountySubdivision, state: 'NJ'); // NJ → NY DMA
+    area($site, '0645000', MunicipalityType::Place, state: 'CA');                // CA place, no CA DMA mapped
+
+    $resolver = new MetroResolver(new DmaTable(
+        countyToDma: ['34003' => 'New York,NY,United States'],
+        stateToLocation: ['NJ' => 'New Jersey,United States', 'CA' => 'California,United States'],
+    ));
+    $metros = $resolver->forCoverage(CoverageArea::all());
+
+    expect(collect($metros)->pluck('locationName'))->toContain('New York,NY,United States', 'California,United States')
+        ->and(collect($metros)->pluck('locationName'))->not->toContain('New Jersey,United States'); // NJ covered by the DMA
+});
