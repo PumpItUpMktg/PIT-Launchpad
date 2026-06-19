@@ -28,6 +28,7 @@ final class FoldTargetAssigner
 {
     public function __construct(
         private readonly float $relatednessFloor = 0.70,
+        private readonly float $reflipMargin = 0.05,
     ) {}
 
     public function run(Site $site, SpokeEmbeddings $vectors): ArrangeResult
@@ -56,24 +57,30 @@ final class FoldTargetAssigner
             $pillar = $pillarsBySilo->get((string) $spoke->silo); // fall back to the spoke's own node
 
             [$best, $score] = $this->bestCore($spoke, $cores, $vectors);
+            $cleared = $best !== null && $score >= $this->relatednessFloor;
+            $target = $cleared ? $best : $pillar; // safe fallback to the pillar
 
-            if ($best !== null && $score >= $this->relatednessFloor) {
-                $target = $best;
-            } else {
-                $target = $pillar; // safe fallback
-                if ($cores->isNotEmpty()) {
-                    // there were cores to consider but none cleared the floor — flag it
-                    $flags[] = new ArrangeFlag(
-                        ArrangeFlagType::NestLowConfidence,
-                        $spoke->id,
-                        "No strong parent for \"{$spoke->name}\"; parked on the {$spoke->silo} pillar — confirm where it nests.",
-                        $cores->take(3)->map(fn (Spoke $c) => [
-                            'id' => $c->id,
-                            'name' => $c->name,
-                            'score' => round($vectors->similarity($spoke, $c), 3),
-                        ])->all(),
-                    );
-                }
+            // Margin-to-reflip: don't move an existing auto default unless the new signal beats
+            // the current one by a band, not a hair — otherwise near-threshold cases thrash every run.
+            if ($spoke->arrangement_source === ArrangementSource::Auto
+                && $spoke->fold_into_id !== null
+                && $target?->id !== $spoke->fold_into_id
+                && $score < ($spoke->arrangement_score ?? -1.0) + $this->reflipMargin) {
+                continue; // keep the current target + score
+            }
+
+            if (! $cleared && $cores->isNotEmpty()) {
+                // there were cores to consider but none cleared the floor — flag it
+                $flags[] = new ArrangeFlag(
+                    ArrangeFlagType::NestLowConfidence,
+                    $spoke->id,
+                    "No strong parent for \"{$spoke->name}\"; parked on the {$spoke->silo} pillar — confirm where it nests.",
+                    $cores->take(3)->map(fn (Spoke $c) => [
+                        'id' => $c->id,
+                        'name' => $c->name,
+                        'score' => round($vectors->similarity($spoke, $c), 3),
+                    ])->all(),
+                );
             }
 
             $targetId = $target?->id;
