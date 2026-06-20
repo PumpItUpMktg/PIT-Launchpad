@@ -250,4 +250,35 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Location-page drip (per-business local relevance)
+    |--------------------------------------------------------------------------
+    |
+    | Town pages don't all build at once. The biggest towns (by Census population)
+    | build immediately; the rest sit in reserve and "drip" live as each earns
+    | enough local relevance for that specific business — competitor density,
+    | review footprint, and local demand resolved per (site, town) through the
+    | LocalSignalProvider seam, so no two sites use the same data.
+    |
+    | - auto_select_tiers: which size tiers are built immediately on first setup.
+    | - drip_threshold: the 0–1 relevance score a reserve town must reach to graduate.
+    | - weights: how the normalized signals blend into the relevance score.
+    |
+    */
+
+    'drip' => [
+        'auto_select_tiers' => ['major', 'large'],
+
+        'drip_threshold' => (float) env('LAUNCHPAD_DRIP_THRESHOLD', 0.55),
+
+        'weights' => [
+            'population' => 0.45,
+            'demand' => 0.30,
+            'reviews' => 0.25,
+            // Competitor saturation is subtracted from the blended score.
+            'competition_penalty' => 0.20,
+        ],
+    ],
+
 ];

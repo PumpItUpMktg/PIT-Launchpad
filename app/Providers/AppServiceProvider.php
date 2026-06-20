@@ -42,6 +42,8 @@ use App\Integrations\Google\GoogleConnectionService;
 use App\Integrations\Google\GoogleOAuthClient;
 use App\Integrations\Google\GoogleSearchConsoleProvider;
 use App\Integrations\Google\SearchConsoleProvider;
+use App\Integrations\Local\LocalSignalProvider;
+use App\Integrations\Local\MockLocalSignalProvider;
 use App\Integrations\LocalGrid\LocalGridProvider;
 use App\Integrations\News\GdeltNewsProvider;
 use App\Integrations\News\GdeltRateLimiter;
@@ -164,6 +166,13 @@ class AppServiceProvider extends ServiceProvider
             (string) config('services.google.maps_api_key', ''),
             (int) config('services.google.timeout', 15),
         ));
+
+        // Per-business local signals (the location-page drip). Mock is the default —
+        // it produces deterministic-but-per-site-distinct numbers so no two businesses
+        // share local data. Real adapters (Places competitor density, GBP reviews,
+        // trade-specific Air Quality / Pollen, job-capture counts) bind here as keys
+        // come online, with no change to the relevance scoring that consumes them.
+        $this->app->singleton(LocalSignalProvider::class, MockLocalSignalProvider::class);
 
         // §5 SERP + local-grid run on the real DataForSEO adapters (Step 2,
         // Adapter 1). They supply NORMALIZED signals only — opportunity scoring
