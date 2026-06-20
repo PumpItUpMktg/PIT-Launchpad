@@ -10,7 +10,18 @@
     font-family:'Inter',ui-sans-serif,system-ui,sans-serif; color:var(--ink); font-size:14px; line-height:1.5;
   }
   .lp-scope .lp-mono{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums}
-  .lp-shell{display:flex;min-height:560px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--paper)}
+  .lp-shell{display:flex;min-height:100vh;overflow:hidden;background:var(--paper)}
+
+  /* Full-bleed: on guided pages only, collapse the Filament chrome so the teal rail is the
+     whole shell (matches the wireframe). Scoped via :has() — no theme build. The site-wide
+     cohesion pass (a later relay) can replace this with a dedicated layout. */
+  body:has(.lp-scope) .fi-sidebar,
+  body:has(.lp-scope) .fi-topbar,
+  body:has(.lp-scope) .fi-header,
+  body:has(.lp-scope) .fi-breadcrumbs{display:none !important}
+  body:has(.lp-scope) .fi-main-ctn,
+  body:has(.lp-scope) .fi-main{margin:0 !important;padding:0 !important;max-width:none !important}
+  body:has(.lp-scope) .fi-page{gap:0 !important}
 
   .lp-rail{width:248px;flex:none;background:var(--teal-deep);color:#DCEBEA;padding:24px 20px;display:flex;flex-direction:column;gap:26px}
   .lp-brand{font-family:'Archivo',sans-serif;font-weight:800;font-size:19px;letter-spacing:-.02em;color:#fff;display:flex;align-items:center;gap:9px}
