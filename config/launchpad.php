@@ -4,6 +4,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Standard pages
+    |--------------------------------------------------------------------------
+    |
+    | Data-gating thresholds for the optional standard pages (Step 4). A toggle is
+    | only offered when the site clears the bar — e.g. Gallery needs photos.
+    */
+    'standard_pages' => [
+        'reviews_min' => 1,
+        'gallery_min' => 3,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Credential rotation
     |--------------------------------------------------------------------------
     |

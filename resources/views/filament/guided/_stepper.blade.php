@@ -7,7 +7,7 @@
     <div class="lp-steps">
         @foreach ($steps as $row)
             @php $s = $row['step']; @endphp
-            @continue($s->isGrow())
+            @continue($s->isPhase())
             @php $cls = $row['active'] ? 'active' : ($row['done'] ? 'done' : ($row['locked'] ? 'locked' : '')); @endphp
             @if ($row['url'] && ! $row['active'])
                 <a class="lp-step {{ $cls }}" href="{{ $row['url'] }}" wire:navigate>
@@ -28,15 +28,18 @@
     <div class="lp-railfoot">
         @foreach ($steps as $row)
             @php $s = $row['step']; @endphp
-            @continue(! $s->isGrow())
-            @php $cls = $row['active'] ? 'active' : ($row['locked'] ? 'locked' : ''); @endphp
+            @continue(! $s->isPhase())
+            @php
+                $cls = $row['active'] ? 'active' : ($row['done'] ? 'done' : ($row['locked'] ? 'locked' : ''));
+                $icon = $s === \App\Enums\SetupStep::Build ? '⚒' : '◳';
+            @endphp
             @if ($row['url'] && ! $row['active'])
                 <a class="lp-grow {{ $cls }}" href="{{ $row['url'] }}" wire:navigate>
-                    <div class="ic">◳</div><div><div class="lbl" style="color:inherit">Grow</div></div>
+                    <div class="ic">{{ $icon }}</div><div><div class="lbl" style="color:inherit">{{ $s->label() }}</div></div>
                 </a>
             @else
                 <div class="lp-grow {{ $cls }}">
-                    <div class="ic">◳</div><div><div class="lbl" style="color:inherit">Grow</div></div>
+                    <div class="ic">{{ $icon }}</div><div><div class="lbl" style="color:inherit">{{ $s->label() }}</div></div>
                 </div>
             @endif
         @endforeach

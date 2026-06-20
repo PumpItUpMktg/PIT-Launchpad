@@ -93,7 +93,7 @@ abstract class GuidedPage extends Page
         $gate = app(StepGate::class);
 
         $rows = [];
-        foreach ([...SetupStep::setupSteps(), SetupStep::Grow] as $step) {
+        foreach ([...SetupStep::setupSteps(), SetupStep::Build, SetupStep::Grow] as $step) {
             $unlocked = $state !== null && $gate->isUnlocked($state, $step);
             $rows[] = [
                 'step' => $step,

@@ -44,6 +44,12 @@ class Site extends Model
         return $this->hasOne(ConversionConfig::class);
     }
 
+    /** @return HasOne<SetupState, $this> */
+    public function setupState(): HasOne
+    {
+        return $this->hasOne(SetupState::class);
+    }
+
     /** @return HasMany<Membership, $this> */
     public function memberships(): HasMany
     {

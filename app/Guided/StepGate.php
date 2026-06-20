@@ -33,7 +33,7 @@ class StepGate
     public function furthestUnlocked(SetupState $state): SetupStep
     {
         $furthest = SetupStep::Business;
-        foreach ([...SetupStep::setupSteps(), SetupStep::Grow] as $step) {
+        foreach ([...SetupStep::setupSteps(), SetupStep::Build, SetupStep::Grow] as $step) {
             if ($this->isUnlocked($state, $step)) {
                 $furthest = $step;
             }

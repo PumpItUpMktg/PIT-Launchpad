@@ -2,20 +2,22 @@
 
 namespace App\Filament\Pages\Guided;
 
-use App\Client\PagePlan;
+use App\Build\BuildManifestAssembler;
 use App\Enums\SetupStep;
+use App\Enums\StandardPageType;
 use App\Guided\GuidedPage;
-use App\Guided\SiteBuilder;
 use App\Guided\StepGate;
+use App\Standard\SitePlan;
+use App\Standard\StandardPages;
 use Filament\Notifications\Notification;
 
 /**
- * Step 4 · Approve & build. The plain-language site plan (reusing the §7c {@see PagePlan}
- * view-model — categories, pages, "also covers"; no tags/volumes/silo vocabulary) + the build
- * config toggles. Approve & build persists the config, triggers generation ({@see SiteBuilder} —
- * stubbed until the generation entrypoint lands), and goes live.
+ * Step 4 · Approve & build. The plain-language plan of the **complete site** ({@see SitePlan} —
+ * fixed standard pages locked in, optional standard pages as data-gated accept/decline toggles,
+ * service pages from the finalized structure, location pages) + the build config. Approve
+ * assembles the build manifest across all three sources and hands off to the Build phase.
  *
- * @property-read array<string, mixed> $plan
+ * @property-read array<string, mixed> $sitePlan
  */
 class Approve extends GuidedPage
 {
@@ -56,13 +58,27 @@ class Approve extends GuidedPage
     /**
      * @return array<string, mixed>
      */
-    public function getPlanProperty(): array
+    public function getSitePlanProperty(): array
     {
         $site = $this->getSite();
 
         return $site === null
-            ? ['silos' => [], 'totals' => ['silos' => 0, 'pages' => 0, 'sections' => 0, 'volume' => 0]]
-            : app(PagePlan::class)->for($site);
+            ? ['fixed' => [], 'optionals' => [], 'service' => [], 'locations' => ['count' => 0, 'sample' => []]]
+            : app(SitePlan::class)->for($site);
+    }
+
+    /** Accept/decline an optional standard page (offerable types only). */
+    public function toggleStandard(string $type): void
+    {
+        $site = $this->getSite();
+        $pageType = StandardPageType::tryFrom($type);
+        if ($site === null || $pageType === null) {
+            return;
+        }
+
+        $standard = app(StandardPages::class);
+        $current = collect($standard->offerable($site))->firstWhere('type', $pageType);
+        $standard->setAccepted($site, $pageType, ! ($current['accepted'] ?? false));
     }
 
     public function toggleLocalize(): void
@@ -88,14 +104,13 @@ class Approve extends GuidedPage
             'localize' => $this->localize,
             'town_page_pace' => max(1, $this->townPagePace),
             'fresh_content' => $this->freshContent,
+            'build_status' => 'building',
         ]);
 
-        $gate->complete($state, SetupStep::Approve);
-        $state->update(['launched' => true]);
+        $gate->complete($state, SetupStep::Approve); // → approved (Build sets launched)
+        app(BuildManifestAssembler::class)->assemble($site);
 
-        app(SiteBuilder::class)->build($site); // generation trigger (stub until it lands)
-
-        Notification::make()->title('Approved — your site is building.')->success()->send();
-        $this->redirect(SetupStep::Grow->pageClass()::getUrl());
+        Notification::make()->title('Approved — assembling your build.')->success()->send();
+        $this->redirect(SetupStep::Build->pageClass()::getUrl());
     }
 }

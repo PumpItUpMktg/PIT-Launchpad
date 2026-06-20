@@ -39,16 +39,24 @@ test('resolve sends a locked target back to the current step, but honors an unlo
     expect($this->gate->resolve($state, SetupStep::Territory))->toBe(SetupStep::Territory); // now unlocked
 });
 
-test('completing the whole chain unlocks Grow', function () {
+test('completing the four setup steps unlocks Build; Build (launched) unlocks Grow', function () {
     $state = SetupState::factory()->create();
 
     foreach (SetupStep::setupSteps() as $step) {
         $this->gate->complete($state, $step);
     }
 
-    expect($this->gate->isUnlocked($state, SetupStep::Grow))->toBeTrue()
-        ->and($this->gate->furthestUnlocked($state))->toBe(SetupStep::Grow)
-        ->and($state->approved)->toBeTrue();
+    // Approved → Build is the furthest; Grow still waits on launch.
+    expect($state->approved)->toBeTrue()
+        ->and($this->gate->isUnlocked($state, SetupStep::Build))->toBeTrue()
+        ->and($this->gate->isUnlocked($state, SetupStep::Grow))->toBeFalse()
+        ->and($this->gate->furthestUnlocked($state))->toBe(SetupStep::Build);
+
+    $this->gate->complete($state, SetupStep::Build); // → launched
+
+    expect($state->launched)->toBeTrue()
+        ->and($this->gate->isUnlocked($state, SetupStep::Grow))->toBeTrue()
+        ->and($this->gate->furthestUnlocked($state))->toBe(SetupStep::Grow);
 });
 
 test('complete never moves current_step backward', function () {

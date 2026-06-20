@@ -4,9 +4,11 @@ use App\Enums\ContentStatus;
 use App\Enums\SpokeStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
+use App\Filament\Pages\Guided\Build;
 use App\Filament\Pages\Guided\Grow;
 use App\Guided\GrowDashboard;
 use App\Jobs\BuildStructure;
+use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
@@ -24,25 +26,28 @@ beforeEach(function () {
     session(['guided_site_id' => $this->site->id]);
 });
 
-test('Step 4 persists build config, launches, triggers the build, and advances to Grow', function () {
+test('Step 4 persists build config, approves, assembles the manifest, and hands off to Build', function () {
     SetupState::query()->create([
         'site_id' => $this->site->id, 'current_step' => 4,
         'services_done' => true, 'territory_done' => true, 'structure_finalized' => true,
     ]);
+    SiloBlueprint::factory()->create(['site_id' => $this->site->id]); // a structure to plan over
 
     Livewire::test(Approve::class)
         ->set('localize', false)
         ->set('townPagePace', 8)
         ->set('freshContent', false)
         ->call('approveAndBuild')
-        ->assertRedirect(Grow::getUrl());
+        ->assertRedirect(Build::getUrl());
 
     $state = SetupState::query()->where('site_id', $this->site->id)->first();
     expect($state->approved)->toBeTrue()
-        ->and($state->launched)->toBeTrue()
+        ->and($state->launched)->toBeFalse()          // Build sets launched
+        ->and($state->build_status)->toBe('building')
         ->and($state->localize)->toBeFalse()
         ->and($state->town_page_pace)->toBe(8)
-        ->and($state->fresh_content)->toBeFalse();
+        ->and($state->fresh_content)->toBeFalse()
+        ->and(BuildPage::query()->where('site_id', $this->site->id)->count())->toBe(6); // fixed core
 });
 
 test('the Grow dashboard counts live / building / planned and lists fresh posts', function () {
@@ -60,7 +65,7 @@ test('the Grow dashboard counts live / building / planned and lists fresh posts'
 
 test('Grow re-run controls: re-arrange runs inline, re-ground dispatches the build', function () {
     SetupState::query()->create([
-        'site_id' => $this->site->id, 'current_step' => 5,
+        'site_id' => $this->site->id, 'current_step' => 6,
         'services_done' => true, 'territory_done' => true, 'structure_finalized' => true, 'approved' => true, 'launched' => true,
     ]);
     Queue::fake();
