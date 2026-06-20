@@ -176,7 +176,7 @@ class Structure extends GuidedPage
         $gate->complete($gate->state($site), SetupStep::Structure);
 
         Notification::make()->title('Structure finalized.')->success()->send();
-        $this->redirect(SetupStep::Approve->pageClass()::getUrl());
+        $this->redirect(Inventory::getUrl()); // the Page Inventory bridge → Approve
     }
 
     private function resolveFlag(string $id, bool $accept): void

@@ -51,6 +51,20 @@ class BuildManifestAssembler
     }
 
     /**
+     * The directed layer (Service + Location) WITHOUT persisting — what the Page Inventory bridge
+     * displays at blueprint confirmation. Standard joins at Approve (already built there).
+     *
+     * @return array{service: list<array<string, mixed>>, location: list<array<string, mixed>>}
+     */
+    public function preview(Site $site): array
+    {
+        return [
+            'service' => $this->serviceRows($site),
+            'location' => $this->locationRows($site),
+        ];
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private function standardRows(Site $site): array

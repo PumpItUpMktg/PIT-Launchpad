@@ -1,7 +1,7 @@
 <?php
 
 use App\Enums\UserRole;
-use App\Filament\Pages\Guided\Approve;
+use App\Filament\Pages\Guided\Inventory;
 use App\Filament\Pages\Guided\Structure;
 use App\Interview\Arrange\AutoArrangeRunner;
 use App\Interview\Expansion\ExpansionPersister;
@@ -68,7 +68,7 @@ test('finalize commits the arranged tree and advances once ready with no flags',
 
     Livewire::test(Structure::class)
         ->call('finalize')
-        ->assertRedirect(Approve::getUrl());
+        ->assertRedirect(Inventory::getUrl());
 
     expect(SetupState::query()->where('site_id', $this->site->id)->value('structure_finalized'))->toBe(true)
         ->and($bp->fresh()->confirmed_at)->not->toBeNull();

@@ -7,6 +7,7 @@ use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Build;
 use App\Filament\Pages\Guided\Business;
 use App\Filament\Pages\Guided\Grow;
+use App\Filament\Pages\Guided\Inventory;
 use App\Filament\Pages\Guided\Structure;
 use App\Filament\Pages\Guided\Territory;
 use App\Models\ArrangementFlag;
@@ -66,11 +67,11 @@ test('Finalize is blocked while an auto-arrange flag is unresolved, then allowed
         ->call('finalize');
     expect(setupState($this->site)->fresh()->structure_finalized)->toBeFalse();
 
-    // Resolve the flag → finalize advances to Approve.
+    // Resolve the flag → finalize advances to the Page Inventory bridge.
     $flag->delete();
     Livewire::test(Structure::class)
         ->call('finalize')
-        ->assertRedirect(Approve::getUrl());
+        ->assertRedirect(Inventory::getUrl());
     expect(setupState($this->site)->fresh()->structure_finalized)->toBeTrue();
 });
 
@@ -82,7 +83,10 @@ test('the full walkthrough advances 1 → 2 → 3 → 4 → Build → Grow and l
     $bp = SiloBlueprint::factory()->create(['site_id' => $this->site->id]);
     Spoke::factory()->create(['site_id' => $this->site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Pumps', 'name' => 'Pumps', 'is_pillar' => true]);
 
-    Livewire::test(Structure::class)->call('finalize'); // ready, no flags → passes
+    Livewire::test(Structure::class)->call('finalize'); // ready, no flags → Page Inventory bridge
+
+    // The inventory bridge carries into Approve.
+    Livewire::test(Inventory::class)->assertOk()->call('proceed')->assertRedirect(Approve::getUrl());
 
     // Approve assembles the manifest and hands off to Build (not straight to Grow).
     Livewire::test(Approve::class)->call('approveAndBuild')->assertRedirect(Build::getUrl());
