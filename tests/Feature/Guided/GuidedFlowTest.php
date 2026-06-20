@@ -1,13 +1,16 @@
 <?php
 
+use App\Build\BuildRunner;
 use App\Enums\ArrangeFlagType;
-use App\Enums\SetupStep;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
+use App\Filament\Pages\Guided\Build;
 use App\Filament\Pages\Guided\Business;
+use App\Filament\Pages\Guided\Grow;
 use App\Filament\Pages\Guided\Structure;
 use App\Filament\Pages\Guided\Territory;
 use App\Models\ArrangementFlag;
+use App\Models\BuildPage;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -71,7 +74,7 @@ test('Finalize is blocked while an auto-arrange flag is unresolved, then allowed
     expect(setupState($this->site)->fresh()->structure_finalized)->toBeTrue();
 });
 
-test('the full walkthrough advances 1 → 2 → 3 → 4 → Grow and launches', function () {
+test('the full walkthrough advances 1 → 2 → 3 → 4 → Build → Grow and launches', function () {
     Livewire::test(Business::class)->call('proceed');
     Livewire::test(Territory::class)->call('proceed');
 
@@ -80,13 +83,24 @@ test('the full walkthrough advances 1 → 2 → 3 → 4 → Grow and launches', 
     Spoke::factory()->create(['site_id' => $this->site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Pumps', 'name' => 'Pumps', 'is_pillar' => true]);
 
     Livewire::test(Structure::class)->call('finalize'); // ready, no flags → passes
-    Livewire::test(Approve::class)->call('approveAndBuild');
+
+    // Approve assembles the manifest and hands off to Build (not straight to Grow).
+    Livewire::test(Approve::class)->call('approveAndBuild')->assertRedirect(Build::getUrl());
 
     $state = setupState($this->site)->fresh();
-    expect($state->services_done)->toBeTrue()
-        ->and($state->territory_done)->toBeTrue()
-        ->and($state->structure_finalized)->toBeTrue()
-        ->and($state->approved)->toBeTrue()
-        ->and($state->launched)->toBeTrue()
-        ->and($state->current_step)->toBe(SetupStep::Grow->value);
+    expect($state->approved)->toBeTrue()
+        ->and($state->launched)->toBeFalse()                 // Build sets launched, not Approve
+        ->and(BuildPage::query()->where('site_id', $this->site->id)->exists())->toBeTrue();
+
+    // Build phase: entering ticks the queue (auto publish / gate brand-critical), then review.
+    Livewire::test(Build::class)->assertOk();
+    foreach (BuildPage::query()->where('site_id', $this->site->id)->where('status', 'in_review')->get() as $page) {
+        app(BuildRunner::class)->publishReviewed($this->site, $page);
+    }
+
+    $state = setupState($this->site)->fresh();
+    expect($state->launched)->toBeTrue();
+
+    // Grow is now unlocked (prerequisite: launched).
+    Livewire::test(Grow::class)->assertOk();
 });
