@@ -26,6 +26,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $localize
  * @property int $town_page_pace
  * @property bool $fresh_content
+ * @property array<string, bool>|null $standard_pages accepted optional standard pages (type => bool)
+ * @property array<string, bool>|null $intake_flags interim intake gates (financing / team)
+ * @property string|null $build_status the Build phase (null|building|live)
  */
 class SetupState extends Model
 {
@@ -67,6 +70,8 @@ class SetupState extends Model
             'localize' => 'boolean',
             'town_page_pace' => 'integer',
             'fresh_content' => 'boolean',
+            'standard_pages' => 'array',
+            'intake_flags' => 'array',
         ];
     }
 }
