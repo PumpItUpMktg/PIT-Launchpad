@@ -10,6 +10,7 @@ use App\Models\CoverageArea;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\Spoke;
+use App\Standard\StandardPages;
 use Illuminate\Support\Collection;
 
 /**
@@ -27,12 +28,13 @@ class InventoryPlan
 {
     public function __construct(
         private readonly BuildManifestAssembler $assembler,
+        private readonly StandardPages $standardPages,
     ) {}
 
     /**
      * @return array{
      *     counts: array{total: int, foundation: int, service: int, location_now: int, reserve: int},
-     *     foundation: list<array{label: string, kind: string}>,
+     *     foundation: list<array{type: string, label: string, kind: string, toggleable: bool, accepted: bool}>,
      *     silos: list<array<string, mixed>>,
      *     tiers: list<array{tier: string, label: string, towns: list<string>}>
      * }
@@ -40,8 +42,9 @@ class InventoryPlan
     public function for(Site $site): array
     {
         $preview = $this->assembler->preview($site);
-        $foundation = $this->foundation($preview['standard']);
-        $foundationCount = count($foundation);
+        $foundation = $this->foundation($site);
+        // Foundation pages that WILL build = fixed + accepted optionals (the curated selection).
+        $foundationCount = count(array_filter($foundation, fn (array $p) => $p['accepted']));
         $serviceCount = count($preview['service']);
         $locationNow = count($preview['location']);
         $reserve = CoverageArea::withoutGlobalScope(SiteScope::class)
@@ -62,20 +65,35 @@ class InventoryPlan
     }
 
     /**
-     * The Foundation (standard) layer, classified for display: core, optional (data-gated), legal.
+     * The Foundation (standard) layer: the fixed core (always built, not toggleable) + the
+     * data-gated optionals (toggleable, carrying their accepted state). The optionals' checkboxes
+     * curate which standard pages land in the build manifest. Legal pages render muted.
      *
-     * @param  list<array<string, mixed>>  $standardRows
-     * @return list<array{label: string, kind: string}>
+     * @return list<array{type: string, label: string, kind: string, toggleable: bool, accepted: bool}>
      */
-    private function foundation(array $standardRows): array
+    private function foundation(Site $site): array
     {
         $legal = [StandardPageType::Privacy, StandardPageType::Terms];
 
         $out = [];
-        foreach ($standardRows as $row) {
-            $type = StandardPageType::from((string) $row['page_key']);
-            $kind = in_array($type, $legal, true) ? 'legal' : ($type->isFixed() ? 'core' : 'optional');
-            $out[] = ['label' => $type->label(), 'kind' => $kind];
+        foreach (StandardPageType::fixed() as $type) {
+            $out[] = [
+                'type' => $type->value,
+                'label' => $type->label(),
+                'kind' => in_array($type, $legal, true) ? 'legal' : 'core',
+                'toggleable' => false,
+                'accepted' => true, // fixed core is always built
+            ];
+        }
+
+        foreach ($this->standardPages->offerable($site) as $row) {
+            $out[] = [
+                'type' => $row['type']->value,
+                'label' => $row['type']->label(),
+                'kind' => 'optional',
+                'toggleable' => true,
+                'accepted' => $row['accepted'],
+            ];
         }
 
         return $out;

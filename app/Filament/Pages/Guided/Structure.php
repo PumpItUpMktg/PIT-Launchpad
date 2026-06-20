@@ -64,11 +64,30 @@ class Structure extends GuidedPage
             return;
         }
 
-        // No structure yet — kick the build chain if Step 1 left us a seed.
+        // No structure yet — mark building; the blade's wire:init drives the synchronous chain
+        // (a visible wire:loading indicator covers it, no queue worker required).
         if ($state->structure_status === null && $this->hasSeed($site)) {
             $state->update(['structure_status' => 'building']);
-            BuildStructure::dispatch($site->id);
         }
+    }
+
+    /**
+     * Run the build chain synchronously (silo-gen → silo-volume → auto-arrange). Triggered by the
+     * blade's wire:init on entry, so a wire:loading spinner shows while it runs and clears on
+     * return — no queue worker to depend on. Idempotent: a ready structure is left untouched.
+     */
+    public function runBuild(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        if (app(StepGate::class)->state($site)->structure_status === 'ready') {
+            return;
+        }
+
+        BuildStructure::dispatchSync($site->id); // the job stamps ready/failed itself
     }
 
     public function getStatusProperty(): ?string
@@ -78,7 +97,7 @@ class Structure extends GuidedPage
         return $site === null ? null : app(StepGate::class)->state($site)->structure_status;
     }
 
-    /** Retry a failed / re-kick the build. */
+    /** Retry a failed build — re-runs the chain synchronously. */
     public function rebuild(): void
     {
         $site = $this->getSite();
@@ -86,7 +105,7 @@ class Structure extends GuidedPage
             return;
         }
         app(StepGate::class)->state($site)->update(['structure_status' => 'building']);
-        BuildStructure::dispatch($site->id);
+        BuildStructure::dispatchSync($site->id);
     }
 
     /**

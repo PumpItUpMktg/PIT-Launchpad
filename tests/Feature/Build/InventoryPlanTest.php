@@ -21,11 +21,12 @@ test('the inventory groups service pages by silo with hub / sub-hub / page, keyw
 
     $inv = app(InventoryPlan::class)->for($site);
 
-    // Foundation = 6 fixed + 2 always-offerable optionals (Why Choose Us, FAQ); service = 4.
-    expect($inv['counts'])->toBe(['total' => 12, 'foundation' => 8, 'service' => 4, 'location_now' => 0, 'reserve' => 0])
-        ->and(collect($inv['foundation'])->firstWhere('label', 'Home')['kind'])->toBe('core')
+    // Foundation count = pages that WILL build = 6 fixed + accepted optionals (none yet → 6).
+    // The optionals still LIST (toggleable) so the operator can select them into the build.
+    expect($inv['counts'])->toBe(['total' => 10, 'foundation' => 6, 'service' => 4, 'location_now' => 0, 'reserve' => 0])
+        ->and(collect($inv['foundation'])->firstWhere('label', 'Home'))->toMatchArray(['kind' => 'core', 'toggleable' => false, 'accepted' => true])
         ->and(collect($inv['foundation'])->firstWhere('label', 'Privacy Policy')['kind'])->toBe('legal')
-        ->and(collect($inv['foundation'])->firstWhere('label', 'FAQ')['kind'])->toBe('optional')
+        ->and(collect($inv['foundation'])->firstWhere('label', 'FAQ'))->toMatchArray(['kind' => 'optional', 'toggleable' => true, 'accepted' => false])
         ->and($inv['silos'])->toHaveCount(1);                       // Backup Power rolls up as a sub-hub
 
     $silo = $inv['silos'][0];
