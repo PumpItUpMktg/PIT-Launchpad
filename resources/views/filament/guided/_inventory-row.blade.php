@@ -1,11 +1,17 @@
-{{-- One inventory row: name + type + primary keyword + the folded sections it covers. --}}
-<div class="lp-prow {{ $child ? 'child' : '' }}{{ $row['type'] === 'sub-hub' ? ' subhub' : '' }}" style="grid-template-columns:1fr auto">
-    <div>
-        <span class="pnm">{{ $row['type'] === 'sub-hub' ? '↳ ' : '' }}{{ $row['name'] }}</span>
-        <div style="font-size:11.5px;color:var(--ink-soft)">{{ $row['keyword'] }}</div>
-        @if (! empty($row['covers']))
-            <div style="font-size:11px;color:var(--ungrouped)">covers: {{ implode(', ', $row['covers']) }}</div>
+{{-- One directed-coverage row: type tag + name + primary keyword, with the folded sections it covers. --}}
+@php
+    $tagClass = $row['type'] === 'hub' ? 'hub' : ($row['type'] === 'sub-hub' ? 'sub' : '');
+    $tagLabel = $row['type'] === 'hub' ? 'Hub' : ($row['type'] === 'sub-hub' ? 'Sub-hub' : 'Page');
+@endphp
+<div class="lp-pagerow" @if ($child) style="padding-left:18px" @endif>
+    <div class="prn">
+        <span class="lp-ptag {{ $tagClass }}">{{ $tagLabel }}</span>
+        {{ $row['name'] }}
+        @if (! empty($row['keyword']))
+            <span style="font-weight:400;color:var(--ink-soft);font-size:11.5px">· {{ $row['keyword'] }}</span>
         @endif
     </div>
-    <span class="lp-tag {{ $row['type'] === 'page' ? 'own' : 'hub' }}">{{ $row['type'] === 'page' ? 'Page' : ($row['type'] === 'sub-hub' ? 'Sub-hub' : 'Hub') }}</span>
+    @if (! empty($row['covers']))
+        <div class="prc">covers: {{ implode(', ', $row['covers']) }}</div>
+    @endif
 </div>

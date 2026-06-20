@@ -5,6 +5,7 @@ namespace App\Build;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokeStatus;
 use App\Enums\SpokeTag;
+use App\Enums\StandardPageType;
 use App\Models\CoverageArea;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -30,7 +31,8 @@ class InventoryPlan
 
     /**
      * @return array{
-     *     counts: array{total: int, service: int, location_now: int, reserve: int},
+     *     counts: array{total: int, foundation: int, service: int, location_now: int, reserve: int},
+     *     foundation: list<array{label: string, kind: string}>,
      *     silos: list<array<string, mixed>>,
      *     tiers: list<array{tier: string, label: string, towns: list<string>}>
      * }
@@ -38,6 +40,8 @@ class InventoryPlan
     public function for(Site $site): array
     {
         $preview = $this->assembler->preview($site);
+        $foundation = $this->foundation($preview['standard']);
+        $foundationCount = count($foundation);
         $serviceCount = count($preview['service']);
         $locationNow = count($preview['location']);
         $reserve = CoverageArea::withoutGlobalScope(SiteScope::class)
@@ -45,14 +49,36 @@ class InventoryPlan
 
         return [
             'counts' => [
-                'total' => $serviceCount + $locationNow,
+                'total' => $foundationCount + $serviceCount + $locationNow,
+                'foundation' => $foundationCount,
                 'service' => $serviceCount,
                 'location_now' => $locationNow,
                 'reserve' => $reserve,
             ],
+            'foundation' => $foundation,
             'silos' => $this->serviceTree($site),
             'tiers' => $this->locationTiers($site),
         ];
+    }
+
+    /**
+     * The Foundation (standard) layer, classified for display: core, optional (data-gated), legal.
+     *
+     * @param  list<array<string, mixed>>  $standardRows
+     * @return list<array{label: string, kind: string}>
+     */
+    private function foundation(array $standardRows): array
+    {
+        $legal = [StandardPageType::Privacy, StandardPageType::Terms];
+
+        $out = [];
+        foreach ($standardRows as $row) {
+            $type = StandardPageType::from((string) $row['page_key']);
+            $kind = in_array($type, $legal, true) ? 'legal' : ($type->isFixed() ? 'core' : 'optional');
+            $out[] = ['label' => $type->label(), 'kind' => $kind];
+        }
+
+        return $out;
     }
 
     /**

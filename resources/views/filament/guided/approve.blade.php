@@ -5,7 +5,7 @@
     $hasService = ! empty($plan['service']);
 @endphp
 <x-guided.shell :steps="$this->steps" :brand="$brand">
-    <div class="lp-eyebrow">Step 4 of 4 · What the client approves</div>
+    <div class="lp-eyebrow">{{ \App\Enums\SetupStep::Approve->eyebrow() }} · What the client approves</div>
     <h1 class="lp-h1">Here's your site plan</h1>
     <p class="lp-lede">Your whole site, in plain language — standard pages, your services, and your towns. Approve it and we'll start building.</p>
 

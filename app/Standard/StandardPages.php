@@ -66,6 +66,18 @@ class StandardPages
     }
 
     /**
+     * The default standard set: the fixed core + every offerable optional, defaulted ON. This is
+     * what the Page Inventory previews (what Build would build by default) before the client
+     * accept/declines at Approve.
+     *
+     * @return list<StandardPageType>
+     */
+    public function defaultForSite(Site $site): array
+    {
+        return [...StandardPageType::fixed(), ...$this->gate->offerable($site)];
+    }
+
+    /**
      * @return array<string, bool>
      */
     private function acceptedMap(Site $site): array

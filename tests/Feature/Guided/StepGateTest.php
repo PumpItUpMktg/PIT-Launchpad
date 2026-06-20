@@ -39,7 +39,7 @@ test('resolve sends a locked target back to the current step, but honors an unlo
     expect($this->gate->resolve($state, SetupStep::Territory))->toBe(SetupStep::Territory); // now unlocked
 });
 
-test('completing the four setup steps unlocks Build; Build (launched) unlocks Grow', function () {
+test('completing the five setup steps unlocks Build; Build (launched) unlocks Grow', function () {
     $state = SetupState::factory()->create();
 
     foreach (SetupStep::setupSteps() as $step) {

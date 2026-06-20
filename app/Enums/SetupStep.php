@@ -6,24 +6,27 @@ use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Build;
 use App\Filament\Pages\Guided\Business;
 use App\Filament\Pages\Guided\Grow;
+use App\Filament\Pages\Guided\Inventory;
 use App\Filament\Pages\Guided\Structure;
 use App\Filament\Pages\Guided\Territory;
 
 /**
- * The guided setup flow: four setup steps + the Grow dashboard. The order is the pipeline's
+ * The guided setup flow: five setup steps + the Build & Grow phases. The order is the pipeline's
  * dependency order made structural — each step's {@see prerequisiteFlag()} (the prior step's
  * completion) must be set before it unlocks, so territory can't be skipped ahead of structure
  * and volume always grounds against a real territory. {@see completionFlag()} is the gate a
- * step sets when its work is done.
+ * step sets when its work is done. Page Inventory is a read-only review step between Structure
+ * and Approve — it shares Approve's prerequisite (no new gate column) and is a pass-through.
  */
 enum SetupStep: int
 {
     case Business = 1;
     case Territory = 2;
     case Structure = 3;
-    case Approve = 4;
-    case Build = 5;
-    case Grow = 6;
+    case Inventory = 4;
+    case Approve = 5;
+    case Build = 6;
+    case Grow = 7;
 
     public function label(): string
     {
@@ -31,6 +34,7 @@ enum SetupStep: int
             self::Business => 'Business & services',
             self::Territory => 'Territory',
             self::Structure => 'Structure',
+            self::Inventory => 'Page inventory',
             self::Approve => 'Approve & build',
             self::Build => 'Build',
             self::Grow => 'Grow',
@@ -43,16 +47,17 @@ enum SetupStep: int
             self::Business => 'What you do',
             self::Territory => 'Where you work',
             self::Structure => 'Your pages',
-            self::Approve => 'Review the plan',
+            self::Inventory => 'What gets built',
+            self::Approve => 'Go live',
             self::Build => 'Going live',
             self::Grow => 'Your live site',
         };
     }
 
-    /** The "Step N of 4" eyebrow; Build and Grow are post-setup phases. */
+    /** The "Step N of 5" eyebrow; Build and Grow are post-setup phases. */
     public function eyebrow(): string
     {
-        return $this->isPhase() ? $this->label() : "Step {$this->value} of 4";
+        return $this->isPhase() ? $this->label() : "Step {$this->value} of 5";
     }
 
     public function isGrow(): bool
@@ -60,7 +65,7 @@ enum SetupStep: int
         return $this === self::Grow;
     }
 
-    /** Post-setup phases (not one of the four numbered setup steps). */
+    /** Post-setup phases (not one of the five numbered setup steps). */
     public function isPhase(): bool
     {
         return $this === self::Build || $this === self::Grow;
@@ -73,7 +78,8 @@ enum SetupStep: int
             self::Business => null,
             self::Territory => 'services_done',
             self::Structure => 'territory_done',
-            self::Approve => 'structure_finalized',
+            self::Inventory => 'structure_finalized',
+            self::Approve => 'structure_finalized', // shares Inventory's gate — Inventory is a pass-through review
             self::Build => 'approved',
             self::Grow => 'launched',
         };
@@ -86,6 +92,7 @@ enum SetupStep: int
             self::Business => 'services_done',
             self::Territory => 'territory_done',
             self::Structure => 'structure_finalized',
+            self::Inventory => null, // pass-through: advances current_step, sets no gate (Approve already unlocked)
             self::Approve => 'approved',
             self::Build => 'launched',
             self::Grow => null,
@@ -99,15 +106,16 @@ enum SetupStep: int
             self::Business => Business::class,
             self::Territory => Territory::class,
             self::Structure => Structure::class,
+            self::Inventory => Inventory::class,
             self::Approve => Approve::class,
             self::Build => Build::class,
             self::Grow => Grow::class,
         };
     }
 
-    /** The four ordered setup steps (excludes Grow). */
+    /** The five ordered setup steps (excludes the Build/Grow phases). */
     public static function setupSteps(): array
     {
-        return [self::Business, self::Territory, self::Structure, self::Approve];
+        return [self::Business, self::Territory, self::Structure, self::Inventory, self::Approve];
     }
 }
