@@ -27,14 +27,26 @@ beforeEach(function () {
     ]);
 });
 
-test('entering Structure with a seed but no spokes dispatches the build chain and shows building', function () {
+test('entering Structure with a seed but no spokes shows the building state and runs synchronously (no queue)', function () {
     Queue::fake();
     SiloBlueprint::factory()->create(['site_id' => $this->site->id, 'seed' => ['trade' => 'Waterproofing', 'anchor_services' => ['x']]]);
 
-    Livewire::test(Structure::class)->assertOk();
+    Livewire::test(Structure::class)
+        ->assertOk()
+        ->assertSeeHtml('wire:init="runBuild"'); // the build runs in-request, not on a worker
 
-    Queue::assertPushed(BuildStructure::class);
+    Queue::assertNothingPushed(); // no queued job — wire:init drives BuildStructure::dispatchSync
     expect(SetupState::query()->where('site_id', $this->site->id)->value('structure_status'))->toBe('building');
+});
+
+test('runBuild is a no-op once the structure is ready (idempotent, no re-run)', function () {
+    $bp = SiloBlueprint::factory()->create(['site_id' => $this->site->id]);
+    Spoke::factory()->create(['site_id' => $this->site->id, 'silo_blueprint_id' => $bp->id]);
+    SetupState::query()->where('site_id', $this->site->id)->update(['structure_status' => 'ready']);
+
+    Livewire::test(Structure::class)->call('runBuild'); // ready → returns early, no engine run
+
+    expect(SetupState::query()->where('site_id', $this->site->id)->value('structure_status'))->toBe('ready');
 });
 
 test('re-entering Structure with spokes already present marks it ready and skips the build', function () {

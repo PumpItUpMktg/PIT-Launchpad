@@ -12,12 +12,27 @@
     @unless ($site)
         <div class="lp-card"><div class="lp-empty">No sites yet — create a site to begin setup.</div></div>
     @elseif ($status === 'building' || $status === null)
-        <div class="lp-card" wire:poll.2s>
-            <div class="lp-empty">
-                <div style="font-family:'Archivo',sans-serif;font-weight:700;font-size:16px;margin-bottom:6px">Building your structure…</div>
-                Generating your categories, grounding them on real search volume, and arranging the pages. This takes a moment.
+        {{-- wire:init runs the chain synchronously; wire:loading shows the spinner until it returns. --}}
+        <div class="lp-card" wire:init="runBuild">
+            <div class="lp-empty" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:48px">
+                <div class="lp-spinner"></div>
+                <div style="font-family:'Archivo',sans-serif;font-weight:700;font-size:16px" data-lp-build-stage>Building your structure…</div>
+                <div style="font-size:12.5px;color:var(--ink-soft)">This takes a moment — hang tight.</div>
             </div>
         </div>
+        <script>
+            (function () {
+                var stages = ['Pulling categories…', 'Scoring volume…', 'Arranging silos…', 'Finalizing…'];
+                var el = document.querySelector('[data-lp-build-stage]');
+                if (! el) return;
+                var i = 0;
+                var t = setInterval(function () {
+                    if (! document.body.contains(el)) { clearInterval(t); return; } // cleared when the build returns
+                    el.textContent = stages[i % stages.length];
+                    i++;
+                }, 1400);
+            })();
+        </script>
     @elseif ($status === 'failed')
         <div class="lp-card">
             <div class="lp-empty">We couldn't build the structure — check that Step 1 has a trade and services.</div>

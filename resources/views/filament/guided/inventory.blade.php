@@ -21,12 +21,25 @@
             <div class="iv"><span class="ivn">{{ $counts['reserve'] }}</span><span class="ivl">towns in reserve</span></div>
         </div>
 
-        {{-- Foundation — the standard layer, kept separate --}}
+        {{-- Foundation — the standard layer, kept separate. Optional pages toggle into the build. --}}
         <div class="lp-basic">
             <div class="bhd"><span class="bd"></span>Foundation — the basic pages every site needs</div>
+            <div class="hint" style="margin:-6px 0 12px;color:var(--ink-soft)">Core pages are always built. Toggle the optional pages to include or remove them.</div>
             <div class="lp-basicgrid">
                 @foreach ($inv['foundation'] as $page)
-                    <div class="lp-pageitem {{ $page['kind'] === 'optional' ? 'opt' : ($page['kind'] === 'legal' ? 'legal' : '') }}"><span class="pd"></span>{{ $page['label'] }}</div>
+                    @if ($page['toggleable'])
+                        <div wire:key="found-{{ $page['type'] }}"
+                             class="lp-pageitem {{ $page['accepted'] ? 'opt on' : 'off' }}"
+                             style="cursor:pointer;user-select:none"
+                             title="{{ $page['accepted'] ? 'Included — click to remove' : 'Click to include' }}"
+                             wire:click="toggleStandard('{{ $page['type'] }}')">
+                            <span class="pd">{{ $page['accepted'] ? '✓' : '' }}</span>{{ $page['label'] }}
+                        </div>
+                    @else
+                        <div wire:key="found-{{ $page['type'] }}" class="lp-pageitem on {{ $page['kind'] === 'legal' ? 'legal' : '' }}" title="Always built">
+                            <span class="pd">✓</span>{{ $page['label'] }}
+                        </div>
+                    @endif
                 @endforeach
             </div>
         </div>

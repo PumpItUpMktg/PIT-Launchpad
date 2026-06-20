@@ -4,16 +4,18 @@ namespace App\Filament\Pages\Guided;
 
 use App\Build\InventoryPlan;
 use App\Enums\SetupStep;
+use App\Enums\StandardPageType;
 use App\Guided\GuidedPage;
 use App\Guided\StepGate;
+use App\Standard\StandardPages;
 
 /**
- * Step 4 · Page inventory — the operator-detailed, read-only "what gets built" review between
- * Structure and Approve. Renders the directed-coverage blueprint as a concrete page list
- * ({@see InventoryPlan}): the Foundation (standard) layer kept separate from the service-by-silo
- * and location-by-tier directed coverage. No toggles here — accept/decline stays at Approve.
- * Continue advances to Approve. Shares Approve's prerequisite (no new gate), so it's a
- * pass-through review reachable once the structure is finalized.
+ * Step 4 · Page inventory — the operator-detailed "what gets built" review between Structure and
+ * Approve. Renders the directed-coverage blueprint as a concrete page list ({@see InventoryPlan}):
+ * the Foundation (standard) layer kept separate from the service-by-silo and location-by-tier
+ * directed coverage. The optional foundation pages have working checkboxes that curate which
+ * standard pages land in the build manifest ({@see StandardPages} accept set) — the selection is
+ * what the build uses. Continue advances to Approve. Shares Approve's prerequisite (no new gate).
  *
  * @property-read array<string, mixed> $inventory
  */
@@ -30,6 +32,40 @@ class Inventory extends GuidedPage
     public function step(): SetupStep
     {
         return SetupStep::Inventory;
+    }
+
+    public function mount(): void
+    {
+        parent::mount(); // resolve site + gate
+
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        // First visit: default the offerable optionals ON, so the inventory starts fully selected
+        // (curate by deselecting). Respects any later operator choice (only seeds when untouched).
+        $state = app(StepGate::class)->state($site);
+        if ($state->standard_pages === null) {
+            $standard = app(StandardPages::class);
+            foreach ($standard->offerable($site) as $row) {
+                $standard->setAccepted($site, $row['type'], true);
+            }
+        }
+    }
+
+    /** Toggle an optional standard page into/out of the build manifest (curates the build). */
+    public function toggleStandard(string $type): void
+    {
+        $site = $this->getSite();
+        $pageType = StandardPageType::tryFrom($type);
+        if ($site === null || $pageType === null) {
+            return;
+        }
+
+        $standard = app(StandardPages::class);
+        $current = collect($standard->offerable($site))->firstWhere('type', $pageType);
+        $standard->setAccepted($site, $pageType, ! ($current['accepted'] ?? false));
     }
 
     /**
