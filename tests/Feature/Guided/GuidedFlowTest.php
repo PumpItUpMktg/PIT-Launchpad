@@ -9,6 +9,7 @@ use App\Filament\Pages\Guided\Structure;
 use App\Filament\Pages\Guided\Territory;
 use App\Models\ArrangementFlag;
 use App\Models\SetupState;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
 use App\Models\User;
@@ -73,7 +74,12 @@ test('Finalize is blocked while an auto-arrange flag is unresolved, then allowed
 test('the full walkthrough advances 1 → 2 → 3 → 4 → Grow and launches', function () {
     Livewire::test(Business::class)->call('proceed');
     Livewire::test(Territory::class)->call('proceed');
-    Livewire::test(Structure::class)->call('finalize'); // no flags → passes
+
+    // Simulate a built structure so Step 3 is "ready" (the engine chain is covered separately).
+    $bp = SiloBlueprint::factory()->create(['site_id' => $this->site->id]);
+    Spoke::factory()->create(['site_id' => $this->site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Pumps', 'name' => 'Pumps', 'is_pillar' => true]);
+
+    Livewire::test(Structure::class)->call('finalize'); // ready, no flags → passes
     Livewire::test(Approve::class)->call('approveAndBuild');
 
     $state = setupState($this->site)->fresh();

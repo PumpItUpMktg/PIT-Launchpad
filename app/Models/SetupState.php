@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $services_done
  * @property bool $territory_done
  * @property bool $structure_finalized
+ * @property string|null $structure_status null|building|ready|failed (Step 3 engine-on-entry)
  * @property bool $approved
  * @property bool $launched
  * @property bool $localize
