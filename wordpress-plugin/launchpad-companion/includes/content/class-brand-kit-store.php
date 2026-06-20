@@ -39,13 +39,22 @@ final class BrandKitStore
     ];
 
     /**
+     * The launchpad-managed CUSTOM global color `_id`s (the extended brand tokens that have no
+     * Elementor system slot). The baseline launchpad.css references these via
+     * `var(--e-global-color-{id})`. Managed-id'd so a re-push replaces them cleanly — operator-
+     * added custom colors are preserved, our stale ones never linger.
+     */
+    private const CUSTOM_IDS = ['lptextmuted', 'lpbg', 'lpbgalt', 'lpborder', 'lponaccent'];
+
+    /**
      * Apply the brand kit to the active Elementor Global Kit.
      *
      * Payload: {
-     *   colors:    { primary?, secondary?, text?, accent? : "#hex" },
-     *   fonts:     { primary?, secondary?, text?, accent? : { family, weight? } },
-     *   wf_tokens: { "--wf-color-primary"?: "#hex", "--wf-font-heading"?: "Inter", … },
-     *   structure: "trust" | "bold" | "warm"
+     *   colors:        { primary?, secondary?, text?, accent? : "#hex" },   // Elementor SYSTEM globals
+     *   custom_colors: [ { _id, title, color } ],                            // named CUSTOM globals (extended brand)
+     *   fonts:         { primary?, secondary?, text?, accent? : { family, weight? } },
+     *   wf_tokens:     { "--wf-color-primary"?: "#hex", "--wf-font-heading"?: "Inter", … },
+     *   structure:     "trust" | "bold" | "warm"
      * }
      *
      * The wf_tokens + structure feed the NATIVE wf-* pages (the base wf-* stylesheet's
@@ -55,7 +64,7 @@ final class BrandKitStore
      * dynamic-tag path).
      *
      * @param  array<string, mixed>  $payload
-     * @return array{updated: bool, kit_id: int, colors_set: int, fonts_set: int, wf_tokens_set: int, structure_set: bool, error?: string}
+     * @return array{updated: bool, kit_id: int, colors_set: int, custom_colors_set: int, fonts_set: int, wf_tokens_set: int, structure_set: bool, error?: string}
      */
     public function install(array $payload): array
     {
@@ -127,7 +136,7 @@ final class BrandKitStore
      * even when there is no active kit.
      *
      * @param  array<string, mixed>  $payload
-     * @return array{updated: bool, kit_id: int, colors_set: int, fonts_set: int, error?: string}
+     * @return array{updated: bool, kit_id: int, colors_set: int, custom_colors_set: int, fonts_set: int, error?: string}
      */
     private function install_global_kit(array $payload): array
     {
@@ -137,19 +146,22 @@ final class BrandKitStore
                 'updated' => false,
                 'kit_id' => 0,
                 'colors_set' => 0,
+                'custom_colors_set' => 0,
                 'fonts_set' => 0,
                 'error' => 'No active Elementor Global Kit; brand not applied.',
             ];
         }
 
         $colors = is_array($payload['colors'] ?? null) ? $payload['colors'] : [];
+        $custom = is_array($payload['custom_colors'] ?? null) ? $payload['custom_colors'] : [];
         $fonts = is_array($payload['fonts'] ?? null) ? $payload['fonts'] : [];
 
-        if ($colors === [] && $fonts === []) {
+        if ($colors === [] && $custom === [] && $fonts === []) {
             return [
                 'updated' => false,
                 'kit_id' => $kit_id,
                 'colors_set' => 0,
+                'custom_colors_set' => 0,
                 'fonts_set' => 0,
                 'error' => 'Empty brand kit (no colors or fonts to apply).',
             ];
@@ -161,6 +173,7 @@ final class BrandKitStore
         }
 
         $colors_set = $this->apply_colors($settings, $colors);
+        $custom_colors_set = $this->apply_custom_colors($settings, $custom);
         $fonts_set = $this->apply_fonts($settings, $fonts);
 
         update_post_meta($kit_id, '_elementor_page_settings', $settings);
@@ -170,8 +183,54 @@ final class BrandKitStore
             'updated' => true,
             'kit_id' => $kit_id,
             'colors_set' => $colors_set,
+            'custom_colors_set' => $custom_colors_set,
             'fonts_set' => $fonts_set,
         ];
+    }
+
+    /**
+     * Set the kit's CUSTOM global colors for the extended brand tokens, replacing the
+     * launchpad-managed entries cleanly: drop every prior managed-id custom color, then write the
+     * incoming set. Operator-added custom colors (non-managed ids) are preserved. So a regenerate
+     * fully refreshes the brand with no stale leftovers. Returns how many were applied.
+     *
+     * @param  array<string, mixed>  $settings  (by ref)
+     * @param  array<int, mixed>     $custom    list of {_id, title, color}
+     */
+    private function apply_custom_colors(array &$settings, array $custom): int
+    {
+        $existing = isset($settings['custom_colors']) && is_array($settings['custom_colors'])
+            ? $settings['custom_colors'] : [];
+        $managed = array_fill_keys(self::CUSTOM_IDS, true);
+
+        // Keep only the non-managed (operator-added) custom colors — drop our stale ones.
+        $kept = [];
+        foreach ($existing as $entry) {
+            $id = is_array($entry) && isset($entry['_id']) && is_string($entry['_id']) ? $entry['_id'] : '';
+            if ($id !== '' && isset($managed[$id])) {
+                continue;
+            }
+            $kept[] = $entry;
+        }
+
+        // Write the incoming managed custom colors fresh.
+        $count = 0;
+        foreach ($custom as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+            $id = isset($entry['_id']) && is_string($entry['_id']) ? $entry['_id'] : '';
+            $color = isset($entry['color']) && is_string($entry['color']) ? $this->sanitize_color($entry['color']) : '';
+            if ($id === '' || ! isset($managed[$id]) || $color === '') {
+                continue;
+            }
+            $kept[] = ['_id' => $id, 'title' => (string) ($entry['title'] ?? $id), 'color' => $color];
+            $count++;
+        }
+
+        $settings['custom_colors'] = array_values($kept);
+
+        return $count;
     }
 
     /**

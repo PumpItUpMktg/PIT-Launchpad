@@ -88,6 +88,53 @@ class Test_Brand_Kit_Store extends WP_UnitTestCase
         $this->assertSame('#222222', $this->color_for('primary')); // latest wins
     }
 
+    private function custom_color_for(string $id): ?string
+    {
+        foreach ($this->settings()['custom_colors'] ?? [] as $c) {
+            if (($c['_id'] ?? '') === $id) {
+                return (string) ($c['color'] ?? '');
+            }
+        }
+
+        return null;
+    }
+
+    public function test_it_writes_the_extended_tokens_as_named_custom_globals(): void
+    {
+        $result = ( new BrandKitStore() )->install([
+            'colors' => ['primary' => '#1B3A5B', 'secondary' => '#3E6E9E'],
+            'custom_colors' => [
+                ['_id' => 'lptextmuted', 'title' => 'Text Muted', 'color' => '#5B6470'],
+                ['_id' => 'lpbg', 'title' => 'Background', 'color' => '#FFFFFF'],
+                ['_id' => 'lpborder', 'title' => 'Border', 'color' => '#E2E6EB'],
+            ],
+        ]);
+
+        $this->assertSame(3, $result['custom_colors_set']);
+        $this->assertSame('#5B6470', $this->custom_color_for('lptextmuted'));
+        $this->assertSame('#3E6E9E', $this->color_for('secondary')); // system secondary no longer dropped
+    }
+
+    public function test_a_re_push_replaces_managed_custom_globals_cleanly_keeping_operator_ones(): void
+    {
+        update_post_meta($this->kit_id, '_elementor_page_settings', [
+            'custom_colors' => [
+                ['_id' => 'op_brand', 'title' => 'Operator', 'color' => '#ABCABC'], // operator-added
+                ['_id' => 'lpbg', 'title' => 'Background', 'color' => '#000000'],     // stale managed
+            ],
+        ]);
+
+        ( new BrandKitStore() )->install([
+            'colors' => ['primary' => '#111111'],
+            'custom_colors' => [['_id' => 'lptextmuted', 'title' => 'Text Muted', 'color' => '#5B6470']],
+        ]);
+
+        $ids = array_map(static fn ($c) => $c['_id'] ?? '', $this->settings()['custom_colors']);
+        sort($ids);
+        $this->assertSame(['lptextmuted', 'op_brand'], $ids); // stale lpbg dropped, operator kept, new added
+        $this->assertSame('#ABCABC', $this->custom_color_for('op_brand'));
+    }
+
     public function test_it_preserves_unrelated_existing_kit_settings(): void
     {
         update_post_meta($this->kit_id, '_elementor_page_settings', [

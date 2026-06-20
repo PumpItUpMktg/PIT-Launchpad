@@ -37,6 +37,24 @@ class BrandKitAssembler
     private const COLOR_SLOTS = ['primary', 'secondary', 'text', 'accent'];
 
     /**
+     * Intake palette keys → named Elementor CUSTOM globals with STABLE `_id`s. Elementor only
+     * has four SYSTEM color slots (primary/secondary/text/accent); the rest of the brand
+     * (text_muted, bg, bg_alt, border, on_accent) is written as custom globals so every color
+     * lands in the Global Kit and resolves via `var(--e-global-color-{id})` — which is exactly
+     * what the baseline launchpad.css references. The ids are stable so a regenerate refreshes
+     * the same globals (the plugin replaces them cleanly), never stale duplicates.
+     */
+    private const CUSTOM_COLOR_SLOTS = [
+        'text_muted' => ['id' => 'lptextmuted', 'title' => 'Text Muted'],
+        'text-muted' => ['id' => 'lptextmuted', 'title' => 'Text Muted'],
+        'bg' => ['id' => 'lpbg', 'title' => 'Background'],
+        'bg_alt' => ['id' => 'lpbgalt', 'title' => 'Background Alt'],
+        'bg-alt' => ['id' => 'lpbgalt', 'title' => 'Background Alt'],
+        'border' => ['id' => 'lpborder', 'title' => 'Border'],
+        'on_accent' => ['id' => 'lponaccent', 'title' => 'On Accent'],
+    ];
+
+    /**
      * Intake palette keys → the brand `--wf-color-*` custom properties the base wf-*
      * stylesheet consumes on native pages. Accepts both `text_muted`/`bg_alt` and
      * the hyphenated aliases. Any key absent simply falls back to the stylesheet
@@ -59,7 +77,7 @@ class BrandKitAssembler
     private const VALID_STRUCTURES = ['trust', 'bold', 'warm'];
 
     /**
-     * @return array{colors: array<string, string>, fonts: array<string, array<string, string>>, wf_tokens: array<string, string>, structure: string}|null
+     * @return array{colors: array<string, string>, custom_colors: list<array{_id: string, title: string, color: string}>, fonts: array<string, array<string, string>>, wf_tokens: array<string, string>, structure: string}|null
      */
     public function forSite(string $siteId): ?array
     {
@@ -82,11 +100,34 @@ class BrandKitAssembler
         }
 
         return [
-            'colors' => $colors,           // Elementor Global Kit system slots (legacy/dynamic-tag path)
+            'colors' => $colors,                          // Elementor Global Kit SYSTEM slots
+            'custom_colors' => $this->customColors($palette), // named CUSTOM globals (stable ids)
             'fonts' => $fonts,
             'wf_tokens' => $this->wfTokens($palette, $typography), // --wf-* for native pages
             'structure' => $this->structure($branding->structure_preset),
         ];
+    }
+
+    /**
+     * The extended palette tokens as named Elementor custom globals (`{_id, title, color}`),
+     * stable-id'd so the kit write replaces them cleanly on every regenerate.
+     *
+     * @param  array<string, mixed>  $palette
+     * @return list<array{_id: string, title: string, color: string}>
+     */
+    private function customColors(array $palette): array
+    {
+        $out = [];
+        $seen = [];
+        foreach (self::CUSTOM_COLOR_SLOTS as $key => $slot) {
+            $value = $palette[$key] ?? null;
+            if (is_string($value) && trim($value) !== '' && ! isset($seen[$slot['id']])) {
+                $seen[$slot['id']] = true;
+                $out[] = ['_id' => $slot['id'], 'title' => $slot['title'], 'color' => trim($value)];
+            }
+        }
+
+        return $out;
     }
 
     /**
