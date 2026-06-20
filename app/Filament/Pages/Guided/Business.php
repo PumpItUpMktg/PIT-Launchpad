@@ -125,7 +125,7 @@ class Business extends GuidedPage
         $gate->complete($gate->state($site), SetupStep::Business);
 
         Notification::make()->title('Services saved.')->success()->send();
-        $this->redirect(SetupStep::Territory->pageClass()::getUrl());
+        $this->redirect(SetupStep::ConnectWordpress->pageClass()::getUrl());
     }
 
     private function blueprint(Site $site): ?SiloBlueprint

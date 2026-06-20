@@ -18,6 +18,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $site_id
  * @property int $current_step
  * @property bool $services_done
+ * @property bool $deps_ready WordPress connected + verified + prepped (step 2)
+ * @property bool $brand_pushed brand kit pushed to the prepped site (step 3)
  * @property bool $territory_done
  * @property bool $structure_finalized
  * @property string|null $structure_status null|building|ready|failed (Step 3 engine-on-entry)
@@ -63,6 +65,8 @@ class SetupState extends Model
         return [
             'current_step' => 'integer',
             'services_done' => 'boolean',
+            'deps_ready' => 'boolean',
+            'brand_pushed' => 'boolean',
             'territory_done' => 'boolean',
             'structure_finalized' => 'boolean',
             'approved' => 'boolean',

@@ -25,7 +25,7 @@ test('completing a step sets its gate, advances current_step, and unlocks the ne
 
     expect($state->services_done)->toBeTrue()
         ->and($state->current_step)->toBe(2)
-        ->and($this->gate->isUnlocked($state, SetupStep::Territory))->toBeTrue()
+        ->and($this->gate->isUnlocked($state, SetupStep::ConnectWordpress))->toBeTrue()
         ->and($this->gate->isUnlocked($state, SetupStep::Structure))->toBeFalse();
 });
 
@@ -36,10 +36,10 @@ test('resolve sends a locked target back to the current step, but honors an unlo
 
     $this->gate->complete($state, SetupStep::Business);
 
-    expect($this->gate->resolve($state, SetupStep::Territory))->toBe(SetupStep::Territory); // now unlocked
+    expect($this->gate->resolve($state, SetupStep::ConnectWordpress))->toBe(SetupStep::ConnectWordpress); // now unlocked
 });
 
-test('completing the five setup steps unlocks Build; Build (launched) unlocks Grow', function () {
+test('completing the setup steps unlocks Build; Build (launched) unlocks Grow', function () {
     $state = SetupState::factory()->create();
 
     foreach (SetupStep::setupSteps() as $step) {
