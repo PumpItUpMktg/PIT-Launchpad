@@ -2,7 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Business;
-use App\Filament\Pages\Guided\Territory;
+use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
@@ -28,7 +28,7 @@ test('Step 1 persists a SiloSeed (trade + stated + confirmed suggestions) and ad
             ['name' => 'French drains', 'why' => 'drainage', 'on' => false],
         ])
         ->call('proceed')
-        ->assertRedirect(Territory::getUrl());
+        ->assertRedirect(ConnectWordpress::getUrl());
 
     $blueprint = SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->firstOrFail();
 

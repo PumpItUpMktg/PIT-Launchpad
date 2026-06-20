@@ -16,7 +16,6 @@ use App\Models\Site;
 use App\Operator\Controls\BudgetControl;
 use App\Operator\Controls\CadenceControl;
 use App\Operator\Controls\TemplateMapping;
-use App\Operator\Controls\WordpressConnector;
 use App\Operator\Handover\SiteHandover;
 use App\Publishing\LaunchOrchestrator;
 use App\Security\GateCheck;
@@ -712,99 +711,37 @@ class SiteResource extends Resource
      */
     public static function form(Schema $schema): Schema
     {
+        // The on-ramp to the unified onboarding flow: capture the business basics only — the
+        // WordPress connection is now the guided flow's Step 2 (Connect WordPress) and the brand
+        // its Step 3, so creation can't get ahead of a prepped site. CreateSite drops the operator
+        // into Step 1 after save.
         return $schema->components([
-            Wizard::make([
-                Step::make('Site')
-                    ->icon('heroicon-o-building-office-2')
-                    ->description('One brand, one WordPress install')
-                    ->schema([
-                        Text::make('A site is one WordPress install — one brand\'s website. Locations (offices, service areas) live inside a site; don\'t create a separate site per location.'),
-                        Select::make('account_id')
-                            ->label('Account (brand)')
-                            ->relationship('account', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->required()
-                            ->createOptionForm([
-                                TextInput::make('name')->label('Account name')->required(),
-                            ]),
-                        TextInput::make('brand_name')
-                            ->label('Site name')
-                            ->required(),
-                        TextInput::make('legal_name')
-                            ->label('Legal name')
-                            ->helperText('Optional — the registered business name, if it differs from the brand.'),
-                        TextInput::make('domain_url')
-                            ->label('Site URL')
-                            ->url()
-                            ->placeholder('https://client-site.com')
-                            ->helperText('Where the site lives — the WordPress base URL this site publishes to.'),
-                        Select::make('status')
-                            ->options(self::statusOptions())
-                            ->default(SiteStatus::Onboarding->value)
-                            ->required(),
-                    ]),
-                Step::make('WordPress connection')
-                    ->icon('heroicon-o-globe-alt')
-                    ->description('Wire publishing now (optional)')
-                    ->schema([
-                        Text::make('Connect the WordPress install so this site can publish with zero tinker. The credential is verified against the live site before it is saved. Leave the password blank to wire it later under Controls → Connections.'),
-                        TextInput::make('base_url')
-                            ->label('WordPress base URL')
-                            ->url()
-                            ->placeholder('https://client-site.com')
-                            ->helperText('Defaults to the Site URL above when left blank.'),
-                        TextInput::make('username')
-                            ->label('WP username')
-                            ->default('launchpad-sync'),
-                        TextInput::make('app_password')
-                            ->label('Application password')
-                            ->password()
-                            ->revealable()
-                            ->helperText('Generated for the launchpad-sync user (provider = WordPress).'),
-                        Actions::make([
-                            self::testConnectionAction(),
-                        ]),
-                    ]),
-            ]),
+            Text::make('A site is one WordPress install — one brand\'s website. Locations (offices, service areas) live inside a site; don\'t create a separate site per location.'),
+            Select::make('account_id')
+                ->label('Account (brand)')
+                ->relationship('account', 'name')
+                ->searchable()
+                ->preload()
+                ->required()
+                ->createOptionForm([
+                    TextInput::make('name')->label('Account name')->required(),
+                ]),
+            TextInput::make('brand_name')
+                ->label('Site name')
+                ->required(),
+            TextInput::make('legal_name')
+                ->label('Legal name')
+                ->helperText('Optional — the registered business name, if it differs from the brand.'),
+            TextInput::make('domain_url')
+                ->label('Site URL')
+                ->url()
+                ->placeholder('https://client-site.com')
+                ->helperText('Where the site lives — you\'ll connect WordPress next.'),
+            Select::make('status')
+                ->options(self::statusOptions())
+                ->default(SiteStatus::Onboarding->value)
+                ->required(),
         ]);
-    }
-
-    /**
-     * "Test connection" — ping the entered WordPress credentials against the live
-     * site and report green/red inline, WITHOUT creating anything. Lets the
-     * operator confirm the connection in the panel before finishing the wizard
-     * (the runbook's step-2 green check), keeping the zero-tinker path honest.
-     */
-    private static function testConnectionAction(): Action
-    {
-        return Action::make('test_connection')
-            ->label('Test connection')
-            ->icon('heroicon-o-signal')
-            ->color('gray')
-            ->action(function (Get $get): void {
-                $baseUrl = trim((string) $get('base_url')) ?: trim((string) $get('domain_url'));
-                $password = trim((string) $get('app_password'));
-
-                if ($baseUrl === '' || $password === '') {
-                    Notification::make()->warning()
-                        ->title('Enter the WordPress URL and application password first')->send();
-
-                    return;
-                }
-
-                $ok = app(WordpressConnector::class)->verify([
-                    'base_url' => $baseUrl,
-                    'username' => trim((string) $get('username')) ?: 'launchpad-sync',
-                    'app_password' => $password,
-                ]);
-
-                $ok
-                    ? Notification::make()->success()->title('Connection verified')
-                        ->body('WordPress authenticated — green to finish the wizard.')->send()
-                    : Notification::make()->danger()->title('Connection failed')
-                        ->body('WordPress did not authenticate at '.$baseUrl.'/wp-json/wp/v2/users/me — check the URL and app password.')->send();
-            });
     }
 
     /**

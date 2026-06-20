@@ -4,6 +4,17 @@
     <h1 class="lp-h1">What does your business do?</h1>
     <p class="lp-lede">List the services you offer. We'll suggest a few you might have missed, then build your site around them.</p>
 
+    @if ($site)
+        <div class="lp-basic" style="background:var(--amber-bg);border-color:#ECD6A8">
+            <div class="bhd" style="color:var(--amber)"><span class="bd" style="background:var(--amber)"></span>Before the next step — have your WordPress ready</div>
+            <div class="hint" style="margin:0">
+                Step 2 connects to your live WordPress site. To breeze through it, have ready:
+                a live WordPress site, an admin login that can install plugins, and a WordPress
+                <strong>application password</strong> (create one under <strong>Users → Profile → Application Passwords</strong> — it's separate from your login password).
+            </div>
+        </div>
+    @endif
+
     @unless ($site)
         <div class="lp-card"><div class="lp-empty">No sites yet — create a site to begin setup.</div></div>
     @else

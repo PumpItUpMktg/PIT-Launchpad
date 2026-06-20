@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Build;
 use App\Filament\Pages\Guided\Business;
+use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Filament\Pages\Guided\Grow;
 use App\Filament\Pages\Guided\Inventory;
 use App\Filament\Pages\Guided\Structure;
@@ -38,17 +39,17 @@ test('a step beyond the furthest-unlocked redirects back to the current step on 
     Livewire::test(Territory::class)->assertRedirect(Business::getUrl());
 });
 
-test('completing step 1 advances and unlocks step 2', function () {
+test('completing step 1 advances and unlocks step 2 (Connect WordPress)', function () {
     Livewire::test(Business::class)
         ->call('proceed')
-        ->assertRedirect(Territory::getUrl());
+        ->assertRedirect(ConnectWordpress::getUrl());
 
     $state = setupState($this->site);
     expect($state->services_done)->toBeTrue()
         ->and($state->current_step)->toBe(2);
 
     // step 2 now mounts without redirect
-    Livewire::test(Territory::class)->assertOk();
+    Livewire::test(ConnectWordpress::class)->assertOk();
 });
 
 test('Finalize is blocked while an auto-arrange flag is unresolved, then allowed once clear', function () {
@@ -75,11 +76,15 @@ test('Finalize is blocked while an auto-arrange flag is unresolved, then allowed
     expect(setupState($this->site)->fresh()->structure_finalized)->toBeTrue();
 });
 
-test('the full walkthrough advances 1 → 2 → 3 → 4 → Build → Grow and launches', function () {
-    Livewire::test(Business::class)->call('proceed');
+test('the full walkthrough advances Business → … → Build → Grow and launches', function () {
+    Livewire::test(Business::class)->call('proceed'); // → Connect WordPress
+
+    // Steps 2-3 (Connect WordPress + Brand) are covered by their own tests; simulate their gates.
+    setupState($this->site)->update(['deps_ready' => true, 'brand_pushed' => true, 'current_step' => 4]);
+
     Livewire::test(Territory::class)->call('proceed');
 
-    // Simulate a built structure so Step 3 is "ready" (the engine chain is covered separately).
+    // Simulate a built structure so Structure is "ready" (the engine chain is covered separately).
     $bp = SiloBlueprint::factory()->create(['site_id' => $this->site->id]);
     Spoke::factory()->create(['site_id' => $this->site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Pumps', 'name' => 'Pumps', 'is_pillar' => true]);
 

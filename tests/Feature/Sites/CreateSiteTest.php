@@ -1,17 +1,17 @@
 <?php
 
-use App\Enums\ConnectionProvider;
 use App\Enums\SiteStatus;
 use App\Enums\UserRole;
+use App\Filament\Pages\Guided\Business;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
 use App\Models\Account;
 use App\Models\Connection;
 use App\Models\Scopes\SiteScope;
+use App\Models\SetupState;
 use App\Models\Site;
 use App\Models\User;
 use Filament\Facades\Filament;
-use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -67,90 +67,32 @@ it('wizard step 1 defines what a site is, to deter per-location sites', function
         ->assertSee('A site is one WordPress install');
 });
 
-it('wizard step 2 offers an in-panel Test connection action', function () {
-    Livewire::test(CreateSite::class)
-        ->assertSee('Test connection');
-});
-
-it('wires a verified WordPress connection from the wizard when credentials are given', function () {
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
+it('creation no longer wires WordPress — that is now the guided flow Step 2', function () {
     $account = Account::factory()->create();
 
     Livewire::test(CreateSite::class)
         ->fillForm([
             'account_id' => $account->id,
-            'brand_name' => 'Connected Co',
-            'domain_url' => 'https://connected-co.com',
-            'app_password' => 'abcd efgh ijkl mnop',
+            'brand_name' => 'Onboarding Co',
+            'domain_url' => 'https://onboarding-co.com',
         ])
         ->call('create')
         ->assertHasNoFormErrors();
 
-    $site = Site::query()->where('brand_name', 'Connected Co')->firstOrFail();
-    $connection = Connection::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->firstOrFail();
+    $site = Site::query()->where('brand_name', 'Onboarding Co')->firstOrFail();
 
-    // The decoded credentials carry ALL THREE keys WordPress Basic auth needs —
-    // base_url + username + app_password — not a two-key subset that would pass a
-    // token-lenient test yet dead-end at publish.
-    expect($connection->provider)->toBe(ConnectionProvider::WpAppPassword)
-        ->and(array_keys($connection->credentials))->toEqualCanonicalizing(['base_url', 'username', 'app_password'])
-        ->and($connection->credentials['base_url'])->toBe('https://connected-co.com') // defaulted from Site URL
-        ->and($connection->credentials['username'])->toBe('launchpad-sync')           // the username field, persisted
-        ->and($connection->credentials['app_password'])->toBe('abcdefghijklmnop')      // spaces stripped, persisted
-        ->and($connection->compromised)->toBeFalse();                                  // verify-before-store → passes the §9 gate
+    // No connection at create — WordPress is connected + prepped at Step 2.
+    expect(Connection::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0)
+        // Creation initializes one continuous setup_state at Step 1 and selects the working site.
+        ->and(SetupState::query()->where('site_id', $site->id)->exists())->toBeTrue()
+        ->and(session('guided_site_id'))->toBe($site->id);
 });
 
-it('persists a custom WP username from the wizard field (not just the default)', function () {
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
+it('lands the operator in the guided flow (Step 1) after creating a site', function () {
     $account = Account::factory()->create();
 
     Livewire::test(CreateSite::class)
-        ->fillForm([
-            'account_id' => $account->id,
-            'brand_name' => 'Custom User Co',
-            'base_url' => 'https://custom-user.com',
-            'username' => 'eric-admin',
-            'app_password' => 'abcd efgh ijkl mnop',
-        ])
+        ->fillForm(['account_id' => $account->id, 'brand_name' => 'Redirect Co'])
         ->call('create')
-        ->assertHasNoFormErrors();
-
-    $site = Site::query()->where('brand_name', 'Custom User Co')->firstOrFail();
-    $connection = Connection::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->firstOrFail();
-
-    expect($connection->credentials['username'])->toBe('eric-admin'); // the field is wired, not hardcoded
-});
-
-it('keeps the site even when WordPress verification fails (never loses the tenant)', function () {
-    Http::fake(['*' => Http::response('', 401)]);
-    $account = Account::factory()->create();
-
-    Livewire::test(CreateSite::class)
-        ->fillForm([
-            'account_id' => $account->id,
-            'brand_name' => 'Unverified Co',
-            'domain_url' => 'https://unverified-co.com',
-            'app_password' => 'wrongpass1234',
-        ])
-        ->call('create')
-        ->assertHasNoFormErrors();
-
-    $site = Site::query()->where('brand_name', 'Unverified Co')->firstOrFail();
-    expect(Connection::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0);
-});
-
-it('creates no connection when the WordPress password is left blank', function () {
-    $account = Account::factory()->create();
-
-    Livewire::test(CreateSite::class)
-        ->fillForm([
-            'account_id' => $account->id,
-            'brand_name' => 'No WP Co',
-            'domain_url' => 'https://no-wp-co.com',
-        ])
-        ->call('create')
-        ->assertHasNoFormErrors();
-
-    $site = Site::query()->where('brand_name', 'No WP Co')->firstOrFail();
-    expect(Connection::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0);
+        ->assertRedirect(Business::getUrl());
 });

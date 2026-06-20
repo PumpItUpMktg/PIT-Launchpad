@@ -28,7 +28,7 @@
         </div>
 
         <div class="lp-foot">
-            <a class="lp-btn ghost" href="{{ \App\Enums\SetupStep::Business->pageClass()::getUrl() }}" wire:navigate>Back</a>
+            <a class="lp-btn ghost" href="{{ \App\Enums\SetupStep::Brand->pageClass()::getUrl() }}" wire:navigate>Back</a>
             <button class="lp-btn" wire:click="proceed">Build my structure</button>
             <span class="lp-gate ok">Saving advances you to Structure</span>
         </div>
