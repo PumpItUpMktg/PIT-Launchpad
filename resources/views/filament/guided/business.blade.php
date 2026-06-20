@@ -1,6 +1,6 @@
 @php $site = $this->getSite(); $brand = $this->businessName ?: ($site?->brand_name ?? 'your business'); @endphp
 <x-guided.shell :steps="$this->steps" :brand="$brand">
-    <div class="lp-eyebrow">{{ \App\Enums\SetupStep::Business->eyebrow() }}</div>
+    <div class="lp-eyebrow">Add a new site · {{ \App\Enums\SetupStep::Business->eyebrow() }}</div>
     <h1 class="lp-h1">What does your business do?</h1>
     <p class="lp-lede">List the services you offer. We'll suggest a few you might have missed, then build your site around them.</p>
 

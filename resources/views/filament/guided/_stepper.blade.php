@@ -2,7 +2,12 @@
      SetupState through StepGate. Locked steps render as non-links. --}}
 <aside class="lp-rail">
     <div class="lp-brand"><span class="dot"></span>Launchpad</div>
-    <div class="lp-railsub">{{ $grow ? 'Grow' : 'Set up' }} — {{ $brand }}</div>
+    @php
+        // "Add a new site" until the business name is known, then personalize.
+        $named = $brand && $brand !== 'your business';
+        $railsub = $grow ? 'Grow — '.$brand : ($named ? 'Setting up '.$brand : 'Add a new site');
+    @endphp
+    <div class="lp-railsub">{{ $railsub }}</div>
 
     <div class="lp-steps">
         @foreach ($steps as $row)

@@ -21,6 +21,11 @@ class CreateSite extends CreateRecord
 {
     protected static string $resource = SiteResource::class;
 
+    public function getTitle(): string
+    {
+        return 'Add a new site';
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */
