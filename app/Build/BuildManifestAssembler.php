@@ -51,14 +51,17 @@ class BuildManifestAssembler
     }
 
     /**
-     * The directed layer (Service + Location) WITHOUT persisting — what the Page Inventory bridge
-     * displays at blueprint confirmation. Standard joins at Approve (already built there).
+     * The full page set WITHOUT persisting — what the Page Inventory previews at blueprint
+     * confirmation. Standard uses the DEFAULT set (fixed + every offerable optional, defaulted on)
+     * so the inventory shows what Build would build by default; the client's accept/decline at
+     * Approve narrows it via {@see assemble()} (same row logic, no drift).
      *
-     * @return array{service: list<array<string, mixed>>, location: list<array<string, mixed>>}
+     * @return array{standard: list<array<string, mixed>>, service: list<array<string, mixed>>, location: list<array<string, mixed>>}
      */
     public function preview(Site $site): array
     {
         return [
+            'standard' => $this->standardRowsFor($this->standardPages->defaultForSite($site)),
             'service' => $this->serviceRows($site),
             'location' => $this->locationRows($site),
         ];
@@ -69,8 +72,17 @@ class BuildManifestAssembler
      */
     private function standardRows(Site $site): array
     {
+        return $this->standardRowsFor($this->standardPages->forSite($site));
+    }
+
+    /**
+     * @param  list<StandardPageType>  $types
+     * @return list<array<string, mixed>>
+     */
+    private function standardRowsFor(array $types): array
+    {
         $rows = [];
-        foreach ($this->standardPages->forSite($site) as $type) {
+        foreach ($types as $type) {
             $priority = $type === StandardPageType::Home ? 0 : ($type->isFixed() ? 10 : 20);
             $rows[] = [
                 'source' => BuildSource::Standard,

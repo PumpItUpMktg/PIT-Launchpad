@@ -5,7 +5,7 @@
     $spineColors = ['#0A4F4F', '#0E6B6B', '#4E9A98', '#A6CFCD'];
 @endphp
 <x-guided.shell :steps="$this->steps" :brand="$brand">
-    <div class="lp-eyebrow">Step 3 of 4 · Operator view</div>
+    <div class="lp-eyebrow">{{ \App\Enums\SetupStep::Structure->eyebrow() }} · Operator view</div>
     <h1 class="lp-h1">Your structure is ready to review</h1>
     <p class="lp-lede">We grouped your services into categories, grounded them on real search demand, and made a few judgment calls. Resolve the flags, then finalize.</p>
 

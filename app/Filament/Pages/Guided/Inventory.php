@@ -5,14 +5,15 @@ namespace App\Filament\Pages\Guided;
 use App\Build\InventoryPlan;
 use App\Enums\SetupStep;
 use App\Guided\GuidedPage;
+use App\Guided\StepGate;
 
 /**
- * The Page Inventory bridge — what "blueprint confirmed" resolves to, between Structure-finalize
- * and Approve. Shows the concrete page list the directed-coverage blueprint produces (Service +
- * Location, via {@see InventoryPlan}) so the user sees exactly what generation will build before
- * approving. Presentation only; Continue → Approve, where the standard-page toggles finish the
- * full build manifest. Shares the Approve gate slot ({@see step()}) — reachable once the
- * structure is finalized.
+ * Step 4 · Page inventory — the operator-detailed, read-only "what gets built" review between
+ * Structure and Approve. Renders the directed-coverage blueprint as a concrete page list
+ * ({@see InventoryPlan}): the Foundation (standard) layer kept separate from the service-by-silo
+ * and location-by-tier directed coverage. No toggles here — accept/decline stays at Approve.
+ * Continue advances to Approve. Shares Approve's prerequisite (no new gate), so it's a
+ * pass-through review reachable once the structure is finalized.
  *
  * @property-read array<string, mixed> $inventory
  */
@@ -26,15 +27,9 @@ class Inventory extends GuidedPage
 
     protected string $view = 'filament.guided.inventory';
 
-    /** Shares Approve's gate slot — the inventory is the front door of Approve. */
     public function step(): SetupStep
     {
-        return SetupStep::Approve;
-    }
-
-    public function getTitle(): string
-    {
-        return 'Page inventory';
+        return SetupStep::Inventory;
     }
 
     /**
@@ -45,12 +40,18 @@ class Inventory extends GuidedPage
         $site = $this->getSite();
 
         return $site === null
-            ? ['counts' => ['total' => 0, 'service' => 0, 'location_now' => 0, 'reserve' => 0], 'silos' => [], 'tiers' => []]
+            ? ['counts' => ['total' => 0, 'foundation' => 0, 'service' => 0, 'location_now' => 0, 'reserve' => 0], 'foundation' => [], 'silos' => [], 'tiers' => []]
             : app(InventoryPlan::class)->for($site);
     }
 
     public function proceed(): void
     {
+        $site = $this->getSite();
+        if ($site !== null) {
+            $gate = app(StepGate::class);
+            $gate->complete($gate->state($site), SetupStep::Inventory); // pass-through: advance current_step
+        }
+
         $this->redirect(SetupStep::Approve->pageClass()::getUrl());
     }
 }
