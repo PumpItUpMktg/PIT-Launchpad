@@ -7,6 +7,7 @@ use App\Enums\SetupStep;
 use App\Enums\StandardPageType;
 use App\Guided\GuidedPage;
 use App\Guided\StepGate;
+use App\Locations\LocalRelevance;
 use App\Standard\SitePlan;
 use App\Standard\StandardPages;
 use Filament\Notifications\Notification;
@@ -18,6 +19,7 @@ use Filament\Notifications\Notification;
  * assembles the build manifest across all three sources and hands off to the Build phase.
  *
  * @property-read array<string, mixed> $sitePlan
+ * @property-read array{now: int, reserve: int, ready: int} $drip
  */
 class Approve extends GuidedPage
 {
@@ -65,6 +67,29 @@ class Approve extends GuidedPage
         return $site === null
             ? ['fixed' => [], 'optionals' => [], 'service' => [], 'locations' => ['count' => 0, 'sample' => []]]
             : app(SitePlan::class)->for($site);
+    }
+
+    /**
+     * The per-business location-page drip summary: how many towns build now vs. sit in reserve,
+     * and how many reserve towns have already earned enough local relevance to drip live.
+     *
+     * @return array{now: int, reserve: int, ready: int}
+     */
+    public function getDripProperty(): array
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return ['now' => 0, 'reserve' => 0, 'ready' => 0];
+        }
+
+        $rows = collect(app(LocalRelevance::class)->forSite($site));
+        $reserve = $rows->where('selected', false);
+
+        return [
+            'now' => $rows->where('selected', true)->count(),
+            'reserve' => $reserve->count(),
+            'ready' => $reserve->where('ready', true)->count(),
+        ];
     }
 
     /** Accept/decline an optional standard page (offerable types only). */

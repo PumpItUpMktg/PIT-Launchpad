@@ -87,39 +87,42 @@ final class LocalRelevance
      * The readiness read-model for the UI: every covered town with its relevance score, tier,
      * selection state, and the raw per-business signals — biggest/most-ready first.
      *
-     * @return Collection<int, array{
+     * @return list<array{
      *     geo_id: string, name: string, tier: string|null, population: int|null,
      *     selected: bool, manual: bool, score: float, ready: bool, signals: LocalSignals
      * }>
      */
-    public function forSite(Site $site): Collection
+    public function forSite(Site $site): array
     {
         $threshold = (float) config('launchpad.drip.drip_threshold', 0.55);
         $trade = $this->trade($site);
         $cap = $this->populationCap($site);
 
-        return CoverageArea::withoutGlobalScope(SiteScope::class)
+        $towns = CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->orderByDesc('population')
             ->orderBy('name')
-            ->get()
-            ->map(function (CoverageArea $town) use ($site, $trade, $cap, $threshold): array {
-                $signals = $this->signals->forTown($site->id, (string) $town->geo_id, $trade, $town->population);
-                $score = $this->score($signals, $cap);
+            ->get();
 
-                return [
-                    'geo_id' => (string) $town->geo_id,
-                    'name' => (string) $town->name,
-                    'tier' => $town->size_tier,
-                    'population' => $town->population,
-                    'selected' => (bool) $town->page_selected,
-                    'manual' => $town->source === 'manual',
-                    'score' => $score,
-                    'ready' => $score >= $threshold,
-                    'signals' => $signals,
-                ];
-            })
-            ->values();
+        $rows = [];
+        foreach ($towns as $town) {
+            $signals = $this->signals->forTown($site->id, (string) $town->geo_id, $trade, $town->population);
+            $score = $this->score($signals, $cap);
+
+            $rows[] = [
+                'geo_id' => (string) $town->geo_id,
+                'name' => (string) $town->name,
+                'tier' => $town->size_tier,
+                'population' => $town->population,
+                'selected' => (bool) $town->page_selected,
+                'manual' => $town->source === 'manual',
+                'score' => $score,
+                'ready' => $score >= $threshold,
+                'signals' => $signals,
+            ];
+        }
+
+        return $rows;
     }
 
     /**
@@ -158,9 +161,7 @@ final class LocalRelevance
     /** The population that normalizes to 1.0 — the tenant's major-tier threshold. */
     private function populationCap(Site $site): int
     {
-        $thresholds = $site->coverageThresholds();
-
-        return (int) ($thresholds['major'] ?? config('launchpad.locations.size_tiers.major', 50000));
+        return (int) $site->coverageThresholds()['major'];
     }
 
     private function trade(Site $site): string
@@ -169,6 +170,10 @@ final class LocalRelevance
             ->where('site_id', $site->id)
             ->first();
 
-        return (string) ($blueprint?->trade ?? '');
+        if ($blueprint === null) {
+            return '';
+        }
+
+        return (string) ($blueprint->trade ?? '');
     }
 }

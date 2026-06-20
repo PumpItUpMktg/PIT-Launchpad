@@ -81,8 +81,8 @@ test('the same town scores differently for two different businesses', function (
     town($b, '30', 'medium', 20000);
 
     $relevance = app(LocalRelevance::class);
-    $rowA = $relevance->forSite($a)->firstWhere('geo_id', '30');
-    $rowB = $relevance->forSite($b)->firstWhere('geo_id', '30');
+    $rowA = collect($relevance->forSite($a))->firstWhere('geo_id', '30');
+    $rowB = collect($relevance->forSite($b))->firstWhere('geo_id', '30');
 
     // Per-business signals — the whole point: no two sites get identical local data.
     expect($rowA['signals']->demandIndex)->not->toBe($rowB['signals']->demandIndex);
@@ -92,7 +92,7 @@ test('the read-model carries score, readiness, and selection state per town', fu
     $site = Site::factory()->create();
     town($site, '40', 'major', 60000, selected: true);
 
-    $row = app(LocalRelevance::class)->forSite($site)->firstWhere('geo_id', '40');
+    $row = collect(app(LocalRelevance::class)->forSite($site))->firstWhere('geo_id', '40');
 
     expect($row['selected'])->toBeTrue()
         ->and($row['score'])->toBeGreaterThanOrEqual(0.0)->toBeLessThanOrEqual(1.0)
