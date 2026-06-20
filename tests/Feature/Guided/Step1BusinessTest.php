@@ -52,3 +52,14 @@ test('add / remove service mutate the stated list', function () {
         ->call('removeService', 0)
         ->assertSet('services', []);
 });
+
+test('Step 1 is framed as "Add a new site" and the sidebar personalizes after a name', function () {
+    // no brand yet → sidebar reads "Add a new site"; eyebrow always carries the creation framing
+    $this->site->update(['brand_name' => '']);
+    Livewire::test(Business::class)
+        ->assertSee('Add a new site')
+        ->assertSee('Step 1 of 7');
+
+    $this->site->update(['brand_name' => 'Sewer Gurus']);
+    Livewire::test(Business::class)->assertSee('Setting up Sewer Gurus');
+});
