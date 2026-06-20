@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Launchpad — Guided Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal:#0E6B6B; --teal-deep:#0A4F4F; --teal-mid:#4E9A98; --teal-light:#A6CFCD;
+    --paper:#EEF1F5; --ungrouped:#C3CCD6; --ink:#172A2F; --ink-soft:#54666C;
+    --card:#FFFFFF; --line:#DDE4E9; --amber:#B5731A; --amber-bg:#FBEFD9;
+    --good:#2E7D6B; --good-bg:#E2F0EC;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',sans-serif;background:var(--paper);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .lp-mono{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums}
+  .lp-shell{display:flex;min-height:100vh}
+
+  /* Sidebar */
+  .lp-rail{width:268px;flex:none;background:var(--teal-deep);color:#DCEBEA;padding:24px 20px;display:flex;flex-direction:column;gap:28px}
+  .lp-brand{font-family:'Archivo',sans-serif;font-weight:800;font-size:20px;letter-spacing:-.02em;color:#fff;display:flex;align-items:center;gap:9px}
+  .lp-brand .dot{width:11px;height:11px;background:var(--teal-light);border-radius:2px;transform:rotate(45deg)}
+  .lp-railsub{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--teal-light);font-weight:600;margin-bottom:-12px}
+  .lp-steps{display:flex;flex-direction:column;position:relative}
+  .lp-step{display:flex;gap:13px;align-items:flex-start;padding:11px 0;cursor:pointer;position:relative;color:#9FC3C0}
+  .lp-step .num{width:26px;height:26px;flex:none;border-radius:50%;border:1.5px solid #3C7C7A;display:flex;align-items:center;justify-content:center;font-family:'Spline Sans Mono',monospace;font-size:12px;font-weight:600;background:var(--teal-deep);z-index:2}
+  .lp-step .lbl{font-weight:600;font-size:13.5px;padding-top:3px;color:#CFE3E1}
+  .lp-step .lbl-sub{font-size:11.5px;color:#7FA8A5;font-weight:400}
+  .lp-step.done .num{background:var(--teal-mid);border-color:var(--teal-mid);color:#fff}
+  .lp-step.active .num{background:var(--teal-light);border-color:var(--teal-light);color:var(--teal-deep)}
+  .lp-step.active .lbl{color:#fff}
+  .lp-step.locked{opacity:.5;cursor:not-allowed}
+  .lp-step .conn{position:absolute;left:12.5px;top:30px;bottom:-8px;width:1.5px;background:#3C7C7A;z-index:1}
+  .lp-step:last-of-type .conn{display:none}
+  .lp-railfoot{margin-top:auto;border-top:1px solid #2C5C5A;padding-top:18px}
+  .lp-grow{display:flex;gap:13px;align-items:center;padding:11px 13px;border-radius:8px;cursor:pointer;color:#CFE3E1;font-weight:600;background:rgba(255,255,255,.04)}
+  .lp-grow.active{background:var(--teal-mid);color:#fff}
+  .lp-grow .ic{width:26px;height:26px;flex:none;display:flex;align-items:center;justify-content:center;font-size:15px}
+
+  /* Main */
+  .lp-main{flex:1;padding:36px 48px;max-width:920px}
+  .lp-eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);font-weight:700;margin-bottom:8px}
+  .lp-h1{font-family:'Archivo',sans-serif;font-weight:700;font-size:27px;letter-spacing:-.02em;margin-bottom:6px}
+  .lp-lede{color:var(--ink-soft);font-size:14.5px;margin-bottom:26px;max-width:560px}
+  .lp-sec{display:none}
+  .lp-sec.show{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  .lp-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-bottom:18px}
+  .lp-card h3{font-family:'Archivo',sans-serif;font-size:15px;font-weight:700;margin-bottom:4px}
+  .lp-card .hint{color:var(--ink-soft);font-size:13px;margin-bottom:16px}
+  .lp-field{margin-bottom:14px}
+  .lp-field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px}
+  .lp-input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;background:#FBFCFD}
+
+  .lp-chips{display:flex;flex-wrap:wrap;gap:8px}
+  .lp-chip{display:inline-flex;align-items:center;gap:7px;background:var(--good-bg);color:var(--teal-deep);border:1px solid #BFDED7;border-radius:20px;padding:6px 13px;font-size:13px;font-weight:600}
+  .lp-chip.home{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .lp-chip .x{opacity:.5;font-weight:400}
+
+  .lp-sug{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;cursor:pointer;background:#FBFCFD;transition:.15s}
+  .lp-sug:hover{border-color:var(--teal-mid)}
+  .lp-sug .box{width:19px;height:19px;flex:none;border:1.5px solid var(--ungrouped);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff}
+  .lp-sug.on{border-color:var(--teal);background:#F3F9F8}
+  .lp-sug.on .box{background:var(--teal);border-color:var(--teal)}
+  .lp-sug .nm{font-weight:600;font-size:13.5px}
+  .lp-sug .why{color:var(--ink-soft);font-size:12px}
+
+  /* tier table */
+  .lp-tier{margin-bottom:14px}
+  .lp-tierhd{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+  .lp-swatch{width:11px;height:11px;border-radius:3px;flex:none}
+  .lp-tiernm{font-size:12px;font-weight:700;letter-spacing:.02em}
+  .lp-tiercount{color:var(--ink-soft);font-size:12px}
+  .lp-townrow{display:flex;flex-wrap:wrap;gap:7px}
+  .lp-town{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:5px 11px;border-radius:7px;border:1px solid var(--line);background:#FBFCFD;cursor:pointer}
+  .lp-town.sel{background:#F3F9F8;border-color:var(--teal-mid);color:var(--teal-deep);font-weight:600}
+  .lp-town .pg{font-size:10px;color:var(--teal)}
+
+  /* tree */
+  .lp-silo{border:1px solid var(--line);border-radius:11px;margin-bottom:12px;overflow:hidden}
+  .lp-silohd{display:flex;align-items:center;gap:11px;padding:14px 17px;background:#F7FAFB;border-bottom:1px solid var(--line)}
+  .lp-silohd .spine{width:5px;height:34px;border-radius:3px;flex:none}
+  .lp-silohd .nm{font-family:'Archivo',sans-serif;font-weight:700;font-size:15px}
+  .lp-silohd .meta{color:var(--ink-soft);font-size:12px}
+  .lp-silohd .vol{margin-left:auto;font-family:'Spline Sans Mono',monospace;font-weight:600;color:var(--teal-deep)}
+  .lp-rows{padding:8px 17px 14px}
+  .lp-prow{display:grid;grid-template-columns:1fr 64px 92px;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #EEF2F4}
+  .lp-prow:last-child{border-bottom:none}
+  .lp-prow .pnm{font-weight:600;font-size:13.5px}
+  .lp-prow.child .pnm{font-weight:400;font-size:13px;color:var(--ink-soft);padding-left:18px;position:relative}
+  .lp-prow.child .pnm::before{content:"└";position:absolute;left:4px;color:var(--ungrouped)}
+  .lp-prow.subhub .pnm{color:var(--teal-deep)}
+  .lp-prow .pvol{font-family:'Spline Sans Mono',monospace;font-size:12.5px;text-align:right;color:var(--ink-soft)}
+  .lp-tag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;text-align:center;padding:3px 0;border-radius:5px}
+  .lp-tag.own{background:var(--good-bg);color:var(--good)}
+  .lp-tag.fold{background:#EEF2F4;color:var(--ink-soft)}
+  .lp-tag.hub{background:#E7EFEF;color:var(--teal-deep)}
+
+  /* flags */
+  .lp-flag{display:flex;align-items:center;gap:13px;background:var(--amber-bg);border:1px solid #ECD6A8;border-radius:10px;padding:13px 16px;margin-bottom:10px}
+  .lp-flag .fic{width:24px;height:24px;flex:none;border-radius:50%;background:var(--amber);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+  .lp-flag .ftx{flex:1}
+  .lp-flag .ftx b{font-weight:700}
+  .lp-flag .ftx .fsub{font-size:12px;color:var(--ink-soft)}
+  .lp-flag.resolved{background:var(--good-bg);border-color:#BFDED7}
+  .lp-flag.resolved .fic{background:var(--good)}
+  .lp-fbtns{display:flex;gap:7px}
+  .lp-mini{font-size:12px;font-weight:600;padding:6px 13px;border-radius:7px;border:1px solid var(--line);background:#fff;cursor:pointer}
+  .lp-mini.primary{background:var(--teal);color:#fff;border-color:var(--teal)}
+
+  /* plan (client surface) */
+  .lp-plan{border:1px solid var(--line);border-radius:11px;padding:16px 19px;margin-bottom:11px;background:#FBFCFD}
+  .lp-plan .ptit{font-family:'Archivo',sans-serif;font-weight:700;font-size:14.5px;margin-bottom:3px}
+  .lp-plan .ppages{font-size:13px;color:var(--ink);margin-bottom:6px}
+  .lp-plan .pcov{font-size:12px;color:var(--ink-soft)}
+
+  /* config toggles */
+  .lp-tog{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #EEF2F4}
+  .lp-tog:last-child{border-bottom:none}
+  .lp-tog .tnm{font-weight:600;font-size:13.5px}
+  .lp-tog .tsub{font-size:12px;color:var(--ink-soft)}
+  .lp-switch{margin-left:auto;width:40px;height:23px;border-radius:12px;background:var(--teal);position:relative;flex:none}
+  .lp-switch::after{content:"";position:absolute;top:2.5px;right:2.5px;width:18px;height:18px;border-radius:50%;background:#fff}
+  .lp-switch.off{background:var(--ungrouped)}
+  .lp-switch.off::after{left:2.5px;right:auto}
+
+  /* dashboard */
+  .lp-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-bottom:20px}
+  .lp-stat{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:16px 18px}
+  .lp-stat .sn{font-family:'Spline Sans Mono',monospace;font-size:26px;font-weight:600;color:var(--teal-deep);letter-spacing:-.01em}
+  .lp-stat .sl{font-size:12px;color:var(--ink-soft);font-weight:500;margin-top:2px}
+  .lp-q{display:flex;align-items:center;gap:12px;padding:12px 15px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:#FBFCFD}
+  .lp-q .qd{width:9px;height:9px;border-radius:50%;flex:none}
+  .lp-q .qn{font-weight:600;font-size:13.5px}
+  .lp-q .qs{font-size:12px;color:var(--ink-soft)}
+  .lp-q .qr{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .lp-news{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid #EEF2F4}
+  .lp-news:last-child{border-bottom:none}
+  .lp-news .silotag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--teal);background:#E7EFEF;padding:3px 8px;border-radius:5px;flex:none;height:fit-content;margin-top:1px}
+  .lp-news .ntx b{font-weight:600;font-size:13.5px}
+  .lp-news .ntx .nmeta{font-size:11.5px;color:var(--ink-soft)}
+
+  /* footer actions */
+  .lp-foot{display:flex;align-items:center;gap:14px;margin-top:8px;padding-top:20px;border-top:1px solid var(--line)}
+  .lp-btn{font-family:'Inter',sans-serif;font-weight:600;font-size:14px;padding:11px 22px;border-radius:9px;border:none;cursor:pointer;background:var(--teal);color:#fff}
+  .lp-btn:disabled{background:var(--ungrouped);cursor:not-allowed}
+  .lp-btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .lp-gate{font-size:12.5px;color:var(--amber);font-weight:600}
+  .lp-gate.ok{color:var(--good)}
+  .lp-pill{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:20px;background:var(--good-bg);color:var(--good)}
+</style>
+</head>
+<body>
+<div class="lp-shell">
+  <!-- SIDEBAR -->
+  <aside class="lp-rail">
+    <div class="lp-brand"><span class="dot"></span>Launchpad</div>
+    <div>
+      <div class="lp-railsub">Set up — Sump Pump Gurus</div>
+    </div>
+    <div class="lp-steps">
+      <div class="lp-step active" data-step="1" onclick="go(1)">
+        <div class="num">1</div>
+        <div><div class="lbl">Business &amp; services</div><div class="lbl-sub">What you do</div></div>
+        <div class="conn"></div>
+      </div>
+      <div class="lp-step" data-step="2" onclick="go(2)">
+        <div class="num">2</div>
+        <div><div class="lbl">Territory</div><div class="lbl-sub">Where you work</div></div>
+        <div class="conn"></div>
+      </div>
+      <div class="lp-step locked" data-step="3" onclick="go(3)">
+        <div class="num">3</div>
+        <div><div class="lbl">Structure</div><div class="lbl-sub">Your pages</div></div>
+        <div class="conn"></div>
+      </div>
+      <div class="lp-step locked" data-step="4" onclick="go(4)">
+        <div class="num">4</div>
+        <div><div class="lbl">Approve &amp; build</div><div class="lbl-sub">Go live</div></div>
+        <div class="conn"></div>
+      </div>
+    </div>
+    <div class="lp-railfoot">
+      <div class="lp-grow" data-step="5" onclick="go(5)">
+        <div class="ic">&#9715;</div>
+        <div><div class="lbl" style="color:inherit">Grow</div></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="lp-main">
+
+    <!-- STEP 1 -->
+    <section class="lp-sec show" id="sec1">
+      <div class="lp-eyebrow">Step 1 of 4</div>
+      <h1 class="lp-h1">What does your business do?</h1>
+      <p class="lp-lede">List the services you offer. We'll suggest a few you might have missed, then build your site around them.</p>
+
+      <div class="lp-card">
+        <h3>Business</h3>
+        <div class="hint">The basics we'll brand the site around.</div>
+        <div class="lp-field"><label>Business name</label><input class="lp-input" value="Sump Pump Gurus"></div>
+        <div class="lp-field"><label>Trade</label><input class="lp-input" value="Basement waterproofing &amp; sump pumps"></div>
+      </div>
+
+      <div class="lp-card">
+        <h3>Services you offer</h3>
+        <div class="hint">Add everything you do — this is what your site gets built around.</div>
+        <div class="lp-chips">
+          <span class="lp-chip">Sump pump installation</span>
+          <span class="lp-chip">Sump pump repair</span>
+          <span class="lp-chip">Basement waterproofing</span>
+          <span class="lp-chip">Sewage ejector pumps</span>
+          <span class="lp-chip">Grinder pumps</span>
+          <span class="lp-chip" style="background:#FBFCFD;color:var(--ink-soft);border-style:dashed">+ add</span>
+        </div>
+      </div>
+
+      <div class="lp-card">
+        <h3>You may also offer these</h3>
+        <div class="hint">Common for your trade. Check the ones you provide — they'll be added to your services.</div>
+        <div class="lp-sug on" onclick="tog(this)"><div class="box">&#10003;</div><div><div class="nm">Battery backup sump pumps</div><div class="why">Keeps the pump running during outages</div></div></div>
+        <div class="lp-sug on" onclick="tog(this)"><div class="box">&#10003;</div><div><div class="nm">Crawl space encapsulation</div><div class="why">Same water problem, different space</div></div></div>
+        <div class="lp-sug" onclick="tog(this)"><div class="box"></div><div><div class="nm">French drain installation</div><div class="why">Common pairing with waterproofing</div></div></div>
+        <div class="lp-sug" onclick="tog(this)"><div class="box"></div><div><div class="nm">Foundation crack repair &amp; sealing</div><div class="why">A primary entry point for basement water</div></div></div>
+        <div class="lp-sug" onclick="tog(this)"><div class="box"></div><div><div class="nm">Smart water leak detection</div><div class="why">Catches leaks that feed chronic moisture</div></div></div>
+      </div>
+
+      <div class="lp-foot">
+        <button class="lp-btn" onclick="go(2)">Continue to territory</button>
+        <span class="lp-gate ok">7 services · 2 suggestions added</span>
+      </div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section class="lp-sec" id="sec2">
+      <div class="lp-eyebrow">Step 2 of 4</div>
+      <h1 class="lp-h1">Where do you work?</h1>
+      <p class="lp-lede">We found your home county from your address and suggested the area around it. Confirm the counties you serve and the towns worth a page.</p>
+
+      <div class="lp-card">
+        <h3>Service area</h3>
+        <div class="hint">Suggested from your address — Montclair, NJ · New York DMA. Adjust as needed.</div>
+        <div class="lp-chips">
+          <span class="lp-chip home">Essex <span class="x">home</span></span>
+          <span class="lp-chip">Passaic <span class="x">&times;</span></span>
+          <span class="lp-chip">Bergen <span class="x">&times;</span></span>
+          <span class="lp-chip">Hudson <span class="x">&times;</span></span>
+          <span class="lp-chip">Morris <span class="x">&times;</span></span>
+          <span class="lp-chip">Union <span class="x">&times;</span></span>
+          <span class="lp-chip" style="background:#FBFCFD;color:var(--ink-soft);border-style:dashed">+ county</span>
+        </div>
+      </div>
+
+      <div class="lp-card">
+        <h3>Towns worth a page</h3>
+        <div class="hint">We pre-picked the bigger towns. The rest stay in reserve and earn a page as you do jobs there. Pin any town that matters to you.</div>
+
+        <div class="lp-tier">
+          <div class="lp-tierhd"><span class="lp-swatch" style="background:var(--teal-deep)"></span><span class="lp-tiernm">MAJOR · 50k+</span><span class="lp-tiercount">— all selected</span></div>
+          <div class="lp-townrow">
+            <span class="lp-town sel">Newark <span class="pg">&#9679;</span></span>
+            <span class="lp-town sel">Jersey City <span class="pg">&#9679;</span></span>
+            <span class="lp-town sel">Paterson <span class="pg">&#9679;</span></span>
+            <span class="lp-town sel">Elizabeth <span class="pg">&#9679;</span></span>
+          </div>
+        </div>
+        <div class="lp-tier">
+          <div class="lp-tierhd"><span class="lp-swatch" style="background:var(--teal)"></span><span class="lp-tiernm">LARGE · 30–50k</span><span class="lp-tiercount">— all selected</span></div>
+          <div class="lp-townrow">
+            <span class="lp-town sel">Montclair <span class="pg">&#9679;</span></span>
+            <span class="lp-town sel">Bloomfield <span class="pg">&#9679;</span></span>
+            <span class="lp-town sel">West Orange <span class="pg">&#9679;</span></span>
+            <span class="lp-town sel">Clifton <span class="pg">&#9679;</span></span>
+            <span class="lp-town sel">Bayonne <span class="pg">&#9679;</span></span>
+          </div>
+        </div>
+        <div class="lp-tier">
+          <div class="lp-tierhd"><span class="lp-swatch" style="background:var(--teal-mid)"></span><span class="lp-tiernm">MEDIUM · 15–30k</span><span class="lp-tiercount">— in reserve</span></div>
+          <div class="lp-townrow">
+            <span class="lp-town">Nutley</span>
+            <span class="lp-town">Belleville</span>
+            <span class="lp-town sel">Glen Ridge <span class="pg">&#128204;</span></span>
+            <span class="lp-town">Verona</span>
+            <span class="lp-town">Cedar Grove</span>
+          </div>
+        </div>
+        <div class="lp-tier">
+          <div class="lp-tierhd"><span class="lp-swatch" style="background:var(--teal-light)"></span><span class="lp-tiernm">SMALL · &lt;15k</span><span class="lp-tiercount">— in reserve, covered by mentions</span></div>
+          <div class="lp-townrow">
+            <span class="lp-town">Caldwell</span>
+            <span class="lp-town">Essex Fells</span>
+            <span class="lp-town">Roseland</span>
+            <span class="lp-town" style="color:var(--ungrouped)">+ 152 more</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="lp-foot">
+        <button class="lp-btn ghost" onclick="go(1)">Back</button>
+        <button class="lp-btn" onclick="go(3)">Build my structure</button>
+        <span class="lp-gate ok">6 counties · 10 town pages · 157 in reserve</span>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="lp-sec" id="sec3">
+      <div class="lp-eyebrow">Step 3 of 4 · Operator view</div>
+      <h1 class="lp-h1">Your structure is ready to review</h1>
+      <p class="lp-lede">We grouped your services into categories, grounded them on real search demand, and made a few judgment calls. Resolve the flags, then finalize.</p>
+
+      <div class="lp-flag" id="flag1">
+        <div class="fic">!</div>
+        <div class="ftx"><b>Group "Backup Power &amp; Pump Protection" under Sump Pumps?</b><div class="fsub">Most of its services point back to sump pumps. We'd make it a sub-page with battery &amp; water-powered backups beneath it.</div></div>
+        <div class="lp-fbtns"><button class="lp-mini primary" onclick="resolve('flag1')">Keep grouping</button><button class="lp-mini" onclick="resolve('flag1')">Separate</button></div>
+      </div>
+      <div class="lp-flag" id="flag2">
+        <div class="fic">!</div>
+        <div class="ftx"><b>"Battery Backup System Installation" looks like "Battery Backup Sump Pump"</b><div class="fsub">Same intent in two places. We'd merge them into one page so they don't compete.</div></div>
+        <div class="lp-fbtns"><button class="lp-mini primary" onclick="resolve('flag2')">Merge</button><button class="lp-mini" onclick="resolve('flag2')">Keep both</button></div>
+      </div>
+      <div class="lp-flag" id="flag3">
+        <div class="fic">!</div>
+        <div class="ftx"><b>"Brands We Service" looks empty</b><div class="fsub">No search demand and no distinct service. We'd fold the brand names into your service pages.</div></div>
+        <div class="lp-fbtns"><button class="lp-mini primary" onclick="resolve('flag3')">Fold in</button><button class="lp-mini" onclick="resolve('flag3')">Keep</button></div>
+      </div>
+
+      <div class="lp-silo">
+        <div class="lp-silohd">
+          <span class="spine" style="background:var(--teal-deep)"></span>
+          <div><div class="nm">Sump Pumps</div><div class="meta">Category hub · 6 pages</div></div>
+          <span class="vol">17,900</span>
+        </div>
+        <div class="lp-rows">
+          <div class="lp-prow"><span class="pnm">Sump Pump Installation</span><span class="pvol">2,900</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow"><span class="pnm">Sump Pump Repair</span><span class="pvol">2,720</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow"><span class="pnm">Sump Pump Maintenance</span><span class="pvol">1,390</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow"><span class="pnm">Sump Pump Replacement</span><span class="pvol">420</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow subhub"><span class="pnm">↳ Backup Power &amp; Pump Protection</span><span class="pvol">—</span><span class="lp-tag hub">Sub-hub</span></div>
+          <div class="lp-prow child"><span class="pnm">Battery Backup Sump Pump</span><span class="pvol">560</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow child"><span class="pnm">Water-Powered Backup</span><span class="pvol">310</span><span class="lp-tag fold">Section</span></div>
+        </div>
+      </div>
+
+      <div class="lp-silo">
+        <div class="lp-silohd">
+          <span class="spine" style="background:var(--teal)"></span>
+          <div><div class="nm">Basement Waterproofing</div><div class="meta">Category hub · 6 pages</div></div>
+          <span class="vol">8,400</span>
+        </div>
+        <div class="lp-rows">
+          <div class="lp-prow"><span class="pnm">Crawl Space Waterproofing</span><span class="pvol">3,360</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow"><span class="pnm">Foundation Crack Repair</span><span class="pvol">1,430</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow"><span class="pnm">Exterior Waterproofing</span><span class="pvol">490</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow child"><span class="pnm">Why is my basement wet?</span><span class="pvol">30</span><span class="lp-tag fold">Section</span></div>
+        </div>
+      </div>
+
+      <div class="lp-silo">
+        <div class="lp-silohd">
+          <span class="spine" style="background:var(--teal-mid)"></span>
+          <div><div class="nm">Rainwater &amp; Stormwater</div><div class="meta">Category hub · 3 pages</div></div>
+          <span class="vol">5,520</span>
+        </div>
+        <div class="lp-rows">
+          <div class="lp-prow"><span class="pnm">Curtain Drain Installation</span><span class="pvol">5,180</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow"><span class="pnm">Yard &amp; Surface Drainage</span><span class="pvol">580</span><span class="lp-tag own">Own page</span></div>
+          <div class="lp-prow"><span class="pnm">Dry Well Installation</span><span class="pvol">510</span><span class="lp-tag own">Own page</span></div>
+        </div>
+      </div>
+
+      <div class="lp-foot">
+        <button class="lp-btn ghost" onclick="go(2)">Back</button>
+        <button class="lp-btn" id="finBtn" disabled onclick="go(4)">Finalize structure</button>
+        <span class="lp-gate" id="finGate">3 items need your input first</span>
+      </div>
+    </section>
+
+    <!-- STEP 4 -->
+    <section class="lp-sec" id="sec4">
+      <div class="lp-eyebrow">Step 4 of 4 · What the client approves</div>
+      <h1 class="lp-h1">Here's your site plan</h1>
+      <p class="lp-lede">This is your site, in plain language. Approve it and we'll start building — your biggest pages go up first, towns follow over time.</p>
+
+      <div class="lp-plan">
+        <div class="ptit">Sump Pumps</div>
+        <div class="ppages">Main page + Installation, Repair, Maintenance, Replacement, and Backup Systems</div>
+        <div class="pcov">Also covers: water-powered backups, discharge lines, alarms &amp; monitoring</div>
+      </div>
+      <div class="lp-plan">
+        <div class="ptit">Basement Waterproofing</div>
+        <div class="ppages">Main page + Crawl Space, Foundation Crack Repair, Exterior &amp; Interior Waterproofing, French Drains</div>
+        <div class="pcov">Also covers: vapor barriers, basement flooding causes, dehumidification</div>
+      </div>
+      <div class="lp-plan">
+        <div class="ptit">Rainwater &amp; Stormwater</div>
+        <div class="ppages">Main page + Curtain Drains, Yard Drainage, Dry Wells</div>
+        <div class="pcov">Also covers: downspout routing, grading, catch basins</div>
+      </div>
+      <div class="lp-plan">
+        <div class="ptit">Local pages</div>
+        <div class="ppages">10 town pages now — Newark, Jersey City, Montclair, and more</div>
+        <div class="pcov">157 more towns build automatically as you complete jobs there</div>
+      </div>
+
+      <div class="lp-card" style="margin-top:18px">
+        <h3>Before we build</h3>
+        <div class="hint">Sensible defaults — adjust if you like.</div>
+        <div class="lp-tog"><div><div class="tnm">Local relevance data</div><div class="tsub">Flood zones, soil, water table, rainfall per town</div></div><div class="lp-switch"></div></div>
+        <div class="lp-tog"><div><div class="tnm">Town page pace</div><div class="tsub">Release up to 5 new town pages per week</div></div><div class="lp-switch"></div></div>
+        <div class="lp-tog"><div><div class="tnm">Fresh content</div><div class="tsub">Publish local news-driven articles into your categories</div></div><div class="lp-switch"></div></div>
+      </div>
+
+      <div class="lp-foot">
+        <button class="lp-btn ghost" onclick="go(3)">Back</button>
+        <button class="lp-btn" onclick="go(5)">Approve &amp; build</button>
+        <span class="lp-gate ok">Ready to go live</span>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section class="lp-sec" id="sec5">
+      <div class="lp-eyebrow">Grow · Sump Pump Gurus</div>
+      <h1 class="lp-h1">Your site is building</h1>
+      <p class="lp-lede">Core pages are live. Town pages release on pace, and earn their way up as jobs and reviews come in.</p>
+
+      <div class="lp-stats">
+        <div class="lp-stat"><div class="sn">22</div><div class="sl">pages live</div></div>
+        <div class="lp-stat"><div class="sn">5</div><div class="sl">building this week</div></div>
+        <div class="lp-stat"><div class="sn">157</div><div class="sl">towns in reserve</div></div>
+      </div>
+
+      <div class="lp-card">
+        <h3>Town queue</h3>
+        <div class="hint">Towns build when they have enough local relevance — a strong flood/soil story, or jobs &amp; reviews on the ground.</div>
+        <div class="lp-q">
+          <span class="qd" style="background:var(--amber)"></span>
+          <div><div class="qn">Norristown, PA</div><div class="qs">Ready — 5 jobs logged, FEMA flood zone, clay soil</div></div>
+          <div class="qr"><span class="lp-pill" style="background:var(--amber-bg);color:var(--amber)">Ready to build</span><button class="lp-mini primary">Build now</button></div>
+        </div>
+        <div class="lp-q">
+          <span class="qd" style="background:var(--teal)"></span>
+          <div><div class="qn">Bloomfield, NJ</div><div class="qs">Building — high water table, 1950s housing stock</div></div>
+          <div class="qr"><span class="lp-pill" style="background:#E7EFEF;color:var(--teal-deep)">In progress</span></div>
+        </div>
+        <div class="lp-q">
+          <span class="qd" style="background:var(--ungrouped)"></span>
+          <div><div class="qn">Nutley, NJ</div><div class="qs">In reserve — 1 job so far, needs more local relevance</div></div>
+          <div class="qr"><span class="lp-pill" style="background:#EEF2F4;color:var(--ink-soft)">Earning</span></div>
+        </div>
+      </div>
+
+      <div class="lp-card">
+        <h3>Fresh content</h3>
+        <div class="hint">Local news, drafted into your categories and linked to the right service pages.</div>
+        <div class="lp-news"><span class="silotag">Sump Pumps</span><div class="ntx"><b>Storms knock out power across Essex County — what it means for your basement</b><div class="nmeta">Published · links to Battery Backup Sump Pump</div></div></div>
+        <div class="lp-news"><span class="silotag">Waterproofing</span><div class="ntx"><b>Heavy spring rains raise flooding risk in low-lying North Jersey towns</b><div class="nmeta">In review · links to Crawl Space Waterproofing</div></div></div>
+        <div class="lp-news"><span class="silotag">Stormwater</span><div class="ntx"><b>New stormwater rules for Passaic County properties</b><div class="nmeta">Drafting · links to Yard &amp; Surface Drainage</div></div></div>
+      </div>
+
+      <div class="lp-foot">
+        <button class="lp-btn ghost">Re-ground volume</button>
+        <button class="lp-btn ghost">Re-arrange structure</button>
+        <span class="lp-gate ok">Your finalized decisions are preserved on any re-run</span>
+      </div>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>
