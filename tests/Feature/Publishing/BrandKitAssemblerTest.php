@@ -56,10 +56,31 @@ it('returns a payload carrying just the captured primary color (today\'s thin in
 
     expect($payload)->toBe([
         'colors' => ['primary' => '#0F62FE'],
+        'custom_colors' => [], // no extended tokens captured
         'fonts' => [],
         'wf_tokens' => ['--wf-color-primary' => '#0F62FE'],
         'structure' => 'trust', // default when unset
     ]);
+});
+
+it('maps the extended palette tokens to named custom globals with stable ids', function () {
+    $site = brandingForSite(['palette' => [
+        'primary' => '#1B3A5B', 'secondary' => '#3E6E9E', 'accent' => '#E8A23D', 'text' => '#1A1A1A',
+        'text_muted' => '#5B6470', 'bg' => '#FFFFFF', 'bg_alt' => '#F4F6F8', 'border' => '#E2E6EB', 'on_accent' => '#FFFFFF',
+    ]]);
+
+    $payload = (new BrandKitAssembler)->forSite($site->id);
+
+    // The four system slots carry primary/secondary/text/accent (secondary no longer dropped).
+    expect($payload['colors'])->toBe(['primary' => '#1B3A5B', 'secondary' => '#3E6E9E', 'text' => '#1A1A1A', 'accent' => '#E8A23D'])
+        // The five extended tokens become named custom globals with stable ids.
+        ->and($payload['custom_colors'])->toBe([
+            ['_id' => 'lptextmuted', 'title' => 'Text Muted', 'color' => '#5B6470'],
+            ['_id' => 'lpbg', 'title' => 'Background', 'color' => '#FFFFFF'],
+            ['_id' => 'lpbgalt', 'title' => 'Background Alt', 'color' => '#F4F6F8'],
+            ['_id' => 'lpborder', 'title' => 'Border', 'color' => '#E2E6EB'],
+            ['_id' => 'lponaccent', 'title' => 'On Accent', 'color' => '#FFFFFF'],
+        ]);
 });
 
 it('maps the palette + typography to the native --wf-* token set', function () {

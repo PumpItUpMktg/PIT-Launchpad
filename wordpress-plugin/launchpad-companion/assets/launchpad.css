@@ -19,13 +19,20 @@
     .lp-conversion-block, .lp-nap, .lp-list, .lp-repeater,
     .lp-faq, .lp-stat, .lp-testimonial, .lp-cta, .lp-image, .lp-map
 ) {
+    /* SYSTEM globals (Elementor's four) */
     --lp-primary: var(--e-global-color-primary, #0f62fe);
+    --lp-secondary: var(--e-global-color-secondary, var(--e-global-color-primary, #0f62fe));
     --lp-accent: var(--e-global-color-accent, var(--e-global-color-primary, #ff6f00));
     --lp-text: var(--e-global-color-text, #1a1a1a);
+    /* CUSTOM globals — extended brand tokens by stable _id (BrandKitStore::CUSTOM_IDS) */
+    --lp-text-muted: var(--e-global-color-lptextmuted, #5b6670);
+    --lp-bg: var(--e-global-color-lpbg, #ffffff);
+    --lp-bg-alt: var(--e-global-color-lpbgalt, #f4f6f8);
+    --lp-on-accent: var(--e-global-color-lponaccent, #ffffff);
     --lp-heading-font: var(--e-global-typography-primary-font-family, inherit);
     --lp-body-font: var(--e-global-typography-text-font-family, inherit);
-    --lp-surface: #ffffff;
-    --lp-border: rgba(0, 0, 0, 0.10);
+    --lp-surface: var(--lp-bg); /* brand background (was hardcoded #fff) */
+    --lp-border: var(--e-global-color-lpborder, rgba(0, 0, 0, 0.10));
     --lp-radius: 10px;
     --lp-gap: clamp(1rem, 2.5vw, 1.75rem);
     --lp-pad: clamp(1.1rem, 2.4vw, 1.6rem);
@@ -54,7 +61,7 @@
     gap: 0.5em;
     padding: 0.9em 1.85em;
     background: var(--lp-accent);
-    color: #ffffff !important;
+    color: var(--lp-on-accent, #ffffff) !important;
     font-family: var(--lp-heading-font);
     font-weight: 700;
     font-size: 1.05rem;
@@ -73,7 +80,7 @@
     filter: brightness(1.07);
     transform: translateY(-1px);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-    color: #ffffff !important;
+    color: var(--lp-on-accent, #ffffff) !important;
 }
 
 /* --- NAP contact block ------------------------------------------------------ */
