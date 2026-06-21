@@ -40,7 +40,9 @@ class PageDrafter
         return 'You are a home-services website page builder. You write in the brand voice provided. '
             .'Accuracy is structural: you may assert a fact about the business ONLY if it is in the '
             .'SUBSTANTIATED PROOF pool, and you must cite the exact proof id you used. Reference locality '
-            .'ONLY from the MARKETS provided — never invent towns, neighborhoods, or service areas. Fill '
+            .'ONLY from the MARKETS provided — never invent towns, neighborhoods, or service areas. When you '
+            .'link to another page on this site, use ONLY a path from INTERNAL LINKS — never invent a URL or '
+            .'leave a placeholder. Fill '
             .'EVERY required slot, keyed EXACTLY by its slot key (an off-schema key renders as a blank '
             .'section). Frame problem→solution. Return ONLY sentinel-delimited blocks as specified — no JSON, '
             .'no prose, no code fences. Write each value RAW between the markers: never escape quotes or newlines.';
@@ -62,6 +64,7 @@ class PageDrafter
         $parts[] = $this->offersBlock($grounding);
         $parts[] = $this->marketsBlock($grounding);
         $parts[] = $this->proofBlock($grounding);
+        $parts[] = $this->internalLinksBlock($grounding);
         $parts[] = $this->kitBlock($grounding);
         $parts[] = $this->outputContract();
 
@@ -131,6 +134,21 @@ class PageDrafter
         return 'SUBSTANTIATED PROOF pool — the ONLY facts you may assert:'."\n"
             .implode("\n", $lines)."\n\n"
             .DraftCall::PROOF_RULES;
+    }
+
+    private function internalLinksBlock(PageGrounding $grounding): string
+    {
+        if ($grounding->relatedLinks === []) {
+            return '';
+        }
+
+        $lines = array_map(fn (array $l) => "- {$l['anchor']} → {$l['path']}", $grounding->relatedLinks);
+
+        return 'INTERNAL LINKS — other pages on this site, each with its FINAL path. Weave a few relevant ones '
+            .'into the body as real links (e.g. <a href="/the-path">anchor</a>): the parent/related service, '
+            .'nearby areas, or pages a reader would go to next. Use ONLY these exact paths — never invent a URL '
+            .'or leave a placeholder. A target may not be published yet; link it anyway (it goes live as that '
+            ."page is built):\n".implode("\n", $lines);
     }
 
     private function kitBlock(PageGrounding $grounding): string
