@@ -4,7 +4,6 @@ namespace App\Enums;
 
 use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Brand;
-use App\Filament\Pages\Guided\Build;
 use App\Filament\Pages\Guided\Business;
 use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Filament\Pages\Guided\Grow;
@@ -120,7 +119,9 @@ enum SetupStep: int
             self::Structure => Structure::class,
             self::Inventory => Inventory::class,
             self::Approve => Approve::class,
-            self::Build => Build::class,
+            // Build is no longer a wizard screen — materialize replaced the build phase. The enum
+            // value persists (its 'launched' gate marks the handoff); it resolves to Grow.
+            self::Build => Grow::class,
             self::Grow => Grow::class,
         };
     }

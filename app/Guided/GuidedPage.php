@@ -93,7 +93,9 @@ abstract class GuidedPage extends Page
         $gate = app(StepGate::class);
 
         $rows = [];
-        foreach ([...SetupStep::setupSteps(), SetupStep::Build, SetupStep::Grow] as $step) {
+        // The rail is the 7 setup steps + Grow. "Build" is no longer a stage (materialize replaced
+        // the build phase; pages build on demand from Grow).
+        foreach ([...SetupStep::setupSteps(), SetupStep::Grow] as $step) {
             $unlocked = $state !== null && $gate->isUnlocked($state, $step);
             $rows[] = [
                 'step' => $step,
