@@ -91,7 +91,7 @@ class Inventory extends GuidedPage
         $site = $this->getSite();
         if ($site !== null) {
             $gate = app(StepGate::class);
-            $gate->complete($gate->state($site), SetupStep::Inventory); // pass-through: advance current_step
+            $gate->complete($gate->state($site), SetupStep::Inventory); // reviewing is enough → marks inventory_reviewed + advances
         }
 
         $this->redirect(SetupStep::Approve->pageClass()::getUrl());

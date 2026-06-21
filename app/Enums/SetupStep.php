@@ -102,7 +102,7 @@ enum SetupStep: int
             self::Brand => 'brand_pushed',
             self::Territory => 'territory_done',
             self::Structure => 'structure_finalized',
-            self::Inventory => null, // pass-through: advances current_step, sets no gate (Approve already unlocked)
+            self::Inventory => 'inventory_reviewed', // Continue = reviewed; completes the step (Approve already unlocked via structure_finalized)
             self::Approve => 'approved',
             self::Build => 'launched',
             self::Grow => null,

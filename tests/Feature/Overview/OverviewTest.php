@@ -49,6 +49,22 @@ test('an onboarding card shows wizard % and resumes at the current step; a live 
         ->and($onbCard['url'])->toBe(Structure::getUrl(['site' => $onb->id])); // resume at step 5
 });
 
+test('a launched site routes to the cockpit, never back into the wizard', function () {
+    // status lagged on Onboarding but the build launched — must not resume the wizard
+    $site = Site::factory()->create(['brand_name' => 'BuiltCo', 'status' => SiteStatus::Onboarding]);
+    SetupState::query()->create([
+        'site_id' => $site->id, 'current_step' => 8,
+        'services_done' => true, 'deps_ready' => true, 'brand_pushed' => true, 'territory_done' => true,
+        'structure_finalized' => true, 'inventory_reviewed' => true, 'approved' => true, 'launched' => true,
+    ]);
+
+    $card = collect(Livewire::test(Overview::class)->instance()->sites)->firstWhere('id', $site->id);
+
+    expect($card['onboarding'])->toBeFalse()
+        ->and($card['url'])->toBe(SiteCockpit::getUrl(['site' => $site->id]))
+        ->and($card['pct'])->toBe(100);
+});
+
 test('the New site button points at the single create on-ramp', function () {
     expect(Livewire::test(Overview::class)->instance()->newSiteUrl())->toBe(CreateSite::getUrl());
 });

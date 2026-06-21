@@ -48,21 +48,29 @@ class Overview extends Page
     public function getSitesProperty(): array
     {
         $metrics = app(PipelineMetrics::class);
-        $states = SetupState::query()->pluck('current_step', 'site_id');
+        $states = SetupState::query()->get()->keyBy('site_id');
         $stepCount = count(SetupStep::setupSteps());
 
         $cards = [];
         foreach (Site::query()->orderBy('brand_name')->get() as $site) {
-            $onboarding = $site->status === SiteStatus::Onboarding;
+            $state = $states->get($site->id);
+            // A launched site is past the wizard even if its status somehow lagged — never resume
+            // the wizard for it. The build→Grow handoff flips status to Active, so this is belt-and-
+            // suspenders against a stuck status.
+            $onboarding = $site->status === SiteStatus::Onboarding && ! (bool) $state?->launched;
             $stats = $metrics->statCards($site->id);
-            $step = (int) ($states[$site->id] ?? 1);
+            $step = $state !== null ? $state->current_step : 1;
+            // Progress reads completion across all 7 steps (Inventory now completes too).
+            $complete = (bool) $state?->onboardingComplete();
 
             $cards[] = [
                 'id' => $site->id,
                 'name' => $site->brand_name,
                 'status' => $site->status->value,
                 'onboarding' => $onboarding,
-                'pct' => $onboarding ? min(100, (int) round(min($step, $stepCount) / $stepCount * 100)) : 100,
+                'pct' => $onboarding
+                    ? ($complete ? 100 : min(100, (int) round(min($step, $stepCount) / $stepCount * 100)))
+                    : 100,
                 'url' => $onboarding
                     ? (SetupStep::tryFrom($step) ?? SetupStep::Business)->pageClass()::getUrl(['site' => $site->id])
                     : SiteCockpit::getUrl(['site' => $site->id]),

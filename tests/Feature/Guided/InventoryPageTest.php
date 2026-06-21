@@ -1,6 +1,7 @@
 <?php
 
 use App\Build\BuildManifestAssembler;
+use App\Enums\SetupStep;
 use App\Enums\SpokeStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
@@ -36,6 +37,20 @@ test('the inventory renders the blueprint pages and Continue carries into Approv
         ->assertSee('Pumps')
         ->call('proceed')
         ->assertRedirect(Approve::getUrl());
+});
+
+test('Continue marks step 6 complete (reviewing is enough) and advances to Approve', function () {
+    SetupState::query()->create([
+        'site_id' => $this->site->id, 'current_step' => 6,
+        'services_done' => true, 'territory_done' => true, 'structure_finalized' => true,
+    ]);
+
+    Livewire::test(Inventory::class)->call('proceed')->assertRedirect(Approve::getUrl());
+
+    $state = SetupState::query()->where('site_id', $this->site->id)->first();
+    expect($state->inventory_reviewed)->toBeTrue()           // step 6 now actually completes
+        ->and($state->isComplete(SetupStep::Inventory))->toBeTrue()
+        ->and($state->current_step)->toBe(7);                // advanced to Approve
 });
 
 test('the inventory is gated until the structure is finalized', function () {

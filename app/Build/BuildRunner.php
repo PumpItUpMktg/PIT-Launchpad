@@ -4,6 +4,7 @@ namespace App\Build;
 
 use App\Enums\BuildSource;
 use App\Enums\BuildStatus;
+use App\Enums\SiteStatus;
 use App\Guided\StepGate;
 use App\Models\BuildPage;
 use App\Models\Site;
@@ -85,7 +86,12 @@ class BuildRunner
         return ! $reviewPending && ! $standardPending;
     }
 
-    /** Flip the site to launched once the foundation is live. */
+    /**
+     * Flip the site to launched once the foundation is live — and out of Onboarding. The Overview
+     * routes on Site.status, so without this flip a built site reads as onboarding forever and the
+     * landing keeps resuming the wizard. Per the §7b lifecycle the wizard-complete state is Active
+     * (Live stays the §9-gated client-handover milestone, written only by SiteLauncher).
+     */
     private function reconcileLaunch(Site $site): void
     {
         if (! $this->launchReady($site)) {
@@ -95,6 +101,10 @@ class BuildRunner
         $state = $this->steps->state($site);
         if (! $state->launched) {
             $state->update(['launched' => true, 'build_status' => 'live']);
+        }
+
+        if ($site->status === SiteStatus::Onboarding) {
+            $site->update(['status' => SiteStatus::Active]);
         }
     }
 }

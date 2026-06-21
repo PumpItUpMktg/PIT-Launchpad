@@ -8,6 +8,7 @@ use App\Enums\BuildSource;
 use App\Enums\BuildStatus;
 use App\Enums\SetupStep;
 use App\Guided\GuidedPage;
+use App\Guided\StepGate;
 use App\Models\BuildPage;
 use Filament\Notifications\Notification;
 
@@ -140,6 +141,11 @@ class Build extends GuidedPage
 
             return;
         }
+
+        // launchReady ⇒ reconcileLaunch already set launched + flipped status to Active; advance
+        // current_step to Grow so the state/stepper stay coherent with the handoff.
+        $gate = app(StepGate::class);
+        $gate->complete($gate->state($site), SetupStep::Build);
 
         $this->redirect(SetupStep::Grow->pageClass()::getUrl());
     }
