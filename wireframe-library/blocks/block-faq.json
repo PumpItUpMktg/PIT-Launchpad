@@ -1,0 +1,79 @@
+{
+    "version": "0.4",
+    "title": "Block - Faq",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "986057e",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-faq",
+                "_css_classes": "wf-block wf-block-faq"
+            },
+            "elements": [
+                {
+                    "id": "b275ad1",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Frequently asked questions",
+                        "header_size": "h2",
+                        "_title": "faq_heading",
+                        "_css_classes": "wf-faq-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "61f5154",
+                    "elType": "widget",
+                    "widgetType": "accordion",
+                    "settings": {
+                        "tabs": [
+                            {
+                                "tab_title": "Frequently asked question 1",
+                                "tab_content": "<p>Answer to the question, 140–300 chars.</p>",
+                                "_id": "377e33b"
+                            },
+                            {
+                                "tab_title": "Frequently asked question 2",
+                                "tab_content": "<p>Answer to the question, 140–300 chars.</p>",
+                                "_id": "d1334e3"
+                            },
+                            {
+                                "tab_title": "Frequently asked question 3",
+                                "tab_content": "<p>Answer to the question, 140–300 chars.</p>",
+                                "_id": "6b042f4"
+                            },
+                            {
+                                "tab_title": "Frequently asked question 4",
+                                "tab_content": "<p>Answer to the question, 140–300 chars.</p>",
+                                "_id": "d37af1b"
+                            }
+                        ],
+                        "_title": "faq",
+                        "_css_classes": "wf-faq"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}

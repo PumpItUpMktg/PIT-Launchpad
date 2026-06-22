@@ -1,0 +1,58 @@
+{
+    "version": "0.4",
+    "title": "Block - Area Intro",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "09e4cc7",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-area-intro",
+                "_css_classes": "wf-block wf-block-area-intro"
+            },
+            "elements": [
+                {
+                    "id": "4179e82",
+                    "elType": "widget",
+                    "widgetType": "heading",
+                    "settings": {
+                        "title": "Area intro heading",
+                        "header_size": "h2",
+                        "_title": "area_heading",
+                        "_css_classes": "wf-area-heading"
+                    },
+                    "elements": []
+                },
+                {
+                    "id": "ec6345d",
+                    "elType": "widget",
+                    "widgetType": "text-editor",
+                    "settings": {
+                        "editor": "<p>Grounded area intro body (client-overridable), 220–400 chars.</p>",
+                        "_title": "area_body",
+                        "_css_classes": "wf-area-body"
+                    },
+                    "elements": []
+                }
+            ]
+        }
+    ]
+}

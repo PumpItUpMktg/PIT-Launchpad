@@ -1,0 +1,273 @@
+{
+    "version": "0.4",
+    "title": "Block - Post Grid",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "ecbddab",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-post-grid",
+                "_css_classes": "wf-block wf-block-post-grid"
+            },
+            "elements": [
+                {
+                    "id": "b0d4cd4",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 24,
+                            "column": "24",
+                            "row": "24"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "id": "ca1306e",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "5a6318d",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/post-1-640x360.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "640",
+                                            "height": "360"
+                                        },
+                                        "_title": "post_1_image",
+                                        "_css_classes": "wf-post-1-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "ac49dfd",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Date · Category</p>",
+                                        "_title": "post_1_meta",
+                                        "_css_classes": "wf-post-1-meta"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "4771e3c",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Post title 1",
+                                        "header_size": "h3",
+                                        "_title": "post_1_title",
+                                        "_css_classes": "wf-post-1-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "5151ee2",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Post excerpt, 80–160 chars.</p>",
+                                        "_title": "post_1_excerpt",
+                                        "_css_classes": "wf-post-1-excerpt"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "f0f11da",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "9e87167",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/post-2-640x360.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "640",
+                                            "height": "360"
+                                        },
+                                        "_title": "post_2_image",
+                                        "_css_classes": "wf-post-2-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "48c9737",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Date · Category</p>",
+                                        "_title": "post_2_meta",
+                                        "_css_classes": "wf-post-2-meta"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "8941473",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Post title 2",
+                                        "header_size": "h3",
+                                        "_title": "post_2_title",
+                                        "_css_classes": "wf-post-2-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "567579c",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Post excerpt, 80–160 chars.</p>",
+                                        "_title": "post_2_excerpt",
+                                        "_css_classes": "wf-post-2-excerpt"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "7fa8c2d",
+                            "elType": "container",
+                            "isInner": true,
+                            "settings": {
+                                "flex_direction": "column",
+                                "flex_gap": {
+                                    "unit": "px",
+                                    "size": 8,
+                                    "column": "8",
+                                    "row": "8"
+                                },
+                                "width": {
+                                    "unit": "%",
+                                    "size": 33,
+                                    "sizes": []
+                                }
+                            },
+                            "elements": [
+                                {
+                                    "id": "b16e8a9",
+                                    "elType": "widget",
+                                    "widgetType": "image",
+                                    "settings": {
+                                        "image": {
+                                            "url": "https://PLACEHOLDER.local/wf/post-3-640x360.png",
+                                            "id": 0
+                                        },
+                                        "image_size": "custom",
+                                        "image_custom_dimension": {
+                                            "width": "640",
+                                            "height": "360"
+                                        },
+                                        "_title": "post_3_image",
+                                        "_css_classes": "wf-post-3-image"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "03911c6",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Date · Category</p>",
+                                        "_title": "post_3_meta",
+                                        "_css_classes": "wf-post-3-meta"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "f59e798",
+                                    "elType": "widget",
+                                    "widgetType": "heading",
+                                    "settings": {
+                                        "title": "Post title 3",
+                                        "header_size": "h3",
+                                        "_title": "post_3_title",
+                                        "_css_classes": "wf-post-3-title"
+                                    },
+                                    "elements": []
+                                },
+                                {
+                                    "id": "476f2ed",
+                                    "elType": "widget",
+                                    "widgetType": "text-editor",
+                                    "settings": {
+                                        "editor": "<p>Post excerpt, 80–160 chars.</p>",
+                                        "_title": "post_3_excerpt",
+                                        "_css_classes": "wf-post-3-excerpt"
+                                    },
+                                    "elements": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

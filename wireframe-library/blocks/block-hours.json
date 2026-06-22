@@ -1,0 +1,308 @@
+{
+    "version": "0.4",
+    "title": "Block - Hours",
+    "type": "container",
+    "page_settings": [],
+    "content": [
+        {
+            "id": "0c962df",
+            "elType": "container",
+            "isInner": false,
+            "settings": {
+                "content_width": "boxed",
+                "flex_direction": "column",
+                "flex_gap": {
+                    "unit": "px",
+                    "size": 28,
+                    "column": "28",
+                    "row": "28"
+                },
+                "padding": {
+                    "unit": "px",
+                    "top": "64",
+                    "right": "0",
+                    "bottom": "64",
+                    "left": "0",
+                    "isLinked": false
+                },
+                "_title": "block-hours",
+                "_css_classes": "wf-block wf-block-hours"
+            },
+            "elements": [
+                {
+                    "id": "d1d3ec8",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        },
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "ba1ec66",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Mon</p>",
+                                "_title": "hours_1_day",
+                                "_css_classes": "wf-hours-1-day"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "faefdfb",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>9:00 AM – 5:00 PM</p>",
+                                "_title": "hours_1_time",
+                                "_css_classes": "wf-hours-1-time"
+                            },
+                            "elements": []
+                        }
+                    ]
+                },
+                {
+                    "id": "aaf583f",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        },
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "0492782",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Tue</p>",
+                                "_title": "hours_2_day",
+                                "_css_classes": "wf-hours-2-day"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "cef1499",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>9:00 AM – 5:00 PM</p>",
+                                "_title": "hours_2_time",
+                                "_css_classes": "wf-hours-2-time"
+                            },
+                            "elements": []
+                        }
+                    ]
+                },
+                {
+                    "id": "6fe2ad1",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        },
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "513bc76",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Wed</p>",
+                                "_title": "hours_3_day",
+                                "_css_classes": "wf-hours-3-day"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "58ada11",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>9:00 AM – 5:00 PM</p>",
+                                "_title": "hours_3_time",
+                                "_css_classes": "wf-hours-3-time"
+                            },
+                            "elements": []
+                        }
+                    ]
+                },
+                {
+                    "id": "244d646",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        },
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "45b503f",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Thu</p>",
+                                "_title": "hours_4_day",
+                                "_css_classes": "wf-hours-4-day"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "59b5fbc",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>9:00 AM – 5:00 PM</p>",
+                                "_title": "hours_4_time",
+                                "_css_classes": "wf-hours-4-time"
+                            },
+                            "elements": []
+                        }
+                    ]
+                },
+                {
+                    "id": "2e8fc7f",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        },
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "83ebe8f",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Fri</p>",
+                                "_title": "hours_5_day",
+                                "_css_classes": "wf-hours-5-day"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "ef6ca89",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>9:00 AM – 5:00 PM</p>",
+                                "_title": "hours_5_time",
+                                "_css_classes": "wf-hours-5-time"
+                            },
+                            "elements": []
+                        }
+                    ]
+                },
+                {
+                    "id": "8e9dfcb",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        },
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "7337fc0",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Sat</p>",
+                                "_title": "hours_6_day",
+                                "_css_classes": "wf-hours-6-day"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "7b940e1",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>9:00 AM – 5:00 PM</p>",
+                                "_title": "hours_6_time",
+                                "_css_classes": "wf-hours-6-time"
+                            },
+                            "elements": []
+                        }
+                    ]
+                },
+                {
+                    "id": "1ba1128",
+                    "elType": "container",
+                    "isInner": true,
+                    "settings": {
+                        "flex_direction": "row",
+                        "flex_gap": {
+                            "unit": "px",
+                            "size": 12,
+                            "column": "12",
+                            "row": "12"
+                        },
+                        "flex_justify_content": "space-between"
+                    },
+                    "elements": [
+                        {
+                            "id": "c61040b",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>Sun</p>",
+                                "_title": "hours_7_day",
+                                "_css_classes": "wf-hours-7-day"
+                            },
+                            "elements": []
+                        },
+                        {
+                            "id": "7a92a1c",
+                            "elType": "widget",
+                            "widgetType": "text-editor",
+                            "settings": {
+                                "editor": "<p>9:00 AM – 5:00 PM</p>",
+                                "_title": "hours_7_time",
+                                "_css_classes": "wf-hours-7-time"
+                            },
+                            "elements": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
