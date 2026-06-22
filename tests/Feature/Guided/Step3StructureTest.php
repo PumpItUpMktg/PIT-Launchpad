@@ -33,7 +33,9 @@ test('entering Structure with a seed but no spokes shows the building state and 
 
     Livewire::test(Structure::class)
         ->assertOk()
-        ->assertSeeHtml('wire:init="runBuild"'); // the build runs in-request, not on a worker
+        ->assertSeeHtml('wire:init="runBuild"') // the build runs in-request, not on a worker
+        ->assertSeeHtml('wire:loading.flex wire:target="runBuild"') // visible spinner while in flight
+        ->assertSee('Building your structure…'); // the indicator copy
 
     Queue::assertNothingPushed(); // no queued job — wire:init drives BuildStructure::dispatchSync
     expect(SetupState::query()->where('site_id', $this->site->id)->value('structure_status'))->toBe('building');

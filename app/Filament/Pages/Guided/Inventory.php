@@ -7,6 +7,7 @@ use App\Enums\SetupStep;
 use App\Enums\StandardPageType;
 use App\Guided\GuidedPage;
 use App\Guided\StepGate;
+use App\Locations\LocalRelevance;
 use App\Standard\StandardPages;
 
 /**
@@ -52,6 +53,11 @@ class Inventory extends GuidedPage
                 $standard->setAccepted($site, $row['type'], true);
             }
         }
+
+        // Seed the population-based town selection so the inventory's "build now vs. reserve"
+        // split is real (the biggest towns build now; the rest drip live as they earn local
+        // relevance). No-op once the operator has curated the pool.
+        app(LocalRelevance::class)->seedInitialSelection($site);
     }
 
     /** Toggle an optional standard page into/out of the build manifest (curates the build). */
@@ -85,7 +91,7 @@ class Inventory extends GuidedPage
         $site = $this->getSite();
         if ($site !== null) {
             $gate = app(StepGate::class);
-            $gate->complete($gate->state($site), SetupStep::Inventory); // pass-through: advance current_step
+            $gate->complete($gate->state($site), SetupStep::Inventory); // reviewing is enough → marks inventory_reviewed + advances
         }
 
         $this->redirect(SetupStep::Approve->pageClass()::getUrl());

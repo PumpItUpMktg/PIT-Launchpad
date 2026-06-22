@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $brand_pushed brand kit pushed to the prepped site (step 3)
  * @property bool $territory_done
  * @property bool $structure_finalized
+ * @property bool $inventory_reviewed step 6 reviewed (Continue) — pass-through completion gate
  * @property string|null $structure_status null|building|ready|failed (Step 3 engine-on-entry)
  * @property bool $approved
  * @property bool $launched
@@ -59,6 +60,18 @@ class SetupState extends Model
         return SetupStep::tryFrom($this->current_step) ?? SetupStep::Business;
     }
 
+    /** All seven setup steps complete — the wizard portion is fully done (Build/Grow are phases). */
+    public function onboardingComplete(): bool
+    {
+        foreach (SetupStep::setupSteps() as $step) {
+            if (! $this->isComplete($step)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -69,6 +82,7 @@ class SetupState extends Model
             'brand_pushed' => 'boolean',
             'territory_done' => 'boolean',
             'structure_finalized' => 'boolean',
+            'inventory_reviewed' => 'boolean',
             'approved' => 'boolean',
             'launched' => 'boolean',
             'localize' => 'boolean',

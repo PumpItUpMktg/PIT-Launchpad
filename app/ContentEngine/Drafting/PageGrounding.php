@@ -22,6 +22,7 @@ final class PageGrounding
      * @param  list<Claim>  $proof
      * @param  list<array<string, mixed>>  $markets
      * @param  array<string, mixed>  $branding
+     * @param  list<array{anchor: string, path: string}>  $relatedLinks  other pages' permalinks (real internal-link targets)
      */
     public function __construct(
         public readonly KitSchema $kit,
@@ -35,5 +36,6 @@ final class PageGrounding
         public readonly array $markets,
         public readonly array $branding,
         public readonly ?string $targetKeyword = null,
+        public readonly array $relatedLinks = [],
     ) {}
 }

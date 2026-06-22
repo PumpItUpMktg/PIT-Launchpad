@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $priority
  * @property bool $review_required
  * @property string|null $spoke_id
+ * @property string|null $content_id the materialized Content row (set at Approve)
  */
 class BuildPage extends Model
 {
@@ -37,6 +38,12 @@ class BuildPage extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /** @return BelongsTo<Content, $this> */
+    public function content(): BelongsTo
+    {
+        return $this->belongsTo(Content::class);
     }
 
     /** @return array<string, string> */

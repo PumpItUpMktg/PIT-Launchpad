@@ -2,8 +2,11 @@
 
 namespace App\Filament\Resources;
 
+use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\UserRole;
+use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
 use App\Filament\Resources\PageResource\Pages\ListPages;
 use App\Jobs\GeneratePage;
 use App\Models\Content;
@@ -61,6 +64,9 @@ class PageResource extends Resource
             ->columns([
                 TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('title')->searchable()->wrap()->limit(60),
+                TextColumn::make('slug')->label('Permalink')->placeholder('—')
+                    ->formatStateUsing(fn (?string $state): string => $state === null ? '—' : '/'.ltrim($state, '/'))
+                    ->copyable()->copyableState(fn (Content $record): string => '/'.ltrim((string) $record->slug, '/')),
                 TextColumn::make('page_type')->badge()->placeholder('—'),
                 TextColumn::make('silo.name')->label('Silo')->placeholder('—'),
                 TextColumn::make('generation_state')
@@ -84,23 +90,125 @@ class PageResource extends Resource
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
             ])
             ->recordActions([
-                Action::make('generate')
-                    ->label('Generate page')
-                    ->icon('heroicon-o-sparkles')
-                    ->color('info')
-                    ->visible(fn (Content $record): bool => ! $record->isGenerating())
-                    ->requiresConfirmation()
-                    ->modalDescription('Queues the page draft (kit slots from brand voice + intake grounding, via Sonnet) and image render (fal) on the worker. The row shows "Generating" until the draft lands in Review.')
-                    ->action(function (Content $record): void {
-                        GeneratePage::enqueue($record, actorId: Auth::id());
-
-                        Notification::make()->success()
-                            ->title('Queued — generating on the worker')
-                            ->body("'{$record->title}' is being drafted; it will appear in Review when ready.")
-                            ->send();
-                    }),
+                self::buildAction(),
+                self::composerPendingAction(),
+                self::reviewAction(),
+                self::publishAction(),
+                self::viewAction(),
                 self::pageConfigAction(),
             ]);
+    }
+
+    /**
+     * Per-page on-demand build (planned → building). Queues single-page generation on the worker —
+     * never auto-runs the whole site. Only shown for a planned page whose composer is ready (a
+     * resolvable kit); standard/hub pages without a kit get {@see composerPendingAction()} instead.
+     */
+    private static function buildAction(): Action
+    {
+        return Action::make('build')
+            ->label('Build')
+            ->icon('heroicon-o-sparkles')
+            ->color('info')
+            ->visible(fn (Content $record): bool => self::isPlanned($record) && self::buildable($record))
+            ->requiresConfirmation()
+            ->modalDescription('Queues THIS page (kit slots from brand voice + intake grounding via Sonnet, with real internal links to your other pages, + fal image) on the worker. Only this page builds — the row shows "Generating" until it lands in Review.')
+            ->action(function (Content $record): void {
+                GeneratePage::enqueue($record, actorId: Auth::id());
+
+                Notification::make()->success()
+                    ->title('Queued — building on the worker')
+                    ->body("'{$record->title}' is being built; it will appear in Review when ready.")
+                    ->send();
+            });
+    }
+
+    /**
+     * The honest stub guard: a planned page whose composer isn't ready (no kit — e.g. standard /
+     * hub pages on the VoiceKit seam) shows a disabled "composer pending" marker rather than
+     * faking an empty draft. Wires to the real composer when it ships.
+     */
+    private static function composerPendingAction(): Action
+    {
+        return Action::make('composer_pending')
+            ->label('Build unavailable — composer pending')
+            ->icon('heroicon-o-clock')
+            ->color('gray')
+            ->disabled()
+            ->visible(fn (Content $record): bool => self::isPlanned($record) && ! self::buildable($record))
+            ->action(fn () => null);
+    }
+
+    /** Open the drafted page in the review queue (the existing per-page review surface). */
+    private static function reviewAction(): Action
+    {
+        return Action::make('review')
+            ->label('Review')
+            ->icon('heroicon-o-eye')
+            ->color('warning')
+            ->visible(fn (Content $record): bool => $record->hasDraft() && $record->status !== ContentStatus::Published)
+            ->url(fn (Content $record): string => EditContentReview::getUrl(['record' => $record->id]));
+    }
+
+    /** Publish THIS page to WordPress — reuses the review queue's approve → idempotent PublishContent. */
+    private static function publishAction(): Action
+    {
+        return Action::make('publish')
+            ->label('Publish')
+            ->icon('heroicon-o-rocket-launch')
+            ->color('success')
+            ->requiresConfirmation()
+            ->visible(fn (Content $record): bool => $record->hasDraft() && $record->status !== ContentStatus::Published)
+            ->action(function (Content $record): void {
+                $result = app(ReviewActions::class)->approve($record, Auth::id());
+
+                if ($result->isBlocked()) {
+                    Notification::make()->danger()->title('Cannot publish')->body($result->blockedReason)->send();
+
+                    return;
+                }
+
+                $notification = Notification::make()->success()->title('Publishing — pushed to the queue');
+                if ($result->warnings !== []) {
+                    $notification->body(implode(' ', $result->warnings));
+                }
+                $notification->send();
+            });
+    }
+
+    /** View the live page (the canonical URL = the assigned permalink). */
+    private static function viewAction(): Action
+    {
+        return Action::make('view')
+            ->label('View')
+            ->icon('heroicon-o-arrow-top-right-on-square')
+            ->color('gray')
+            ->visible(fn (Content $record): bool => $record->status === ContentStatus::Published && self::liveUrl($record) !== null)
+            ->url(fn (Content $record): ?string => self::liveUrl($record))
+            ->openUrlInNewTab();
+    }
+
+    /** A planned page: materialized, undrafted, not currently generating — the only pre-build state. */
+    private static function isPlanned(Content $record): bool
+    {
+        return ! $record->hasDraft() && ! $record->isGenerating();
+    }
+
+    /** The composer is ready when a wireframe kit is bound (service/location); null kit → pending. */
+    private static function buildable(Content $record): bool
+    {
+        return $record->wireframe_kit_id !== null;
+    }
+
+    /** The live URL — site domain + the assigned permalink (the slug pushed to WordPress). */
+    private static function liveUrl(Content $record): ?string
+    {
+        $domain = $record->site?->domain_url;
+        if (! is_string($domain) || $domain === '') {
+            return null;
+        }
+
+        return rtrim($domain, '/').'/'.ltrim((string) $record->slug, '/');
     }
 
     /**

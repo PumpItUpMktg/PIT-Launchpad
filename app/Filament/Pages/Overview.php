@@ -2,9 +2,14 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\SetupStep;
 use App\Enums\SiteStatus;
+use App\Filament\Pages\Guided\Grow;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
+use App\Models\Content;
+use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\Site;
 use App\Operator\PipelineMetrics;
@@ -48,24 +53,40 @@ class Overview extends Page
     public function getSitesProperty(): array
     {
         $metrics = app(PipelineMetrics::class);
-        $states = SetupState::query()->pluck('current_step', 'site_id');
+        $states = SetupState::query()->get()->keyBy('site_id');
         $stepCount = count(SetupStep::setupSteps());
 
         $cards = [];
         foreach (Site::query()->orderBy('brand_name')->get() as $site) {
-            $onboarding = $site->status === SiteStatus::Onboarding;
+            $state = $states->get($site->id);
+            // A launched site is past the wizard even if its status somehow lagged — never resume
+            // the wizard for it. The build→Grow handoff flips status to Active, so this is belt-and-
+            // suspenders against a stuck status.
+            $onboarding = $site->status === SiteStatus::Onboarding && ! (bool) $state?->launched;
             $stats = $metrics->statCards($site->id);
-            $step = (int) ($states[$site->id] ?? 1);
+            $step = $state !== null ? $state->current_step : 1;
+            // Progress reads completion across all 7 steps (Inventory now completes too).
+            $complete = (bool) $state?->onboardingComplete();
+            $pages = $this->buildProgress($site);
 
             $cards[] = [
                 'id' => $site->id,
                 'name' => $site->brand_name,
                 'status' => $site->status->value,
                 'onboarding' => $onboarding,
-                'pct' => $onboarding ? min(100, (int) round(min($step, $stepCount) / $stepCount * 100)) : 100,
-                'url' => $onboarding
-                    ? (SetupStep::tryFrom($step) ?? SetupStep::Business)->pageClass()::getUrl(['site' => $site->id])
-                    : SiteCockpit::getUrl(['site' => $site->id]),
+                'pct' => $onboarding
+                    ? ($complete ? 100 : min(100, (int) round(min($step, $stepCount) / $stepCount * 100)))
+                    : 100,
+                // Onboarding → resume the wizard; Active → Grow (build pages on demand);
+                // Live (client handover, §9) → the operator cockpit.
+                'url' => match (true) {
+                    $onboarding => (SetupStep::tryFrom($step) ?? SetupStep::Business)->pageClass()::getUrl(['site' => $site->id]),
+                    $site->status === SiteStatus::Live => SiteCockpit::getUrl(['site' => $site->id]),
+                    default => Grow::getUrl(['site' => $site->id]),
+                },
+                // Build progress — "building" is a metric, not a stage; an Active-but-empty site
+                // reads as "Active · 0/N published", not a misleading "live with nothing on it".
+                'pages' => $pages,
                 'signals' => [
                     'publish' => $stats['approved_pending'],
                     'review' => $stats['needs_review'],
@@ -75,5 +96,23 @@ class Overview extends Page
         }
 
         return $cards;
+    }
+
+    /**
+     * Build progress for a site — published pages over total materialized pages. "Building" is a
+     * metric, not a lifecycle stage.
+     *
+     * @return array{published: int, total: int}
+     */
+    private function buildProgress(Site $site): array
+    {
+        $base = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value);
+
+        return [
+            'published' => (clone $base)->where('status', ContentStatus::Published->value)->count(),
+            'total' => (clone $base)->count(),
+        ];
     }
 }

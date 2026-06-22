@@ -7,7 +7,7 @@
 <x-guided.shell :steps="$this->steps" :brand="$brand">
     <div class="lp-eyebrow">{{ \App\Enums\SetupStep::Approve->eyebrow() }} · What the client approves</div>
     <h1 class="lp-h1">Here's your site plan</h1>
-    <p class="lp-lede">Your whole site, in plain language — standard pages, your services, and your towns. Approve it and we'll start building.</p>
+    <p class="lp-lede">Your whole site, in plain language — standard pages, your services, and your towns. Approve it and we'll build your pages — you'll review them before anything publishes.</p>
 
     @unless ($site)
         <div class="lp-card"><div class="lp-empty">No sites yet — create a site to begin setup.</div></div>
@@ -65,12 +65,16 @@
             @endif
         </div>
 
+        @php $drip = $this->drip; @endphp
         <div class="lp-card" style="margin-top:18px">
             <h3>Before we build</h3>
             <div class="hint">Sensible defaults — adjust if you like.</div>
             <div class="lp-tog">
-                <div><div class="tnm">Local relevance data</div><div class="tsub">Flood zones, soil, water table, rainfall per town</div></div>
+                <div><div class="tnm">Local relevance data</div><div class="tsub">Ground each town page in {{ $brand }}'s own local signals — local demand, competition, and your review footprint, pulled per town. No two sites use the same data.</div></div>
                 <button class="lp-switch {{ $this->localize ? '' : 'off' }}" wire:click="toggleLocalize"></button>
+            </div>
+            <div class="lp-tog">
+                <div><div class="tnm">Town pages build as they earn relevance</div><div class="tsub">{{ $drip['now'] }} biggest {{ \Illuminate\Support\Str::plural('town', $drip['now']) }} build now · {{ $drip['reserve'] }} in reserve, dripping live as each earns enough local relevance{{ $drip['ready'] > 0 ? ' ('.$drip['ready'].' already ready)' : '' }}.</div></div>
             </div>
             <div class="lp-tog">
                 <div><div class="tnm">Town page pace</div><div class="tsub">Release up to {{ $this->townPagePace }} new town pages per week</div></div>
@@ -86,7 +90,7 @@
             <a class="lp-btn ghost" href="{{ \App\Enums\SetupStep::Structure->pageClass()::getUrl() }}" wire:navigate>Back</a>
             <button class="lp-btn" wire:click="approveAndBuild" @disabled(! $hasService)>Approve &amp; build</button>
             @if ($hasService)
-                <span class="lp-gate ok">Ready to go live</span>
+                <span class="lp-gate ok">Ready to build · you'll review before publishing</span>
             @else
                 <span class="lp-gate">Finalize your structure first</span>
             @endif

@@ -46,22 +46,22 @@
 
         {{-- Directed coverage · service --}}
         <div class="lp-invlabel">Directed coverage · service pages</div>
-        @forelse ($inv['silos'] as $silo)
+        @forelse ($inv['silos'] as $si => $silo)
             @php $color = $spineColors[$loop->index % count($spineColors)]; @endphp
-            <div class="lp-silo">
+            <div class="lp-silo" wire:key="inv-silo-{{ $si }}">
                 <div class="lp-silohd">
                     <span class="spine" style="background:{{ $color }}"></span>
                     <div><div class="nm">{{ $silo['name'] }}</div><div class="meta">{{ $silo['count'] }} {{ \Illuminate\Support\Str::plural('page', $silo['count']) }}</div></div>
                 </div>
                 <div class="lp-rows">
-                    @include('filament.guided._inventory-row', ['row' => $silo['hub'], 'child' => false])
-                    @foreach ($silo['pages'] as $page)
-                        @include('filament.guided._inventory-row', ['row' => $page, 'child' => false])
+                    @include('filament.guided._inventory-row', ['row' => $silo['hub'], 'child' => false, 'rowKey' => "s{$si}-hub"])
+                    @foreach ($silo['pages'] as $pi => $page)
+                        @include('filament.guided._inventory-row', ['row' => $page, 'child' => false, 'rowKey' => "s{$si}-p{$pi}"])
                     @endforeach
-                    @foreach ($silo['subhubs'] as $sub)
-                        @include('filament.guided._inventory-row', ['row' => $sub, 'child' => false])
-                        @foreach ($sub['pages'] as $page)
-                            @include('filament.guided._inventory-row', ['row' => $page, 'child' => true])
+                    @foreach ($silo['subhubs'] as $bi => $sub)
+                        @include('filament.guided._inventory-row', ['row' => $sub, 'child' => false, 'rowKey' => "s{$si}-sh{$bi}"])
+                        @foreach ($sub['pages'] as $spi => $page)
+                            @include('filament.guided._inventory-row', ['row' => $page, 'child' => true, 'rowKey' => "s{$si}-sh{$bi}-p{$spi}"])
                         @endforeach
                     @endforeach
                 </div>
@@ -74,7 +74,7 @@
         <div class="lp-invlabel">Directed coverage · location pages</div>
         <div class="lp-card">
             @forelse ($inv['tiers'] as $tier)
-                <div class="lp-loctier">
+                <div class="lp-loctier" wire:key="inv-tier-{{ $tier['tier'] }}">
                     <span class="ltn"><span class="lp-swatch" style="background:var(--teal-mid)"></span>{{ $tier['label'] }}</span>
                     <span class="lts">{{ collect($tier['towns'])->join(' · ') }}</span>
                 </div>

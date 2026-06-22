@@ -22,6 +22,8 @@
                             <div class="lp-prog"><i style="width:{{ $card['pct'] }}%"></i></div>
                             <div class="lp-progtxt">{{ $card['pct'] }}% through setup — resume the wizard</div>
                         @else
+                            @php $pg = $card['pages']; @endphp
+                            <div class="lp-progtxt" style="margin:2px 0 8px">{{ $pg['published'] }}/{{ $pg['total'] }} {{ \Illuminate\Support\Str::plural('page', $pg['total']) }} published — build the rest on demand</div>
                             <div class="lp-sigs">
                                 <div class="lp-sig"><span class="v">{{ number_format($card['signals']['publish']) }}</span><span class="l">to publish</span></div>
                                 <div class="lp-sig"><span class="v {{ $card['signals']['review'] ? 'warn' : '' }}">{{ number_format($card['signals']['review']) }}</span><span class="l">needs review</span></div>

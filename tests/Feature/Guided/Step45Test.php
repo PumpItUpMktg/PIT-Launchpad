@@ -1,15 +1,17 @@
 <?php
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\SiteStatus;
 use App\Enums\SpokeStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
-use App\Filament\Pages\Guided\Build;
 use App\Filament\Pages\Guided\Grow;
 use App\Guided\GrowDashboard;
 use App\Jobs\BuildStructure;
 use App\Models\BuildPage;
 use App\Models\Content;
+use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -26,7 +28,8 @@ beforeEach(function () {
     session(['guided_site_id' => $this->site->id]);
 });
 
-test('Step 4 persists build config, approves, assembles the manifest, and hands off to Build', function () {
+test('Step 4 persists build config, materializes the manifest, and hands off to Grow (Onboarding → Active)', function () {
+    $this->site->update(['status' => SiteStatus::Onboarding]);
     SetupState::query()->create([
         'site_id' => $this->site->id, 'current_step' => 4,
         'services_done' => true, 'territory_done' => true, 'structure_finalized' => true,
@@ -38,16 +41,19 @@ test('Step 4 persists build config, approves, assembles the manifest, and hands 
         ->set('townPagePace', 8)
         ->set('freshContent', false)
         ->call('approveAndBuild')
-        ->assertRedirect(Build::getUrl());
+        ->assertRedirect(Grow::getUrl());
 
     $state = SetupState::query()->where('site_id', $this->site->id)->first();
     expect($state->approved)->toBeTrue()
-        ->and($state->launched)->toBeFalse()          // Build sets launched
-        ->and($state->build_status)->toBe('building')
+        ->and($state->launched)->toBeTrue()           // handoff fires at materialize-complete
+        ->and($state->build_status)->toBe('live')
         ->and($state->localize)->toBeFalse()
         ->and($state->town_page_pace)->toBe(8)
         ->and($state->fresh_content)->toBeFalse()
-        ->and(BuildPage::query()->where('site_id', $this->site->id)->count())->toBe(6); // fixed core
+        ->and($this->site->fresh()->status)->toBe(SiteStatus::Active)
+        ->and(BuildPage::query()->where('site_id', $this->site->id)->count())->toBe(6); // fixed core manifest
+    // materialized into one planned page per manifest entry (no AI)
+    expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->where('kind', ContentKind::Page->value)->count())->toBe(6);
 });
 
 test('the Grow dashboard counts live / building / planned and lists fresh posts', function () {

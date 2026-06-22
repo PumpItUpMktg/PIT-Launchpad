@@ -3,10 +3,13 @@
 namespace App\Filament\Pages\Guided;
 
 use App\Build\BuildManifestAssembler;
+use App\Build\PageMaterializer;
 use App\Enums\SetupStep;
+use App\Enums\SiteStatus;
 use App\Enums\StandardPageType;
 use App\Guided\GuidedPage;
 use App\Guided\StepGate;
+use App\Locations\LocalRelevance;
 use App\Standard\SitePlan;
 use App\Standard\StandardPages;
 use Filament\Notifications\Notification;
@@ -18,6 +21,7 @@ use Filament\Notifications\Notification;
  * assembles the build manifest across all three sources and hands off to the Build phase.
  *
  * @property-read array<string, mixed> $sitePlan
+ * @property-read array{now: int, reserve: int, ready: int} $drip
  */
 class Approve extends GuidedPage
 {
@@ -67,6 +71,29 @@ class Approve extends GuidedPage
             : app(SitePlan::class)->for($site);
     }
 
+    /**
+     * The per-business location-page drip summary: how many towns build now vs. sit in reserve,
+     * and how many reserve towns have already earned enough local relevance to drip live.
+     *
+     * @return array{now: int, reserve: int, ready: int}
+     */
+    public function getDripProperty(): array
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return ['now' => 0, 'reserve' => 0, 'ready' => 0];
+        }
+
+        $rows = collect(app(LocalRelevance::class)->forSite($site));
+        $reserve = $rows->where('selected', false);
+
+        return [
+            'now' => $rows->where('selected', true)->count(),
+            'reserve' => $reserve->count(),
+            'ready' => $reserve->where('ready', true)->count(),
+        ];
+    }
+
     /** Accept/decline an optional standard page (offerable types only). */
     public function toggleStandard(string $type): void
     {
@@ -98,19 +125,33 @@ class Approve extends GuidedPage
             return;
         }
 
-        $gate = app(StepGate::class);
-        $state = $gate->state($site);
+        $state = app(StepGate::class)->state($site);
         $state->update([
             'localize' => $this->localize,
             'town_page_pace' => max(1, $this->townPagePace),
             'fresh_content' => $this->freshContent,
-            'build_status' => 'building',
         ]);
 
-        $gate->complete($state, SetupStep::Approve); // → approved (Build sets launched)
+        // Cheap + instant: assemble the manifest, then materialize it into planned page rows. No AI,
+        // no generation — pages are built one at a time, on demand, from the pages list (Grow).
         app(BuildManifestAssembler::class)->assemble($site);
+        app(PageMaterializer::class)->materialize($site);
 
-        Notification::make()->title('Approved — assembling your build.')->success()->send();
-        $this->redirect(SetupStep::Build->pageClass()::getUrl());
+        // The wizard-completion handoff fires HERE, on materialize-complete (re-anchored from the
+        // old "build finished" — there's no blocking build now): approve the wizard, mark launched,
+        // advance to Grow, and flip the site Onboarding → Active (the only two site states). The
+        // overview then routes this site to Grow instead of resuming the wizard.
+        $state->update([
+            'approved' => true,
+            'launched' => true,
+            'build_status' => 'live',
+            'current_step' => SetupStep::Grow->value,
+        ]);
+        if ($site->status === SiteStatus::Onboarding) {
+            $site->update(['status' => SiteStatus::Active]);
+        }
+
+        Notification::make()->title('Approved — your pages are ready to build.')->success()->send();
+        $this->redirect(SetupStep::Grow->pageClass()::getUrl());
     }
 }

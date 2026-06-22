@@ -1,6 +1,7 @@
 <?php
 
 use App\Build\BuildManifestAssembler;
+use App\Enums\SetupStep;
 use App\Enums\SpokeStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
@@ -38,6 +39,20 @@ test('the inventory renders the blueprint pages and Continue carries into Approv
         ->assertRedirect(Approve::getUrl());
 });
 
+test('Continue marks step 6 complete (reviewing is enough) and advances to Approve', function () {
+    SetupState::query()->create([
+        'site_id' => $this->site->id, 'current_step' => 6,
+        'services_done' => true, 'territory_done' => true, 'structure_finalized' => true,
+    ]);
+
+    Livewire::test(Inventory::class)->call('proceed')->assertRedirect(Approve::getUrl());
+
+    $state = SetupState::query()->where('site_id', $this->site->id)->first();
+    expect($state->inventory_reviewed)->toBeTrue()           // step 6 now actually completes
+        ->and($state->isComplete(SetupStep::Inventory))->toBeTrue()
+        ->and($state->current_step)->toBe(7);                // advanced to Approve
+});
+
 test('the inventory is gated until the structure is finalized', function () {
     // fresh state — only step 1 open
     Livewire::test(Inventory::class)->assertRedirect(Business::getUrl());
@@ -65,12 +80,20 @@ test('toggling an optional foundation page curates the build manifest', function
 
     $page = Livewire::test(Inventory::class); // mount seeds faq ON
 
+    // The toggle is bound to Livewire (wire:click action) and the loop item carries a unique key
+    // so the morph updates the right node in the browser.
+    $page->assertSeeHtml('wire:click="toggleStandard(\'faq\')"')
+        ->assertSeeHtml('wire:key="found-faq"');
+
     $page->call('toggleStandard', 'faq'); // → off
     expect(SetupState::query()->where('site_id', $this->site->id)->value('standard_pages')['faq'])->toBeFalse();
+    // the rendered markup reflects the deselected state (not just the persisted value)
+    $page->assertSeeHtml('class="lp-pageitem off"');
 
     $page->call('toggleStandard', 'faq'); // → on, persists through re-render
     expect(SetupState::query()->where('site_id', $this->site->id)->value('standard_pages')['faq'])->toBeTrue()
         ->and(collect($page->instance()->inventory['foundation'])->firstWhere('type', 'faq')['accepted'])->toBeTrue();
+    $page->assertSeeHtml('class="lp-pageitem opt on"');
 
     // the curated selection flows into the assembled build manifest
     app(BuildManifestAssembler::class)->assemble($this->site->fresh());

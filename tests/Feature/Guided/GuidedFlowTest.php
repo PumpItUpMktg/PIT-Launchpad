@@ -1,10 +1,10 @@
 <?php
 
-use App\Build\BuildRunner;
 use App\Enums\ArrangeFlagType;
+use App\Enums\ContentKind;
+use App\Enums\SiteStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
-use App\Filament\Pages\Guided\Build;
 use App\Filament\Pages\Guided\Business;
 use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Filament\Pages\Guided\Grow;
@@ -13,6 +13,8 @@ use App\Filament\Pages\Guided\Structure;
 use App\Filament\Pages\Guided\Territory;
 use App\Models\ArrangementFlag;
 use App\Models\BuildPage;
+use App\Models\Content;
+use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -24,7 +26,7 @@ use Livewire\Livewire;
 beforeEach(function () {
     Filament::setCurrentPanel('admin');
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
-    $this->site = Site::factory()->create();
+    $this->site = Site::factory()->create(['status' => SiteStatus::Onboarding]);
     session(['guided_site_id' => $this->site->id]);
 });
 
@@ -76,7 +78,7 @@ test('Finalize is blocked while an auto-arrange flag is unresolved, then allowed
     expect(setupState($this->site)->fresh()->structure_finalized)->toBeTrue();
 });
 
-test('the full walkthrough advances Business → … → Build → Grow and launches', function () {
+test('the full walkthrough advances Business → … → Approve → Grow and launches', function () {
     Livewire::test(Business::class)->call('proceed'); // → Connect WordPress
 
     // Steps 2-3 (Connect WordPress + Brand) are covered by their own tests; simulate their gates.
@@ -93,23 +95,21 @@ test('the full walkthrough advances Business → … → Build → Grow and laun
     // The inventory bridge carries into Approve.
     Livewire::test(Inventory::class)->assertOk()->call('proceed')->assertRedirect(Approve::getUrl());
 
-    // Approve assembles the manifest and hands off to Build (not straight to Grow).
-    Livewire::test(Approve::class)->call('approveAndBuild')->assertRedirect(Build::getUrl());
+    // Approve materializes the manifest into planned pages (no AI) and hands off straight to Grow.
+    Livewire::test(Approve::class)->call('approveAndBuild')->assertRedirect(Grow::getUrl());
 
     $state = setupState($this->site)->fresh();
     expect($state->approved)->toBeTrue()
-        ->and($state->launched)->toBeFalse()                 // Build sets launched, not Approve
-        ->and(BuildPage::query()->where('site_id', $this->site->id)->exists())->toBeTrue();
+        ->and($state->launched)->toBeTrue()                  // handoff fires at materialize-complete
+        ->and(BuildPage::query()->where('site_id', $this->site->id)->exists())->toBeTrue()
+        ->and($this->site->fresh()->status)->toBe(SiteStatus::Active); // Onboarding → Active
 
-    // Build phase: entering ticks the queue (auto publish / gate brand-critical), then review.
-    Livewire::test(Build::class)->assertOk();
-    foreach (BuildPage::query()->where('site_id', $this->site->id)->where('status', 'in_review')->get() as $page) {
-        app(BuildRunner::class)->publishReviewed($this->site, $page);
-    }
+    // The manifest is materialized into planned, undrafted pages — no generation has run.
+    $pages = Content::withoutGlobalScope(SiteScope::class)
+        ->where('site_id', $this->site->id)->where('kind', ContentKind::Page->value)->get();
+    expect($pages)->not->toBeEmpty()
+        ->and($pages->every(fn (Content $c) => ! $c->hasDraft()))->toBeTrue();
 
-    $state = setupState($this->site)->fresh();
-    expect($state->launched)->toBeTrue();
-
-    // Grow is now unlocked (prerequisite: launched).
+    // Grow is unlocked (prerequisite: launched) — no blocking build screen between approve and Grow.
     Livewire::test(Grow::class)->assertOk();
 });

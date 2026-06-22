@@ -2,6 +2,8 @@
 
 namespace App\ContentEngine\Drafting;
 
+use App\Build\Permalinks;
+use App\Enums\ContentKind;
 use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Market;
@@ -27,6 +29,7 @@ class PageGroundingAssembler
 {
     public function __construct(
         private readonly VoiceResolver $voice = new VoiceResolver,
+        private readonly Permalinks $permalinks = new Permalinks,
     ) {}
 
     public function assemble(Content $page): PageGrounding
@@ -48,7 +51,31 @@ class PageGroundingAssembler
             markets: $this->markets($siteId),
             branding: $this->branding($siteId, $page),
             targetKeyword: $this->targetKeyword($page),
+            relatedLinks: $this->relatedLinks($page),
         );
+    }
+
+    /**
+     * Real internal-link targets: the permalinks of the site's OTHER materialized pages. The full
+     * URL map exists from materialize, so the drafter writes links to final URLs (not placeholders)
+     * even if the target page isn't built yet — it self-heals as the inventory completes. Capped to
+     * keep the prompt bounded. (Best-effort: site-wide for now; silo-scoped ordering lands with the
+     * Spoke→§1 bridge.)
+     *
+     * @return list<array{anchor: string, path: string}>
+     */
+    private function relatedLinks(Content $page): array
+    {
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $page->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('id', '!=', $page->id)
+            ->orderBy('title')
+            ->limit(50)
+            ->get()
+            ->map(fn (Content $p) => ['anchor' => (string) $p->title, 'path' => $this->permalinks->path($p)])
+            ->values()
+            ->all();
     }
 
     private function kit(Content $page): KitSchema

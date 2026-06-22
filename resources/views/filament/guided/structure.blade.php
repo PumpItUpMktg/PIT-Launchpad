@@ -12,27 +12,27 @@
     @unless ($site)
         <div class="lp-card"><div class="lp-empty">No sites yet — create a site to begin setup.</div></div>
     @elseif ($status === 'building' || $status === null)
-        {{-- wire:init runs the chain synchronously; wire:loading shows the spinner until it returns. --}}
+        {{-- wire:init kicks the synchronous build chain on entry (no queue worker); the wire:loading
+             block shows the spinner while that request is in flight and auto-clears when it returns.
+             Stage labels cycle via Alpine — a raw <script> does NOT re-execute after wire:navigate
+             (SPA) navigation, which is how the stepper reaches this page; Alpine runs reliably and
+             tears the timer down via destroy() when the build returns and the block is removed. --}}
         <div class="lp-card" wire:init="runBuild">
-            <div class="lp-empty" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:48px">
+            <div wire:loading.flex wire:target="runBuild"
+                 class="lp-empty"
+                 style="flex-direction:column;align-items:center;gap:12px;padding:48px"
+                 x-data="{
+                     stages: ['Building your structure…', 'Pulling categories…', 'Scoring volume…', 'Arranging silos…', 'Finalizing…'],
+                     i: 0,
+                     timer: null,
+                     init() { this.timer = setInterval(() => { this.i = (this.i + 1) % this.stages.length }, 1400) },
+                     destroy() { clearInterval(this.timer) }
+                 }">
                 <div class="lp-spinner"></div>
-                <div style="font-family:'Archivo',sans-serif;font-weight:700;font-size:16px" data-lp-build-stage>Building your structure…</div>
+                <div style="font-family:'Archivo',sans-serif;font-weight:700;font-size:16px" x-text="stages[i]">Building your structure…</div>
                 <div style="font-size:12.5px;color:var(--ink-soft)">This takes a moment — hang tight.</div>
             </div>
         </div>
-        <script>
-            (function () {
-                var stages = ['Pulling categories…', 'Scoring volume…', 'Arranging silos…', 'Finalizing…'];
-                var el = document.querySelector('[data-lp-build-stage]');
-                if (! el) return;
-                var i = 0;
-                var t = setInterval(function () {
-                    if (! document.body.contains(el)) { clearInterval(t); return; } // cleared when the build returns
-                    el.textContent = stages[i % stages.length];
-                    i++;
-                }, 1400);
-            })();
-        </script>
     @elseif ($status === 'failed')
         <div class="lp-card">
             <div class="lp-empty">We couldn't build the structure — check that Step 1 has a trade and services.</div>

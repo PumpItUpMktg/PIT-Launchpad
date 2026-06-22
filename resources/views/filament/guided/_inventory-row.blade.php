@@ -3,7 +3,7 @@
     $tagClass = $row['type'] === 'hub' ? 'hub' : ($row['type'] === 'sub-hub' ? 'sub' : '');
     $tagLabel = $row['type'] === 'hub' ? 'Hub' : ($row['type'] === 'sub-hub' ? 'Sub-hub' : 'Page');
 @endphp
-<div class="lp-pagerow" @if ($child) style="padding-left:18px" @endif>
+<div class="lp-pagerow" @isset($rowKey) wire:key="inv-row-{{ $rowKey }}" @endisset @if ($child) style="padding-left:18px" @endif>
     <div class="prn">
         <span class="lp-ptag {{ $tagClass }}">{{ $tagLabel }}</span>
         {{ $row['name'] }}

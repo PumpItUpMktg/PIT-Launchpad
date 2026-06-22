@@ -142,6 +142,20 @@ test('a post carries NO native body — the single-post template renders it', fu
     expect($payload['elementor_data'])->toBe([]);              // posts → plugin no-op
 });
 
+test('the pushed slug equals the assigned permalink exactly — the live URL cannot drift', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+    $content->forceFill(['slug' => 'drain-cleaning-austin'])->save(); // the materialized permalink
+
+    $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection);
+
+    // The WordPress slug is the Launchpad permalink, verbatim — so every internal link that points
+    // at /drain-cleaning-austin resolves to this page once it publishes.
+    expect($payload['slug'])->toBe('drain-cleaning-austin')
+        ->and($payload['seo']['canonical'])->toEndWith('/drain-cleaning-austin');
+});
+
 test('the breadcrumb silo crumb links to its pillar page and the leaf uses the SEO title', function () {
     PublishHarness::fakeAdapters();
     $site = PublishHarness::site(); // domain_url https://apex.example
