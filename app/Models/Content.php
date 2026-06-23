@@ -99,6 +99,28 @@ class Content extends Model
     }
 
     /**
+     * The operator-facing build-out label (the locked §1 vocabulary). Nothing reads "published"
+     * until a page is genuinely on WordPress: a materialized-but-empty page is "Ready to generate",
+     * an accepted-but-unpushed page is "Approved · ready to publish". Single source of truth for
+     * the state badge across the overview, the pages list, and Grow.
+     */
+    public function buildStateLabel(): string
+    {
+        return match ($this->generationState()) {
+            'generating' => 'Generating…',
+            'failed' => 'Generation failed',
+            'drafted' => match ($this->status) {
+                ContentStatus::Approved => 'Approved · ready to publish',
+                ContentStatus::Published => 'Published',
+                ContentStatus::Rendering, ContentStatus::Publishing => 'Publishing…',
+                ContentStatus::RenderFailed, ContentStatus::PublishFailed => 'Publish failed',
+                default => 'Draft ready for review',
+            },
+            default => 'Ready to generate', // awaiting / planned (materialized, no content)
+        };
+    }
+
+    /**
      * Stamp the row "generating" (clearing any prior failure marker so a re-run
      * doesn't read as failed while it works). Set before dispatch so the UI
      * reflects it immediately.

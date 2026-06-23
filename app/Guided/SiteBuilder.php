@@ -5,11 +5,9 @@ namespace App\Guided;
 use App\Models\Site;
 
 /**
- * The "Approve & build" trigger — the single wiring point where an approved site's pages begin
- * generating. **Stub:** the generation composition (the fold→section assembly) and the drip
- * controller aren't landed yet, so this is intentionally a clean no-op seam. When generation
- * lands, this dispatches per-confirmed-page generation (GeneratePage/GeneratePost); the guided
- * flow already calls it, so nothing downstream changes here.
+ * Legacy post-finalize build trigger — a clean no-op seam, now superseded by Finalize Plan
+ * materializing the manifest into planned pages that generate on demand (PageMaterializer +
+ * the Pages list). Currently unreferenced; kept as the seam if a bulk-build entrypoint returns.
  */
 class SiteBuilder
 {

@@ -38,7 +38,7 @@ enum SetupStep: int
             self::Territory => 'Territory',
             self::Structure => 'Structure',
             self::Inventory => 'Page inventory',
-            self::Approve => 'Approve & build',
+            self::Approve => 'Finalize Plan',
             self::Build => 'Build',
             self::Grow => 'Grow',
         };
@@ -53,7 +53,7 @@ enum SetupStep: int
             self::Territory => 'Where you work',
             self::Structure => 'Your pages',
             self::Inventory => 'What gets built',
-            self::Approve => 'Go live',
+            self::Approve => 'Finalize the plan',
             self::Build => 'Going live',
             self::Grow => 'Your live site',
         };

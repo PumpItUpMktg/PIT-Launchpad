@@ -15,7 +15,7 @@ use App\Standard\StandardPages;
 use Filament\Notifications\Notification;
 
 /**
- * Step 4 · Approve & build. The plain-language plan of the **complete site** ({@see SitePlan} —
+ * Step 7 · Finalize Plan. The plain-language plan of the **complete site** ({@see SitePlan} —
  * fixed standard pages locked in, optional standard pages as data-gated accept/decline toggles,
  * service pages from the finalized structure, location pages) + the build config. Approve
  * assembles the build manifest across all three sources and hands off to the Build phase.
@@ -29,7 +29,7 @@ class Approve extends GuidedPage
 
     protected static ?int $navigationSort = 4;
 
-    protected static ?string $navigationLabel = 'Approve & build';
+    protected static ?string $navigationLabel = 'Finalize Plan';
 
     protected string $view = 'filament.guided.approve';
 
@@ -151,7 +151,7 @@ class Approve extends GuidedPage
             $site->update(['status' => SiteStatus::Active]);
         }
 
-        Notification::make()->title('Approved — your pages are ready to build.')->success()->send();
+        Notification::make()->title('Plan finalized — your pages are ready.')->success()->send();
         $this->redirect(SetupStep::Grow->pageClass()::getUrl());
     }
 }

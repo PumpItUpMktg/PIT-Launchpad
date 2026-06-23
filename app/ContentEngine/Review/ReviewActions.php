@@ -9,9 +9,11 @@ use App\Models\Content;
 
 /**
  * The operator's review actions — the orchestration that closes the §6 → §2
- * pipeline. Approve validates (a required-image render_failed hard-blocks; an
- * unsupported claim warns), flips the draft to `approved`, and enqueues §2's
- * `PublishContent`. Reject, lock, edit-in-place, and bulk variants round it out.
+ * pipeline. The flow is two distinct gates (decoupled, per the build-out UX):
+ * **Approve** accepts a draft into `approved` (a Launchpad-only acceptance — no
+ * WordPress contact); **Publish** is the separate, heavier compose-and-push step
+ * that enqueues §2's `PublishContent`. Reject, lock, edit-in-place, and bulk
+ * variants round it out.
  *
  * Pure orchestration over existing models + §2's publish entrypoint — no UI
  * here, so it is unit-testable with a faked job dispatch.
@@ -19,8 +21,9 @@ use App\Models\Content;
 class ReviewActions
 {
     /**
-     * Approve a draft and enqueue its publish. Blocked (no dispatch) if a
-     * required image is render_failed.
+     * Approve a draft — accept it into `approved` (ready to publish). This does NOT push to
+     * WordPress; publishing is the separate {@see publish()} step. Blocked (no flip) if a required
+     * image is render_failed.
      */
     public function approve(Content $content, ?string $actorId = null): ApproveResult
     {
@@ -32,8 +35,6 @@ class ReviewActions
         $warnings = $this->warnings($content);
 
         $content->forceFill(['status' => ContentStatus::Approved])->save();
-
-        PublishContent::dispatch($content->id, $actorId);
 
         return ApproveResult::approved($warnings);
     }
@@ -49,6 +50,42 @@ class ReviewActions
         $results = [];
         foreach ($contents as $content) {
             $results[$content->id] = $this->approve($content, $actorId);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Publish an approved page — the compose-and-push. Enqueues §2's idempotent `PublishContent`
+     * (compose into the Elementor template + brand kit, then push to WordPress). Re-checks the same
+     * blocking guard so a render_failed page can never push a partial page.
+     */
+    public function publish(Content $content, ?string $actorId = null): ApproveResult
+    {
+        $blocker = $this->blockingReason($content);
+        if ($blocker !== null) {
+            return ApproveResult::blocked($blocker);
+        }
+
+        $warnings = $this->warnings($content);
+
+        PublishContent::dispatch($content->id, $actorId);
+
+        return ApproveResult::approved($warnings);
+    }
+
+    /**
+     * Publish several approved pages — dispatches N queued compose-and-push jobs (a real batch of
+     * background work with per-item status, not an instant flip).
+     *
+     * @param  iterable<Content>  $contents
+     * @return array<string, ApproveResult> keyed by content id
+     */
+    public function bulkPublish(iterable $contents, ?string $actorId = null): array
+    {
+        $results = [];
+        foreach ($contents as $content) {
+            $results[$content->id] = $this->publish($content, $actorId);
         }
 
         return $results;

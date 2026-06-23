@@ -12,7 +12,7 @@ function reviewActions(): ReviewActions
     return app(ReviewActions::class);
 }
 
-test('approve flips the draft to approved and enqueues PublishContent', function () {
+test('approve accepts the draft into approved WITHOUT publishing (publish is its own step)', function () {
     Bus::fake();
     $content = Content::factory()->create(['status' => ContentStatus::NeedsReview]);
 
@@ -22,8 +22,44 @@ test('approve flips the draft to approved and enqueues PublishContent', function
         ->and($result->isBlocked())->toBeFalse()
         ->and($content->fresh()->status)->toBe(ContentStatus::Approved);
 
+    // Approve is a Launchpad-only acceptance — no WordPress contact until Publish.
+    Bus::assertNotDispatched(PublishContent::class);
+});
+
+test('publish enqueues the compose-and-push for an approved page', function () {
+    Bus::fake();
+    $content = Content::factory()->create(['status' => ContentStatus::Approved]);
+
+    $result = reviewActions()->publish($content, 'operator-1');
+
+    expect($result->approved)->toBeTrue()
+        ->and($result->isBlocked())->toBeFalse();
+
     Bus::assertDispatched(PublishContent::class, fn (PublishContent $job) => $job->contentId === $content->id
         && $job->actorId === 'operator-1');
+});
+
+test('publish honors the render_failed guard — a partial page never pushes', function () {
+    Bus::fake();
+    $content = Content::factory()->create(['status' => ContentStatus::Approved]);
+    RenderJob::factory()->failed()->create(['site_id' => $content->site_id, 'content_id' => $content->id, 'required' => true]);
+
+    $result = reviewActions()->publish($content);
+
+    expect($result->isBlocked())->toBeTrue();
+    Bus::assertNotDispatched(PublishContent::class);
+});
+
+test('bulkPublish dispatches one compose-and-push job per approved page', function () {
+    Bus::fake();
+    $a = Content::factory()->create(['status' => ContentStatus::Approved]);
+    $b = Content::factory()->create(['status' => ContentStatus::Approved]);
+
+    $results = reviewActions()->bulkPublish([$a, $b]);
+
+    expect($results[$a->id]->approved)->toBeTrue()
+        ->and($results[$b->id]->approved)->toBeTrue();
+    Bus::assertDispatchedTimes(PublishContent::class, 2);
 });
 
 test('approve is blocked for an undrafted candidate and dispatches nothing', function () {
@@ -70,7 +106,8 @@ test('an unsupported claim warns but still approves (the operator decides)', fun
     expect($result->approved)->toBeTrue()
         ->and($result->warnings)->not->toBeEmpty();
 
-    Bus::assertDispatched(PublishContent::class);
+    // The warning rides on approve, but publishing is still a separate, deliberate step.
+    Bus::assertNotDispatched(PublishContent::class);
 });
 
 test('reject sets rejected with a reason', function () {
@@ -104,7 +141,8 @@ test('bulk-approve applies the same render_failed guard per item', function () {
         ->and($ok->fresh()->status)->toBe(ContentStatus::Approved)
         ->and($blocked->fresh()->status)->toBe(ContentStatus::NeedsReview);
 
-    Bus::assertDispatchedTimes(PublishContent::class, 1);
+    // Bulk-approve accepts; it never publishes (that's bulkPublish).
+    Bus::assertNotDispatched(PublishContent::class);
 });
 
 test('edit-in-place persists slot, body and SEO without clobbering image specs', function () {

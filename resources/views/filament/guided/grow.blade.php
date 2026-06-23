@@ -1,8 +1,8 @@
 @php $site = $this->getSite(); $brand = $site?->brand_name ?? 'your business'; $stats = $this->stats; @endphp
 <x-guided.shell :steps="$this->steps" :brand="$brand" :grow="true">
     <div class="lp-eyebrow">Grow · {{ $brand }}</div>
-    <h1 class="lp-h1">Your site is building</h1>
-    <p class="lp-lede">Core pages are live. Town pages release on pace, and earn their way up as jobs and reviews come in.</p>
+    <h1 class="lp-h1">Your pages are ready</h1>
+    <p class="lp-lede">Generate each page, review the draft, then publish — at your pace.</p>
 
     @unless ($site)
         <div class="lp-card"><div class="lp-empty">No sites yet.</div></div>
