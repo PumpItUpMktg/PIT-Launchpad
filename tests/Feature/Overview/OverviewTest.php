@@ -7,7 +7,6 @@ use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Grow;
 use App\Filament\Pages\Guided\Structure;
 use App\Filament\Pages\Overview;
-use App\Filament\Pages\SiteCockpit;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Models\Content;
 use App\Models\SetupState;
@@ -36,7 +35,7 @@ test('a card per site renders with the New site on-ramp', function () {
         ->assertSee('New site');
 });
 
-test('an onboarding card shows wizard % and resumes at the current step; a live card → cockpit', function () {
+test('a setup card resumes the wizard at its step; a live card opens Grow', function () {
     $live = Site::factory()->create(['brand_name' => 'LiveCo', 'status' => SiteStatus::Live]);
     $onb = Site::factory()->create(['brand_name' => 'OnbCo', 'status' => SiteStatus::Onboarding]);
     SetupState::query()->create(['site_id' => $onb->id, 'current_step' => 5]); // Structure (5 of 7)
@@ -46,11 +45,30 @@ test('an onboarding card shows wizard % and resumes at the current step; a live 
     $liveCard = $cards->firstWhere('id', $live->id);
     $onbCard = $cards->firstWhere('id', $onb->id);
 
-    expect($liveCard['onboarding'])->toBeFalse()
-        ->and($liveCard['url'])->toBe(SiteCockpit::getUrl(['site' => $live->id]))
-        ->and($onbCard['onboarding'])->toBeTrue()
+    expect($liveCard['mode'])->toBe('live')
+        ->and($liveCard['url'])->toBe(Grow::getUrl(['site' => $live->id]))
+        ->and($onbCard['mode'])->toBe('setup')
         ->and($onbCard['pct'])->toBe((int) round(5 / 7 * 100))             // ~71%
+        ->and($onbCard['resume'])->toContain('Step 5 of 7')
         ->and($onbCard['url'])->toBe(Structure::getUrl(['site' => $onb->id])); // resume at step 5
+});
+
+test('triage floats attention up — a failing live site ranks above a calm one regardless of name', function () {
+    $failing = Site::factory()->create(['brand_name' => 'Zeta', 'status' => SiteStatus::Active]);
+    Content::factory()->create(['site_id' => $failing->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::PublishFailed, 'slug' => 'z1', 'title' => 'Z1']);
+    $calm = Site::factory()->create(['brand_name' => 'Aaa', 'status' => SiteStatus::Active]);
+
+    $cards = collect(Livewire::test(Overview::class)->instance()->sites);
+    $fail = $cards->firstWhere('id', $failing->id);
+    $ok = $cards->firstWhere('id', $calm->id);
+
+    expect($fail['work'])->toContain('need attention')
+        ->and($fail['sort'])->toBe(0)
+        ->and($ok['work'])->toBe('All caught up')
+        ->and($ok['sort'])->toBe(3)
+        // Zeta (failing) sorts before Aaa (calm) despite the alphabet.
+        ->and($cards->search(fn ($c) => $c['id'] === $failing->id))
+        ->toBeLessThan($cards->search(fn ($c) => $c['id'] === $calm->id));
 });
 
 test('an active (launched) site routes to Grow with build progress, never back into the wizard', function () {
@@ -71,13 +89,17 @@ test('an active (launched) site routes to Grow with build progress, never back i
         ->and($card['pages'])->toBe(['published' => 1, 'total' => 2]);
 });
 
-test('a live (handed-over) site routes to the operator cockpit', function () {
+test('a handed-over (Live) site also opens Grow — the per-site surface is Grow, not a separate cockpit', function () {
     $site = Site::factory()->create(['brand_name' => 'LiveHO', 'status' => SiteStatus::Live]);
 
     $card = collect(Livewire::test(Overview::class)->instance()->sites)->firstWhere('id', $site->id);
 
-    expect($card['onboarding'])->toBeFalse()
-        ->and($card['url'])->toBe(SiteCockpit::getUrl(['site' => $site->id]));
+    expect($card['mode'])->toBe('live')
+        ->and($card['url'])->toBe(Grow::getUrl(['site' => $site->id]));
+});
+
+test('the empty state invites the first site instead of a sad grid', function () {
+    Livewire::test(Overview::class)->assertOk()->assertSee('Add your first site');
 });
 
 test('the New site button points at the single create on-ramp', function () {
