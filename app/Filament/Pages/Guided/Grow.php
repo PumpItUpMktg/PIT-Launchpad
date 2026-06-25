@@ -6,7 +6,7 @@ use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentStatus;
 use App\Enums\SetupStep;
-use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
+use App\Filament\Pages\ProofEditor;
 use App\Guided\GrowDashboard;
 use App\Guided\GuidedPage;
 use App\Interview\Arrange\AutoArrangeRunner;
@@ -83,10 +83,10 @@ class Grow extends GuidedPage
         return $site === null ? [] : app(GrowDashboard::class)->news($site);
     }
 
-    /** The proof step (per-page review/approve) URL for a draft-ready row. */
+    /** The proof step (structured preview + review/approve) URL for a draft-ready row. */
     public function reviewUrl(string $contentId): string
     {
-        return EditContentReview::getUrl(['record' => $contentId]);
+        return ProofEditor::getUrl(['content' => $contentId]);
     }
 
     /**
