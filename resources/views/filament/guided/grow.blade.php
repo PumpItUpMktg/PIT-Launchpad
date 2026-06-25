@@ -58,6 +58,9 @@
                                     @case('view')
                                         @if ($p['live_url'])<a class="lp-btn sm ghost" href="{{ $p['live_url'] }}" target="_blank" rel="noopener">View</a>@endif
                                         @break
+                                    @case('grounding')
+                                        <span class="pgpending" title="No resolvable grounding yet — service/market entities aren't wired for this page.">Grounding pending</span>
+                                        @break
                                     @case('pending')
                                         <span class="pgpending">Composer pending</span>
                                         @break

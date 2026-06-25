@@ -2,6 +2,7 @@
 
 namespace App\Guided;
 
+use App\ContentEngine\Drafting\GroundingReadiness;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
@@ -20,6 +21,8 @@ use Illuminate\Database\Eloquent\Collection;
  */
 class GrowDashboard
 {
+    public function __construct(private readonly GroundingReadiness $grounding) {}
+
     /**
      * Build-out counts, page-based so the header strip agrees with the workbench list exactly:
      * `planned` = pages still awaiting generation (the [Generate] targets), `live` = published,
@@ -71,22 +74,31 @@ class GrowDashboard
      */
     private function row(Content $c): array
     {
-        $buildable = $c->wireframe_kit_id !== null;
+        // The pre-generation gate: a planned page needs BOTH a composer (kit) AND resolvable
+        // grounding to generate for real — kit but no grounding → "grounding pending"; no kit →
+        // "composer pending". Neither lies about producing an empty draft.
+        $primable = match (true) {
+            $c->wireframe_kit_id === null => 'pending',          // composer pending
+            ! $this->grounding->ready($c) => 'grounding',        // grounding pending
+            default => 'generate',
+        };
 
         [$action, $rank] = match (true) {
             $c->isGenerating() => [null, 3],
-            ! $c->hasDraft() => [$buildable ? 'generate' : 'pending', 2], // awaiting OR failed → (re)generate
+            ! $c->hasDraft() => [$primable, 2], // awaiting OR failed → (re)generate / pending
             $c->status === ContentStatus::Published => ['view', 5],
             $c->status === ContentStatus::Approved => ['publish', 1],
             default => ['review', 0], // a draft awaiting acceptance — most urgent
         };
 
+        $state = $action === 'grounding' ? 'Grounding pending' : $c->buildStateLabel();
+
         return [
             'id' => (string) $c->id,
             'title' => $this->title($c),
             'permalink' => '/'.ltrim((string) $c->slug, '/'),
-            'state' => $c->buildStateLabel(),
-            'tone' => $this->tone($c->buildStateLabel()),
+            'state' => $state,
+            'tone' => $this->tone($state),
             'action' => $action,
             'live_url' => $action === 'view' ? $this->liveUrl($c) : null,
             // which bulk lane this row belongs to (the checkbox targets); generate is per-page only

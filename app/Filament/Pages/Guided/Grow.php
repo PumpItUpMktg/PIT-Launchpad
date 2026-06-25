@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Guided;
 
+use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentStatus;
 use App\Enums\SetupStep;
@@ -96,6 +97,14 @@ class Grow extends GuidedPage
     {
         $content = $this->ownedPage($contentId);
         if ($content === null) {
+            return;
+        }
+
+        // Honest gate: never queue a page that can't ground — it would only produce an empty draft.
+        if (! app(GroundingReadiness::class)->ready($content)) {
+            Notification::make()->warning()->title('Grounding pending')
+                ->body('This page has no resolvable grounding yet, so it can\'t be generated.')->send();
+
             return;
         }
 
