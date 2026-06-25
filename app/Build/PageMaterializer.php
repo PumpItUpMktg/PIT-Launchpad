@@ -22,15 +22,18 @@ use Illuminate\Support\Facades\DB;
  * per-page Build can write real internal links.
  *
  * Idempotent: each BuildPage is linked to its Content via `build_pages.content_id`, so re-running
- * approve reuses rather than duplicates. Associations are best-effort — the guided manifest carries
- * a string silo (not a §1/§4 FK), so silo_id/market_id are left null and per-page Build grounds on
- * the site-wide §1 data, surfacing gaps rather than faking a page. The wireframe kit is resolved
- * from the mapped page_type (service/location have kits; standard/hub don't → Build is composer-
- * pending until their composer ships).
+ * approve reuses rather than duplicates. Grounding: {@see GuidedEntityProjector} first projects the
+ * spoke structure into §1 Service + §4 Silo, then each service/hub page pins `silo_id` to its silo —
+ * so the drafter grounds on the page's own service, not a site-wide guess. The wireframe kit is
+ * resolved from the mapped page_type (service/location have kits; standard/hub don't → Build is
+ * composer-pending until their composer ships).
  */
 final class PageMaterializer
 {
-    public function __construct(private readonly Permalinks $permalinks) {}
+    public function __construct(
+        private readonly Permalinks $permalinks,
+        private readonly GuidedEntityProjector $projector,
+    ) {}
 
     /**
      * @return list<Content> the materialized pages (one per manifest entry)
@@ -38,6 +41,10 @@ final class PageMaterializer
     public function materialize(Site $site): array
     {
         return DB::transaction(function () use ($site): array {
+            // Project the spoke structure into §1 Service + §4 Silo BEFORE materializing, so each
+            // page can pin its silo and the drafter grounds on real entities.
+            $this->projector->project($site);
+
             $manifest = BuildPage::query()
                 ->where('site_id', $site->id)
                 ->orderBy('priority')
@@ -61,6 +68,11 @@ final class PageMaterializer
 
                 $kit = PillarFactory::resolveKit($pageType, $site->id);
 
+                // Pin the page to its silo (service/hub pages) so grounding scopes to its own service.
+                $silo = $entry->source === BuildSource::Service
+                    ? $this->projector->siloForSpoke($entry->spoke_id, $site)
+                    : null;
+
                 $content = Content::create([
                     'site_id' => $site->id, // explicit: no current-site scope in console/job context
                     'kind' => ContentKind::Page,
@@ -69,6 +81,7 @@ final class PageMaterializer
                     'title' => $entry->title,
                     'slug' => $slug,
                     'version' => 1,
+                    'silo_id' => $silo?->id,
                     'wireframe_kit_id' => $kit?->id,
                     'wireframe_kit_version' => $kit?->version,
                 ]);

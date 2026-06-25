@@ -14,6 +14,7 @@ use App\Models\PageConfig;
 use App\Models\Scopes\SiteScope;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -25,6 +26,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
@@ -69,56 +71,57 @@ class PageResource extends Resource
                     ->copyable()->copyableState(fn (Content $record): string => '/'.ltrim((string) $record->slug, '/')),
                 TextColumn::make('page_type')->badge()->placeholder('—'),
                 TextColumn::make('silo.name')->label('Silo')->placeholder('—'),
-                TextColumn::make('generation_state')
+                TextColumn::make('build_state')
                     ->label('State')
                     ->badge()
-                    ->state(fn (Content $record): string => match ($record->generationState()) {
-                        'drafted' => 'Drafted',
-                        'generating' => 'Generating',
-                        'failed' => 'Draft failed',
-                        default => 'Awaiting draft',
-                    })
+                    ->state(fn (Content $record): string => $record->buildStateLabel())
                     ->color(fn (string $state): string => match ($state) {
-                        'Drafted' => 'success',
-                        'Generating' => 'info',
-                        'Draft failed' => 'danger',
-                        default => 'gray',
+                        'Published' => 'success',
+                        'Approved · ready to publish' => 'success',
+                        'Draft ready for review' => 'warning',
+                        'Generating…', 'Publishing…' => 'info',
+                        'Generation failed', 'Publish failed' => 'danger',
+                        default => 'gray', // Ready to generate
                     }),
-                TextColumn::make('status')->badge(),
             ])
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
             ])
             ->recordActions([
-                self::buildAction(),
+                self::generateAction(),
                 self::composerPendingAction(),
                 self::reviewAction(),
                 self::publishAction(),
                 self::viewAction(),
                 self::pageConfigAction(),
+            ])
+            ->bulkActions([
+                self::bulkApproveAction(),
+                self::bulkPublishAction(),
             ]);
     }
 
     /**
-     * Per-page on-demand build (planned → building). Queues single-page generation on the worker —
-     * never auto-runs the whole site. Only shown for a planned page whose composer is ready (a
-     * resolvable kit); standard/hub pages without a kit get {@see composerPendingAction()} instead.
+     * Per-page on-demand generate (planned → generating). Queues a Launchpad-only draft on the
+     * worker (NO WordPress contact — that's Publish) — never auto-runs the whole site. Only shown
+     * for a planned page whose composer is ready (a resolvable kit); standard/hub pages without a
+     * kit get {@see composerPendingAction()} instead.
      */
-    private static function buildAction(): Action
+    private static function generateAction(): Action
     {
-        return Action::make('build')
-            ->label('Build')
+        return Action::make('generate')
+            ->label('Generate')
             ->icon('heroicon-o-sparkles')
             ->color('info')
             ->visible(fn (Content $record): bool => self::isPlanned($record) && self::buildable($record))
             ->requiresConfirmation()
-            ->modalDescription('Queues THIS page (kit slots from brand voice + intake grounding via Sonnet, with real internal links to your other pages, + fal image) on the worker. Only this page builds — the row shows "Generating" until it lands in Review.')
+            ->modalDescription('Queues THIS page as an editable Launchpad draft (kit slots from brand voice + intake grounding via Sonnet, with real internal links to your other pages, + fal image). Nothing reaches WordPress until you Publish. Only this page generates — the row shows "Generating…" until it lands in Review.')
             ->action(function (Content $record): void {
                 GeneratePage::enqueue($record, actorId: Auth::id());
 
                 Notification::make()->success()
-                    ->title('Queued — building on the worker')
-                    ->body("'{$record->title}' is being built; it will appear in Review when ready.")
+                    ->title('Queued — generating on the worker')
+                    ->body("'{$record->title}' is being drafted; it will appear ready for review shortly.")
                     ->send();
             });
     }
@@ -139,18 +142,26 @@ class PageResource extends Resource
             ->action(fn () => null);
     }
 
-    /** Open the drafted page in the review queue (the existing per-page review surface). */
+    /**
+     * The row primary for a draft-ready page: open the proof step (the existing per-page review
+     * surface) to read, correct the rare thing, and approve. Hidden once approved/published.
+     */
     private static function reviewAction(): Action
     {
         return Action::make('review')
             ->label('Review')
             ->icon('heroicon-o-eye')
             ->color('warning')
-            ->visible(fn (Content $record): bool => $record->hasDraft() && $record->status !== ContentStatus::Published)
+            ->visible(fn (Content $record): bool => $record->hasDraft()
+                && ! in_array($record->status, [ContentStatus::Approved, ContentStatus::Published], true))
             ->url(fn (Content $record): string => EditContentReview::getUrl(['record' => $record->id]));
     }
 
-    /** Publish THIS page to WordPress — reuses the review queue's approve → idempotent PublishContent. */
+    /**
+     * The row primary for an APPROVED page: publish — the compose-and-push (compose into the
+     * Elementor template + brand kit, then push to WordPress) via §2's idempotent PublishContent.
+     * Only an approved page shows this; review/approve comes first.
+     */
     private static function publishAction(): Action
     {
         return Action::make('publish')
@@ -158,9 +169,10 @@ class PageResource extends Resource
             ->icon('heroicon-o-rocket-launch')
             ->color('success')
             ->requiresConfirmation()
-            ->visible(fn (Content $record): bool => $record->hasDraft() && $record->status !== ContentStatus::Published)
+            ->modalDescription('Composes this approved page into its template + brand kit and pushes it to the live WordPress site. Edits are made in Launchpad and re-published — never edited in WordPress (a WP edit is overwritten on the next push).')
+            ->visible(fn (Content $record): bool => $record->status === ContentStatus::Approved)
             ->action(function (Content $record): void {
-                $result = app(ReviewActions::class)->approve($record, Auth::id());
+                $result = app(ReviewActions::class)->publish($record, Auth::id());
 
                 if ($result->isBlocked()) {
                     Notification::make()->danger()->title('Cannot publish')->body($result->blockedReason)->send();
@@ -168,7 +180,7 @@ class PageResource extends Resource
                     return;
                 }
 
-                $notification = Notification::make()->success()->title('Publishing — pushed to the queue');
+                $notification = Notification::make()->success()->title('Publishing — composing and pushing to WordPress');
                 if ($result->warnings !== []) {
                     $notification->body(implode(' ', $result->warnings));
                 }
@@ -186,6 +198,54 @@ class PageResource extends Resource
             ->visible(fn (Content $record): bool => $record->status === ContentStatus::Published && self::liveUrl($record) !== null)
             ->url(fn (Content $record): ?string => self::liveUrl($record))
             ->openUrlInNewTab();
+    }
+
+    /**
+     * Bulk Approve — a cheap state flip (no WordPress contact), so several already-eyeballed
+     * draft-ready pages can be accepted at once. Applies the same render_failed guard per item.
+     */
+    private static function bulkApproveAction(): BulkAction
+    {
+        return BulkAction::make('bulkApprove')
+            ->label('Approve selected')
+            ->icon('heroicon-o-check')
+            ->color('success')
+            ->requiresConfirmation()
+            ->action(function (Collection $records): void {
+                $results = app(ReviewActions::class)->bulkApprove($records, Auth::id());
+                $blocked = count(array_filter($results, fn ($r) => $r->isBlocked()));
+                $approved = count($results) - $blocked;
+
+                Notification::make()->success()->title("Approved {$approved}, blocked {$blocked}")->send();
+            });
+    }
+
+    /**
+     * Bulk Publish — publish is NOT cheap (it composes into Elementor + brand kit and pushes), so
+     * this dispatches N queued compose-and-push jobs that process in the background with per-row
+     * status. Only approved pages are pushed; other selections are skipped (publish follows approve).
+     */
+    private static function bulkPublishAction(): BulkAction
+    {
+        return BulkAction::make('bulkPublish')
+            ->label('Publish selected')
+            ->icon('heroicon-o-rocket-launch')
+            ->color('success')
+            ->requiresConfirmation()
+            ->modalDescription('Queues a compose-and-push job for each APPROVED page selected. They publish in the background; non-approved selections are skipped (approve them first).')
+            ->action(function (Collection $records): void {
+                $approved = $records->filter(fn (Content $c) => $c->status === ContentStatus::Approved);
+                $skipped = $records->count() - $approved->count();
+
+                $results = app(ReviewActions::class)->bulkPublish($approved, Auth::id());
+                $blocked = count(array_filter($results, fn ($r) => $r->isBlocked()));
+                $queued = count($results) - $blocked;
+
+                Notification::make()->success()
+                    ->title("Queued {$queued} to publish")
+                    ->body($blocked > 0 || $skipped > 0 ? "{$blocked} blocked, {$skipped} not yet approved." : 'Publishing in the background.')
+                    ->send();
+            });
     }
 
     /** A planned page: materialized, undrafted, not currently generating — the only pre-build state. */

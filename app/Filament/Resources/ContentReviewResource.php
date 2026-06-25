@@ -174,7 +174,7 @@ class ContentReviewResource extends Resource
                     return;
                 }
 
-                $notification = Notification::make()->success()->title('Approved — publish enqueued');
+                $notification = Notification::make()->success()->title('Approved — ready to publish');
                 if ($result->warnings !== []) {
                     $notification->body(implode(' ', $result->warnings));
                 }

@@ -5,9 +5,9 @@
     $hasService = ! empty($plan['service']);
 @endphp
 <x-guided.shell :steps="$this->steps" :brand="$brand">
-    <div class="lp-eyebrow">{{ \App\Enums\SetupStep::Approve->eyebrow() }} · What the client approves</div>
+    <div class="lp-eyebrow">{{ \App\Enums\SetupStep::Approve->eyebrow() }} · The plan you're finalizing</div>
     <h1 class="lp-h1">Here's your site plan</h1>
-    <p class="lp-lede">Your whole site, in plain language — standard pages, your services, and your towns. Approve it and we'll build your pages — you'll review them before anything publishes.</p>
+    <p class="lp-lede">Your whole site, in plain language — standard pages, your services, and your towns. Finalize the plan and we'll set up your pages; you generate, review, and publish each one at your pace — nothing goes live until you publish it.</p>
 
     @unless ($site)
         <div class="lp-card"><div class="lp-empty">No sites yet — create a site to begin setup.</div></div>
@@ -88,9 +88,9 @@
 
         <div class="lp-foot">
             <a class="lp-btn ghost" href="{{ \App\Enums\SetupStep::Structure->pageClass()::getUrl() }}" wire:navigate>Back</a>
-            <button class="lp-btn" wire:click="approveAndBuild" @disabled(! $hasService)>Approve &amp; build</button>
+            <button class="lp-btn" wire:click="approveAndBuild" @disabled(! $hasService)>Finalize Plan</button>
             @if ($hasService)
-                <span class="lp-gate ok">Ready to build · you'll review before publishing</span>
+                <span class="lp-gate ok">Sets up your pages · you generate, review &amp; publish each one</span>
             @else
                 <span class="lp-gate">Finalize your structure first</span>
             @endif

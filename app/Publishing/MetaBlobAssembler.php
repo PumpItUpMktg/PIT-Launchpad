@@ -121,7 +121,7 @@ class MetaBlobAssembler
      * @param  Collection<int, RenderJob>  $renderJobs
      * @return array<string, mixed>
      */
-    public function assemble(Content $content, Collection $renderJobs, ContentSource $source = ContentSource::Generated): array
+    public function assemble(Content $content, Collection $renderJobs, ContentSource $source = ContentSource::Generated, string $wpStatus = 'published'): array
     {
         // Placeholder = the SAME composed page with length-representative stand-ins +
         // image/form boxes (preview = reality; only slot content differs).
@@ -139,7 +139,9 @@ class MetaBlobAssembler
             'kit_version' => (string) ($content->wireframe_kit_version ?? ''),
             'silo_id' => $content->silo_id,
             'slug' => $content->slug,
-            'status' => 'published',
+            // 'published' → live; anything else → a WP draft (the plugin's mapping). The proof-step
+            // preview-push sends 'draft' so the page renders in WP without going live.
+            'status' => $wpStatus,
             'locked' => (bool) $content->locked,
             // The RESOLVED slots stay the source of truth the plugin keys SEO/schema
             // off (FAQPage reads slot_payload.faq) — retained ALONGSIDE the native

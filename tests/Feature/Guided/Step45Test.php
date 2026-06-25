@@ -3,7 +3,6 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\SiteStatus;
-use App\Enums\SpokeStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Grow;
@@ -15,7 +14,6 @@ use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
-use App\Models\Spoke;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
@@ -56,11 +54,11 @@ test('Step 4 persists build config, materializes the manifest, and hands off to 
     expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->where('kind', ContentKind::Page->value)->count())->toBe(6);
 });
 
-test('the Grow dashboard counts live / building / planned and lists fresh posts', function () {
-    $bp = SiloBlueprint::factory()->create(['site_id' => $this->site->id]);
-    Content::factory()->create(['site_id' => $this->site->id, 'status' => ContentStatus::Published]);
-    Content::factory()->create(['site_id' => $this->site->id, 'status' => ContentStatus::Rendering]);
-    Spoke::factory()->create(['site_id' => $this->site->id, 'silo_blueprint_id' => $bp->id, 'status' => SpokeStatus::Offered]);
+test('the Grow dashboard counts live / building / planned from the page set', function () {
+    // page-based: header strip and the workbench list derive from the same kind=page Content
+    Content::factory()->page()->create(['site_id' => $this->site->id, 'status' => ContentStatus::Published, 'slot_payload' => ['h' => 'x']]);
+    Content::factory()->page()->create(['site_id' => $this->site->id, 'status' => ContentStatus::Rendering, 'slot_payload' => ['h' => 'x']]); // drafted, in motion
+    Content::factory()->page()->create(['site_id' => $this->site->id, 'status' => ContentStatus::Candidate, 'slot_payload' => []]); // planned / awaiting generate
 
     $stats = app(GrowDashboard::class)->stats($this->site);
 

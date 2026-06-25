@@ -17,16 +17,18 @@ use BackedEnum;
 use Filament\Pages\Page;
 
 /**
- * The admin landing — a card per site, replacing the old pooled-across-tenants dashboard
- * (aggregate metrics aren't actionable). Each card shows status (onboarding with % through the
- * 7-step wizard, or live) + the live signals that tell the operator what to do (pages to publish,
- * needs review, failures), and clicks through: live → the per-site {@see SiteCockpit}; onboarding
- * → resume the wizard at its persisted step. "New site" is the single on-ramp into the wizard.
+ * The admin landing — a triage board, not a site list. Two quarantined groups: "In setup"
+ * (onboarding = setup tasks, resume the wizard at its step) on top, live sites (content tasks,
+ * open Grow) below. Attention floats up — failures, then work-waiting, then stalled onboarding;
+ * caught-up and untouched sink. "New site" is the single on-ramp into the wizard.
  *
  * @property-read list<array<string, mixed>> $sites
  */
 class Overview extends Page
 {
+    /** A setup site with no wizard movement in this many days reads as "stalled". */
+    private const STALLED_DAYS = 7;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-squares-2x2';
 
     protected static ?string $navigationLabel = 'Overview';
@@ -58,44 +60,103 @@ class Overview extends Page
 
         $cards = [];
         foreach (Site::query()->orderBy('brand_name')->get() as $site) {
-            $state = $states->get($site->id);
-            // A launched site is past the wizard even if its status somehow lagged — never resume
-            // the wizard for it. The build→Grow handoff flips status to Active, so this is belt-and-
-            // suspenders against a stuck status.
-            $onboarding = $site->status === SiteStatus::Onboarding && ! (bool) $state?->launched;
-            $stats = $metrics->statCards($site->id);
-            $step = $state !== null ? $state->current_step : 1;
-            // Progress reads completion across all 7 steps (Inventory now completes too).
-            $complete = (bool) $state?->onboardingComplete();
-            $pages = $this->buildProgress($site);
-
-            $cards[] = [
-                'id' => $site->id,
-                'name' => $site->brand_name,
-                'status' => $site->status->value,
-                'onboarding' => $onboarding,
-                'pct' => $onboarding
-                    ? ($complete ? 100 : min(100, (int) round(min($step, $stepCount) / $stepCount * 100)))
-                    : 100,
-                // Onboarding → resume the wizard; Active → Grow (build pages on demand);
-                // Live (client handover, §9) → the operator cockpit.
-                'url' => match (true) {
-                    $onboarding => (SetupStep::tryFrom($step) ?? SetupStep::Business)->pageClass()::getUrl(['site' => $site->id]),
-                    $site->status === SiteStatus::Live => SiteCockpit::getUrl(['site' => $site->id]),
-                    default => Grow::getUrl(['site' => $site->id]),
-                },
-                // Build progress — "building" is a metric, not a stage; an Active-but-empty site
-                // reads as "Active · 0/N published", not a misleading "live with nothing on it".
-                'pages' => $pages,
-                'signals' => [
-                    'publish' => $stats['approved_pending'],
-                    'review' => $stats['needs_review'],
-                    'failed' => $stats['render_failed'] + $stats['publish_failed'],
-                ],
-            ];
+            $cards[] = $this->siteCard($site, $states->get($site->id), $metrics, $stepCount);
         }
 
-        return $cards;
+        return collect($cards)->sortBy([
+            ['sort', 'asc'],
+            ['name', 'asc'],
+        ])->values()->all();
+    }
+
+    /**
+     * One triage card for a site — adaptive by mode (setup task vs content task).
+     *
+     * @return array<string, mixed>
+     */
+    private function siteCard(Site $site, ?SetupState $state, PipelineMetrics $metrics, int $stepCount): array
+    {
+        // A launched site is past the wizard even if its status somehow lagged — never resume the
+        // wizard for it. The Finalize-Plan→Grow handoff flips status to Active; this is belt-and-
+        // suspenders against a stuck status.
+        $onboarding = $site->status === SiteStatus::Onboarding && ! (bool) $state?->launched;
+        $stats = $metrics->statCards($site->id);
+        $step = $state !== null ? $state->current_step : 1;
+        $complete = (bool) $state?->onboardingComplete();
+        $signals = [
+            'publish' => $stats['approved_pending'],
+            'review' => $stats['needs_review'],
+            'failed' => $stats['render_failed'] + $stats['publish_failed'],
+        ];
+        $stalled = $onboarding && $state !== null && $state->updated_at !== null
+            && $state->updated_at->lt(now()->subDays(self::STALLED_DAYS));
+
+        return [
+            'id' => $site->id,
+            'name' => $site->brand_name,
+            'status' => $site->status->value,
+            'onboarding' => $onboarding,
+            // Two quarantined modes: a setup card is a *setup task*, a live card is a *content task*.
+            'mode' => $onboarding ? 'setup' : 'live',
+            'pct' => $onboarding
+                ? ($complete ? 100 : min(100, (int) round(min($step, $stepCount) / $stepCount * 100)))
+                : 100,
+            // Setup card: resume exactly where they stopped. Live card: opens Grow (the active-site
+            // home — pages list, proof step, content pipeline). Cockpit reconciled to Grow.
+            'url' => $onboarding
+                ? (SetupStep::tryFrom($step) ?? SetupStep::Business)->pageClass()::getUrl(['site' => $site->id])
+                : Grow::getUrl(['site' => $site->id]),
+            'resume' => $onboarding
+                ? 'Step '.min($step, $stepCount)." of {$stepCount} · ".(SetupStep::tryFrom($step) ?? SetupStep::Business)->label()
+                : null,
+            'stalled' => $stalled,
+            // The work waiting on the operator — the live card's whole reason to exist.
+            'work' => $onboarding ? null : $this->workSummary($signals),
+            // Build progress — "N of M pages live"; "building" is a metric, not a stage.
+            'pages' => $this->buildProgress($site),
+            'signals' => $signals,
+            // Triage rank — attention floats up (failures → work-waiting → stalled → calm).
+            'sort' => $this->attentionRank($onboarding, $stalled, $signals),
+        ];
+    }
+
+    /**
+     * Triage rank — lower floats up. Failures first, then live work-waiting, then stalled
+     * onboarding, then calm live, then fresh/untouched onboarding sinks to the bottom.
+     *
+     * @param  array{publish: int, review: int, failed: int}  $signals
+     */
+    private function attentionRank(bool $onboarding, bool $stalled, array $signals): int
+    {
+        return match (true) {
+            ! $onboarding && $signals['failed'] > 0 => 0,                              // ⚠ something broke
+            ! $onboarding && ($signals['review'] + $signals['publish']) > 0 => 1,      // work waiting
+            $onboarding && $stalled => 2,                                              // stuck mid-setup
+            ! $onboarding => 3,                                                        // caught up / live
+            default => 4,                                                              // fresh onboarding
+        };
+    }
+
+    /**
+     * The human work-waiting line for a live card.
+     *
+     * @param  array{publish: int, review: int, failed: int}  $signals
+     */
+    private function workSummary(array $signals): string
+    {
+        if ($signals['failed'] > 0) {
+            return "⚠ {$signals['failed']} need attention";
+        }
+
+        $parts = [];
+        if ($signals['review'] > 0) {
+            $parts[] = "{$signals['review']} to review";
+        }
+        if ($signals['publish'] > 0) {
+            $parts[] = "{$signals['publish']} to publish";
+        }
+
+        return $parts === [] ? 'All caught up' : implode(' · ', $parts);
     }
 
     /**
