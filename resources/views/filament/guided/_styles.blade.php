@@ -174,4 +174,28 @@
   .lp-loctier .ltn{font-size:12px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;gap:7px;min-width:120px}
   .lp-loctier .lts{font-size:12.5px;color:var(--ink)}
   .lp-loctier .ltr{font-size:12px;color:var(--ink-soft);font-style:italic}
+
+  /* Pages workbench (the Active landing's primary content) */
+  .lp-btn.sm{padding:7px 14px;font-size:12.5px;border-radius:7px;text-decoration:none;display:inline-block}
+  .lp-btn.sm.warn{background:var(--amber-bg);color:var(--amber);border:1px solid #EAD6B0}
+  .lp-bulkbar{display:flex;align-items:center;gap:10px;padding:10px 0 14px;border-bottom:1px solid #EEF2F4;margin-bottom:6px}
+  .lp-bulkbar .bsel{font-size:12px;color:var(--ink-soft);font-weight:600;margin-right:auto}
+  .lp-pglist{list-style:none;margin:0;padding:0}
+  .lp-pgrow{display:grid;grid-template-columns:22px 1fr auto auto;align-items:center;gap:13px;padding:12px 0;border-bottom:1px solid #EEF2F4}
+  .lp-pgrow:last-child{border-bottom:none}
+  .lp-pgrow .pgsel{display:flex;justify-content:center}
+  .lp-pgrow .pgmain{min-width:0}
+  .lp-pgrow .pgtitle{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lp-pgrow .pgperma{font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:var(--ink-soft)}
+  .lp-pgrow .pgact{min-width:96px;text-align:right}
+  .lp-pgrow .pgpending{font-size:11.5px;color:var(--ink-soft);font-style:italic}
+  .pgbadge{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:4px 9px;border-radius:6px;white-space:nowrap}
+  .pgbadge.tone-ok{color:var(--good);background:var(--good-bg)}
+  .pgbadge.tone-warn{color:var(--amber);background:var(--amber-bg)}
+  .pgbadge.tone-info{color:var(--teal);background:#E7EFEF}
+  .pgbadge.tone-danger{color:#A4262C;background:#FBE5E6}
+  .pgbadge.tone-idle{color:var(--ink-soft);background:#EEF1F5}
+  .lp-later{opacity:.92}
+  .lp-later h3{display:flex;align-items:center;gap:9px}
+  .laterpill{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);background:#EEF1F5;border:1px solid var(--line);padding:2px 8px;border-radius:20px}
 </style>
