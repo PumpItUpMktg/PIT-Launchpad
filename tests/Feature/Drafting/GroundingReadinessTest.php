@@ -34,12 +34,17 @@ it('grounds a location page only when the site has a market', function () {
     expect(readiness()->ready($page->fresh()))->toBeTrue();
 });
 
-it('never grounds home/hub/utility pages (no entity grounding wired)', function () {
+it('grounds a hub (category) page on its silo services, but never home/utility', function () {
     $site = Site::factory()->create();
     Service::factory()->create(['site_id' => $site->id]);
     Market::factory()->create(['site_id' => $site->id]);
 
-    foreach ([PageType::Home, PageType::Hub, PageType::Utility] as $type) {
+    // a hub is the category page — it grounds on the silo's services
+    $hub = Content::factory()->page()->create(['site_id' => $site->id, 'page_type' => PageType::Hub]);
+    expect(readiness()->ready($hub))->toBeTrue();
+
+    // home/utility have no entity-grounding path yet
+    foreach ([PageType::Home, PageType::Utility] as $type) {
         $page = Content::factory()->page()->create(['site_id' => $site->id, 'page_type' => $type]);
         expect(readiness()->ready($page))->toBeFalse();
     }

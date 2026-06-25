@@ -14,10 +14,10 @@ use App\Models\Service;
  * surfaces can gate generation honestly: a page generates for real only when grounded; everything
  * else shows "grounding pending" rather than faking an empty draft (DraftGuard would reject it anyway).
  *
- * - **Service-family pages** (service / pillar / cluster) need ≥1 resolvable §1 Service — silo-scoped
- *   when the page pins a `silo_id`, else the assembler's site-wide fallback.
+ * - **Service-family pages** (service / hub / pillar / cluster) need ≥1 resolvable §1 Service —
+ *   silo-scoped when the page pins a `silo_id`, else the assembler's site-wide fallback.
  * - **Location pages** need ≥1 §1 Market for the site.
- * - **Home / hub / utility** have no entity-grounding path yet → always pending.
+ * - **Home / utility** have no entity-grounding path yet → always pending.
  *
  * NOTE (the spoke→Service gap): the guided flow materializes pages without a `silo_id` and does not
  * yet create §1 Service/Market entities (those come from §7a intake), so a pure guided-flow site reads
@@ -34,9 +34,9 @@ class GroundingReadiness
     public function ready(Content $page): bool
     {
         return match ($page->page_type) {
-            PageType::Service, PageType::Pillar, PageType::Cluster => $this->hasServices($page),
+            PageType::Service, PageType::Hub, PageType::Pillar, PageType::Cluster => $this->hasServices($page),
             PageType::Location => $this->hasMarkets($page),
-            default => false, // home / hub / utility — no entity grounding wired yet
+            default => false, // home / utility — no entity grounding wired yet
         };
     }
 
