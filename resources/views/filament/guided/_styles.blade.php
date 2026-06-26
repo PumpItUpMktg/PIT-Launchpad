@@ -195,8 +195,11 @@
   .lp-pgrow .pgperma{font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:var(--ink-soft)}
   .lp-pgrow .pgact{min-width:96px;text-align:right}
   .lp-pgrow .pgpending{font-size:11.5px;color:var(--ink-soft);font-style:italic}
-  .lp-pgrow .pgreason{font-size:11px;color:var(--ink-soft);margin-top:3px;line-height:1.35}
-  .lp-pgrow .pgheld{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);background:#EEF1F5;border:1px solid var(--line);padding:3px 9px;border-radius:6px}
+  .lp-pgrow .pgmove{font-size:11px;color:var(--ink-soft);margin-top:3px;line-height:1.35}
+  .lp-pgrow .pgstate{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+  .lp-pgrow .pgtail{font-size:10.5px;color:var(--ink-soft);font-family:'Spline Sans Mono',monospace;line-height:1.3;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lp-pgrow .pgact{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+  .lp-foot-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-right:4px}
   .pgbadge{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:4px 9px;border-radius:6px;white-space:nowrap}
   .pgbadge.tone-ok{color:var(--good);background:var(--good-bg)}
   .pgbadge.tone-warn{color:var(--amber);background:var(--amber-bg)}
