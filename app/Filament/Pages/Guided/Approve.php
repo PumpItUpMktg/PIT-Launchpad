@@ -9,6 +9,7 @@ use App\Enums\SiteStatus;
 use App\Enums\StandardPageType;
 use App\Guided\GuidedPage;
 use App\Guided\StepGate;
+use App\Jobs\SyncSiloCategories;
 use App\Locations\LocalRelevance;
 use App\Standard\SitePlan;
 use App\Standard\StandardPages;
@@ -136,6 +137,11 @@ class Approve extends GuidedPage
         // no generation — pages are built one at a time, on demand, from the pages list (Grow).
         app(BuildManifestAssembler::class)->assemble($site);
         app(PageMaterializer::class)->materialize($site);
+
+        // Taxonomy is locked here — project the silo tree into WP categories now (queued, so Finalize
+        // stays network-free) so they exist before the news engine publishes a post into them.
+        // Idempotent; no-op until a WP connection is wired; the go-live launch re-pushes as a backstop.
+        SyncSiloCategories::enqueue($site);
 
         // The wizard-completion handoff fires HERE, on materialize-complete (re-anchored from the
         // old "build finished" — there's no blocking build now): approve the wizard, mark launched,

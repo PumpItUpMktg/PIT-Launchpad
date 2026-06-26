@@ -24,6 +24,31 @@ test('publishing a silo pushes the structure and stores the returned wp_category
         && array_key_exists('parent_silo_id', $r->data()));
 });
 
+test('publishSite pushes the whole tree roots-first and stores every wp_category_id', function () {
+    $site = PublishHarness::site();
+    $root = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Plumbing', 'parent_silo_id' => null, 'wp_category_id' => null]);
+    $child = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Drain Cleaning', 'parent_silo_id' => $root->id, 'wp_category_id' => null]);
+
+    $seq = 100;
+    Http::fake([
+        '*/wp-json/launchpad/v1/silo' => function ($request) use (&$seq) {
+            return Http::response(['silo_id' => $request['silo_id'], 'wp_category_id' => $seq++], 200);
+        },
+    ]);
+
+    $count = app(PublishSiloService::class)->publishSite($site);
+
+    expect($count)->toBe(2)
+        ->and($root->fresh()->wp_category_id)->toBe(100)   // root pushed first
+        ->and($child->fresh()->wp_category_id)->toBe(101); // child after
+
+    // the root's push carried no parent; the child's named its parent
+    $sent = collect(Http::recorded())->map(fn ($pair) => $pair[0]->data());
+    expect($sent->first()['silo_id'])->toBe($root->id)
+        ->and($sent->first()['parent_silo_id'])->toBeNull()
+        ->and($sent->last()['parent_silo_id'])->toBe($root->id);
+});
+
 test('publishing redirects sends the active redirects in contract shape', function () {
     $site = PublishHarness::site();
     Redirect::factory()->create([

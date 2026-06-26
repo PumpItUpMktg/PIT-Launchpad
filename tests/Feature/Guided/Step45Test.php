@@ -8,6 +8,7 @@ use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Grow;
 use App\Guided\GrowDashboard;
 use App\Jobs\BuildStructure;
+use App\Jobs\SyncSiloCategories;
 use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -52,6 +53,20 @@ test('Step 4 persists build config, materializes the manifest, and hands off to 
         ->and(BuildPage::query()->where('site_id', $this->site->id)->count())->toBe(6); // fixed core manifest
     // materialized into one planned page per manifest entry (no AI)
     expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->where('kind', ContentKind::Page->value)->count())->toBe(6);
+});
+
+test('Finalize projects the silo tree to WP categories (queued, same trigger as materialize)', function () {
+    Queue::fake();
+    $this->site->update(['status' => SiteStatus::Onboarding]);
+    SetupState::query()->create([
+        'site_id' => $this->site->id, 'current_step' => 4,
+        'services_done' => true, 'territory_done' => true, 'structure_finalized' => true,
+    ]);
+    SiloBlueprint::factory()->create(['site_id' => $this->site->id]);
+
+    Livewire::test(Approve::class)->call('approveAndBuild');
+
+    Queue::assertPushed(SyncSiloCategories::class, fn ($job) => $job->siteId === $this->site->id);
 });
 
 test('the Grow dashboard counts live / building / planned from the page set', function () {

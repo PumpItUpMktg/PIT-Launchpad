@@ -37,4 +37,24 @@ class PublishSiloService
 
         return $response;
     }
+
+    /**
+     * Push every silo of a site to its WP category, roots-first so a child's parent mapping is clean.
+     * Idempotent by ULID — safe to re-run (projected at Finalize, re-pushed as the go-live backstop).
+     * Returns the number of silos pushed.
+     */
+    public function publishSite(Site $site): int
+    {
+        $silos = Silo::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->orderByRaw('parent_silo_id is not null') // roots (null parent) first
+            ->orderBy('created_at')
+            ->get();
+
+        foreach ($silos as $silo) {
+            $this->publish($silo);
+        }
+
+        return $silos->count();
+    }
 }
