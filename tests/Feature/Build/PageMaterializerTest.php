@@ -93,6 +93,32 @@ test('page_type is mapped per source: standard, service own-page/pillar, locatio
         ->and($byTitle['Austin, TX']->page_type)->toBe(PageType::Location);
 });
 
+test('a service page is pinned to its OWN projected service; hub / standard / location pages are not', function () {
+    $site = Site::factory()->create();
+    $blueprint = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+    $pillar = Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $blueprint->id, 'is_pillar' => true, 'name' => 'Plumbing']);
+    $service = Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $blueprint->id, 'is_pillar' => false, 'name' => 'Toilet Replacement', 'silo' => 'Plumbing']);
+
+    manifestEntry($site, BuildSource::Service, $pillar->id, 'Plumbing', ['spoke_id' => $pillar->id]);
+    manifestEntry($site, BuildSource::Service, $service->id, 'Toilet Replacement', ['spoke_id' => $service->id]);
+    manifestEntry($site, BuildSource::Standard, 'about', 'About');
+    manifestEntry($site, BuildSource::Location, 'twn1', 'Clifton, NJ');
+
+    app(PageMaterializer::class)->materialize($site);
+
+    $byTitle = pagesFor($site)->keyBy('title');
+
+    // the service page carries its own service subject…
+    $servicePage = $byTitle['Toilet Replacement'];
+    expect($servicePage->primary_service_id)->not->toBeNull()
+        ->and($servicePage->primaryService->name)->toBe('Toilet Replacement');
+
+    // …while the category/hub page (spans the silo), the standard page, and the town page do not.
+    expect($byTitle['Plumbing']->primary_service_id)->toBeNull()
+        ->and($byTitle['About']->primary_service_id)->toBeNull()
+        ->and($byTitle['Clifton, NJ']->primary_service_id)->toBeNull();
+});
+
 test('colliding titles get deterministic disambiguated permalinks', function () {
     $site = Site::factory()->create();
     manifestEntry($site, BuildSource::Service, 'a', 'Springfield', ['priority' => 100]);

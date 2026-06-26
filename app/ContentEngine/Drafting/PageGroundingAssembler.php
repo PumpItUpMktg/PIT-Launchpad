@@ -36,7 +36,7 @@ class PageGroundingAssembler
     {
         $siteId = (string) $page->site_id;
         $kit = $this->kit($page);
-        $services = $this->services($siteId, $page->silo_id !== null ? (string) $page->silo_id : null);
+        $services = $this->groundingServices($page);
         $voice = $this->voice->active($siteId);
 
         return new PageGrounding(
@@ -88,6 +88,34 @@ class PageGroundingAssembler
         }
 
         return $schema;
+    }
+
+    /**
+     * The services that ground the page's content. A service page pinned to its own subject
+     * (`primary_service_id`) grounds on THAT service alone — never the silo's siblings, which is the
+     * cluster-bleed that let a /toilet-replacement page draft from a sibling's (slow-drain /
+     * sewer-backup) copy. Everything else (hub/category pages, location pages, or pages predating the
+     * pin) keeps the silo-scoped / site-wide fallback.
+     *
+     * @return Collection<int, Service>
+     */
+    private function groundingServices(Content $page): Collection
+    {
+        $siteId = (string) $page->site_id;
+
+        if ($page->primary_service_id !== null) {
+            $own = Service::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $siteId)
+                ->whereKey($page->primary_service_id)
+                ->with('problems')
+                ->get();
+
+            if ($own->isNotEmpty()) {
+                return $own;
+            }
+        }
+
+        return $this->services($siteId, $page->silo_id !== null ? (string) $page->silo_id : null);
     }
 
     /**

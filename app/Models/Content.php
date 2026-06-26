@@ -29,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property bool $locally_edited
  * @property int|null $wp_post_id
  * @property string|null $near_dup_of_content_id
+ * @property string|null $primary_service_id
  * @property Carbon|null $published_at
  * @property array<string, mixed>|null $meta
  * @property array<string, mixed>|null $slot_payload
@@ -163,6 +164,18 @@ class Content extends Model
     public function market(): BelongsTo
     {
         return $this->belongsTo(Market::class);
+    }
+
+    /**
+     * The page's OWN service — the specific §1 Service a service page is about, so grounding scopes
+     * to its subject rather than every sibling in the silo. FK is not DB-enforced (additive ALTER;
+     * §1 deferred-FK pattern); resolved at the model level.
+     *
+     * @return BelongsTo<Service, $this>
+     */
+    public function primaryService(): BelongsTo
+    {
+        return $this->belongsTo(Service::class, 'primary_service_id');
     }
 
     /** @return BelongsTo<Source, $this> */

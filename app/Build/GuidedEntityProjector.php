@@ -83,6 +83,30 @@ class GuidedEntityProjector
             ->first();
     }
 
+    /**
+     * The §1 Service a materialized service page should pin as its subject, resolved from its source
+     * spoke (null if the spoke isn't service-bearing or wasn't projected). Keyed identically to
+     * {@see project()} — (site_id, exact spoke name) — so it returns the same Service the projection
+     * created. This is what lets grounding scope a /toilet-replacement page to the toilet-replacement
+     * Service, not every sibling in the silo.
+     */
+    public function serviceForSpoke(?string $spokeId, Site $site): ?Service
+    {
+        if ($spokeId === null) {
+            return null;
+        }
+
+        $spoke = Spoke::withoutGlobalScope(SiteScope::class)->find($spokeId);
+        if ($spoke === null || ! $this->isService($spoke)) {
+            return null;
+        }
+
+        return Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('name', (string) $spoke->name)
+            ->first();
+    }
+
     /** A pillar heads its own silo (its name); a child carries the parent silo name in `silo`. */
     private function siloName(Spoke $spoke): string
     {

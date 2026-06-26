@@ -73,6 +73,14 @@ final class PageMaterializer
                     ? $this->projector->siloForSpoke($entry->spoke_id, $site)
                     : null;
 
+                // A service page is about ONE service — pin its subject so grounding scopes to that
+                // service, not every sibling in the silo (a silo can hold a cluster: toilet
+                // replacement / installation / repair). Hub/category pages cover the whole silo and
+                // stay unpinned; location/standard pages have no service subject.
+                $primaryService = ($entry->source === BuildSource::Service && $pageType === PageType::Service)
+                    ? $this->projector->serviceForSpoke($entry->spoke_id, $site)
+                    : null;
+
                 $content = Content::create([
                     'site_id' => $site->id, // explicit: no current-site scope in console/job context
                     'kind' => ContentKind::Page,
@@ -82,6 +90,7 @@ final class PageMaterializer
                     'slug' => $slug,
                     'version' => 1,
                     'silo_id' => $silo?->id,
+                    'primary_service_id' => $primaryService?->id,
                     'wireframe_kit_id' => $kit?->id,
                     'wireframe_kit_version' => $kit?->version,
                 ]);
