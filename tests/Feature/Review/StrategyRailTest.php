@@ -4,6 +4,7 @@ use App\ContentEngine\Review\StrategyRail;
 use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Keyword;
+use App\Models\Service;
 use App\Models\Silo;
 
 it('placement names the silo and role; target reads the keyword; performance is dark pre-publish', function () {
@@ -23,6 +24,30 @@ it('placement names the silo and role; target reads the keyword; performance is 
         ->and($rail['performance']['available'])->toBeFalse()
         ->and($rail['performance']['note'])->toContain('after publish')
         ->and($rail['locked_note'])->toContain('Structure');
+});
+
+it('surfaces the pinned service subject and flags a wrong-service draft in placement', function () {
+    $page = Content::factory()->page()->create([
+        'page_type' => PageType::Service,
+        'slot_payload' => ['hero' => ['heading' => 'Sewer backups cleared fast']], // no "toilet"
+    ]);
+    $service = Service::factory()->create(['site_id' => $page->site_id, 'name' => 'Toilet Replacement']);
+    $page->forceFill(['primary_service_id' => $service->id])->save();
+
+    $placement = (new StrategyRail)->for($page->fresh())['placement'];
+
+    expect($placement['subject'])->toBe('Toilet Replacement')
+        ->and($placement['mismatch'])->toBeTrue()
+        ->and($placement['mismatch_note'])->toContain('Toilet Replacement');
+});
+
+it('reports no mismatch for an unpinned page (no subject to verify)', function () {
+    $page = Content::factory()->page()->create(['page_type' => PageType::Hub, 'primary_service_id' => null]);
+
+    $placement = (new StrategyRail)->for($page)['placement'];
+
+    expect($placement['mismatch'])->toBeFalse()
+        ->and($placement['subject'])->toBeNull();
 });
 
 it('degrades honestly when the page has no silo or keyword (best-effort materialize)', function () {
