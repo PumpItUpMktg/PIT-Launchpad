@@ -4,6 +4,7 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Site;
+use App\Models\VoiceProfile;
 use App\Pages\Audience;
 use App\Pages\PageState;
 use App\Pages\PageStatePresenter;
@@ -49,6 +50,12 @@ it('reserves the operator "Your move" camp for states with an on-screen action; 
         ->and(PageState::HeldGrounding->whoseMove(Audience::Operator))->toBe('Not available yet — pending Territory→Market.')
         ->and(PageState::HeldComposer->whoseMove(Audience::Operator))->not->toContain('Your move')
         ->and(PageState::HeldGrounding->whoseMove(Audience::Operator))->not->toContain('Your move');
+
+    // Held-intake points to the capture surface (a missing input, not unbuilt code) — neither
+    // "Your move" (no on-screen button) nor "Not available yet".
+    expect(PageState::HeldIntake->whoseMove(Audience::Operator))->toBe('Needs brand intake — capture it in setup.')
+        ->and(PageState::HeldIntake->whoseMove(Audience::Operator))->not->toContain('Your move')
+        ->and(PageState::HeldIntake->clientLine())->toBe("We're still preparing this page");
 
     // The states that DO have an on-screen action keep "Your move" (failed → the retry button).
     expect(PageState::ReadyToGenerate->whoseMove(Audience::Operator))->toStartWith('Your move')
@@ -107,6 +114,27 @@ it('resolves a retryable generate failure and a terminal publish failure to fail
 
     expect(presenter()->resolve($genFailed->fresh()))->toBe(PageState::Failed)
         ->and(presenter()->resolve($pubFailed))->toBe(PageState::Failed);
+});
+
+it('carries voice provenance in the tail and flags staleness when a newer voice is active', function () {
+    $site = Site::factory()->create();
+    VoiceProfile::factory()->create(['site_id' => $site->id, 'version' => 1, 'status' => 'archived']);
+    VoiceProfile::factory()->active()->create(['site_id' => $site->id, 'version' => 2]);
+
+    // a review-ready draft produced under voice v1, while v2 is now active → stale
+    $stale = Content::factory()->page()->create([
+        'site_id' => $site->id, 'slot_payload' => ['h' => 'x'], 'status' => ContentStatus::NeedsReview,
+        'voice_profile_version' => 1,
+    ]);
+    // one produced under the current v2 → not stale
+    $fresh = Content::factory()->page()->create([
+        'site_id' => $site->id, 'slot_payload' => ['h' => 'x'], 'status' => ContentStatus::NeedsReview,
+        'voice_profile_version' => 2,
+    ]);
+
+    expect(presenter()->present($stale, Audience::Operator)->operatorTail)->toContain('voice v1 (current v2 — regenerate)')
+        ->and(presenter()->present($fresh, Audience::Operator)->operatorTail)->toContain('voice v2')
+        ->and(presenter()->present($fresh, Audience::Operator)->operatorTail)->not->toContain('regenerate');
 });
 
 it('appends the operator tail but never to the client', function () {

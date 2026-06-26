@@ -152,7 +152,7 @@ class GrowDashboard
         $rank = match ($state) {
             PageState::ReadyToReview => 0,
             PageState::Approved => 1,
-            PageState::ReadyToGenerate, PageState::Failed, PageState::HeldComposer, PageState::HeldGrounding => 2,
+            PageState::ReadyToGenerate, PageState::Failed, PageState::HeldComposer, PageState::HeldGrounding, PageState::HeldIntake => 2,
             PageState::Writing, PageState::Publishing => 3,
             PageState::Live => 5,
         };

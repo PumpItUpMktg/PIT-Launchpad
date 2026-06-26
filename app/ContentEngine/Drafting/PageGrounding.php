@@ -40,5 +40,9 @@ final class PageGrounding
         // A human page descriptor (e.g. "About", "Why Choose Us") for standard pages, so the drafter
         // knows the page's intent — the coarse PageType (utility) doesn't carry it. Null otherwise.
         public readonly ?string $pageLabel = null,
+        // Captured brand-narrative intake the page composes from (story / mission / values /
+        // differentiators), keyed by field — ONLY the fields actually present. The drafter grounds on
+        // these and never invents beyond them; absent fields simply aren't here (degrade by omission).
+        public readonly array $narrative = [],
     ) {}
 }

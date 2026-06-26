@@ -12,7 +12,9 @@ use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
 use App\Integrations\Wordpress\WordpressException;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\SiteNarrative;
 use App\Operator\Controls\BudgetControl;
 use App\Operator\Controls\CadenceControl;
 use App\Operator\Controls\TemplateMapping;
@@ -26,6 +28,7 @@ use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -99,6 +102,7 @@ class SiteResource extends Resource
                 ActionGroup::make([
                     self::queueAction(),
                     self::brandAction(),
+                    self::narrativeAction(),
                     self::launchAction(),
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
@@ -162,6 +166,90 @@ class SiteResource extends Resource
                         ->body((string) ($result['error'] ?? 'Could not push to the site.'))->send();
                 }
             });
+    }
+
+    /**
+     * Capture the brand NARRATIVE the Core-page composer grounds on — the words §1 never captured
+     * (About story, mission, values, Why-Choose-Us differentiators). Pages draft from this, never
+     * fabricate around it: a blank required field holds the page "needs intake"; a blank optional
+     * field is omitted, not invented. Upserts the site's {@see SiteNarrative}.
+     */
+    private static function narrativeAction(): Action
+    {
+        return Action::make('narrative')
+            ->label('Brand narrative')
+            ->icon('heroicon-o-document-text')
+            ->modalHeading('Brand narrative')
+            ->modalDescription('The words the Core-page composer grounds on. Captured here so About / Why Choose Us / Home draft from real intake — never fabricated. A blank required field holds the page "needs intake"; a blank optional field is omitted, not invented.')
+            ->modalSubmitActionLabel('Save')
+            ->fillForm(fn (Site $record): array => self::narrativeFormData($record))
+            ->schema([
+                Textarea::make('story')->label('Brand story (About)')->rows(5)
+                    ->helperText('Required for the About page — without it, About holds "needs intake".'),
+                Textarea::make('mission')->label('Mission')->rows(3),
+                Repeater::make('values')->label('Values')
+                    ->schema([
+                        TextInput::make('title')->required(),
+                        TextInput::make('description'),
+                    ])->addActionLabel('Add value')->default([])->columns(2),
+                Repeater::make('differentiators')->label('Differentiators (Why Choose Us)')
+                    ->schema([
+                        TextInput::make('title')->required(),
+                        TextInput::make('description'),
+                    ])->addActionLabel('Add differentiator')->default([])->columns(2)
+                    ->helperText('Required for the Why Choose Us page.'),
+            ])
+            ->action(function (Site $record, array $data): void {
+                SiteNarrative::withoutGlobalScope(SiteScope::class)->updateOrCreate(
+                    ['site_id' => $record->id],
+                    [
+                        'story' => self::cleanNarrativeText($data['story'] ?? null),
+                        'mission' => self::cleanNarrativeText($data['mission'] ?? null),
+                        'values' => self::cleanNarrativeList($data['values'] ?? []),
+                        'differentiators' => self::cleanNarrativeList($data['differentiators'] ?? []),
+                    ],
+                );
+
+                Notification::make()->success()->title('Brand narrative saved')
+                    ->body('Core pages draft from this; missing fields hold or omit rather than fabricate.')->send();
+            });
+    }
+
+    /** @return array<string, mixed> */
+    private static function narrativeFormData(Site $record): array
+    {
+        $narrative = SiteNarrative::withoutGlobalScope(SiteScope::class)->where('site_id', $record->id)->first();
+
+        return [
+            'story' => $narrative?->story,
+            'mission' => $narrative?->mission,
+            'values' => is_array($narrative?->values) ? $narrative->values : [],
+            'differentiators' => is_array($narrative?->differentiators) ? $narrative->differentiators : [],
+        ];
+    }
+
+    private static function cleanNarrativeText(mixed $value): ?string
+    {
+        $value = is_string($value) ? trim($value) : '';
+
+        return $value === '' ? null : $value;
+    }
+
+    /**
+     * @return list<array<string, mixed>>|null
+     */
+    private static function cleanNarrativeList(mixed $list): ?array
+    {
+        if (! is_array($list)) {
+            return null;
+        }
+
+        $rows = array_values(array_filter(
+            $list,
+            fn ($row) => is_array($row) && trim((string) ($row['title'] ?? '')) !== '',
+        ));
+
+        return $rows === [] ? null : $rows;
     }
 
     /**
