@@ -32,6 +32,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $wp_post_id
  * @property string|null $near_dup_of_content_id
  * @property string|null $primary_service_id
+ * @property string|null $last_publish_error
  * @property Carbon|null $published_at
  * @property array<string, mixed>|null $meta
  * @property array<string, mixed>|null $slot_payload
