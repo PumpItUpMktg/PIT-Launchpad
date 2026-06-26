@@ -7,12 +7,14 @@ use App\Enums\BuildStatus;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Enums\StandardPageType;
 use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
+use Database\Seeders\WireframeKitSeeder;
 
 function manifestEntry(Site $site, BuildSource $source, string $key, string $title, array $extra = []): BuildPage
 {
@@ -117,6 +119,25 @@ test('a service page is pinned to its OWN projected service; hub / standard / lo
     expect($byTitle['Plumbing']->primary_service_id)->toBeNull()
         ->and($byTitle['About']->primary_service_id)->toBeNull()
         ->and($byTitle['Clifton, NJ']->primary_service_id)->toBeNull();
+});
+
+test('a standard page is stamped with its standard_type and gets its composer kit (composable only)', function () {
+    (new WireframeKitSeeder)->run();
+    $site = Site::factory()->create();
+    manifestEntry($site, BuildSource::Standard, 'about', 'About');     // composer shipped
+    manifestEntry($site, BuildSource::Standard, 'privacy', 'Privacy'); // not yet → held
+
+    app(PageMaterializer::class)->materialize($site);
+
+    $byTitle = pagesFor($site)->keyBy('title');
+
+    expect($byTitle['About']->standard_type)->toBe(StandardPageType::About)
+        ->and($byTitle['About']->wireframe_kit_id)->not->toBeNull()
+        ->and($byTitle['About']->wireframeKit->name)->toBe('about-page');
+
+    // Privacy still carries its identity, but has no kit → the surface holds it "Not ready yet".
+    expect($byTitle['Privacy']->standard_type)->toBe(StandardPageType::Privacy)
+        ->and($byTitle['Privacy']->wireframe_kit_id)->toBeNull();
 });
 
 test('colliding titles get deterministic disambiguated permalinks', function () {

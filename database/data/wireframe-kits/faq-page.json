@@ -1,0 +1,60 @@
+{
+    "name": "faq-page",
+    "version": 1,
+    "page_type": "utility",
+    "elementor_template_ref": "lp-standard-v1",
+    "seo_profile_ref": "standard",
+    "slots": [
+        {
+            "key": "hero_headline",
+            "label": "Hero Headline",
+            "content_type": "heading",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 6, "max_length": 90 },
+            "client_override": true,
+            "generation_hint": "A plain FAQ headline for the brand and its trade.",
+            "seo_binding": "h1",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "intro",
+            "label": "Intro",
+            "content_type": "short_text",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false, "max_length": 220 },
+            "client_override": true,
+            "generation_hint": "One line inviting the reader to find answers below.",
+            "seo_binding": "meta_description",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "faqs",
+            "label": "FAQs",
+            "content_type": "faq",
+            "role": "faq",
+            "source": "generated",
+            "cardinality": { "type": "repeater", "min": 5, "max": 12 },
+            "constraints": { "required": true },
+            "client_override": true,
+            "generation_hint": "Real questions a customer of this trade asks, with honest, specific answers grounded in the services. No invented prices or guarantees.",
+            "seo_binding": "faqpage",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "cta",
+            "label": "Primary CTA",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false },
+            "client_override": true,
+            "generation_hint": "A gentle next step for anyone whose question wasn't answered.",
+            "elementor_binding": "lp/cta"
+        }
+    ]
+}

@@ -1,0 +1,98 @@
+{
+    "name": "about-page",
+    "version": 1,
+    "page_type": "utility",
+    "elementor_template_ref": "lp-standard-v1",
+    "seo_profile_ref": "standard",
+    "slots": [
+        {
+            "key": "hero_headline",
+            "label": "Hero Headline",
+            "content_type": "heading",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 6, "max_length": 90 },
+            "client_override": true,
+            "generation_hint": "An About headline grounded in the brand — its name and what it stands for.",
+            "seo_binding": "h1",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hero_image",
+            "label": "Hero Image",
+            "content_type": "image",
+            "role": "hero_solution",
+            "source": "media",
+            "cardinality": { "type": "single" },
+            "constraints": {
+                "required": true,
+                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": true }
+            },
+            "client_override": false,
+            "seo_binding": "og_image",
+            "elementor_binding": "lp/image"
+        },
+        {
+            "key": "our_story",
+            "label": "Our Story",
+            "content_type": "rich_text",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 160, "format": "html" },
+            "client_override": true,
+            "generation_hint": "The brand's story in its own voice — honest, no invented history or numbers.",
+            "seo_binding": "meta_description",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "mission",
+            "label": "Mission",
+            "content_type": "long_text",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 80 },
+            "client_override": true,
+            "generation_hint": "What the brand commits to for its customers.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "values",
+            "label": "Values",
+            "content_type": "list",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "repeater", "min": 3, "max": 6 },
+            "constraints": { "required": true },
+            "client_override": true,
+            "generation_hint": "The principles the brand works by — one short title + line each.",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "proof_points",
+            "label": "Proof Points",
+            "content_type": "rich_text",
+            "role": "proof",
+            "source": "grounded",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false, "min_length": 60, "entity": "proof.substantiated", "min_entities": 1 },
+            "client_override": true,
+            "generation_hint": "Only substantiated claims — credentials, guarantees, track record. Omit if none.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "cta",
+            "label": "Primary CTA",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true },
+            "client_override": true,
+            "generation_hint": "A warm next step to get in touch or book.",
+            "elementor_binding": "lp/cta"
+        }
+    ]
+}

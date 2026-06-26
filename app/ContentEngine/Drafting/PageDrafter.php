@@ -52,7 +52,10 @@ class PageDrafter
     {
         $parts = [];
 
-        $parts[] = "Build a {$grounding->pageType->value} page for a home-services brand.";
+        $descriptor = $grounding->pageLabel !== null
+            ? "\"{$grounding->pageLabel}\" page"
+            : "{$grounding->pageType->value} page";
+        $parts[] = "Build the {$descriptor} for a home-services brand.";
         if ($grounding->targetKeyword !== null && $grounding->targetKeyword !== '') {
             $parts[] = "Primary target: {$grounding->targetKeyword}";
         }

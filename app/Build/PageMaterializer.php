@@ -6,12 +6,14 @@ use App\Enums\BuildSource;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Enums\StandardPageType;
 use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\Spoke;
 use App\SiloCreator\PillarFactory;
+use App\Standard\StandardKit;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -66,7 +68,15 @@ final class PageMaterializer
                 $slug = $this->permalinks->uniqueSlug($entry->title, $taken);
                 $taken[] = $slug;
 
-                $kit = PillarFactory::resolveKit($pageType, $site->id);
+                // A standard page knows WHICH standard page it is (its page_key); the composer
+                // resolves its kit by that finer identity (service/location resolve by page_type).
+                $standardType = $entry->source === BuildSource::Standard
+                    ? StandardPageType::tryFrom((string) $entry->page_key)
+                    : null;
+
+                $kit = $standardType !== null
+                    ? StandardKit::resolve($standardType, $site->id)
+                    : PillarFactory::resolveKit($pageType, $site->id);
 
                 // Pin the page to its silo (service/hub pages) so grounding scopes to its own service.
                 $silo = $entry->source === BuildSource::Service
@@ -85,6 +95,7 @@ final class PageMaterializer
                     'site_id' => $site->id, // explicit: no current-site scope in console/job context
                     'kind' => ContentKind::Page,
                     'page_type' => $pageType,
+                    'standard_type' => $standardType?->value,
                     'status' => ContentStatus::Candidate, // planned/undrafted — generationState 'awaiting'
                     'title' => $entry->title,
                     'slug' => $slug,

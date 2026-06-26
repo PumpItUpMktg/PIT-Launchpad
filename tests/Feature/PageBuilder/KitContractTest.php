@@ -46,11 +46,13 @@ test('location nap and map slots are conditional on is_storefront', function () 
     }
 });
 
-test('the seeder persists both locked kits idempotently', function () {
+test('the seeder persists the library kits idempotently (keyed by name, not page_type)', function () {
     $this->seed(WireframeKitSeeder::class);
     $this->seed(WireframeKitSeeder::class);
 
-    expect(WireframeKit::whereNotNull('page_type')->count())->toBe(2);
+    // 2 locked page kits + 4 standard-page composer kits; re-seed updates rather than duplicates.
+    expect(WireframeKit::whereNotNull('page_type')->count())->toBe(6)
+        ->and(WireframeKit::where('page_type', 'utility')->count())->toBe(3); // about / why-choose-us / faq share page_type
 
     $service = WireframeKit::where('page_type', 'service')->sole();
 

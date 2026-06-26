@@ -52,6 +52,7 @@ class PageGroundingAssembler
             branding: $this->branding($siteId, $page),
             targetKeyword: $this->targetKeyword($page),
             relatedLinks: $this->relatedLinks($page),
+            pageLabel: $page->standard_type?->label(),
         );
     }
 

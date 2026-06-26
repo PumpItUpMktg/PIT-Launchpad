@@ -1,0 +1,83 @@
+{
+    "name": "why-choose-us-page",
+    "version": 1,
+    "page_type": "utility",
+    "elementor_template_ref": "lp-standard-v1",
+    "seo_profile_ref": "standard",
+    "slots": [
+        {
+            "key": "hero_headline",
+            "label": "Hero Headline",
+            "content_type": "heading",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 6, "max_length": 90 },
+            "client_override": true,
+            "generation_hint": "Why a customer should choose this brand — the single strongest reason.",
+            "seo_binding": "h1",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hero_subhead",
+            "label": "Hero Subhead",
+            "content_type": "short_text",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 12, "max_length": 200 },
+            "client_override": true,
+            "generation_hint": "One line framing what sets the brand apart.",
+            "seo_binding": "meta_description",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "differentiators",
+            "label": "Differentiators",
+            "content_type": "list",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "repeater", "min": 3, "max": 8 },
+            "constraints": { "required": true },
+            "client_override": true,
+            "generation_hint": "The concrete reasons to choose this brand — title + line each. No empty superlatives.",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "proof_points",
+            "label": "Proof Points",
+            "content_type": "rich_text",
+            "role": "proof",
+            "source": "grounded",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false, "min_length": 60, "entity": "proof.substantiated", "min_entities": 1 },
+            "client_override": true,
+            "generation_hint": "Back the claims with the substantiated-proof set only. Omit if none.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "guarantee",
+            "label": "Guarantee",
+            "content_type": "long_text",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false, "min_length": 40 },
+            "client_override": true,
+            "generation_hint": "The brand's promise / guarantee, only if one is grounded in the intake.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "cta",
+            "label": "Primary CTA",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true },
+            "client_override": true,
+            "generation_hint": "A confident next step to get started.",
+            "elementor_binding": "lp/cta"
+        }
+    ]
+}
