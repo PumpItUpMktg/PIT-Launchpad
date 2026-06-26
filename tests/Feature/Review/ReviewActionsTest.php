@@ -5,6 +5,7 @@ use App\Enums\ContentStatus;
 use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\RenderJob;
+use App\Models\Service;
 use Illuminate\Support\Facades\Bus;
 
 function reviewActions(): ReviewActions
@@ -107,6 +108,22 @@ test('an unsupported claim warns but still approves (the operator decides)', fun
         ->and($result->warnings)->not->toBeEmpty();
 
     // The warning rides on approve, but publishing is still a separate, deliberate step.
+    Bus::assertNotDispatched(PublishContent::class);
+});
+
+test('a wrong-service draft warns but still approves (the operator decides)', function () {
+    Bus::fake();
+    $content = Content::factory()->page()->create([
+        'status' => ContentStatus::NeedsReview,
+        'slot_payload' => ['hero' => ['heading' => 'Sewer line repair across the metro']], // no "toilet"
+    ]);
+    $service = Service::factory()->create(['site_id' => $content->site_id, 'name' => 'Toilet Replacement']);
+    $content->forceFill(['primary_service_id' => $service->id])->save();
+
+    $result = reviewActions()->approve($content->fresh());
+
+    expect($result->approved)->toBeTrue()
+        ->and(collect($result->warnings)->implode(' '))->toContain('Toilet Replacement');
     Bus::assertNotDispatched(PublishContent::class);
 });
 

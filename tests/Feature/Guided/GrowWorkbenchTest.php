@@ -61,14 +61,18 @@ it('gives every page row its morphing primary action, badge tone, and bulk lane'
         ->and($rows[$approved->id]['bulk'])->toBe('publish');
     expect($rows[$generating->id]['action'])->toBeNull()
         ->and($rows[$generating->id]['tone'])->toBe('info');
-    expect($rows[$pending->id]['action'])->toBe('pending');
+    // No kit → one plain "Not ready yet" held state (composer is an admin-only distinction).
+    expect($rows[$pending->id]['action'])->toBe('held')
+        ->and($rows[$pending->id]['state'])->toBe('Not ready yet')
+        ->and($rows[$pending->id]['hold_kind'])->toBe('composer')
+        ->and($rows[$pending->id]['reason'])->toBe('This page type isn\'t available yet.');
 
     // most-actionable first: review (approve) before the planned generate row
     $order = collect(app(GrowDashboard::class)->pages($ctx['site']))->pluck('id');
     expect($order->search($review->id))->toBeLessThan($order->search($planned->id));
 });
 
-it('shows grounding pending (not Generate) for a kit-bound page with no resolvable grounding', function () {
+it('holds (no Generate) a kit-bound page with no resolvable grounding — one plain state, not "Ready to generate"', function () {
     // a service page WITH a kit but on a site with no §1 Service → can't ground → must not offer Generate
     $base = PageFixture::intakePage();
     $ungrounded = Content::factory()->page()->create([
@@ -80,8 +84,55 @@ it('shows grounding pending (not Generate) for a kit-bound page with no resolvab
 
     $row = collect(app(GrowDashboard::class)->pages($ungrounded->site))->firstWhere('id', $ungrounded->id);
 
-    expect($row['action'])->toBe('grounding')
-        ->and($row['state'])->toBe('Grounding pending');
+    expect($row['action'])->toBe('held')                 // never a live Generate
+        ->and($row['state'])->toBe('Not ready yet')      // never "Ready to generate" while held
+        ->and($row['hold_kind'])->toBe('grounding')      // admin-only debug distinction
+        ->and($row['reason'])->toBe('We\'re still getting this page\'s details ready.');
+});
+
+it('uses the coverage-growth reason for a held town page', function () {
+    $site = Site::factory()->create();
+    $town = Content::factory()->page()->create([
+        'site_id' => $site->id, 'page_type' => PageType::Location, 'wireframe_kit_id' => null, 'slot_payload' => [],
+    ]);
+
+    $row = collect(app(GrowDashboard::class)->pages($site))->firstWhere('id', $town->id);
+
+    expect($row['action'])->toBe('held')
+        ->and($row['reason'])->toBe('Town pages unlock as local coverage grows.');
+});
+
+it('groups the workbench into Core / Service / Town lanes with per-section counts', function () {
+    $ctx = growSite(); // 1 planned service page already
+    growPage($ctx, ['page_type' => PageType::Service, 'slot_payload' => []]);
+    growPage($ctx, ['page_type' => PageType::Home, 'slot_payload' => []]);
+    growPage($ctx, ['page_type' => PageType::Utility, 'slot_payload' => []]);
+    growPage($ctx, ['page_type' => PageType::Location, 'slot_payload' => []]);
+
+    $sections = collect(app(GrowDashboard::class)->sections($ctx['site']))->keyBy('key');
+
+    // ordered Core → Service → Town
+    expect(collect(app(GrowDashboard::class)->sections($ctx['site']))->pluck('key')->all())
+        ->toBe(['core', 'service', 'town']);
+
+    expect($sections['core']['label'])->toBe('Core pages')
+        ->and($sections['core']['count'])->toBe(2)            // home + utility
+        ->and($sections['service']['count'])->toBe(2)         // base + the extra service
+        ->and($sections['town']['count'])->toBe(1)            // location
+        ->and($sections['service']['count'])->toBe(count($sections['service']['pages']));
+
+    // section pages carry the same row shape (and no internal sort/group keys leak)
+    expect($sections['service']['pages'][0])->toHaveKeys(['id', 'title', 'permalink', 'state', 'action', 'bulk'])
+        ->and($sections['service']['pages'][0])->not->toHaveKey('rank')
+        ->and($sections['service']['pages'][0])->not->toHaveKey('section');
+});
+
+it('drops empty lanes — a site with only service pages shows just the Service section', function () {
+    $ctx = growSite(); // 1 service page, no core/town
+
+    $keys = collect(app(GrowDashboard::class)->sections($ctx['site']))->pluck('key');
+
+    expect($keys->all())->toBe(['service']);
 });
 
 it('carries the permalink on every row', function () {

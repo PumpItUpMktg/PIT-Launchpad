@@ -7,14 +7,22 @@ use App\PageBuilder\Schema\KitSchema;
 use Illuminate\Database\Seeder;
 
 /**
- * Seeds the two locked library-level kits (service-page, location-page) from
- * their JSON definitions in database/data/wireframe-kits. The schema is parsed
- * through the value objects and re-serialized, so what lands in the database is
- * exactly what the validation engine reads back.
+ * Seeds the library-level kits from their JSON definitions in database/data/wireframe-kits: the two
+ * locked page kits (service-page, location-page) plus the standard-page composer's kits (home, about,
+ * why-choose-us, faq). The schema is parsed through the value objects and re-serialized, so what
+ * lands in the database is exactly what the validation engine reads back. Keyed on (site_id, name,
+ * version) — name is the kit identity, so several kits can share page_type='utility'.
  */
 class WireframeKitSeeder extends Seeder
 {
-    private const KITS = ['service-page', 'location-page'];
+    private const KITS = [
+        'service-page',
+        'location-page',
+        'home-page',
+        'about-page',
+        'why-choose-us-page',
+        'faq-page',
+    ];
 
     public function run(): void
     {
@@ -27,11 +35,11 @@ class WireframeKitSeeder extends Seeder
             WireframeKit::updateOrCreate(
                 [
                     'site_id' => null,
-                    'page_type' => $schema->pageType?->value,
+                    'name' => $schema->name,
                     'version' => $schema->version,
                 ],
                 [
-                    'name' => $schema->name,
+                    'page_type' => $schema->pageType?->value,
                     'elementor_template_ref' => $schema->elementorTemplateRef,
                     'seo_profile_ref' => $schema->seoProfileRef,
                     'slot_schema' => $schema->toArray(),

@@ -37,5 +37,8 @@ final class PageGrounding
         public readonly array $branding,
         public readonly ?string $targetKeyword = null,
         public readonly array $relatedLinks = [],
+        // A human page descriptor (e.g. "About", "Why Choose Us") for standard pages, so the drafter
+        // knows the page's intent — the coarse PageType (utility) doesn't carry it. Null otherwise.
+        public readonly ?string $pageLabel = null,
     ) {}
 }

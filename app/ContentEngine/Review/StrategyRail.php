@@ -22,6 +22,8 @@ use App\Models\Silo;
  */
 class StrategyRail
 {
+    public function __construct(private readonly ServiceAlignment $serviceAlignment = new ServiceAlignment) {}
+
     /**
      * @return array{placement: array<string, mixed>, target: array<string, mixed>, performance: array<string, mixed>}
      */
@@ -37,7 +39,11 @@ class StrategyRail
     }
 
     /**
-     * @return array{silo: ?string, role: string, label: string}
+     * Placement answers "is this page where it belongs, and is it about the right thing?" — silo +
+     * role, plus the pinned service subject and a mismatch flag (the catch that turns a wrong-service
+     * draft from a silent publish into a visible warning at review).
+     *
+     * @return array{silo: ?string, role: string, label: string, subject: ?string, mismatch: bool, mismatch_note: ?string}
      */
     private function placement(Content $page): array
     {
@@ -47,10 +53,16 @@ class StrategyRail
         $siloName = $silo instanceof Silo ? (string) $silo->name : null;
         $role = $this->role($page->page_type);
 
+        $alignment = $this->serviceAlignment->check($page);
+        $mismatch = $alignment['checked'] && ! $alignment['aligned'];
+
         return [
             'silo' => $siloName,
             'role' => $role,
             'label' => $siloName !== null ? "{$siloName} · {$role}" : "{$role} · unassigned silo",
+            'subject' => $alignment['service'],
+            'mismatch' => $mismatch,
+            'mismatch_note' => $mismatch ? $alignment['note'] : null,
         ];
     }
 

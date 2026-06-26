@@ -21,7 +21,10 @@ use App\Models\Content;
  */
 class ReviewActions
 {
-    public function __construct(private readonly EditCapture $editCapture = new EditCapture) {}
+    public function __construct(
+        private readonly EditCapture $editCapture = new EditCapture,
+        private readonly ServiceAlignment $serviceAlignment = new ServiceAlignment,
+    ) {}
 
     /**
      * Approve a draft — accept it into `approved` (ready to publish). This does NOT push to
@@ -222,6 +225,12 @@ class ReviewActions
 
         if (in_array(ReviewFlag::UnsupportedClaim, AlertFlags::for($content), true)) {
             $warnings[] = 'This draft has an unsupported claim that did not trace to the Claims set.';
+        }
+
+        // The wrong-service catch: a page pinned to a subject whose draft never mentions it.
+        $alignment = $this->serviceAlignment->check($content);
+        if ($alignment['checked'] && ! $alignment['aligned'] && $alignment['note'] !== null) {
+            $warnings[] = $alignment['note'];
         }
 
         return $warnings;

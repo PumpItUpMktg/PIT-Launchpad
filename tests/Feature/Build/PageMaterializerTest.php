@@ -7,12 +7,14 @@ use App\Enums\BuildStatus;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Enums\StandardPageType;
 use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
+use Database\Seeders\WireframeKitSeeder;
 
 function manifestEntry(Site $site, BuildSource $source, string $key, string $title, array $extra = []): BuildPage
 {
@@ -91,6 +93,51 @@ test('page_type is mapped per source: standard, service own-page/pillar, locatio
         ->and($byTitle['Plumbing']->page_type)->toBe(PageType::Hub)         // pillar spoke → hub
         ->and($byTitle['Drain Cleaning']->page_type)->toBe(PageType::Service)
         ->and($byTitle['Austin, TX']->page_type)->toBe(PageType::Location);
+});
+
+test('a service page is pinned to its OWN projected service; hub / standard / location pages are not', function () {
+    $site = Site::factory()->create();
+    $blueprint = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+    $pillar = Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $blueprint->id, 'is_pillar' => true, 'name' => 'Plumbing']);
+    $service = Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $blueprint->id, 'is_pillar' => false, 'name' => 'Toilet Replacement', 'silo' => 'Plumbing']);
+
+    manifestEntry($site, BuildSource::Service, $pillar->id, 'Plumbing', ['spoke_id' => $pillar->id]);
+    manifestEntry($site, BuildSource::Service, $service->id, 'Toilet Replacement', ['spoke_id' => $service->id]);
+    manifestEntry($site, BuildSource::Standard, 'about', 'About');
+    manifestEntry($site, BuildSource::Location, 'twn1', 'Clifton, NJ');
+
+    app(PageMaterializer::class)->materialize($site);
+
+    $byTitle = pagesFor($site)->keyBy('title');
+
+    // the service page carries its own service subject…
+    $servicePage = $byTitle['Toilet Replacement'];
+    expect($servicePage->primary_service_id)->not->toBeNull()
+        ->and($servicePage->primaryService->name)->toBe('Toilet Replacement');
+
+    // …while the category/hub page (spans the silo), the standard page, and the town page do not.
+    expect($byTitle['Plumbing']->primary_service_id)->toBeNull()
+        ->and($byTitle['About']->primary_service_id)->toBeNull()
+        ->and($byTitle['Clifton, NJ']->primary_service_id)->toBeNull();
+});
+
+test('a standard page is stamped with its standard_type and gets its composer kit (composable only)', function () {
+    (new WireframeKitSeeder)->run();
+    $site = Site::factory()->create();
+    manifestEntry($site, BuildSource::Standard, 'about', 'About');     // composer shipped
+    manifestEntry($site, BuildSource::Standard, 'privacy', 'Privacy'); // not yet → held
+
+    app(PageMaterializer::class)->materialize($site);
+
+    $byTitle = pagesFor($site)->keyBy('title');
+
+    expect($byTitle['About']->standard_type)->toBe(StandardPageType::About)
+        ->and($byTitle['About']->wireframe_kit_id)->not->toBeNull()
+        ->and($byTitle['About']->wireframeKit->name)->toBe('about-page');
+
+    // Privacy still carries its identity, but has no kit → the surface holds it "Not ready yet".
+    expect($byTitle['Privacy']->standard_type)->toBe(StandardPageType::Privacy)
+        ->and($byTitle['Privacy']->wireframe_kit_id)->toBeNull();
 });
 
 test('colliding titles get deterministic disambiguated permalinks', function () {

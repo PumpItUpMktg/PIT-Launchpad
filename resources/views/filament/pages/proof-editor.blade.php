@@ -46,6 +46,7 @@
         .pe-kv{font-size:13px;color:var(--pe-ink);line-height:1.5}
         .pe-kv .muted{color:var(--pe-soft)}
         .pe-note{font-size:11.5px;color:var(--pe-soft);font-style:italic;margin-top:8px}
+        .pe-warn{font-size:11.5px;color:#A4262C;background:#FBE5E6;border-radius:6px;padding:6px 8px;margin-top:8px;line-height:1.4}
     </style>
 
     <div class="pe-top">
@@ -119,6 +120,12 @@
             <div class="pe-card">
                 <h4>Placement</h4>
                 <div class="pe-kv">{{ $rail['placement']['label'] ?? '—' }}</div>
+                @if (!empty($rail['placement']['subject']))
+                    <div class="pe-kv muted">Subject: {{ $rail['placement']['subject'] }}</div>
+                @endif
+                @if (!empty($rail['placement']['mismatch']))
+                    <div class="pe-warn">⚠ {{ $rail['placement']['mismatch_note'] }}</div>
+                @endif
             </div>
             <div class="pe-card">
                 <h4>Target</h4>

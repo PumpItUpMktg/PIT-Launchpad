@@ -28,7 +28,8 @@ use Illuminate\Support\Facades\Auth;
  * twin (confirmed decisions survive).
  *
  * @property-read array{live: int, building: int, planned: int} $stats
- * @property-read list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string}> $pages
+ * @property-read list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, reason: ?string, hold_kind: ?string, live_url: ?string, bulk: ?string}> $pages
+ * @property-read list<array{key: string, label: string, count: int, pages: list<array<string, mixed>>}> $sections
  * @property-read array<int, array{title: string, status: string, silo: string}> $news
  */
 class Grow extends GuidedPage
@@ -74,6 +75,19 @@ class Grow extends GuidedPage
     }
 
     /**
+     * The workbench grouped into Core / Service / Town lanes with per-section counts (the list the
+     * view renders). The flat {@see getPagesProperty()} stays for the bulk-lane gate + counts.
+     *
+     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string}>}>
+     */
+    public function getSectionsProperty(): array
+    {
+        $site = $this->getSite();
+
+        return $site === null ? [] : app(GrowDashboard::class)->sections($site);
+    }
+
+    /**
      * @return array<int, array{title: string, status: string, silo: string}>
      */
     public function getNewsProperty(): array
@@ -102,8 +116,8 @@ class Grow extends GuidedPage
 
         // Honest gate: never queue a page that can't ground — it would only produce an empty draft.
         if (! app(GroundingReadiness::class)->ready($content)) {
-            Notification::make()->warning()->title('Grounding pending')
-                ->body('This page has no resolvable grounding yet, so it can\'t be generated.')->send();
+            Notification::make()->warning()->title('Not ready yet')
+                ->body('This page isn\'t ready to write yet — its details are still coming together.')->send();
 
             return;
         }

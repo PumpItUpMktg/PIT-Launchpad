@@ -1,0 +1,110 @@
+{
+    "name": "home-page",
+    "version": 1,
+    "page_type": "home",
+    "elementor_template_ref": "lp-home-v1",
+    "seo_profile_ref": "home",
+    "slots": [
+        {
+            "key": "hero_headline",
+            "label": "Hero Headline",
+            "content_type": "heading",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 8, "max_length": 90 },
+            "client_override": true,
+            "generation_hint": "The brand's core promise in the customer's words — what they get, not what we do.",
+            "seo_binding": "h1",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hero_subhead",
+            "label": "Hero Subhead",
+            "content_type": "short_text",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 12, "max_length": 200 },
+            "client_override": true,
+            "generation_hint": "One line: who we serve and the outcome we deliver.",
+            "seo_binding": "meta_description",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hero_image",
+            "label": "Hero Image",
+            "content_type": "image",
+            "role": "hero_solution",
+            "source": "media",
+            "cardinality": { "type": "single" },
+            "constraints": {
+                "required": true,
+                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": true }
+            },
+            "client_override": false,
+            "seo_binding": "og_image",
+            "elementor_binding": "lp/image"
+        },
+        {
+            "key": "intro",
+            "label": "Introduction",
+            "content_type": "rich_text",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 120, "format": "html" },
+            "client_override": true,
+            "generation_hint": "Who the brand is and what it does — grounded in the real services and brand voice.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "service_highlights",
+            "label": "Service Highlights",
+            "content_type": "list",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "repeater", "min": 3, "max": 6 },
+            "constraints": { "required": true },
+            "client_override": true,
+            "generation_hint": "The top service categories, one short benefit-led line each. Use only the real services.",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "why_us",
+            "label": "Why Us",
+            "content_type": "rich_text",
+            "role": "proof",
+            "source": "grounded",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false, "min_length": 80, "entity": "proof.substantiated", "min_entities": 1 },
+            "client_override": true,
+            "generation_hint": "Write only from the substantiated-claims set; omit if none.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "service_area",
+            "label": "Service Area",
+            "content_type": "short_text",
+            "role": "local_relevance",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false, "max_length": 200 },
+            "client_override": true,
+            "generation_hint": "Name the markets served — only from the grounding, never invent locality.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "cta",
+            "label": "Primary CTA",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true },
+            "client_override": true,
+            "generation_hint": "A clear next step (call / book), matched to the primary conversion intent.",
+            "elementor_binding": "lp/cta"
+        }
+    ]
+}

@@ -36,7 +36,7 @@ class PageGroundingAssembler
     {
         $siteId = (string) $page->site_id;
         $kit = $this->kit($page);
-        $services = $this->services($siteId, $page->silo_id !== null ? (string) $page->silo_id : null);
+        $services = $this->groundingServices($page);
         $voice = $this->voice->active($siteId);
 
         return new PageGrounding(
@@ -48,10 +48,11 @@ class PageGroundingAssembler
             problems: $this->problems($services),
             offers: $this->offers($siteId),
             proof: $this->proof($siteId),
-            markets: $this->markets($siteId),
+            markets: $this->markets($siteId, $page),
             branding: $this->branding($siteId, $page),
             targetKeyword: $this->targetKeyword($page),
             relatedLinks: $this->relatedLinks($page),
+            pageLabel: $page->standard_type?->label(),
         );
     }
 
@@ -88,6 +89,34 @@ class PageGroundingAssembler
         }
 
         return $schema;
+    }
+
+    /**
+     * The services that ground the page's content. A service page pinned to its own subject
+     * (`primary_service_id`) grounds on THAT service alone — never the silo's siblings, which is the
+     * cluster-bleed that let a /toilet-replacement page draft from a sibling's (slow-drain /
+     * sewer-backup) copy. Everything else (hub/category pages, location pages, or pages predating the
+     * pin) keeps the silo-scoped / site-wide fallback.
+     *
+     * @return Collection<int, Service>
+     */
+    private function groundingServices(Content $page): Collection
+    {
+        $siteId = (string) $page->site_id;
+
+        if ($page->primary_service_id !== null) {
+            $own = Service::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $siteId)
+                ->whereKey($page->primary_service_id)
+                ->with('problems')
+                ->get();
+
+            if ($own->isNotEmpty()) {
+                return $own;
+            }
+        }
+
+        return $this->services($siteId, $page->silo_id !== null ? (string) $page->silo_id : null);
     }
 
     /**
@@ -172,13 +201,25 @@ class PageGroundingAssembler
     }
 
     /**
+     * The site's markets — a location page's OWN town (its pinned `market_id`) leads the list as the
+     * page's subject; the rest follow as service-area context. So the drafter writes about Clifton,
+     * not a sibling town, without losing the area list a town page legitimately needs.
+     *
      * @return list<array<string, mixed>>
      */
-    private function markets(string $siteId): array
+    private function markets(string $siteId, Content $page): array
     {
-        return Market::withoutGlobalScope(SiteScope::class)
+        $markets = Market::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
-            ->get()
+            ->get();
+
+        if ($page->market_id !== null) {
+            $markets = $markets
+                ->sortByDesc(fn (Market $m) => (string) $m->id === (string) $page->market_id ? 1 : 0)
+                ->values();
+        }
+
+        return $markets
             ->map(fn (Market $m) => [
                 'name' => $m->name,
                 'region' => $m->region,

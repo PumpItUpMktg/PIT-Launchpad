@@ -7,6 +7,7 @@ use App\Models\Content;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\SiteBranding;
 
 /**
  * Can this planned page resolve to REAL grounding — i.e. would {@see PageGroundingAssembler} feed the
@@ -17,7 +18,10 @@ use App\Models\Service;
  * - **Service-family pages** (service / hub / pillar / cluster) need ≥1 resolvable §1 Service —
  *   silo-scoped when the page pins a `silo_id`, else the assembler's site-wide fallback.
  * - **Location pages** need ≥1 §1 Market for the site.
- * - **Home / utility** have no entity-grounding path yet → always pending.
+ * - **Home / utility** (the standard-page composer's brand-narrative pages) ground on the brand
+ *   itself — its identity (branding) and/or its real services. Either is enough to write honestly.
+ *   (Kit presence is a separate gate the surfaces apply; a standard page with no kit stays held
+ *   regardless of grounding.)
  *
  * NOTE (the spoke→Service gap): the guided flow materializes pages without a `silo_id` and does not
  * yet create §1 Service/Market entities (those come from §7a intake), so a pure guided-flow site reads
@@ -31,12 +35,16 @@ class GroundingReadiness
     /** @var array<string, bool> site_id => has any §1 Market (per-request memo) */
     private array $marketSites = [];
 
+    /** @var array<string, bool> site_id => has brand-narrative grounding (per-request memo) */
+    private array $narrativeSites = [];
+
     public function ready(Content $page): bool
     {
         return match ($page->page_type) {
             PageType::Service, PageType::Hub, PageType::Pillar, PageType::Cluster => $this->hasServices($page),
             PageType::Location => $this->hasMarkets($page),
-            default => false, // home / utility — no entity grounding wired yet
+            PageType::Home, PageType::Utility => $this->hasNarrativeGrounding($page),
+            default => false,
         };
     }
 
@@ -65,5 +73,24 @@ class GroundingReadiness
 
         return $this->marketSites[$siteId] ??= Market::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)->exists();
+    }
+
+    /**
+     * A brand-narrative page (home / about / why-us / faq) grounds on the brand itself: its identity
+     * (a SiteBranding row) and/or its real services. Either is enough to write honestly; neither →
+     * still pending.
+     */
+    private function hasNarrativeGrounding(Content $page): bool
+    {
+        $siteId = (string) $page->site_id;
+
+        if (isset($this->narrativeSites[$siteId])) {
+            return $this->narrativeSites[$siteId];
+        }
+
+        $has = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->exists()
+            || Service::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->exists();
+
+        return $this->narrativeSites[$siteId] = $has;
     }
 }
