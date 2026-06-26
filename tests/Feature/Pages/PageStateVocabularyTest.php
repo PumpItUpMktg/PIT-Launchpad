@@ -36,12 +36,25 @@ it('flips whose-move by audience ONLY for held and failed states', function () {
 
         if ($state->isHeld() || $state === PageState::Failed) {
             expect($op)->not->toBe($client)               // flips
-                ->and($op)->toStartWith('Your move')
                 ->and($client)->toStartWith('Nothing needed');
         } else {
             expect($op)->toBe($client);                   // identical everywhere else
         }
     }
+});
+
+it('reserves the operator "Your move" camp for states with an on-screen action; held is pending-a-build', function () {
+    // Held = blocked on UNBUILT features → "Not available yet", never "Your move" (no button exists).
+    expect(PageState::HeldComposer->whoseMove(Audience::Operator))->toBe('Not available yet — pending the composer build.')
+        ->and(PageState::HeldGrounding->whoseMove(Audience::Operator))->toBe('Not available yet — pending Territory→Market.')
+        ->and(PageState::HeldComposer->whoseMove(Audience::Operator))->not->toContain('Your move')
+        ->and(PageState::HeldGrounding->whoseMove(Audience::Operator))->not->toContain('Your move');
+
+    // The states that DO have an on-screen action keep "Your move" (failed → the retry button).
+    expect(PageState::ReadyToGenerate->whoseMove(Audience::Operator))->toStartWith('Your move')
+        ->and(PageState::ReadyToReview->whoseMove(Audience::Operator))->toStartWith('Your move')
+        ->and(PageState::Approved->whoseMove(Audience::Operator))->toStartWith('Your move')
+        ->and(PageState::Failed->whoseMove(Audience::Operator))->toStartWith('Your move');
 });
 
 it('resolves a kit-bound, grounded, undrafted page to ready-to-generate', function () {
@@ -104,7 +117,7 @@ it('appends the operator tail but never to the client', function () {
 
     expect($operator->clientLine)->toBe($client->clientLine)        // sacred line shared
         ->and($operator->operatorTail)->toBe('composer pending')    // tail names the real blocker
-        ->and($operator->whoseMove)->toBe('Your move — blocked on the composer build.')
+        ->and($operator->whoseMove)->toBe('Not available yet — pending the composer build.')
         ->and($client->operatorTail)->toBeNull()                    // client never sees the tail
         ->and($client->whoseMove)->toBe("Nothing needed — we're getting this ready.");
 });

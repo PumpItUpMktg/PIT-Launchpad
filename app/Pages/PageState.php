@@ -9,10 +9,14 @@ namespace App\Pages;
  * Each state carries:
  *  - {@see clientLine()} — the SACRED shared line. Identical on every surface, now and future; never
  *    reworded per-screen. A second wording for the same state is the bug this class exists to prevent.
- *  - {@see whoseMove()} — the small-type your-move/our-move line. Identical across audiences EXCEPT for
- *    the held/failed states, where it flips: operator-truth ("your move — you unblock it") vs the
- *    future client-calm ("nothing needed — we're handling it"). That split is also the scannability
- *    spine of the screen.
+ *  - {@see whoseMove()} — the small-type whose-move line. Identical across audiences EXCEPT for the
+ *    held/failed states, where it flips to operator-truth vs the future client-calm ("nothing needed
+ *    — we're handling it"). The operator camp is three-way, mirroring whether there's an on-screen
+ *    action: "Your move" only for states with one (generate / review / publish / failed→try again);
+ *    "We've got it" while the system is working; and "Not available yet — pending X" for a page
+ *    blocked on an UNBUILT feature (the composer, Territory→Market), which is neither the operator's
+ *    click nor ours to do — so the copy must not imply a button that isn't there. That split is also
+ *    the scannability spine of the screen.
  *  - {@see tone()} — the neutral badge tone (shared presentation hint).
  *
  * The content-specific operator tail (post id, error, queued-at, …) is append-only diagnostic detail
@@ -64,11 +68,14 @@ enum PageState: string
             self::Approved => 'Your move — publish when ready.',
             self::Publishing => "We've got it — going live shortly.",
             self::Live => 'Done — nothing needed.',
+            // Held states are blocked on UNBUILT features, not an operator click — so the operator
+            // camp is "pending-a-build", never "Your move" (which would imply a button that isn't
+            // there). "Your move" is reserved for states with an actual on-screen action.
             self::HeldComposer => $operator
-                ? 'Your move — blocked on the composer build.'
+                ? 'Not available yet — pending the composer build.'
                 : "Nothing needed — we're getting this ready.",
             self::HeldGrounding => $operator
-                ? 'Your move — blocked on Territory→Market.'
+                ? 'Not available yet — pending Territory→Market.'
                 : 'Nothing needed — unlocks as coverage grows.',
             // Failed is shown only once retries are exhausted (GeneratePage tries=1; PublishContent
             // tries=3 then terminal) — so it is genuinely a manual re-trigger, never an auto-retry.
