@@ -73,7 +73,7 @@ it('renders each row from the canonical vocabulary with its loop actions and bul
     // held-composer: no live action; the sacred line + operator-truth whose-move + diagnostic tail
     expect($rows[$pending->id]['actions'])->toBe([])
         ->and($rows[$pending->id]['client_line'])->toBe("We're still preparing this page")
-        ->and($rows[$pending->id]['whose_move'])->toBe('Your move — blocked on the composer build.')
+        ->and($rows[$pending->id]['whose_move'])->toBe('Not available yet — pending the composer build.')
         ->and($rows[$pending->id]['operator_tail'])->toBe('composer pending');
 
     // most-actionable first: review before the planned generate row
@@ -95,7 +95,7 @@ it('holds (no live action) a kit-bound page with no grounding — held-grounding
 
     expect($row['actions'])->toBe([])                    // never a live Generate
         ->and($row['client_line'])->toBe("We're still preparing this page")
-        ->and($row['whose_move'])->toBe('Your move — blocked on Territory→Market.')
+        ->and($row['whose_move'])->toBe('Not available yet — pending Territory→Market.')
         ->and($row['operator_tail'])->toBe('grounding pending — Territory→§1 Market');
 });
 
