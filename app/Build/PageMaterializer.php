@@ -91,6 +91,12 @@ final class PageMaterializer
                     ? $this->projector->serviceForSpoke($entry->spoke_id, $site)
                     : null;
 
+                // A location page targets ONE town — pin its market (the page_key is the source
+                // CoverageArea id) so grounding foregrounds its own town, not the whole service area.
+                $market = $entry->source === BuildSource::Location
+                    ? $this->projector->marketForCoverageArea($entry->page_key, $site)
+                    : null;
+
                 $content = Content::create([
                     'site_id' => $site->id, // explicit: no current-site scope in console/job context
                     'kind' => ContentKind::Page,
@@ -102,6 +108,7 @@ final class PageMaterializer
                     'version' => 1,
                     'silo_id' => $silo?->id,
                     'primary_service_id' => $primaryService?->id,
+                    'market_id' => $market?->id,
                     'wireframe_kit_id' => $kit?->id,
                     'wireframe_kit_version' => $kit?->version,
                 ]);

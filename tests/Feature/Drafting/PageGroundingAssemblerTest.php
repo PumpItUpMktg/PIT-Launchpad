@@ -124,6 +124,30 @@ it('falls back to silo-scoped grounding when the page has no pinned service (hub
     expect($grounding->services)->toHaveCount(2); // the whole silo, as before
 });
 
+it('foregrounds a location page\'s OWN town as the subject, keeping the rest as service-area context', function () {
+    $site = Site::factory()->create();
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'region' => 'NJ']);
+    $clifton = Market::factory()->create(['site_id' => $site->id, 'name' => 'Clifton', 'region' => 'NJ']);
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'region' => 'NJ']);
+
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('page_type', 'location')->firstOrFail();
+
+    $page = Content::factory()->page()->create([
+        'site_id' => $site->id,
+        'market_id' => $clifton->id, // the page is about Clifton
+        'wireframe_kit_id' => $kit->id,
+        'page_type' => PageType::Location,
+        'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    $grounding = app(PageGroundingAssembler::class)->assemble($page);
+
+    // the page's own town leads; all three are still present as service-area context
+    expect($grounding->markets[0]['name'])->toBe('Clifton')
+        ->and(collect($grounding->markets)->pluck('name')->sort()->values()->all())->toBe(['Clifton', 'Montclair', 'Newark']);
+});
+
 it('surfaces a page without a wireframe kit as a failure (the guard wraps it)', function () {
     $site = Site::factory()->create();
     $page = Content::factory()->page()->create(['site_id' => $site->id, 'wireframe_kit_id' => null]);

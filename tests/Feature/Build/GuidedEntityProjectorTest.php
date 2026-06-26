@@ -10,12 +10,15 @@ use App\Enums\SpokePageType;
 use App\Enums\SpokeStatus;
 use App\Enums\SpokeTag;
 use App\Models\BuildPage;
+use App\Models\CoverageArea;
+use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Silo;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
+use Database\Seeders\WireframeKitSeeder;
 
 function projSpoke(Site $site, SiloBlueprint $bp, array $attrs): Spoke
 {
@@ -58,6 +61,42 @@ it('is idempotent — re-projecting does not duplicate', function () {
 
     expect(Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1)
         ->and(Service::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1);
+});
+
+it('projects page-selected territories into §1 Markets, idempotently (manual towns are priority)', function () {
+    $site = Site::factory()->create();
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Clifton', 'state' => 'NJ', 'page_selected' => true, 'source' => 'county']);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'state' => 'NJ', 'page_selected' => true, 'source' => 'manual']);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'state' => 'NJ', 'page_selected' => false]); // not selected → no market
+
+    app(GuidedEntityProjector::class)->project($site);
+    app(GuidedEntityProjector::class)->project($site); // idempotent
+
+    $markets = Market::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
+
+    expect($markets->pluck('name')->sort()->values()->all())->toBe(['Clifton', 'Montclair'])
+        ->and($markets->firstWhere('name', 'Montclair')->tier->value)->toBe('priority')   // owner-added → priority
+        ->and($markets->firstWhere('name', 'Clifton')->tier->value)->toBe('coverage')
+        ->and((bool) $markets->firstWhere('name', 'Clifton')->is_covered)->toBeTrue();
+});
+
+it('materializes a location page pinned to its market, so grounding readiness flips to ready', function () {
+    $this->seed(WireframeKitSeeder::class);
+    $site = Site::factory()->create();
+    $town = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Clifton', 'state' => 'NJ', 'page_selected' => true]);
+
+    BuildPage::factory()->create([
+        'site_id' => $site->id, 'source' => BuildSource::Location, 'page_key' => $town->id,
+        'title' => 'Clifton, NJ', 'recipe' => 'location.town', 'status' => BuildStatus::Queued,
+        'priority' => 500, 'review_required' => false, 'spoke_id' => null,
+    ]);
+
+    $pages = app(PageMaterializer::class)->materialize($site);
+    $page = collect($pages)->firstWhere('title', 'Clifton, NJ');
+
+    expect($page->market_id)->not->toBeNull()
+        ->and($page->market->name)->toBe('Clifton')
+        ->and(app(GroundingReadiness::class)->ready($page->fresh()))->toBeTrue();
 });
 
 it('materializes a service page pinned to its silo, so grounding readiness flips to ready', function () {
