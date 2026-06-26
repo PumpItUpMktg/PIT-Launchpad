@@ -55,7 +55,7 @@
             "cardinality": { "type": "single" },
             "constraints": { "required": true, "min_length": 120, "format": "html" },
             "client_override": true,
-            "generation_hint": "Who the brand is and what it does — grounded in the real services and brand voice.",
+            "generation_hint": "Who the brand is and what it does — grounded in the real services, the captured brand story if one is provided, and the brand voice. Invent no facts.",
             "elementor_binding": "lp/text"
         },
         {

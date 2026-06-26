@@ -12,8 +12,10 @@ use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SiteBranding;
+use App\Models\SiteNarrative;
 use App\Models\WireframeKit;
 use App\PageBuilder\Schema\KitSchema;
+use App\Standard\StandardPageIntake;
 use Illuminate\Database\Eloquent\Collection;
 use RuntimeException;
 
@@ -53,7 +55,41 @@ class PageGroundingAssembler
             targetKeyword: $this->targetKeyword($page),
             relatedLinks: $this->relatedLinks($page),
             pageLabel: $page->standard_type?->label(),
+            narrative: $this->narrative($page),
         );
+    }
+
+    /**
+     * The captured brand-narrative intake this page composes from — ONLY the fields its kit consumes
+     * AND that carry real content. Absent fields are left out entirely, so the drafter has nothing to
+     * fabricate from and the kit's intake-bound slots condition out (degrade by omission).
+     *
+     * @return array<string, mixed>
+     */
+    private function narrative(Content $page): array
+    {
+        $type = $page->standard_type;
+        if ($type === null) {
+            return [];
+        }
+
+        $fields = StandardPageIntake::fields($type);
+        if ($fields === []) {
+            return [];
+        }
+
+        $narrative = SiteNarrative::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $page->site_id)
+            ->first();
+
+        $out = [];
+        foreach ($fields as $field) {
+            if (StandardPageIntake::present($narrative, $field)) {
+                $out[$field] = $narrative?->getAttribute($field);
+            }
+        }
+
+        return $out;
     }
 
     /**

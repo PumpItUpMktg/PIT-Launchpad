@@ -40,7 +40,7 @@
             "cardinality": { "type": "repeater", "min": 3, "max": 8 },
             "constraints": { "required": true },
             "client_override": true,
-            "generation_hint": "The concrete reasons to choose this brand — title + line each. No empty superlatives.",
+            "generation_hint": "Phrase each captured 'differentiator' (title + line) in the brand voice — concrete, no empty superlatives, none invented. (Required intake: the page holds if no differentiators are captured.)",
             "elementor_binding": "lp/repeater"
         },
         {

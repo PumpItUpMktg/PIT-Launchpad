@@ -36,6 +36,7 @@ enum PageState: string
     case Live = 'live';
     case HeldComposer = 'held_composer';
     case HeldGrounding = 'held_grounding';
+    case HeldIntake = 'held_intake';
     case Failed = 'failed';
 
     /** The sacred, shared client line — identical on the operator screen and the future client screen. */
@@ -48,7 +49,7 @@ enum PageState: string
             self::Approved => 'Approved — ready to publish',
             self::Publishing => 'Publishing now',
             self::Live => 'Live on your site',
-            self::HeldComposer, self::HeldGrounding => "We're still preparing this page",
+            self::HeldComposer, self::HeldGrounding, self::HeldIntake => "We're still preparing this page",
             self::Failed => "Something went wrong — we're on it",
         };
     }
@@ -77,6 +78,11 @@ enum PageState: string
             self::HeldGrounding => $operator
                 ? 'Not available yet — pending Territory→Market.'
                 : 'Nothing needed — unlocks as coverage grows.',
+            // Missing intake is a missing INPUT the operator supplies (not unbuilt code) — so the
+            // operator camp points to the capture surface ("needs intake"), never fabricates around it.
+            self::HeldIntake => $operator
+                ? 'Needs brand intake — capture it in setup.'
+                : "Nothing needed — we're getting this ready.",
             // Failed is shown only once retries are exhausted (GeneratePage tries=1; PublishContent
             // tries=3 then terminal) — so it is genuinely a manual re-trigger, never an auto-retry.
             self::Failed => $operator
@@ -93,13 +99,13 @@ enum PageState: string
             self::ReadyToReview => 'warn',
             self::Writing, self::Publishing => 'info',
             self::Failed => 'danger',
-            self::ReadyToGenerate, self::HeldComposer, self::HeldGrounding => 'idle',
+            self::ReadyToGenerate, self::HeldComposer, self::HeldGrounding, self::HeldIntake => 'idle',
         };
     }
 
     /** Held/blocked states — the only ones whose whose-move line flips by audience. */
     public function isHeld(): bool
     {
-        return $this === self::HeldComposer || $this === self::HeldGrounding;
+        return $this === self::HeldComposer || $this === self::HeldGrounding || $this === self::HeldIntake;
     }
 }

@@ -2,6 +2,7 @@
 
 use App\ContentEngine\Drafting\DraftCall;
 use App\ContentEngine\Drafting\DraftGuard;
+use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Drafting\PageDrafter;
 use App\ContentEngine\Drafting\PageDraftingEngine;
 use App\ContentEngine\Drafting\PageGroundingAssembler;
@@ -16,9 +17,12 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\SiteBranding;
+use App\Models\SiteNarrative;
 use App\Models\VoiceProfile;
 use App\Models\WireframeKit;
 use App\PageBuilder\Validation\KitValidator;
+use App\Pages\PageState;
+use App\Pages\PageStatePresenter;
 use App\Standard\StandardKit;
 use Database\Seeders\WireframeKitSeeder;
 use Tests\Support\Draft;
@@ -36,7 +40,7 @@ function standardEngine(FakeClaudeClient $claude): PageDraftingEngine
 }
 
 /** An undrafted About page wired to brand grounding + the about-page composer kit. */
-function aboutPage(): Content
+function aboutPage(bool $withNarrative = true): Content
 {
     $site = Site::factory()->create(['brand_name' => 'Lone Star Plumbing']);
     VoiceProfile::factory()->active()->create(['site_id' => $site->id, 'version' => 2]);
@@ -46,6 +50,15 @@ function aboutPage(): Content
         'site_id' => $site->id, 'type' => ProofType::Warranty,
         'payload' => ['label' => '10-year warranty'], 'is_substantiated' => true,
     ]);
+
+    if ($withNarrative) {
+        SiteNarrative::factory()->create([
+            'site_id' => $site->id,
+            'story' => 'Lone Star Plumbing started with one truck and a promise to show up on time.',
+            'mission' => 'Make plumbing painless for local homeowners.',
+            'values' => [['title' => 'On time', 'description' => 'Every visit.']],
+        ]);
+    }
 
     (new WireframeKitSeeder)->run();
     $kit = WireframeKit::where('name', 'about-page')->firstOrFail();
@@ -90,11 +103,47 @@ it('drafts a standard About page end-to-end → needs_review with its kit slots 
     expect($drafted->status)->toBe(ContentStatus::NeedsReview)
         ->and($drafted->hasDraft())->toBeTrue()
         ->and($drafted->slot_payload['hero_headline'])->toContain('Plumbing')
-        ->and($drafted->slot_payload['values'])->toHaveCount(3)
+        ->and($drafted->slot_payload['values'])->toHaveCount(3)   // mission/values kept — intake present
         ->and($drafted->meta['image_specs'])->not->toBeEmpty();
 
-    // The drafter is told the page's intent ("About"), not the coarse "utility" page type.
-    expect($claude->prompts[0])->toContain('"About" page');
+    // The drafter is told the page's intent ("About") AND grounded on the captured narrative.
+    expect($claude->prompts[0])->toContain('"About" page')
+        ->and($claude->prompts[0])->toContain('BRAND NARRATIVE')
+        ->and($claude->prompts[0])->toContain('show up on time'); // the captured story is injected
+});
+
+it('holds an About page with no captured story — needs intake, never fabricated', function () {
+    $page = aboutPage(withNarrative: false)->fresh();
+
+    // The honesty gate: required intake (story) absent → not generatable, surfaced as held-intake.
+    expect(app(GroundingReadiness::class)->ready($page))->toBeFalse()
+        ->and(app(PageStatePresenter::class)->resolve($page))->toBe(PageState::HeldIntake);
+});
+
+it('degrades by omission — drops optional intake slots whose intake was not captured', function () {
+    // story captured (required satisfied) but NO mission/values → those slots must not be fabricated.
+    $site = Site::factory()->create(['brand_name' => 'Lone Star Plumbing']);
+    VoiceProfile::factory()->active()->create(['site_id' => $site->id, 'version' => 1]);
+    SiteBranding::factory()->create(['site_id' => $site->id]);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id, 'story' => 'One truck, one promise: on time, honest work.',
+        'mission' => null, 'values' => null, 'differentiators' => null,
+    ]);
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('name', 'about-page')->firstOrFail();
+    $page = Content::factory()->page()->create([
+        'site_id' => $site->id, 'page_type' => PageType::Utility, 'standard_type' => StandardPageType::About,
+        'wireframe_kit_id' => $kit->id, 'slot_payload' => [],
+    ]);
+
+    // Even if the model emits mission/values, they're dropped (intake absent) — degrade by omission.
+    $claude = new FakeClaudeClient(aboutResponse('x'));
+    $drafted = standardEngine($claude)->draftPage($page->fresh());
+
+    expect($drafted->hasDraft())->toBeTrue()
+        ->and($drafted->slot_payload)->toHaveKey('our_story')
+        ->and($drafted->slot_payload)->not->toHaveKey('mission')   // dropped — no captured mission
+        ->and($drafted->slot_payload)->not->toHaveKey('values');   // dropped — no captured values
 });
 
 it('resolves a kit only for the standard pages whose composer has shipped', function () {

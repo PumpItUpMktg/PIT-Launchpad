@@ -50,6 +50,12 @@ it('reserves the operator "Your move" camp for states with an on-screen action; 
         ->and(PageState::HeldComposer->whoseMove(Audience::Operator))->not->toContain('Your move')
         ->and(PageState::HeldGrounding->whoseMove(Audience::Operator))->not->toContain('Your move');
 
+    // Held-intake points to the capture surface (a missing input, not unbuilt code) — neither
+    // "Your move" (no on-screen button) nor "Not available yet".
+    expect(PageState::HeldIntake->whoseMove(Audience::Operator))->toBe('Needs brand intake — capture it in setup.')
+        ->and(PageState::HeldIntake->whoseMove(Audience::Operator))->not->toContain('Your move')
+        ->and(PageState::HeldIntake->clientLine())->toBe("We're still preparing this page");
+
     // The states that DO have an on-screen action keep "Your move" (failed → the retry button).
     expect(PageState::ReadyToGenerate->whoseMove(Audience::Operator))->toStartWith('Your move')
         ->and(PageState::ReadyToReview->whoseMove(Audience::Operator))->toStartWith('Your move')

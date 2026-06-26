@@ -5,6 +5,7 @@ namespace App\Pages;
 use App\ContentEngine\Drafting\GroundingReadiness;
 use App\Enums\ContentStatus;
 use App\Models\Content;
+use App\Standard\StandardPageIntake;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 
@@ -56,6 +57,12 @@ class PageStatePresenter
             return PageState::HeldComposer;
         }
 
+        // Missing required brand-narrative intake is its own hold, distinct from missing entities —
+        // checked before the grounding gate so the operator sees "needs intake", not a vague pending.
+        if (StandardPageIntake::missingRequired($content) !== []) {
+            return PageState::HeldIntake;
+        }
+
         if (! $this->grounding->ready($content)) {
             return PageState::HeldGrounding;
         }
@@ -78,6 +85,7 @@ class PageStatePresenter
             PageState::Live => $this->liveTail($content),
             PageState::HeldComposer => 'composer pending',
             PageState::HeldGrounding => 'grounding pending — Territory→§1 Market',
+            PageState::HeldIntake => $this->intakeTail($content),
             PageState::Failed => $this->failedTail($content),
             PageState::ReadyToGenerate => null,
         };
@@ -105,6 +113,13 @@ class PageStatePresenter
         }
 
         return $parts === [] ? 'live' : implode(' · ', $parts);
+    }
+
+    private function intakeTail(Content $content): string
+    {
+        $missing = StandardPageIntake::missingRequired($content);
+
+        return $missing === [] ? 'needs intake' : 'needs intake — '.implode(', ', $missing);
     }
 
     private function failedTail(Content $content): string

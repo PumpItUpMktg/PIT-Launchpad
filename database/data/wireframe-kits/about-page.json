@@ -42,7 +42,7 @@
             "cardinality": { "type": "single" },
             "constraints": { "required": true, "min_length": 160, "format": "html" },
             "client_override": true,
-            "generation_hint": "The brand's story in its own voice — honest, no invented history or numbers.",
+            "generation_hint": "Write the BRAND NARRATIVE 'story' in the brand voice — expand and shape it, but assert no history, dates, or numbers not in it. (Required intake: the page holds if no story is captured.)",
             "seo_binding": "meta_description",
             "elementor_binding": "lp/text"
         },
@@ -54,8 +54,9 @@
             "source": "generated",
             "cardinality": { "type": "single" },
             "constraints": { "required": true, "min_length": 80 },
+            "condition": { "field": "has_intake_mission", "equals": true },
             "client_override": true,
-            "generation_hint": "What the brand commits to for its customers.",
+            "generation_hint": "Write the captured 'mission' in the brand voice. Only present when a mission is captured — never invented.",
             "elementor_binding": "lp/text"
         },
         {
@@ -66,8 +67,9 @@
             "source": "generated",
             "cardinality": { "type": "repeater", "min": 3, "max": 6 },
             "constraints": { "required": true },
+            "condition": { "field": "has_intake_values", "equals": true },
             "client_override": true,
-            "generation_hint": "The principles the brand works by — one short title + line each.",
+            "generation_hint": "Phrase each captured 'value' (title + line) in the brand voice. Only present when values are captured — never invented.",
             "elementor_binding": "lp/repeater"
         },
         {

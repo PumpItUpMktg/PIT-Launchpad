@@ -5,6 +5,7 @@ namespace App\ContentEngine\Drafting;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
+use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\KitValidator;
 use App\PageBuilder\Validation\ValidationCode;
 use App\PageBuilder\Validation\ValidationContext;
@@ -70,8 +71,15 @@ class PageDraftingEngine
         // off-schema keys (the render contract is the slot key), then validate
         // structure. A structural failure is surfaced; media/entity gate publish.
         $slots = $this->shaper->shape($kit->slots, $attempt->payload->slots ?? []);
+
+        // Degrade by omission, never by invention: an intake-bound slot whose intake wasn't captured
+        // is dropped from the draft, not kept as fabricated copy. Model proposes, deterministic check
+        // enforces — the same discipline as fonts and internal links. The flags also let a
+        // conditioned slot count as required when its intake IS present.
+        $flags = $this->intakeFlags($grounding);
+        $slots = $this->dropConditionedOut($kit, $slots, $flags);
         $structural = $this->structuralFailures(
-            $this->validator->validate($kit, $slots, new ValidationContext($page)),
+            $this->validator->validate($kit, $slots, new ValidationContext($page, flags: $flags)),
         );
 
         if ($structural !== []) {
@@ -88,6 +96,48 @@ class PageDraftingEngine
         $this->persist($page, $grounding, $attempt->payload, $slots);
 
         return $page;
+    }
+
+    /**
+     * Presence flags for the captured narrative fields (has_intake_story, …) — kit slots condition on
+     * these so a slot is required when its intake is present and absent (dropped) when it isn't.
+     *
+     * @return array<string, bool>
+     */
+    private function intakeFlags(PageGrounding $grounding): array
+    {
+        $flags = [];
+        foreach (array_keys($grounding->narrative) as $field) {
+            $flags["has_intake_{$field}"] = true;
+        }
+
+        return $flags;
+    }
+
+    /**
+     * Drop slots whose kit condition isn't met by the context flags — the deterministic enforcement
+     * of degrade-by-omission (a fabricated intake-bound slot can't survive into the payload).
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  array<string, bool>  $flags
+     * @return array<string, mixed>
+     */
+    private function dropConditionedOut(KitSchema $kit, array $slots, array $flags): array
+    {
+        foreach (array_keys($slots) as $key) {
+            $slot = $kit->slot((string) $key);
+
+            // Scope strictly to intake conditions (has_intake_*). Other conditions (has_proof,
+            // has_location, …) are publish-time gates whose flags aren't computed at draft — touching
+            // them here would change service-page behavior. Only intake degrades by omission here.
+            if ($slot?->condition !== null
+                && str_starts_with($slot->condition->field, 'has_intake_')
+                && ! $slot->appliesTo($flags)) {
+                unset($slots[$key]);
+            }
+        }
+
+        return $slots;
     }
 
     /**

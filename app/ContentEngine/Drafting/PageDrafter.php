@@ -62,6 +62,7 @@ class PageDrafter
 
         $parts[] = $this->voiceBlock($grounding);
         $parts[] = $this->brandingBlock($grounding);
+        $parts[] = $this->narrativeBlock($grounding);
         $parts[] = $this->servicesBlock($grounding);
         $parts[] = $this->problemsBlock($grounding);
         $parts[] = $this->offersBlock($grounding);
@@ -86,6 +87,17 @@ class PageDrafter
     private function brandingBlock(PageGrounding $grounding): string
     {
         return "BRAND / NAP (use exactly; never invent):\n".$this->json($grounding->branding);
+    }
+
+    private function narrativeBlock(PageGrounding $grounding): string
+    {
+        if ($grounding->narrative === []) {
+            return '';
+        }
+
+        return 'BRAND NARRATIVE (the captured intake this page is built from — write it in the brand '
+            .'voice, expand and shape, but DO NOT invent facts, history, numbers, names, or claims '
+            ."beyond what is here):\n".$this->json($grounding->narrative);
     }
 
     private function servicesBlock(PageGrounding $grounding): string

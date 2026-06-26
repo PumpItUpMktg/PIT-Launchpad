@@ -8,6 +8,7 @@ use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SiteBranding;
+use App\Standard\StandardPageIntake;
 
 /**
  * Can this planned page resolve to REAL grounding — i.e. would {@see PageGroundingAssembler} feed the
@@ -82,6 +83,12 @@ class GroundingReadiness
      */
     private function hasNarrativeGrounding(Content $page): bool
     {
+        // A Core page also needs its REQUIRED brand-narrative intake (About→story, Why-Choose-Us→
+        // differentiators). Absent → held "needs intake", never drafted from thin air.
+        if (StandardPageIntake::missingRequired($page) !== []) {
+            return false;
+        }
+
         $siteId = (string) $page->site_id;
 
         if (isset($this->narrativeSites[$siteId])) {
