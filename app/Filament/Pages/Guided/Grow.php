@@ -28,9 +28,8 @@ use Illuminate\Support\Facades\Auth;
  * twin (confirmed decisions survive).
  *
  * @property-read array{live: int, building: int, planned: int} $stats
- * @property-read list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, reason: ?string, hold_kind: ?string, live_url: ?string, bulk: ?string}> $pages
+ * @property-read list<array<string, mixed>> $pages
  * @property-read list<array{key: string, label: string, count: int, pages: list<array<string, mixed>>}> $sections
- * @property-read array<int, array{title: string, status: string, silo: string}> $news
  */
 class Grow extends GuidedPage
 {
@@ -65,7 +64,7 @@ class Grow extends GuidedPage
     }
 
     /**
-     * @return list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string}>
+     * @return list<array<string, mixed>>
      */
     public function getPagesProperty(): array
     {
@@ -78,23 +77,13 @@ class Grow extends GuidedPage
      * The workbench grouped into Core / Service / Town lanes with per-section counts (the list the
      * view renders). The flat {@see getPagesProperty()} stays for the bulk-lane gate + counts.
      *
-     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string}>}>
+     * @return list<array{key: string, label: string, count: int, pages: list<array<string, mixed>>}>
      */
     public function getSectionsProperty(): array
     {
         $site = $this->getSite();
 
         return $site === null ? [] : app(GrowDashboard::class)->sections($site);
-    }
-
-    /**
-     * @return array<int, array{title: string, status: string, silo: string}>
-     */
-    public function getNewsProperty(): array
-    {
-        $site = $this->getSite();
-
-        return $site === null ? [] : app(GrowDashboard::class)->news($site);
     }
 
     /** The proof step (structured preview + review/approve) URL for a draft-ready row. */
@@ -128,6 +117,29 @@ class Grow extends GuidedPage
             ->title('Queued — generating on the worker')
             ->body("'{$content->title}' is being drafted; it will appear ready for review shortly.")
             ->send();
+    }
+
+    /** Per-page approve (a review row) — a cheap Launchpad-only acceptance; surfaces guard warnings. */
+    public function approve(string $contentId): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        $result = app(ReviewActions::class)->approve($content, Auth::id());
+
+        if ($result->isBlocked()) {
+            Notification::make()->danger()->title('Cannot approve')->body((string) $result->blockedReason)->send();
+
+            return;
+        }
+
+        $notification = Notification::make()->success()->title('Approved — ready to publish');
+        if ($result->warnings !== []) {
+            $notification->body(implode(' ', $result->warnings));
+        }
+        $notification->send();
     }
 
     /** Per-page publish (the morphing primary for an approved row) — §2's idempotent compose-and-push. */

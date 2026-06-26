@@ -81,3 +81,20 @@ test('Grow re-run controls: re-arrange runs inline, re-ground dispatches the bui
 
     Queue::assertPushed(BuildStructure::class);
 });
+
+test('Grow per-page approve flips a review draft to approved (no WordPress contact)', function () {
+    SetupState::query()->create([
+        'site_id' => $this->site->id, 'current_step' => 6,
+        'services_done' => true, 'territory_done' => true, 'structure_finalized' => true, 'approved' => true, 'launched' => true,
+    ]);
+    $page = Content::factory()->page()->create([
+        'site_id' => $this->site->id, 'status' => ContentStatus::NeedsReview, 'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    Livewire::test(Grow::class)
+        ->assertOk()                              // the workbench renders the vocab rows + actions
+        ->call('approve', $page->id)
+        ->assertOk();
+
+    expect($page->fresh()->status)->toBe(ContentStatus::Approved);
+});

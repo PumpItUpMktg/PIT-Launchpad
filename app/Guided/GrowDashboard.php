@@ -2,27 +2,28 @@
 
 namespace App\Guided;
 
-use App\ContentEngine\Drafting\GroundingReadiness;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
-use App\Models\Silo;
 use App\Models\Site;
+use App\Pages\Audience;
+use App\Pages\PageState;
+use App\Pages\PageStatePresenter;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * The Grow dashboard read model. The Active landing's primary content is the pages workbench
- * ({@see pages()}) — every planned `kind=page` Content row (materialized by §Build's PageMaterializer)
- * with its build-out state and the morphing primary action that makes generate → approve → publish
- * reachable. The header strip (live / building / planned) and the list are both derived from the
- * SAME page set so they never drift. The town queue + fresh-content feed are deferred-layer
- * scaffolds (coverage/drip + news engine) shown as clearly-labeled "activates later" sections.
+ * The Grow dashboard read model — the operator's action surface. Its primary content is the pages
+ * workbench ({@see sections()}): every `kind=page` Content row grouped Core / Service / Town, each
+ * carrying the canonical state vocabulary ({@see PageStatePresenter}) — the sacred client line, the
+ * operator whose-move line, the append-only operator tail — plus the loop actions that make
+ * generate → review → approve → publish reachable. The header counts derive from the same page set so
+ * they never drift. All state words come from the one vocabulary source; none are spelled here.
  */
 class GrowDashboard
 {
-    public function __construct(private readonly GroundingReadiness $grounding) {}
+    public function __construct(private readonly PageStatePresenter $presenter = new PageStatePresenter) {}
 
     /**
      * Build-out counts, page-based so the header strip agrees with the workbench list exactly:
@@ -47,14 +48,12 @@ class GrowDashboard
     }
 
     /**
-     * The pages workbench — one row per planned `kind=page` Content, most-actionable first, each
-     * carrying its build-out state badge and the morphing primary (`generate` until drafted,
-     * `review` while a draft awaits acceptance, `publish` once approved, `view` once live; `pending`
-     * when the page has no kit yet so the composer can't run). The bulk Approve/Publish lanes act on
-     * the `review`/`publish` rows respectively (never bulk-generate — generation is a deliberate
-     * per-page action).
+     * The pages workbench — one row per `kind=page` Content, most-actionable first, each carrying the
+     * canonical vocabulary (client line + operator whose-move + operator tail) and its loop actions.
+     * The bulk Approve/Publish lanes act on the review/approved rows respectively (never bulk-generate
+     * — generation is a deliberate per-page action).
      *
-     * @return list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, reason: ?string, hold_kind: ?string, live_url: ?string, bulk: ?string}>
+     * @return list<array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, live_url: ?string, bulk: ?string}>
      */
     public function pages(Site $site): array
     {
@@ -74,7 +73,7 @@ class GrowDashboard
      * most-actionable-first rank WITHIN each section; empty sections are dropped, so a site with no
      * materialized town pages yet simply shows Core + Service.
      *
-     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, reason: ?string, hold_kind: ?string, live_url: ?string, bulk: ?string}>}>
+     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, live_url: ?string, bulk: ?string}>}>
      */
     public function sections(Site $site): array
     {
@@ -129,78 +128,55 @@ class GrowDashboard
     }
 
     /**
-     * @return array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, reason: ?string, hold_kind: ?string, live_url: ?string, bulk: ?string, rank: int, section: string}
+     * @return array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, live_url: ?string, bulk: ?string, rank: int, section: string}
      */
     private function row(Content $c): array
     {
-        // The pre-generation hold: a planned page needs BOTH a composer (kit) AND resolvable grounding
-        // to generate. We track WHICH is missing for our OWN debugging (hold_kind), but the operator
-        // sees ONE plain "Not ready yet" held state with a plain reason — never the internal
-        // composer/grounding vocabulary, and never "Ready to generate" and a hold at the same time.
-        $holdKind = match (true) {
-            ! $c->hasDraft() && $c->wireframe_kit_id === null => 'composer',
-            ! $c->hasDraft() && ! $this->grounding->ready($c) => 'grounding',
+        $p = $this->presenter->present($c, Audience::Operator);
+        $state = $p->state;
+
+        // Operator-screen behavior derived from the canonical state. Review rows offer BOTH Review
+        // (→ proof editor) and a per-page Approve; a failed row re-triggers the step that failed
+        // (re-generate if it never drafted, re-publish if the push failed). Held / in-flight rows
+        // carry no live action — their whose-move line says why.
+        $actions = match ($state) {
+            PageState::ReadyToGenerate => ['generate'],
+            PageState::ReadyToReview => ['review', 'approve'],
+            PageState::Approved => ['publish'],
+            PageState::Live => ['view'],
+            PageState::Failed => [$c->hasDraft() ? 'publish' : 'generate'],
+            default => [], // Writing, Publishing, HeldComposer, HeldGrounding
+        };
+
+        // Most-actionable first within a lane: review → approved → (ready / held / failed) → in-flight → live.
+        $rank = match ($state) {
+            PageState::ReadyToReview => 0,
+            PageState::Approved => 1,
+            PageState::ReadyToGenerate, PageState::Failed, PageState::HeldComposer, PageState::HeldGrounding => 2,
+            PageState::Writing, PageState::Publishing => 3,
+            PageState::Live => 5,
+        };
+
+        $bulk = match ($state) {
+            PageState::ReadyToReview => 'approve',
+            PageState::Approved => 'publish',
             default => null,
         };
-
-        [$action, $rank] = match (true) {
-            $c->isGenerating() => [null, 3],
-            ! $c->hasDraft() => [$holdKind !== null ? 'held' : 'generate', 2],
-            $c->status === ContentStatus::Published => ['view', 5],
-            $c->status === ContentStatus::Approved => ['publish', 1],
-            default => ['review', 0], // a draft awaiting acceptance — most urgent
-        };
-
-        $state = $action === 'held' ? 'Not ready yet' : $c->buildStateLabel();
 
         return [
             'id' => (string) $c->id,
             'title' => $this->title($c),
             'permalink' => '/'.ltrim((string) $c->slug, '/'),
-            'state' => $state,
-            'tone' => $this->tone($state),
-            'action' => $action,
-            // The plain, user-facing reason a held row isn't actionable (no internal vocabulary).
-            'reason' => $action === 'held' ? $this->holdReason($c, $holdKind) : null,
-            // Admin-only: which gate is unmet (composer vs grounding) — for our debugging, never user copy.
-            'hold_kind' => $holdKind,
-            'live_url' => $action === 'view' ? $this->liveUrl($c) : null,
-            // which bulk lane this row belongs to (the checkbox targets); generate is per-page only
-            'bulk' => match ($action) {
-                'review' => 'approve',
-                'publish' => 'publish',
-                default => null,
-            },
+            'client_line' => $p->clientLine,
+            'whose_move' => $p->whoseMove,
+            'operator_tail' => $p->operatorTail,
+            'tone' => $p->tone,
+            'actions' => $actions,
+            'live_url' => $state === PageState::Live ? $this->liveUrl($c) : null,
+            'bulk' => $bulk,
             'rank' => $rank,
             'section' => $this->section($c->page_type),
         ];
-    }
-
-    /**
-     * The plain-language reason a planned page is held — what the operator reads. Town pages are
-     * gated by the coverage layer; a missing composer means the page type isn't wired yet; anything
-     * else is grounding still coming together. Deliberately free of the composer/grounding terms.
-     */
-    private function holdReason(Content $c, ?string $holdKind): string
-    {
-        if ($c->page_type === PageType::Location) {
-            return 'Town pages unlock as local coverage grows.';
-        }
-
-        return $holdKind === 'composer'
-            ? 'This page type isn\'t available yet.'
-            : 'We\'re still getting this page\'s details ready.';
-    }
-
-    private function tone(string $label): string
-    {
-        return match ($label) {
-            'Published', 'Approved · ready to publish' => 'ok',
-            'Draft ready for review' => 'warn',
-            'Generating…', 'Publishing…' => 'info',
-            'Generation failed', 'Publish failed' => 'danger',
-            default => 'idle', // Ready to generate / Not ready yet
-        };
     }
 
     private function liveUrl(Content $c): ?string
@@ -221,28 +197,6 @@ class GrowDashboard
             ->where('kind', ContentKind::Page->value)
             ->with('site')
             ->get();
-    }
-
-    /**
-     * Recent reactive (news-driven) posts, drafted into the categories.
-     *
-     * @return list<array{title: string, status: string, silo: string}>
-     */
-    public function news(Site $site, int $limit = 6): array
-    {
-        return Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('kind', ContentKind::Post->value)
-            ->with('matchedSilo')
-            ->latest()
-            ->limit($limit)
-            ->get()
-            ->map(fn (Content $c) => [
-                'title' => $this->title($c),
-                'status' => ucfirst(str_replace('_', ' ', $c->status->value)),
-                'silo' => $c->matchedSilo instanceof Silo ? (string) $c->matchedSilo->name : '',
-            ])
-            ->all();
     }
 
     private function title(Content $c): string
