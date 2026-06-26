@@ -5,6 +5,7 @@ namespace App\Guided;
 use App\ContentEngine\Drafting\GroundingReadiness;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
@@ -61,16 +62,74 @@ class GrowDashboard
             ->map(fn (Content $c) => $this->row($c))
             ->sortBy('rank')
             ->values()
-            ->map(function (array $r): array {
-                unset($r['rank']);
-
-                return $r;
-            })
+            ->map(fn (array $r): array => $this->present($r))
             ->all();
     }
 
     /**
-     * @return array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string, rank: int}
+     * The workbench grouped into its three readiness lanes — Core (home + standard pages), Service
+     * (service / hub / pillar / cluster), Town (location). Flat-alphabetical hid that each type sits
+     * in a different readiness state (core pages composer-pending, service pages generating, town
+     * pages grounding-pending); sectioning makes that legible at a glance. Rows keep the
+     * most-actionable-first rank WITHIN each section; empty sections are dropped, so a site with no
+     * materialized town pages yet simply shows Core + Service.
+     *
+     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string}>}>
+     */
+    public function sections(Site $site): array
+    {
+        $grouped = $this->pageContent($site)
+            ->map(fn (Content $c) => $this->row($c))
+            ->groupBy('section');
+
+        $sections = [];
+        foreach (self::SECTIONS as $key => $label) {
+            $group = $grouped->get($key);
+            if ($group === null || $group->isEmpty()) {
+                continue;
+            }
+
+            $pages = $group->sortBy('rank')->values()
+                ->map(fn (array $r): array => $this->present($r))
+                ->all();
+
+            $sections[] = ['key' => $key, 'label' => $label, 'count' => count($pages), 'pages' => $pages];
+        }
+
+        return $sections;
+    }
+
+    /** The ordered workbench lanes (Core → Service → Town), labels included. */
+    private const SECTIONS = [
+        'core' => 'Core pages',
+        'service' => 'Service pages',
+        'town' => 'Town pages',
+    ];
+
+    /** Strip the internal sort/group keys before a row reaches the view. */
+    private function present(array $row): array
+    {
+        unset($row['rank'], $row['section']);
+
+        return $row;
+    }
+
+    /**
+     * Which workbench lane a page belongs to, from its page_type. Service/hub/pillar/cluster are the
+     * targeting body of work; location is a town page; everything else (home, utility, untyped) is a
+     * core page.
+     */
+    private function section(?PageType $type): string
+    {
+        return match ($type) {
+            PageType::Location => 'town',
+            PageType::Service, PageType::Hub, PageType::Pillar, PageType::Cluster => 'service',
+            default => 'core', // home / utility / null
+        };
+    }
+
+    /**
+     * @return array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string, rank: int, section: string}
      */
     private function row(Content $c): array
     {
@@ -108,6 +167,7 @@ class GrowDashboard
                 default => null,
             },
             'rank' => $rank,
+            'section' => $this->section($c->page_type),
         ];
     }
 

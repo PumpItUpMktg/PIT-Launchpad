@@ -1,4 +1,4 @@
-@php $site = $this->getSite(); $brand = $site?->brand_name ?? 'your business'; $stats = $this->stats; $pages = $this->pages; @endphp
+@php $site = $this->getSite(); $brand = $site?->brand_name ?? 'your business'; $stats = $this->stats; $sections = $this->sections; $pages = collect($sections)->flatMap(fn ($s) => $s['pages']); @endphp
 <x-guided.shell :steps="$this->steps" :brand="$brand" :grow="true">
     <div class="lp-eyebrow">Grow · {{ $brand }}</div>
     <h1 class="lp-h1">Your pages are ready</h1>
@@ -19,10 +19,10 @@
             <h3>Your pages</h3>
             <div class="hint">Each page generates on demand — nothing reaches WordPress until you publish.</div>
 
-            @if (count($pages) === 0)
+            @if ($pages->isEmpty())
                 <div class="lp-empty" style="padding:22px">No pages yet — finalize your plan to materialize them here.</div>
             @else
-                @php $bulkable = collect($pages)->filter(fn ($p) => $p['bulk'] !== null); @endphp
+                @php $bulkable = $pages->filter(fn ($p) => $p['bulk'] !== null); @endphp
                 @if ($bulkable->isNotEmpty())
                     <div class="lp-bulkbar">
                         <span class="bsel">{{ count($this->selected) }} selected</span>
@@ -31,44 +31,53 @@
                     </div>
                 @endif
 
-                <ul class="lp-pglist">
-                    @foreach ($pages as $p)
-                        <div class="lp-pgrow" wire:key="pg-{{ $p['id'] }}">
-                            <div class="pgsel">
-                                @if ($p['bulk'] !== null)
-                                    <input type="checkbox" wire:model.live="selected" value="{{ $p['id'] }}" aria-label="Select page">
-                                @endif
-                            </div>
-                            <div class="pgmain">
-                                <div class="pgtitle">{{ $p['title'] }}</div>
-                                <div class="pgperma">{{ $p['permalink'] }}</div>
-                            </div>
-                            <span class="pgbadge tone-{{ $p['tone'] }}">{{ $p['state'] }}</span>
-                            <div class="pgact">
-                                @switch ($p['action'])
-                                    @case('generate')
-                                        <button class="lp-btn sm" wire:click="generate('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="generate('{{ $p['id'] }}')">Generate</button>
-                                        @break
-                                    @case('review')
-                                        <a class="lp-btn sm warn" href="{{ $this->reviewUrl($p['id']) }}">Review</a>
-                                        @break
-                                    @case('publish')
-                                        <button class="lp-btn sm" wire:click="publish('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="publish('{{ $p['id'] }}')">Publish</button>
-                                        @break
-                                    @case('view')
-                                        @if ($p['live_url'])<a class="lp-btn sm ghost" href="{{ $p['live_url'] }}" target="_blank" rel="noopener">View</a>@endif
-                                        @break
-                                    @case('grounding')
-                                        <span class="pgpending" title="No resolvable grounding yet — service/market entities aren't wired for this page.">Grounding pending</span>
-                                        @break
-                                    @case('pending')
-                                        <span class="pgpending">Composer pending</span>
-                                        @break
-                                @endswitch
-                            </div>
+                {{-- Grouped by page type: each lane (Core / Service / Town) is in its own readiness state. --}}
+                @foreach ($sections as $section)
+                    <div class="lp-pgsection" wire:key="sec-{{ $section['key'] }}">
+                        <div class="pgsection-head">
+                            <span class="pgsection-title">{{ $section['label'] }}</span>
+                            <span class="pgsection-count">{{ $section['count'] }}</span>
                         </div>
-                    @endforeach
-                </ul>
+                        <ul class="lp-pglist">
+                            @foreach ($section['pages'] as $p)
+                                <div class="lp-pgrow" wire:key="pg-{{ $p['id'] }}">
+                                    <div class="pgsel">
+                                        @if ($p['bulk'] !== null)
+                                            <input type="checkbox" wire:model.live="selected" value="{{ $p['id'] }}" aria-label="Select page">
+                                        @endif
+                                    </div>
+                                    <div class="pgmain">
+                                        <div class="pgtitle">{{ $p['title'] }}</div>
+                                        <div class="pgperma">{{ $p['permalink'] }}</div>
+                                    </div>
+                                    <span class="pgbadge tone-{{ $p['tone'] }}">{{ $p['state'] }}</span>
+                                    <div class="pgact">
+                                        @switch ($p['action'])
+                                            @case('generate')
+                                                <button class="lp-btn sm" wire:click="generate('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="generate('{{ $p['id'] }}')">Generate</button>
+                                                @break
+                                            @case('review')
+                                                <a class="lp-btn sm warn" href="{{ $this->reviewUrl($p['id']) }}">Review</a>
+                                                @break
+                                            @case('publish')
+                                                <button class="lp-btn sm" wire:click="publish('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="publish('{{ $p['id'] }}')">Publish</button>
+                                                @break
+                                            @case('view')
+                                                @if ($p['live_url'])<a class="lp-btn sm ghost" href="{{ $p['live_url'] }}" target="_blank" rel="noopener">View</a>@endif
+                                                @break
+                                            @case('grounding')
+                                                <span class="pgpending" title="No resolvable grounding yet — service/market entities aren't wired for this page.">Grounding pending</span>
+                                                @break
+                                            @case('pending')
+                                                <span class="pgpending">Composer pending</span>
+                                                @break
+                                        @endswitch
+                                    </div>
+                                </div>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endforeach
             @endif
         </div>
 

@@ -84,6 +84,39 @@ it('shows grounding pending (not Generate) for a kit-bound page with no resolvab
         ->and($row['state'])->toBe('Grounding pending');
 });
 
+it('groups the workbench into Core / Service / Town lanes with per-section counts', function () {
+    $ctx = growSite(); // 1 planned service page already
+    growPage($ctx, ['page_type' => PageType::Service, 'slot_payload' => []]);
+    growPage($ctx, ['page_type' => PageType::Home, 'slot_payload' => []]);
+    growPage($ctx, ['page_type' => PageType::Utility, 'slot_payload' => []]);
+    growPage($ctx, ['page_type' => PageType::Location, 'slot_payload' => []]);
+
+    $sections = collect(app(GrowDashboard::class)->sections($ctx['site']))->keyBy('key');
+
+    // ordered Core → Service → Town
+    expect(collect(app(GrowDashboard::class)->sections($ctx['site']))->pluck('key')->all())
+        ->toBe(['core', 'service', 'town']);
+
+    expect($sections['core']['label'])->toBe('Core pages')
+        ->and($sections['core']['count'])->toBe(2)            // home + utility
+        ->and($sections['service']['count'])->toBe(2)         // base + the extra service
+        ->and($sections['town']['count'])->toBe(1)            // location
+        ->and($sections['service']['count'])->toBe(count($sections['service']['pages']));
+
+    // section pages carry the same row shape (and no internal sort/group keys leak)
+    expect($sections['service']['pages'][0])->toHaveKeys(['id', 'title', 'permalink', 'state', 'action', 'bulk'])
+        ->and($sections['service']['pages'][0])->not->toHaveKey('rank')
+        ->and($sections['service']['pages'][0])->not->toHaveKey('section');
+});
+
+it('drops empty lanes — a site with only service pages shows just the Service section', function () {
+    $ctx = growSite(); // 1 service page, no core/town
+
+    $keys = collect(app(GrowDashboard::class)->sections($ctx['site']))->pluck('key');
+
+    expect($keys->all())->toBe(['service']);
+});
+
 it('carries the permalink on every row', function () {
     $ctx = growSite();
     growPage($ctx, ['slug' => 'services/tankless-install', 'slot_payload' => ['h' => 'x'], 'status' => ContentStatus::Approved]);

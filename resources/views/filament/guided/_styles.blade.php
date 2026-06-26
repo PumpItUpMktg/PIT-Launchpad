@@ -180,6 +180,11 @@
   .lp-btn.sm.warn{background:var(--amber-bg);color:var(--amber);border:1px solid #EAD6B0}
   .lp-bulkbar{display:flex;align-items:center;gap:10px;padding:10px 0 14px;border-bottom:1px solid #EEF2F4;margin-bottom:6px}
   .lp-bulkbar .bsel{font-size:12px;color:var(--ink-soft);font-weight:600;margin-right:auto}
+  .lp-pgsection{margin-top:16px}
+  .lp-pgsection:first-of-type{margin-top:6px}
+  .pgsection-head{display:flex;align-items:center;gap:8px;padding:0 0 4px;border-bottom:1px solid var(--line)}
+  .pgsection-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft)}
+  .pgsection-count{font-size:10.5px;font-weight:700;color:var(--ink-soft);background:#EEF1F5;border-radius:20px;padding:1px 8px;min-width:20px;text-align:center}
   .lp-pglist{list-style:none;margin:0;padding:0}
   .lp-pgrow{display:grid;grid-template-columns:22px 1fr auto auto;align-items:center;gap:13px;padding:12px 0;border-bottom:1px solid #EEF2F4}
   .lp-pgrow:last-child{border-bottom:none}

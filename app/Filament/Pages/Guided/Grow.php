@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Auth;
  *
  * @property-read array{live: int, building: int, planned: int} $stats
  * @property-read list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string}> $pages
+ * @property-read list<array{key: string, label: string, count: int, pages: list<array<string, mixed>>}> $sections
  * @property-read array<int, array{title: string, status: string, silo: string}> $news
  */
 class Grow extends GuidedPage
@@ -71,6 +72,19 @@ class Grow extends GuidedPage
         $site = $this->getSite();
 
         return $site === null ? [] : app(GrowDashboard::class)->pages($site);
+    }
+
+    /**
+     * The workbench grouped into Core / Service / Town lanes with per-section counts (the list the
+     * view renders). The flat {@see getPagesProperty()} stays for the bulk-lane gate + counts.
+     *
+     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string}>}>
+     */
+    public function getSectionsProperty(): array
+    {
+        $site = $this->getSite();
+
+        return $site === null ? [] : app(GrowDashboard::class)->sections($site);
     }
 
     /**
