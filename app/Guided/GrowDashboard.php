@@ -54,7 +54,7 @@ class GrowDashboard
      * the `review`/`publish` rows respectively (never bulk-generate — generation is a deliberate
      * per-page action).
      *
-     * @return list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string}>
+     * @return list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, reason: ?string, hold_kind: ?string, live_url: ?string, bulk: ?string}>
      */
     public function pages(Site $site): array
     {
@@ -74,7 +74,7 @@ class GrowDashboard
      * most-actionable-first rank WITHIN each section; empty sections are dropped, so a site with no
      * materialized town pages yet simply shows Core + Service.
      *
-     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string}>}>
+     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, reason: ?string, hold_kind: ?string, live_url: ?string, bulk: ?string}>}>
      */
     public function sections(Site $site): array
     {
@@ -129,28 +129,29 @@ class GrowDashboard
     }
 
     /**
-     * @return array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, live_url: ?string, bulk: ?string, rank: int, section: string}
+     * @return array{id: string, title: string, permalink: string, state: string, tone: string, action: ?string, reason: ?string, hold_kind: ?string, live_url: ?string, bulk: ?string, rank: int, section: string}
      */
     private function row(Content $c): array
     {
-        // The pre-generation gate: a planned page needs BOTH a composer (kit) AND resolvable
-        // grounding to generate for real — kit but no grounding → "grounding pending"; no kit →
-        // "composer pending". Neither lies about producing an empty draft.
-        $primable = match (true) {
-            $c->wireframe_kit_id === null => 'pending',          // composer pending
-            ! $this->grounding->ready($c) => 'grounding',        // grounding pending
-            default => 'generate',
+        // The pre-generation hold: a planned page needs BOTH a composer (kit) AND resolvable grounding
+        // to generate. We track WHICH is missing for our OWN debugging (hold_kind), but the operator
+        // sees ONE plain "Not ready yet" held state with a plain reason — never the internal
+        // composer/grounding vocabulary, and never "Ready to generate" and a hold at the same time.
+        $holdKind = match (true) {
+            ! $c->hasDraft() && $c->wireframe_kit_id === null => 'composer',
+            ! $c->hasDraft() && ! $this->grounding->ready($c) => 'grounding',
+            default => null,
         };
 
         [$action, $rank] = match (true) {
             $c->isGenerating() => [null, 3],
-            ! $c->hasDraft() => [$primable, 2], // awaiting OR failed → (re)generate / pending
+            ! $c->hasDraft() => [$holdKind !== null ? 'held' : 'generate', 2],
             $c->status === ContentStatus::Published => ['view', 5],
             $c->status === ContentStatus::Approved => ['publish', 1],
             default => ['review', 0], // a draft awaiting acceptance — most urgent
         };
 
-        $state = $action === 'grounding' ? 'Grounding pending' : $c->buildStateLabel();
+        $state = $action === 'held' ? 'Not ready yet' : $c->buildStateLabel();
 
         return [
             'id' => (string) $c->id,
@@ -159,6 +160,10 @@ class GrowDashboard
             'state' => $state,
             'tone' => $this->tone($state),
             'action' => $action,
+            // The plain, user-facing reason a held row isn't actionable (no internal vocabulary).
+            'reason' => $action === 'held' ? $this->holdReason($c, $holdKind) : null,
+            // Admin-only: which gate is unmet (composer vs grounding) — for our debugging, never user copy.
+            'hold_kind' => $holdKind,
             'live_url' => $action === 'view' ? $this->liveUrl($c) : null,
             // which bulk lane this row belongs to (the checkbox targets); generate is per-page only
             'bulk' => match ($action) {
@@ -171,6 +176,22 @@ class GrowDashboard
         ];
     }
 
+    /**
+     * The plain-language reason a planned page is held — what the operator reads. Town pages are
+     * gated by the coverage layer; a missing composer means the page type isn't wired yet; anything
+     * else is grounding still coming together. Deliberately free of the composer/grounding terms.
+     */
+    private function holdReason(Content $c, ?string $holdKind): string
+    {
+        if ($c->page_type === PageType::Location) {
+            return 'Town pages unlock as local coverage grows.';
+        }
+
+        return $holdKind === 'composer'
+            ? 'This page type isn\'t available yet.'
+            : 'We\'re still getting this page\'s details ready.';
+    }
+
     private function tone(string $label): string
     {
         return match ($label) {
@@ -178,7 +199,7 @@ class GrowDashboard
             'Draft ready for review' => 'warn',
             'Generating…', 'Publishing…' => 'info',
             'Generation failed', 'Publish failed' => 'danger',
-            default => 'idle', // Ready to generate
+            default => 'idle', // Ready to generate / Not ready yet
         };
     }
 

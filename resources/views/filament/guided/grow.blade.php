@@ -7,11 +7,12 @@
     @unless ($site)
         <div class="lp-card"><div class="lp-empty">No sites yet.</div></div>
     @else
-        {{-- Build-out counts: a header strip above the workbench, derived from the same page set --}}
+        {{-- Build-out counts: a header strip above the workbench, derived from the same page set.
+             Plain-language labels with a one-line "what this means" — no internal vocabulary. --}}
         <div class="lp-stats">
-            <div class="lp-stat"><div class="sn">{{ number_format($stats['live']) }}</div><div class="sl">live</div></div>
-            <div class="lp-stat"><div class="sn">{{ number_format($stats['building']) }}</div><div class="sl">building</div></div>
-            <div class="lp-stat"><div class="sn">{{ number_format($stats['planned']) }}</div><div class="sl">planned</div></div>
+            <div class="lp-stat"><div class="sn">{{ number_format($stats['live']) }}</div><div class="sl">Live on the site</div><div class="sc">Published and visible to visitors.</div></div>
+            <div class="lp-stat"><div class="sn">{{ number_format($stats['building']) }}</div><div class="sl">Writing now</div><div class="sc">Being written, reviewed, or published.</div></div>
+            <div class="lp-stat"><div class="sn">{{ number_format($stats['planned']) }}</div><div class="sl">Not started</div><div class="sc">Planned — not generated yet.</div></div>
         </div>
 
         {{-- THE primary content: the pages workbench. One row per planned page, morphing primary. --}}
@@ -49,6 +50,7 @@
                                     <div class="pgmain">
                                         <div class="pgtitle">{{ $p['title'] }}</div>
                                         <div class="pgperma">{{ $p['permalink'] }}</div>
+                                        @if (!empty($p['reason']))<div class="pgreason">{{ $p['reason'] }}</div>@endif
                                     </div>
                                     <span class="pgbadge tone-{{ $p['tone'] }}">{{ $p['state'] }}</span>
                                     <div class="pgact">
@@ -65,11 +67,10 @@
                                             @case('view')
                                                 @if ($p['live_url'])<a class="lp-btn sm ghost" href="{{ $p['live_url'] }}" target="_blank" rel="noopener">View</a>@endif
                                                 @break
-                                            @case('grounding')
-                                                <span class="pgpending" title="No resolvable grounding yet — service/market entities aren't wired for this page.">Grounding pending</span>
-                                                @break
-                                            @case('pending')
-                                                <span class="pgpending">Composer pending</span>
+                                            {{-- One held state for the operator; data-hold carries the composer/grounding
+                                                 distinction for our own debugging only (not user-facing copy). --}}
+                                            @case('held')
+                                                <span class="pgheld" data-hold="{{ $p['hold_kind'] }}">Held</span>
                                                 @break
                                         @endswitch
                                     </div>
