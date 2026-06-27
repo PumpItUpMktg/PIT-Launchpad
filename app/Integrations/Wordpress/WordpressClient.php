@@ -142,6 +142,25 @@ class WordpressClient
     }
 
     /**
+     * Permanently delete a core WordPress post/page by its WP id — `force=true` so it BYPASSES the
+     * trash. The REST default trashes, and a trashed post still RESERVES its slug, which would re-slug
+     * the next publish to `-2`; force-delete frees the permalink. Core `/wp/v2/{type}` route (not the
+     * launchpad/v1 contract), reached through the same Basic-auth channel as {@see ping()}.
+     *
+     * @param  'pages'|'posts'  $type
+     * @return bool true if the post was deleted or already absent (404)
+     */
+    public function forceDeletePost(string $type, int $id): bool
+    {
+        $url = rtrim($this->baseUrl, '/')."/wp-json/wp/v2/{$type}/{$id}?force=true";
+
+        $response = $this->request()->delete($url);
+
+        // Already gone is success for cleanup purposes; anything else is a real failure.
+        return $response->successful() || $response->status() === 404;
+    }
+
+    /**
      * @param  array<string, mixed>  $body
      * @return array<string, mixed>
      */
