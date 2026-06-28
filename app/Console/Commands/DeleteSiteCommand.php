@@ -2,40 +2,21 @@
 
 namespace App\Console\Commands;
 
-use App\Enums\ContentKind;
-use App\Enums\SiteStatus;
-use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Models\Account;
-use App\Models\Content;
-use App\Models\Keyword;
-use App\Models\Market;
-use App\Models\Scopes\SiteScope;
-use App\Models\Service;
-use App\Models\Silo;
 use App\Models\Site;
+use App\Operator\SiteDeleter;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
-use Throwable;
 
 /**
  * Permanently DELETE a tenant (Site) and all of its data — the destructive sibling of
  * {@see ResetTenantCommand} (which only rewinds onboarding and keeps the site row). Use when a
  * duplicate/abandoned tenant must be removed entirely (e.g. re-running the build created a second
- * instance of the same brand).
- *
- * Mechanics:
- *  - Every `site_id` foreign key is `cascadeOnDelete`, so deleting the Site row removes all child
- *    rows (content/silos/services/markets/keywords/connection/brand/wizard/pivots/…) at the DB in
- *    one cascade — guaranteed complete. Three tables carry a RAW `site_id` with no FK
- *    (`arrange_flags`, `content_edits`, `page_configs`); those are cleared explicitly first so no
- *    orphans survive.
- *  - WordPress is left UNTOUCHED by default. A duplicate tenant usually points at the SAME WP
- *    instance as the original, so force-deleting "its" pages would wipe the real site's pages.
- *    `--purge-wordpress` opts into force-deleting this site's published pages (only when you know the
- *    WP instance is exclusively this tenant's).
+ * instance of the same brand). The actual erase lives in {@see SiteDeleter} (shared with the operator
+ * portfolio's row action); this command is the CLI surface — resolve, confirm, report.
  *
  * Guards: refuses a `live` (client-handed-over) tenant; refuses an ambiguous brand-name match
- * (lists the candidate ids so you pass the exact ULID); a named confirmation (`--force` to skip).
+ * (lists the candidate ids so you pass the exact ULID); a named confirmation (`--force` to skip);
+ * `--dry-run` reports without changing anything. WordPress is left alone unless `--purge-wordpress`.
  */
 class DeleteSiteCommand extends Command
 {
@@ -48,16 +29,15 @@ class DeleteSiteCommand extends Command
 
     protected $description = 'Permanently delete a tenant (Site) and all its data. WordPress is left alone unless --purge-wordpress. Dry-run / confirmation guarded.';
 
-    public function handle(WordpressClientFactory $wordpress): int
+    public function handle(SiteDeleter $deleter): int
     {
-        $arg = (string) $this->argument('site');
-        $site = $this->resolveSite($arg);
+        $site = $this->resolveSite((string) $this->argument('site'));
         if ($site === null) {
             return self::FAILURE; // resolveSite already reported why (not found / ambiguous)
         }
 
         // A live (client-handed-over) tenant is production — never delete it from this tool.
-        if ($site->status === SiteStatus::Live) {
+        if ($deleter->isLive($site)) {
             $this->error("Refusing to delete '{$site->brand_name}' ({$site->id}) — it is LIVE (handed to a client).");
 
             return self::FAILURE;
@@ -67,100 +47,28 @@ class DeleteSiteCommand extends Command
         $purgeWp = (bool) $this->option('purge-wordpress');
         $withAccount = (bool) $this->option('with-account');
 
-        $published = $this->publishedPages($site->id);
-        $counts = $this->counts($site->id);
+        $published = $deleter->publishedPages($site);
+        $counts = $deleter->counts($site);
         $account = $site->account;
         $siblingSites = $account !== null ? max(0, $account->sites()->count() - 1) : 0;
 
-        if (! $this->confirmDelete($site, $counts, count($published), $purgeWp, $withAccount, $siblingSites, $dryRun)) {
+        if (! $this->confirmDelete($site, $counts, count($published), $purgeWp, $withAccount, $siblingSites)) {
             $this->line('Aborted.');
 
             return self::SUCCESS;
         }
 
-        // WP cleanup FIRST (read post ids from Content before the cascade), only when opted in.
-        $wpDeleted = [];
-        $wpFailed = [];
-        if (! $dryRun && $purgeWp && $published !== []) {
-            $client = null;
-            try {
-                $client = $wordpress->forSite($site);
-            } catch (Throwable $e) {
-                $this->warn('No usable WordPress connection — skipping WP cleanup ('.$e->getMessage().').');
-            }
+        if ($dryRun) {
+            $this->report($site, $counts, $published, [], [], $purgeWp, false, $account, $siblingSites, true);
 
-            foreach ($published as $page) {
-                if ($client === null) {
-                    $wpFailed[] = $page['slug'];
-
-                    continue;
-                }
-                try {
-                    $ok = $client->forceDeletePost($page['type'], $page['wp_post_id']);
-                    $ok ? $wpDeleted[] = $page['slug'] : $wpFailed[] = $page['slug'];
-                } catch (Throwable $e) {
-                    $wpFailed[] = $page['slug'];
-                }
-            }
+            return self::SUCCESS;
         }
 
-        $accountDeleted = false;
-        if (! $dryRun) {
-            DB::transaction(function () use ($site, $account, $withAccount, $siblingSites, &$accountDeleted): void {
-                // Raw site_id columns (no FK → no cascade) — clear before the site delete.
-                foreach (['arrange_flags', 'content_edits', 'page_configs'] as $table) {
-                    if (DB::getSchemaBuilder()->hasTable($table)) {
-                        DB::table($table)->where('site_id', $site->id)->delete();
-                    }
-                }
+        $result = $deleter->delete($site, $purgeWp, $withAccount);
 
-                // The cascade does the rest: every site_id FK is cascadeOnDelete.
-                $site->delete();
-
-                if ($withAccount && $account !== null && $siblingSites === 0) {
-                    $account->delete();
-                    $accountDeleted = true;
-                }
-            });
-        }
-
-        $this->report($site, $counts, $published, $wpDeleted, $wpFailed, $purgeWp, $accountDeleted, $account, $siblingSites, $dryRun);
+        $this->report($site, $counts, $published, $result['wp_deleted'], $result['wp_failed'], $purgeWp, $result['account_deleted'], $account, $siblingSites, false);
 
         return self::SUCCESS;
-    }
-
-    /**
-     * Launchpad-published pages/posts (those carrying a WP post id), read BEFORE the delete.
-     *
-     * @return list<array{wp_post_id: int, slug: string, type: 'pages'|'posts'}>
-     */
-    private function publishedPages(string $siteId): array
-    {
-        return Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)
-            ->whereNotNull('wp_post_id')
-            ->get(['wp_post_id', 'slug', 'kind'])
-            ->map(fn (Content $c): array => [
-                'wp_post_id' => (int) $c->wp_post_id,
-                'slug' => '/'.ltrim((string) $c->slug, '/'),
-                'type' => $c->kind === ContentKind::Page ? 'pages' : 'posts',
-            ])
-            ->all();
-    }
-
-    /** @return array<string, int> */
-    private function counts(string $siteId): array
-    {
-        $forSite = fn (string $class) => $class::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId);
-
-        return [
-            'pages' => (clone $forSite(Content::class))->where('kind', ContentKind::Page->value)->count(),
-            'posts' => (clone $forSite(Content::class))->where('kind', ContentKind::Post->value)->count(),
-            'silos' => $forSite(Silo::class)->count(),
-            'markets' => $forSite(Market::class)->count(),
-            'services' => $forSite(Service::class)->count(),
-            'keywords' => $forSite(Keyword::class)->count(),
-        ];
     }
 
     /**
@@ -196,9 +104,9 @@ class DeleteSiteCommand extends Command
     /**
      * @param  array<string, int>  $counts
      */
-    private function confirmDelete(Site $site, array $counts, int $publishedCount, bool $purgeWp, bool $withAccount, int $siblingSites, bool $dryRun): bool
+    private function confirmDelete(Site $site, array $counts, int $publishedCount, bool $purgeWp, bool $withAccount, int $siblingSites): bool
     {
-        if ($this->option('force') || $dryRun) {
+        if ($this->option('force') || $this->option('dry-run')) {
             return true;
         }
 
