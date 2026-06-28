@@ -153,3 +153,20 @@ test('templates surfaces a WordpressException on a non-2xx', function () {
 
     expect(fn () => wpClient()->templates())->toThrow(WordpressException::class);
 });
+
+test('forceDeletePost permanently deletes a core WP page with force=true (never trash)', function () {
+    Http::fake(['*/wp-json/wp/v2/pages/42*' => Http::response([], 200)]);
+
+    expect(wpClient()->forceDeletePost('pages', 42))->toBeTrue();
+
+    Http::assertSent(fn ($r) => $r->method() === 'DELETE'
+        && str_contains($r->url(), '/wp-json/wp/v2/pages/42')
+        && str_contains($r->url(), 'force=true')                       // bypass trash → frees the slug
+        && $r->hasHeader('Authorization', 'Basic '.base64_encode('svc-user:app-pass')));
+});
+
+test('forceDeletePost treats an already-gone post (404) as success', function () {
+    Http::fake(['*/wp-json/wp/v2/posts/99*' => Http::response([], 404)]);
+
+    expect(wpClient()->forceDeletePost('posts', 99))->toBeTrue();
+});
