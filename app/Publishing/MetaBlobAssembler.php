@@ -14,6 +14,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
 use App\PageBuilder\Library\FormHeroComposer;
+use App\PageBuilder\Library\LibraryHubComposer;
 use App\PageBuilder\Library\LibraryServiceComposer;
 use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
@@ -41,6 +42,7 @@ class MetaBlobAssembler
         private readonly PublishEligibility $eligibility,
         private readonly NativeComposer $composer,
         private readonly LibraryServiceComposer $libraryService,
+        private readonly LibraryHubComposer $libraryHub,
         private readonly ServiceSchemaBuilder $serviceSchema,
     ) {}
 
@@ -200,6 +202,11 @@ class MetaBlobAssembler
             return $tree;
         }
 
+        // Silo-pillar HUB pages render off the same verified library (service-hub assembly).
+        if ($content->page_type?->value === 'hub') {
+            return $this->libraryHub->compose($slots, $images);
+        }
+
         $schema = $this->schema($content);
         if ($schema === null) {
             return [];
@@ -326,6 +333,67 @@ class MetaBlobAssembler
         if (in_array('contact_block', $slotKeys, true)) {
             $slots = $this->resolveContactBlock($location, $slots);
         }
+
+        if (in_array('sibling_services', $slotKeys, true)) {
+            $slots = $this->resolveSiblingServices($content, $slots);
+        }
+
+        return $slots;
+    }
+
+    /**
+     * Fill the hub page's `sibling_services` grid from the silo's child service pages —
+     * the §4 structure, not drafted copy. Each card is a {title, body} where the body
+     * carries a "Learn more" link to the child page (the grid card is a text hook, so
+     * the link rides inside its HTML). Capped at 3 (the service-hub block is 3 cards);
+     * an empty result drops the slot and the block self-prunes. The hub page itself is
+     * its silo's pillar, so it's excluded.
+     *
+     * @param  array<string, mixed>  $slots
+     * @return array<string, mixed>
+     */
+    private function resolveSiblingServices(Content $content, array $slots): array
+    {
+        if ($content->silo_id === null) {
+            unset($slots['sibling_services']);
+
+            return $slots;
+        }
+
+        $home = is_string($this->site($content)?->domain_url) ? rtrim((string) $this->site($content)->domain_url, '/').'/' : '/';
+
+        $siblings = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('silo_id', $content->silo_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', 'service')
+            ->whereKeyNot($content->id)
+            ->orderBy('created_at')
+            ->limit(3)
+            ->get();
+
+        $cards = [];
+        foreach ($siblings as $sibling) {
+            $title = trim((string) $sibling->title);
+            if ($title === '') {
+                continue;
+            }
+            $metaSeo = is_array($sibling->meta['seo'] ?? null) ? $sibling->meta['seo'] : [];
+            $blurb = trim((string) ($metaSeo['meta_description'] ?? ''));
+            $url = $home.ltrim((string) $sibling->slug, '/');
+            $body = ($blurb !== '' ? '<p>'.e($blurb).'</p>' : '')
+                .'<p><a href="'.e($url).'">Learn more →</a></p>';
+
+            $cards[] = ['title' => $title, 'body' => $body];
+        }
+
+        if ($cards === []) {
+            unset($slots['sibling_services']);
+
+            return $slots;
+        }
+
+        $slots['sibling_services'] = $cards;
 
         return $slots;
     }

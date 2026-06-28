@@ -8,8 +8,9 @@ use Illuminate\Database\Seeder;
 
 /**
  * Seeds the library-level kits from their JSON definitions in database/data/wireframe-kits: the two
- * locked page kits (service-page, location-page) plus the standard-page composer's kits (home, about,
- * why-choose-us, faq). The schema is parsed through the value objects and re-serialized, so what
+ * locked page kits (service-page, location-page), the standard-page composer's kits (home, about,
+ * why-choose-us, faq), and the silo-pillar hub kit (hub-page). The schema is parsed through the value
+ * objects and re-serialized, so what
  * lands in the database is exactly what the validation engine reads back. Keyed on (site_id, name,
  * version) — name is the kit identity, so several kits can share page_type='utility'.
  */
@@ -22,6 +23,7 @@ class WireframeKitSeeder extends Seeder
         'about-page',
         'why-choose-us-page',
         'faq-page',
+        'hub-page',
     ];
 
     public function run(): void

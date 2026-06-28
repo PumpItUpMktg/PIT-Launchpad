@@ -56,6 +56,9 @@ return [
         'wf-reviews-heading' => 'What customers say',
         'wf-faq-heading' => 'Frequently asked questions',
         'wf-cta-heading' => 'Ready to get started?',
+        // Hub (service-hub) section headings.
+        'wf-intro-heading' => 'About this service',
+        'wf-svcgrid-heading' => 'Services in this category',
     ],
 
 ];

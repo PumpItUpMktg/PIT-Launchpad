@@ -83,6 +83,48 @@ class PublishHarness
         ]);
     }
 
+    /**
+     * An approved silo-pillar HUB page (kind=page, page_type=hub) wired to a silo, with
+     * a hero image spec. Caller seeds the silo's child service pages so the services-grid
+     * resolves. Drafted text slots are pre-filled (the drafter's job); sibling_services /
+     * cta are entity-resolved at assemble time.
+     */
+    public static function approvedHubPage(Site $site, string $siloId): Content
+    {
+        (new WireframeKitSeeder)->run();
+        $kit = WireframeKit::where('page_type', 'hub')->firstOrFail();
+
+        return Content::factory()->create([
+            'site_id' => $site->id,
+            'silo_id' => $siloId,
+            'kind' => ContentKind::Page,
+            'page_type' => PageType::Hub,
+            'status' => ContentStatus::Approved,
+            'slug' => 'drain-cleaning',
+            'title' => 'Drain Cleaning',
+            'wireframe_kit_id' => $kit->id,
+            'wireframe_kit_version' => 1,
+            'slot_payload' => [
+                'hero_problem' => 'Slow or clogged drains across your home?',
+                'hero_solution' => 'Every drain-cleaning service in one place — pick the job you need.',
+                'hub_intro' => '<p>From kitchen sinks to main sewer lines, this is the full range of drain work we do.</p>',
+                'why_us' => 'Licensed, insured, and fully warrantied on every drain job.',
+            ],
+            'meta' => [
+                'seo' => [
+                    'title' => 'Drain Cleaning Services | Apex',
+                    'meta_description' => 'Every drain-cleaning service in one place.',
+                ],
+                'image_specs' => [[
+                    'slot' => 'hero_image',
+                    'prompt' => 'A plumber clearing a residential drain',
+                    'seo_filename' => 'drain-cleaning-hero.webp',
+                    'alt' => 'A plumber clearing a residential drain',
+                ]],
+            ],
+        ]);
+    }
+
     public static function approvedPage(Site $site): Content
     {
         (new WireframeKitSeeder)->run();
