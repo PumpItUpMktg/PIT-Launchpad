@@ -28,6 +28,33 @@
             </div>
         </div>
 
+        {{-- Brand narrative: the words the About / Why-Choose-Us pages are written from. Optional — a
+             blank field is simply left out (never invented); a missing required one holds that page
+             "needs intake" rather than drafting generic copy. --}}
+        <div class="lp-card">
+            <h3>Your story</h3>
+            <div class="hint">The words your About and Why Choose Us pages are written from — in your voice, never invented. Leave a field blank and that part is simply left out.</div>
+
+            <div class="lp-field">
+                <label>Brand story <span style="font-weight:400;color:var(--ungrouped)">— your About page needs this</span></label>
+                <textarea class="lp-input" rows="5" wire:model="story" placeholder="How {{ $brand }} started, who you serve, and what you stand for."></textarea>
+            </div>
+            <div class="lp-field">
+                <label>Mission <span style="font-weight:400;color:var(--ungrouped)">— optional</span></label>
+                <textarea class="lp-input" rows="2" wire:model="mission" placeholder="What you commit to for every customer."></textarea>
+            </div>
+            <div class="lp-field">
+                <label>Values <span style="font-weight:400;color:var(--ungrouped)">— optional, one per line</span></label>
+                <textarea class="lp-input" rows="3" wire:model="valuesText" placeholder="On time, every time&#10;Quote before we start&#10;Leave it cleaner than we found it"></textarea>
+            </div>
+            <div class="lp-field">
+                <label>Differentiators <span style="font-weight:400;color:var(--ungrouped)">— your Why Choose Us page needs this, one per line</span></label>
+                <textarea class="lp-input" rows="3" wire:model="differentiatorsText" placeholder="Licensed &amp; insured&#10;Written warranty on every job&#10;Same-day service"></textarea>
+            </div>
+
+            <button class="lp-mini" wire:click="saveNarrative">Save brand details</button>
+        </div>
+
         <div class="lp-foot">
             <a class="lp-btn ghost" href="{{ \App\Enums\SetupStep::ConnectWordpress->pageClass()::getUrl() }}" wire:navigate>Back</a>
             <button class="lp-btn" wire:click="proceed" @disabled(! $this->pushed)>Continue to territory</button>

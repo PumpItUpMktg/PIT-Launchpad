@@ -8,6 +8,7 @@ use App\Guided\GuidedPage;
 use App\Guided\StepGate;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiteBranding;
+use App\Models\SiteNarrative;
 use Filament\Notifications\Notification;
 
 /**
@@ -30,9 +31,40 @@ class Brand extends GuidedPage
 
     protected string $view = 'filament.guided.brand';
 
+    // Brand-narrative intake (the words the standard-page composer grounds About / Why-Choose-Us on).
+    public string $story = '';
+
+    public string $mission = '';
+
+    /** One value per line. */
+    public string $valuesText = '';
+
+    /** One differentiator per line. */
+    public string $differentiatorsText = '';
+
     public function step(): SetupStep
     {
         return SetupStep::Brand;
+    }
+
+    public function mount(): void
+    {
+        parent::mount();
+
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $narrative = SiteNarrative::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+        if ($narrative === null) {
+            return;
+        }
+
+        $this->story = (string) ($narrative->story ?? '');
+        $this->mission = (string) ($narrative->mission ?? '');
+        $this->valuesText = $this->toLines($narrative->values);
+        $this->differentiatorsText = $this->toLines($narrative->differentiators);
     }
 
     /**
@@ -104,6 +136,21 @@ class Brand extends GuidedPage
         Notification::make()->title('Brand push failed')->body((string) ($result['error'] ?? 'Try again.'))->danger()->send();
     }
 
+    /**
+     * Save the brand-narrative intake the standard-page composer grounds on. Optional by design —
+     * a page whose required intake is absent holds "needs intake" rather than fabricating; this is
+     * the onboarding step that supplies it so About / Why Choose Us can generate.
+     */
+    public function saveNarrative(): void
+    {
+        if ($this->getSite() === null) {
+            return;
+        }
+
+        $this->persistNarrative();
+        Notification::make()->title('Brand details saved.')->success()->send();
+    }
+
     public function proceed(): void
     {
         $site = $this->getSite();
@@ -117,8 +164,73 @@ class Brand extends GuidedPage
             return;
         }
 
+        // Persist whatever narrative was entered (idempotent) so it isn't lost on continue.
+        $this->persistNarrative();
+
         $gate = app(StepGate::class);
         $gate->complete($gate->state($site), SetupStep::Brand);
         $this->redirect(SetupStep::Territory->pageClass()::getUrl());
+    }
+
+    private function persistNarrative(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        SiteNarrative::withoutGlobalScope(SiteScope::class)->updateOrCreate(
+            ['site_id' => $site->id],
+            [
+                'story' => $this->clean($this->story),
+                'mission' => $this->clean($this->mission),
+                'values' => $this->fromLines($this->valuesText),
+                'differentiators' => $this->fromLines($this->differentiatorsText),
+            ],
+        );
+    }
+
+    private function clean(string $value): ?string
+    {
+        $value = trim($value);
+
+        return $value === '' ? null : $value;
+    }
+
+    /**
+     * Split a textarea into a trimmed, non-empty list — null when empty (degrade by omission).
+     *
+     * @return list<string>|null
+     */
+    private function fromLines(string $text): ?array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $text) ?: [];
+        $lines = array_values(array_filter(array_map('trim', $lines), fn (string $l): bool => $l !== ''));
+
+        return $lines === [] ? null : $lines;
+    }
+
+    /** Render a stored list (strings or {title, description}) back into one-per-line textarea text. */
+    private function toLines(mixed $items): string
+    {
+        if (! is_array($items)) {
+            return '';
+        }
+
+        $lines = array_map(function (mixed $item): string {
+            if (is_string($item)) {
+                return $item;
+            }
+            if (is_array($item)) {
+                $title = trim((string) ($item['title'] ?? ''));
+                $description = trim((string) ($item['description'] ?? ''));
+
+                return $description !== '' ? "{$title} — {$description}" : $title;
+            }
+
+            return '';
+        }, $items);
+
+        return implode("\n", array_filter($lines, fn (string $l): bool => $l !== ''));
     }
 }
