@@ -4,11 +4,15 @@ namespace App\Filament\Pages\Guided;
 
 use App\Branding\BrandStudio;
 use App\Enums\SetupStep;
+use App\Enums\VoiceStatus;
 use App\Guided\GuidedPage;
 use App\Guided\StepGate;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
+use App\Models\VoiceProfile;
+use App\Onboarding\IntakeCollector;
+use App\Operator\Controls\VoiceControl;
 use Filament\Notifications\Notification;
 
 /**
@@ -42,6 +46,15 @@ class Brand extends GuidedPage
     /** One differentiator per line. */
     public string $differentiatorsText = '';
 
+    // VoiceKit voice setup (the tone the composer writes in; absent → a default voice).
+    public string $voiceTone = 'professional_warm';
+
+    public string $voiceAudience = '';
+
+    public string $voiceCredibility = '';
+
+    public bool $voiceSet = false;
+
     public function step(): SetupStep
     {
         return SetupStep::Brand;
@@ -57,14 +70,22 @@ class Brand extends GuidedPage
         }
 
         $narrative = SiteNarrative::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
-        if ($narrative === null) {
-            return;
+        if ($narrative !== null) {
+            $this->story = (string) ($narrative->story ?? '');
+            $this->mission = (string) ($narrative->mission ?? '');
+            $this->valuesText = $this->toLines($narrative->values);
+            $this->differentiatorsText = $this->toLines($narrative->differentiators);
         }
 
-        $this->story = (string) ($narrative->story ?? '');
-        $this->mission = (string) ($narrative->mission ?? '');
-        $this->valuesText = $this->toLines($narrative->values);
-        $this->differentiatorsText = $this->toLines($narrative->differentiators);
+        $voice = VoiceProfile::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('status', VoiceStatus::Active->value)
+            ->first();
+        if ($voice !== null) {
+            $this->voiceSet = true;
+            $this->voiceAudience = (string) data_get($voice->audience, 'primary', '');
+            $this->voiceCredibility = (string) data_get($voice->persona, 'credibility', '');
+        }
     }
 
     /**
@@ -149,6 +170,41 @@ class Brand extends GuidedPage
 
         $this->persistNarrative();
         Notification::make()->title('Brand details saved.')->success()->send();
+    }
+
+    /**
+     * Set the brand VOICE — synthesise a VoiceProfile from a short interview and activate it (one
+     * active per site; activating archives the prior). The composer writes every page in this voice;
+     * without it the drafter falls back to a plain default voice, so this is optional but makes the
+     * copy sound like the brand. Each save is a new versioned profile (a re-interview).
+     */
+    public function saveVoice(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $interview = $this->toneAxes($this->voiceTone) + [
+            'audience' => $this->clean($this->voiceAudience) ?? 'homeowners',
+            'credibility' => $this->clean($this->voiceCredibility) ?? 'licensed and insured',
+        ];
+
+        $profile = app(IntakeCollector::class)->synthesizeVoice($site, $interview);
+        app(VoiceControl::class)->activate($profile);
+
+        $this->voiceSet = true;
+        Notification::make()->title('Brand voice set — your pages will be written in it.')->success()->send();
+    }
+
+    /** @return array{formality: float, warmth: float} */
+    private function toneAxes(string $tone): array
+    {
+        return match ($tone) {
+            'friendly_warm' => ['formality' => 0.3, 'warmth' => 0.85],
+            'direct_expert' => ['formality' => 0.6, 'warmth' => 0.5],
+            default => ['formality' => 0.55, 'warmth' => 0.7], // professional_warm
+        };
     }
 
     public function proceed(): void

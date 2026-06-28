@@ -3,6 +3,7 @@
 use App\Branding\BrandStudio;
 use App\Branding\GeneratedBrand;
 use App\Enums\UserRole;
+use App\Enums\VoiceStatus;
 use App\Filament\Pages\Guided\Brand;
 use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Filament\Pages\Guided\Territory;
@@ -11,8 +12,15 @@ use App\Models\SetupState;
 use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Models\User;
+use App\Models\VoiceProfile;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
+
+function activeVoice(string $siteId): ?VoiceProfile
+{
+    return VoiceProfile::withoutGlobalScope(SiteScope::class)
+        ->where('site_id', $siteId)->where('status', VoiceStatus::Active->value)->first();
+}
 
 function brandNarrative(string $siteId): ?SiteNarrative
 {
@@ -85,6 +93,52 @@ test('Continuing from Brand persists whatever narrative was entered', function (
     Livewire::test(Brand::class)->set('story', 'Truck story')->call('proceed')->assertRedirect(Territory::getUrl());
 
     expect(brandNarrative($this->site->id)?->story)->toBe('Truck story');
+});
+
+test('Brand step synthesises and activates a voice profile from the interview', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+
+    Livewire::test(Brand::class)
+        ->set('voiceTone', 'direct_expert')
+        ->set('voiceAudience', 'property managers')
+        ->set('voiceCredibility', 'licensed, 20 years')
+        ->call('saveVoice')
+        ->assertOk();
+
+    $v = activeVoice($this->site->id);
+    expect($v)->not->toBeNull()
+        ->and($v->version)->toBe(1)
+        ->and($v->tone_axes['formality'])->toBe(0.6)              // direct_expert tone
+        ->and(data_get($v->audience, 'primary'))->toBe('property managers')
+        ->and(data_get($v->persona, 'credibility'))->toBe('licensed, 20 years');
+});
+
+test('updating the voice archives the prior active (one active per site)', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+
+    Livewire::test(Brand::class)->set('voiceAudience', 'homeowners')->call('saveVoice');
+    Livewire::test(Brand::class)->set('voiceAudience', 'builders')->call('saveVoice');
+
+    $active = VoiceProfile::withoutGlobalScope(SiteScope::class)
+        ->where('site_id', $this->site->id)->where('status', VoiceStatus::Active->value)->get();
+
+    expect($active)->toHaveCount(1)                               // exactly one active
+        ->and($active->first()->version)->toBe(2)                 // the newer one
+        ->and(VoiceProfile::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)
+            ->where('status', VoiceStatus::Archived->value)->count())->toBe(1);
+});
+
+test('Brand step shows voice as set and pre-fills from the active profile', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+    VoiceProfile::create([
+        'site_id' => $this->site->id, 'version' => 1, 'status' => VoiceStatus::Active,
+        'audience' => ['primary' => 'homeowners'], 'persona' => ['credibility' => 'licensed'],
+    ]);
+
+    Livewire::test(Brand::class)
+        ->assertSet('voiceSet', true)
+        ->assertSet('voiceAudience', 'homeowners')
+        ->assertSet('voiceCredibility', 'licensed');
 });
 
 test('Brand is gated until WordPress is prepped — the brand push cannot run first', function () {

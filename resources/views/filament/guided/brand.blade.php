@@ -55,6 +55,32 @@
             <button class="lp-mini" wire:click="saveNarrative">Save brand details</button>
         </div>
 
+        {{-- Brand voice: the tone every page is written in. Optional — skip it and pages use a plain
+             default voice; set it and the composer writes in the brand's voice. --}}
+        <div class="lp-card">
+            <h3>Your voice @if ($this->voiceSet)<span class="lp-gate ok" style="margin-left:8px">voice set</span>@endif</h3>
+            <div class="hint">How your pages should sound. Optional — without it we use a plain, friendly default.</div>
+
+            <div class="lp-field">
+                <label>Tone</label>
+                <select class="lp-input" wire:model="voiceTone">
+                    <option value="friendly_warm">Friendly &amp; warm</option>
+                    <option value="professional_warm">Professional &amp; warm</option>
+                    <option value="direct_expert">Direct &amp; expert</option>
+                </select>
+            </div>
+            <div class="lp-field">
+                <label>Who you're talking to</label>
+                <input class="lp-input" wire:model="voiceAudience" placeholder="e.g. homeowners, property managers">
+            </div>
+            <div class="lp-field">
+                <label>What makes you credible</label>
+                <input class="lp-input" wire:model="voiceCredibility" placeholder="e.g. licensed, insured, 20 years in the trade">
+            </div>
+
+            <button class="lp-mini" wire:click="saveVoice">{{ $this->voiceSet ? 'Update brand voice' : 'Set brand voice' }}</button>
+        </div>
+
         <div class="lp-foot">
             <a class="lp-btn ghost" href="{{ \App\Enums\SetupStep::ConnectWordpress->pageClass()::getUrl() }}" wire:navigate>Back</a>
             <button class="lp-btn" wire:click="proceed" @disabled(! $this->pushed)>Continue to territory</button>
