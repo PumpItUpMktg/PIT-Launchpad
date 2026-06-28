@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Branding\BrandBrief;
 use App\Branding\BrandStudio;
 use App\Branding\Scheme;
+use App\Console\Commands\DeleteSiteCommand;
 use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
@@ -19,6 +20,7 @@ use App\Operator\Controls\BudgetControl;
 use App\Operator\Controls\CadenceControl;
 use App\Operator\Controls\TemplateMapping;
 use App\Operator\Handover\SiteHandover;
+use App\Operator\SiteDeleter;
 use App\Publishing\LaunchOrchestrator;
 use App\Security\GateCheck;
 use BackedEnum;
@@ -32,6 +34,7 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
@@ -108,8 +111,67 @@ class SiteResource extends Resource
                     self::budgetAction(),
                     self::templatesAction(),
                     self::handoverAction(),
+                    self::deleteAction(),
                 ]),
             ]);
+    }
+
+    /**
+     * Permanently delete a tenant from the portfolio row — the UI surface of
+     * {@see DeleteSiteCommand}, sharing {@see SiteDeleter}. Hidden for a
+     * `live` (handed-over) tenant so a client site can't be removed by a misclick. The cascade
+     * removes all of the site's data; WordPress is left untouched unless the operator opts in
+     * (a duplicate usually shares the original's WP instance). With no other sites, the owning
+     * account can be removed in the same step.
+     */
+    private static function deleteAction(): Action
+    {
+        return Action::make('delete')
+            ->label('Delete site')
+            ->icon('heroicon-o-trash')
+            ->color('danger')
+            ->visible(fn (Site $record): bool => $record->status !== SiteStatus::Live)
+            ->requiresConfirmation()
+            ->modalHeading('Delete this tenant?')
+            ->modalDescription(fn (Site $record): string => self::deleteSummary($record))
+            ->modalSubmitActionLabel('Delete permanently')
+            ->schema([
+                Toggle::make('purge_wordpress')
+                    ->label('Also delete its published pages on WordPress')
+                    ->helperText('Leave OFF if this WordPress install is shared with another tenant — ON would wipe the other site\'s pages too.')
+                    ->default(false),
+                Toggle::make('with_account')
+                    ->label('Also delete the owning account if it has no other sites')
+                    ->default(false),
+            ])
+            ->action(function (Site $record, array $data): void {
+                $result = app(SiteDeleter::class)->delete(
+                    $record,
+                    (bool) ($data['purge_wordpress'] ?? false),
+                    (bool) ($data['with_account'] ?? false),
+                );
+
+                $body = 'All of its data was removed.';
+                if (! empty($result['wp_failed'])) {
+                    $body .= ' ⚠ '.count($result['wp_failed']).' WordPress page(s) could not be deleted.';
+                }
+                if ($result['account_deleted']) {
+                    $body .= ' The owning account was also removed.';
+                }
+
+                Notification::make()->success()->title("Deleted '{$record->brand_name}'")->body($body)->send();
+            });
+    }
+
+    private static function deleteSummary(Site $site): string
+    {
+        $c = app(SiteDeleter::class)->counts($site);
+        $published = count(app(SiteDeleter::class)->publishedPages($site));
+
+        return "This permanently deletes '{$site->brand_name}' and ALL its data — "
+            ."{$c['pages']} pages, {$c['posts']} posts, {$c['silos']} silos, {$c['markets']} markets, "
+            ."{$c['services']} services, {$c['keywords']} keywords, its connection, brand and wizard progress. "
+            ."{$published} page(s) are published on WordPress. This cannot be undone.";
     }
 
     /**
