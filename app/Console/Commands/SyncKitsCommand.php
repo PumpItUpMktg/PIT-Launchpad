@@ -30,8 +30,11 @@ class SyncKitsCommand extends Command
 
         $this->info("Synced {$kits->count()} library wireframe kit(s):");
         foreach ($kits as $kit) {
-            $schema = $kit->schema();
-            $this->line("  • {$kit->name} (page_type={$schema->pageType->value}, v{$kit->version}, ".count($schema->slots).' slots)');
+            // page_type is descriptive metadata and may be null on a legacy kit — read the raw column
+            // (not the enum cast) so the report is null-safe and never throws on an odd stored value.
+            $rawPageType = $kit->getRawOriginal('page_type');
+            $pageType = is_string($rawPageType) && $rawPageType !== '' ? $rawPageType : 'none';
+            $this->line("  • {$kit->name} (page_type={$pageType}, v{$kit->version}, ".count($kit->schema()->slots).' slots)');
         }
 
         return self::SUCCESS;
