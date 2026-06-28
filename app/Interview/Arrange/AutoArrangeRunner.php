@@ -39,6 +39,11 @@ final class AutoArrangeRunner
                 'type' => $flag->type,
                 'message' => $flag->message,
                 'candidates' => $flag->candidates,
+                // The dismiss/accept revert target (e.g. ['spoke_id' => …]) — without this the
+                // resolver can't find the alternative and every accept/dismiss that reverts to it
+                // (nest accept, dedup dismiss, keyword dismiss, dead-silo accept) fails as
+                // "Could not resolve that flag."
+                'alternative' => $flag->alternative,
                 'score' => $flag->candidates[0]['score'] ?? null,
             ]);
         }
