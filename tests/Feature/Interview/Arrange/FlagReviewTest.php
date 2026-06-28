@@ -98,6 +98,47 @@ test('the runner persists the flag list (replace-on-run, not duplicated)', funct
     expect(ArrangementFlag::query()->where('site_id', $site->id)->count())->toBe(2); // replaced, not 4
 });
 
+test('the runner persists a nest flag WITH its alternative, so accept can resolve it (regression)', function () {
+    // A folded spoke whose best core is below the relatedness floor → NestLowConfidence,
+    // parked on the pillar with the best core as the accept alternative.
+    $fake = new class implements EmbeddingProvider
+    {
+        public function embed(string $text): array
+        {
+            $t = mb_strtolower($text);
+
+            return match (true) {
+                str_contains($t, 'unclogging') => [1.0, 0.0, 0.0],
+                str_contains($t, 'storm') => [0.5, 0.8660254, 0.0], // cosine 0.5 to unclogging → below 0.70 floor
+                default => [0.0, 0.0, 1.0],
+            };
+        }
+    };
+    app()->instance(EmbeddingProvider::class, $fake);
+
+    $site = Site::factory()->create();
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+    frSpoke($site, $bp, ['silo' => 'Drains', 'name' => 'Drains', 'is_pillar' => true]);
+    frSpoke($site, $bp, ['silo' => 'Drains', 'name' => 'Drain Unclogging', 'head_keyword' => 'unclogging', 'volume' => 200]);
+    frSpoke($site, $bp, ['silo' => 'Drains', 'name' => 'Storm Drain Cleaning', 'head_keyword' => 'storm drain', 'volume' => 30, 'granularity' => SpokeGranularity::Folded]);
+
+    app(AutoArrangeRunner::class)->run($site);
+
+    $flag = ArrangementFlag::query()->where('site_id', $site->id)
+        ->where('type', ArrangeFlagType::NestLowConfidence->value)
+        ->where('spoke_id', frspk($site, 'Storm Drain Cleaning')->id)->first();
+
+    // The persisted alternative carries the best core — this is exactly what was dropped before.
+    expect($flag)->not->toBeNull()
+        ->and($flag->alternative)->toBe(['spoke_id' => frspk($site, 'Drain Unclogging')->id]);
+
+    // Accept now resolves (folds the spoke into the alternative core) instead of "could not resolve".
+    expect(flagResolver($fake)->accept($site, $flag))->toBeTrue()
+        ->and(frspk($site, 'Storm Drain Cleaning')->fold_into_id)->toBe(frspk($site, 'Drain Unclogging')->id)
+        ->and(frspk($site, 'Storm Drain Cleaning')->arrangement_source)->toBe(ArrangementSource::Confirmed)
+        ->and(ArrangementFlag::query()->whereKey($flag->id)->exists())->toBeFalse();
+});
+
 test('accepting a sub-hub demotion flag demotes the silo and clears the flag', function () {
     $site = Site::factory()->create();
     frSite($site);
