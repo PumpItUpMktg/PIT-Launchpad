@@ -1,0 +1,111 @@
+{
+    "name": "hub-page",
+    "version": 1,
+    "page_type": "hub",
+    "elementor_template_ref": "lp-service-hub-v1",
+    "seo_profile_ref": "service",
+    "slots": [
+        {
+            "key": "hero_problem",
+            "label": "Hero — Headline",
+            "content_type": "heading",
+            "role": "hero_problem",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 8, "max_length": 120 },
+            "client_override": true,
+            "generation_hint": "Name this service category in the customer's words — the umbrella over the services beneath it.",
+            "seo_binding": "h1",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hero_solution",
+            "label": "Hero — Subhead",
+            "content_type": "short_text",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 12, "max_length": 220 },
+            "client_override": true,
+            "generation_hint": "One line on the value of this whole category and who it's for.",
+            "seo_binding": "meta_description",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hero_image",
+            "label": "Hero Image",
+            "content_type": "image",
+            "role": "hero_solution",
+            "source": "media",
+            "cardinality": { "type": "single" },
+            "constraints": {
+                "required": true,
+                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": true }
+            },
+            "client_override": false,
+            "seo_binding": "og_image",
+            "elementor_binding": "lp/image"
+        },
+        {
+            "key": "hub_intro",
+            "label": "Category Intro",
+            "content_type": "rich_text",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false, "min_length": 60, "max_length": 600 },
+            "client_override": true,
+            "generation_hint": "A short overview of the category — what it covers and why it matters — leading into the services below. No prices or guarantees unless substantiated.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "sibling_services",
+            "label": "Services in this category (grid)",
+            "content_type": "list",
+            "role": "body_explainer",
+            "source": "entity",
+            "cardinality": { "type": "repeater", "min": 0, "max": 3 },
+            "constraints": { "required": false, "entity": "silo.services" },
+            "client_override": false,
+            "generation_hint": "The service pages beneath this hub — resolved from the silo, not drafted.",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "why_us",
+            "label": "Why choose us",
+            "content_type": "rich_text",
+            "role": "proof",
+            "source": "grounded",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false, "min_length": 80, "entity": "proof.substantiated", "min_entities": 1 },
+            "condition": { "field": "has_proof", "equals": true },
+            "client_override": true,
+            "generation_hint": "Write only from substantiated claims — what makes this team the one to call for this category.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "testimonial",
+            "label": "Testimonials",
+            "content_type": "testimonial",
+            "role": "proof",
+            "source": "entity",
+            "cardinality": { "type": "repeater", "min": 1, "max": 3 },
+            "constraints": { "required": false, "entity": "reviews.market", "min_entities": 1 },
+            "condition": { "field": "has_reviews", "equals": true },
+            "client_override": false,
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "cta",
+            "label": "Primary CTA",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": false },
+            "condition": { "field": "has_location_phone", "equals": true },
+            "client_override": false,
+            "elementor_binding": "lp/cta"
+        }
+    ]
+}
