@@ -65,7 +65,7 @@
             "content_type": "list",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "repeater", "min": 3, "max": 6 },
+            "cardinality": { "type": "repeater", "min": 1, "max": 6 },
             "constraints": { "required": true },
             "condition": { "field": "has_intake_values", "equals": true },
             "client_override": true,

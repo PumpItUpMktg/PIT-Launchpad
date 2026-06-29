@@ -112,6 +112,30 @@ it('drafts a standard About page end-to-end → needs_review with its kit slots 
         ->and($claude->prompts[0])->toContain('show up on time'); // the captured story is injected
 });
 
+it('drafts an About page with only TWO captured values (renders what is captured, never blocks)', function () {
+    // Regression: the values slot required min 3; a brand with 2 captured values made the page fail
+    // the kit schema ("Slot [values] has 2 items, minimum 3") instead of rendering the 2 it has.
+    $page = aboutPage();
+    $claimId = (string) ProofItem::withoutGlobalScope(SiteScope::class)->where('site_id', $page->site_id)->value('id');
+    $response = Draft::json([
+        'slots' => [
+            'hero_headline' => 'Plumbing You Can Count On',
+            'our_story' => '<p>Lone Star Plumbing began with one truck and a simple promise: show up on time and do honest '
+                .'work. Years later that same promise still runs every single job we take on, big or small.</p>',
+            'mission' => 'We exist to make plumbing painless for local homeowners — clear pricing and clean work.',
+            'values' => ['Show up on time, every time', 'Quote before we start'], // only two
+        ],
+        'images' => [['slot' => 'hero_image', 'prompt' => 'A plumber at a front door', 'seo_filename' => 'about.jpg', 'alt' => 'A plumber']],
+        'claims_used' => [['text' => '10-year warranty', 'claim_id' => $claimId]],
+    ]);
+
+    $drafted = standardEngine(new FakeClaudeClient($response))->draftPage($page->fresh());
+
+    expect($drafted->status)->toBe(ContentStatus::NeedsReview)
+        ->and($drafted->hasDraft())->toBeTrue()
+        ->and($drafted->slot_payload['values'])->toHaveCount(2); // the captured two render — no hard-fail
+});
+
 it('holds an About page with no captured story — needs intake, never fabricated', function () {
     $page = aboutPage(withNarrative: false)->fresh();
 
