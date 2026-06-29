@@ -64,7 +64,7 @@
             "content_type": "list",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "repeater", "min": 3, "max": 6 },
+            "cardinality": { "type": "repeater", "min": 1, "max": 6 },
             "constraints": { "required": true },
             "client_override": true,
             "generation_hint": "The top service categories, one short benefit-led line each. Use only the real services.",

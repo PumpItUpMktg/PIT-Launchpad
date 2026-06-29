@@ -37,7 +37,7 @@
             "content_type": "list",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "repeater", "min": 3, "max": 8 },
+            "cardinality": { "type": "repeater", "min": 1, "max": 8 },
             "constraints": { "required": true },
             "client_override": true,
             "generation_hint": "Phrase each captured 'differentiator' (title + line) in the brand voice — concrete, no empty superlatives, none invented. (Required intake: the page holds if no differentiators are captured.)",
