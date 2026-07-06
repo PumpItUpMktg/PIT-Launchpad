@@ -34,7 +34,7 @@ final class BlockSections
         PageContext $ctx,
     ): string {
         $left = [
-            $this->b->paragraph($eyebrow, ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-eyebrow']),
+            $this->b->paragraph($eyebrow, ['textColor' => 'base', 'fontSize' => 'small', 'className' => 'lp-eyebrow']),
             $this->b->heading(1, $headline, ['textColor' => 'base']),
             $this->b->paragraph($subhead, ['textColor' => 'base']),
             $this->heroButtons($assessmentText, $assessmentUrl, $ctx),
@@ -46,9 +46,9 @@ final class BlockSections
             $right[] = $this->b->image($imageUrl, $imageAlt !== '' ? $imageAlt : $headline);
         }
 
-        $columns = [$this->b->column($left, ['width' => '55%'])];
+        $columns = [$this->b->column($left, ['width' => '60%'])];
         if ($right !== []) {
-            $columns[] = $this->b->column($right, ['width' => '45%']);
+            $columns[] = $this->b->column($right, ['width' => '40%']);
         }
 
         return $this->b->group([

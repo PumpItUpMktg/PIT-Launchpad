@@ -5,8 +5,10 @@
  * here as CSS custom properties, so this file carries NO brand values — it restyles automatically with
  * whichever style variation is active. It owns two things theme.json can't: (1) @font-face for every
  * variation's heading font, so the webfont always loads; (2) the .lp-* section arrangements the control
- * plane composes. Every layout selector uses a real class (specificity ≥ 0,1,0) so it beats the
- * zero-specificity :where() layout rules WordPress injects from theme.json.
+ * plane composes. The section layouts drive their own CSS grid/flex keyed to the lp-* classes rather
+ * than leaning on core's wp-block-columns flex — deterministic across WP versions, and every selector
+ * uses a real class (specificity ≥ 0,1,0) so it beats the zero-specificity :where() layout rules
+ * WordPress injects from theme.json.
  */
 
 /* ------------------------------------------------------------------ *
@@ -51,30 +53,37 @@
 
 /* ------------------------------------------------------------------ *
  * Section width model. Each composed section is a full-bleed group
- * (align:full); its inner content is capped to the wide size and
- * centered here — overriding both the template's constrained content
- * width and each group's own constrained cap on its children.
+ * (align:full); its inner content is capped and centered here — over-
+ * riding the template's constrained content width and each group's own
+ * constrained cap on its children.
  * ------------------------------------------------------------------ */
+.lp-hero,
+.lp-services,
+.lp-proof,
+.lp-cta {
+    --lp-max: 1200px;
+}
+
 .lp-hero > *,
 .lp-services > *,
 .lp-proof > *,
 .lp-cta > * {
-    max-width: var(--wp--style--global--wide-size, 1200px);
+    max-width: var(--lp-max);
     margin-inline: auto;
 }
 
 .lp-hero,
 .lp-cta {
-    padding-block: clamp(3rem, 6vw, 6rem);
+    padding-block: clamp(3.5rem, 6vw, 6rem);
 }
 
 .lp-services,
 .lp-proof {
-    padding-block: clamp(2.5rem, 5vw, 4.5rem);
+    padding-block: clamp(3rem, 5vw, 5rem);
 }
 
 /* ------------------------------------------------------------------ *
- * Eyebrow — the small uppercase label above hero / section headings.
+ * Eyebrow — small uppercase label above hero / section headings.
  * ------------------------------------------------------------------ */
 .lp-eyebrow {
     text-transform: uppercase;
@@ -84,22 +93,46 @@
     margin-bottom: 0.6rem;
 }
 
+/* On the dark hero band the eyebrow is white; dim it slightly so the headline leads. */
+.lp-hero .lp-eyebrow {
+    opacity: 0.72;
+}
+
 /* ------------------------------------------------------------------ *
- * Hero — split copy / image, buttons, trust row.
+ * Hero — 60/40 split: copy + buttons + trust on the left, the image
+ * inline (vertically centered) on the right.
  * ------------------------------------------------------------------ */
 .lp-hero > .wp-block-columns {
-    gap: clamp(2rem, 5vw, 4rem);
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: clamp(2rem, 4vw, 3.75rem);
     align-items: center;
+    margin: 0;
+}
+
+/* Stack the split hero on phones/tablets — full-width copy, then the image. */
+@media (max-width: 782px) {
+    .lp-hero > .wp-block-columns {
+        grid-template-columns: 1fr;
+    }
+}
+
+.lp-hero > .wp-block-columns > .wp-block-column {
+    min-width: 0;
 }
 
 .lp-hero h1 {
-    margin-bottom: 1rem;
+    font-size: clamp(2rem, 1.35rem + 2.4vw, 3.25rem);
+    line-height: 1.1;
+    margin: 0 0 0.85rem;
 }
 
-.lp-hero p {
-    font-size: var(--wp--preset--font-size--large, 1.375rem);
-    line-height: 1.5;
-    max-width: 34ch;
+.lp-hero > .wp-block-columns > .wp-block-column > p {
+    font-size: 1.15rem;
+    line-height: 1.55;
+    max-width: 42ch;
+    opacity: 0.92;
+    margin: 0 0 0.5rem;
 }
 
 .lp-hero .wp-block-buttons {
@@ -114,37 +147,40 @@
 
 .lp-hero figure.wp-block-image img {
     width: 100%;
-    height: auto;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
     border-radius: var(--wp--custom--radius, 12px);
+    box-shadow: 0 24px 55px rgba(2, 12, 27, 0.28);
     display: block;
 }
 
-/* Trust row — value over label, spaced out under the hero copy. */
+/* Trust row — value over label, spaced under the hero copy. */
 .lp-hero .lp-trust {
-    margin-top: 2.25rem;
-    gap: clamp(1.5rem, 4vw, 3rem);
+    display: flex;
     flex-wrap: wrap;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    margin: 2.25rem 0 0;
+    align-items: flex-start;
 }
 
-.lp-hero .lp-trust .wp-block-column {
-    flex-basis: auto;
-    flex-grow: 0;
+.lp-hero .lp-trust > .wp-block-column {
+    flex: 0 0 auto;
 }
 
 .lp-hero .lp-trust p {
     margin: 0;
     font-size: var(--wp--preset--font-size--small, 0.875rem);
     line-height: 1.35;
-    opacity: 0.9;
+    opacity: 0.85;
 }
 
 .lp-hero .lp-trust strong {
     display: block;
     font-family: var(--wp--preset--font-family--heading);
-    font-size: var(--wp--preset--font-size--x-large, 1.75rem);
+    font-size: 1.85rem;
     font-weight: 800;
-    line-height: 1.1;
-    margin-bottom: 0.15rem;
+    line-height: 1.05;
+    margin-bottom: 0.1rem;
     opacity: 1;
 }
 
@@ -152,7 +188,7 @@
  * Section head — centered eyebrow + heading above the grids.
  * ------------------------------------------------------------------ */
 .lp-section-head {
-    max-width: 44rem;
+    max-width: 42rem;
     margin-inline: auto;
     margin-bottom: clamp(2rem, 4vw, 3rem);
     text-align: center;
@@ -162,45 +198,72 @@
     color: var(--wp--preset--color--accent);
 }
 
+.lp-section-head h2 {
+    margin: 0;
+}
+
 /* ------------------------------------------------------------------ *
- * Services grid — equal-height cards with icon, blurb, learn-more.
+ * Services grid — up to 3 per row, wrapping by service count; equal-
+ * height cards with icon, blurb, and a learn-more link.
  * ------------------------------------------------------------------ */
-.lp-services-grid {
+.wp-block-columns.lp-services-grid {
+    display: grid;
+    grid-template-columns: 1fr;
     gap: var(--wp--preset--spacing--40, 1.5rem);
+    margin: 0;
+}
+
+@media (min-width: 600px) {
+    .wp-block-columns.lp-services-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 960px) {
+    .wp-block-columns.lp-services-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 .lp-services-grid > .wp-block-column {
     display: flex;
+    margin: 0;
 }
 
 .lp-card {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    align-items: flex-start;
+    gap: 0.6rem;
     height: 100%;
-    padding: var(--wp--preset--spacing--50, 2.5rem);
+    width: 100%;
+    padding: clamp(1.5rem, 3vw, 2rem);
+    background: var(--wp--preset--color--base, #fff);
     border: 1px solid var(--wp--preset--color--border, #e2e8f0);
     border-radius: var(--wp--custom--radius, 12px);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .lp-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.1);
+    box-shadow: 0 16px 38px rgba(15, 23, 42, 0.12);
+    border-color: transparent;
 }
 
 .lp-card h3 {
     margin: 0;
-    font-size: var(--wp--preset--font-size--large, 1.375rem);
+    font-size: 1.2rem;
 }
 
 .lp-card p {
     margin: 0;
+    font-size: var(--wp--preset--font-size--medium, 1rem);
+    line-height: 1.55;
 }
 
 .lp-card p:last-child {
     margin-top: auto;
-    padding-top: 0.5rem;
+    padding-top: 0.35rem;
     font-weight: 600;
 }
 
@@ -217,14 +280,24 @@
 
 /* ------------------------------------------------------------------ *
  * Proof gallery — real photos fill; empty slots are honest dashed
- * "add your own photo" placeholders.
+ * "add your own photo" placeholders. Up to 3 across.
  * ------------------------------------------------------------------ */
-.lp-proof-grid {
+.wp-block-columns.lp-proof-grid {
+    display: grid;
+    grid-template-columns: 1fr;
     gap: var(--wp--preset--spacing--40, 1.5rem);
+    margin: 0;
+}
+
+@media (min-width: 600px) {
+    .wp-block-columns.lp-proof-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 .lp-proof-grid > .wp-block-column {
     display: flex;
+    margin: 0;
 }
 
 .lp-proof-grid figure.wp-block-image {
@@ -235,7 +308,7 @@
 .lp-proof-grid figure.wp-block-image img {
     width: 100%;
     height: 100%;
-    min-height: 220px;
+    aspect-ratio: 4 / 3;
     object-fit: cover;
     border-radius: var(--wp--custom--radius, 12px);
     display: block;
@@ -248,12 +321,12 @@
     justify-content: center;
     gap: 0.4rem;
     width: 100%;
-    min-height: 220px;
-    padding: var(--wp--preset--spacing--50, 2.5rem);
+    aspect-ratio: 4 / 3;
+    padding: 1.5rem;
     text-align: center;
+    background: transparent;
     border: 2px dashed var(--wp--preset--color--border, #cbd5e1);
     border-radius: var(--wp--custom--radius, 12px);
-    background: transparent;
 }
 
 .lp-photo-placeholder h4 {
@@ -263,7 +336,8 @@
 
 .lp-photo-placeholder p {
     margin: 0;
-    max-width: 24ch;
+    max-width: 26ch;
+    font-size: var(--wp--preset--font-size--small, 0.875rem);
 }
 
 /* ------------------------------------------------------------------ *
@@ -274,7 +348,11 @@
 }
 
 .lp-cta > * {
-    max-width: 46rem;
+    max-width: 44rem;
+}
+
+.lp-cta h2 {
+    font-size: clamp(1.75rem, 1.3rem + 1.8vw, 2.5rem);
 }
 
 .lp-cta .wp-block-buttons {
