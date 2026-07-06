@@ -38,11 +38,17 @@ it('ships a valid base theme.json (block theme, v3)', function () {
         ->and(paletteColor($theme, 'on-accent'))->not->toBeNull();
 });
 
-it('is a Twenty Twenty-Five child theme (style.css declares the template)', function () {
+it('is a self-contained block theme (declared + has its own templates, no parent required)', function () {
     $css = (string) file_get_contents(base_path('wordpress-theme/launchpad/style.css'));
 
     expect($css)->toContain('Theme Name: Launchpad')
-        ->and($css)->toContain('Template: twentytwentyfive');
+        // Standalone: no parent-theme dependency (a missing parent blocks activation on a tenant).
+        ->and($css)->not->toContain('Template:');
+
+    // A block theme needs its own templates + parts (it no longer inherits them).
+    foreach (['templates/index.html', 'templates/page.html', 'parts/header.html', 'parts/footer.html'] as $file) {
+        expect(file_exists(base_path("wordpress-theme/launchpad/{$file}")))->toBeTrue();
+    }
 });
 
 it('each style variation matches its control-plane StyleVariation tokens exactly', function (StyleVariation $variation) {
