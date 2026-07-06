@@ -13,6 +13,7 @@ use Launchpad\Companion\Content\EditGuard;
 use Launchpad\Companion\Content\KitTaxonomy;
 use Launchpad\Companion\Render\Assets;
 use Launchpad\Companion\Render\Shortcodes;
+use Launchpad\Companion\Render\SiteChrome;
 use Launchpad\Companion\Render\TagManager;
 use Launchpad\Companion\Render\TemplateRouter;
 use Launchpad\Companion\Rest\Routes;
@@ -60,6 +61,10 @@ final class Plugin
         ( new Shortcodes() )->register();
         add_action('elementor/dynamic_tags/register', [new TagManager(), 'register']);
         ( new TemplateRouter() )->register();
+
+        // Universal header/footer chrome — [lp_header]/[lp_footer] render the pushed
+        // site profile (brand/NAP/nav) for the block theme's template parts.
+        ( new SiteChrome() )->register();
 
         // Baseline design layer — styles the lp-* blocks (keyed to the Global Kit
         // CSS variables) so a generated page is presentable without a designer.

@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.2
+Stable tag: 0.9.3
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,15 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.3 =
+* Added the universal header/footer chrome. New POST /site-profile stores the pushed
+  per-tenant brand + NAP + navigation (phone, emergency flag, hours, service/area/
+  company links) into the lp_site_profile option; new [lp_header] / [lp_footer]
+  shortcodes render it as semantic .lp-* markup for the block theme's header/footer
+  template parts (styled by the theme's assets/theme.css). A block-theme template part
+  can't express per-tenant NAP statically — this is the injection path. Degrades to the
+  WordPress site title with no phone/nav when no profile has been pushed.
 
 = 0.9.2 =
 * Stop fighting the block theme on the front end. On a BLOCK theme the plugin no
@@ -65,6 +74,9 @@ import — images are served from R2/CDN URLs in the payload.
                      Builder group (single-page / single-post / header / footer / page /
                      container …), any status, each with its actual _elementor_template_type
                      (taxonomy fallback for v4), so the control plane maps kits to real templates
+* POST /site-profile — store the per-tenant brand + NAP + navigation (phone, emergency,
+                     hours, service/area/company links) into lp_site_profile for the
+                     universal [lp_header]/[lp_footer] chrome. Idempotent
 
 Authentication: WordPress application password for the dedicated `launchpad-sync`
 service user (role `launchpad_service`, capability `lp_manage_content`).

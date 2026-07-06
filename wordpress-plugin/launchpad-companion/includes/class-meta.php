@@ -82,4 +82,8 @@ final class Meta
     /** trust|bold|warm — the chosen structure preset; emitted as a body.wf-structure-
      * {slug} class by TemplateRouter so the matching token bundle applies. */
     public const OPTION_STRUCTURE_PRESET = 'lp_structure_preset';
+
+    /** The pushed per-tenant site profile (brand/NAP/nav) rendered by the universal
+     * header/footer chrome — see SiteProfileStore + SiteChrome. */
+    public const OPTION_SITE_PROFILE = 'lp_site_profile';
 }
