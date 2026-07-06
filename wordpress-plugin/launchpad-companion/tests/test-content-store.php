@@ -189,6 +189,40 @@ class Test_Content_Store extends WP_UnitTestCase
         $this->assertSame('', get_post_meta($result['wp_post_id'], '_wp_page_template', true), 'The non-native render path must not force a page template.');
     }
 
+    public function test_block_post_content_is_stored_as_the_wp_post_content(): void
+    {
+        $blocks = "<!-- wp:heading {\"level\":1} -->\n<h1>Fast Water Heater Repair</h1>\n<!-- /wp:heading -->";
+
+        $result = (new ContentStore())->upsert($this->payload(['post_content' => $blocks]));
+        $post = get_post($result['wp_post_id']);
+
+        // The block markup IS the WP post_content (the block theme renders it).
+        $this->assertSame($blocks, $post->post_content);
+        // The block path writes no Elementor body and forces no page template (theme default).
+        $this->assertSame('', get_post_meta($result['wp_post_id'], '_elementor_data', true));
+        $this->assertSame('', get_post_meta($result['wp_post_id'], '_wp_page_template', true));
+    }
+
+    public function test_repushing_to_the_block_path_strips_a_stale_elementor_body(): void
+    {
+        $store = new ContentStore();
+
+        // First push on the old Elementor path.
+        $store->upsert($this->payload(['elementor_data' => [[
+            'id' => 'old1234', 'elType' => 'container', 'settings' => [], 'elements' => [], 'isInner' => false,
+        ]]]));
+
+        // Re-push the SAME content on the new block path.
+        $blocks = "<!-- wp:paragraph -->\n<p>Now a block page.</p>\n<!-- /wp:paragraph -->";
+        $result = $store->upsert($this->payload(['post_content' => $blocks]));
+        $id = $result['wp_post_id'];
+
+        // The leftover Elementor document is gone, so WP renders the blocks — not a ghost Elementor body.
+        $this->assertSame('', get_post_meta($id, '_elementor_data', true));
+        $this->assertSame('', get_post_meta($id, '_elementor_edit_mode', true));
+        $this->assertSame($blocks, get_post($id)->post_content);
+    }
+
     public function test_a_locally_edited_page_keeps_its_native_body(): void
     {
         $store = new ContentStore();

@@ -1,14 +1,26 @@
 === Launchpad Companion ===
-Requires at least: 6.3
+Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.8.7
+Stable tag: 0.9.0
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
-the §2 control-plane↔WordPress contract: authed REST upserts, consolidated
-slot-blob storage, brand-neutral Elementor rendering via lp/* dynamic tags,
-native SEO, a managed sitemap, and 301 redirects. No SEO plugin, no ACF, no
-media-library import — images are served from R2/CDN URLs in the payload.
+the control-plane↔WordPress contract: authed REST upserts, consolidated
+slot-blob storage, core Gutenberg block markup stored as the page's post_content
+(rendered by a block theme — no page builder), native SEO, a managed sitemap,
+and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
+import — images are served from R2/CDN URLs in the payload.
+
+== Changelog ==
+
+= 0.9.0 =
+* Elementor → Gutenberg pivot. The /content endpoint now stores core-block markup
+  (the push's `post_content`) as the WP post_content, rendered by the Launchpad
+  block theme; brand styling lives in the theme's theme.json, not an Elementor
+  Global Kit. Dropped the `Requires Plugins: elementor` dependency so Elementor can
+  be deactivated/removed on managed sites. A page re-pushed to the block path strips
+  any stale `_elementor_data`. Pushes without `post_content` still fall back to the
+  legacy Elementor-body path. Requires a block theme (a Twenty Twenty-Five child).
 
 == Contract endpoints (namespace launchpad/v1) ==
 * POST /silo       — ensure a hierarchical category mirrors a Silo
