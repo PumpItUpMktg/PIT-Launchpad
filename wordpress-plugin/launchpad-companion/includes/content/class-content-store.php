@@ -45,11 +45,16 @@ final class ContentStore
         $seo = is_array($payload['seo'] ?? null) ? $payload['seo'] : [];
         $status = ($payload['status'] ?? '') === 'published' ? 'publish' : 'draft';
 
+        // The Gutenberg body: when the push carries core-block markup, it IS the WP
+        // post_content (the block theme renders it — no page builder). Absent → '' and
+        // the legacy Elementor-body path takes over below (backward compatible).
+        $block_content = is_string($payload['post_content'] ?? null) ? trim((string) $payload['post_content']) : '';
+
         $postarr = [
             'post_type' => $kind,
             'post_status' => $status,
             'post_title' => (string) ($seo['title'] ?? $payload['title'] ?? 'Untitled'),
-            'post_content' => '',
+            'post_content' => $block_content,
         ];
         if (! empty($payload['slug'])) {
             $postarr['post_name'] = sanitize_title((string) $payload['slug']);
@@ -89,7 +94,7 @@ final class ContentStore
             : [];
 
         $this->store_meta($post_id, $content_id, $kind, $payload, $seo, $images);
-        $this->store_elementor_body($post_id, $payload);
+        $this->store_body($post_id, $payload, $block_content);
         $this->apply_featured_image($post_id, $payload, $images);
         TemplateRouter::assign($post_id, (string) ($payload['kit'] ?? ''), (string) ($payload['page_type'] ?? ''));
         $this->assign_category($post_id, (string) ($payload['silo_id'] ?? ''));
@@ -112,6 +117,28 @@ final class ContentStore
         return ! empty($payload['locked'])
             || get_post_meta($post_id, Meta::LOCKED, true) === '1'
             || EditGuard::is_locally_edited($post_id);
+    }
+
+    /**
+     * Dispatch the page body. A Gutenberg push (core-block markup) already landed as the WP
+     * post_content at insert/update time, so here we only STRIP any stale Elementor body — a page
+     * re-pushed from the old Elementor path to the new block path must render its blocks, not a
+     * leftover `_elementor_data` document. A push with no block content falls back to the legacy
+     * Elementor-body write, unchanged.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function store_body(int $post_id, array $payload, string $block_content): void
+    {
+        if ($block_content !== '') {
+            delete_post_meta($post_id, '_elementor_data');
+            delete_post_meta($post_id, '_elementor_edit_mode');
+            delete_post_meta($post_id, '_elementor_version');
+
+            return;
+        }
+
+        $this->store_elementor_body($post_id, $payload);
     }
 
     /**
