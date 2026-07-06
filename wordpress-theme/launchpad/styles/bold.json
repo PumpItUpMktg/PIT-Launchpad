@@ -1,0 +1,31 @@
+{
+    "$schema": "https://schemas.wp.org/trunk/theme.json",
+    "version": 3,
+    "title": "Bold & Direct",
+    "description": "High-contrast and confident — for direct, results-first and commercial brands. Navy + orange, Archivo 800, tight tracking, sharp 3px corners.",
+    "settings": {
+        "color": {
+            "palette": [
+                { "slug": "base", "name": "Base", "color": "#ffffff" },
+                { "slug": "surface", "name": "Surface", "color": "#f2f5f8" },
+                { "slug": "contrast", "name": "Contrast", "color": "#0B1F33" },
+                { "slug": "muted", "name": "Muted", "color": "#475569" },
+                { "slug": "border", "name": "Border", "color": "#dbe3ea" },
+                { "slug": "primary", "name": "Primary", "color": "#0B1F33" },
+                { "slug": "accent", "name": "Accent", "color": "#EA580C" },
+                { "slug": "on-accent", "name": "On accent", "color": "#ffffff" }
+            ]
+        },
+        "typography": {
+            "fontFamilies": [
+                { "slug": "heading", "name": "Archivo", "fontFamily": "Archivo, system-ui, sans-serif" },
+                { "slug": "body", "name": "Body", "fontFamily": "system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" }
+            ]
+        },
+        "custom": {
+            "radius": "3px",
+            "headingLetterSpacing": "-0.02em",
+            "headingWeight": "800"
+        }
+    }
+}

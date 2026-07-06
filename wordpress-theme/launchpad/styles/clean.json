@@ -1,0 +1,31 @@
+{
+    "$schema": "https://schemas.wp.org/trunk/theme.json",
+    "version": 3,
+    "title": "Clean & Trustworthy",
+    "description": "Calm, precise and premium — the trustworthy default for careful, credentialed brands. Deep blue, Manrope 700, airy tracking, soft 12px corners.",
+    "settings": {
+        "color": {
+            "palette": [
+                { "slug": "base", "name": "Base", "color": "#ffffff" },
+                { "slug": "surface", "name": "Surface", "color": "#f1f5f9" },
+                { "slug": "contrast", "name": "Contrast", "color": "#0f172a" },
+                { "slug": "muted", "name": "Muted", "color": "#475569" },
+                { "slug": "border", "name": "Border", "color": "#e2e8f0" },
+                { "slug": "primary", "name": "Primary", "color": "#123B6B" },
+                { "slug": "accent", "name": "Accent", "color": "#1D6FD6" },
+                { "slug": "on-accent", "name": "On accent", "color": "#ffffff" }
+            ]
+        },
+        "typography": {
+            "fontFamilies": [
+                { "slug": "heading", "name": "Manrope", "fontFamily": "Manrope, system-ui, sans-serif" },
+                { "slug": "body", "name": "Body", "fontFamily": "system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" }
+            ]
+        },
+        "custom": {
+            "radius": "12px",
+            "headingLetterSpacing": "0em",
+            "headingWeight": "700"
+        }
+    }
+}

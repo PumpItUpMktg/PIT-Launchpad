@@ -1,0 +1,35 @@
+# Launchpad block theme
+
+A lightly customized **Twenty Twenty-Five child theme** — the WordPress side of the Elementor →
+Gutenberg pivot. All brand styling lives in `theme.json` and its style variations; there is no page
+builder and no Global Kit. Pages are core Gutenberg blocks, so the client is never locked into a
+proprietary builder (the whole point of the pivot).
+
+## Files
+- `style.css` — the child-theme declaration (`Template: twentytwentyfive`). Intentionally CSS-free:
+  the brand-styling surface is `theme.json`, single and only.
+- `theme.json` — the base token vocabulary the block **patterns bind to**: the color palette slugs
+  (`base` / `surface` / `contrast` / `muted` / `border` / `primary` / `accent` / `on-accent`), the
+  type scale, spacing scale, and custom properties (`radius`, `headingWeight`,
+  `headingLetterSpacing`). Patterns reference these by slug, so they are style-agnostic.
+- `styles/{bold,clean,warm}.json` — the three style variations (Bold & Direct / Clean & Trustworthy /
+  Warm & Local). Each overrides the brand palette, heading typeface, radius and tracking. Switching
+  the active variation restyles every page without regenerating content.
+
+## Single source of truth
+The variation tokens mirror `app/Styling/StyleVariation.php` on the control-plane side (the recommender
+picks a variation; the Brand step writes its tokens to the site's `theme.json`). `ThemeVariationTest`
+locks the two together so they can't drift — change the tokens in one place and the test fails until
+both agree.
+
+## TODO before the live-eyeball gate
+- **Bundle the heading webfonts** (Archivo 800, Manrope 700, Bricolage Grotesque 700) as local
+  `woff2` files and add `fontFace` `src` entries to each variation's `fontFamilies`. They currently
+  declare the family name with a system fallback stack; corners/colors/tracking are already exact, but
+  the typeface won't match the mockup until the fonts are bundled. Local fonts (not a CDN link) keep
+  the output portable and privacy-clean.
+
+## Install (WP-side, per tenant)
+Ships with the site (Layer 6 onboarding adds an "install / activate the block theme" step, replacing
+the Elementor install). Twenty Twenty-Five must be present as the parent. The active style variation
+is set from the operator's recommendation choice.
