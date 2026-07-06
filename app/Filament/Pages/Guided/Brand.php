@@ -2,28 +2,29 @@
 
 namespace App\Filament\Pages\Guided;
 
-use App\Branding\BrandStudio;
 use App\Enums\SetupStep;
 use App\Enums\VoiceStatus;
 use App\Guided\GuidedPage;
 use App\Guided\StepGate;
 use App\Models\Scopes\SiteScope;
-use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use App\Models\VoiceProfile;
 use App\Onboarding\IntakeCollector;
 use App\Operator\Controls\VoiceControl;
+use App\Styling\StyleActivator;
+use App\Styling\StyleVariation;
 use Filament\Notifications\Notification;
 
 /**
- * Step 3 · Brand — palette / typography → brand kit → push. Folds the standalone brand step into
- * the flow ({@see BrandStudio}: generate + save + push to the site's Elementor Global Kit). The
- * push is reachable only once step 2 set `deps_ready` (Brand's prerequisite), so the brand kit
- * can't be pushed to an unprepared WordPress — the /brand-kit 404 can't recur. `brand_pushed` is
- * the completion flag.
+ * Step 3 · Brand — voice → look → narrative. The Gutenberg-pivot brand step: capture the brand voice,
+ * pick a look (one of three theme.json style variations, recommended from the voice), and give the
+ * words the standard-page composer grounds on. "Apply" activates the chosen variation on the site's
+ * WordPress global styles via {@see StyleActivator} — there is no Elementor Global Kit. The apply is
+ * reachable only once step 2 set `deps_ready`; `brand_pushed` is the completion flag.
  *
- * @property-read array{palette: array<string, string>, typography: array<string, string>}|null $branding
  * @property-read bool $pushed
+ * @property-read StyleVariation|null $resolvedStyle
+ * @property-read StyleVariation|null $chosenStyle
  */
 class Brand extends GuidedPage
 {
@@ -88,27 +89,6 @@ class Brand extends GuidedPage
         }
     }
 
-    /**
-     * @return array{palette: array<string, string>, typography: array<string, string>}|null
-     */
-    public function getBrandingProperty(): ?array
-    {
-        $site = $this->getSite();
-        if ($site === null) {
-            return null;
-        }
-
-        $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
-        if ($branding === null || ! is_array($branding->palette)) {
-            return null;
-        }
-
-        return [
-            'palette' => $branding->palette,
-            'typography' => is_array($branding->typography) ? $branding->typography : [],
-        ];
-    }
-
     public function getPushedProperty(): bool
     {
         $site = $this->getSite();
@@ -116,22 +96,45 @@ class Brand extends GuidedPage
         return $site !== null && app(StepGate::class)->state($site)->brand_pushed;
     }
 
-    /** Generate a brand (industry-grounded) and save it — the preview before pushing. */
-    public function generate(): void
+    /** The style variation this site will render in (operator override → voice recommendation → default). */
+    public function getResolvedStyleProperty(): ?StyleVariation
+    {
+        $site = $this->getSite();
+
+        return $site !== null ? app(StyleActivator::class)->resolve($site) : null;
+    }
+
+    /** The operator's explicit override, or null when following the recommendation. */
+    public function getChosenStyleProperty(): ?StyleVariation
+    {
+        return $this->getSite()?->style_variation;
+    }
+
+    /**
+     * Operator override of the recommended style. `auto` clears the override (follow the voice
+     * recommendation). The Gutenberg pivot's recommend-with-override: the system suggests, the human
+     * confirms/overrides — brand styling is one of the three theme.json variations.
+     */
+    public function chooseStyle(string $variation): void
     {
         $site = $this->getSite();
         if ($site === null) {
             return;
         }
 
-        $studio = app(BrandStudio::class);
-        $brand = $studio->generate($site, []); // industry resolved from the site
-        $studio->save($site, $brand->palette, $brand->typography);
+        $picked = $variation === 'auto' ? null : StyleVariation::tryFrom($variation);
+        $site->forceFill(['style_variation' => $picked])->save();
 
-        Notification::make()->title('Brand generated — review, then push.')->success()->send();
+        Notification::make()
+            ->title($picked !== null ? "Style set to {$picked->label()}." : 'Using the recommended style.')
+            ->success()->send();
     }
 
-    /** Push the saved brand kit to the prepped WordPress (gated on deps_ready). */
+    /**
+     * Apply the resolved style variation to the prepped WordPress (gated on deps_ready) — the pivot's
+     * brand push. Activates a theme.json style variation (bold/clean/warm) as the site's global
+     * styles; there is no Elementor Global Kit. `brand_pushed` is the completion flag.
+     */
     public function pushBrand(): void
     {
         $site = $this->getSite();
@@ -146,15 +149,17 @@ class Brand extends GuidedPage
             return;
         }
 
-        $result = app(BrandStudio::class)->push($site);
+        $result = app(StyleActivator::class)->activate($site);
+        $label = StyleVariation::tryFrom((string) ($result['variation'] ?? ''))?->label() ?? 'your style';
+
         if ($result['updated'] ?? false) {
             $gate->state($site)->update(['brand_pushed' => true]);
-            Notification::make()->title('Brand kit pushed to WordPress.')->success()->send();
+            Notification::make()->title("Applied {$label} to your site.")->success()->send();
 
             return;
         }
 
-        Notification::make()->title('Brand push failed')->body((string) ($result['error'] ?? 'Try again.'))->danger()->send();
+        Notification::make()->title('Could not apply your style')->body((string) ($result['error'] ?? 'Try again.'))->danger()->send();
     }
 
     /**
