@@ -1,12 +1,15 @@
 <?php
 
 use App\Enums\ContentKind;
+use App\Enums\MarketTier;
 use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Models\Content;
 use App\Models\Location;
+use App\Models\Market;
 use App\Models\ProofItem;
 use App\Models\Site;
+use App\Models\SiteNarrative;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\MetaBlobAssembler;
 
@@ -67,6 +70,61 @@ it('composes Home post_content from real inputs — cards link to real pages, ph
         ->toContain('24/7')
         // substantiated proof stat (not fabricated)
         ->toContain('Licensed &amp; insured');
+});
+
+it('composes the full 9-section Home from real §1 data — credibility, differentiators, testimonials, areas', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'offers_emergency' => true]);
+    Location::factory()->create(['site_id' => $site->id, 'phone' => '(973) 555-0100']);
+
+    // Credibility badge — a substantiated license.
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::License,
+        'payload' => ['label' => 'NJ Master Plumber'], 'is_substantiated' => true,
+    ]);
+    // Testimonial — substantiated review with quote/author/role/stars.
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::Testimonial,
+        'payload' => ['text' => 'Caught a collapsing line before it flooded the basement.', 'author' => 'Facilities Director', 'role' => 'Jersey City', 'stars' => 5],
+        'is_substantiated' => true,
+    ]);
+    // Why Choose Us — real differentiators from the narrative.
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'differentiators' => [['title' => 'Preventive-first', 'description' => 'We stop failures before they happen.']],
+    ]);
+    // Service areas — priority + coverage markets.
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Jersey City', 'tier' => MarketTier::Priority]);
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'tier' => MarketTier::Coverage]);
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose(
+        $home->fresh(), $home->slot_payload,
+        ['hero_image' => ['url' => 'https://cdn.example/hero.webp', 'alt' => 'On site']],
+    );
+
+    expect($markup)
+        ->toContain('NJ Master Plumber')                                        // credibility strip
+        ->toContain('Preventive-first')                                         // why choose us
+        ->toContain('Getting started is simple')                                // how it works (always)
+        ->toContain('Caught a collapsing line before it flooded the basement.') // testimonial
+        ->toContain('★★★★★')                                                     // star rating rendered
+        ->toContain('Facilities Director')
+        ->toContain('Jersey City')->toContain('Newark')                         // service-area tags
+        ->toContain('Areas we serve');
+});
+
+it('data-gated sections stay hidden when their data is absent — degrade, never fabricate', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->not->toContain('What sets us apart')   // no differentiators → no Why section
+        ->not->toContain('In their words')       // no reviews → no Testimonials
+        ->not->toContain('Areas we serve')       // no markets → no Service Areas
+        // but the presentational process section always renders
+        ->toContain('Getting started is simple');
 });
 
 it('returns null for a page type whose block pattern has not shipped (falls back to existing render)', function () {
