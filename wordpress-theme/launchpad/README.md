@@ -22,12 +22,11 @@ picks a variation; the Brand step writes its tokens to the site's `theme.json`).
 locks the two together so they can't drift — change the tokens in one place and the test fails until
 both agree.
 
-## TODO before the live-eyeball gate
-- **Bundle the heading webfonts** (Archivo 800, Manrope 700, Bricolage Grotesque 700) as local
-  `woff2` files and add `fontFace` `src` entries to each variation's `fontFamilies`. They currently
-  declare the family name with a system fallback stack; corners/colors/tracking are already exact, but
-  the typeface won't match the mockup until the fonts are bundled. Local fonts (not a CDN link) keep
-  the output portable and privacy-clean.
+## Webfonts
+Heading typefaces (Archivo 800 · Manrope 700 · Bricolage Grotesque 700) and the Inter body font are
+**bundled locally** as latin-subset `woff2` under `assets/fonts/`, wired via `theme.json` /
+`styles/*.json` `fontFace` `src: file:./assets/fonts/…`. Self-hosted, not a CDN link — portable and
+privacy-clean. See `assets/fonts/README.md` for the files and their OFL license.
 
 ## Install (WP-side, per tenant)
 Ships with the site (Layer 6 onboarding adds an "install / activate the block theme" step, replacing

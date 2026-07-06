@@ -66,6 +66,33 @@ it('each style variation matches its control-plane StyleVariation tokens exactly
     'warm' => StyleVariation::Warm,
 ]);
 
+it('bundles the heading webfont locally for each variation (fontFace → an existing woff2)', function (StyleVariation $variation) {
+    $json = variationJson($variation);
+    $heading = collect($json['settings']['typography']['fontFamilies'])->firstWhere('slug', 'heading');
+
+    expect($heading['fontFace'] ?? null)->toBeArray()->not->toBeEmpty();
+
+    $src = $heading['fontFace'][0]['src'][0] ?? '';
+    expect($src)->toStartWith('file:./assets/fonts/')->toEndWith('.woff2');
+
+    // The referenced file is actually bundled (self-hosted, not a CDN link).
+    $path = base_path('wordpress-theme/launchpad/'.substr($src, strlen('file:./')));
+    expect(file_exists($path))->toBeTrue();
+})->with([
+    'bold' => StyleVariation::Bold,
+    'clean' => StyleVariation::Clean,
+    'warm' => StyleVariation::Warm,
+]);
+
+it('bundles the Inter body font in the base theme', function () {
+    $theme = json_decode((string) file_get_contents(base_path('wordpress-theme/launchpad/theme.json')), true, 512, JSON_THROW_ON_ERROR);
+    $body = collect($theme['settings']['typography']['fontFamilies'])->firstWhere('slug', 'body');
+
+    expect($body['fontFamily'])->toContain('Inter')
+        ->and($body['fontFace'])->toBeArray()->not->toBeEmpty()
+        ->and(file_exists(base_path('wordpress-theme/launchpad/assets/fonts/inter-400.woff2')))->toBeTrue();
+});
+
 it('covers every StyleVariation with a shipped theme file (no orphans either way)', function () {
     $files = glob(base_path('wordpress-theme/launchpad/styles/*.json'));
     $slugs = array_map(fn (string $f): string => basename($f, '.json'), $files ?: []);
