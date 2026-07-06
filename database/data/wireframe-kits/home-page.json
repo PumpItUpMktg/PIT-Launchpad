@@ -25,7 +25,7 @@
             "role": "hero_solution",
             "source": "generated",
             "cardinality": { "type": "single" },
-            "constraints": { "required": true, "min_length": 12, "max_length": 200 },
+            "constraints": { "required": true, "min_length": 12, "max_length": 260 },
             "client_override": true,
             "generation_hint": "One line: who we serve and the outcome we deliver.",
             "seo_binding": "meta_description",
@@ -89,9 +89,9 @@
             "role": "local_relevance",
             "source": "generated",
             "cardinality": { "type": "single" },
-            "constraints": { "required": false, "max_length": 200 },
+            "constraints": { "required": false, "max_length": 120 },
             "client_override": true,
-            "generation_hint": "Name the markets served — only from the grounding, never invent locality.",
+            "generation_hint": "A SHORT hero eyebrow label — the trade + the region served, e.g. 'Commercial Plumbing · Northern New Jersey'. NOT a list of towns. Only from the grounding; never invent locality.",
             "elementor_binding": "lp/text"
         },
         {
