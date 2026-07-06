@@ -614,6 +614,14 @@
 /* ------------------------------------------------------------------ *
  * Service Areas — pill tags of the towns served.
  * ------------------------------------------------------------------ */
+/* County lead-in — the "county level" line above the town pills. */
+.lp-areas-counties {
+    margin: 0 0 1.25rem;
+    max-width: 62ch;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
 .wp-block-list.lp-area-tags {
     list-style: none;
     margin: 0;

@@ -4,7 +4,10 @@ use App\Enums\ContentKind;
 use App\Enums\MarketTier;
 use App\Enums\PageType;
 use App\Enums\ProofType;
+use App\Integrations\Census\County;
+use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\ProofItem;
@@ -111,6 +114,37 @@ it('composes the full 9-section Home from real §1 data — credibility, differe
         ->toContain('Facilities Director')
         ->toContain('Jersey City')->toContain('Newark')                         // service-area tags
         ->toContain('Areas we serve');
+});
+
+it('the areas section leads with the named counties, then lists towns largest-first', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34013', '34017']]);
+
+    // County names resolve via the SAME gazetteer seam onboarding's county multi-select uses.
+    $gazetteer = Mockery::mock(MunicipalityGazetteer::class);
+    $gazetteer->shouldReceive('countiesInState')->with('34')->andReturn([
+        new County('34013', 'Essex County', '34', '013'),
+        new County('34017', 'Hudson County', '34', '017'),
+        new County('34099', 'Ocean County', '34', '099'), // in-state but NOT selected
+    ]);
+    app()->instance(MunicipalityGazetteer::class, $gazetteer);
+
+    // Coverage towns carry the census size tier → ordered major → medium → small.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Tinytown', 'size_tier' => 'small', 'population' => 1500]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'size_tier' => 'major', 'population' => 300000]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bloomfield', 'size_tier' => 'medium', 'population' => 50000]);
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Serving Essex County and Hudson County.') // named from the SELECTED county geoids
+        ->not->toContain('Ocean County')                       // an unselected in-state county is excluded
+        ->toContain('Areas we serve');
+
+    // Largest-first: major before medium before small.
+    expect(mb_strpos($markup, 'Newark'))->toBeLessThan(mb_strpos($markup, 'Bloomfield'));
+    expect(mb_strpos($markup, 'Bloomfield'))->toBeLessThan(mb_strpos($markup, 'Tinytown'));
 });
 
 it('data-gated sections stay hidden when their data is absent — degrade, never fabricate', function () {
