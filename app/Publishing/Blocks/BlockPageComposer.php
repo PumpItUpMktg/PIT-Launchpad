@@ -21,9 +21,23 @@ final class BlockPageComposer
      * @param  array<string, array<string, mixed>>  $images  image map keyed by slot
      * @param  list<array{title: string, blurb: string, url: string}>  $serviceCards  resolved child service pages (real internal links)
      * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats (never fabricated) for the hero trust row
+     * @param  list<string>  $credibilityBadges  substantiated trust badges (licensed/certified/rated) for the credibility strip
+     * @param  list<array{title?: string, description?: string}>  $differentiators  Why-Choose-Us items (site narrative)
+     * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
+     * @param  list<string>  $serviceAreas  towns/cities served (data-gated), priority markets first
      */
-    public function composeHome(array $slots, array $images, array $serviceCards, PageContext $ctx, array $trustStats = []): string
-    {
+    public function composeHome(
+        array $slots,
+        array $images,
+        array $serviceCards,
+        PageContext $ctx,
+        array $trustStats = [],
+        array $credibilityBadges = [],
+        array $differentiators = [],
+        array $testimonials = [],
+        array $serviceAreas = [],
+        ?string $serviceAreasMore = null,
+    ): string {
         $hero = $this->sections->hero(
             eyebrow: $this->str($slots['service_area'] ?? ''),
             headline: $this->str($slots['hero_headline'] ?? ''),
@@ -36,16 +50,47 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
+        // 2. Credibility strip — substantiated badges only; hides when none exist.
+        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges);
+
         $services = $this->sections->servicesGrid(
             eyebrow: 'What we do',
-            heading: $this->str($slots['hero_subhead'] ?? '') !== '' ? 'Our services' : 'Our services',
+            heading: 'Our services',
             cards: $serviceCards,
+        );
+
+        // 4. Why Choose Us — real differentiators; hides when none captured.
+        $why = $this->sections->whyChooseUs(
+            eyebrow: 'Why choose us',
+            heading: 'What sets us apart',
+            items: $differentiators,
+        );
+
+        // 5. How It Works — presentational (business-agnostic default), always renders.
+        $process = $this->sections->howItWorks(
+            eyebrow: 'How it works',
+            heading: 'Getting started is simple',
         );
 
         $proof = $this->sections->proofGallery(
             eyebrow: 'Proof',
             heading: 'Show the work you’re proud of',
             imageUrls: $this->galleryUrls($images),
+        );
+
+        // 7. Testimonials — data-gated on substantiated reviews.
+        $reviews = $this->sections->testimonials(
+            eyebrow: 'What clients say',
+            heading: 'In their words',
+            quotes: $testimonials,
+        );
+
+        // 8. Service Areas — data-gated on real markets.
+        $areas = $this->sections->serviceAreas(
+            eyebrow: 'Where we work',
+            heading: 'Areas we serve',
+            areas: $serviceAreas,
+            more: $serviceAreasMore,
         );
 
         $cta = $this->sections->cta(
@@ -56,7 +101,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $services, $proof, $cta]);
+        return $this->join([$hero, $credibility, $services, $why, $process, $proof, $reviews, $areas, $cta]);
     }
 
     /** @param list<string> $blocks */

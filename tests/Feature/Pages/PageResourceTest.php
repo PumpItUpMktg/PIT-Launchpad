@@ -9,6 +9,7 @@ use App\Filament\Resources\PageResource\Pages\ListPages;
 use App\Jobs\GeneratePage;
 use App\Jobs\PublishContent;
 use App\Models\Content;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -82,6 +83,61 @@ test('an approved page shows Publish (the compose-and-push), which enqueues Publ
 
     Bus::assertDispatched(PublishContent::class, fn (PublishContent $job) => $job->contentId === $page->id);
     expect($page->buildStateLabel())->toBe('Approved · ready to publish');
+});
+
+test('a drafted page shows Regenerate (not Generate), which re-queues a fresh draft', function () {
+    Bus::fake();
+    Filament::setCurrentPanel('admin');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+
+    $page = PageFixture::intakePage(['status' => ContentStatus::NeedsReview, 'slot_payload' => ['hero_problem' => 'x']]);
+
+    Livewire::test(ListPages::class)
+        ->assertOk()
+        ->assertTableActionHidden('generate', $page)      // already drafted — Generate morphs to Regenerate
+        ->assertTableActionVisible('regenerate', $page)
+        ->callTableAction('regenerate', $page);
+
+    Bus::assertDispatched(GeneratePage::class, fn (GeneratePage $job) => $job->contentId === $page->id);
+    // The generating marker is stamped (prior draft-error cleared); the row keeps its existing draft
+    // visible until the worker overwrites it — a re-draft doesn't blank the page.
+    expect($page->fresh()->meta['generating_at'] ?? null)->not->toBeNull();
+});
+
+test('a published page shows Re-push, which re-dispatches PublishContent (recreates a deleted WP page)', function () {
+    Bus::fake();
+    Filament::setCurrentPanel('admin');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+
+    $page = PageFixture::intakePage(['status' => ContentStatus::Published, 'slot_payload' => ['hero_problem' => 'x']]);
+
+    Livewire::test(ListPages::class)
+        ->assertOk()
+        ->assertTableActionVisible('repush', $page)
+        ->callTableAction('repush', $page);
+
+    Bus::assertDispatched(PublishContent::class, fn (PublishContent $job) => $job->contentId === $page->id);
+});
+
+test('Re-push is hidden until a page has been published (nothing to re-push)', function () {
+    Filament::setCurrentPanel('admin');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+
+    $page = PageFixture::intakePage(['status' => ContentStatus::NeedsReview, 'slot_payload' => ['hero_problem' => 'x']]);
+
+    Livewire::test(ListPages::class)->assertTableActionHidden('repush', $page);
+});
+
+test('Delete soft-deletes the page from Launchpad (recoverable, WP untouched)', function () {
+    Filament::setCurrentPanel('admin');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+
+    $page = PageFixture::intakePage(['status' => ContentStatus::Published, 'slot_payload' => ['hero_problem' => 'x']]);
+
+    Livewire::test(ListPages::class)->callTableAction('deletePage', $page);
+
+    expect(Content::withoutGlobalScope(SiteScope::class)->whereKey($page->id)->exists())->toBeFalse()
+        ->and(Content::withoutGlobalScope(SiteScope::class)->withTrashed()->whereKey($page->id)->exists())->toBeTrue();
 });
 
 test('bulk Publish queues a compose-and-push only for approved selections', function () {

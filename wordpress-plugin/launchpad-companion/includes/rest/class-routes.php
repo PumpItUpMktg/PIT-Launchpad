@@ -15,6 +15,7 @@ use Launchpad\Companion\Content\ContentStore;
 use Launchpad\Companion\Content\KitTemplateStore;
 use Launchpad\Companion\Content\RedirectStore;
 use Launchpad\Companion\Content\SiloStore;
+use Launchpad\Companion\Content\SiteProfileStore;
 use Launchpad\Companion\ServiceUser;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -78,6 +79,12 @@ final class Routes
             'callback' => [$this, 'templates'],
             'permission_callback' => $auth,
         ]);
+
+        register_rest_route(self::NS, '/site-profile', [
+            'methods' => 'POST',
+            'callback' => [$this, 'site_profile'],
+            'permission_callback' => $auth,
+        ]);
     }
 
     public function status(): WP_REST_Response
@@ -133,6 +140,13 @@ final class Routes
     public function style(WP_REST_Request $request): WP_REST_Response
     {
         $result = ( new StyleStore() )->apply((array) $request->get_json_params());
+
+        return new WP_REST_Response($result, empty($result['updated']) ? 422 : 200);
+    }
+
+    public function site_profile(WP_REST_Request $request): WP_REST_Response
+    {
+        $result = ( new SiteProfileStore() )->save((array) $request->get_json_params());
 
         return new WP_REST_Response($result, empty($result['updated']) ? 422 : 200);
     }

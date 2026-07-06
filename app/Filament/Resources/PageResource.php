@@ -9,6 +9,7 @@ use App\Enums\UserRole;
 use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
 use App\Filament\Resources\PageResource\Pages\ListPages;
 use App\Jobs\GeneratePage;
+use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\PageConfig;
 use App\Models\Scopes\SiteScope;
@@ -93,7 +94,10 @@ class PageResource extends Resource
                 self::reviewAction(),
                 self::publishAction(),
                 self::viewAction(),
+                self::regenerateAction(),
+                self::repushAction(),
                 self::pageConfigAction(),
+                self::deleteAction(),
             ])
             ->bulkActions([
                 self::bulkApproveAction(),
@@ -198,6 +202,84 @@ class PageResource extends Resource
             ->visible(fn (Content $record): bool => $record->status === ContentStatus::Published && self::liveUrl($record) !== null)
             ->url(fn (Content $record): ?string => self::liveUrl($record))
             ->openUrlInNewTab();
+    }
+
+    /**
+     * Regenerate — force a FRESH draft of an already-drafted (or published) page: re-runs the gated
+     * Sonnet draft + fal render on the worker, overwriting the current draft and returning the page to
+     * Review. This is how you re-draft after content drifts; the "Generate" action only shows for a
+     * not-yet-drafted page, so a drafted/published page needs this. No WordPress contact — the live
+     * page is untouched until you Publish / Re-push.
+     */
+    private static function regenerateAction(): Action
+    {
+        return Action::make('regenerate')
+            ->label('Regenerate')
+            ->icon('heroicon-o-arrow-path')
+            ->color('info')
+            ->visible(fn (Content $record): bool => self::buildable($record) && ! $record->isGenerating() && $record->hasDraft())
+            ->requiresConfirmation()
+            ->modalHeading('Regenerate this page')
+            ->modalDescription('Re-drafts the page from scratch (Sonnet + fal image), OVERWRITING the current draft, then returns it to Review. Nothing reaches WordPress until you Publish / Re-push — the live page is untouched.')
+            ->action(function (Content $record): void {
+                GeneratePage::enqueue($record, actorId: Auth::id());
+
+                Notification::make()->success()
+                    ->title('Regenerating on the worker')
+                    ->body("'{$record->title}' is being re-drafted; it will return to Review shortly.")
+                    ->send();
+            });
+    }
+
+    /**
+     * Re-push — send an already-published (or publish-failed) page to WordPress again. Idempotent by
+     * control-plane ULID: if the WordPress page was deleted, this RECREATES it; otherwise it updates in
+     * place. Skips a page locked / locally edited in WordPress. This is the recovery path when pages
+     * were removed on the WordPress side.
+     */
+    private static function repushAction(): Action
+    {
+        return Action::make('repush')
+            ->label('Re-push')
+            ->icon('heroicon-o-arrow-up-on-square')
+            ->color('success')
+            ->visible(fn (Content $record): bool => in_array($record->status, [ContentStatus::Published, ContentStatus::PublishFailed], true))
+            ->requiresConfirmation()
+            ->modalHeading('Re-push to WordPress')
+            ->modalDescription('Re-composes and pushes this page to WordPress again. Idempotent by page id — if the WordPress page was deleted, this recreates it; otherwise it updates in place. A page locked / edited in WordPress is skipped.')
+            ->action(function (Content $record): void {
+                PublishContent::dispatch($record->id, Auth::id());
+
+                Notification::make()->success()
+                    ->title('Re-pushing to WordPress')
+                    ->body("'{$record->title}' is being re-composed and pushed; it will reappear on the site shortly.")
+                    ->send();
+            });
+    }
+
+    /**
+     * Delete — remove this page from Launchpad (soft delete). Does NOT delete a live WordPress page
+     * (delete that in WordPress if you want it gone there); this clears the control-plane row so it
+     * stops showing in the pipeline. The page can be rebuilt later from the plan.
+     */
+    private static function deleteAction(): Action
+    {
+        return Action::make('deletePage')
+            ->label('Delete')
+            ->icon('heroicon-o-trash')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading('Delete this page')
+            ->modalDescription('Removes this page from Launchpad. It does NOT delete the live WordPress page (do that in WordPress if needed). You can rebuild it later from the plan.')
+            ->action(function (Content $record): void {
+                $title = (string) $record->title;
+                $record->delete();
+
+                Notification::make()->success()
+                    ->title('Page deleted')
+                    ->body("'{$title}' was removed from Launchpad.")
+                    ->send();
+            });
     }
 
     /**

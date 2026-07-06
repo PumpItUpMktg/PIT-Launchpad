@@ -37,6 +37,14 @@ final class Assets
 
     public function enqueue(): void
     {
+        // Gutenberg pivot: on a BLOCK theme, all styling comes from theme.json + the theme's own
+        // stylesheet. The legacy lp-*/wf-* baseline and the brand-token Google Fonts are the
+        // Elementor-era system — loading them on a block theme fights it and pulls the wrong fonts
+        // (Merriweather/Source Sans). Only enqueue on a NON-block (classic/Elementor) theme.
+        if (function_exists('wp_is_block_theme') && wp_is_block_theme()) {
+            return;
+        }
+
         wp_enqueue_style(self::HANDLE, LPC_URL . 'assets/launchpad.css', [], LPC_VERSION);
         wp_enqueue_style(self::WF_HANDLE, LPC_URL . 'assets/wireframe.css', [], LPC_VERSION);
 

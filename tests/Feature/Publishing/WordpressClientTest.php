@@ -29,6 +29,21 @@ test('upsertContent posts to /content with the control-plane ULID and basic auth
     });
 });
 
+test('pushSiteProfile posts the chrome profile to /site-profile', function () {
+    Http::fake(['*/wp-json/launchpad/v1/site-profile' => Http::response(['updated' => true], 200)]);
+
+    $result = wpClient()->pushSiteProfile(['brand_name' => 'Sewer Gurus', 'phone' => '(973) 555-0100', 'emergency' => true]);
+
+    expect($result['updated'])->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        return str_ends_with($request->url(), '/wp-json/launchpad/v1/site-profile')
+            && $request['brand_name'] === 'Sewer Gurus'
+            && $request['emergency'] === true
+            && $request->hasHeader('Authorization', 'Basic '.base64_encode('svc-user:app-pass'));
+    });
+});
+
 test('a transient 5xx is retried and the same ULID is re-sent (idempotent, no duplicate)', function () {
     Http::fake([
         '*/wp-json/launchpad/v1/content' => Http::sequence()
