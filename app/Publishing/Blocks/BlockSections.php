@@ -53,7 +53,7 @@ final class BlockSections
 
         return $this->b->group([
             $this->b->columns($columns),
-        ], ['backgroundColor' => 'primary', 'textColor' => 'base', 'className' => 'lp-hero']);
+        ], ['backgroundColor' => 'primary', 'textColor' => 'base', 'align' => 'full', 'className' => 'lp-hero']);
     }
 
     /**
@@ -75,7 +75,7 @@ final class BlockSections
         return $this->b->group([
             $this->sectionHead($eyebrow, $heading),
             $this->b->columns($columns, ['className' => 'lp-services-grid']),
-        ], ['className' => 'lp-services']);
+        ], ['align' => 'full', 'className' => 'lp-services']);
     }
 
     /**
@@ -102,7 +102,7 @@ final class BlockSections
         return $this->b->group([
             $this->sectionHead($eyebrow, $heading),
             $this->b->columns($cells, ['className' => 'lp-proof-grid']),
-        ], ['className' => 'lp-proof']);
+        ], ['align' => 'full', 'className' => 'lp-proof']);
     }
 
     /**
@@ -127,7 +127,7 @@ final class BlockSections
             ['text' => $actionText, 'url' => $actionUrl !== '' ? $actionUrl : '#contact', 'attrs' => ['backgroundColor' => 'accent', 'textColor' => 'on-accent']],
         ]);
 
-        return $this->b->group($children, ['backgroundColor' => 'primary', 'textColor' => 'base', 'className' => 'lp-cta']);
+        return $this->b->group($children, ['backgroundColor' => 'primary', 'textColor' => 'base', 'align' => 'full', 'className' => 'lp-cta']);
     }
 
     // ── section internals ──

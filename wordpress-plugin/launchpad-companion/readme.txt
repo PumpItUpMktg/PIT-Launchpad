@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.1
+Stable tag: 0.9.2
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,14 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.2 =
+* Stop fighting the block theme on the front end. On a BLOCK theme the plugin no
+  longer enqueues the Elementor-era baseline stylesheets (launchpad.css / wireframe.css)
+  or the brand-token Google Fonts — those were the classic/Elementor styling system and
+  loaded the wrong fonts (Merriweather / Source Sans) over a block theme whose styling
+  is theme.json + the theme's own stylesheet. The legacy enqueue now runs only on a
+  non-block (classic) theme, where it is still the render layer.
 
 = 0.9.1 =
 * Added POST /style — activate a block-theme theme.json style variation (bold/clean/

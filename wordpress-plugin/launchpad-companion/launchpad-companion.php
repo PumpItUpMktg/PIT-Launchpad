@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Launchpad Companion
  * Description:       Receiver on each client site for the Launchpad control plane. Accepts the launchpad/v1 contract pushes (silo/content/redirects), stores content idempotently by control-plane ULID, sideloads images, stores pages as core Gutenberg block markup (post_content) for a block theme, emits native SEO, and honors the locked / locally-edited protocol. No page builder, no SEO plugin, no ACF.
- * Version:           0.9.1
+ * Version:           0.9.2
  * Requires PHP:      8.0
  * Requires at least: 6.6
  * Author:            Pump It Up Marketing
@@ -18,7 +18,7 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
-define('LPC_VERSION', '0.9.1');
+define('LPC_VERSION', '0.9.2');
 define('LPC_FILE', __FILE__);
 define('LPC_DIR', plugin_dir_path(__FILE__));
 define('LPC_URL', plugin_dir_url(__FILE__));

@@ -197,11 +197,26 @@ final class BlockBuilder
     {
         $parts = array_filter([
             $base,
+            $this->alignClass($attrs),
             $this->colorClasses($attrs),
             is_string($attrs['className'] ?? null) ? $attrs['className'] : '',
         ], fn (string $p): bool => trim($p) !== '');
 
         return trim(implode(' ', $parts));
+    }
+
+    /**
+     * Map an `align` attr (`full`/`wide`) to WP's `alignfull`/`alignwide` wrapper class. The matching
+     * `"align"` key stays in the block-comment JSON (see attrJson) so the editor round-trips it; the
+     * class is what lets a full-bleed section escape the template's constrained content width.
+     *
+     * @param  array<string, mixed>  $attrs
+     */
+    private function alignClass(array $attrs): string
+    {
+        $align = $attrs['align'] ?? null;
+
+        return is_string($align) && in_array($align, ['full', 'wide'], true) ? 'align'.$align : '';
     }
 
     /** Map backgroundColor/textColor palette slugs to WP's has-*-color classes. */
