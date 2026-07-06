@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.0
+Stable tag: 0.9.1
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,14 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.1 =
+* Added POST /style — activate a block-theme theme.json style variation (bold/clean/
+  warm) as the site's global styles (writes the user global-styles post, same as
+  picking it in Appearance → Editor → Styles). This is the pivot's brand "push":
+  brand styling is a theme.json variation, not the Elementor Global Kit. The legacy
+  /brand-kit endpoint remains for backward compatibility but is no longer the path
+  the Brand step uses.
 
 = 0.9.0 =
 * Elementor → Gutenberg pivot. The /content endpoint now stores core-block markup
@@ -32,7 +40,11 @@ import — images are served from R2/CDN URLs in the payload.
                      `lp_kit` term, and sets its Display Condition (Singular → By
                      Term → Launchpad Kit → {kit}) when Elementor Pro is present
                      (advisory meta + condition_set:false when it is not)
-* POST /brand-kit  — write the tenant's brand. Sets the Elementor Global Kit system
+* POST /style      — activate a block-theme theme.json style variation (bold/clean/
+                     warm) as the site's global styles. The pivot's brand push:
+                     writes the variation's settings+styles to the user global-styles
+                     post; brand styling lives in theme.json. Idempotent.
+* POST /brand-kit  — [legacy] write the tenant's brand. Sets the Elementor Global Kit system
                      colors + typography by _id (primary/secondary/text/accent) for the
                      __globals__/dynamic-tag path; AND stores the native wf-* layer —
                      `wf_tokens` ("--wf-*" => value) into the lp_brand_tokens option and

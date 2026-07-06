@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\SiteStatus;
+use App\Styling\StyleVariation;
 use Database\Factories\SiteFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property array<string, int>|null $coverage_thresholds
  * @property string|null $domain_url
  * @property string $brand_name
+ * @property bool $offers_emergency
+ * @property StyleVariation|null $style_variation
  */
 class Site extends Model
 {
@@ -206,6 +209,7 @@ class Site extends Model
             'slug_conventions' => 'array',
             'status' => SiteStatus::class,
             'offers_emergency' => 'boolean',
+            'style_variation' => StyleVariation::class,
             'budget_ceiling' => 'integer',
             'silo_own_page_bar' => 'integer',
             'coverage_thresholds' => 'array',

@@ -102,6 +102,17 @@ class WordpressClient
     }
 
     /**
+     * Activate a block-theme theme.json STYLE VARIATION (bold/clean/warm) as the site's global
+     * styles — the Gutenberg-pivot brand push. Brand styling lives in theme.json, not a Global Kit.
+     *
+     * @return array<string, mixed>
+     */
+    public function activateStyle(string $variation): array
+    {
+        return $this->post('/style', ['variation' => $variation]);
+    }
+
+    /**
      * Read the companion plugin's environment introspection (WP/PHP/Elementor/
      * theme/plugin versions) through the same authed channel.
      *

@@ -1,18 +1,19 @@
 <?php
 
-use App\Branding\BrandStudio;
-use App\Branding\GeneratedBrand;
 use App\Enums\UserRole;
 use App\Enums\VoiceStatus;
 use App\Filament\Pages\Guided\Brand;
 use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Filament\Pages\Guided\Territory;
+use App\Integrations\Wordpress\WordpressClient;
+use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Models\User;
 use App\Models\VoiceProfile;
+use App\Styling\StyleVariation;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 
@@ -34,22 +35,35 @@ beforeEach(function () {
     session(['guided_site_id' => $this->site->id]);
 });
 
-test('Brand generate + push sets brand_pushed and Continue advances to Territory', function () {
+test('Applying the look activates the style variation, sets brand_pushed, and Continue advances', function () {
     SetupState::query()->create([
         'site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true,
     ]);
 
-    $studio = Mockery::mock(BrandStudio::class);
-    $studio->shouldReceive('generate')->andReturn(new GeneratedBrand(['primary' => '#0E6B6B', 'accent' => '#A6CFCD', 'text' => '#172A2F'], ['heading' => 'Archivo', 'body' => 'Inter'], 'ok'));
-    $studio->shouldReceive('save');
-    $studio->shouldReceive('push')->andReturn(['updated' => true]);
-    app()->instance(BrandStudio::class, $studio);
+    // The pivot's brand push = activate a theme.json style variation (no Elementor Global Kit).
+    // Mock the WP transport so the real StyleActivator runs (no override / no voice → Clean).
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('activateStyle')->once()->with('clean')->andReturn(['updated' => true, 'variation' => 'clean']);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
 
-    Livewire::test(Brand::class)->call('generate')->call('pushBrand');
+    Livewire::test(Brand::class)->call('pushBrand');
 
     expect(SetupState::query()->where('site_id', $this->site->id)->value('brand_pushed'))->toBe(true);
 
     Livewire::test(Brand::class)->call('proceed')->assertRedirect(Territory::getUrl());
+});
+
+test('Choosing a style sets the operator override on the site', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+
+    Livewire::test(Brand::class)->call('chooseStyle', 'warm');
+    expect($this->site->fresh()->style_variation)->toBe(StyleVariation::Warm);
+
+    // 'auto' clears the override → follow the recommendation again.
+    Livewire::test(Brand::class)->call('chooseStyle', 'auto');
+    expect($this->site->fresh()->style_variation)->toBeNull();
 });
 
 test('Brand step captures the brand narrative into SiteNarrative (blank → null, lines → list)', function () {

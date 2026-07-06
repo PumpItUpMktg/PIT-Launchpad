@@ -10,6 +10,7 @@
 namespace Launchpad\Companion\Rest;
 
 use Launchpad\Companion\Content\BrandKitStore;
+use Launchpad\Companion\Content\StyleStore;
 use Launchpad\Companion\Content\ContentStore;
 use Launchpad\Companion\Content\KitTemplateStore;
 use Launchpad\Companion\Content\RedirectStore;
@@ -57,6 +58,12 @@ final class Routes
         register_rest_route(self::NS, '/brand-kit', [
             'methods' => 'POST',
             'callback' => [$this, 'brand_kit'],
+            'permission_callback' => $auth,
+        ]);
+
+        register_rest_route(self::NS, '/style', [
+            'methods' => 'POST',
+            'callback' => [$this, 'style'],
             'permission_callback' => $auth,
         ]);
 
@@ -120,6 +127,13 @@ final class Routes
 
         // A missing/empty kit is a soft failure (422) the engine surfaces but does
         // not treat as a hard error — provisioning continues.
+        return new WP_REST_Response($result, empty($result['updated']) ? 422 : 200);
+    }
+
+    public function style(WP_REST_Request $request): WP_REST_Response
+    {
+        $result = ( new StyleStore() )->apply((array) $request->get_json_params());
+
         return new WP_REST_Response($result, empty($result['updated']) ? 422 : 200);
     }
 }

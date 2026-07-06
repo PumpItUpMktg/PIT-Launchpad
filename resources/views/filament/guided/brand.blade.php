@@ -1,30 +1,63 @@
-@php $site = $this->getSite(); $brand = $site?->brand_name ?? 'your business'; $branding = $this->branding; @endphp
+@php $site = $this->getSite(); $brand = $site?->brand_name ?? 'your business'; @endphp
 <x-guided.shell :steps="$this->steps" :brand="$brand">
     <div class="lp-eyebrow">{{ \App\Enums\SetupStep::Brand->eyebrow() }}</div>
     <h1 class="lp-h1">Your brand</h1>
-    <p class="lp-lede">We'll generate a palette and typography for your trade, then push it straight into your site's Elementor kit.</p>
+    <p class="lp-lede">Set your brand voice, pick a look, and give us the words your pages are written from. Your look is a real WordPress style — no page builder, nothing locked in.</p>
 
     @unless ($site)
         <div class="lp-card"><div class="lp-empty">No sites yet — create a site to begin setup.</div></div>
     @else
+        {{-- Brand voice FIRST: it drives the recommended look below (voice → style). Optional — skip it
+             and pages use a plain default voice + the default look. --}}
         <div class="lp-card">
-            <h3>Brand kit</h3>
-            <div class="hint">Generate a brand, review it, then push it to WordPress.</div>
+            <h3>Your voice @if ($this->voiceSet)<span class="lp-gate ok" style="margin-left:8px">voice set</span>@endif</h3>
+            <div class="hint">How your pages should sound — and what we recommend a look from. Optional; without it we use a plain, friendly default.</div>
 
-            @if ($branding)
-                <div class="lp-chips" style="margin-bottom:14px">
-                    @foreach ($branding['palette'] as $name => $hex)
-                        <span class="lp-chip" style="background:#fff"><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:{{ $hex }};border:1px solid var(--line)"></span>{{ $name }} {{ $hex }}</span>
-                    @endforeach
-                </div>
-                @if (! empty($branding['typography']))
-                    <div class="hint" style="margin:0 0 12px">Type: {{ collect($branding['typography'])->join(' · ') }}</div>
+            <div class="lp-field">
+                <label>Tone</label>
+                <select class="lp-input" wire:model="voiceTone">
+                    <option value="friendly_warm">Friendly &amp; warm</option>
+                    <option value="professional_warm">Professional &amp; warm</option>
+                    <option value="direct_expert">Direct &amp; expert</option>
+                </select>
+            </div>
+            <div class="lp-field">
+                <label>Who you're talking to</label>
+                <input class="lp-input" wire:model="voiceAudience" placeholder="e.g. homeowners, property managers">
+            </div>
+            <div class="lp-field">
+                <label>What makes you credible</label>
+                <input class="lp-input" wire:model="voiceCredibility" placeholder="e.g. licensed, insured, 20 years in the trade">
+            </div>
+
+            <button class="lp-mini" wire:click="saveVoice">{{ $this->voiceSet ? 'Update brand voice' : 'Set brand voice' }}</button>
+        </div>
+
+        {{-- Your look: one of three theme.json style variations. Recommended from the voice above;
+             override to any. Applying activates it on the site's WordPress global styles (theme.json,
+             not a page builder). --}}
+        @php $resolved = $this->resolvedStyle; $chosen = $this->chosenStyle; @endphp
+        <div class="lp-card">
+            <h3>Your look</h3>
+            <div class="hint">We recommend a style from your brand voice — pick any. Same site &amp; content, restyled instantly. Applying sets it on your WordPress.</div>
+
+            <div class="lp-chips" style="margin:12px 0">
+                @foreach (\App\Styling\StyleVariation::cases() as $v)
+                    @php $t = $v->tokens(); $active = $resolved === $v; @endphp
+                    <button type="button" class="lp-chip @if ($active) primary @endif" wire:click="chooseStyle('{{ $v->value }}')" style="cursor:pointer;gap:7px">
+                        <span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:{{ $t['primary'] }};border:1px solid var(--line)"></span>
+                        <span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:{{ $t['accent'] }};border:1px solid var(--line)"></span>
+                        {{ $v->label() }}
+                        @if ($active && $chosen === null)<span class="lp-gate ok" style="margin-left:6px">recommended</span>@endif
+                    </button>
+                @endforeach
+            </div>
+
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="lp-mini primary" wire:click="pushBrand">Apply {{ $resolved?->label() ?? 'your look' }} to your site</button>
+                @if ($chosen !== null)
+                    <button class="lp-mini" wire:click="chooseStyle('auto')">Use the recommended</button>
                 @endif
-            @endif
-
-            <div style="display:flex;gap:8px">
-                <button class="lp-mini" wire:click="generate">{{ $branding ? 'Regenerate' : 'Generate brand' }}</button>
-                <button class="lp-mini primary" wire:click="pushBrand" @disabled(! $branding)>Push to WordPress</button>
             </div>
         </div>
 
@@ -55,39 +88,13 @@
             <button class="lp-mini" wire:click="saveNarrative">Save brand details</button>
         </div>
 
-        {{-- Brand voice: the tone every page is written in. Optional — skip it and pages use a plain
-             default voice; set it and the composer writes in the brand's voice. --}}
-        <div class="lp-card">
-            <h3>Your voice @if ($this->voiceSet)<span class="lp-gate ok" style="margin-left:8px">voice set</span>@endif</h3>
-            <div class="hint">How your pages should sound. Optional — without it we use a plain, friendly default.</div>
-
-            <div class="lp-field">
-                <label>Tone</label>
-                <select class="lp-input" wire:model="voiceTone">
-                    <option value="friendly_warm">Friendly &amp; warm</option>
-                    <option value="professional_warm">Professional &amp; warm</option>
-                    <option value="direct_expert">Direct &amp; expert</option>
-                </select>
-            </div>
-            <div class="lp-field">
-                <label>Who you're talking to</label>
-                <input class="lp-input" wire:model="voiceAudience" placeholder="e.g. homeowners, property managers">
-            </div>
-            <div class="lp-field">
-                <label>What makes you credible</label>
-                <input class="lp-input" wire:model="voiceCredibility" placeholder="e.g. licensed, insured, 20 years in the trade">
-            </div>
-
-            <button class="lp-mini" wire:click="saveVoice">{{ $this->voiceSet ? 'Update brand voice' : 'Set brand voice' }}</button>
-        </div>
-
         <div class="lp-foot">
             <a class="lp-btn ghost" href="{{ \App\Enums\SetupStep::ConnectWordpress->pageClass()::getUrl() }}" wire:navigate>Back</a>
             <button class="lp-btn" wire:click="proceed" @disabled(! $this->pushed)>Continue to territory</button>
             @if ($this->pushed)
-                <span class="lp-gate ok">Brand pushed to your site</span>
+                <span class="lp-gate ok">Look applied to your site</span>
             @else
-                <span class="lp-gate">Push your brand kit to continue</span>
+                <span class="lp-gate">Apply your look to continue</span>
             @endif
         </div>
     @endunless
