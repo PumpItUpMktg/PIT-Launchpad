@@ -2,9 +2,8 @@
 Theme Name: Launchpad
 Theme URI: https://pumpitup.marketing/launchpad
 Author: Pump It Up Marketing
-Description: Launchpad's block theme — a lightly customized Twenty Twenty-Five child. All brand styling lives in theme.json and its style variations (Bold & Direct / Clean & Trustworthy / Warm & Local); there is no page builder and no Global Kit. Pages are core Gutenberg blocks, so the client is never locked into a proprietary builder.
-Template: twentytwentyfive
-Version: 0.1.0
+Description: Launchpad's standalone block theme. All brand styling lives in theme.json and its three style variations (Bold & Direct / Clean & Trustworthy / Warm & Local); pages are core Gutenberg blocks, so the client is never locked into a proprietary builder. Self-contained — no parent theme required.
+Version: 0.2.0
 Requires at least: 6.6
 Tested up to: 6.7
 Requires PHP: 8.0
@@ -14,8 +13,8 @@ Text Domain: launchpad
 */
 
 /*
- * Styling belongs in theme.json — this file only declares the child theme.
- * Twenty Twenty-Five provides the templates and template parts (header/footer);
- * Launchpad overrides tokens (theme.json) and ships three style variations
- * (/styles/*.json). Keep CSS here empty so the brand-styling surface stays single.
+ * Styling belongs in theme.json — this file only declares the theme. The block
+ * templates (templates/) and template parts (parts/) provide the header/footer
+ * chrome and the page/post render; the brand-styling surface is theme.json,
+ * single and only.
  */

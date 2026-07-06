@@ -1,13 +1,17 @@
 # Launchpad block theme
 
-A lightly customized **Twenty Twenty-Five child theme** — the WordPress side of the Elementor →
-Gutenberg pivot. All brand styling lives in `theme.json` and its style variations; there is no page
-builder and no Global Kit. Pages are core Gutenberg blocks, so the client is never locked into a
-proprietary builder (the whole point of the pivot).
+A **self-contained block theme** — the WordPress side of the Elementor → Gutenberg pivot. All brand
+styling lives in `theme.json` and its style variations; there is no page builder and no Global Kit.
+Pages are core Gutenberg blocks, so the client is never locked into a proprietary builder (the whole
+point of the pivot). **No parent theme required** — it ships its own templates and parts, so it
+activates cleanly on any WordPress 6.6+ without a separate parent install.
 
 ## Files
-- `style.css` — the child-theme declaration (`Template: twentytwentyfive`). Intentionally CSS-free:
+- `style.css` — the theme declaration (standalone; no `Template:` parent). Intentionally CSS-free:
   the brand-styling surface is `theme.json`, single and only.
+- `templates/` — block templates: `page.html` (renders a generated page's `post_content`, the key
+  one), `single.html` (posts), `index.html` (blog/fallback).
+- `parts/` — `header.html` (site title + navigation) and `footer.html` template parts.
 - `theme.json` — the base token vocabulary the block **patterns bind to**: the color palette slugs
   (`base` / `surface` / `contrast` / `muted` / `border` / `primary` / `accent` / `on-accent`), the
   type scale, spacing scale, and custom properties (`radius`, `headingWeight`,
