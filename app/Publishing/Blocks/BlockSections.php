@@ -266,30 +266,65 @@ final class BlockSections
     }
 
     /**
-     * Service Areas: a tag cloud of the towns served. Data-gated on real markets — hidden when a tenant
-     * has no coverage captured yet. Geo lives only here and on location pages, never in silo/service copy.
+     * Service Areas: the COUNTY level first (a "Serving … counties" lead), then the towns as pill tags
+     * ordered largest-first — a readable hierarchy, not a crowded cloud. Data-gated: hidden when a tenant
+     * has no coverage captured. Geo lives only here and on location pages, never in silo/service copy.
      *
-     * @param  list<string>  $areas  town/city names (already resolved; priority markets first)
+     * @param  list<string>  $counties  named counties served (broadest first line)
+     * @param  list<string>  $cities  town/city names, largest-first (already resolved + truncated)
      */
-    public function serviceAreas(string $eyebrow, string $heading, array $areas, ?string $more = null): string
+    public function serviceAreas(string $eyebrow, string $heading, array $counties, array $cities, ?string $more = null): string
     {
-        $areas = array_values(array_filter(array_map('trim', $areas), fn (string $a): bool => $a !== ''));
-        if ($areas === []) {
+        $counties = array_values(array_filter(array_map('trim', $counties), fn (string $c): bool => $c !== ''));
+        $cities = array_values(array_filter(array_map('trim', $cities), fn (string $c): bool => $c !== ''));
+        if ($counties === [] && $cities === []) {
             return '';
         }
 
-        $tags = $areas;
-        if ($more !== null && trim($more) !== '') {
-            $tags[] = trim($more);
+        $children = [$this->sectionHead($eyebrow, $heading)];
+
+        if ($counties !== []) {
+            $children[] = $this->b->paragraph(
+                'Serving '.$this->naturalList(array_map(fn (string $c): string => $this->text($c), $counties)).'.',
+                ['className' => 'lp-areas-counties'],
+            );
         }
 
-        return $this->b->group([
-            $this->sectionHead($eyebrow, $heading),
-            $this->b->list($tags, ['className' => 'lp-area-tags']),
-        ], ['align' => 'full', 'className' => 'lp-areas']);
+        if ($cities !== []) {
+            $tags = $cities;
+            if ($more !== null && trim($more) !== '') {
+                $tags[] = trim($more);
+            }
+            $children[] = $this->b->list($tags, ['className' => 'lp-area-tags']);
+        }
+
+        return $this->b->group($children, ['align' => 'full', 'className' => 'lp-areas']);
     }
 
     // ── section internals ──
+
+    /**
+     * "A" · "A and B" · "A, B, and C" — a natural-language join. Items are already escaped.
+     *
+     * @param  list<string>  $items
+     */
+    private function naturalList(array $items): string
+    {
+        $count = count($items);
+        if ($count === 0) {
+            return '';
+        }
+        if ($count === 1) {
+            return $items[0];
+        }
+        if ($count === 2) {
+            return $items[0].' and '.$items[1];
+        }
+
+        $last = array_pop($items);
+
+        return implode(', ', $items).', and '.$last;
+    }
 
     private function heroButtons(string $assessmentText, string $assessmentUrl, PageContext $ctx): string
     {

@@ -24,7 +24,8 @@ final class BlockPageComposer
      * @param  list<string>  $credibilityBadges  substantiated trust badges (licensed/certified/rated) for the credibility strip
      * @param  list<array{title?: string, description?: string}>  $differentiators  Why-Choose-Us items (site narrative)
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
-     * @param  list<string>  $serviceAreas  towns/cities served (data-gated), priority markets first
+     * @param  list<string>  $serviceAreaCounties  named counties served (the "county level"), shown first
+     * @param  list<string>  $serviceAreas  towns/cities served, largest-first (data-gated)
      */
     public function composeHome(
         array $slots,
@@ -35,6 +36,7 @@ final class BlockPageComposer
         array $credibilityBadges = [],
         array $differentiators = [],
         array $testimonials = [],
+        array $serviceAreaCounties = [],
         array $serviceAreas = [],
         ?string $serviceAreasMore = null,
     ): string {
@@ -85,11 +87,13 @@ final class BlockPageComposer
             quotes: $testimonials,
         );
 
-        // 8. Service Areas — data-gated on real markets.
+        // 8. Service Areas — counties first (the "county level"), then towns largest-first.
+        //    Data-gated on real coverage.
         $areas = $this->sections->serviceAreas(
             eyebrow: 'Where we work',
             heading: 'Areas we serve',
-            areas: $serviceAreas,
+            counties: $serviceAreaCounties,
+            cities: $serviceAreas,
             more: $serviceAreasMore,
         );
 

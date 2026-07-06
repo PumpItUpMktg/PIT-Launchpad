@@ -3,11 +3,9 @@
 namespace App\Publishing\Blocks;
 
 use App\Enums\ContentKind;
-use App\Enums\MarketTier;
 use App\Enums\ProofType;
 use App\Models\Content;
 use App\Models\Location;
-use App\Models\Market;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -25,7 +23,10 @@ use App\Publishing\MetaBlobAssembler;
  */
 final class BlockContentAssembler
 {
-    public function __construct(private readonly BlockPageComposer $composer) {}
+    public function __construct(
+        private readonly BlockPageComposer $composer,
+        private readonly ServiceAreaResolver $serviceAreas,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $slots  the resolved slot_payload (from MetaBlobAssembler)
@@ -49,7 +50,7 @@ final class BlockContentAssembler
             emergency: $site !== null && (bool) $site->offers_emergency,
         );
 
-        [$areas, $areasMore] = $this->serviceAreas($content);
+        $areas = $this->serviceAreas->resolve((string) $content->site_id);
 
         return $this->composer->composeHome(
             slots: $slots,
@@ -60,8 +61,9 @@ final class BlockContentAssembler
             credibilityBadges: $this->credibilityBadges($content),
             differentiators: $this->differentiators($content),
             testimonials: $this->testimonials($content),
-            serviceAreas: $areas,
-            serviceAreasMore: $areasMore,
+            serviceAreaCounties: $areas['counties'],
+            serviceAreas: $areas['cities'],
+            serviceAreasMore: $areas['more'] > 0 ? '+ '.$areas['more'].' more' : null,
         );
     }
 
@@ -158,31 +160,6 @@ final class BlockContentAssembler
         }
 
         return $quotes;
-    }
-
-    /**
-     * Service areas — the towns served, priority markets first. Returns the shown list (capped at 12)
-     * plus an optional "+ more" affordance when more markets exist. Data-gated by the caller (empty →
-     * no section). Geo lives only here and on location pages.
-     *
-     * @return array{0: list<string>, 1: ?string}
-     */
-    private function serviceAreas(Content $content): array
-    {
-        $names = Market::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->orderByRaw('CASE WHEN tier = ? THEN 0 ELSE 1 END', [MarketTier::Priority->value])
-            ->orderBy('name')
-            ->limit(25)
-            ->pluck('name')
-            ->map(fn ($n): string => trim((string) $n))
-            ->filter(fn (string $n): bool => $n !== '')
-            ->values()
-            ->all();
-
-        $more = count($names) > 12 ? '+ more →' : null;
-
-        return [array_slice($names, 0, 12), $more];
     }
 
     /**
