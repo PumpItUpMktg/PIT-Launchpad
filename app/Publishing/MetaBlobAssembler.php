@@ -19,6 +19,7 @@ use App\PageBuilder\Library\LibraryServiceComposer;
 use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\PublishEligibility;
+use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use App\Support\SeoTitle;
 use Illuminate\Support\Collection;
@@ -44,6 +45,7 @@ class MetaBlobAssembler
         private readonly LibraryServiceComposer $libraryService,
         private readonly LibraryHubComposer $libraryHub,
         private readonly ServiceSchemaBuilder $serviceSchema,
+        private readonly BlockContentAssembler $blockContent,
     ) {}
 
     /**
@@ -158,6 +160,10 @@ class MetaBlobAssembler
             // widgets baked from the SAME resolved slots. Pages only; posts ([] →
             // plugin no-op) keep the single-post template render.
             'elementor_data' => $this->nativeBody($content, $slots, $images, $source),
+            // Gutenberg pivot: core-block markup for the WP post_content. Non-null only for page
+            // types whose block pattern has shipped (home first); the Layer-5 plugin prefers this
+            // over elementor_data when present. Composed from the SAME resolved slots + images.
+            'post_content' => $this->blockContent->compose($content, $slots, $images),
         ];
     }
 
