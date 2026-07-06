@@ -18,8 +18,23 @@
         },
         "typography": {
             "fontFamilies": [
-                { "slug": "heading", "name": "Archivo", "fontFamily": "Archivo, system-ui, sans-serif" },
-                { "slug": "body", "name": "Body", "fontFamily": "system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" }
+                {
+                    "slug": "heading",
+                    "name": "Archivo",
+                    "fontFamily": "Archivo, system-ui, sans-serif",
+                    "fontFace": [
+                        { "fontFamily": "Archivo", "fontWeight": "800", "fontStyle": "normal", "fontDisplay": "swap", "src": ["file:./assets/fonts/archivo-800.woff2"] }
+                    ]
+                },
+                {
+                    "slug": "body",
+                    "name": "Inter",
+                    "fontFamily": "Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                    "fontFace": [
+                        { "fontFamily": "Inter", "fontWeight": "400", "fontStyle": "normal", "fontDisplay": "swap", "src": ["file:./assets/fonts/inter-400.woff2"] },
+                        { "fontFamily": "Inter", "fontWeight": "600", "fontStyle": "normal", "fontDisplay": "swap", "src": ["file:./assets/fonts/inter-600.woff2"] }
+                    ]
+                }
             ]
         },
         "custom": {
