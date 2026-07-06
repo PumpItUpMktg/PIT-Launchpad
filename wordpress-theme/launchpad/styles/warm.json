@@ -1,0 +1,31 @@
+{
+    "$schema": "https://schemas.wp.org/trunk/theme.json",
+    "version": 3,
+    "title": "Warm & Local",
+    "description": "Approachable and rooted — for local, relationship-led brands close to their community. Pine + amber, Bricolage Grotesque 700, rounded 18px corners.",
+    "settings": {
+        "color": {
+            "palette": [
+                { "slug": "base", "name": "Base", "color": "#ffffff" },
+                { "slug": "surface", "name": "Surface", "color": "#f4f1ea" },
+                { "slug": "contrast", "name": "Contrast", "color": "#14261e" },
+                { "slug": "muted", "name": "Muted", "color": "#4b5a52" },
+                { "slug": "border", "name": "Border", "color": "#e4ded1" },
+                { "slug": "primary", "name": "Primary", "color": "#14513F" },
+                { "slug": "accent", "name": "Accent", "color": "#DD8A2B" },
+                { "slug": "on-accent", "name": "On accent", "color": "#1f2937" }
+            ]
+        },
+        "typography": {
+            "fontFamilies": [
+                { "slug": "heading", "name": "Bricolage Grotesque", "fontFamily": "\"Bricolage Grotesque\", system-ui, sans-serif" },
+                { "slug": "body", "name": "Body", "fontFamily": "system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" }
+            ]
+        },
+        "custom": {
+            "radius": "18px",
+            "headingLetterSpacing": "0em",
+            "headingWeight": "700"
+        }
+    }
+}
