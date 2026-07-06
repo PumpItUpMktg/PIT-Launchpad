@@ -58,17 +58,28 @@
  * constrained cap on its children.
  * ------------------------------------------------------------------ */
 .lp-hero,
+.lp-credibility,
 .lp-services,
+.lp-why,
+.lp-process,
 .lp-proof,
+.lp-testimonials,
+.lp-areas,
 .lp-cta {
     --lp-max: 1200px;
 }
 
 .lp-hero > *,
+.lp-credibility > *,
 .lp-services > *,
+.lp-why > *,
+.lp-process > *,
 .lp-proof > *,
+.lp-testimonials > *,
+.lp-areas > *,
 .lp-cta > * {
     max-width: var(--lp-max);
+    margin-block: 0;
     margin-inline: auto;
 }
 
@@ -78,8 +89,17 @@
 }
 
 .lp-services,
-.lp-proof {
+.lp-why,
+.lp-process,
+.lp-proof,
+.lp-testimonials,
+.lp-areas {
     padding-block: clamp(3rem, 5vw, 5rem);
+}
+
+.lp-credibility {
+    padding-block: 1.15rem;
+    border-block: 1px solid var(--wp--preset--color--border, #e2e8f0);
 }
 
 /* ------------------------------------------------------------------ *
@@ -189,9 +209,14 @@
  * Section head — centered eyebrow + heading above the grids.
  * ------------------------------------------------------------------ */
 .lp-section-head {
-    max-width: 42rem;
+    max-width: 54ch;
+    margin-block: 0 clamp(2rem, 4vw, 3rem);
+    margin-inline: 0;
+    text-align: left;
+}
+
+.lp-section-head--center {
     margin-inline: auto;
-    margin-bottom: clamp(2rem, 4vw, 3rem);
     text-align: center;
 }
 
@@ -201,6 +226,7 @@
 
 .lp-section-head h2 {
     margin: 0;
+    font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.25rem);
 }
 
 /* ------------------------------------------------------------------ *
@@ -365,4 +391,221 @@
 
 .lp-callnow {
     font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ *
+ * Credibility strip — centered row of substantiated badges.
+ * ------------------------------------------------------------------ */
+.wp-block-columns.lp-cred-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem 2rem;
+    margin: 0;
+}
+
+.lp-cred-row > .wp-block-column {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.lp-cred-lead {
+    margin: 0;
+    font-weight: 600;
+}
+
+.lp-cred-item {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.lp-check {
+    color: var(--wp--preset--color--accent, #1d6fd6);
+    font-weight: 800;
+}
+
+/* ------------------------------------------------------------------ *
+ * Why Choose Us — dark band, differentiators (flex, adapts to count).
+ * ------------------------------------------------------------------ */
+.wp-block-columns.lp-why-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.5rem;
+    margin-block: 0;
+    margin-inline: auto;
+}
+
+.lp-why-grid > .wp-block-column {
+    flex: 1 1 220px;
+    max-width: 320px;
+    display: flex;
+    margin: 0;
+}
+
+.lp-why-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.55rem;
+    width: 100%;
+}
+
+.lp-why-item .lp-icon {
+    color: var(--wp--preset--color--accent, #ea580c);
+    background: color-mix(in srgb, var(--wp--preset--color--accent, #ea580c) 18%, transparent);
+    border-radius: var(--wp--custom--radius, 6px);
+}
+
+.lp-why-item h4 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.lp-why-item p {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    opacity: 0.82;
+}
+
+/* ------------------------------------------------------------------ *
+ * How It Works — three numbered step cards.
+ * ------------------------------------------------------------------ */
+.wp-block-columns.lp-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem;
+    margin-block: 0;
+    margin-inline: auto;
+}
+
+@media (max-width: 780px) {
+    .wp-block-columns.lp-steps {
+        grid-template-columns: 1fr;
+    }
+}
+
+.lp-steps > .wp-block-column {
+    display: flex;
+    margin: 0;
+}
+
+.lp-step {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+    height: 100%;
+    width: 100%;
+    padding: clamp(1.5rem, 3vw, 2rem);
+    background: var(--wp--preset--color--base, #fff);
+    border: 1px solid var(--wp--preset--color--border, #e2e8f0);
+    border-radius: var(--wp--custom--radius, 12px);
+}
+
+.lp-step-n {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--wp--preset--color--accent, #1d6fd6);
+    color: var(--wp--preset--color--on-accent, #fff);
+    font-family: var(--wp--preset--font-family--heading);
+    font-weight: 800;
+    font-size: 1rem;
+}
+
+.lp-step h4 {
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.lp-step p {
+    margin: 0;
+    line-height: 1.55;
+}
+
+/* ------------------------------------------------------------------ *
+ * Testimonials — surface band; white quote cards (flex, adapts).
+ * ------------------------------------------------------------------ */
+.wp-block-columns.lp-testimonials-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.5rem;
+    margin-block: 0;
+    margin-inline: auto;
+}
+
+.lp-testimonials-grid > .wp-block-column {
+    flex: 1 1 300px;
+    max-width: 380px;
+    display: flex;
+    margin: 0;
+}
+
+.lp-quote {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    height: 100%;
+    width: 100%;
+    padding: clamp(1.5rem, 3vw, 2rem);
+    background: var(--wp--preset--color--base, #fff);
+    border: 1px solid var(--wp--preset--color--border, #e2e8f0);
+    border-radius: var(--wp--custom--radius, 12px);
+}
+
+.lp-stars {
+    margin: 0;
+    letter-spacing: 0.15em;
+    font-size: 0.95rem;
+}
+
+.lp-quote-text {
+    margin: 0;
+    line-height: 1.6;
+}
+
+.lp-who {
+    margin: auto 0 0;
+    font-weight: 700;
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+
+.lp-who-role {
+    font-weight: 400;
+    color: var(--wp--preset--color--muted, #475569);
+}
+
+/* ------------------------------------------------------------------ *
+ * Service Areas — pill tags of the towns served.
+ * ------------------------------------------------------------------ */
+.wp-block-list.lp-area-tags {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.wp-block-list.lp-area-tags li {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    background: var(--wp--preset--color--surface, #f1f5f9);
+    border: 1px solid var(--wp--preset--color--border, #e2e8f0);
+    border-radius: 999px;
+    padding: 0.5rem 1rem;
 }

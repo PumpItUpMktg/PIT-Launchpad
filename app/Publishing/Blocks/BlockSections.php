@@ -130,6 +130,165 @@ final class BlockSections
         return $this->b->group($children, ['backgroundColor' => 'primary', 'textColor' => 'base', 'align' => 'full', 'className' => 'lp-cta']);
     }
 
+    /**
+     * The credibility strip: a slim reassurance band — an optional lead line + a row of substantiated
+     * trust badges (licensed, certified, rated). Data-gated: renders nothing when there are no badges,
+     * so an unsubstantiated tenant degrades to no strip rather than an empty or fabricated one.
+     *
+     * @param  list<string>  $badges  substantiated proof labels (already resolved upstream; never invented)
+     */
+    public function credibilityStrip(string $lead, array $badges): string
+    {
+        $badges = array_values(array_filter(array_map('trim', $badges), fn (string $b): bool => $b !== ''));
+        if ($badges === []) {
+            return '';
+        }
+
+        $cols = [];
+        if (trim($lead) !== '') {
+            $cols[] = $this->b->column([
+                $this->b->paragraph($this->text($lead), ['textColor' => 'muted', 'className' => 'lp-cred-lead']),
+            ]);
+        }
+        foreach ($badges as $badge) {
+            $cols[] = $this->b->column([
+                $this->b->paragraph('<span class="lp-check" aria-hidden="true">✓</span> '.$this->text($badge), ['className' => 'lp-cred-item']),
+            ]);
+        }
+
+        return $this->b->group([
+            $this->b->columns($cols, ['className' => 'lp-cred-row']),
+        ], ['align' => 'full', 'backgroundColor' => 'surface', 'className' => 'lp-credibility']);
+    }
+
+    /**
+     * Why Choose Us: a dark band of differentiators (icon + title + line). Data-gated on real
+     * differentiators (from the site narrative) — falls back to nothing when none are captured.
+     *
+     * @param  list<array{title?: string, description?: string}>  $items
+     */
+    public function whyChooseUs(string $eyebrow, string $heading, array $items): string
+    {
+        $items = array_values(array_filter($items, fn (array $i): bool => trim((string) ($i['title'] ?? '')) !== ''));
+        if ($items === []) {
+            return '';
+        }
+
+        $cols = array_map(function (array $i): string {
+            $children = [$this->icon(), $this->b->heading(4, (string) $i['title'], ['textColor' => 'base'])];
+            if (trim((string) ($i['description'] ?? '')) !== '') {
+                $children[] = $this->b->paragraph((string) $i['description'], ['textColor' => 'base']);
+            }
+
+            return $this->b->column([$this->b->group($children, ['className' => 'lp-why-item'])]);
+        }, $items);
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading, onDark: true),
+            $this->b->columns($cols, ['className' => 'lp-why-grid']),
+        ], ['align' => 'full', 'backgroundColor' => 'primary', 'textColor' => 'base', 'className' => 'lp-why']);
+    }
+
+    /**
+     * How It Works: a numbered three-step process. Presentational and business-agnostic (no fabricated
+     * specifics), so it always renders. Callers may pass their own steps; the default is a safe,
+     * universally-true assessment → plan → service arc.
+     *
+     * @param  list<array{title: string, description: string}>  $steps
+     */
+    public function howItWorks(string $eyebrow, string $heading, array $steps = []): string
+    {
+        if ($steps === []) {
+            $steps = [
+                ['title' => 'Free assessment', 'description' => "Reach out and we'll assess exactly what you need — no obligation."],
+                ['title' => 'A plan that fits', 'description' => 'A clear plan built around your situation, timeline, and budget.'],
+                ['title' => 'We handle it', 'description' => 'Scheduled, reliable service and a team you can count on.'],
+            ];
+        }
+
+        $n = 0;
+        $cols = array_map(function (array $s) use (&$n): string {
+            $n++;
+
+            return $this->b->column([
+                $this->b->group([
+                    $this->b->paragraph((string) $n, ['className' => 'lp-step-n']),
+                    $this->b->heading(4, (string) $s['title']),
+                    $this->b->paragraph((string) $s['description'], ['textColor' => 'muted']),
+                ], ['className' => 'lp-step']),
+            ]);
+        }, $steps);
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading, center: true),
+            $this->b->columns($cols, ['className' => 'lp-steps']),
+        ], ['align' => 'full', 'className' => 'lp-process']);
+    }
+
+    /**
+     * Testimonials: a three-up of client quotes. Data-gated — renders only when real, substantiated
+     * reviews exist; never fabricates a quote or a star rating.
+     *
+     * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $quotes
+     */
+    public function testimonials(string $eyebrow, string $heading, array $quotes): string
+    {
+        $quotes = array_values(array_filter($quotes, fn (array $q): bool => trim($q['quote']) !== ''));
+        if ($quotes === []) {
+            return '';
+        }
+
+        $cols = array_map(function (array $q): string {
+            $children = [];
+            $stars = (int) ($q['stars'] ?? 0);
+            if ($stars > 0) {
+                $children[] = $this->b->paragraph(str_repeat('★', min($stars, 5)), ['textColor' => 'accent', 'className' => 'lp-stars']);
+            }
+            $children[] = $this->b->paragraph('“'.$this->text($q['quote']).'”', ['className' => 'lp-quote-text']);
+
+            $author = trim((string) ($q['author'] ?? ''));
+            $role = trim((string) ($q['role'] ?? ''));
+            if ($author !== '' || $role !== '') {
+                $who = '<strong>'.$this->text($author !== '' ? $author : $role).'</strong>';
+                if ($author !== '' && $role !== '') {
+                    $who .= '<br><span class="lp-who-role">'.$this->text($role).'</span>';
+                }
+                $children[] = $this->b->paragraph($who, ['className' => 'lp-who']);
+            }
+
+            return $this->b->column([$this->b->group($children, ['backgroundColor' => 'base', 'className' => 'lp-quote'])]);
+        }, $quotes);
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading, center: true),
+            $this->b->columns($cols, ['className' => 'lp-testimonials-grid']),
+        ], ['align' => 'full', 'backgroundColor' => 'surface', 'className' => 'lp-testimonials']);
+    }
+
+    /**
+     * Service Areas: a tag cloud of the towns served. Data-gated on real markets — hidden when a tenant
+     * has no coverage captured yet. Geo lives only here and on location pages, never in silo/service copy.
+     *
+     * @param  list<string>  $areas  town/city names (already resolved; priority markets first)
+     */
+    public function serviceAreas(string $eyebrow, string $heading, array $areas, ?string $more = null): string
+    {
+        $areas = array_values(array_filter(array_map('trim', $areas), fn (string $a): bool => $a !== ''));
+        if ($areas === []) {
+            return '';
+        }
+
+        $tags = $areas;
+        if ($more !== null && trim($more) !== '') {
+            $tags[] = trim($more);
+        }
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading),
+            $this->b->list($tags, ['className' => 'lp-area-tags']),
+        ], ['align' => 'full', 'className' => 'lp-areas']);
+    }
+
     // ── section internals ──
 
     private function heroButtons(string $assessmentText, string $assessmentUrl, PageContext $ctx): string
@@ -204,12 +363,14 @@ final class BlockSections
         ], ['backgroundColor' => 'surface', 'className' => 'lp-photo-placeholder']);
     }
 
-    private function sectionHead(string $eyebrow, string $heading): string
+    private function sectionHead(string $eyebrow, string $heading, bool $onDark = false, bool $center = false): string
     {
+        $classes = 'lp-section-head'.($center ? ' lp-section-head--center' : '');
+
         return $this->b->group([
             $this->b->paragraph($eyebrow, ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-eyebrow']),
-            $this->b->heading(2, $heading),
-        ], ['className' => 'lp-section-head']);
+            $this->b->heading(2, $heading, $onDark ? ['textColor' => 'base'] : []),
+        ], ['className' => $classes]);
     }
 
     /** A single generic service icon (inline SVG via core/html — a CORE block, so still portable). */
