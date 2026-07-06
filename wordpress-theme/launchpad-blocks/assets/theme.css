@@ -175,6 +175,29 @@
     display: block;
 }
 
+/* Desktop: enlarge the hero image to the FULL height of the copy column so it aligns top-to-bottom
+   with the text (no shorter photo floating beside a taller text block). Targets only the image column
+   (:nth-child(2)) — a no-op when the hero has no image. Mobile keeps the 4/3 stacked image. */
+@media (min-width: 783px) {
+    .lp-hero > .wp-block-columns {
+        align-items: stretch;
+    }
+
+    .lp-hero > .wp-block-columns > .wp-block-column:nth-child(2) {
+        display: flex;
+    }
+
+    .lp-hero > .wp-block-columns > .wp-block-column:nth-child(2) figure.wp-block-image {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .lp-hero > .wp-block-columns > .wp-block-column:nth-child(2) figure.wp-block-image img {
+        height: 100%;
+        aspect-ratio: auto;
+    }
+}
+
 /* Trust row — value over label, spaced under the hero copy. */
 .lp-hero .lp-trust {
     display: flex;
