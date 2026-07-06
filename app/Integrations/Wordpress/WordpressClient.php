@@ -6,6 +6,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 
 /**
  * Authed transport to the companion plugin's `launchpad/v1` REST contract. Auth
@@ -180,12 +181,25 @@ class WordpressClient
         $response = $this->request()->post(rtrim($this->baseUrl, '/').self::NAMESPACE.$path, $body);
 
         if (! $response->successful()) {
-            throw new WordpressException("WordPress {$path} returned HTTP ".$response->status());
+            throw new WordpressException("WordPress {$path} returned HTTP ".$response->status().$this->errorDetail($response));
         }
 
         $json = $response->json();
 
         return is_array($json) ? $json : [];
+    }
+
+    /**
+     * The human-readable reason from a failed response body — the plugin's soft-failure `error`
+     * (e.g. "is the Launchpad block theme active?") or WordPress's own `message`. Surfaced so a 422/403
+     * carries WHY, not just the status code.
+     */
+    private function errorDetail(Response $response): string
+    {
+        $body = $response->json();
+        $detail = is_array($body) ? ($body['error'] ?? $body['message'] ?? null) : null;
+
+        return is_string($detail) && trim($detail) !== '' ? ' — '.trim($detail) : '';
     }
 
     private function request(): PendingRequest
