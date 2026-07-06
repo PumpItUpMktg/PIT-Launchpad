@@ -170,3 +170,28 @@ test('forceDeletePost treats an already-gone post (404) as success', function ()
 
     expect(wpClient()->forceDeletePost('posts', 99))->toBeTrue();
 });
+
+test('activateStyle posts the variation to /style', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/style' => Http::response(['updated' => true, 'variation' => 'bold'], 200),
+    ]);
+
+    $result = wpClient()->activateStyle('bold');
+
+    expect($result['updated'])->toBeTrue()->and($result['variation'])->toBe('bold');
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/wp-json/launchpad/v1/style')
+        && $request['variation'] === 'bold');
+});
+
+test('a failed push surfaces the WHY from the response body, not just the status', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/style' => Http::response(
+            ['updated' => false, 'error' => "Style variation 'bold' is not in the active theme (is the Launchpad block theme active?)."],
+            422,
+        ),
+    ]);
+
+    expect(fn () => wpClient()->activateStyle('bold'))
+        ->toThrow(WordpressException::class, 'is the Launchpad block theme active?');
+});

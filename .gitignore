@@ -33,3 +33,7 @@ Thumbs.db
 
 # Built companion-plugin distribution zips (artifacts, not source)
 wordpress-plugin/launchpad-companion-*.zip
+
+# Built distributable zips (regenerated; sent to the user, not committed)
+wordpress-theme/*.zip
+wordpress-plugin/*.zip
