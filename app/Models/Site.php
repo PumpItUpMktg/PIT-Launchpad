@@ -205,6 +205,7 @@ class Site extends Model
         return [
             'slug_conventions' => 'array',
             'status' => SiteStatus::class,
+            'offers_emergency' => 'boolean',
             'budget_ceiling' => 'integer',
             'silo_own_page_bar' => 'integer',
             'coverage_thresholds' => 'array',
