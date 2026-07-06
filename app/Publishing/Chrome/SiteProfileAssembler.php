@@ -1,0 +1,186 @@
+<?php
+
+namespace App\Publishing\Chrome;
+
+use App\Enums\ContentKind;
+use App\Enums\PageType;
+use App\Models\Content;
+use App\Models\Location;
+use App\Models\Market;
+use App\Models\Scopes\SiteScope;
+use App\Models\Site;
+use Illuminate\Support\Collection;
+
+/**
+ * Builds the per-tenant site PROFILE the companion plugin's universal header/footer chrome renders
+ * (brand + NAP + navigation) — the block-theme template parts can't express this statically. Pure and
+ * testable: a Site in, the profile array out; the push is a thin transport on top (see
+ * {@see SiteProfilePublisher}). Sourced entirely from real §1 data — links point
+ * only to pages that exist, so the chrome never advertises a page that isn't there.
+ */
+final class SiteProfileAssembler
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function assemble(Site $site): array
+    {
+        $home = $this->homeBase($site);
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->orderBy('created_at')
+            ->first();
+
+        $phone = $location !== null ? trim((string) $location->phone) : '';
+        $address = $location !== null ? trim((string) $location->address) : '';
+
+        return [
+            'brand_name' => (string) $site->brand_name,
+            'tagline' => $this->tagline($site),
+            'phone' => $phone,
+            'phone_tel' => $this->tel($phone),
+            'emergency' => (bool) $site->offers_emergency,
+            'address' => $address,
+            'hours' => $this->hours($location, (bool) $site->offers_emergency),
+            'legal' => '',
+            'services' => $this->services($site, $home),
+            'areas' => $this->areas($site),
+            'company' => $this->company($site, $home),
+            'nav' => $this->company($site, $home),
+        ];
+    }
+
+    /** The home-page hero eyebrow (trade · region) doubles as the brand tagline when present. */
+    private function tagline(Site $site): string
+    {
+        $home = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Home->value)
+            ->first();
+
+        $slots = is_array($home?->slot_payload) ? $home->slot_payload : [];
+        $area = $slots['service_area'] ?? '';
+
+        return trim(is_array($area) ? (string) ($area[0] ?? '') : (string) $area);
+    }
+
+    /**
+     * The site's service / hub pages as nav links — real internal links only.
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function services(Site $site, string $home): array
+    {
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->whereIn('page_type', [PageType::Service->value, PageType::Hub->value])
+            ->whereNotNull('slug')
+            ->orderBy('created_at')
+            ->limit(6)
+            ->get();
+
+        return $this->links($pages, $home);
+    }
+
+    /**
+     * Towns served, priority markets first. Plain labels (no per-town page assumed); a "+ more"
+     * affordance when the list is truncated.
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function areas(Site $site): array
+    {
+        $names = Market::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->orderByRaw('CASE WHEN tier = ? THEN 0 ELSE 1 END', ['priority'])
+            ->orderBy('name')
+            ->limit(9)
+            ->pluck('name')
+            ->map(fn ($n): string => trim((string) $n))
+            ->filter(fn (string $n): bool => $n !== '')
+            ->values()
+            ->all();
+
+        $shown = array_slice($names, 0, 6);
+        $out = array_map(fn (string $n): array => ['label' => $n, 'url' => ''], $shown);
+        if (count($names) > 6) {
+            $out[] = ['label' => 'All areas →', 'url' => ''];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Informational pages (about / FAQ / contact / why-choose-us) — included only when the page
+     * actually exists, matched by slug.
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function company(Site $site, string $home): array
+    {
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->whereIn('slug', ['about', 'about-us', 'faq', 'contact', 'why-choose-us', 'why-us'])
+            ->orderBy('created_at')
+            ->get();
+
+        return $this->links($pages, $home);
+    }
+
+    /**
+     * @param  Collection<int, Content>  $pages
+     * @return list<array{label: string, url: string}>
+     */
+    private function links($pages, string $home): array
+    {
+        $out = [];
+        foreach ($pages as $page) {
+            $label = trim((string) $page->title);
+            $slug = trim((string) $page->slug);
+            if ($label === '' || $slug === '') {
+                continue;
+            }
+            $out[] = ['label' => $label, 'url' => $home.ltrim($slug, '/')];
+        }
+
+        return $out;
+    }
+
+    /** A compact hours line — the weekday range (when present) plus the emergency note. */
+    private function hours(?Location $location, bool $emergency): string
+    {
+        $parts = [];
+
+        $hours = is_array($location?->hours) ? $location->hours : [];
+        $mon = $hours['mon'] ?? null;
+        if (is_array($mon) && trim((string) ($mon['open'] ?? '')) !== '' && trim((string) ($mon['close'] ?? '')) !== '') {
+            $parts[] = 'Mon–Fri '.trim((string) $mon['open']).'–'.trim((string) $mon['close']);
+        }
+
+        if ($emergency) {
+            $parts[] = '24/7 Emergency';
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    private function homeBase(Site $site): string
+    {
+        return is_string($site->domain_url) && trim($site->domain_url) !== ''
+            ? rtrim($site->domain_url, '/').'/'
+            : '/';
+    }
+
+    private function tel(string $phone): string
+    {
+        if ($phone === '') {
+            return '';
+        }
+        $digits = (string) preg_replace('/[^0-9+]/', '', $phone);
+
+        return $digits !== '' ? 'tel:'.$digits : '';
+    }
+}

@@ -114,6 +114,18 @@ class WordpressClient
     }
 
     /**
+     * Push the per-tenant site PROFILE (brand + NAP + navigation) that the universal header/footer
+     * chrome renders — the block-theme template parts can't carry per-tenant NAP statically.
+     *
+     * @param  array<string, mixed>  $profile
+     * @return array<string, mixed>
+     */
+    public function pushSiteProfile(array $profile): array
+    {
+        return $this->post('/site-profile', $profile);
+    }
+
+    /**
      * Read the companion plugin's environment introspection (WP/PHP/Elementor/
      * theme/plugin versions) through the same authed channel.
      *
