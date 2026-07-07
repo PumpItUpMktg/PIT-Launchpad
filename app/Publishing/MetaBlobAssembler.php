@@ -123,9 +123,12 @@ class MetaBlobAssembler
 
     /**
      * @param  Collection<int, RenderJob>  $renderJobs
+     * @param  bool  $preview  operator proof-view context — the composed page builds ALL recommended
+     *                         sections with labeled example placeholders for missing data; publish
+     *                         (default false) keeps the data-gating so placeholders never go live.
      * @return array<string, mixed>
      */
-    public function assemble(Content $content, Collection $renderJobs, ContentSource $source = ContentSource::Generated, string $wpStatus = 'published'): array
+    public function assemble(Content $content, Collection $renderJobs, ContentSource $source = ContentSource::Generated, string $wpStatus = 'published', bool $preview = false): array
     {
         // Placeholder = the SAME composed page with length-representative stand-ins +
         // image/form boxes (preview = reality; only slot content differs).
@@ -163,7 +166,7 @@ class MetaBlobAssembler
             // Gutenberg pivot: core-block markup for the WP post_content. Non-null only for page
             // types whose block pattern has shipped (home first); the Layer-5 plugin prefers this
             // over elementor_data when present. Composed from the SAME resolved slots + images.
-            'post_content' => $this->blockContent->compose($content, $slots, $images),
+            'post_content' => $this->blockContent->compose($content, $slots, $images, $preview),
         ];
     }
 

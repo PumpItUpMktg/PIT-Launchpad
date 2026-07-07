@@ -18,6 +18,7 @@ use App\Models\MediaAsset;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Publishing\PagePreviewService;
 use App\Publishing\TenantStorage;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -57,6 +58,9 @@ class ProofEditor extends Page
 
     /** The pending replacement image upload. */
     public mixed $imageUpload = null;
+
+    /** The WordPress-rendered full-page preview URL, once pushed (null = not previewed this visit). */
+    public ?string $previewUrl = null;
 
     /** The slot key currently being corrected in place (null = read mode). */
     public ?string $editingKey = null;
@@ -298,6 +302,33 @@ class ProofEditor extends Page
         }
 
         app(EditCapture::class)->record($record, "image:{$slot}", $before, $editedTag, EditReason::Preference, Auth::id());
+    }
+
+    /**
+     * Preview the WHOLE page as it will look — push the current draft to WordPress as a hidden DRAFT
+     * (never live) and surface its rendered URL. In this preview context every recommended section is
+     * built: a data-gated section with no data yet renders a LABELED example placeholder, so the
+     * operator sees the complete design and what still needs data. The live publish never builds
+     * placeholders, so nothing here can reach a visitor.
+     */
+    public function previewFullPage(): void
+    {
+        $record = $this->record();
+        if ($record === null) {
+            return;
+        }
+
+        $result = app(PagePreviewService::class)->preview($record);
+        if (! $result->isReady() || $result->previewUrl === null) {
+            Notification::make()->warning()->title('Preview unavailable')
+                ->body($result->isReady() ? 'The draft was pushed, but WordPress returned no preview URL.' : $result->message)->send();
+
+            return;
+        }
+
+        $this->previewUrl = $result->previewUrl;
+        Notification::make()->success()->title('Full-page preview ready')
+            ->body('Opens the whole page as it will look — “Example” placeholders mark the sections that still need data.')->send();
     }
 
     /** Approve — a cheap state flip to `approved` (no WordPress contact). */

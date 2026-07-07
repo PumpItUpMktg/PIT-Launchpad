@@ -6,8 +6,11 @@ use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Claude\CompletionResult;
 use App\Models\Content;
 use App\Models\CoverageArea;
+use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\ProofItem;
@@ -15,6 +18,7 @@ use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\MetaBlobAssembler;
+use Tests\Support\FakeClaudeClient;
 
 function blockHomePage(Site $site): Content
 {
@@ -167,6 +171,64 @@ it('service cards carry a real description even without SEO meta — from the pa
         ->toContain('Snaking and hydro-jetting that clears the whole pipe wall.'); // real blurb, not just "Learn more"
 });
 
+it('an ungenerated service page gets a generated, keyword-grounded card blurb (cached, never null)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $keyword = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump maintenance']);
+
+    // The child page exists (its card links to it) but is NOT generated: no SEO, no slots.
+    $service = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'sump-pump-maintenance', 'title' => 'Sump Pump Maintenance',
+        'slot_payload' => [], 'meta' => [], 'target_keyword_id' => $keyword->id,
+    ]);
+
+    $fake = new FakeClaudeClient('Routine upkeep that keeps your sump pump ready before the next big storm.');
+    app()->instance(ClaudeClient::class, $fake);
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Sump Pump Maintenance')
+        ->toContain('Routine upkeep that keeps your sump pump ready before the next big storm.');
+    // Grounded on the real keyword (the §5 carry-over), not generic.
+    expect($fake->prompts[0])->toContain('sump pump maintenance');
+    // Generated once → cached on the page so a re-publish reuses it (no second model call).
+    expect($service->fresh()->meta['card_blurb'] ?? null)
+        ->toBe('Routine upkeep that keeps your sump pump ready before the next big storm.');
+});
+
+it('a card blurb is never null even when the model is unreachable — deterministic keyword template', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $keyword = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'hydro jetting']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'hydro-jetting', 'title' => 'Hydro Jetting',
+        'slot_payload' => [], 'meta' => [], 'target_keyword_id' => $keyword->id,
+    ]);
+
+    // A model that throws → the resolver must still return a non-empty, keyword-anchored line.
+    app()->instance(ClaudeClient::class, new class implements ClaudeClient
+    {
+        public function complete(string $prompt, ?string $system = null): string
+        {
+            throw new RuntimeException('model down');
+        }
+
+        public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
+        {
+            throw new RuntimeException('model down');
+        }
+    });
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Hydro Jetting')
+        ->toContain('Hydro jetting'); // the deterministic template leads with the keyword — never blank
+});
+
 it('How It Works uses the tenant process when captured (else the safe default)', function () {
     $site = Site::factory()->create();
     ProofItem::factory()->create(['site_id' => $site->id, 'type' => ProofType::Process, 'payload' => ['title' => 'Book a camera inspection', 'description' => 'We scope the line first — no guessing.']]);
@@ -193,6 +255,64 @@ it('data-gated sections stay hidden when their data is absent — degrade, never
         ->not->toContain('Areas we serve')       // no markets → no Service Areas
         // but the presentational process section always renders
         ->toContain('Getting started is simple');
+});
+
+it('preview builds ALL recommended sections with labeled placeholders; publish omits the empty ones', function () {
+    // A bare tenant: no badges, no differentiators, no reviews, no markets — every data-gated section empty.
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+
+    $preview = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], preview: true);
+    $published = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    // Preview: the whole page is visible — every data-gated section renders as a labeled example.
+    expect($preview)
+        ->toContain('lp-placeholder')                                   // sections greyed as examples
+        ->toContain('What sets us apart')                               // Why Choose Us shown
+        ->toContain('In their words')                                   // Testimonials shown
+        ->toContain('Areas we serve')                                   // Service Areas shown
+        ->toContain('activates when you add reviews')                   // names what fills Testimonials
+        ->toContain('activates when you add licenses, certifications, or ratings') // Credibility
+        ->toContain('add your service areas to activate this section')  // Service Areas
+        ->toContain('Getting started is simple');                       // always-on section still there
+
+    // Publish (default): the same empty sections are GONE — data-gated, no placeholder leaks live.
+    expect($published)
+        ->not->toContain('lp-placeholder')
+        ->not->toContain('What sets us apart')
+        ->not->toContain('In their words')
+        ->not->toContain('Areas we serve')
+        ->not->toContain('activates when you add')
+        ->toContain('Getting started is simple');                       // always-on unaffected
+});
+
+it('a section WITH data renders real in preview — no placeholder marker on it', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    // Real testimonial present; other data-gated sections still empty.
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::Testimonial,
+        'payload' => ['text' => 'They saved us from a flooded basement.', 'author' => 'Real Client', 'stars' => 5],
+        'is_substantiated' => true,
+    ]);
+    $home = blockHomePage($site);
+
+    $preview = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], preview: true);
+
+    expect($preview)
+        ->toContain('They saved us from a flooded basement.')  // the REAL review renders
+        ->not->toContain('activates when you add reviews')     // so Testimonials is NOT a placeholder
+        ->toContain('add your service areas to activate this section'); // but empty Service Areas still is
+});
+
+it('the meta-blob threads preview into post_content (placeholder in preview, gated on publish)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+
+    $previewBlob = app(MetaBlobAssembler::class)->assemble($home->fresh(), collect(), preview: true);
+    $publishBlob = app(MetaBlobAssembler::class)->assemble($home->fresh(), collect());
+
+    expect($previewBlob['post_content'])->toContain('lp-placeholder')->toContain('Areas we serve');
+    expect($publishBlob['post_content'])->not->toContain('lp-placeholder')->not->toContain('Areas we serve');
 });
 
 it('returns null for a page type whose block pattern has not shipped (falls back to existing render)', function () {

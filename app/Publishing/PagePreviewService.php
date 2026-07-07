@@ -40,7 +40,10 @@ class PagePreviewService
             ->get();
 
         // status='draft' → the plugin stores a WP draft (not live), then renders its preview.
-        $payload = $this->assembler->assemble($content, $jobs, ContentSource::Generated, 'draft');
+        // preview:true → build the WHOLE page: data-gated sections with no data render a labeled
+        // example placeholder so the operator sees the complete design and what's still missing.
+        // The live publish path never sets this, so a placeholder can't reach the visitor-facing page.
+        $payload = $this->assembler->assemble($content, $jobs, ContentSource::Generated, 'draft', preview: true);
 
         try {
             $response = $this->wordpress->forSite($site)->upsertContent($payload);

@@ -137,11 +137,17 @@ final class BlockSections
      *
      * @param  list<string>  $badges  substantiated proof labels (already resolved upstream; never invented)
      */
-    public function credibilityStrip(string $lead, array $badges): string
+    public function credibilityStrip(string $lead, array $badges, bool $preview = false): string
     {
         $badges = array_values(array_filter(array_map('trim', $badges), fn (string $b): bool => $b !== ''));
+        $placeholder = false;
         if ($badges === []) {
-            return '';
+            if (! $preview) {
+                return '';
+            }
+            // Preview only: show the layout with clearly-marked example badges + what activates it.
+            $badges = ['Licensed & insured', 'Certified technicians', 'Satisfaction guaranteed'];
+            $placeholder = true;
         }
 
         $cols = [];
@@ -156,9 +162,13 @@ final class BlockSections
             ]);
         }
 
-        return $this->b->group([
-            $this->b->columns($cols, ['className' => 'lp-cred-row']),
-        ], ['align' => 'full', 'backgroundColor' => 'surface', 'className' => 'lp-credibility']);
+        $children = [];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('activates when you add licenses, certifications, or ratings');
+        }
+        $children[] = $this->b->columns($cols, ['className' => 'lp-cred-row']);
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-credibility', $placeholder)]);
     }
 
     /**
@@ -167,11 +177,21 @@ final class BlockSections
      *
      * @param  list<array{title?: string, description?: string}>  $items
      */
-    public function whyChooseUs(string $eyebrow, string $heading, array $items): string
+    public function whyChooseUs(string $eyebrow, string $heading, array $items, bool $preview = false): string
     {
         $items = array_values(array_filter($items, fn (array $i): bool => trim((string) ($i['title'] ?? '')) !== ''));
+        $placeholder = false;
         if ($items === []) {
-            return '';
+            if (! $preview) {
+                return '';
+            }
+            // Preview only: example differentiators so the operator sees the band, marked as example.
+            $items = [
+                ['title' => 'Upfront pricing', 'description' => 'Know the number before we start — no surprises.'],
+                ['title' => 'Experienced crew', 'description' => 'Trained technicians who do it right the first time.'],
+                ['title' => 'Work guaranteed', 'description' => 'We stand behind every job we take on.'],
+            ];
+            $placeholder = true;
         }
 
         $cols = array_map(function (array $i): string {
@@ -183,10 +203,13 @@ final class BlockSections
             return $this->b->column([$this->b->group($children, ['className' => 'lp-why-item'])]);
         }, $items);
 
-        return $this->b->group([
-            $this->sectionHead($eyebrow, $heading, onDark: true),
-            $this->b->columns($cols, ['className' => 'lp-why-grid']),
-        ], ['align' => 'full', 'backgroundColor' => 'primary', 'textColor' => 'base', 'className' => 'lp-why']);
+        $children = [$this->sectionHead($eyebrow, $heading, onDark: true)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('activates when you add what sets you apart', onDark: true);
+        }
+        $children[] = $this->b->columns($cols, ['className' => 'lp-why-grid']);
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'primary', 'textColor' => 'base', 'className' => $this->sectionClass('lp-why', $placeholder)]);
     }
 
     /**
@@ -231,11 +254,20 @@ final class BlockSections
      *
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $quotes
      */
-    public function testimonials(string $eyebrow, string $heading, array $quotes): string
+    public function testimonials(string $eyebrow, string $heading, array $quotes, bool $preview = false): string
     {
         $quotes = array_values(array_filter($quotes, fn (array $q): bool => trim($q['quote']) !== ''));
+        $placeholder = false;
         if ($quotes === []) {
-            return '';
+            if (! $preview) {
+                return '';
+            }
+            // Preview only: example reviews (clearly labeled) so the operator sees the section shape.
+            $quotes = [
+                ['quote' => 'They diagnosed the problem fast and fixed it right — exactly what they promised.', 'author' => 'Your Google reviews', 'role' => 'appear here', 'stars' => 5],
+                ['quote' => 'Professional, on time, and fair on price. I’d call them again in a heartbeat.', 'author' => 'Your Google reviews', 'role' => 'appear here', 'stars' => 5],
+            ];
+            $placeholder = true;
         }
 
         $cols = array_map(function (array $q): string {
@@ -259,10 +291,13 @@ final class BlockSections
             return $this->b->column([$this->b->group($children, ['backgroundColor' => 'base', 'className' => 'lp-quote'])]);
         }, $quotes);
 
-        return $this->b->group([
-            $this->sectionHead($eyebrow, $heading, center: true),
-            $this->b->columns($cols, ['className' => 'lp-testimonials-grid']),
-        ], ['align' => 'full', 'backgroundColor' => 'surface', 'className' => 'lp-testimonials']);
+        $children = [$this->sectionHead($eyebrow, $heading, center: true)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('activates when you add reviews');
+        }
+        $children[] = $this->b->columns($cols, ['className' => 'lp-testimonials-grid']);
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-testimonials', $placeholder)]);
     }
 
     /**
@@ -273,7 +308,7 @@ final class BlockSections
      * @param  list<string>  $counties  named counties served (broadest first line)
      * @param  list<array{label: string, url: string}>  $cities  towns largest-first; a non-empty url is a REAL town page
      */
-    public function serviceAreas(string $eyebrow, string $heading, array $counties, array $cities, ?string $more = null): string
+    public function serviceAreas(string $eyebrow, string $heading, array $counties, array $cities, ?string $more = null, bool $preview = false): string
     {
         $counties = array_values(array_filter(array_map('trim', $counties), fn (string $c): bool => $c !== ''));
 
@@ -290,11 +325,22 @@ final class BlockSections
                 : $this->text($label);
         }
 
+        $placeholder = false;
         if ($counties === [] && $cityTags === []) {
-            return '';
+            if (! $preview) {
+                return '';
+            }
+            // Preview only: example territory so the operator sees the section + what to fill in.
+            $counties = ['Your county'];
+            $cityTags = [$this->text('Your city'), $this->text('Nearby town'), $this->text('Surrounding area')];
+            $more = null;
+            $placeholder = true;
         }
 
         $children = [$this->sectionHead($eyebrow, $heading)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('add your service areas to activate this section');
+        }
 
         if ($counties !== []) {
             $children[] = $this->b->paragraph(
@@ -310,10 +356,33 @@ final class BlockSections
             $children[] = $this->b->list($cityTags, ['className' => 'lp-area-tags']);
         }
 
-        return $this->b->group($children, ['align' => 'full', 'className' => 'lp-areas']);
+        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-areas', $placeholder)]);
     }
 
     // ── section internals ──
+
+    /**
+     * The preview-only placeholder banner for a data-gated section: an "Example" tag + a plain-language
+     * line naming what activates the section. Marks the example content so the operator never mistakes
+     * it for real copy — and the `lp-placeholder` section class greys the whole block in the theme.
+     * NEVER reaches the live site: a placeholder is built only in preview, and publish omits the
+     * section entirely (each builder returns '' when its data is empty and preview is off).
+     */
+    private function placeholderNote(string $activates, bool $onDark = false): string
+    {
+        $attrs = ['className' => 'lp-placeholder-note', 'fontSize' => 'small'];
+        if ($onDark) {
+            $attrs['textColor'] = 'base';
+        }
+
+        return $this->b->paragraph('<span class="lp-placeholder-tag">Example</span> '.$this->text($activates), $attrs);
+    }
+
+    /** A section's className, with the `lp-placeholder` marker appended when it's a preview placeholder. */
+    private function sectionClass(string $base, bool $placeholder): string
+    {
+        return $placeholder ? $base.' lp-placeholder' : $base;
+    }
 
     /**
      * "A" · "A and B" · "A, B, and C" — a natural-language join. Items are already escaped.
