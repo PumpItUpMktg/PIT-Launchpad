@@ -6,8 +6,11 @@ use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Claude\CompletionResult;
 use App\Models\Content;
 use App\Models\CoverageArea;
+use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\ProofItem;
@@ -15,6 +18,7 @@ use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\MetaBlobAssembler;
+use Tests\Support\FakeClaudeClient;
 
 function blockHomePage(Site $site): Content
 {
@@ -165,6 +169,64 @@ it('service cards carry a real description even without SEO meta — from the pa
     expect($markup)
         ->toContain('Drain Cleaning')
         ->toContain('Snaking and hydro-jetting that clears the whole pipe wall.'); // real blurb, not just "Learn more"
+});
+
+it('an ungenerated service page gets a generated, keyword-grounded card blurb (cached, never null)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $keyword = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump maintenance']);
+
+    // The child page exists (its card links to it) but is NOT generated: no SEO, no slots.
+    $service = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'sump-pump-maintenance', 'title' => 'Sump Pump Maintenance',
+        'slot_payload' => [], 'meta' => [], 'target_keyword_id' => $keyword->id,
+    ]);
+
+    $fake = new FakeClaudeClient('Routine upkeep that keeps your sump pump ready before the next big storm.');
+    app()->instance(ClaudeClient::class, $fake);
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Sump Pump Maintenance')
+        ->toContain('Routine upkeep that keeps your sump pump ready before the next big storm.');
+    // Grounded on the real keyword (the §5 carry-over), not generic.
+    expect($fake->prompts[0])->toContain('sump pump maintenance');
+    // Generated once → cached on the page so a re-publish reuses it (no second model call).
+    expect($service->fresh()->meta['card_blurb'] ?? null)
+        ->toBe('Routine upkeep that keeps your sump pump ready before the next big storm.');
+});
+
+it('a card blurb is never null even when the model is unreachable — deterministic keyword template', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $keyword = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'hydro jetting']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'hydro-jetting', 'title' => 'Hydro Jetting',
+        'slot_payload' => [], 'meta' => [], 'target_keyword_id' => $keyword->id,
+    ]);
+
+    // A model that throws → the resolver must still return a non-empty, keyword-anchored line.
+    app()->instance(ClaudeClient::class, new class implements ClaudeClient
+    {
+        public function complete(string $prompt, ?string $system = null): string
+        {
+            throw new RuntimeException('model down');
+        }
+
+        public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
+        {
+            throw new RuntimeException('model down');
+        }
+    });
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Hydro Jetting')
+        ->toContain('Hydro jetting'); // the deterministic template leads with the keyword — never blank
 });
 
 it('How It Works uses the tenant process when captured (else the safe default)', function () {

@@ -26,6 +26,7 @@ final class BlockContentAssembler
     public function __construct(
         private readonly BlockPageComposer $composer,
         private readonly ServiceAreaResolver $serviceAreas,
+        private readonly ServiceCardBlurb $cardBlurb,
     ) {}
 
     /**
@@ -232,51 +233,14 @@ final class BlockContentAssembler
             }
             $cards[] = [
                 'title' => $title,
-                'blurb' => $this->serviceBlurb($page),
+                // Never null — child-page description if it exists, else a generated keyword-grounded
+                // blurb (see {@see ServiceCardBlurb}), so no card ships as a bare "Learn more".
+                'blurb' => $this->cardBlurb->for($page),
                 'url' => $home.ltrim((string) $page->slug, '/'),
             ];
         }
 
         return $cards;
-    }
-
-    /**
-     * A real one-line description for a service card — never just "Learn more". Prefers the page's SEO
-     * meta description, then falls back to its own hero sub / intro / problem slot (so a card carries
-     * substance even before SEO is written), stripped to a clean single line.
-     */
-    private function serviceBlurb(Content $page): string
-    {
-        $seo = is_array($page->meta['seo'] ?? null) ? $page->meta['seo'] : [];
-        $desc = trim((string) ($seo['meta_description'] ?? ''));
-        if ($desc !== '') {
-            return $this->oneLine($desc, 155);
-        }
-
-        $slots = is_array($page->slot_payload) ? $page->slot_payload : [];
-        foreach (['hero_subhead', 'intro', 'hero_problem', 'summary', 'body'] as $key) {
-            $value = $slots[$key] ?? null;
-            $text = trim(is_array($value) ? (string) ($value[0] ?? '') : (string) $value);
-            if ($text !== '') {
-                return $this->oneLine(strip_tags($text), 155);
-            }
-        }
-
-        return '';
-    }
-
-    /** Collapse to one line and truncate at a word boundary. */
-    private function oneLine(string $text, int $limit): string
-    {
-        $text = trim((string) preg_replace('/\s+/', ' ', $text));
-        if (mb_strlen($text) <= $limit) {
-            return $text;
-        }
-
-        $cut = mb_substr($text, 0, $limit);
-        $space = mb_strrpos($cut, ' ');
-
-        return rtrim($space !== false ? mb_substr($cut, 0, $space) : $cut, ' ,.;:').'…';
     }
 
     /**
