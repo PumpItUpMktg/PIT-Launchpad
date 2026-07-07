@@ -1,12 +1,17 @@
 <?php
 
 use App\Enums\ContentStatus;
+use App\Enums\RenderStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\ProofEditor;
+use App\Jobs\RenderImage;
 use App\Models\Content;
 use App\Models\ContentEdit;
+use App\Models\RenderJob;
+use App\Models\Scopes\SiteScope;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Bus;
 use Livewire\Livewire;
 use Tests\Support\PageFixture;
 
@@ -79,4 +84,24 @@ it('is operator-only', function () {
 
     $this->actingAs(User::factory()->create(['role' => UserRole::Client]));
     expect(ProofEditor::canAccess())->toBeFalse();
+});
+
+it('regenerates one image slot — resets its render job, re-dispatches, and captures the edit', function () {
+    Bus::fake();
+    $page = draftedPage();
+    $job = RenderJob::factory()->create([
+        'site_id' => $page->site_id, 'content_id' => $page->id, 'slot' => 'hero_image',
+        'status' => RenderStatus::Succeeded, 'r2_key' => 'sites/x/hero.webp', 'attempts' => 1,
+    ]);
+
+    Livewire::withQueryParams(['content' => $page->id])
+        ->test(ProofEditor::class)
+        ->call('regenerateImage', 'hero_image');
+
+    $fresh = RenderJob::withoutGlobalScope(SiteScope::class)->find($job->id);
+    expect($fresh->status)->toBe(RenderStatus::Queued)
+        ->and($fresh->attempts)->toBe(0);
+
+    Bus::assertDispatched(RenderImage::class, fn ($j) => $j->renderJobId === $job->id);
+    expect(ContentEdit::query()->where('content_id', $page->id)->where('field', 'image:hero_image')->exists())->toBeTrue();
 });
