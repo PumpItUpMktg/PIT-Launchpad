@@ -56,6 +56,17 @@
   .lp-field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px}
   .lp-input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;background:#FBFCFD;color:var(--ink)}
 
+  /* File uploader: a big, obvious clickable label wrapping a visually-hidden file input, so the
+     "choose a file" affordance is unmistakable inside the full-bleed guided scope (the bare native
+     control was too easy to miss). Clicking the label opens the OS picker; wire:model still uploads. */
+  .lp-upload{display:flex;align-items:center;gap:13px;border:1.5px dashed var(--teal-mid);border-radius:10px;padding:15px 17px;background:#FBFCFD;cursor:pointer;transition:border-color .15s,background .15s}
+  .lp-upload:hover{border-color:var(--teal);background:#F3F9F8}
+  .lp-upload input[type=file]{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  .lp-upload .ic{width:38px;height:38px;flex:none;border-radius:9px;background:var(--good-bg);color:var(--teal-deep);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .lp-upload .tx{display:flex;flex-direction:column;gap:2px}
+  .lp-upload .tx strong{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .lp-upload .tx span{font-size:12px;color:var(--ink-soft)}
+
   .lp-chips{display:flex;flex-wrap:wrap;gap:8px}
   .lp-chip{display:inline-flex;align-items:center;gap:7px;background:var(--good-bg);color:var(--teal-deep);border:1px solid #BFDED7;border-radius:20px;padding:6px 13px;font-size:13px;font-weight:600}
   .lp-chip.home{background:var(--teal);color:#fff;border-color:var(--teal)}

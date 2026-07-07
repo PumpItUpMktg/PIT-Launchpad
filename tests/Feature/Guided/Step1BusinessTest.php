@@ -7,8 +7,12 @@ use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use App\Models\User;
+use App\Publishing\TenantStorage;
 use Filament\Facades\Filament;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -51,6 +55,19 @@ test('add / remove service mutate the stated list', function () {
         ->assertSet('newService', '')
         ->call('removeService', 0)
         ->assertSet('services', []);
+});
+
+test('choosing a logo file uploads it and stores it on SiteBranding', function () {
+    Storage::fake(TenantStorage::DISK);
+
+    Livewire::test(Business::class)
+        ->set('logo', UploadedFile::fake()->image('brand.png', 120, 60))
+        ->assertHasNoErrors()
+        ->assertSet('logo', null); // cleared after processing
+
+    $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->firstOrFail();
+    expect($branding->logo_set['url'] ?? null)->not->toBeNull()
+        ->and($branding->logo_set['ext'] ?? null)->toBe('png');
 });
 
 test('Step 1 is framed as "Add a new site" and the sidebar personalizes after a name', function () {
