@@ -329,6 +329,28 @@
     background: color-mix(in srgb, var(--wp--preset--color--accent, #1d6fd6) 12%, transparent);
 }
 
+/* The icon glyph is drawn here (CSS mask), not in post_content — so WordPress' kses can't strip it.
+   Every service maps to one of these slugs (unmatched → --service), so an icon is never empty. */
+.lp-icon::before {
+    content: "";
+    width: 1.4rem;
+    height: 1.4rem;
+    background: currentColor;
+    -webkit-mask: var(--lp-icon-img) center / contain no-repeat;
+    mask: var(--lp-icon-img) center / contain no-repeat;
+    --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2'/%3E%3C/svg%3E");
+}
+.lp-icon--drain::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8c2-2 4-2 6 0s4 2 6 0M4 14c2-2 4-2 6 0s4 2 6 0'/%3E%3C/svg%3E"); }
+.lp-icon--jet::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h12M15 8l4 4-4 4'/%3E%3C/svg%3E"); }
+.lp-icon--pipe::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8v8M4 8h10a4 4 0 0 1 4 4v4'/%3E%3C/svg%3E"); }
+.lp-icon--camera::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='7' width='13' height='11' rx='2'/%3E%3Ccircle cx='9.5' cy='12.5' r='2.5'/%3E%3Cpath d='M16 10l5-2v8l-5-2'/%3E%3C/svg%3E"); }
+.lp-icon--droplet::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11Z'/%3E%3C/svg%3E"); }
+.lp-icon--pump::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='10' width='14' height='9' rx='1'/%3E%3Cpath d='M9 10V6a3 3 0 0 1 6 0v4'/%3E%3C/svg%3E"); }
+.lp-icon--grease::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 5h14l-5 7v6l-4 2v-8L5 5Z'/%3E%3C/svg%3E"); }
+.lp-icon--bolt::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13 2L4 14h7l-1 8 9-12h-7l1-8Z'/%3E%3C/svg%3E"); }
+.lp-icon--wrench::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 4a5 5 0 0 0-4.5 7L3 18.5 5.5 21l7.5-7.5A5 5 0 0 0 20 9l-3 3-2-2 3-3a5 5 0 0 0-3-3Z'/%3E%3C/svg%3E"); }
+.lp-icon--spark::before { --lp-icon-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6Z'/%3E%3C/svg%3E"); }
+
 /* ------------------------------------------------------------------ *
  * Proof gallery — real photos fill; empty slots are honest dashed
  * "add your own photo" placeholders. Up to 3 across.

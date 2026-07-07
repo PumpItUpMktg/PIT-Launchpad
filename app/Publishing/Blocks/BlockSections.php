@@ -175,7 +175,7 @@ final class BlockSections
         }
 
         $cols = array_map(function (array $i): string {
-            $children = [$this->icon(), $this->b->heading(4, (string) $i['title'], ['textColor' => 'base'])];
+            $children = [$this->icon('spark'), $this->b->heading(4, (string) $i['title'], ['textColor' => 'base'])];
             if (trim((string) ($i['description'] ?? '')) !== '') {
                 $children[] = $this->b->paragraph((string) $i['description'], ['textColor' => 'base']);
             }
@@ -389,7 +389,7 @@ final class BlockSections
      */
     private function serviceCard(array $c): string
     {
-        $children = [$this->icon()];
+        $children = [$this->icon((new ServiceIcon)->slugFor((string) ($c['title'] ?? '')))];
         $children[] = $this->b->heading(3, (string) $c['title']);
         if (trim((string) ($c['blurb'] ?? '')) !== '') {
             $children[] = $this->b->paragraph((string) $c['blurb'], ['textColor' => 'muted']);
@@ -420,12 +420,13 @@ final class BlockSections
         ], ['className' => $classes]);
     }
 
-    /** A single generic service icon (inline SVG via core/html — a CORE block, so still portable). */
-    private function icon(): string
+    /**
+     * A curated icon as a CLASS (drawn by the theme's CSS), NOT inline SVG — WordPress' kses strips
+     * <svg> from post_content on save, so an inline icon renders empty. A classed span survives.
+     */
+    private function icon(string $slug = ServiceIcon::FALLBACK): string
     {
-        $svg = '<span class="lp-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></span>';
-
-        return "<!-- wp:html -->\n{$svg}\n<!-- /wp:html -->";
+        return "<!-- wp:html -->\n".'<span class="lp-icon lp-icon--'.$slug.'" aria-hidden="true"></span>'."\n<!-- /wp:html -->";
     }
 
     private function text(?string $v): string

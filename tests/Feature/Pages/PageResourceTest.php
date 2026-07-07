@@ -6,6 +6,8 @@ use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Resources\PageResource;
 use App\Filament\Resources\PageResource\Pages\ListPages;
+use App\Integrations\Wordpress\WordpressClient;
+use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Jobs\GeneratePage;
 use App\Jobs\PublishContent;
 use App\Models\Content;
@@ -128,16 +130,29 @@ test('Re-push is hidden until a page has been published (nothing to re-push)', f
     Livewire::test(ListPages::class)->assertTableActionHidden('repush', $page);
 });
 
-test('Delete soft-deletes the page from Launchpad (recoverable, WP untouched)', function () {
+test('Delete from WordPress force-deletes the WP post and makes the page republishable on the same slug', function () {
     Filament::setCurrentPanel('admin');
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
 
-    $page = PageFixture::intakePage(['status' => ContentStatus::Published, 'slot_payload' => ['hero_problem' => 'x']]);
+    $page = PageFixture::intakePage([
+        'status' => ContentStatus::Published, 'slot_payload' => ['hero_problem' => 'x'],
+        'slug' => 'drain-cleaning', 'wp_post_id' => 42, 'locally_edited' => true,
+    ]);
 
-    Livewire::test(ListPages::class)->callTableAction('deletePage', $page);
+    // The WP transport force-deletes (force=true); assert we call it with the WP id.
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('forceDeletePost')->once()->with('pages', 42)->andReturn(true);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->once()->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
 
-    expect(Content::withoutGlobalScope(SiteScope::class)->whereKey($page->id)->exists())->toBeFalse()
-        ->and(Content::withoutGlobalScope(SiteScope::class)->withTrashed()->whereKey($page->id)->exists())->toBeTrue();
+    Livewire::test(ListPages::class)->callTableAction('deleteFromWp', $page);
+
+    $fresh = Content::withoutGlobalScope(SiteScope::class)->find($page->id);
+    expect($fresh)->not->toBeNull()                       // Content stays in Launchpad
+        ->and($fresh->wp_post_id)->toBeNull()             // WP link cleared
+        ->and($fresh->status)->toBe(ContentStatus::Approved) // ready to re-push
+        ->and($fresh->slug)->toBe('drain-cleaning');      // same slug → no "-2"
 });
 
 test('bulk Publish queues a compose-and-push only for approved selections', function () {

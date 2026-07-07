@@ -11,10 +11,13 @@ use App\Filament\Resources\PageResource\Pages\ListPages;
 use App\Jobs\GeneratePage;
 use App\Jobs\PublishContent;
 use App\Models\Content;
+use App\Models\ContentEdit;
 use App\Models\PageConfig;
 use App\Models\Scopes\SiteScope;
+use App\Publishing\DeleteFromWordpress;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -89,15 +92,19 @@ class PageResource extends Resource
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
             ])
             ->recordActions([
+                // The lifecycle primary — one clear "next step" per row.
                 self::generateAction(),
                 self::composerPendingAction(),
                 self::reviewAction(),
                 self::publishAction(),
                 self::viewAction(),
-                self::regenerateAction(),
-                self::repushAction(),
-                self::pageConfigAction(),
-                self::deleteAction(),
+                // Secondary management actions live in a "…" overflow so the row isn't a wall of buttons.
+                ActionGroup::make([
+                    self::regenerateAction(),
+                    self::repushAction(),
+                    self::pageConfigAction(),
+                    self::deleteFromWpAction(),
+                ])->label('More')->icon('heroicon-o-ellipsis-horizontal'),
             ])
             ->bulkActions([
                 self::bulkApproveAction(),
@@ -220,7 +227,8 @@ class PageResource extends Resource
             ->visible(fn (Content $record): bool => self::buildable($record) && ! $record->isGenerating() && $record->hasDraft())
             ->requiresConfirmation()
             ->modalHeading('Regenerate this page')
-            ->modalDescription('Re-drafts the page from scratch (Sonnet + fal image), OVERWRITING the current draft, then returns it to Review. Nothing reaches WordPress until you Publish / Re-push — the live page is untouched.')
+            ->modalDescription(fn (Content $record): string => 'Re-drafts the WHOLE page from scratch (Sonnet + fal image), OVERWRITING the current draft, then returns it to Review. Nothing reaches WordPress until you Publish / Re-push — the live page is untouched.'
+                .(self::hasEdits($record) ? ' ⚠ This page has hand edits — regenerating DISCARDS them.' : ''))
             ->action(function (Content $record): void {
                 GeneratePage::enqueue($record, actorId: Auth::id());
 
@@ -258,28 +266,37 @@ class PageResource extends Resource
     }
 
     /**
-     * Delete — remove this page from Launchpad (soft delete). Does NOT delete a live WordPress page
-     * (delete that in WordPress if you want it gone there); this clears the control-plane row so it
-     * stops showing in the pipeline. The page can be rebuilt later from the plan.
+     * Delete from WordPress — FORCE-delete the live WP page (bypasses trash, so the slug is freed: a
+     * follow-up publish lands on the SAME permalink, no "-2"). The Content stays in Launchpad as
+     * ready-to-publish; Re-push recreates it. Reuses the reset tooling's force-delete path.
      */
-    private static function deleteAction(): Action
+    private static function deleteFromWpAction(): Action
     {
-        return Action::make('deletePage')
-            ->label('Delete')
+        return Action::make('deleteFromWp')
+            ->label('Delete from WordPress')
             ->icon('heroicon-o-trash')
             ->color('danger')
+            ->visible(fn (Content $record): bool => $record->wp_post_id !== null
+                || in_array($record->status, [ContentStatus::Published, ContentStatus::PublishFailed], true))
             ->requiresConfirmation()
-            ->modalHeading('Delete this page')
-            ->modalDescription('Removes this page from Launchpad. It does NOT delete the live WordPress page (do that in WordPress if needed). You can rebuild it later from the plan.')
+            ->modalHeading('Delete from WordPress')
+            ->modalDescription('Force-deletes the live WordPress page (bypasses trash, so the slug is freed — no "-2"). The page stays in Launchpad as ready-to-publish; Re-push recreates it on the SAME URL.')
             ->action(function (Content $record): void {
-                $title = (string) $record->title;
-                $record->delete();
+                $result = app(DeleteFromWordpress::class)->delete($record);
 
-                Notification::make()->success()
-                    ->title('Page deleted')
-                    ->body("'{$title}' was removed from Launchpad.")
-                    ->send();
+                $notification = Notification::make()->body($result['message']);
+                ($result['deleted'] || ! $result['on_wp'])
+                    ? $notification->success()->title('Removed from WordPress')
+                    : $notification->danger()->title('Could not delete from WordPress');
+                $notification->send();
             });
+    }
+
+    /** Whether the page carries hand edits that a whole-page regenerate would discard. */
+    private static function hasEdits(Content $record): bool
+    {
+        return (bool) $record->locally_edited
+            || ContentEdit::query()->where('content_id', $record->id)->exists();
     }
 
     /**
