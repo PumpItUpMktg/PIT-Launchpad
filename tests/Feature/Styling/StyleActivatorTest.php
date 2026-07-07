@@ -1,11 +1,12 @@
 <?php
 
+use App\Branding\BrandVariationBuilder;
 use App\Enums\VoiceStatus;
 use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use App\Models\VoiceProfile;
-use App\Branding\BrandVariationBuilder;
 use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Styling\StyleActivator;
 use App\Styling\StyleRecommender;
@@ -62,7 +63,7 @@ it('activates the resolved variation on the site WordPress', function () {
 
 it('activates the logo-derived variation inline when use_logo_colors is set', function () {
     $site = Site::factory()->create(['use_logo_colors' => true]);
-    App\Models\SiteBranding::factory()->create(['site_id' => $site->id, 'logo_set' => ['primary' => '#EA580C', 'accent' => '#0B1F33']]);
+    SiteBranding::factory()->create(['site_id' => $site->id, 'logo_set' => ['primary' => '#EA580C', 'accent' => '#0B1F33']]);
 
     $client = Mockery::mock(WordpressClient::class);
     $client->shouldReceive('activateStyleVariation')->once()

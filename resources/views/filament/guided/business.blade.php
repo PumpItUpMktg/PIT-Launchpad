@@ -26,6 +26,34 @@
         </div>
 
         <div class="lp-card">
+            <h3>Logo <span class="hint" style="font-weight:400">— optional</span></h3>
+            <div class="hint">PNG or SVG works best. We'll add it to your site header and pull your brand colors from it as a style option — you can skip this.</div>
+            @if ($this->logoInfo)
+                <div style="display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap">
+                    <img src="{{ $this->logoInfo['url'] }}" alt="Your logo" style="height:56px;width:auto;max-width:180px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px">
+                    @if ($this->logoInfo['primary'])
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <span class="hint" style="margin:0">Brand colors:</span>
+                            <span title="{{ $this->logoInfo['primary'] }}" style="width:22px;height:22px;border-radius:50%;background:{{ $this->logoInfo['primary'] }};border:1px solid var(--line)"></span>
+                            @if ($this->logoInfo['accent'])
+                                <span title="{{ $this->logoInfo['accent'] }}" style="width:22px;height:22px;border-radius:50%;background:{{ $this->logoInfo['accent'] }};border:1px solid var(--line)"></span>
+                            @endif
+                            <span class="hint" style="margin:0">→ available as a style option</span>
+                        </div>
+                    @else
+                        <span class="hint" style="margin:0">No clear brand color found — the logo is still in your header.</span>
+                    @endif
+                    <button class="lp-mini" wire:click="removeLogo" style="margin-left:auto">Remove</button>
+                </div>
+            @endif
+            <div class="lp-field" style="margin-top:12px">
+                <input type="file" wire:model="logo" accept="image/png,image/jpeg,image/svg+xml,.svg,.png,.jpg,.jpeg">
+                <div wire:loading wire:target="logo" class="hint" style="margin:6px 0 0">Reading your logo…</div>
+                @error('logo') <div class="hint" style="margin:6px 0 0;color:#b91c1c">{{ $message }}</div> @enderror
+            </div>
+        </div>
+
+        <div class="lp-card">
             <h3>Services you offer</h3>
             <div class="hint">Add everything you do — this is what your site gets built around.</div>
             <div class="lp-chips">

@@ -10,6 +10,7 @@ use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use App\Models\User;
 use App\Models\VoiceProfile;
@@ -33,6 +34,45 @@ beforeEach(function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $this->site = Site::factory()->create();
     session(['guided_site_id' => $this->site->id]);
+});
+
+test('the "Your brand colors" option is gated on a usable logo palette and is selectable', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+
+    // No logo → the 4th option is not rendered.
+    Livewire::test(Brand::class)->assertDontSee('Your brand colors');
+
+    SiteBranding::factory()->create([
+        'site_id' => $this->site->id,
+        'logo_set' => ['url' => 'https://cdn.example/logo.png', 'primary' => '#EA580C', 'accent' => '#0B1F33'],
+    ]);
+
+    // A usable palette → the option appears with its swatches.
+    $component = Livewire::test(Brand::class)
+        ->assertSee('Your brand colors')
+        ->assertSee('pulled from your logo')
+        ->assertSee('#ea580c'); // the logo primary swatch
+
+    // Choosing it sets the flag (kept out of style_variation).
+    $component->call('chooseStyle', 'brand_colors');
+    expect($this->site->fresh()->use_logo_colors)->toBeTrue()
+        ->and($this->site->fresh()->style_variation)->toBeNull();
+
+    // Switching to a curated style clears the flag.
+    $component->call('chooseStyle', 'warm');
+    expect($this->site->fresh()->use_logo_colors)->toBeFalse()
+        ->and($this->site->fresh()->style_variation)->toBe(StyleVariation::Warm);
+});
+
+test('a monochrome logo still offers the option — accent borrowed from the nearest base', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+    SiteBranding::factory()->create([
+        'site_id' => $this->site->id,
+        'logo_set' => ['url' => 'https://cdn.example/logo.png', 'primary' => '#0B1F33'], // no accent
+    ]);
+
+    // Nearest base for cool-dark navy is Bold → its accent (#ea580c) is borrowed for the swatch.
+    Livewire::test(Brand::class)->assertSee('Your brand colors')->assertSee('#ea580c');
 });
 
 test('Applying the look activates the style variation, sets brand_pushed, and Continue advances', function () {

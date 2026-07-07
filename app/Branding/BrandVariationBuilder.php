@@ -54,7 +54,7 @@ final class BrandVariationBuilder
     public function resolve(BrandColors $colors): array
     {
         $base = $this->nearestForColor($colors->primary);
-        $accent = $colors->accent !== null ? $this->normalize($colors->accent) : self::BASE[$base]['accent'];
+        $accent = $this->normalize($colors->accent ?? self::BASE[$base]['accent']);
 
         return [
             'primary' => $this->normalize($colors->primary),

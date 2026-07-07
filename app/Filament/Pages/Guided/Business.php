@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Guided;
 
+use App\Branding\LogoIntake;
 use App\Enums\SetupStep;
 use App\Guided\GuidedPage;
 use App\Guided\ServiceSuggester;
@@ -10,7 +11,10 @@ use App\Interview\SiloSeed;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use Filament\Notifications\Notification;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 
 /**
  * Step 1 · Business & services. Brand + trade + stated services, with the connecting-services
@@ -20,6 +24,8 @@ use Filament\Notifications\Notification;
  */
 class Business extends GuidedPage
 {
+    use WithFileUploads;
+
     protected static ?string $slug = 'setup';
 
     protected static ?int $navigationSort = 1;
@@ -40,6 +46,12 @@ class Business extends GuidedPage
     /** @var list<array{name: string, why: string, on: bool}> */
     public array $suggestions = [];
 
+    /** The pending logo upload (optional). */
+    public mixed $logo = null;
+
+    /** The stored logo for display: url + extracted primary/accent (null until one is stored). */
+    public ?array $logoInfo = null;
+
     public function step(): SetupStep
     {
         return SetupStep::Business;
@@ -59,10 +71,54 @@ class Business extends GuidedPage
         $seed = ($blueprint !== null && is_array($blueprint->seed)) ? $blueprint->seed : [];
         $this->trade = (string) ($seed['trade'] ?? '');
         $this->services = $this->stringList($seed['anchor_services'] ?? []);
+        $this->logoInfo = $this->existingLogo($site);
 
         if ($this->trade !== '') {
             $this->suggest();
         }
+    }
+
+    /**
+     * Optional logo — processed the moment it's uploaded (stored to R2, colors extracted, persisted),
+     * so Step 3's "Your brand colors" option can appear. Never blocks the step.
+     */
+    public function updatedLogo(): void
+    {
+        $site = $this->getSite();
+        if ($site === null || ! $this->logo instanceof TemporaryUploadedFile) {
+            return;
+        }
+
+        $this->validate([
+            'logo' => ['file', 'mimetypes:image/png,image/jpeg,image/svg+xml,text/plain', 'max:4096'],
+        ], [], ['logo' => 'logo']);
+
+        $ext = strtolower($this->logo->getClientOriginalExtension() ?: (string) $this->logo->guessExtension());
+        $set = app(LogoIntake::class)->store($site, (string) $this->logo->get(), $ext);
+
+        $this->logo = null;
+        $this->logoInfo = $this->displayInfo($set);
+
+        Notification::make()->title('Logo saved.')
+            ->body(isset($set['primary']) ? 'Your brand colors are ready as a style option.' : 'Added to your site header.')
+            ->success()->send();
+    }
+
+    public function removeLogo(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+        $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+        if ($branding !== null) {
+            $set = is_array($branding->logo_set) ? $branding->logo_set : [];
+            unset($set['url'], $set['r2_key'], $set['ext'], $set['primary'], $set['accent']);
+            $branding->update(['logo_set' => $set]);
+        }
+        // Drop the logo-colors style choice too — its source is gone.
+        $site->update(['use_logo_colors' => false]);
+        $this->logoInfo = null;
     }
 
     public function addService(): void
@@ -131,6 +187,33 @@ class Business extends GuidedPage
     private function blueprint(Site $site): ?SiloBlueprint
     {
         return SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+    }
+
+    /** @return array{url: string, primary: ?string, accent: ?string}|null */
+    private function existingLogo(Site $site): ?array
+    {
+        $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+        $set = is_array($branding?->logo_set) ? $branding->logo_set : [];
+
+        return $this->displayInfo($set);
+    }
+
+    /**
+     * @param  array<string, mixed>  $set
+     * @return array{url: string, primary: ?string, accent: ?string}|null
+     */
+    private function displayInfo(array $set): ?array
+    {
+        $url = trim((string) ($set['url'] ?? ''));
+        if ($url === '') {
+            return null;
+        }
+
+        return [
+            'url' => $url,
+            'primary' => isset($set['primary']) ? (string) $set['primary'] : null,
+            'accent' => isset($set['accent']) ? (string) $set['accent'] : null,
+        ];
     }
 
     /**

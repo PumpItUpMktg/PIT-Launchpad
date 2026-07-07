@@ -56,6 +56,7 @@ final class SiteProfileStore
     {
         return [
             'brand_name' => sanitize_text_field((string) ($p['brand_name'] ?? '')),
+            'logo_url' => isset($p['logo_url']) ? (string) esc_url_raw((string) $p['logo_url']) : '',
             'tagline' => sanitize_text_field((string) ($p['tagline'] ?? '')),
             'phone' => sanitize_text_field((string) ($p['phone'] ?? '')),
             'phone_tel' => self::tel((string) ($p['phone_tel'] ?? '')),
