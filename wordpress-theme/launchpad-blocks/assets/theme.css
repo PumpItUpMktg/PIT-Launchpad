@@ -684,43 +684,68 @@
 /* ------------------------------------------------------------------ *
  * Service Areas — pill tags of the towns served.
  * ------------------------------------------------------------------ */
-/* County lead-in — the "county level" line above the town pills. */
-.lp-areas-counties {
-    margin: 0 0 1.25rem;
-    max-width: 62ch;
-    font-size: 1.05rem;
-    font-weight: 600;
+/* The 50/50 map | major-cities block, with the county list beneath. */
+.wp-block-columns.lp-areas-split {
+    gap: clamp(1.5rem, 4vw, 3rem);
+    align-items: stretch;
+    margin-bottom: 1.5rem;
 }
 
-.wp-block-list.lp-area-tags {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem;
+.lp-areas-split > .wp-block-column {
+    flex-basis: 0;
+    flex-grow: 1;
 }
 
-.wp-block-list.lp-area-tags li {
+/* Major cities grouped by county — the block beside the map. */
+.lp-areas-cities {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 1.5rem;
+    align-content: start;
+}
+
+.lp-areas-countyblock {
+    min-width: 0;
+}
+
+.lp-areas-county {
+    margin: 0 0 0.25rem;
+    font-family: var(--wp--preset--font-family--heading);
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.lp-areas-towns {
     margin: 0;
     font-size: 0.9rem;
-    font-weight: 600;
-    background: var(--wp--preset--color--surface, #f1f5f9);
-    border: 1px solid var(--wp--preset--color--border, #e2e8f0);
-    border-radius: 999px;
-    padding: 0.5rem 1rem;
-    transition: border-color 0.15s ease, color 0.15s ease;
+    line-height: 1.5;
 }
 
-/* Linked town pills (real location pages) — same look, clickable, accent on hover. */
-.wp-block-list.lp-area-tags li a {
+.lp-areas-towns a {
     color: inherit;
     text-decoration: none;
+    border-bottom: 1px solid transparent;
 }
 
-.wp-block-list.lp-area-tags li:has(a):hover {
-    border-color: var(--wp--preset--color--accent, #1d6fd6);
+.lp-areas-towns a:hover {
     color: var(--wp--preset--color--accent, #1d6fd6);
+    border-bottom-color: currentColor;
+}
+
+/* The county list beneath the block — pipe-separated, mirroring the block width. */
+.lp-areas-counties {
+    margin: 0;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--wp--preset--color--border, #e2e8f0);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--wp--preset--color--muted, #475569);
+}
+
+@media (max-width: 600px) {
+    .lp-areas-cities {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* ================================================================== *
@@ -1062,18 +1087,8 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
 }
 
-/* When the map leads, the county line + town pills become a compact, SMALL, secondary caption
- * beneath it (kept for SEO / a11y / no-JS, but no longer the headline). Counties render as a
- * pipe-separated list; the pills stay small too. */
-.lp-areas--map .lp-areas-counties {
-    text-align: center;
-    font-size: 0.8rem;
-    opacity: 0.8;
-    margin-top: 0;
-}
-
-.lp-areas--map .lp-area-tags {
-    justify-content: center;
-    font-size: 0.8rem;
-    opacity: 0.85;
+/* In the 50/50 block the map fills its column height (its own --live height is a floor). */
+.lp-areas--map .lp-areas-split .lp-areas-map--live {
+    height: 100%;
+    min-height: clamp(320px, 40vh, 460px);
 }

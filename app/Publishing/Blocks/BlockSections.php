@@ -304,43 +304,30 @@ final class BlockSections
     }
 
     /**
-     * Service Areas: the COUNTY level first (a "Serving … counties" lead), then the towns as pill tags
-     * ordered largest-first — a readable hierarchy, not a crowded cloud. Data-gated: hidden when a tenant
-     * has no coverage captured. Geo lives only here and on location pages, never in silo/service copy.
+     * Service Areas: a 50/50 block — the interactive map on one side, the MAJOR CITIES from each served
+     * county on the other — with the county list beneath, pipe-separated, mirroring the block's width.
+     * The map geometry rides the meta-blob's `service_area_map` (drawn by the theme); the grouped city
+     * text + county line are the real, crawlable content (SEO / a11y / no-JS). Data-gated: hidden with no
+     * coverage (a labeled example stands in for preview). Geo lives only here + on location pages.
      *
-     * When $mapAvailable, an interactive Leaflet map (the served-county outlines + tiered town markers)
-     * leads as the visual — its geometry rides the meta-blob's `service_area_map`, drawn by the theme;
-     * the county lead + town pills stay beneath as the REAL, crawlable text fallback (no-JS + SEO + a11y).
-     *
-     * @param  list<string>  $counties  named counties served (broadest first line)
-     * @param  list<array{label: string, url: string}>  $cities  towns largest-first; a non-empty url is a REAL town page
+     * @param  list<string>  $counties  named counties served (the pipe-separated line beneath)
+     * @param  list<array{county: string, cities: list<array{label: string, url: string}>}>  $byCounty  major cities grouped by county, largest-first; a non-empty url is a REAL town page
      */
-    public function serviceAreas(string $eyebrow, string $heading, array $counties, array $cities, ?string $more = null, bool $preview = false, bool $mapAvailable = false): string
+    public function serviceAreas(string $eyebrow, string $heading, array $counties, array $byCounty, bool $preview = false, bool $mapAvailable = false): string
     {
         $counties = array_values(array_filter(array_map('trim', $counties), fn (string $c): bool => $c !== ''));
 
-        // A town with a real location page becomes a link; otherwise a plain pill. Never an invented URL.
-        $cityTags = [];
-        foreach ($cities as $city) {
-            $label = trim($city['label']);
-            if ($label === '') {
-                continue;
-            }
-            $url = trim($city['url']);
-            $cityTags[] = $url !== ''
-                ? '<a href="'.$this->attr($url).'">'.$this->text($label).'</a>'
-                : $this->text($label);
-        }
-
         $placeholder = false;
-        if ($counties === [] && $cityTags === []) {
+        if ($counties === [] && $byCounty === []) {
             if (! $preview) {
                 return '';
             }
             // Preview only: example territory so the operator sees the section + what to fill in.
-            $counties = ['Your county'];
-            $cityTags = [$this->text('Your city'), $this->text('Nearby town'), $this->text('Surrounding area')];
-            $more = null;
+            $counties = ['Your county', 'Nearby county'];
+            $byCounty = [
+                ['county' => 'Your county', 'cities' => [['label' => 'Your city', 'url' => ''], ['label' => 'Nearby town', 'url' => '']]],
+                ['county' => 'Nearby county', 'cities' => [['label' => 'Another town', 'url' => ''], ['label' => 'Surrounding area', 'url' => '']]],
+            ];
             $placeholder = true;
         }
 
@@ -349,33 +336,69 @@ final class BlockSections
             $children[] = $this->placeholderNote('add your service areas to activate this section');
         }
 
-        // The interactive map leads (real geometry only — never on a placeholder). Empty on the server;
-        // the theme draws into it. The text below is the crawlable fallback, so both contexts stay honest.
+        // The major-cities-by-county column (real geometry only draws the map; text always renders).
+        $cities = $this->areaCitiesColumn($byCounty);
         $withMap = $mapAvailable && ! $placeholder;
-        if ($withMap) {
-            $children[] = $this->areaMapMount();
+
+        if ($withMap && $cities !== '') {
+            // 50/50: the map beside the cities.
+            $children[] = $this->b->columns([
+                $this->b->column([$this->areaMapMount()]),
+                $this->b->column([$cities]),
+            ], ['className' => 'lp-areas-split']);
+        } elseif ($cities !== '') {
+            $children[] = $cities;
         }
 
+        // The county list beneath — pipe-separated, mirroring the block width above.
         if ($counties !== []) {
-            $escaped = array_map(fn (string $c): string => $this->text($c), $counties);
-            // Under the map the counties are a compact, pipe-separated caption; standalone (no map)
-            // they read as a natural sentence.
-            $line = $withMap
-                ? implode(' | ', $escaped)
-                : 'Serving '.$this->naturalList($escaped).'.';
-            $children[] = $this->b->paragraph($line, ['className' => 'lp-areas-counties']);
-        }
-
-        if ($cityTags !== []) {
-            if ($more !== null && trim($more) !== '') {
-                $cityTags[] = $this->text(trim($more));
-            }
-            $children[] = $this->b->list($cityTags, ['className' => 'lp-area-tags']);
+            $children[] = $this->b->paragraph(
+                implode(' | ', array_map(fn (string $c): string => $this->text($c), $counties)),
+                ['className' => 'lp-areas-counties'],
+            );
         }
 
         $classes = $this->sectionClass('lp-areas', $placeholder).($withMap ? ' lp-areas--map' : '');
 
         return $this->b->group($children, ['align' => 'full', 'className' => $classes]);
+    }
+
+    /**
+     * The "major cities from each county" column: one block per county — the county name + its largest
+     * towns on a middot-separated line (a town with a real location page links; never an invented URL).
+     * Returns '' when there's nothing to show.
+     *
+     * @param  list<array{county: string, cities: list<array{label: string, url: string}>}>  $byCounty
+     */
+    private function areaCitiesColumn(array $byCounty): string
+    {
+        $blocks = [];
+        foreach ($byCounty as $group) {
+            $county = trim($group['county']);
+            if ($county === '' || $group['cities'] === []) {
+                continue;
+            }
+
+            $parts = [];
+            foreach ($group['cities'] as $city) {
+                $label = trim($city['label']);
+                if ($label === '') {
+                    continue;
+                }
+                $url = trim($city['url']);
+                $parts[] = $url !== '' ? '<a href="'.$this->attr($url).'">'.$this->text($label).'</a>' : $this->text($label);
+            }
+            if ($parts === []) {
+                continue;
+            }
+
+            $blocks[] = $this->b->group([
+                $this->b->heading(5, $county, ['className' => 'lp-areas-county']),
+                $this->b->paragraph(implode(' · ', $parts), ['className' => 'lp-areas-towns', 'textColor' => 'muted']),
+            ], ['className' => 'lp-areas-countyblock']);
+        }
+
+        return $blocks === [] ? '' : $this->b->group($blocks, ['className' => 'lp-areas-cities']);
     }
 
     /**
@@ -413,29 +436,6 @@ final class BlockSections
     private function sectionClass(string $base, bool $placeholder): string
     {
         return $placeholder ? $base.' lp-placeholder' : $base;
-    }
-
-    /**
-     * "A" · "A and B" · "A, B, and C" — a natural-language join. Items are already escaped.
-     *
-     * @param  list<string>  $items
-     */
-    private function naturalList(array $items): string
-    {
-        $count = count($items);
-        if ($count === 0) {
-            return '';
-        }
-        if ($count === 1) {
-            return $items[0];
-        }
-        if ($count === 2) {
-            return $items[0].' and '.$items[1];
-        }
-
-        $last = array_pop($items);
-
-        return implode(', ', $items).', and '.$last;
     }
 
     private function heroButtons(string $assessmentText, string $assessmentUrl, PageContext $ctx): string

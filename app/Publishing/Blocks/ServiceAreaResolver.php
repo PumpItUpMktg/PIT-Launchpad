@@ -3,6 +3,7 @@
 namespace App\Publishing\Blocks;
 
 use App\Enums\ContentKind;
+use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
@@ -33,9 +34,74 @@ final class ServiceAreaResolver
 
     private const MAX_CITIES = 18;
 
+    /** Largest towns shown per county in the grouped "major cities" column. */
+    private const PER_COUNTY = 6;
+
     private const COUNTY_CACHE_DAYS = 30;
 
     public function __construct(private readonly MunicipalityGazetteer $gazetteer) {}
+
+    /**
+     * The served counties each paired with their LARGEST towns — for the areas section's "major cities
+     * from each county" column. A town is assigned to its county by census GEOID (a county subdivision
+     * carries its county in the first 5 digits), else by which served-county polygon contains its point
+     * (offline, using the same cached polygons the map draws). Largest-first, capped per county; counties
+     * ordered by name to match the county list. Best-effort: any gazetteer failure yields [].
+     *
+     * @return list<array{county: string, cities: list<array{label: string, url: string}>}>
+     */
+    public function byCounty(string $siteId): array
+    {
+        $names = $this->countyNamesForSite($siteId); // geoId => county name
+        if ($names === []) {
+            return [];
+        }
+
+        $polygons = $this->countyPolygons(array_keys($names)); // geoId => rings
+        $urls = $this->locationUrls($siteId);
+
+        $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->get(['name', 'geo_id', 'type', 'lat', 'lng', 'size_tier', 'population']);
+
+        /** @var array<string, list<array{name: string, url: string, key: array{0: int, 1: int, 2: string}}>> $buckets */
+        $buckets = [];
+        foreach ($areas as $area) {
+            $name = trim((string) $area->name);
+            if ($name === '') {
+                continue;
+            }
+            $geoId = $this->assignCounty($area, $names, $polygons);
+            if ($geoId === null) {
+                continue; // no confident county → it still plots on the map, just not in a county group
+            }
+            $buckets[$geoId][] = [
+                'name' => $name,
+                'url' => $urls[$this->key($name)] ?? '',
+                'key' => [self::TIER_RANK[(string) $area->size_tier] ?? 4, -1 * (int) ($area->population ?? 0), $name],
+            ];
+        }
+
+        // County name order, matching the county list below.
+        $ordered = $names;
+        asort($ordered);
+
+        $out = [];
+        foreach (array_keys($ordered) as $geoId) {
+            if (! isset($buckets[$geoId])) {
+                continue;
+            }
+            $towns = $buckets[$geoId];
+            usort($towns, fn (array $a, array $b): int => $a['key'] <=> $b['key']);
+            $cities = [];
+            foreach (array_slice($towns, 0, self::PER_COUNTY) as $town) {
+                $cities[] = ['label' => $town['name'], 'url' => $town['url']];
+            }
+            $out[] = ['county' => $names[$geoId], 'cities' => $cities];
+        }
+
+        return $out;
+    }
 
     /**
      * @return array{counties: list<string>, cities: list<array{label: string, url: string}>, more: int}
@@ -103,6 +169,20 @@ final class ServiceAreaResolver
      */
     private function counties(string $siteId): array
     {
+        $names = array_values($this->countyNamesForSite($siteId));
+        sort($names);
+
+        return $names;
+    }
+
+    /**
+     * geoId => county name for every county the site serves. The shared resolver behind {@see counties()}
+     * and {@see byCounty()}. Best-effort: any failure or no selection → [].
+     *
+     * @return array<string, string>
+     */
+    private function countyNamesForSite(string $siteId): array
+    {
         $geoIds = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
             ->pluck('county_geoids')
@@ -122,18 +202,110 @@ final class ServiceAreaResolver
                 $map = $this->countyNames((string) $stateFips);
                 foreach ($stateGeoIds as $geoId) {
                     if (isset($map[$geoId]) && $map[$geoId] !== '') {
-                        $names[$map[$geoId]] = true;
+                        $names[(string) $geoId] = $map[$geoId];
                     }
                 }
             }
 
-            $out = array_keys($names);
-            sort($out);
-
-            return $out;
+            return $names;
         } catch (Throwable) {
             return [];
         }
+    }
+
+    /**
+     * geoId => boundary rings for the served counties, cached 30d under the SAME key the map uses (so it's
+     * a shared hit, not a second fetch). Best-effort: a gazetteer failure yields [] and grouping falls back
+     * to the GEOID prefix alone.
+     *
+     * @param  list<string>  $geoIds
+     * @return array<string, list<list<array{lat: float, lng: float}>>>
+     */
+    private function countyPolygons(array $geoIds): array
+    {
+        $geoIds = array_values(array_filter(array_map('strval', $geoIds), fn (string $g): bool => $g !== ''));
+        if ($geoIds === []) {
+            return [];
+        }
+
+        sort($geoIds);
+        $key = 'lp.county_polygons.'.md5(implode(',', $geoIds));
+
+        $cached = Cache::get($key);
+        $polys = is_array($cached) ? $cached : null;
+        if ($polys === null) {
+            try {
+                $polys = $this->gazetteer->countyPolygons($geoIds);
+            } catch (Throwable) {
+                return [];
+            }
+            if ($polys !== []) {
+                Cache::put($key, $polys, now()->addDays(self::COUNTY_CACHE_DAYS));
+            }
+        }
+
+        $out = [];
+        foreach ($polys as $poly) {
+            if (isset($poly['geo_id'], $poly['rings']) && is_array($poly['rings'])) {
+                $out[(string) $poly['geo_id']] = $poly['rings'];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The served-county GEOID a coverage town belongs to: a county subdivision carries its county in the
+     * first 5 GEOID digits; anything else is placed by which served-county polygon contains its point.
+     * Null when neither resolves confidently (the town still plots on the map, just ungrouped).
+     *
+     * @param  array<string, string>  $names  served geoId => name
+     * @param  array<string, list<list<array{lat: float, lng: float}>>>  $polygons
+     */
+    private function assignCounty(CoverageArea $area, array $names, array $polygons): ?string
+    {
+        if ($area->type === MunicipalityType::CountySubdivision) {
+            $county = substr((string) $area->geo_id, 0, 5);
+            if (isset($names[$county])) {
+                return $county;
+            }
+        }
+
+        if ($area->lat !== null && $area->lng !== null) {
+            foreach ($polygons as $geoId => $rings) {
+                if ($this->pointInRings((float) $area->lat, (float) $area->lng, $rings)) {
+                    return (string) $geoId;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Ray-casting point-in-polygon over a county's rings (lat = y, lng = x). Good enough to bucket a town
+     * into the county that contains it; exact boundary ties don't matter here.
+     *
+     * @param  list<list<array{lat: float, lng: float}>>  $rings
+     */
+    private function pointInRings(float $lat, float $lng, array $rings): bool
+    {
+        $inside = false;
+        foreach ($rings as $ring) {
+            $n = count($ring);
+            for ($i = 0, $j = $n - 1; $i < $n; $j = $i++) {
+                $yi = $ring[$i]['lat'];
+                $xi = $ring[$i]['lng'];
+                $yj = $ring[$j]['lat'];
+                $xj = $ring[$j]['lng'];
+                $denom = ($yj - $yi) !== 0.0 ? ($yj - $yi) : 1e-12;
+                if ((($yi > $lat) !== ($yj > $lat)) && ($lng < ($xj - $xi) * ($lat - $yi) / $denom + $xi)) {
+                    $inside = ! $inside;
+                }
+            }
+        }
+
+        return $inside;
     }
 
     /**

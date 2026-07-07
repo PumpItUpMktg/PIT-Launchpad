@@ -1,7 +1,7 @@
 <?php
 
 use App\Enums\ContentKind;
-use App\Enums\MarketTier;
+use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Integrations\Census\County;
@@ -12,7 +12,6 @@ use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Location;
-use App\Models\Market;
 use App\Models\ProofItem;
 use App\Models\Site;
 use App\Models\SiteNarrative;
@@ -99,9 +98,16 @@ it('composes the full 9-section Home from real §1 data — credibility, differe
         'site_id' => $site->id,
         'differentiators' => [['title' => 'Preventive-first', 'description' => 'We stop failures before they happen.']],
     ]);
-    // Service areas — priority + coverage markets.
-    Market::factory()->create(['site_id' => $site->id, 'name' => 'Jersey City', 'tier' => MarketTier::Priority]);
-    Market::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'tier' => MarketTier::Coverage]);
+    // Service areas — a served county with a covered town (county subdivision → county via GEOID prefix).
+    Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34017']]);
+    $gaz = Mockery::mock(MunicipalityGazetteer::class);
+    $gaz->shouldReceive('countiesInState')->andReturn([new County('34017', 'Hudson County', '34', '017')]);
+    $gaz->shouldReceive('countyPolygons')->andReturn([]);
+    app()->instance(MunicipalityGazetteer::class, $gaz);
+    CoverageArea::factory()->create([
+        'site_id' => $site->id, 'name' => 'Jersey City', 'type' => MunicipalityType::CountySubdivision,
+        'geo_id' => '3401736000', 'size_tier' => 'major', 'population' => 290000,
+    ]);
 
     $home = blockHomePage($site);
     $markup = app(BlockContentAssembler::class)->compose(
@@ -116,11 +122,12 @@ it('composes the full 9-section Home from real §1 data — credibility, differe
         ->toContain('Caught a collapsing line before it flooded the basement.') // testimonial
         ->toContain('★★★★★')                                                     // star rating rendered
         ->toContain('Facilities Director')
-        ->toContain('Jersey City')->toContain('Newark')                         // service-area tags
-        ->toContain('Areas we serve');
+        ->toContain('Areas we serve')
+        ->toContain('Hudson County')                                            // county subhead + pipe line
+        ->toContain('Jersey City');                                             // major city grouped under it
 });
 
-it('the areas section leads with the named counties, then lists towns largest-first', function () {
+it('groups the major cities under each county, largest-first, with the pipe-separated county line', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
     Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34013', '34017']]);
 
@@ -131,27 +138,32 @@ it('the areas section leads with the named counties, then lists towns largest-fi
         new County('34017', 'Hudson County', '34', '017'),
         new County('34099', 'Ocean County', '34', '099'), // in-state but NOT selected
     ]);
+    $gazetteer->shouldReceive('countyPolygons')->andReturn([]); // subdivisions group by GEOID prefix
     app()->instance(MunicipalityGazetteer::class, $gazetteer);
 
-    // Coverage towns carry the census size tier → ordered major → medium → small.
-    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Tinytown', 'size_tier' => 'small', 'population' => 1500]);
-    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'size_tier' => 'major', 'population' => 300000]);
-    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bloomfield', 'size_tier' => 'medium', 'population' => 50000]);
-    // Newark has a real location page → its pill links; Tinytown has none → plain pill (no invented URL).
+    // County subdivisions: the first 5 GEOID digits are the county — 34013 = Essex, 34017 = Hudson.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Tinytown', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3401399999', 'size_tier' => 'small', 'population' => 1500]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3401351000', 'size_tier' => 'major', 'population' => 300000]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bloomfield', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3401306260', 'size_tier' => 'medium', 'population' => 50000]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Jersey City', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3401736000', 'size_tier' => 'major', 'population' => 290000]);
+    // Newark has a real location page → its name links; the rest are plain (no invented URL).
     Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'slug' => 'newark', 'title' => 'Newark']);
 
     $home = blockHomePage($site);
     $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
 
     expect($markup)
-        ->toContain('Serving Essex County and Hudson County.') // named from the SELECTED county geoids
-        ->not->toContain('Ocean County')                       // an unselected in-state county is excluded
         ->toContain('Areas we serve')
-        ->toContain('href="https://sewergurus.com/newark"');   // real town-page link
+        ->toContain('Essex County | Hudson County') // pipe-separated county line
+        ->not->toContain('Ocean County')            // an unselected in-state county is excluded
+        ->toContain('Jersey City')                  // Hudson's town, grouped
+        ->toContain('href="https://sewergurus.com/newark"'); // real town-page link
 
-    // Largest-first: major before medium before small.
+    // Within Essex: largest-first (major → medium → small).
     expect(mb_strpos($markup, 'Newark'))->toBeLessThan(mb_strpos($markup, 'Bloomfield'));
     expect(mb_strpos($markup, 'Bloomfield'))->toBeLessThan(mb_strpos($markup, 'Tinytown'));
+    // Counties ordered by name: Essex county block before Hudson's.
+    expect(mb_strpos($markup, 'Essex County'))->toBeLessThan(mb_strpos($markup, 'Hudson County'));
 });
 
 it('service cards carry a real description even without SEO meta — from the page slots', function () {
@@ -277,13 +289,13 @@ it('data-gated sections stay hidden when their data is absent — degrade, never
     expect($markup)
         ->not->toContain('What sets us apart')   // no differentiators → no Why section
         ->not->toContain('In their words')       // no reviews → no Testimonials
-        ->not->toContain('Areas we serve')       // no markets → no Service Areas
+        ->not->toContain('Areas we serve')       // no coverage → no Service Areas
         // but the presentational process section always renders
         ->toContain('Getting started is simple');
 });
 
 it('preview builds ALL recommended sections with labeled placeholders; publish omits the empty ones', function () {
-    // A bare tenant: no badges, no differentiators, no reviews, no markets — every data-gated section empty.
+    // A bare tenant: no badges, no differentiators, no reviews, no coverage — every data-gated section empty.
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
     $home = blockHomePage($site);
 
@@ -361,24 +373,24 @@ it('the areas section leads with the map mount + keeps the text fallback when ge
         ['geo_id' => '34017', 'name' => 'Hudson County', 'rings' => [[['lat' => 40.7, 'lng' => -74.05]]]],
     ]);
     app()->instance(MunicipalityGazetteer::class, $gaz);
-    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'size_tier' => 'major', 'lat' => 40.73, 'lng' => -74.17]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3401351000', 'size_tier' => 'major', 'lat' => 40.73, 'lng' => -74.17]);
 
     $home = blockHomePage($site);
 
-    // Compose with the map available → the mount + the crawlable text fallback both render; under the
-    // map the counties are a compact pipe-separated caption (not the "Serving …" sentence).
+    // Map available → the 50/50 mount + the grouped cities + the pipe county line all render.
     $withMap = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], mapAvailable: true);
     expect($withMap)
         ->toContain('class="lp-areas-map"')             // the Leaflet mount point
         ->toContain('lp-areas--map')                    // section modifier
-        ->toContain('Essex County | Hudson County')     // pipe-separated county caption
-        ->not->toContain('Serving Essex County')        // no natural sentence under the map
-        ->toContain('Newark');                          // town pill stays
+        ->toContain('lp-areas-split')                   // the 50/50 columns
+        ->toContain('Essex County | Hudson County')     // pipe-separated county line
+        ->toContain('Newark');                          // major city grouped under Essex
 
-    // Compose without the map → no mount, and the counties read as the natural sentence (back-compat).
+    // No map → no mount; the grouped cities + pipe county line still render (crawlable).
     $noMap = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
     expect($noMap)->not->toContain('lp-areas-map')
-        ->toContain('Serving Essex County and Hudson County.');
+        ->toContain('Essex County | Hudson County')
+        ->toContain('Newark');
 });
 
 it('the meta-blob carries the service_area_map geometry for Home (and drives the mount)', function () {
@@ -389,7 +401,7 @@ it('the meta-blob carries the service_area_map geometry for Home (and drives the
     $gaz->shouldReceive('countiesInState')->andReturn([new County('34013', 'Essex County', '34', '013')]);
     $gaz->shouldReceive('countyPolygons')->andReturn([['geo_id' => '34013', 'name' => 'Essex County', 'rings' => [[['lat' => 40.8, 'lng' => -74.2]]]]]);
     app()->instance(MunicipalityGazetteer::class, $gaz);
-    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'size_tier' => 'major', 'lat' => 40.73, 'lng' => -74.17]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3401351000', 'size_tier' => 'major', 'lat' => 40.73, 'lng' => -74.17]);
 
     $blob = app(MetaBlobAssembler::class)->assemble(blockHomePage($site)->fresh(), collect());
 
