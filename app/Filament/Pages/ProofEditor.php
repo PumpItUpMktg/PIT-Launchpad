@@ -15,10 +15,14 @@ use App\Jobs\RenderImage;
 use App\Models\Content;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
+use App\Models\Site;
+use App\Publishing\TenantStorage;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 
 /**
  * The proof editor — the [Review] target for a generated page. It renders the page the way it will
@@ -35,6 +39,8 @@ use Illuminate\Support\Facades\Auth;
  */
 class ProofEditor extends Page
 {
+    use WithFileUploads;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-eye';
 
     protected static ?string $slug = 'proof';
@@ -42,6 +48,12 @@ class ProofEditor extends Page
     protected string $view = 'filament.pages.proof-editor';
 
     public ?string $contentId = null;
+
+    /** The image slot whose Replace uploader is open (null = none). */
+    public ?string $replaceSlot = null;
+
+    /** The pending replacement image upload. */
+    public mixed $imageUpload = null;
 
     /** The slot key currently being corrected in place (null = read mode). */
     public ?string $editingKey = null;
@@ -174,6 +186,62 @@ class ProofEditor extends Page
 
         Notification::make()->success()->title('Regenerating image')
             ->body('A fresh image is being generated — it will refresh here shortly.')->send();
+    }
+
+    /** Open the Replace uploader for one image slot. */
+    public function startReplace(string $slot): void
+    {
+        $this->replaceSlot = $slot;
+        $this->imageUpload = null;
+    }
+
+    public function cancelReplace(): void
+    {
+        $this->reset(['replaceSlot', 'imageUpload']);
+    }
+
+    /**
+     * Replace an image slot with an UPLOAD — the client's real photo beats AI here. Stores it to R2 and
+     * writes it onto the slot's RenderJob (r2_key + succeeded), the SAME single source the proof +
+     * publish read via toImageObject() — so no override and no divergence. Captures the edit.
+     */
+    public function updatedImageUpload(): void
+    {
+        $record = $this->record();
+        $slot = $this->replaceSlot;
+        if ($record === null || $slot === null || ! $this->imageUpload instanceof TemporaryUploadedFile) {
+            return;
+        }
+
+        $this->validate(['imageUpload' => ['image', 'max:8192']], [], ['imageUpload' => 'image']);
+
+        $site = Site::withoutGlobalScope(SiteScope::class)->find($record->site_id);
+        if ($site === null) {
+            return;
+        }
+
+        $ext = strtolower($this->imageUpload->getClientOriginalExtension() ?: (string) $this->imageUpload->guessExtension());
+        $key = app(TenantStorage::class)->put($site, "proof-{$slot}.{$ext}", (string) $this->imageUpload->get());
+
+        $job = RenderJob::withoutGlobalScope(SiteScope::class)
+            ->where('content_id', $record->id)->where('slot', $slot)->first();
+
+        if ($job !== null) {
+            $before = (string) ($job->r2_key ?? '');
+            $job->forceFill(['r2_key' => $key, 'status' => RenderStatus::Succeeded, 'attempts' => 0, 'error' => null])->save();
+        } else {
+            $before = '';
+            RenderJob::create([
+                'site_id' => $record->site_id, 'content_id' => $record->id, 'slot' => $slot,
+                'r2_key' => $key, 'status' => RenderStatus::Succeeded, 'required' => false, 'attempts' => 0,
+            ]);
+        }
+
+        app(EditCapture::class)->record($record, "image:{$slot}", $before, "upload:{$key}", EditReason::Preference, Auth::id());
+
+        $this->reset(['replaceSlot', 'imageUpload']);
+        Notification::make()->success()->title('Image replaced')
+            ->body('Your photo is in — it will ship on the next publish.')->send();
     }
 
     /** Approve — a cheap state flip to `approved` (no WordPress contact). */

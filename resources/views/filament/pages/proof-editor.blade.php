@@ -107,8 +107,19 @@
                             @else
                                 <div class="pe-img-ph">🖼 Image — generated on the worker</div>
                             @endif
-                            <button class="pe-btn ghost sm" wire:click="regenerateImage('{{ $sec['key'] }}')">↻ Regenerate image</button>
-                            <span class="pe-note">Weird AI image? Regenerate just this one — the rest stays put.</span>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                                <button class="pe-btn ghost sm" wire:click="regenerateImage('{{ $sec['key'] }}')">↻ Regenerate</button>
+                                <button class="pe-btn ghost sm" wire:click="startReplace('{{ $sec['key'] }}')">⇧ Replace with upload</button>
+                            </div>
+                            @if ($replaceSlot === $sec['key'])
+                                <div style="margin-top:8px">
+                                    <input type="file" wire:model="imageUpload" accept="image/*">
+                                    <div wire:loading wire:target="imageUpload" class="pe-note">Uploading…</div>
+                                    @error('imageUpload') <div class="pe-note" style="color:#b91c1c">{{ $message }}</div> @enderror
+                                    <button class="pe-btn ghost sm" wire:click="cancelReplace" style="margin-top:6px">Cancel</button>
+                                </div>
+                            @endif
+                            <span class="pe-note">Weird AI image? Regenerate just this one — or drop in a real photo. The rest stays put.</span>
                         </div>
                     @elseif (is_array($sec['value']))
                         <div class="pe-val"><ul>@foreach ($sec['value'] as $item)<li>{{ is_array($item) ? implode(' — ', array_map('strval', $item)) : (string) $item }}</li>@endforeach</ul></div>

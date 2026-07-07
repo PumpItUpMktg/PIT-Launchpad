@@ -11,7 +11,9 @@ use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\Support\PageFixture;
 
@@ -103,5 +105,25 @@ it('regenerates one image slot — resets its render job, re-dispatches, and cap
         ->and($fresh->attempts)->toBe(0);
 
     Bus::assertDispatched(RenderImage::class, fn ($j) => $j->renderJobId === $job->id);
+    expect(ContentEdit::query()->where('content_id', $page->id)->where('field', 'image:hero_image')->exists())->toBeTrue();
+});
+
+it('replaces an image slot with an upload — stores to R2, writes the render job, captures the edit', function () {
+    Storage::fake('r2');
+    $page = draftedPage();
+    $job = RenderJob::factory()->create([
+        'site_id' => $page->site_id, 'content_id' => $page->id, 'slot' => 'hero_image',
+        'status' => RenderStatus::Succeeded, 'r2_key' => 'sites/x/old.webp',
+    ]);
+
+    Livewire::withQueryParams(['content' => $page->id])
+        ->test(ProofEditor::class)
+        ->call('startReplace', 'hero_image')
+        ->set('imageUpload', UploadedFile::fake()->image('photo.jpg', 800, 600));
+
+    $fresh = RenderJob::withoutGlobalScope(SiteScope::class)->find($job->id);
+    expect($fresh->r2_key)->not->toBe('sites/x/old.webp')                 // the upload replaced it
+        ->and($fresh->status)->toBe(RenderStatus::Succeeded);   // ready, no re-render
+    Storage::disk('r2')->assertExists($fresh->r2_key);
     expect(ContentEdit::query()->where('content_id', $page->id)->where('field', 'image:hero_image')->exists())->toBeTrue();
 });
