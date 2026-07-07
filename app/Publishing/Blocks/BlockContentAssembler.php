@@ -5,12 +5,12 @@ namespace App\Publishing\Blocks;
 use App\Enums\ContentKind;
 use App\Enums\ProofType;
 use App\Models\Content;
-use App\Models\Location;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Publishing\MetaBlobAssembler;
+use App\Publishing\SiteContact;
 
 /**
  * Resolves a page's real §1/§4 inputs and composes its `post_content` (core Gutenberg block markup) —
@@ -27,6 +27,7 @@ final class BlockContentAssembler
         private readonly BlockPageComposer $composer,
         private readonly ServiceAreaResolver $serviceAreas,
         private readonly ServiceCardBlurb $cardBlurb,
+        private readonly SiteContact $contact,
     ) {}
 
     /**
@@ -49,10 +50,17 @@ final class BlockContentAssembler
         }
 
         $site = $this->site($content);
+        // Phone resolves via SiteContact (primary Location's number, else the site business phone), so a
+        // guided-onboarded tenant that set only the wizard phone still shows a number. Emergency uses the
+        // dedicated after-hours line when set, else the main number.
+        $phone = $site !== null ? $this->contact->phone($site) : null;
+        $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
         $ctx = new PageContext(
-            phoneDisplay: $this->phone($content),
-            phoneTel: $this->tel($this->phone($content)),
+            phoneDisplay: $phone,
+            phoneTel: $this->contact->tel($phone),
             emergency: $site !== null && (bool) $site->offers_emergency,
+            emergencyDisplay: $emergencyPhone,
+            emergencyTel: $this->contact->tel($emergencyPhone),
         );
 
         $areas = $this->serviceAreas->resolve((string) $content->site_id);
@@ -273,26 +281,6 @@ final class BlockContentAssembler
         }
 
         return $stats;
-    }
-
-    private function phone(Content $content): ?string
-    {
-        $phone = Location::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->orderBy('created_at')
-            ->value('phone');
-
-        return is_string($phone) && trim($phone) !== '' ? trim($phone) : null;
-    }
-
-    private function tel(?string $phone): ?string
-    {
-        if ($phone === null) {
-            return null;
-        }
-        $digits = (string) preg_replace('/[^0-9+]/', '', $phone);
-
-        return $digits !== '' ? 'tel:'.$digits : null;
     }
 
     private function site(Content $content): ?Site

@@ -23,6 +23,21 @@
             <div class="hint">The basics we'll brand the site around.</div>
             <div class="lp-field"><label>Business name</label><input class="lp-input" wire:model="businessName"></div>
             <div class="lp-field"><label>Trade</label><input class="lp-input" wire:model.blur="trade" wire:change="suggest" placeholder="e.g. Basement waterproofing &amp; sump pumps"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="lp-field" style="margin-bottom:0">
+                    <label>Phone number</label>
+                    <input class="lp-input" wire:model.blur="phone" type="tel" placeholder="(973) 555-0100" autocomplete="tel">
+                </div>
+                <div class="lp-field" style="margin-bottom:0">
+                    <label>Emergency line <span class="hint" style="font-weight:400">— optional</span></label>
+                    <input class="lp-input" wire:model.blur="emergencyPhone" type="tel" placeholder="After-hours number" autocomplete="tel">
+                </div>
+            </div>
+            @if (trim($this->phone) === '')
+                <div class="hint" style="margin:8px 0 0;color:var(--amber)">
+                    ⚠ Add your phone number — it's the main call-to-action in your site header, hero and CTA. Without it, visitors can't call.
+                </div>
+            @endif
         </div>
 
         <div class="lp-card">

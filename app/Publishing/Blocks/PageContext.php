@@ -15,11 +15,28 @@ final class PageContext
         public readonly ?string $phoneDisplay,
         public readonly ?string $phoneTel,
         public readonly bool $emergency = false,
+        public readonly ?string $emergencyDisplay = null,
+        public readonly ?string $emergencyTel = null,
     ) {}
 
     public function hasPhone(): bool
     {
         return $this->phoneDisplay !== null && trim($this->phoneDisplay) !== ''
             && $this->phoneTel !== null && trim($this->phoneTel) !== '';
+    }
+
+    /** The emergency/after-hours number to call — the dedicated line when set, else the main number. */
+    public function emergencyCallDisplay(): ?string
+    {
+        return $this->emergencyDisplay !== null && trim($this->emergencyDisplay) !== ''
+            ? $this->emergencyDisplay
+            : $this->phoneDisplay;
+    }
+
+    public function emergencyCallTel(): ?string
+    {
+        return $this->emergencyTel !== null && trim($this->emergencyTel) !== ''
+            ? $this->emergencyTel
+            : $this->phoneTel;
     }
 }

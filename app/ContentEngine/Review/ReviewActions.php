@@ -7,6 +7,7 @@ use App\Enums\EditReason;
 use App\Enums\ReviewFlag;
 use App\Jobs\PublishContent;
 use App\Models\Content;
+use App\Publishing\SiteContact;
 
 /**
  * The operator's review actions — the orchestration that closes the §6 → §2
@@ -24,6 +25,7 @@ class ReviewActions
     public function __construct(
         private readonly EditCapture $editCapture = new EditCapture,
         private readonly ServiceAlignment $serviceAlignment = new ServiceAlignment,
+        private readonly SiteContact $contact = new SiteContact,
     ) {}
 
     /**
@@ -231,6 +233,12 @@ class ReviewActions
         $alignment = $this->serviceAlignment->check($content);
         if ($alignment['checked'] && ! $alignment['aligned'] && $alignment['note'] !== null) {
             $warnings[] = $alignment['note'];
+        }
+
+        // Never silently drop the phone: flag a missing business number before it publishes without one.
+        $site = $content->site;
+        if ($site !== null && $this->contact->phone($site) === null) {
+            $warnings[] = 'No business phone is set — the site header, hero and CTA will have no number to call. Add it in the setup wizard (Business step).';
         }
 
         return $warnings;

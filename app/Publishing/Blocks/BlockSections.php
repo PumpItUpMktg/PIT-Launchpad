@@ -117,8 +117,9 @@ final class BlockSections
         ];
 
         if ($ctx->emergency && $ctx->hasPhone()) {
+            // Emergency call-now uses the dedicated after-hours line when set, else the main number.
             $children[] = $this->b->paragraph(
-                'Or call now: <a href="'.$this->attr($ctx->phoneTel).'">'.$this->text($ctx->phoneDisplay).'</a>',
+                'Or call now: <a href="'.$this->attr($ctx->emergencyCallTel()).'">'.$this->text($ctx->emergencyCallDisplay()).'</a>',
                 ['textColor' => 'base', 'className' => 'lp-callnow'],
             );
         }

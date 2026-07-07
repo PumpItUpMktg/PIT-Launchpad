@@ -3,6 +3,7 @@
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Business;
 use App\Filament\Pages\Guided\ConnectWordpress;
+use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
@@ -55,6 +56,25 @@ test('add / remove service mutate the stated list', function () {
         ->assertSet('newService', '')
         ->call('removeService', 0)
         ->assertSet('services', []);
+});
+
+test('captures the business phone + emergency line onto the site and mirrors to the primary location', function () {
+    // A primary location exists (created earlier by territory) but carries no phone yet.
+    $location = Location::factory()->create(['site_id' => $this->site->id, 'phone' => null]);
+
+    Livewire::test(Business::class)
+        ->set('businessName', 'Sewer Gurus')
+        ->set('trade', 'Sewer repair')
+        ->set('phone', '(973) 555-0100')
+        ->set('emergencyPhone', '(973) 555-9111')
+        ->call('proceed')
+        ->assertRedirect(ConnectWordpress::getUrl());
+
+    $site = $this->site->fresh();
+    expect($site->phone)->toBe('(973) 555-0100')
+        ->and($site->emergency_phone)->toBe('(973) 555-9111')
+        // NAP stays consistent: the phone-less primary location inherits the business number
+        ->and($location->fresh()->phone)->toBe('(973) 555-0100');
 });
 
 test('choosing a logo file uploads it and stores it on SiteBranding', function () {
