@@ -25,7 +25,8 @@ final class BlockPageComposer
      * @param  list<array{title?: string, description?: string}>  $differentiators  Why-Choose-Us items (site narrative)
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
      * @param  list<string>  $serviceAreaCounties  named counties served (the "county level"), shown first
-     * @param  list<string>  $serviceAreas  towns/cities served, largest-first (data-gated)
+     * @param  list<array{label: string, url: string}>  $serviceAreas  towns largest-first, with real page links (data-gated)
+     * @param  list<array{title: string, description: string}>  $processSteps  the tenant's captured process (else a safe default)
      */
     public function composeHome(
         array $slots,
@@ -39,6 +40,7 @@ final class BlockPageComposer
         array $serviceAreaCounties = [],
         array $serviceAreas = [],
         ?string $serviceAreasMore = null,
+        array $processSteps = [],
     ): string {
         $hero = $this->sections->hero(
             eyebrow: $this->str($slots['service_area'] ?? ''),
@@ -68,10 +70,12 @@ final class BlockPageComposer
             items: $differentiators,
         );
 
-        // 5. How It Works — presentational (business-agnostic default), always renders.
+        // 5. How It Works — the tenant's real process when captured, else a safe business-agnostic
+        //    default. Always renders.
         $process = $this->sections->howItWorks(
             eyebrow: 'How it works',
             heading: 'Getting started is simple',
+            steps: $processSteps,
         );
 
         $proof = $this->sections->proofGallery(

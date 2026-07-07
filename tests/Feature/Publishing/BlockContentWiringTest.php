@@ -133,6 +133,8 @@ it('the areas section leads with the named counties, then lists towns largest-fi
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Tinytown', 'size_tier' => 'small', 'population' => 1500]);
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'size_tier' => 'major', 'population' => 300000]);
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bloomfield', 'size_tier' => 'medium', 'population' => 50000]);
+    // Newark has a real location page → its pill links; Tinytown has none → plain pill (no invented URL).
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'slug' => 'newark', 'title' => 'Newark']);
 
     $home = blockHomePage($site);
     $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
@@ -140,11 +142,43 @@ it('the areas section leads with the named counties, then lists towns largest-fi
     expect($markup)
         ->toContain('Serving Essex County and Hudson County.') // named from the SELECTED county geoids
         ->not->toContain('Ocean County')                       // an unselected in-state county is excluded
-        ->toContain('Areas we serve');
+        ->toContain('Areas we serve')
+        ->toContain('href="https://sewergurus.com/newark"');   // real town-page link
 
     // Largest-first: major before medium before small.
     expect(mb_strpos($markup, 'Newark'))->toBeLessThan(mb_strpos($markup, 'Bloomfield'));
     expect(mb_strpos($markup, 'Bloomfield'))->toBeLessThan(mb_strpos($markup, 'Tinytown'));
+});
+
+it('service cards carry a real description even without SEO meta — from the page slots', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'drain-cleaning', 'title' => 'Drain Cleaning',
+        'slot_payload' => ['hero_subhead' => 'Snaking and hydro-jetting that clears the whole pipe wall.'],
+        'meta' => [], // no SEO meta_description
+    ]);
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Drain Cleaning')
+        ->toContain('Snaking and hydro-jetting that clears the whole pipe wall.'); // real blurb, not just "Learn more"
+});
+
+it('How It Works uses the tenant process when captured (else the safe default)', function () {
+    $site = Site::factory()->create();
+    ProofItem::factory()->create(['site_id' => $site->id, 'type' => ProofType::Process, 'payload' => ['title' => 'Book a camera inspection', 'description' => 'We scope the line first — no guessing.']]);
+    ProofItem::factory()->create(['site_id' => $site->id, 'type' => ProofType::Process, 'payload' => ['title' => 'Fixed-price plan', 'description' => 'You approve the number before we dig.']]);
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Book a camera inspection')
+        ->toContain('Fixed-price plan')
+        ->not->toContain('Free assessment'); // the generic default is replaced by the real process
 });
 
 it('data-gated sections stay hidden when their data is absent — degrade, never fabricate', function () {

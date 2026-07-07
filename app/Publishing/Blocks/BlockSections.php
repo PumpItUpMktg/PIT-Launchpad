@@ -271,13 +271,26 @@ final class BlockSections
      * has no coverage captured. Geo lives only here and on location pages, never in silo/service copy.
      *
      * @param  list<string>  $counties  named counties served (broadest first line)
-     * @param  list<string>  $cities  town/city names, largest-first (already resolved + truncated)
+     * @param  list<array{label: string, url: string}>  $cities  towns largest-first; a non-empty url is a REAL town page
      */
     public function serviceAreas(string $eyebrow, string $heading, array $counties, array $cities, ?string $more = null): string
     {
         $counties = array_values(array_filter(array_map('trim', $counties), fn (string $c): bool => $c !== ''));
-        $cities = array_values(array_filter(array_map('trim', $cities), fn (string $c): bool => $c !== ''));
-        if ($counties === [] && $cities === []) {
+
+        // A town with a real location page becomes a link; otherwise a plain pill. Never an invented URL.
+        $cityTags = [];
+        foreach ($cities as $city) {
+            $label = trim($city['label']);
+            if ($label === '') {
+                continue;
+            }
+            $url = trim($city['url']);
+            $cityTags[] = $url !== ''
+                ? '<a href="'.$this->attr($url).'">'.$this->text($label).'</a>'
+                : $this->text($label);
+        }
+
+        if ($counties === [] && $cityTags === []) {
             return '';
         }
 
@@ -290,12 +303,11 @@ final class BlockSections
             );
         }
 
-        if ($cities !== []) {
-            $tags = $cities;
+        if ($cityTags !== []) {
             if ($more !== null && trim($more) !== '') {
-                $tags[] = trim($more);
+                $cityTags[] = $this->text(trim($more));
             }
-            $children[] = $this->b->list($tags, ['className' => 'lp-area-tags']);
+            $children[] = $this->b->list($cityTags, ['className' => 'lp-area-tags']);
         }
 
         return $this->b->group($children, ['align' => 'full', 'className' => 'lp-areas']);

@@ -64,7 +64,36 @@ final class BlockContentAssembler
             serviceAreaCounties: $areas['counties'],
             serviceAreas: $areas['cities'],
             serviceAreasMore: $areas['more'] > 0 ? '+ '.$areas['more'].' more' : null,
+            processSteps: $this->processSteps($content),
         );
+    }
+
+    /**
+     * The tenant's real "how it works" — ProofItem type=process (title + description). Descriptive, not
+     * a claim, so substantiation isn't required. Fewer than 2 real steps → [] so the section keeps its
+     * safe business-agnostic default rather than a lopsided one.
+     *
+     * @return list<array{title: string, description: string}>
+     */
+    private function processSteps(Content $content): array
+    {
+        $items = ProofItem::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('type', ProofType::Process->value)
+            ->orderBy('created_at')
+            ->limit(3)
+            ->get();
+
+        $steps = [];
+        foreach ($items as $item) {
+            $title = $this->payloadString($item, ['title', 'label']);
+            $description = $this->payloadString($item, ['description', 'text']);
+            if ($title !== '' && $description !== '') {
+                $steps[] = ['title' => $title, 'description' => $description];
+            }
+        }
+
+        return count($steps) >= 2 ? $steps : [];
     }
 
     /**
@@ -201,15 +230,53 @@ final class BlockContentAssembler
             if ($title === '') {
                 continue;
             }
-            $metaSeo = is_array($page->meta['seo'] ?? null) ? $page->meta['seo'] : [];
             $cards[] = [
                 'title' => $title,
-                'blurb' => trim((string) ($metaSeo['meta_description'] ?? '')),
+                'blurb' => $this->serviceBlurb($page),
                 'url' => $home.ltrim((string) $page->slug, '/'),
             ];
         }
 
         return $cards;
+    }
+
+    /**
+     * A real one-line description for a service card — never just "Learn more". Prefers the page's SEO
+     * meta description, then falls back to its own hero sub / intro / problem slot (so a card carries
+     * substance even before SEO is written), stripped to a clean single line.
+     */
+    private function serviceBlurb(Content $page): string
+    {
+        $seo = is_array($page->meta['seo'] ?? null) ? $page->meta['seo'] : [];
+        $desc = trim((string) ($seo['meta_description'] ?? ''));
+        if ($desc !== '') {
+            return $this->oneLine($desc, 155);
+        }
+
+        $slots = is_array($page->slot_payload) ? $page->slot_payload : [];
+        foreach (['hero_subhead', 'intro', 'hero_problem', 'summary', 'body'] as $key) {
+            $value = $slots[$key] ?? null;
+            $text = trim(is_array($value) ? (string) ($value[0] ?? '') : (string) $value);
+            if ($text !== '') {
+                return $this->oneLine(strip_tags($text), 155);
+            }
+        }
+
+        return '';
+    }
+
+    /** Collapse to one line and truncate at a word boundary. */
+    private function oneLine(string $text, int $limit): string
+    {
+        $text = trim((string) preg_replace('/\s+/', ' ', $text));
+        if (mb_strlen($text) <= $limit) {
+            return $text;
+        }
+
+        $cut = mb_substr($text, 0, $limit);
+        $space = mb_strrpos($cut, ' ');
+
+        return rtrim($space !== false ? mb_substr($cut, 0, $space) : $cut, ' ,.;:').'…';
     }
 
     /**
