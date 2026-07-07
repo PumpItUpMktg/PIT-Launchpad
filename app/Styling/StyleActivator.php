@@ -2,11 +2,15 @@
 
 namespace App\Styling;
 
+use App\Branding\BrandColors;
+use App\Branding\BrandVariationBuilder;
 use App\Enums\VoiceStatus;
+use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use App\Models\VoiceProfile;
 use App\Publishing\Chrome\SiteProfileAssembler;
 use Throwable;
@@ -24,7 +28,32 @@ final class StyleActivator
         private readonly WordpressClientFactory $factory,
         private readonly StyleRecommender $recommender,
         private readonly SiteProfileAssembler $profile,
+        private readonly BrandVariationBuilder $brandVariation,
     ) {}
+
+    /** The logo-derived brand colors for a site, or null when no usable logo palette was extracted. */
+    public function logoColors(Site $site): ?BrandColors
+    {
+        $branding = SiteBranding::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->first();
+
+        $set = is_array($branding?->logo_set) ? $branding->logo_set : [];
+        $primary = trim((string) ($set['primary'] ?? ''));
+        if ($primary === '') {
+            return null;
+        }
+
+        $accent = trim((string) ($set['accent'] ?? ''));
+
+        return new BrandColors($primary, $accent !== '' ? $accent : null);
+    }
+
+    /** Whether the logo-derived "Your brand colors" option is available for this site (a usable palette). */
+    public function logoColorsAvailable(Site $site): bool
+    {
+        return $this->logoColors($site) !== null;
+    }
 
     /** The variation the site renders in: explicit override → voice recommendation → Clean default. */
     public function resolve(Site $site): StyleVariation
@@ -53,8 +82,28 @@ final class StyleActivator
      */
     public function activate(Site $site): array
     {
-        $variation = $this->resolve($site);
         $client = $this->factory->forSite($site);
+
+        // The logo-derived "Your brand colors": build the per-tenant dynamic variation and push it
+        // inline. Only taken when the operator chose it AND a usable logo palette exists.
+        $logoColors = $site->use_logo_colors ? $this->logoColors($site) : null;
+        if ($logoColors !== null) {
+            try {
+                $result = $client->activateStyleVariation(
+                    BrandVariationBuilder::SLUG,
+                    $this->brandVariation->build($logoColors),
+                );
+            } catch (WordpressException $e) {
+                return ['updated' => false, 'error' => $e->getMessage(), 'variation' => BrandVariationBuilder::SLUG];
+            }
+
+            $this->pushChrome($client, $site);
+
+            return ['variation' => BrandVariationBuilder::SLUG] + $result;
+        }
+
+        // Curated variation: explicit override → voice recommendation → Clean default.
+        $variation = $this->resolve($site);
 
         try {
             $result = $client->activateStyle($variation->value);
@@ -62,15 +111,22 @@ final class StyleActivator
             return ['updated' => false, 'error' => $e->getMessage(), 'variation' => $variation->value];
         }
 
-        // The brand push also populates the universal header/footer chrome (brand + NAP + nav) — the
-        // same setup step writes both the theme.json variation AND the site profile. Best-effort: a
-        // chrome-push failure never fails the style activation.
+        $this->pushChrome($client, $site);
+
+        return ['variation' => $variation->value] + $result;
+    }
+
+    /**
+     * The brand push also populates the universal header/footer chrome (brand + NAP + nav) — the same
+     * setup step writes both the theme.json variation AND the site profile. Best-effort: a chrome-push
+     * failure never fails the style activation.
+     */
+    private function pushChrome(WordpressClient $client, Site $site): void
+    {
         try {
             $client->pushSiteProfile($this->profile->assemble($site));
         } catch (Throwable) {
             // Surfaced elsewhere (the operator can re-run launchpad:sync-site-profile); style stands.
         }
-
-        return ['variation' => $variation->value] + $result;
     }
 }

@@ -29,6 +29,20 @@ test('upsertContent posts to /content with the control-plane ULID and basic auth
     });
 });
 
+test('activateStyleVariation posts the inline theme_json to /style', function () {
+    Http::fake(['*/wp-json/launchpad/v1/style' => Http::response(['updated' => true, 'variation' => 'brand'], 200)]);
+
+    $result = wpClient()->activateStyleVariation('brand', ['title' => 'Your brand colors', 'settings' => ['color' => []]]);
+
+    expect($result['updated'])->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        return str_ends_with($request->url(), '/wp-json/launchpad/v1/style')
+            && $request['variation'] === 'brand'
+            && $request['theme_json']['title'] === 'Your brand colors';
+    });
+});
+
 test('pushSiteProfile posts the chrome profile to /site-profile', function () {
     Http::fake(['*/wp-json/launchpad/v1/site-profile' => Http::response(['updated' => true], 200)]);
 
