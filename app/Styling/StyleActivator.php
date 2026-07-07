@@ -55,6 +55,28 @@ final class StyleActivator
         return $this->logoColors($site) !== null;
     }
 
+    /**
+     * The colors + heading font the site ACTUALLY renders in — the logo-derived variation when chosen,
+     * else the resolved curated one. Lets the proof editor style a page exactly as it will ship, so the
+     * operator reviews the real look, not the raw Account palette.
+     *
+     * @return array{primary: string, accent: string, heading_font: string}
+     */
+    public function activeLook(Site $site): array
+    {
+        $logo = $site->use_logo_colors ? $this->logoColors($site) : null;
+        if ($logo !== null) {
+            $resolved = $this->brandVariation->resolve($logo);
+            $font = StyleVariation::from($resolved['base'])->tokens()['heading_font'];
+
+            return ['primary' => $resolved['primary'], 'accent' => $resolved['accent'], 'heading_font' => $font];
+        }
+
+        $tokens = $this->resolve($site)->tokens();
+
+        return ['primary' => $tokens['primary'], 'accent' => $tokens['accent'], 'heading_font' => $tokens['heading_font']];
+    }
+
     /** The variation the site renders in: explicit override → voice recommendation → Clean default. */
     public function resolve(Site $site): StyleVariation
     {

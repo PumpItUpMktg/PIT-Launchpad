@@ -1,6 +1,7 @@
 <?php
 
 use App\ContentEngine\Review\ProofPreview;
+use App\Styling\StyleVariation;
 use Tests\Support\PageFixture;
 
 it('renders the kit sections in order with real copy, brand kit, and the SEO strip', function () {
@@ -38,4 +39,16 @@ it('marks entity-sourced slots as non-editable and empty slots as empty', functi
     expect($sections->every(fn ($s) => $s['empty'] === true))->toBeTrue();
     // entity-sourced slots (platform-filled proof/NAP) are not edited in the proof step
     expect($sections->contains(fn ($s) => $s['editable'] === false))->toBeTrue();
+});
+
+it('styles the proof in the site ACTIVE theme.json variation, not the raw Account palette', function () {
+    $page = PageFixture::intakePage();
+    $page->site->forceFill(['style_variation' => StyleVariation::Bold->value])->save();
+
+    $brand = (new ProofPreview)->for($page->fresh())['brand'];
+
+    // Bold variation — the look the page actually ships in.
+    expect($brand['primary'])->toBe('#0B1F33')
+        ->and($brand['accent'])->toBe('#EA580C')
+        ->and($brand['heading_font'])->toBe('Archivo');
 });
