@@ -9,6 +9,7 @@ use App\Enums\PageType;
 use App\Enums\StandardPageType;
 use App\Models\BuildPage;
 use App\Models\Content;
+use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -35,6 +36,7 @@ final class PageMaterializer
     public function __construct(
         private readonly Permalinks $permalinks,
         private readonly GuidedEntityProjector $projector,
+        private readonly TargetKeywordResolver $keywords,
     ) {}
 
     /**
@@ -97,6 +99,10 @@ final class PageMaterializer
                     ? $this->projector->marketForCoverageArea($entry->page_key, $site)
                     : null;
 
+                // Carry the spoke's Pass-D keyword onto the page (before create, so the rail + grounding
+                // read a real target). Resolve the string to a §5 Keyword — the single representation.
+                $targetKeyword = $this->keywords->forSpoke($site, $entry->spoke_id, $silo?->id);
+
                 $content = Content::create([
                     'site_id' => $site->id, // explicit: no current-site scope in console/job context
                     'kind' => ContentKind::Page,
@@ -109,11 +115,19 @@ final class PageMaterializer
                     'silo_id' => $silo?->id,
                     'primary_service_id' => $primaryService?->id,
                     'market_id' => $market?->id,
+                    'target_keyword_id' => $targetKeyword?->id,
                     'wireframe_kit_id' => $kit?->id,
                     'wireframe_kit_version' => $kit?->version,
                 ]);
 
                 $entry->forceFill(['content_id' => $content->id])->save();
+
+                // Complete the bi-directional link so §5 coverage sees this keyword as covered (only when
+                // the keyword isn't already pointed at another page — never clobber an existing target).
+                if ($targetKeyword !== null && $targetKeyword->target_content_id === null) {
+                    $targetKeyword->forceFill(['target_content_id' => $content->id])->save();
+                }
+
                 $pages[] = $content;
             }
 

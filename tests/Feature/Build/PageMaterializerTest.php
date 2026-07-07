@@ -10,6 +10,7 @@ use App\Enums\PageType;
 use App\Enums\StandardPageType;
 use App\Models\BuildPage;
 use App\Models\Content;
+use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -160,4 +161,40 @@ test('the URL map lists every page permalink after materialize, before drafting'
 
     expect($map)->toHaveCount(2)
         ->and(collect($map)->values()->all())->toContain('/home', '/austin-tx');
+});
+
+test('materialize carries the spoke primary_keyword onto the page as a resolved Keyword target', function () {
+    $site = Site::factory()->create();
+    $blueprint = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+    $core = Spoke::factory()->create([
+        'site_id' => $site->id, 'silo_blueprint_id' => $blueprint->id, 'is_pillar' => false,
+        'name' => 'Drain Cleaning', 'primary_keyword' => 'drain cleaning newark', 'volume' => 480,
+    ]);
+    manifestEntry($site, BuildSource::Service, $core->id, 'Drain Cleaning', ['spoke_id' => $core->id]);
+
+    app(PageMaterializer::class)->materialize($site);
+
+    $page = pagesFor($site)->firstWhere('title', 'Drain Cleaning');
+    expect($page->target_keyword_id)->not->toBeNull();
+
+    $kw = Keyword::withoutGlobalScope(SiteScope::class)->find($page->target_keyword_id);
+    expect($kw->query)->toBe('drain cleaning newark')
+        ->and($kw->volume)->toBe(480)
+        ->and($kw->target_content_id)->toBe($page->id); // bi-directional link → §5 sees it covered
+});
+
+test('materialize reuses an existing Keyword rather than duplicating (matched on normalized query)', function () {
+    $site = Site::factory()->create();
+    $blueprint = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+    $core = Spoke::factory()->create([
+        'site_id' => $site->id, 'silo_blueprint_id' => $blueprint->id, 'is_pillar' => false,
+        'name' => 'Drain Cleaning', 'primary_keyword' => '  Drain Cleaning Newark ', // case/spacing differ
+    ]);
+    $existing = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'drain cleaning newark']);
+    manifestEntry($site, BuildSource::Service, $core->id, 'Drain Cleaning', ['spoke_id' => $core->id]);
+
+    app(PageMaterializer::class)->materialize($site);
+
+    expect(Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1); // no dup
+    expect(pagesFor($site)->firstWhere('title', 'Drain Cleaning')->target_keyword_id)->toBe($existing->id);
 });
