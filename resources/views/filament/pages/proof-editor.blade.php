@@ -116,7 +116,17 @@
                                     <input type="file" wire:model="imageUpload" accept="image/*">
                                     <div wire:loading wire:target="imageUpload" class="pe-note">Uploading…</div>
                                     @error('imageUpload') <div class="pe-note" style="color:#b91c1c">{{ $message }}</div> @enderror
-                                    <button class="pe-btn ghost sm" wire:click="cancelReplace" style="margin-top:6px">Cancel</button>
+                                    @if (count($this->library))
+                                        <div class="pe-note" style="margin-top:8px">…or choose from your library:</div>
+                                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+                                            @foreach ($this->library as $asset)
+                                                <img src="{{ $asset['url'] }}" alt="{{ $asset['alt'] }}" title="{{ $asset['alt'] }}"
+                                                    wire:click="chooseFromLibrary('{{ $sec['key'] }}', '{{ $asset['id'] }}')"
+                                                    style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--pe-line);cursor:pointer">
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                    <button class="pe-btn ghost sm" wire:click="cancelReplace" style="margin-top:8px">Cancel</button>
                                 </div>
                             @endif
                             <span class="pe-note">Weird AI image? Regenerate just this one — or drop in a real photo. The rest stays put.</span>

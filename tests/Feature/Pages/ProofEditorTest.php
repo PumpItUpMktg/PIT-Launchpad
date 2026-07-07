@@ -1,12 +1,14 @@
 <?php
 
 use App\Enums\ContentStatus;
+use App\Enums\MediaKind;
 use App\Enums\RenderStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\ProofEditor;
 use App\Jobs\RenderImage;
 use App\Models\Content;
 use App\Models\ContentEdit;
+use App\Models\MediaAsset;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\User;
@@ -125,5 +127,26 @@ it('replaces an image slot with an upload — stores to R2, writes the render jo
     expect($fresh->r2_key)->not->toBe('sites/x/old.webp')                 // the upload replaced it
         ->and($fresh->status)->toBe(RenderStatus::Succeeded);   // ready, no re-render
     Storage::disk('r2')->assertExists($fresh->r2_key);
+    expect(ContentEdit::query()->where('content_id', $page->id)->where('field', 'image:hero_image')->exists())->toBeTrue();
+});
+
+it('chooses an existing library image for a slot — writes the render job and captures the edit', function () {
+    $page = draftedPage();
+    $asset = MediaAsset::factory()->create([
+        'site_id' => $page->site_id, 'kind' => MediaKind::Photo,
+        'r2_key' => 'sites/x/lib.webp', 'alt_text' => 'Our crew',
+    ]);
+    $job = RenderJob::factory()->create([
+        'site_id' => $page->site_id, 'content_id' => $page->id, 'slot' => 'hero_image',
+        'status' => RenderStatus::Succeeded, 'r2_key' => 'sites/x/old.webp',
+    ]);
+
+    Livewire::withQueryParams(['content' => $page->id])
+        ->test(ProofEditor::class)
+        ->call('chooseFromLibrary', 'hero_image', $asset->id);
+
+    $fresh = RenderJob::withoutGlobalScope(SiteScope::class)->find($job->id);
+    expect($fresh->r2_key)->toBe('sites/x/lib.webp')
+        ->and($fresh->alt)->toBe('Our crew');
     expect(ContentEdit::query()->where('content_id', $page->id)->where('field', 'image:hero_image')->exists())->toBeTrue();
 });
