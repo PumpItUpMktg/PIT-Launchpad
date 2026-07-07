@@ -27,6 +27,9 @@ final class BlockPageComposer
      * @param  list<string>  $serviceAreaCounties  named counties served (the "county level"), shown first
      * @param  list<array{label: string, url: string}>  $serviceAreas  towns largest-first, with real page links (data-gated)
      * @param  list<array{title: string, description: string}>  $processSteps  the tenant's captured process (else a safe default)
+     * @param  bool  $serviceAreaMapAvailable  whether the tenant has map geometry (served counties / geocoded
+     *                                          towns) — when true the areas section leads with the interactive
+     *                                          map; the geometry itself travels on the blob, not in this markup.
      * @param  bool  $preview  two contexts, one rule: preview (operator proof) builds ALL recommended
      *                         sections — a data-gated section with no data renders a LABELED example
      *                         placeholder so the operator sees the whole page and what's still missing;
@@ -47,6 +50,7 @@ final class BlockPageComposer
         ?string $serviceAreasMore = null,
         array $processSteps = [],
         bool $preview = false,
+        bool $serviceAreaMapAvailable = false,
     ): string {
         $hero = $this->sections->hero(
             eyebrow: $this->str($slots['service_area'] ?? ''),
@@ -109,6 +113,7 @@ final class BlockPageComposer
             cities: $serviceAreas,
             more: $serviceAreasMore,
             preview: $preview,
+            mapAvailable: $serviceAreaMapAvailable,
         );
 
         $cta = $this->sections->cta(

@@ -34,8 +34,10 @@ final class BlockContentAssembler
      * @param  array<string, array<string, mixed>>  $images  the resolved image map
      * @param  bool  $preview  operator proof-view context — build all sections with labeled placeholders
      *                         for missing data (see {@see BlockPageComposer::composeHome}); publish omits.
+     * @param  bool  $mapAvailable  whether the tenant has service-area map geometry (resolved once by the
+     *                              caller and carried on the blob) — drives the interactive areas map.
      */
-    public function compose(Content $content, array $slots, array $images, bool $preview = false): ?string
+    public function compose(Content $content, array $slots, array $images, bool $preview = false, bool $mapAvailable = false): ?string
     {
         if ($content->kind !== ContentKind::Page) {
             return null;
@@ -69,6 +71,7 @@ final class BlockContentAssembler
             serviceAreasMore: $areas['more'] > 0 ? '+ '.$areas['more'].' more' : null,
             processSteps: $this->processSteps($content),
             preview: $preview,
+            serviceAreaMapAvailable: $mapAvailable,
         );
     }
 
