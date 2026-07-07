@@ -4,10 +4,14 @@
     $brand = $preview['brand'] ?? [];
     $primary = $brand['primary'] ?? '#0B2545';
     $accent = $brand['accent'] ?? '#5BC0EB';
+    // The active theme.json variation's heading typeface — so the proof reads in the shipping type.
+    $headingFont = ($brand['heading_font'] ?? '') !== '' && ($brand['heading_font'] ?? '') !== 'inherit'
+        ? "'".$brand['heading_font']."', sans-serif"
+        : 'inherit';
 @endphp
 
 <x-filament-panels::page>
-<div class="pe-scope" style="--pe-primary: {{ $primary }}; --pe-accent: {{ $accent }};">
+<div class="pe-scope" style="--pe-primary: {{ $primary }}; --pe-accent: {{ $accent }}; --pe-heading: {{ $headingFont }};">
     <style>
         .pe-scope{--pe-line:#DDE4E9;--pe-ink:#172A2F;--pe-soft:#54666C}
         .pe-top{display:flex;align-items:center;gap:14px;margin-bottom:16px}
@@ -21,7 +25,8 @@
         .pe-grid{display:grid;grid-template-columns:1fr 280px;gap:20px;align-items:start}
         .pe-doc{background:#fff;border:1px solid var(--pe-line);border-radius:14px;overflow:hidden}
         .pe-dochead{padding:18px 24px;border-bottom:1px solid var(--pe-line);background:linear-gradient(180deg,color-mix(in srgb,var(--pe-primary) 7%,#fff),#fff)}
-        .pe-eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--pe-primary)}
+        .pe-eyebrow{font-family:var(--pe-heading);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--pe-primary)}
+        .pe-doc .pe-role[data-head] .pe-val, .pe-hero-val{font-family:var(--pe-heading)}
         .pe-perma{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--pe-soft);margin-top:3px}
         .pe-sec{padding:16px 24px;border-bottom:1px solid #EEF2F4}
         .pe-sec:last-child{border-bottom:none}

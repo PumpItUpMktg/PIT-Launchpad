@@ -5,6 +5,7 @@ namespace App\ContentEngine\Review;
 use App\Enums\SlotContentType;
 use App\Models\Content;
 use App\PageBuilder\Schema\SlotDefinition;
+use App\Styling\StyleActivator;
 
 /**
  * The structured proof preview (§4) — the page rendered in the kit's block structure with the brand
@@ -20,7 +21,7 @@ use App\PageBuilder\Schema\SlotDefinition;
 class ProofPreview
 {
     /**
-     * @return array{brand: array{name: string, logo_url: ?string, primary: string, accent: string}, sections: list<array<string, mixed>>, seo: array{title: ?string, meta_description: ?string}, permalink: string}
+     * @return array{brand: array{name: string, logo_url: ?string, primary: string, accent: string, heading_font: string}, sections: list<array<string, mixed>>, seo: array{title: ?string, meta_description: ?string}, permalink: string}
      */
     public function for(Content $page): array
     {
@@ -33,15 +34,30 @@ class ProofPreview
     }
 
     /**
-     * @return array{name: string, logo_url: ?string, primary: string, accent: string}
+     * The brand identity for the preview chrome: the Account's name + logo, but the COLORS + heading
+     * font come from the site's ACTIVE theme.json variation (what actually ships) — not the raw Account
+     * palette — so the operator proofs the real look.
+     *
+     * @return array{name: string, logo_url: ?string, primary: string, accent: string, heading_font: string}
      */
     private function brand(Content $page): array
     {
         $account = $page->site?->account;
-
-        return $account !== null
+        $identity = $account !== null
             ? $account->branding()
             : ['name' => '', 'logo_url' => null, 'primary' => '#0B2545', 'accent' => '#5BC0EB'];
+
+        $site = $page->site;
+        if ($site !== null) {
+            $look = app(StyleActivator::class)->activeLook($site);
+            $identity['primary'] = $look['primary'];
+            $identity['accent'] = $look['accent'];
+            $identity['heading_font'] = $look['heading_font'];
+        }
+
+        $identity['heading_font'] ??= 'inherit';
+
+        return $identity;
     }
 
     /**
