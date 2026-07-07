@@ -34,13 +34,14 @@ it('assembles the site profile from real §1 data — brand, NAP, real page link
     // Markets — priority first.
     Market::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'tier' => MarketTier::Coverage]);
     Market::factory()->create(['site_id' => $site->id, 'name' => 'Jersey City', 'tier' => MarketTier::Priority]);
-    // Uploaded logo → the header serves it from R2.
-    SiteBranding::factory()->create(['site_id' => $site->id, 'logo_set' => ['url' => 'https://cdn.example/sites/x/brand-logo.svg']]);
+    // Uploaded logo → the header serves it from R2, and carries the chosen header tone.
+    SiteBranding::factory()->create(['site_id' => $site->id, 'logo_set' => ['url' => 'https://cdn.example/sites/x/brand-logo.svg', 'header_tone' => 'dark']]);
 
     $profile = app(SiteProfileAssembler::class)->assemble($site->fresh());
 
     expect($profile['brand_name'])->toBe('Sewer Gurus')
         ->and($profile['logo_url'])->toBe('https://cdn.example/sites/x/brand-logo.svg')
+        ->and($profile['header_tone'])->toBe('dark')
         ->and($profile['tagline'])->toBe('Commercial Plumbing · Northern NJ')
         ->and($profile['phone'])->toBe('(973) 555-0100')
         ->and($profile['phone_tel'])->toBe('tel:9735550100')
@@ -63,6 +64,7 @@ it('degrades cleanly for a bare site — no phone, no links, chrome falls back t
     expect($profile['brand_name'])->toBe('Bare Co')
         ->and($profile['phone'])->toBe('')
         ->and($profile['phone_tel'])->toBe('')
+        ->and($profile['header_tone'])->toBe('dark') // no logo → the platform's standard dark header
         ->and($profile['services'])->toBe([])
         ->and($profile['areas'])->toBe([])
         ->and($profile['company'])->toBe([])

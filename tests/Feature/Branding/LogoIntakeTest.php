@@ -27,14 +27,16 @@ it('stores the logo to R2 and persists url + extracted colors onto SiteBranding.
 
     $set = app(LogoIntake::class)->store($site, twoColorLogo(), 'png');
 
-    expect($set)->toHaveKeys(['url', 'r2_key', 'ext', 'primary', 'accent'])
-        ->and($set['ext'])->toBe('png');
+    expect($set)->toHaveKeys(['url', 'r2_key', 'ext', 'primary', 'accent', 'header_tone'])
+        ->and($set['ext'])->toBe('png')
+        ->and($set['header_tone'])->toBeIn(['dark', 'light']); // header background chosen for the logo
     Storage::disk('r2')->assertExists($set['r2_key']);
 
     $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
     expect($branding->logo_set['url'])->toBe($set['url'])
         ->and($branding->logo_set['primary'])->toBeString()
-        ->and($branding->logo_set['accent'])->toBeString();
+        ->and($branding->logo_set['accent'])->toBeString()
+        ->and($branding->logo_set['header_tone'])->toBeIn(['dark', 'light']);
 });
 
 it('stores a monochrome logo with no accent (option will borrow it)', function () {

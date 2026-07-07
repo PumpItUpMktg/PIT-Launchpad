@@ -22,10 +22,11 @@ final class LogoIntake
     public function __construct(
         private readonly TenantStorage $storage,
         private readonly LogoColorExtractor $extractor,
+        private readonly LogoHeaderTone $headerTone,
     ) {}
 
     /**
-     * @return array{url: string, r2_key: string, ext: string, primary?: string, accent?: string}
+     * @return array{url: string, r2_key: string, ext: string, header_tone: string, primary?: string, accent?: string}
      */
     public function store(Site $site, string $bytes, string $extension): array
     {
@@ -33,7 +34,8 @@ final class LogoIntake
         $key = $this->storage->put($site, 'brand-logo.'.$ext, $bytes);
         $url = Storage::disk(TenantStorage::DISK)->url($key);
 
-        $set = ['url' => $url, 'r2_key' => $key, 'ext' => $ext];
+        // Which header background best shows this logo (dark vs light) — chosen, not guessed.
+        $set = ['url' => $url, 'r2_key' => $key, 'ext' => $ext, 'header_tone' => $this->headerTone->forLogo($bytes, $ext)];
 
         $colors = $this->extractor->extract($bytes, $ext);
         if ($colors !== null) {
@@ -45,8 +47,8 @@ final class LogoIntake
 
         $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->firstOrCreate(['site_id' => $site->id]);
         $existing = is_array($branding->logo_set) ? $branding->logo_set : [];
-        // A re-upload replaces the logo + its colors cleanly (drop a stale accent from a prior logo).
-        unset($existing['url'], $existing['r2_key'], $existing['ext'], $existing['primary'], $existing['accent']);
+        // A re-upload replaces the logo + its derived colors/tone cleanly (drop stale values from a prior logo).
+        unset($existing['url'], $existing['r2_key'], $existing['ext'], $existing['header_tone'], $existing['primary'], $existing['accent']);
         $branding->update(['logo_set' => array_merge($existing, $set)]);
 
         return $set;
