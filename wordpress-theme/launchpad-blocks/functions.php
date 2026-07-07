@@ -26,11 +26,19 @@ if (! defined('ABSPATH')) {
 
 add_action('wp_enqueue_scripts', function (): void {
     $theme = wp_get_theme();
+    $version = (string) $theme->get('Version');
+    $dir = get_stylesheet_directory_uri();
 
-    wp_enqueue_style(
-        'launchpad-blocks',
-        get_stylesheet_directory_uri().'/assets/theme.css',
-        [],
-        (string) $theme->get('Version')
-    );
+    wp_enqueue_style('launchpad-blocks', $dir.'/assets/theme.css', [], $version);
+
+    // "Areas we serve" interactive map: self-hosted Leaflet + init, loaded ONLY on a singular page
+    // that actually carries map geometry (the companion plugin's `_lp_area_map` meta) — so Leaflet
+    // never loads on a page without a map. The plugin prints the geometry as window.lpAreaMap early
+    // in the footer; assets/area-map.js reads it + draws into .lp-areas-map (vector marks, no image
+    // deps). No geometry → nothing enqueues and the section shows its text fallback.
+    if (is_singular() && get_post_meta(get_queried_object_id(), '_lp_area_map', true)) {
+        wp_enqueue_style('leaflet', $dir.'/assets/vendor/leaflet/leaflet.css', [], '1.9.4');
+        wp_enqueue_script('leaflet', $dir.'/assets/vendor/leaflet/leaflet.js', [], '1.9.4', true);
+        wp_enqueue_script('launchpad-area-map', $dir.'/assets/area-map.js', ['leaflet'], $version, true);
+    }
 });

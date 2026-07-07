@@ -20,6 +20,7 @@ use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\PublishEligibility;
 use App\Publishing\Blocks\BlockContentAssembler;
+use App\Publishing\Blocks\ServiceAreaMap;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use App\Support\SeoTitle;
 use Illuminate\Support\Collection;
@@ -46,6 +47,7 @@ class MetaBlobAssembler
         private readonly LibraryHubComposer $libraryHub,
         private readonly ServiceSchemaBuilder $serviceSchema,
         private readonly BlockContentAssembler $blockContent,
+        private readonly ServiceAreaMap $serviceAreaMap,
     ) {}
 
     /**
@@ -138,6 +140,13 @@ class MetaBlobAssembler
             : $this->heroImageOverride($content, $this->images($renderJobs));
         $slots = $placeholder ? $this->placeholderSlots($content) : $this->slotPayload($content);
 
+        // The "Areas we serve" interactive map's geometry — the served-county polygons + tiered town
+        // points. It rides the blob (NOT post_content — kses would strip embedded geometry); the plugin
+        // stores it and prints it for the theme's Leaflet init. Home only; null elsewhere / no coverage.
+        $areaMap = $content->page_type?->value === 'home'
+            ? $this->serviceAreaMap->for((string) $content->site_id)
+            : null;
+
         return [
             'content_id' => $content->id,
             'kind' => $content->kind->value,
@@ -166,7 +175,10 @@ class MetaBlobAssembler
             // Gutenberg pivot: core-block markup for the WP post_content. Non-null only for page
             // types whose block pattern has shipped (home first); the Layer-5 plugin prefers this
             // over elementor_data when present. Composed from the SAME resolved slots + images.
-            'post_content' => $this->blockContent->compose($content, $slots, $images, $preview),
+            'post_content' => $this->blockContent->compose($content, $slots, $images, $preview, $areaMap !== null),
+            // Service-area map geometry for the theme's Leaflet init (home only; null = no map). The
+            // block markup carries only the mount container + text fallback; the geometry travels here.
+            'service_area_map' => $areaMap,
         ];
     }
 

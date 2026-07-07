@@ -322,6 +322,59 @@ it('returns null for a page type whose block pattern has not shipped (falls back
     expect(app(BlockContentAssembler::class)->compose($service->fresh(), [], []))->toBeNull();
 });
 
+it('the areas section leads with the map mount + keeps the text fallback when geometry exists', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34013']]);
+
+    $gaz = Mockery::mock(MunicipalityGazetteer::class);
+    $gaz->shouldReceive('countiesInState')->with('34')->andReturn([new County('34013', 'Essex County', '34', '013')]);
+    $gaz->shouldReceive('countyPolygons')->andReturn([['geo_id' => '34013', 'name' => 'Essex County', 'rings' => [[['lat' => 40.8, 'lng' => -74.2]]]]]);
+    app()->instance(MunicipalityGazetteer::class, $gaz);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'size_tier' => 'major', 'lat' => 40.73, 'lng' => -74.17]);
+
+    $home = blockHomePage($site);
+
+    // Compose with the map available → the mount + the crawlable text fallback both render.
+    $withMap = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], mapAvailable: true);
+    expect($withMap)
+        ->toContain('class="lp-areas-map"')          // the Leaflet mount point
+        ->toContain('lp-areas--map')                 // section modifier
+        ->toContain('Serving Essex County.')         // county text stays (SEO / a11y / no-JS)
+        ->toContain('Newark');                       // town pill stays
+
+    // Compose without the map → no mount, text-only (back-compat).
+    $noMap = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+    expect($noMap)->not->toContain('lp-areas-map')->toContain('Serving Essex County.');
+});
+
+it('the meta-blob carries the service_area_map geometry for Home (and drives the mount)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34013']]);
+
+    $gaz = Mockery::mock(MunicipalityGazetteer::class);
+    $gaz->shouldReceive('countiesInState')->andReturn([new County('34013', 'Essex County', '34', '013')]);
+    $gaz->shouldReceive('countyPolygons')->andReturn([['geo_id' => '34013', 'name' => 'Essex County', 'rings' => [[['lat' => 40.8, 'lng' => -74.2]]]]]);
+    app()->instance(MunicipalityGazetteer::class, $gaz);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'size_tier' => 'major', 'lat' => 40.73, 'lng' => -74.17]);
+
+    $blob = app(MetaBlobAssembler::class)->assemble(blockHomePage($site)->fresh(), collect());
+
+    expect($blob)->toHaveKey('service_area_map')
+        ->and($blob['service_area_map'])->not->toBeNull()
+        ->and($blob['service_area_map']['counties'][0]['name'])->toBe('Essex County')
+        ->and($blob['service_area_map']['cities'][0]['name'])->toBe('Newark')
+        ->and($blob['post_content'])->toContain('class="lp-areas-map"');
+});
+
+it('the service_area_map is null for a tenant with no coverage (map self-prunes, text data-gates)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+
+    $blob = app(MetaBlobAssembler::class)->assemble(blockHomePage($site)->fresh(), collect());
+
+    expect($blob['service_area_map'])->toBeNull()
+        ->and($blob['post_content'])->not->toContain('lp-areas-map');
+});
+
 it('the meta-blob carries post_content for Home', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
     $home = blockHomePage($site);

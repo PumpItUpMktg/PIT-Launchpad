@@ -959,3 +959,50 @@
     letter-spacing: 0.06em;
     vertical-align: middle;
 }
+
+/* ------------------------------------------------------------------
+ * "Areas we serve" interactive map (assets/area-map.js + Leaflet).
+ * The .lp-areas-map div is an empty mount on the server; the script
+ * adds .lp-areas-map--live only once it confirms JS + geometry, so a
+ * no-JS visitor never sees an empty box — they get the text fallback
+ * below, which stays present for SEO + screen readers either way.
+ * ------------------------------------------------------------------ */
+.lp-areas-map {
+    width: 100%;
+}
+
+.lp-areas-map--live {
+    height: clamp(320px, 46vh, 520px);
+    border-radius: 14px;
+    overflow: hidden;
+    margin: 0.5rem 0 1.25rem;
+    border: 1px solid color-mix(in srgb, var(--wp--preset--color--contrast, #172a2f) 12%, transparent);
+    z-index: 0; /* keep Leaflet panes under the site header/menus */
+}
+
+.lp-areas-map .leaflet-container {
+    font: inherit;
+    background: var(--wp--preset--color--surface, #f1f5f9);
+}
+
+.lp-map-tip {
+    font-weight: 600;
+    font-size: 0.8rem;
+    border: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+}
+
+/* When the map leads, the county line + town pills become a compact, secondary caption beneath it
+ * (kept for SEO / a11y / no-JS, but no longer the headline). */
+.lp-areas--map .lp-areas-counties {
+    text-align: center;
+    font-size: 0.95rem;
+    opacity: 0.85;
+    margin-top: 0;
+}
+
+.lp-areas--map .lp-area-tags {
+    justify-content: center;
+    font-size: 0.85rem;
+    opacity: 0.9;
+}

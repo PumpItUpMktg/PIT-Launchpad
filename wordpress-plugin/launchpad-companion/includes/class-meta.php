@@ -38,6 +38,12 @@ final class Meta
     public const SILO_ID = '_lp_silo_id';
     public const LOCKED = '_lp_locked';
 
+    /** The "Areas we serve" interactive-map geometry (served-county polygons + tiered town
+     * points). Stored from the /content blob's `service_area_map` and printed as a
+     * `window.lpAreaMap` global for the block theme's Leaflet init — kept OUT of post_content
+     * because kses would strip the embedded geometry. */
+    public const AREA_MAP = '_lp_area_map';
+
     /** The operator-resolved Elementor template id for this page's kit (§7b
      * mapping). Stored for reference + the Theme Builder condition the Slots
      * screen documents; rendering is driven by the lp_kit term condition, not

@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.4
+Stable tag: 0.9.5
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,12 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.5 =
+* /content now accepts `service_area_map` — the "Areas we serve" interactive-map geometry
+  (served-county polygons + tiered town points). Stored as post meta (`_lp_area_map`) and
+  printed as a `window.lpAreaMap` global in the footer for the block theme's Leaflet init.
+  Kept out of post_content because kses strips embedded geometry. Absent/null clears it.
 
 = 0.9.4 =
 * POST /style now also accepts an inline `theme_json` payload — a per-tenant DYNAMIC style

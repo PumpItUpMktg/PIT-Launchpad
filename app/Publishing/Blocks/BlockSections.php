@@ -305,10 +305,14 @@ final class BlockSections
      * ordered largest-first — a readable hierarchy, not a crowded cloud. Data-gated: hidden when a tenant
      * has no coverage captured. Geo lives only here and on location pages, never in silo/service copy.
      *
+     * When $mapAvailable, an interactive Leaflet map (the served-county outlines + tiered town markers)
+     * leads as the visual — its geometry rides the meta-blob's `service_area_map`, drawn by the theme;
+     * the county lead + town pills stay beneath as the REAL, crawlable text fallback (no-JS + SEO + a11y).
+     *
      * @param  list<string>  $counties  named counties served (broadest first line)
      * @param  list<array{label: string, url: string}>  $cities  towns largest-first; a non-empty url is a REAL town page
      */
-    public function serviceAreas(string $eyebrow, string $heading, array $counties, array $cities, ?string $more = null, bool $preview = false): string
+    public function serviceAreas(string $eyebrow, string $heading, array $counties, array $cities, ?string $more = null, bool $preview = false, bool $mapAvailable = false): string
     {
         $counties = array_values(array_filter(array_map('trim', $counties), fn (string $c): bool => $c !== ''));
 
@@ -342,6 +346,13 @@ final class BlockSections
             $children[] = $this->placeholderNote('add your service areas to activate this section');
         }
 
+        // The interactive map leads (real geometry only — never on a placeholder). Empty on the server;
+        // the theme draws into it. The text below is the crawlable fallback, so both contexts stay honest.
+        $withMap = $mapAvailable && ! $placeholder;
+        if ($withMap) {
+            $children[] = $this->areaMapMount();
+        }
+
         if ($counties !== []) {
             $children[] = $this->b->paragraph(
                 'Serving '.$this->naturalList(array_map(fn (string $c): string => $this->text($c), $counties)).'.',
@@ -356,7 +367,21 @@ final class BlockSections
             $children[] = $this->b->list($cityTags, ['className' => 'lp-area-tags']);
         }
 
-        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-areas', $placeholder)]);
+        $classes = $this->sectionClass('lp-areas', $placeholder).($withMap ? ' lp-areas--map' : '');
+
+        return $this->b->group($children, ['align' => 'full', 'className' => $classes]);
+    }
+
+    /**
+     * The interactive service-area map's mount point. Empty on the server — the theme's Leaflet init
+     * draws the served-county polygons + tiered town markers into it from the plugin-printed
+     * `service_area_map` geometry (kses would strip embedded geometry from post_content, so it can't
+     * ride here). role/aria give it a screen-reader handle; the county + town text beneath is the real
+     * crawlable fallback for no-JS and search.
+     */
+    private function areaMapMount(): string
+    {
+        return "<!-- wp:html -->\n".'<div class="lp-areas-map" role="img" aria-label="Map of the areas we serve"></div>'."\n<!-- /wp:html -->";
     }
 
     // ── section internals ──
