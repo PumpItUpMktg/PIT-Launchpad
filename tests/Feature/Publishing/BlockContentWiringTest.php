@@ -324,27 +324,36 @@ it('returns null for a page type whose block pattern has not shipped (falls back
 
 it('the areas section leads with the map mount + keeps the text fallback when geometry exists', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
-    Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34013']]);
+    Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34013', '34017']]);
 
     $gaz = Mockery::mock(MunicipalityGazetteer::class);
-    $gaz->shouldReceive('countiesInState')->with('34')->andReturn([new County('34013', 'Essex County', '34', '013')]);
-    $gaz->shouldReceive('countyPolygons')->andReturn([['geo_id' => '34013', 'name' => 'Essex County', 'rings' => [[['lat' => 40.8, 'lng' => -74.2]]]]]);
+    $gaz->shouldReceive('countiesInState')->with('34')->andReturn([
+        new County('34013', 'Essex County', '34', '013'),
+        new County('34017', 'Hudson County', '34', '017'),
+    ]);
+    $gaz->shouldReceive('countyPolygons')->andReturn([
+        ['geo_id' => '34013', 'name' => 'Essex County', 'rings' => [[['lat' => 40.8, 'lng' => -74.2]]]],
+        ['geo_id' => '34017', 'name' => 'Hudson County', 'rings' => [[['lat' => 40.7, 'lng' => -74.05]]]],
+    ]);
     app()->instance(MunicipalityGazetteer::class, $gaz);
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'size_tier' => 'major', 'lat' => 40.73, 'lng' => -74.17]);
 
     $home = blockHomePage($site);
 
-    // Compose with the map available → the mount + the crawlable text fallback both render.
+    // Compose with the map available → the mount + the crawlable text fallback both render; under the
+    // map the counties are a compact pipe-separated caption (not the "Serving …" sentence).
     $withMap = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], mapAvailable: true);
     expect($withMap)
-        ->toContain('class="lp-areas-map"')          // the Leaflet mount point
-        ->toContain('lp-areas--map')                 // section modifier
-        ->toContain('Serving Essex County.')         // county text stays (SEO / a11y / no-JS)
-        ->toContain('Newark');                       // town pill stays
+        ->toContain('class="lp-areas-map"')             // the Leaflet mount point
+        ->toContain('lp-areas--map')                    // section modifier
+        ->toContain('Essex County | Hudson County')     // pipe-separated county caption
+        ->not->toContain('Serving Essex County')        // no natural sentence under the map
+        ->toContain('Newark');                          // town pill stays
 
-    // Compose without the map → no mount, text-only (back-compat).
+    // Compose without the map → no mount, and the counties read as the natural sentence (back-compat).
     $noMap = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
-    expect($noMap)->not->toContain('lp-areas-map')->toContain('Serving Essex County.');
+    expect($noMap)->not->toContain('lp-areas-map')
+        ->toContain('Serving Essex County and Hudson County.');
 });
 
 it('the meta-blob carries the service_area_map geometry for Home (and drives the mount)', function () {

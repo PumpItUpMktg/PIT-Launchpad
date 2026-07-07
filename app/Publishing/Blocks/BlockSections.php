@@ -354,10 +354,13 @@ final class BlockSections
         }
 
         if ($counties !== []) {
-            $children[] = $this->b->paragraph(
-                'Serving '.$this->naturalList(array_map(fn (string $c): string => $this->text($c), $counties)).'.',
-                ['className' => 'lp-areas-counties'],
-            );
+            $escaped = array_map(fn (string $c): string => $this->text($c), $counties);
+            // Under the map the counties are a compact, pipe-separated caption; standalone (no map)
+            // they read as a natural sentence.
+            $line = $withMap
+                ? implode(' | ', $escaped)
+                : 'Serving '.$this->naturalList($escaped).'.';
+            $children[] = $this->b->paragraph($line, ['className' => 'lp-areas-counties']);
         }
 
         if ($cityTags !== []) {
