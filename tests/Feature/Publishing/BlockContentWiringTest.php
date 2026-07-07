@@ -229,6 +229,31 @@ it('a card blurb is never null even when the model is unreachable — determinis
         ->toContain('Hydro jetting'); // the deterministic template leads with the keyword — never blank
 });
 
+it('the home phone falls back to the site business phone when no location has one', function () {
+    // A guided-onboarded tenant: business phone on the Site, no Location phone anywhere.
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
+    $home = blockHomePage($site);
+
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)->toContain('tel:9735550100'); // the hero Call button gets the site business number
+});
+
+it('the emergency call-now line uses the dedicated emergency number when set', function () {
+    $site = Site::factory()->create([
+        'domain_url' => 'https://sewergurus.com', 'offers_emergency' => true,
+        'phone' => '(973) 555-0100', 'emergency_phone' => '(973) 555-9111',
+    ]);
+    $home = blockHomePage($site);
+
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->toContain('tel:9735550100')   // main number leads (hero)
+        ->toContain('Or call now:')      // the emergency CTA line renders
+        ->toContain('tel:9735559111');   // and it dials the dedicated emergency line
+});
+
 it('How It Works uses the tenant process when captured (else the safe default)', function () {
     $site = Site::factory()->create();
     ProofItem::factory()->create(['site_id' => $site->id, 'type' => ProofType::Process, 'payload' => ['title' => 'Book a camera inspection', 'description' => 'We scope the line first — no guessing.']]);

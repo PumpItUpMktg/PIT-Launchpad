@@ -6,6 +6,7 @@ use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\RenderJob;
 use App\Models\Service;
+use App\Models\Site;
 use Illuminate\Support\Facades\Bus;
 
 function reviewActions(): ReviewActions
@@ -181,4 +182,18 @@ test('edit-in-place persists slot, body and SEO without clobbering image specs',
         ->and($fresh->meta['seo']['meta_description'])->toBe('New meta')
         // The image specs the drafter emitted survive the SEO edit.
         ->and($fresh->meta['image_specs'])->toHaveCount(1);
+});
+
+test('flags a missing business phone before publish so it is never silently dropped', function () {
+    $site = Site::factory()->create(['phone' => null, 'emergency_phone' => null]);
+    $content = Content::factory()->create(['status' => ContentStatus::Approved, 'site_id' => $site->id]);
+
+    // No phone anywhere → the operator is warned (non-blocking).
+    expect(collect(reviewActions()->warnings($content))->implode(' '))
+        ->toContain('No business phone');
+
+    // Once a phone is set, the warning clears.
+    $site->update(['phone' => '(973) 555-0100']);
+    expect(collect(reviewActions()->warnings($content->fresh()))->implode(' '))
+        ->not->toContain('No business phone');
 });

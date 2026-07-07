@@ -10,6 +10,7 @@ use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteBranding;
+use App\Publishing\SiteContact;
 use Illuminate\Support\Collection;
 
 /**
@@ -21,6 +22,8 @@ use Illuminate\Support\Collection;
  */
 final class SiteProfileAssembler
 {
+    public function __construct(private readonly SiteContact $contact) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -32,7 +35,9 @@ final class SiteProfileAssembler
             ->orderBy('created_at')
             ->first();
 
-        $phone = $location !== null ? trim((string) $location->phone) : '';
+        // The chrome phone resolves the same way every surface does — the primary location's number,
+        // else the site business phone — so a guided-onboarded tenant's header never ships empty.
+        $phone = trim((string) $this->contact->phone($site));
         $address = $location !== null ? trim((string) $location->address) : '';
 
         return [

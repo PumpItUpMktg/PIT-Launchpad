@@ -8,6 +8,7 @@ use App\Guided\GuidedPage;
 use App\Guided\ServiceSuggester;
 use App\Guided\StepGate;
 use App\Interview\SiloSeed;
+use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -38,6 +39,12 @@ class Business extends GuidedPage
 
     public string $trade = '';
 
+    /** The main business phone — the number the site's header, hero and CTA call to. */
+    public string $phone = '';
+
+    /** An optional dedicated emergency / after-hours line (falls back to the main phone when blank). */
+    public string $emergencyPhone = '';
+
     /** @var list<string> */
     public array $services = [];
 
@@ -67,6 +74,8 @@ class Business extends GuidedPage
         }
 
         $this->businessName = (string) $site->brand_name;
+        $this->phone = (string) $site->phone;
+        $this->emergencyPhone = (string) $site->emergency_phone;
         $blueprint = $this->blueprint($site);
         $seed = ($blueprint !== null && is_array($blueprint->seed)) ? $blueprint->seed : [];
         $this->trade = (string) ($seed['trade'] ?? '');
@@ -170,6 +179,14 @@ class Business extends GuidedPage
             $site->update(['brand_name' => trim($this->businessName)]);
         }
 
+        // Capture the business phone early (the guided flow never did, so guided-onboarded tenants
+        // shipped with no number). Store it canonically on the Site; mirror it onto the primary
+        // Location when one exists so the NAP / schema stay consistent.
+        $phone = trim($this->phone);
+        $emergency = trim($this->emergencyPhone);
+        $site->update(['phone' => $phone !== '' ? $phone : null, 'emergency_phone' => $emergency !== '' ? $emergency : null]);
+        $this->mirrorPhoneToPrimaryLocation($site, $phone);
+
         $blueprint = SiloBlueprint::withoutGlobalScope(SiteScope::class)->firstOrCreate(['site_id' => $site->id]);
         $seed = SiloSeed::fromArray([...($blueprint->seed ?? []), 'trade' => $this->trade, 'anchor_services' => $anchor]);
         $blueprint->update([
@@ -187,6 +204,27 @@ class Business extends GuidedPage
     private function blueprint(Site $site): ?SiloBlueprint
     {
         return SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+    }
+
+    /**
+     * Keep NAP consistent: when the site already has a primary Location with no phone of its own, stamp
+     * the business phone onto it so location pages / LocalBusiness schema carry the same number. A
+     * Location that already has its own phone is left untouched (multi-location overrides win).
+     */
+    private function mirrorPhoneToPrimaryLocation(Site $site, string $phone): void
+    {
+        if ($phone === '') {
+            return;
+        }
+
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->orderBy('created_at')
+            ->first();
+
+        if ($location !== null && trim((string) $location->phone) === '') {
+            $location->forceFill(['phone' => $phone])->save();
+        }
     }
 
     /** @return array{url: string, primary: ?string, accent: ?string}|null */
