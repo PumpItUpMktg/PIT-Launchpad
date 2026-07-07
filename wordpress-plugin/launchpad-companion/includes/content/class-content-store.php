@@ -199,6 +199,16 @@ final class ContentStore
         update_post_meta($post_id, Meta::SILO_ID, (string) ($payload['silo_id'] ?? ''));
         update_post_meta($post_id, Meta::LOCKED, ! empty($payload['locked']) ? '1' : '0');
 
+        // "Areas we serve" map geometry — stored for the theme's Leaflet init (printed as
+        // window.lpAreaMap). Absent / null (no coverage, non-home) → cleared so a stale map
+        // can't linger after coverage is removed.
+        $area_map = $payload['service_area_map'] ?? null;
+        if (is_array($area_map) && ! empty($area_map)) {
+            update_post_meta($post_id, Meta::AREA_MAP, $area_map);
+        } else {
+            delete_post_meta($post_id, Meta::AREA_MAP);
+        }
+
         // §7b template mapping: stamp the kit marker (the Theme Builder display-
         // condition target) on kit PAGES, and record the operator-resolved
         // template id. Rendering is driven by the operator's condition against the

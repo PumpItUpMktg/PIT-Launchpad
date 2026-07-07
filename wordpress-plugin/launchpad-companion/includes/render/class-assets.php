@@ -33,6 +33,39 @@ final class Assets
     public function register(): void
     {
         add_action('wp_enqueue_scripts', [$this, 'enqueue']);
+        // Print the "Areas we serve" map geometry early in the footer (before the theme's Leaflet
+        // init script prints), so the block theme can draw it. Works on block themes too (unlike the
+        // legacy stylesheet enqueue below, which self-disables on block themes).
+        add_action('wp_footer', [$this, 'print_area_map'], 1);
+    }
+
+    /**
+     * Emit the current singular post's service-area map geometry as a `window.lpAreaMap` global for
+     * the block theme's Leaflet init to read. Nothing prints when the post has no map (self-pruning).
+     */
+    public function print_area_map(): void
+    {
+        if (! is_singular()) {
+            return;
+        }
+
+        $post_id = get_queried_object_id();
+        if ($post_id <= 0) {
+            return;
+        }
+
+        $map = get_post_meta($post_id, Meta::AREA_MAP, true);
+        if (! is_array($map) || empty($map)) {
+            return;
+        }
+
+        $json = wp_json_encode($map);
+        if (! is_string($json)) {
+            return;
+        }
+
+        // wp_json_encode escapes forward slashes, so an embedded "</script>" can't break out.
+        echo '<script id="lp-area-map-data">window.lpAreaMap = ' . $json . ";</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 
     public function enqueue(): void
