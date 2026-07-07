@@ -2,6 +2,7 @@
 
 namespace App\Publishing\Chrome;
 
+use App\Branding\LogoHeaderTone;
 use App\Enums\ContentKind;
 use App\Enums\PageType;
 use App\Models\Content;
@@ -43,6 +44,7 @@ final class SiteProfileAssembler
         return [
             'brand_name' => (string) $site->brand_name,
             'logo_url' => $this->logoUrl($site),
+            'header_tone' => $this->headerTone($site),
             'tagline' => $this->tagline($site),
             'phone' => $phone,
             'phone_tel' => $this->tel($phone),
@@ -60,13 +62,30 @@ final class SiteProfileAssembler
     /** The uploaded logo's R2 URL (served like every other image, not from the WP media library). */
     private function logoUrl(Site $site): string
     {
+        return trim((string) ($this->logoSet($site)['url'] ?? ''));
+    }
+
+    /**
+     * The header background that best shows the logo — 'dark' or 'light', derived at logo intake
+     * ({@see LogoHeaderTone}). Defaults to 'dark' (no logo / no signal) — the platform's standard
+     * branded header — so a logo only ever flips the bar to light when it genuinely needs it. The
+     * plugin renders the matching `lp-tone-{tone}` class.
+     */
+    private function headerTone(Site $site): string
+    {
+        $tone = trim((string) ($this->logoSet($site)['header_tone'] ?? ''));
+
+        return $tone === 'light' ? 'light' : 'dark';
+    }
+
+    /** @return array<string, mixed> */
+    private function logoSet(Site $site): array
+    {
         $branding = SiteBranding::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->first();
 
-        $set = is_array($branding?->logo_set) ? $branding->logo_set : [];
-
-        return trim((string) ($set['url'] ?? ''));
+        return is_array($branding?->logo_set) ? $branding->logo_set : [];
     }
 
     /** The home-page hero eyebrow (trade · region) doubles as the brand tagline when present. */

@@ -243,10 +243,12 @@ final class BlockSections
             ]);
         }, $steps);
 
+        // Surface band — keeps the light sections alternating surface→base between the dark anchors
+        // (hero / why / cta) so no two white sections sit adjacent. Part of the orderly bg rhythm.
         return $this->b->group([
             $this->sectionHead($eyebrow, $heading, center: true),
             $this->b->columns($cols, ['className' => 'lp-steps']),
-        ], ['align' => 'full', 'className' => 'lp-process']);
+        ], ['align' => 'full', 'backgroundColor' => 'surface', 'className' => 'lp-process']);
     }
 
     /**

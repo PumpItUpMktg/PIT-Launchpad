@@ -32,7 +32,11 @@ final class SiteChrome
         $home = esc_url(home_url('/'));
         $brand = $this->brandName($p);
 
-        $out = '<div class="lp-header-inner">';
+        // The header background the uploaded logo is best shown on (control-plane LogoHeaderTone).
+        // The theme styles the whole bar off this class (.lp-header:has(.lp-tone-dark)); default light.
+        $tone = (isset($p['header_tone']) && $p['header_tone'] === 'dark') ? 'dark' : 'light';
+
+        $out = '<div class="lp-header-inner lp-tone-' . $tone . '">';
 
         $out .= '<a class="lp-brand" href="' . $home . '">';
         // The uploaded logo (served from R2) replaces the text business name; no logo → text fallback.
