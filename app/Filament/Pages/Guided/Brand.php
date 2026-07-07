@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Guided;
 
+use App\Branding\BrandVariationBuilder;
 use App\Enums\SetupStep;
 use App\Enums\VoiceStatus;
 use App\Guided\GuidedPage;
@@ -111,6 +112,36 @@ class Brand extends GuidedPage
     }
 
     /**
+     * The logo-derived palette for the "Your brand colors" option — {primary, accent} for the swatch,
+     * or null when no usable logo palette exists (the option is then data-gated OUT of the picker).
+     *
+     * @return array{primary: string, accent: string}|null
+     */
+    public function getLogoColorsProperty(): ?array
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return null;
+        }
+
+        $colors = app(StyleActivator::class)->logoColors($site);
+        if ($colors === null) {
+            return null;
+        }
+
+        // Resolve through the builder so the swatch shows the ACTUAL accent (borrowed for a monochrome logo).
+        $resolved = app(BrandVariationBuilder::class)->resolve($colors);
+
+        return ['primary' => $resolved['primary'], 'accent' => $resolved['accent']];
+    }
+
+    /** Whether "Your brand colors" is the current choice. */
+    public function getUsesLogoColorsProperty(): bool
+    {
+        return (bool) $this->getSite()?->use_logo_colors;
+    }
+
+    /**
      * Operator override of the recommended style. `auto` clears the override (follow the voice
      * recommendation). The Gutenberg pivot's recommend-with-override: the system suggests, the human
      * confirms/overrides — brand styling is one of the three theme.json variations.
@@ -122,8 +153,17 @@ class Brand extends GuidedPage
             return;
         }
 
+        // "Your brand colors" — the logo-derived variation. Kept out of StyleVariation (a separate flag)
+        // so the recommendation stays voice-driven; this is an override.
+        if ($variation === 'brand_colors') {
+            $site->forceFill(['use_logo_colors' => true])->save();
+            Notification::make()->title('Style set to your brand colors.')->success()->send();
+
+            return;
+        }
+
         $picked = $variation === 'auto' ? null : StyleVariation::tryFrom($variation);
-        $site->forceFill(['style_variation' => $picked])->save();
+        $site->forceFill(['style_variation' => $picked, 'use_logo_colors' => false])->save();
 
         Notification::make()
             ->title($picked !== null ? "Style set to {$picked->label()}." : 'Using the recommended style.')
@@ -150,7 +190,10 @@ class Brand extends GuidedPage
         }
 
         $result = app(StyleActivator::class)->activate($site);
-        $label = StyleVariation::tryFrom((string) ($result['variation'] ?? ''))?->label() ?? 'your style';
+        $variationValue = (string) ($result['variation'] ?? '');
+        $label = $variationValue === BrandVariationBuilder::SLUG
+            ? BrandVariationBuilder::TITLE
+            : (StyleVariation::tryFrom($variationValue)?->label() ?? 'your style');
 
         if ($result['updated'] ?? false) {
             $gate->state($site)->update(['brand_pushed' => true]);

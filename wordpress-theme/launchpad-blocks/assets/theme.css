@@ -693,6 +693,15 @@
     line-height: 1.05;
 }
 
+/* The uploaded logo in the header (served from R2). */
+.lp-logo {
+    display: block;
+    height: 40px;
+    width: auto;
+    max-width: 220px;
+    object-fit: contain;
+}
+
 .lp-brand-tag {
     font-size: 0.7rem;
     letter-spacing: 0.03em;

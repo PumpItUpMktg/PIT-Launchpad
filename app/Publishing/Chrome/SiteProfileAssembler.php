@@ -9,6 +9,7 @@ use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use Illuminate\Support\Collection;
 
 /**
@@ -36,6 +37,7 @@ final class SiteProfileAssembler
 
         return [
             'brand_name' => (string) $site->brand_name,
+            'logo_url' => $this->logoUrl($site),
             'tagline' => $this->tagline($site),
             'phone' => $phone,
             'phone_tel' => $this->tel($phone),
@@ -48,6 +50,18 @@ final class SiteProfileAssembler
             'company' => $this->company($site, $home),
             'nav' => $this->company($site, $home),
         ];
+    }
+
+    /** The uploaded logo's R2 URL (served like every other image, not from the WP media library). */
+    private function logoUrl(Site $site): string
+    {
+        $branding = SiteBranding::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->first();
+
+        $set = is_array($branding?->logo_set) ? $branding->logo_set : [];
+
+        return trim((string) ($set['url'] ?? ''));
     }
 
     /** The home-page hero eyebrow (trade · region) doubles as the brand tagline when present. */

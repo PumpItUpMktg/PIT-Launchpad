@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string $brand_name
  * @property bool $offers_emergency
  * @property StyleVariation|null $style_variation
+ * @property bool $use_logo_colors
  */
 class Site extends Model
 {
@@ -210,6 +211,7 @@ class Site extends Model
             'status' => SiteStatus::class,
             'offers_emergency' => 'boolean',
             'style_variation' => StyleVariation::class,
+            'use_logo_colors' => 'boolean',
             'budget_ceiling' => 'integer',
             'silo_own_page_bar' => 'integer',
             'coverage_thresholds' => 'array',

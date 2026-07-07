@@ -35,7 +35,12 @@ final class SiteChrome
         $out = '<div class="lp-header-inner">';
 
         $out .= '<a class="lp-brand" href="' . $home . '">';
-        $out .= '<span class="lp-brand-name">' . esc_html($brand) . '</span>';
+        // The uploaded logo (served from R2) replaces the text business name; no logo → text fallback.
+        if (! empty($p['logo_url'])) {
+            $out .= '<img class="lp-logo" src="' . esc_url((string) $p['logo_url']) . '" alt="' . esc_attr($brand) . '" />';
+        } else {
+            $out .= '<span class="lp-brand-name">' . esc_html($brand) . '</span>';
+        }
         if (! empty($p['tagline'])) {
             $out .= '<span class="lp-brand-tag">' . esc_html((string) $p['tagline']) . '</span>';
         }

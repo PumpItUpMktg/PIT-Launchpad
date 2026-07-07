@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.3
+Stable tag: 0.9.4
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,12 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.4 =
+* POST /style now also accepts an inline `theme_json` payload — a per-tenant DYNAMIC style
+  variation (the logo-derived "Your brand colors") that has no styles/{slug}.json file in
+  the theme. When `theme_json` is present it is written to the user global-styles post
+  directly; otherwise the curated slug is read from the active theme as before. Idempotent.
 
 = 0.9.3 =
 * Added the universal header/footer chrome. New POST /site-profile stores the pushed

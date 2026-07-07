@@ -114,6 +114,19 @@ class WordpressClient
     }
 
     /**
+     * Activate a DYNAMIC, per-tenant theme.json variation pushed inline (the logo-derived "Your brand
+     * colors" — there is no styles/{slug}.json file for it). Same endpoint; the plugin writes the
+     * inline variation to global styles directly.
+     *
+     * @param  array<string, mixed>  $themeJson  the full theme.json variation (settings/styles/title)
+     * @return array<string, mixed>
+     */
+    public function activateStyleVariation(string $slug, array $themeJson): array
+    {
+        return $this->post('/style', ['variation' => $slug, 'theme_json' => $themeJson]);
+    }
+
+    /**
      * Push the per-tenant site PROFILE (brand + NAP + navigation) that the universal header/footer
      * chrome renders — the block-theme template parts can't carry per-tenant NAP statically.
      *

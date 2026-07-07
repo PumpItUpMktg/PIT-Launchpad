@@ -36,14 +36,14 @@
         {{-- Your look: one of three theme.json style variations. Recommended from the voice above;
              override to any. Applying activates it on the site's WordPress global styles (theme.json,
              not a page builder). --}}
-        @php $resolved = $this->resolvedStyle; $chosen = $this->chosenStyle; @endphp
+        @php $resolved = $this->resolvedStyle; $chosen = $this->chosenStyle; $logo = $this->logoColors; $usesLogo = $this->usesLogoColors; @endphp
         <div class="lp-card">
             <h3>Your look</h3>
             <div class="hint">We recommend a style from your brand voice — pick any. Same site &amp; content, restyled instantly. Applying sets it on your WordPress.</div>
 
             <div class="lp-chips" style="margin:12px 0">
                 @foreach (\App\Styling\StyleVariation::cases() as $v)
-                    @php $t = $v->tokens(); $active = $resolved === $v; @endphp
+                    @php $t = $v->tokens(); $active = ! $usesLogo && $resolved === $v; @endphp
                     <button type="button" class="lp-chip @if ($active) primary @endif" wire:click="chooseStyle('{{ $v->value }}')" style="cursor:pointer;gap:7px">
                         <span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:{{ $t['primary'] }};border:1px solid var(--line)"></span>
                         <span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:{{ $t['accent'] }};border:1px solid var(--line)"></span>
@@ -51,11 +51,21 @@
                         @if ($active && $chosen === null)<span class="lp-gate ok" style="margin-left:6px">recommended</span>@endif
                     </button>
                 @endforeach
+
+                {{-- Data-gated: only when a usable logo palette was extracted. --}}
+                @if ($logo)
+                    <button type="button" class="lp-chip @if ($usesLogo) primary @endif" wire:click="chooseStyle('brand_colors')" style="cursor:pointer;gap:7px">
+                        <span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:{{ $logo['primary'] }};border:1px solid var(--line)"></span>
+                        <span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:{{ $logo['accent'] }};border:1px solid var(--line)"></span>
+                        Your brand colors
+                        <span class="lp-gate" style="margin-left:6px;opacity:.65">pulled from your logo</span>
+                    </button>
+                @endif
             </div>
 
             <div style="display:flex;gap:8px;align-items:center">
-                <button class="lp-mini primary" wire:click="pushBrand">Apply {{ $resolved?->label() ?? 'your look' }} to your site</button>
-                @if ($chosen !== null)
+                <button class="lp-mini primary" wire:click="pushBrand">Apply {{ $usesLogo ? 'your brand colors' : ($resolved?->label() ?? 'your look') }} to your site</button>
+                @if ($chosen !== null || $usesLogo)
                     <button class="lp-mini" wire:click="chooseStyle('auto')">Use the recommended</button>
                 @endif
             </div>

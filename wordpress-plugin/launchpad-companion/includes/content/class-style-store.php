@@ -18,25 +18,31 @@ if (! defined('ABSPATH')) {
 final class StyleStore
 {
     /**
-     * @param  array<string, mixed>  $payload  { variation: "bold"|"clean"|"warm" }
+     * @param  array<string, mixed>  $payload  { variation: "bold"|"clean"|"warm" } OR
+     *                                          { variation: "brand", theme_json: {settings,styles,…} }
      * @return array<string, mixed>
      */
     public function apply(array $payload): array
     {
         $variation = isset($payload['variation']) ? sanitize_key((string) $payload['variation']) : '';
-        if ($variation === '') {
+
+        // A per-tenant DYNAMIC variation (e.g. the logo-derived "Your brand colors") is pushed inline as
+        // a full theme.json variation — there is no styles/{slug}.json file for it in the theme.
+        if (isset($payload['theme_json']) && is_array($payload['theme_json'])) {
+            $data = $payload['theme_json'];
+        } elseif ($variation !== '') {
+            // A curated variation ships in the active block theme as styles/{slug}.json.
+            $file = get_theme_file_path("styles/{$variation}.json");
+            if (! is_string($file) || ! file_exists($file)) {
+                return ['updated' => false, 'error' => "Style variation '{$variation}' is not in the active theme (is the Launchpad block theme active?)."];
+            }
+
+            $data = json_decode((string) file_get_contents($file), true);
+            if (! is_array($data)) {
+                return ['updated' => false, 'error' => "Style variation '{$variation}' is not valid JSON."];
+            }
+        } else {
             return ['updated' => false, 'error' => 'No style variation given.'];
-        }
-
-        // The variation ships in the active block theme as styles/{slug}.json.
-        $file = get_theme_file_path("styles/{$variation}.json");
-        if (! is_string($file) || ! file_exists($file)) {
-            return ['updated' => false, 'error' => "Style variation '{$variation}' is not in the active theme (is the Launchpad block theme active?)."];
-        }
-
-        $data = json_decode((string) file_get_contents($file), true);
-        if (! is_array($data)) {
-            return ['updated' => false, 'error' => "Style variation '{$variation}' is not valid JSON."];
         }
 
         // The user global-styles post content — the same shape the editor writes when a variation is
