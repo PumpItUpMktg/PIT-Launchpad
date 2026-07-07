@@ -13,8 +13,16 @@ it('maps service names to curated icon slugs, with a fallback', function () {
         ->and($icons->slugFor('Leak Detection'))->toBe('droplet')
         ->and($icons->slugFor('Sump Pump Services'))->toBe('pump')
         ->and($icons->slugFor('Hydro Jetting'))->toBe('jet')
+        ->and($icons->slugFor('Grease Trap Cleaning'))->toBe('grease')
         ->and($icons->slugFor('24/7 Emergency Service'))->toBe('bolt')
-        ->and($icons->slugFor('Fixture Replacement'))->toBe('wrench')
+        // service-specific slugs (previously collapsed to droplet/wrench)
+        ->and($icons->slugFor('Water Heater Installation'))->toBe('heater')
+        ->and($icons->slugFor('Tankless Water Heaters'))->toBe('heater')
+        ->and($icons->slugFor('Toilet Repair'))->toBe('toilet')
+        ->and($icons->slugFor('Faucet & Fixture Replacement'))->toBe('faucet')
+        ->and($icons->slugFor('Gas Line Repair'))->toBe('gas')
+        // "maintenance" contains "main" — must resolve to wrench, not pipe (substring guard)
+        ->and($icons->slugFor('Preventive Maintenance'))->toBe('wrench')
         // unmatched → the fallback, never empty
         ->and($icons->slugFor('Something Bespoke'))->toBe(ServiceIcon::FALLBACK)
         ->and($icons->slugFor(''))->toBe(ServiceIcon::FALLBACK);

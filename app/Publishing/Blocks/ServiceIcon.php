@@ -13,20 +13,41 @@ namespace App\Publishing\Blocks;
  */
 final class ServiceIcon
 {
-    /** keyword => icon slug. First match wins; order matters (specific before generic). */
+    /**
+     * keyword => icon slug. First match wins; order matters (SPECIFIC before generic), and every
+     * substring collision is deliberate — e.g. `water heater`/`tankless` resolve BEFORE the generic
+     * `water`/`heater`, and `maintenance` resolves before the bare pipe keywords (which is why there's
+     * no bare `main` keyword — it lives inside "maintenance"). Every slug here is styled by the theme.
+     */
     private const KEYWORDS = [
-        'drain' => 'drain', 'clog' => 'drain', 'snak' => 'drain', 'rooter' => 'drain',
-        'jet' => 'jet', 'hydro' => 'jet',
-        'sewer' => 'pipe', 'pipe' => 'pipe', 'line' => 'pipe', 'trenchless' => 'pipe', 'main' => 'pipe',
+        // Drain cleaning / clogs
+        'drain' => 'drain', 'clog' => 'drain', 'snak' => 'drain', 'rooter' => 'drain', 'auger' => 'drain',
+        // Hydro jetting
+        'hydro' => 'jet', 'jet' => 'jet',
+        // Camera / inspection
         'camera' => 'camera', 'inspect' => 'camera', 'scope' => 'camera', 'video' => 'camera', 'locat' => 'camera',
-        'leak' => 'droplet', 'detect' => 'droplet',
-        'water heater' => 'droplet', 'heater' => 'droplet', 'soften' => 'droplet', 'filtr' => 'droplet',
+        // Water heaters (before the generic water / heater / install keywords)
+        'water heater' => 'heater', 'tankless' => 'heater', 'heater' => 'heater', 'boiler' => 'heater',
+        // Toilets
+        'toilet' => 'toilet', 'commode' => 'toilet',
+        // Faucets / fixtures / sinks
+        'faucet' => 'faucet', 'fixture' => 'faucet', 'sink' => 'faucet', 'shower' => 'faucet', 'bath' => 'faucet',
+        // Gas lines (before pipe, so "gas line" reads as gas)
+        'gas' => 'gas', 'propane' => 'gas',
+        // Sump / ejector pumps
+        'sump' => 'pump', 'ejector' => 'pump', 'grinder' => 'pump', 'pump' => 'pump',
+        // Grease traps / interceptors
+        'grease' => 'grease', 'interceptor' => 'grease', 'trap' => 'grease',
+        // Sewer / pipe / water lines
+        'sewer' => 'pipe', 'trenchless' => 'pipe', 'repipe' => 'pipe', 'water main' => 'pipe',
+        'pipe' => 'pipe', 'line' => 'pipe',
+        // Leak detection / water treatment
+        'leak' => 'droplet', 'detect' => 'droplet', 'soften' => 'droplet', 'filtr' => 'droplet',
         'condition' => 'droplet', 'backflow' => 'droplet', 'water' => 'droplet',
-        'sump' => 'pump', 'pump' => 'pump', 'ejector' => 'pump', 'grinder' => 'pump',
-        'grease' => 'grease', 'trap' => 'grease',
+        // Emergency
         'emergency' => 'bolt', '24' => 'bolt', 'urgent' => 'bolt',
-        'repair' => 'wrench', 'replace' => 'wrench', 'install' => 'wrench', 'maintenance' => 'wrench',
-        'excavat' => 'wrench', 'gas' => 'wrench', 'fixture' => 'wrench', 'faucet' => 'wrench', 'toilet' => 'wrench',
+        // General repair / install / service
+        'repair' => 'wrench', 'replace' => 'wrench', 'install' => 'wrench', 'maintenance' => 'wrench', 'excavat' => 'wrench',
     ];
 
     public const FALLBACK = 'service';
