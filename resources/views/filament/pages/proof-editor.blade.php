@@ -52,6 +52,9 @@
         .pe-kv .muted{color:var(--pe-soft)}
         .pe-note{font-size:11.5px;color:var(--pe-soft);font-style:italic;margin-top:8px}
         .pe-warn{font-size:11.5px;color:#A4262C;background:#FBE5E6;border-radius:6px;padding:6px 8px;margin-top:8px;line-height:1.4}
+        .pe-upload{display:inline-flex;align-items:center;gap:9px;border:1.5px dashed var(--pe-primary);border-radius:8px;padding:9px 13px;background:#fff;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--pe-ink)}
+        .pe-upload:hover{background:color-mix(in srgb,var(--pe-primary) 6%,#fff)}
+        .pe-upload input[type=file]{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
     </style>
 
     <div class="pe-top">
@@ -113,7 +116,10 @@
                             </div>
                             @if ($replaceSlot === $sec['key'])
                                 <div style="margin-top:8px">
-                                    <input type="file" wire:model="imageUpload" accept="image/*">
+                                    <label class="pe-upload">
+                                        <input type="file" wire:model="imageUpload" accept="image/*">
+                                        ⬆ Choose a photo to upload
+                                    </label>
                                     <div wire:loading wire:target="imageUpload" class="pe-note">Uploading…</div>
                                     @error('imageUpload') <div class="pe-note" style="color:#b91c1c">{{ $message }}</div> @enderror
                                     @if (count($this->library))

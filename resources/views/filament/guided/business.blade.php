@@ -47,7 +47,14 @@
                 </div>
             @endif
             <div class="lp-field" style="margin-top:12px">
-                <input type="file" wire:model="logo" accept="image/png,image/jpeg,image/svg+xml,.svg,.png,.jpg,.jpeg">
+                <label class="lp-upload">
+                    <input type="file" wire:model="logo" accept="image/png,image/jpeg,image/svg+xml,.svg,.png,.jpg,.jpeg">
+                    <span class="ic">⬆</span>
+                    <span class="tx">
+                        <strong>{{ $this->logoInfo ? 'Choose a different logo' : 'Choose a logo file' }}</strong>
+                        <span>PNG, JPG or SVG · up to 4&nbsp;MB</span>
+                    </span>
+                </label>
                 <div wire:loading wire:target="logo" class="hint" style="margin:6px 0 0">Reading your logo…</div>
                 @error('logo') <div class="hint" style="margin:6px 0 0;color:#b91c1c">{{ $message }}</div> @enderror
             </div>
