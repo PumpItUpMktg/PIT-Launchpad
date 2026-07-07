@@ -2,14 +2,18 @@
 
 namespace App\Filament\Pages;
 
+use App\ContentEngine\Review\EditCapture;
 use App\ContentEngine\Review\ProofPreview;
 use App\ContentEngine\Review\ReviewActions;
 use App\ContentEngine\Review\StrategyRail;
 use App\Enums\ContentStatus;
 use App\Enums\EditReason;
+use App\Enums\RenderStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Grow;
+use App\Jobs\RenderImage;
 use App\Models\Content;
+use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -134,6 +138,42 @@ class ProofEditor extends Page
 
         $this->reset(['editingKey', 'editValue', 'editReason']);
         Notification::make()->success()->title('Saved')->send();
+    }
+
+    /**
+     * Regenerate ONE image slot in place — the surgical fix for a weird AI image. Resets that slot's
+     * render job and re-dispatches (fal → R2), the SAME path launchpad:reset-render uses; the fresh
+     * image lands on the same RenderJob the proof + publish already read, so there's no override or
+     * divergence. Leaves the rest of the page untouched. Captures the edit as the §7 quality signal.
+     */
+    public function regenerateImage(string $slot): void
+    {
+        $record = $this->record();
+        if ($record === null) {
+            return;
+        }
+
+        $job = RenderJob::withoutGlobalScope(SiteScope::class)
+            ->where('content_id', $record->id)
+            ->where('slot', $slot)
+            ->first();
+
+        if ($job === null) {
+            Notification::make()->warning()->title('No image to regenerate')
+                ->body('This slot has no render job yet — generate the page first.')->send();
+
+            return;
+        }
+
+        $before = (string) ($job->r2_key ?? '');
+        $job->forceFill(['status' => RenderStatus::Queued, 'attempts' => 0, 'error' => null])->save();
+        RenderImage::dispatch($job->id);
+
+        // The image was off (that's why it's being regenerated) — capture it as the non-retrofittable signal.
+        app(EditCapture::class)->record($record, "image:{$slot}", $before, 'regenerated', EditReason::OffBase, Auth::id());
+
+        Notification::make()->success()->title('Regenerating image')
+            ->body('A fresh image is being generated — it will refresh here shortly.')->send();
     }
 
     /** Approve — a cheap state flip to `approved` (no WordPress contact). */

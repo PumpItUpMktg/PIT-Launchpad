@@ -100,7 +100,16 @@
                             </div>
                         </div>
                     @elseif ($sec['is_image'])
-                        <div class="pe-img">🖼 Image slot — renders on publish</div>
+                        @php $imgUrl = is_string($sec['value'] ?? null) && str_starts_with((string) $sec['value'], 'http') ? $sec['value'] : null; @endphp
+                        <div class="pe-img">
+                            @if ($imgUrl)
+                                <img src="{{ $imgUrl }}" alt="" style="max-width:340px;width:100%;border-radius:10px;border:1px solid var(--pe-line);display:block;margin-bottom:8px">
+                            @else
+                                <div class="pe-img-ph">🖼 Image — generated on the worker</div>
+                            @endif
+                            <button class="pe-btn ghost sm" wire:click="regenerateImage('{{ $sec['key'] }}')">↻ Regenerate image</button>
+                            <span class="pe-note">Weird AI image? Regenerate just this one — the rest stays put.</span>
+                        </div>
                     @elseif (is_array($sec['value']))
                         <div class="pe-val"><ul>@foreach ($sec['value'] as $item)<li>{{ is_array($item) ? implode(' — ', array_map('strval', $item)) : (string) $item }}</li>@endforeach</ul></div>
                     @elseif ($sec['empty'])
