@@ -8,11 +8,13 @@ use App\ContentEngine\Review\ReviewActions;
 use App\ContentEngine\Review\StrategyRail;
 use App\Enums\ContentStatus;
 use App\Enums\EditReason;
+use App\Enums\MediaKind;
 use App\Enums\RenderStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Grow;
 use App\Jobs\RenderImage;
 use App\Models\Content;
+use App\Models\MediaAsset;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -21,6 +23,7 @@ use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
@@ -223,25 +226,78 @@ class ProofEditor extends Page
         $ext = strtolower($this->imageUpload->getClientOriginalExtension() ?: (string) $this->imageUpload->guessExtension());
         $key = app(TenantStorage::class)->put($site, "proof-{$slot}.{$ext}", (string) $this->imageUpload->get());
 
+        $this->applyImageToSlot($record, $slot, $key, null, "upload:{$key}");
+
+        $this->reset(['replaceSlot', 'imageUpload']);
+        Notification::make()->success()->title('Image replaced')
+            ->body('Your photo is in — it will ship on the next publish.')->send();
+    }
+
+    /** The site's usable media (photos/logo) to pick from for a slot — served from R2. @return list<array{id: string, url: string, alt: string}> */
+    public function getLibraryProperty(): array
+    {
+        $record = $this->record();
+        if ($record === null) {
+            return [];
+        }
+
+        return MediaAsset::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $record->site_id)
+            ->whereIn('kind', [MediaKind::Photo->value, MediaKind::Logo->value])
+            ->whereNotNull('r2_key')
+            ->latest()
+            ->limit(24)
+            ->get()
+            ->map(fn (MediaAsset $a): array => ['id' => (string) $a->id, 'url' => Storage::disk('r2')->url((string) $a->r2_key), 'alt' => (string) ($a->alt_text ?? '')])
+            ->all();
+    }
+
+    /** Choose an existing library image for a slot — same RenderJob single source as upload/regenerate. */
+    public function chooseFromLibrary(string $slot, string $assetId): void
+    {
+        $record = $this->record();
+        if ($record === null) {
+            return;
+        }
+
+        $asset = MediaAsset::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $record->site_id)->whereKey($assetId)->first();
+        if ($asset === null || $asset->r2_key === null) {
+            return;
+        }
+
+        $this->applyImageToSlot($record, $slot, (string) $asset->r2_key, $asset->alt_text, "library:{$asset->id}");
+
+        $this->reset(['replaceSlot', 'imageUpload']);
+        Notification::make()->success()->title('Image chosen')
+            ->body('The library image is in — it will ship on the next publish.')->send();
+    }
+
+    /**
+     * Write an image onto a slot's RenderJob (the single source the proof + publish read via
+     * toImageObject) — create the job if the slot never had one — and capture the edit.
+     */
+    private function applyImageToSlot(Content $record, string $slot, string $r2Key, ?string $alt, string $editedTag): void
+    {
         $job = RenderJob::withoutGlobalScope(SiteScope::class)
             ->where('content_id', $record->id)->where('slot', $slot)->first();
 
         if ($job !== null) {
             $before = (string) ($job->r2_key ?? '');
-            $job->forceFill(['r2_key' => $key, 'status' => RenderStatus::Succeeded, 'attempts' => 0, 'error' => null])->save();
+            $attrs = ['r2_key' => $r2Key, 'status' => RenderStatus::Succeeded, 'attempts' => 0, 'error' => null];
+            if ($alt !== null && $alt !== '') {
+                $attrs['alt'] = $alt;
+            }
+            $job->forceFill($attrs)->save();
         } else {
             $before = '';
             RenderJob::create([
                 'site_id' => $record->site_id, 'content_id' => $record->id, 'slot' => $slot,
-                'r2_key' => $key, 'status' => RenderStatus::Succeeded, 'required' => false, 'attempts' => 0,
+                'r2_key' => $r2Key, 'alt' => $alt, 'status' => RenderStatus::Succeeded, 'required' => false, 'attempts' => 0,
             ]);
         }
 
-        app(EditCapture::class)->record($record, "image:{$slot}", $before, "upload:{$key}", EditReason::Preference, Auth::id());
-
-        $this->reset(['replaceSlot', 'imageUpload']);
-        Notification::make()->success()->title('Image replaced')
-            ->body('Your photo is in — it will ship on the next publish.')->send();
+        app(EditCapture::class)->record($record, "image:{$slot}", $before, $editedTag, EditReason::Preference, Auth::id());
     }
 
     /** Approve — a cheap state flip to `approved` (no WordPress contact). */
