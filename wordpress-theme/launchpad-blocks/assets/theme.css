@@ -639,6 +639,18 @@
     border: 1px solid var(--wp--preset--color--border, #e2e8f0);
     border-radius: 999px;
     padding: 0.5rem 1rem;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+/* Linked town pills (real location pages) — same look, clickable, accent on hover. */
+.wp-block-list.lp-area-tags li a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.wp-block-list.lp-area-tags li:has(a):hover {
+    border-color: var(--wp--preset--color--accent, #1d6fd6);
+    color: var(--wp--preset--color--accent, #1d6fd6);
 }
 
 /* ================================================================== *

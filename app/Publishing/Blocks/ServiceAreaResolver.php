@@ -2,12 +2,16 @@
 
 namespace App\Publishing\Blocks;
 
+use App\Enums\ContentKind;
+use App\Enums\PageType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
+use App\Models\Site;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
 
@@ -34,17 +38,61 @@ final class ServiceAreaResolver
     public function __construct(private readonly MunicipalityGazetteer $gazetteer) {}
 
     /**
-     * @return array{counties: list<string>, cities: list<string>, more: int}
+     * @return array{counties: list<string>, cities: list<array{label: string, url: string}>, more: int}
      */
     public function resolve(string $siteId): array
     {
-        [$cities, $more] = $this->cities($siteId);
+        [$names, $more] = $this->cities($siteId);
+
+        // Attach a REAL town-page link where one exists (every link resolves to a real page); a town
+        // with no location page renders as a plain pill.
+        $urls = $this->locationUrls($siteId);
+        $cities = array_map(fn (string $name): array => [
+            'label' => $name,
+            'url' => $urls[$this->key($name)] ?? '',
+        ], $names);
 
         return [
             'counties' => $this->counties($siteId),
             'cities' => $cities,
             'more' => $more,
         ];
+    }
+
+    /**
+     * town name (lower-cased) => its published location-page URL. Real pages only — a town without a
+     * location page just won't be in the map, so it links to nothing.
+     *
+     * @return array<string, string>
+     */
+    private function locationUrls(string $siteId): array
+    {
+        $domain = Site::find($siteId)?->domain_url;
+        $home = is_string($domain) && trim($domain) !== '' ? rtrim($domain, '/').'/' : '/';
+
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->whereNotNull('slug')
+            ->get(['title', 'slug']);
+
+        $map = [];
+        foreach ($pages as $page) {
+            $title = trim((string) $page->title);
+            $slug = trim((string) $page->slug);
+            if ($title === '' || $slug === '') {
+                continue;
+            }
+            $map[$this->key($title)] = $home.ltrim($slug, '/');
+        }
+
+        return $map;
+    }
+
+    private function key(string $name): string
+    {
+        return mb_strtolower(trim($name));
     }
 
     /**

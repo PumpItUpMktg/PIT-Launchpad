@@ -8,6 +8,8 @@ use App\Integrations\Wordpress\WordpressException;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\VoiceProfile;
+use App\Publishing\Chrome\SiteProfileAssembler;
+use Throwable;
 
 /**
  * The Gutenberg-pivot brand "push": resolve the site's block-theme style variation and activate it on
@@ -21,6 +23,7 @@ final class StyleActivator
     public function __construct(
         private readonly WordpressClientFactory $factory,
         private readonly StyleRecommender $recommender,
+        private readonly SiteProfileAssembler $profile,
     ) {}
 
     /** The variation the site renders in: explicit override → voice recommendation → Clean default. */
@@ -51,11 +54,21 @@ final class StyleActivator
     public function activate(Site $site): array
     {
         $variation = $this->resolve($site);
+        $client = $this->factory->forSite($site);
 
         try {
-            $result = $this->factory->forSite($site)->activateStyle($variation->value);
+            $result = $client->activateStyle($variation->value);
         } catch (WordpressException $e) {
             return ['updated' => false, 'error' => $e->getMessage(), 'variation' => $variation->value];
+        }
+
+        // The brand push also populates the universal header/footer chrome (brand + NAP + nav) — the
+        // same setup step writes both the theme.json variation AND the site profile. Best-effort: a
+        // chrome-push failure never fails the style activation.
+        try {
+            $client->pushSiteProfile($this->profile->assemble($site));
+        } catch (Throwable) {
+            // Surfaced elsewhere (the operator can re-run launchpad:sync-site-profile); style stands.
         }
 
         return ['variation' => $variation->value] + $result;
