@@ -27,6 +27,11 @@ final class BlockPageComposer
      * @param  list<string>  $serviceAreaCounties  named counties served (the "county level"), shown first
      * @param  list<array{label: string, url: string}>  $serviceAreas  towns largest-first, with real page links (data-gated)
      * @param  list<array{title: string, description: string}>  $processSteps  the tenant's captured process (else a safe default)
+     * @param  bool  $preview  two contexts, one rule: preview (operator proof) builds ALL recommended
+     *                         sections — a data-gated section with no data renders a LABELED example
+     *                         placeholder so the operator sees the whole page and what's still missing;
+     *                         publish (default false) keeps the data-gating — empty sections are omitted
+     *                         and a placeholder can never reach the live, visitor-facing page.
      */
     public function composeHome(
         array $slots,
@@ -41,6 +46,7 @@ final class BlockPageComposer
         array $serviceAreas = [],
         ?string $serviceAreasMore = null,
         array $processSteps = [],
+        bool $preview = false,
     ): string {
         $hero = $this->sections->hero(
             eyebrow: $this->str($slots['service_area'] ?? ''),
@@ -54,8 +60,9 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // 2. Credibility strip — substantiated badges only; hides when none exist.
-        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges);
+        // 2. Credibility strip — substantiated badges only; hides when none exist (a labeled example
+        //    placeholder stands in for preview, never for publish).
+        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
 
         $services = $this->sections->servicesGrid(
             eyebrow: 'What we do',
@@ -63,11 +70,12 @@ final class BlockPageComposer
             cards: $serviceCards,
         );
 
-        // 4. Why Choose Us — real differentiators; hides when none captured.
+        // 4. Why Choose Us — real differentiators; hides when none captured (preview → example band).
         $why = $this->sections->whyChooseUs(
             eyebrow: 'Why choose us',
             heading: 'What sets us apart',
             items: $differentiators,
+            preview: $preview,
         );
 
         // 5. How It Works — the tenant's real process when captured, else a safe business-agnostic
@@ -84,21 +92,23 @@ final class BlockPageComposer
             imageUrls: $this->galleryUrls($images),
         );
 
-        // 7. Testimonials — data-gated on substantiated reviews.
+        // 7. Testimonials — data-gated on substantiated reviews (preview → labeled example reviews).
         $reviews = $this->sections->testimonials(
             eyebrow: 'What clients say',
             heading: 'In their words',
             quotes: $testimonials,
+            preview: $preview,
         );
 
         // 8. Service Areas — counties first (the "county level"), then towns largest-first.
-        //    Data-gated on real coverage.
+        //    Data-gated on real coverage (preview → example territory).
         $areas = $this->sections->serviceAreas(
             eyebrow: 'Where we work',
             heading: 'Areas we serve',
             counties: $serviceAreaCounties,
             cities: $serviceAreas,
             more: $serviceAreasMore,
+            preview: $preview,
         );
 
         $cta = $this->sections->cta(

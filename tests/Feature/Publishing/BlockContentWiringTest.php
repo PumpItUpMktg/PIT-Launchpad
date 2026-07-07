@@ -257,6 +257,64 @@ it('data-gated sections stay hidden when their data is absent — degrade, never
         ->toContain('Getting started is simple');
 });
 
+it('preview builds ALL recommended sections with labeled placeholders; publish omits the empty ones', function () {
+    // A bare tenant: no badges, no differentiators, no reviews, no markets — every data-gated section empty.
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+
+    $preview = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], preview: true);
+    $published = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    // Preview: the whole page is visible — every data-gated section renders as a labeled example.
+    expect($preview)
+        ->toContain('lp-placeholder')                                   // sections greyed as examples
+        ->toContain('What sets us apart')                               // Why Choose Us shown
+        ->toContain('In their words')                                   // Testimonials shown
+        ->toContain('Areas we serve')                                   // Service Areas shown
+        ->toContain('activates when you add reviews')                   // names what fills Testimonials
+        ->toContain('activates when you add licenses, certifications, or ratings') // Credibility
+        ->toContain('add your service areas to activate this section')  // Service Areas
+        ->toContain('Getting started is simple');                       // always-on section still there
+
+    // Publish (default): the same empty sections are GONE — data-gated, no placeholder leaks live.
+    expect($published)
+        ->not->toContain('lp-placeholder')
+        ->not->toContain('What sets us apart')
+        ->not->toContain('In their words')
+        ->not->toContain('Areas we serve')
+        ->not->toContain('activates when you add')
+        ->toContain('Getting started is simple');                       // always-on unaffected
+});
+
+it('a section WITH data renders real in preview — no placeholder marker on it', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    // Real testimonial present; other data-gated sections still empty.
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::Testimonial,
+        'payload' => ['text' => 'They saved us from a flooded basement.', 'author' => 'Real Client', 'stars' => 5],
+        'is_substantiated' => true,
+    ]);
+    $home = blockHomePage($site);
+
+    $preview = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], preview: true);
+
+    expect($preview)
+        ->toContain('They saved us from a flooded basement.')  // the REAL review renders
+        ->not->toContain('activates when you add reviews')     // so Testimonials is NOT a placeholder
+        ->toContain('add your service areas to activate this section'); // but empty Service Areas still is
+});
+
+it('the meta-blob threads preview into post_content (placeholder in preview, gated on publish)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+
+    $previewBlob = app(MetaBlobAssembler::class)->assemble($home->fresh(), collect(), preview: true);
+    $publishBlob = app(MetaBlobAssembler::class)->assemble($home->fresh(), collect());
+
+    expect($previewBlob['post_content'])->toContain('lp-placeholder')->toContain('Areas we serve');
+    expect($publishBlob['post_content'])->not->toContain('lp-placeholder')->not->toContain('Areas we serve');
+});
+
 it('returns null for a page type whose block pattern has not shipped (falls back to existing render)', function () {
     $site = Site::factory()->create();
     $service = blockServicePage($site, 'Drain Cleaning', 'drain-cleaning', 'x');

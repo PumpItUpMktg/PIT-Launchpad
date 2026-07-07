@@ -61,6 +61,14 @@
         <a href="{{ $this->backUrl() }}" class="pe-back">← Back to pages</a>
         <div class="pe-spacer"></div>
         <div class="pe-actbar">
+            @if ($previewUrl)
+                <a class="pe-btn ghost" href="{{ $previewUrl }}" target="_blank" rel="noopener">Open full page ↗</a>
+            @else
+                <button class="pe-btn ghost" wire:click="previewFullPage" wire:loading.attr="disabled" wire:target="previewFullPage">
+                    <span wire:loading.remove wire:target="previewFullPage">Preview full page</span>
+                    <span wire:loading wire:target="previewFullPage">Building…</span>
+                </button>
+            @endif
             @if ($this->canPublish())
                 <button class="pe-btn" wire:click="publish" wire:loading.attr="disabled">Publish</button>
             @elseif ($this->isApprovable())

@@ -12,6 +12,8 @@ use App\Models\MediaAsset;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\User;
+use App\Publishing\PagePreviewService;
+use App\Publishing\PreviewResult;
 use Filament\Facades\Filament;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
@@ -81,6 +83,22 @@ it('approves a drafted page (no WordPress contact)', function () {
         ->call('approve');
 
     expect($page->fresh()->status)->toBe(ContentStatus::Approved);
+});
+
+it('surfaces the full-page preview URL from the preview-push', function () {
+    $page = draftedPage();
+
+    $service = Mockery::mock(PagePreviewService::class);
+    $service->shouldReceive('preview')->once()
+        ->andReturn(PreviewResult::ready(42, 'https://wp.example/?p=42&preview=true'));
+    app()->instance(PagePreviewService::class, $service);
+
+    Livewire::withQueryParams(['content' => $page->id])
+        ->test(ProofEditor::class)
+        ->assertSee('Preview full page')
+        ->call('previewFullPage')
+        ->assertSet('previewUrl', 'https://wp.example/?p=42&preview=true')
+        ->assertSee('Open full page ↗');
 });
 
 it('is operator-only', function () {

@@ -913,3 +913,49 @@
     border-top: 1px solid color-mix(in srgb, var(--wp--preset--color--base, #fff) 12%, transparent);
     font-size: 0.75rem;
 }
+
+/* ------------------------------------------------------------------
+ * Preview placeholders (proof view only).
+ * A data-gated section with no data is built in the operator preview as
+ * a LABELED example so the whole page is visible before publish. These
+ * styles grey the section and mark the example so it can't be mistaken
+ * for real content. Placeholders never publish — the live composer omits
+ * an empty section entirely — so on a live page these selectors match
+ * nothing. Purely a preview aid.
+ * ------------------------------------------------------------------ */
+.lp-placeholder {
+    position: relative;
+    opacity: 0.72;
+    filter: saturate(0.5);
+}
+
+.lp-placeholder::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border: 2px dashed color-mix(in srgb, var(--wp--preset--color--contrast, #172a2f) 22%, transparent);
+    border-radius: 14px;
+}
+
+.lp-placeholder-note {
+    margin: 0 auto 0.75rem;
+    text-align: center;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    opacity: 0.9;
+}
+
+.lp-placeholder-tag {
+    display: inline-block;
+    margin-right: 0.4rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--wp--preset--color--accent, #b5731a) 18%, transparent);
+    color: var(--wp--preset--color--contrast, #172a2f);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    vertical-align: middle;
+}
