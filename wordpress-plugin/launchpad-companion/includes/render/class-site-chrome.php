@@ -93,7 +93,8 @@ final class SiteChrome
         $out .= '</div>';
 
         $out .= $this->footerColumn('Services', $p['services'] ?? []);
-        $out .= $this->footerColumn('Service Areas', $p['areas'] ?? []);
+        // Service Areas (curated town list) is covered by the home page's areas map + grouped cities —
+        // dropped from the footer to avoid a redundant county/town list.
         $out .= $this->footerColumn('Company', $p['company'] ?? []);
 
         $out .= '</div>';

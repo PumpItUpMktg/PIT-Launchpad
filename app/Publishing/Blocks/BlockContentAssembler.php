@@ -77,6 +77,8 @@ final class BlockContentAssembler
             serviceAreaCounties: $this->serviceAreas->resolve($siteId)['counties'],
             serviceAreasByCounty: $this->serviceAreas->byCounty($siteId),
             processSteps: $this->processSteps($content),
+            certifications: $this->certifications($content),
+            guarantee: $this->guarantee($content),
             preview: $preview,
             serviceAreaMapAvailable: $mapAvailable,
         );
@@ -165,6 +167,52 @@ final class BlockContentAssembler
                 continue;
             }
             $out[] = ['title' => $title, 'description' => trim((string) ($item['description'] ?? ''))];
+        }
+
+        return array_slice($out, 0, 6);
+    }
+
+    /**
+     * The tenant's guarantee/warranty from the narrative — {name, description}, verbatim. Empty when
+     * none is captured (the band then omits). Never fabricated.
+     *
+     * @return array{name: string, description: string}
+     */
+    private function guarantee(Content $content): array
+    {
+        $g = SiteNarrative::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->value('guarantee');
+        $g = is_array($g) ? $g : [];
+
+        return ['name' => trim((string) ($g['name'] ?? '')), 'description' => trim((string) ($g['description'] ?? ''))];
+    }
+
+    /**
+     * The tenant's certifications/credentials from the narrative — a list of {label, number?, logo_url?},
+     * verbatim, per-item. Only captured credentials appear (never fabricated); capped so the row stays a
+     * row.
+     *
+     * @return list<array{label: string, number: string, logo_url: string}>
+     */
+    private function certifications(Content $content): array
+    {
+        $items = SiteNarrative::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->value('certifications');
+        $items = is_array($items) ? $items : [];
+
+        $out = [];
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $label = trim((string) ($item['label'] ?? ''));
+            $logo = trim((string) ($item['logo_url'] ?? ''));
+            if ($label === '' && $logo === '') {
+                continue;
+            }
+            $out[] = ['label' => $label, 'number' => trim((string) ($item['number'] ?? '')), 'logo_url' => $logo];
         }
 
         return array_slice($out, 0, 6);

@@ -59,8 +59,10 @@
  * ------------------------------------------------------------------ */
 .lp-hero,
 .lp-credibility,
+.lp-certs,
 .lp-services,
 .lp-why,
+.lp-guarantee,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -71,8 +73,10 @@
 
 .lp-hero > *,
 .lp-credibility > *,
+.lp-certs > *,
 .lp-services > *,
 .lp-why > *,
+.lp-guarantee > *,
 .lp-process > *,
 .lp-proof > *,
 .lp-testimonials > *,
@@ -100,6 +104,76 @@
 .lp-credibility {
     padding-block: 1.15rem;
     border-block: 1px solid var(--wp--preset--color--border, #e2e8f0);
+}
+
+.lp-certs {
+    padding-block: clamp(1.5rem, 3vw, 2.5rem);
+    border-bottom: 1px solid var(--wp--preset--color--border, #e2e8f0);
+}
+
+.lp-guarantee {
+    padding-block: clamp(2.5rem, 4vw, 3.5rem);
+}
+
+/* Certifications / trust row — real credentials as badges, centered, per-item (never padded). */
+.wp-block-columns.lp-certs-row {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: clamp(1rem, 3vw, 2.5rem);
+    align-items: center;
+}
+
+.lp-certs-row > .wp-block-column {
+    flex: 0 1 auto;
+    text-align: center;
+}
+
+.lp-cert {
+    font-size: 0.95rem;
+    line-height: 1.3;
+}
+
+.lp-cert .lp-cert-num {
+    font-size: 0.82rem;
+    color: var(--wp--preset--color--muted, #475569);
+    font-weight: 500;
+}
+
+.lp-cert-logo img {
+    max-height: 56px;
+    width: auto;
+    object-fit: contain;
+}
+
+/* Guarantee band — a standout accent promise: shield mark + name + line, centered. */
+.lp-guarantee-card {
+    max-width: 720px;
+    margin-inline: auto;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.lp-guarantee-card .lp-icon {
+    width: 3.5rem;
+    height: 3.5rem;
+    color: var(--wp--preset--color--on-accent, #fff);
+    background: color-mix(in srgb, var(--wp--preset--color--on-accent, #fff) 16%, transparent);
+    margin-bottom: 0.25rem;
+}
+
+.lp-guarantee-card h3 {
+    margin: 0;
+    font-size: clamp(1.3rem, 2.5vw, 1.7rem);
+}
+
+.lp-guarantee-card p {
+    margin: 0;
+    font-size: 1.05rem;
+    opacity: 0.92;
+    max-width: 56ch;
 }
 
 /* ------------------------------------------------------------------ *
@@ -739,14 +813,11 @@
     border-bottom-color: currentColor;
 }
 
-/* The county list beneath the block — pipe-separated, mirroring the block width. */
+/* The old pipe-separated county line is retired — the grouped cities carry the county names now. Hide
+   it so a page published BEFORE that change (its markup is baked in post_content) drops the redundant
+   line without waiting to be republished. */
 .lp-areas-counties {
-    margin: 0;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--wp--preset--color--border, #e2e8f0);
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--wp--preset--color--muted, #475569);
+    display: none;
 }
 
 @media (max-width: 600px) {

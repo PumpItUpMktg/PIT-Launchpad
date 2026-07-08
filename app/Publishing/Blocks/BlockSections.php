@@ -173,6 +173,85 @@ final class BlockSections
     }
 
     /**
+     * Certifications / trust row: a row of REAL credentials — each a badge (its uploaded logo, else the
+     * text label + optional number). Per-item: only the credentials captured render, never padded. Order
+     * is the tenant's captured order (their audience choice). Data-gated: hidden with none. Reusable —
+     * home uses it near the top; About / Why-Choose-Us can too. NEVER fabricates a credential.
+     *
+     * @param  list<array{label?: string, number?: string, logo_url?: string}>  $certs
+     */
+    public function certificationsRow(array $certs, bool $preview = false): string
+    {
+        $certs = array_values(array_filter(
+            $certs,
+            fn (array $c): bool => trim((string) ($c['label'] ?? '')) !== '' || trim((string) ($c['logo_url'] ?? '')) !== '',
+        ));
+
+        $placeholder = false;
+        if ($certs === []) {
+            if (! $preview) {
+                return '';
+            }
+            $certs = [['label' => 'Licensed & Insured'], ['label' => 'NJ Master Plumber', 'number' => '#1234'], ['label' => 'BBB A+ Rated']];
+            $placeholder = true;
+        }
+
+        $cols = array_map(function (array $c): string {
+            $logo = trim((string) ($c['logo_url'] ?? ''));
+            $label = trim((string) ($c['label'] ?? ''));
+            if ($logo !== '') {
+                return $this->b->column([$this->b->image($logo, $label !== '' ? $label : 'Certification', ['className' => 'lp-cert-logo'])]);
+            }
+            $number = trim((string) ($c['number'] ?? ''));
+            $body = '<strong>'.$this->text($label).'</strong>'.($number !== '' ? '<br><span class="lp-cert-num">'.$this->text($number).'</span>' : '');
+
+            return $this->b->column([$this->b->group([$this->b->paragraph($body)], ['className' => 'lp-cert'])]);
+        }, $certs);
+
+        $children = [];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add certifications');
+        }
+        $children[] = $this->b->columns($cols, ['className' => 'lp-certs-row']);
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-certs', $placeholder)]);
+    }
+
+    /**
+     * Guarantee band: the tenant's guarantee/warranty as a standout risk-reversal PROMISE — an accent
+     * band with a shield mark, the guarantee name (headline) + its description. Rendered verbatim (a
+     * fabricated guarantee is false advertising). Data-gated: hidden without one. Reusable across pages.
+     */
+    public function guaranteeBand(string $name, string $description, bool $preview = false): string
+    {
+        $name = trim($name);
+        $description = trim($description);
+
+        $placeholder = false;
+        if ($name === '') {
+            if (! $preview) {
+                return '';
+            }
+            $name = 'Your guarantee';
+            $description = 'Add a guarantee or warranty — it reads here as a standout promise that reverses the risk.';
+            $placeholder = true;
+        }
+
+        $card = [$this->icon('shield'), $this->b->heading(3, $name, ['textColor' => 'on-accent'])];
+        if ($description !== '') {
+            $card[] = $this->b->paragraph($this->text($description), ['textColor' => 'on-accent']);
+        }
+
+        $children = [];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add a guarantee', onDark: true);
+        }
+        $children[] = $this->b->group($card, ['className' => 'lp-guarantee-card']);
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'accent', 'textColor' => 'on-accent', 'className' => $this->sectionClass('lp-guarantee', $placeholder)]);
+    }
+
+    /**
      * Why Choose Us: a dark band of differentiators (icon + title + line). Data-gated on real
      * differentiators (from the site narrative) — falls back to nothing when none are captured.
      *

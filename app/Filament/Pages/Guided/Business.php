@@ -13,6 +13,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteBranding;
+use App\Models\SiteNarrative;
 use Filament\Notifications\Notification;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
@@ -53,6 +54,19 @@ class Business extends GuidedPage
     /** @var list<array{name: string, why: string, on: bool}> */
     public array $suggestions = [];
 
+    /** The guarantee / warranty — name + description. Optional; drives the guarantee band. */
+    public string $guaranteeName = '';
+
+    public string $guaranteeDescription = '';
+
+    /** Real credentials — each {label, number}. Optional; drives the certifications row. Verbatim. */
+    /** @var list<array{label: string, number: string}> */
+    public array $certifications = [];
+
+    public string $newCertLabel = '';
+
+    public string $newCertNumber = '';
+
     /** The pending logo upload (optional). */
     public mixed $logo = null;
 
@@ -81,6 +95,7 @@ class Business extends GuidedPage
         $this->trade = (string) ($seed['trade'] ?? '');
         $this->services = $this->stringList($seed['anchor_services'] ?? []);
         $this->logoInfo = $this->existingLogo($site);
+        $this->loadTrustSignals($site);
 
         if ($this->trade !== '') {
             $this->suggest();
@@ -145,6 +160,60 @@ class Business extends GuidedPage
         $this->services = array_values($this->services);
     }
 
+    /** Add a credential (label + optional number). Verbatim — never invented. */
+    public function addCertification(): void
+    {
+        $label = trim($this->newCertLabel);
+        if ($label !== '') {
+            $this->certifications[] = ['label' => $label, 'number' => trim($this->newCertNumber)];
+        }
+        $this->newCertLabel = '';
+        $this->newCertNumber = '';
+    }
+
+    public function removeCertification(int $index): void
+    {
+        unset($this->certifications[$index]);
+        $this->certifications = array_values($this->certifications);
+    }
+
+    /** Load the tenant's captured guarantee + certifications from the site narrative. */
+    private function loadTrustSignals(Site $site): void
+    {
+        $narrative = SiteNarrative::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+
+        $guarantee = is_array($narrative?->guarantee) ? $narrative->guarantee : [];
+        $this->guaranteeName = (string) ($guarantee['name'] ?? '');
+        $this->guaranteeDescription = (string) ($guarantee['description'] ?? '');
+
+        $certs = is_array($narrative?->certifications) ? $narrative->certifications : [];
+        $this->certifications = [];
+        foreach ($certs as $c) {
+            if (is_array($c) && trim((string) ($c['label'] ?? '')) !== '') {
+                $this->certifications[] = ['label' => trim((string) $c['label']), 'number' => trim((string) ($c['number'] ?? ''))];
+            }
+        }
+    }
+
+    /** Persist the guarantee + certifications verbatim onto the site narrative (null when empty). */
+    private function saveTrustSignals(Site $site): void
+    {
+        $name = trim($this->guaranteeName);
+        $guarantee = $name !== '' ? ['name' => $name, 'description' => trim($this->guaranteeDescription)] : null;
+
+        $certs = [];
+        foreach ($this->certifications as $c) {
+            $label = trim($c['label']);
+            if ($label !== '') {
+                $certs[] = ['label' => $label, 'number' => trim($c['number'])];
+            }
+        }
+
+        SiteNarrative::withoutGlobalScope(SiteScope::class)
+            ->firstOrCreate(['site_id' => $site->id])
+            ->update(['guarantee' => $guarantee, 'certifications' => $certs !== [] ? $certs : null]);
+    }
+
     /** Refresh the connecting-services suggestions for the current trade + stated set. */
     public function suggest(): void
     {
@@ -193,6 +262,8 @@ class Business extends GuidedPage
             'trade' => $this->trade,
             'seed' => [...$seed->toArray(), 'suggested_confirmed' => $confirmed],
         ]);
+
+        $this->saveTrustSignals($site);
 
         $gate = app(StepGate::class);
         $gate->complete($gate->state($site), SetupStep::Business);

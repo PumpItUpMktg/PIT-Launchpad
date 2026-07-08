@@ -108,6 +108,28 @@
             @endforelse
         </div>
 
+        <div class="lp-card">
+            <h3>Guarantee <span class="hint" style="font-weight:400">— optional</span></h3>
+            <div class="hint">Your guarantee or warranty, in your words. It shows as a standout promise on your site. Only add one you actually offer.</div>
+            <div class="lp-field"><label>Name</label><input class="lp-input" wire:model="guaranteeName" placeholder="e.g. Forever Pump Warranty, Satisfaction Guaranteed"></div>
+            <div class="lp-field" style="margin-bottom:0"><label>Description</label><input class="lp-input" wire:model="guaranteeDescription" placeholder="One line — what the guarantee covers"></div>
+        </div>
+
+        <div class="lp-card">
+            <h3>Certifications &amp; credentials <span class="hint" style="font-weight:400">— optional</span></h3>
+            <div class="hint">Licenses, certifications, ratings — only what you actually hold. These are trust <em>and legal</em> claims, so we show exactly what you enter, nothing invented.</div>
+            <div class="lp-chips">
+                @foreach ($this->certifications as $i => $cert)
+                    <span class="lp-chip">{{ $cert['label'] }}@if (!empty($cert['number'])) <span style="opacity:.6">{{ $cert['number'] }}</span>@endif <span class="x" style="cursor:pointer" wire:click="removeCertification({{ $i }})">×</span></span>
+                @endforeach
+            </div>
+            <div class="lp-field" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+                <input class="lp-input" style="flex:2;min-width:180px" wire:model="newCertLabel" wire:keydown.enter.prevent="addCertification" placeholder="Credential (e.g. NJ Master Plumber, BBB A+)">
+                <input class="lp-input" style="flex:1;min-width:120px" wire:model="newCertNumber" wire:keydown.enter.prevent="addCertification" placeholder="Number (optional)">
+                <button class="lp-mini primary" wire:click="addCertification">Add</button>
+            </div>
+        </div>
+
         @php $added = collect($this->suggestions)->where('on', true)->count(); @endphp
         <div class="lp-foot">
             <button class="lp-btn" wire:click="proceed">Continue to territory</button>

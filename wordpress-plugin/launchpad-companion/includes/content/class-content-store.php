@@ -101,6 +101,13 @@ final class ContentStore
 
         EditGuard::record_push($post_id, $this->fingerprint($payload));
 
+        // The home page becomes WordPress' static front page — but only once it's actually published
+        // (a preview-push is a draft and must never repoint the site's front page).
+        if (($payload['page_type'] ?? '') === 'home' && get_post_status($post_id) === 'publish') {
+            update_option('show_on_front', 'page');
+            update_option('page_on_front', $post_id);
+        }
+
         return [
             'content_id' => $content_id,
             'wp_post_id' => $post_id,
