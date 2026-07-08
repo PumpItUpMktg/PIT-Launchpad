@@ -140,6 +140,83 @@ final class BlockPageComposer
         return $this->join([$hero, $credibility, $certs, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $cta]);
     }
 
+    /**
+     * Composes the WHY CHOOSE US page — a dedicated trust-conversion page whose body IS the
+     * differentiators, reinforced by the guarantee, real credentials, and client voice. It reuses the
+     * home section builders in a differentiators-led order (no services grid / process / gallery here —
+     * this page argues *why*, it doesn't catalog *what*). Same two-contexts rule as the home composer:
+     * preview builds every recommended section with a labeled placeholder; publish data-gates.
+     *
+     * @param  array<string, mixed>  $slots  the page's resolved slot_payload (hero headline/subhead)
+     * @param  array<string, array<string, mixed>>  $images  image map keyed by slot
+     * @param  list<array{title?: string, description?: string}>  $differentiators  the real captured value props (the page's spine)
+     * @param  list<string>  $credibilityBadges  substantiated trust badges (licensed/certified/rated)
+     * @param  array{name?: string, description?: string}  $guarantee  the tenant's guarantee/warranty (verbatim, data-gated)
+     * @param  list<array{label?: string, number?: string, logo_url?: string}>  $certifications  real credentials (verbatim, data-gated, per-item)
+     * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
+     * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero trust row
+     * @param  bool  $preview  operator proof-view (all sections + labeled placeholders) vs publish (data-gated)
+     */
+    public function composeWhyChooseUs(
+        array $slots,
+        array $images,
+        PageContext $ctx,
+        array $differentiators = [],
+        array $credibilityBadges = [],
+        array $guarantee = [],
+        array $certifications = [],
+        array $testimonials = [],
+        array $trustStats = [],
+        bool $preview = false,
+    ): string {
+        $hero = $this->sections->hero(
+            eyebrow: 'Why choose us',
+            headline: $this->str($slots['hero_headline'] ?? '') ?: 'Why clients choose us',
+            subhead: $this->str($slots['hero_subhead'] ?? $slots['intro'] ?? ''),
+            imageUrl: $this->imageUrl('hero_image', $images),
+            imageAlt: $this->imageAlt('hero_image', $images),
+            assessmentText: 'Get a free assessment',
+            assessmentUrl: '#contact',
+            trust: $this->heroTrust($ctx, $trustStats),
+            ctx: $ctx,
+        );
+
+        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
+
+        // The page's spine: the real, captured differentiators (preview → labeled example band).
+        $why = $this->sections->whyChooseUs(
+            eyebrow: 'What sets us apart',
+            heading: 'Reasons clients choose us',
+            items: $differentiators,
+            preview: $preview,
+        );
+
+        $guaranteeBand = $this->sections->guaranteeBand(
+            name: (string) ($guarantee['name'] ?? ''),
+            description: (string) ($guarantee['description'] ?? ''),
+            preview: $preview,
+        );
+
+        $certs = $this->sections->certificationsRow($certifications, $preview);
+
+        $reviews = $this->sections->testimonials(
+            eyebrow: 'What clients say',
+            heading: 'In their words',
+            quotes: $testimonials,
+            preview: $preview,
+        );
+
+        $cta = $this->sections->cta(
+            heading: 'Ready to get started?',
+            body: 'Get in touch for a free, no-obligation assessment.',
+            actionText: 'Schedule an assessment',
+            actionUrl: '#contact',
+            ctx: $ctx,
+        );
+
+        return $this->join([$hero, $credibility, $why, $guaranteeBand, $certs, $reviews, $cta]);
+    }
+
     /** @param list<string> $blocks */
     private function join(array $blocks): string
     {

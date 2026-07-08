@@ -3,7 +3,9 @@
 namespace App\Publishing\Blocks;
 
 use App\Enums\ContentKind;
+use App\Enums\PageType;
 use App\Enums\ProofType;
+use App\Enums\StandardPageType;
 use App\Models\Content;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
@@ -44,25 +46,29 @@ final class BlockContentAssembler
             return null;
         }
 
-        // Home is the first shipped block pattern (the mockup's subject); others land next.
-        if ($content->page_type?->value !== 'home') {
-            return null;
+        $ctx = $this->context($this->site($content));
+
+        // Dispatch by the page's identity: Home by page_type, standard pages (Utility page_type) by
+        // their finer standard_type. A type whose block composer hasn't shipped returns null — the blob
+        // then carries no post_content and the plugin falls back to the existing render.
+        if ($content->page_type === PageType::Home) {
+            return $this->composeHome($content, $slots, $images, $ctx, $preview, $mapAvailable);
         }
 
-        $site = $this->site($content);
-        // Phone resolves via SiteContact (primary Location's number, else the site business phone), so a
-        // guided-onboarded tenant that set only the wizard phone still shows a number. Emergency uses the
-        // dedicated after-hours line when set, else the main number.
-        $phone = $site !== null ? $this->contact->phone($site) : null;
-        $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
-        $ctx = new PageContext(
-            phoneDisplay: $phone,
-            phoneTel: $this->contact->tel($phone),
-            emergency: $site !== null && (bool) $site->offers_emergency,
-            emergencyDisplay: $emergencyPhone,
-            emergencyTel: $this->contact->tel($emergencyPhone),
-        );
+        if ($content->standard_type === StandardPageType::WhyChooseUs) {
+            return $this->composeWhyChooseUs($content, $slots, $images, $ctx, $preview);
+        }
 
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $slots
+     * @param  array<string, array<string, mixed>>  $images
+     */
+    private function composeHome(Content $content, array $slots, array $images, PageContext $ctx, bool $preview, bool $mapAvailable): string
+    {
+        $site = $this->site($content);
         $siteId = (string) $content->site_id;
 
         return $this->composer->composeHome(
@@ -81,6 +87,48 @@ final class BlockContentAssembler
             guarantee: $this->guarantee($content),
             preview: $preview,
             serviceAreaMapAvailable: $mapAvailable,
+        );
+    }
+
+    /**
+     * The dedicated Why Choose Us page — its body is the §1 differentiators, reinforced by the
+     * guarantee, real credentials, and substantiated client voice (all reusing the home resolvers).
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  array<string, array<string, mixed>>  $images
+     */
+    private function composeWhyChooseUs(Content $content, array $slots, array $images, PageContext $ctx, bool $preview): string
+    {
+        return $this->composer->composeWhyChooseUs(
+            slots: $slots,
+            images: $images,
+            ctx: $ctx,
+            differentiators: $this->differentiators($content),
+            credibilityBadges: $this->credibilityBadges($content),
+            guarantee: $this->guarantee($content),
+            certifications: $this->certifications($content),
+            testimonials: $this->testimonials($content),
+            trustStats: $this->trustStats($content),
+            preview: $preview,
+        );
+    }
+
+    /**
+     * The shared page context — phone resolves via SiteContact (primary Location's number, else the
+     * site business phone), so a guided-onboarded tenant that set only the wizard phone still shows a
+     * number. Emergency uses the dedicated after-hours line when set, else the main number.
+     */
+    private function context(?Site $site): PageContext
+    {
+        $phone = $site !== null ? $this->contact->phone($site) : null;
+        $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
+
+        return new PageContext(
+            phoneDisplay: $phone,
+            phoneTel: $this->contact->tel($phone),
+            emergency: $site !== null && (bool) $site->offers_emergency,
+            emergencyDisplay: $emergencyPhone,
+            emergencyTel: $this->contact->tel($emergencyPhone),
         );
     }
 
