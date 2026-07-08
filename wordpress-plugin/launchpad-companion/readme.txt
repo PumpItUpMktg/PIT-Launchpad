@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.7
+Stable tag: 0.9.8
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,12 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.8 =
+* /content now sets the home page as WordPress' static front page (show_on_front=page,
+  page_on_front) once it's PUBLISHED — a preview-push (draft) never repoints the front page.
+* [lp_footer] drops the "Service Areas" column — the home page's areas map + grouped cities
+  cover it, so the footer no longer repeats a curated county/town list.
 
 = 0.9.7 =
 * [lp_header] now renders a slim SERVICES sub-bar below the main menu (.lp-header-services)

@@ -739,14 +739,11 @@
     border-bottom-color: currentColor;
 }
 
-/* The county list beneath the block — pipe-separated, mirroring the block width. */
+/* The old pipe-separated county line is retired — the grouped cities carry the county names now. Hide
+   it so a page published BEFORE that change (its markup is baked in post_content) drops the redundant
+   line without waiting to be republished. */
 .lp-areas-counties {
-    margin: 0;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--wp--preset--color--border, #e2e8f0);
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--wp--preset--color--muted, #475569);
+    display: none;
 }
 
 @media (max-width: 600px) {
