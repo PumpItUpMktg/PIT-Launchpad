@@ -86,18 +86,19 @@ it('offers the right secondary (overflow-menu) controls per state', function () 
     $planned = $ctx['base'];
     $review = growPage($ctx, ['slot_payload' => ['hero' => 'x'], 'status' => ContentStatus::NeedsReview]);
     $approved = growPage($ctx, ['slot_payload' => ['hero' => 'x'], 'status' => ContentStatus::Approved]);
-    $live = growPage($ctx, ['slot_payload' => ['hero' => 'x'], 'status' => ContentStatus::Published]);
+    $live = growPage($ctx, ['slot_payload' => ['hero' => 'x'], 'status' => ContentStatus::Published, 'wp_post_id' => 4567]);
     $generating = growPage($ctx, ['slot_payload' => [], 'meta' => ['generating_at' => now()->toIso8601String()]]);
 
     $rows = collect(app(GrowDashboard::class)->pages($ctx['site']))->keyBy('id');
 
-    // a planned page can only be deleted (removed from the plan); no draft to regenerate/reject yet
-    expect($rows[$planned->id]['menu'])->toBe(['delete'])
-        // a review draft: regenerate a fresh one, reject it, or delete it
-        ->and($rows[$review->id]['menu'])->toBe(['regenerate', 'reject', 'delete'])
-        // approved / live pages: regenerate, lock (protect from republish clobber), delete
-        ->and($rows[$approved->id]['menu'])->toBe(['regenerate', 'lock', 'delete'])
-        ->and($rows[$live->id]['menu'])->toBe(['regenerate', 'lock', 'delete'])
+    // a planned page has nothing to re-draft/protect/take-down yet — no secondary menu
+    expect($rows[$planned->id]['menu'])->toBe([])
+        // a review draft: regenerate a fresh one or reject it (nothing on WordPress to take down)
+        ->and($rows[$review->id]['menu'])->toBe(['regenerate', 'reject'])
+        // approved page: regenerate or lock; not on WordPress → no take-down
+        ->and($rows[$approved->id]['menu'])->toBe(['regenerate', 'lock'])
+        // a live page (has a WP post): regenerate, lock, and take-down (removes the live post)
+        ->and($rows[$live->id]['menu'])->toBe(['regenerate', 'lock', 'takedown'])
         // an in-flight (generating) page carries no menu — we never interrupt a running job
         ->and($rows[$generating->id]['menu'])->toBe([]);
 });

@@ -150,18 +150,23 @@ class GrowDashboard
 
         // Secondary lifecycle controls, tucked in a per-row overflow menu so the primary stays clean.
         // Regenerate re-drafts anything that has (or expects) a draft; Reject sends a review draft back;
-        // Lock protects a publishable page from being clobbered; Delete removes the page (taking it down
-        // from WordPress first if it's live). In-flight rows (Writing / Publishing) carry no menu — we
-        // never interrupt a running job.
+        // Lock protects a publishable page from being clobbered. In-flight rows (Writing / Publishing)
+        // carry no menu — we never interrupt a running job.
         $menu = match ($state) {
-            PageState::ReadyToGenerate => ['delete'],
-            PageState::ReadyToReview => ['regenerate', 'reject', 'delete'],
-            PageState::Approved => ['regenerate', 'lock', 'delete'],
-            PageState::Live => ['regenerate', 'lock', 'delete'],
-            PageState::Failed => ['regenerate', 'delete'],
-            PageState::HeldComposer, PageState::HeldGrounding, PageState::HeldIntake => ['delete'],
-            default => [], // Writing, Publishing — a job is running; don't offer to interfere
+            PageState::ReadyToReview => ['regenerate', 'reject'],
+            PageState::Approved, PageState::Live => ['regenerate', 'lock'],
+            PageState::Failed => ['regenerate'],
+            default => [], // ReadyToGenerate / held / in-flight — nothing to re-draft or protect
         };
+
+        // Take down — offered only when there is actually a live WordPress post to remove. It force-
+        // deletes the post (freeing the slug) and keeps the plan row as republishable (§2's
+        // DeleteFromWordpress), so the page can be regenerated or re-published on the same URL. Never
+        // mid-job.
+        $onWp = (int) ($c->wp_post_id ?? 0) > 0;
+        if ($onWp && $state !== PageState::Writing && $state !== PageState::Publishing) {
+            $menu[] = 'takedown';
+        }
 
         // Most-actionable first within a lane: review → approved → (ready / held / failed) → in-flight → live.
         $rank = match ($state) {

@@ -96,8 +96,8 @@
                                                             @case('reject')
                                                                 <button type="button" wire:click="startReject('{{ $p['id'] }}')">Reject…</button>
                                                                 @break
-                                                            @case('delete')
-                                                                <button type="button" class="danger" wire:click="delete('{{ $p['id'] }}')" wire:confirm="Delete this page? It's removed from your plan@if ($p['live_url']) and taken down from WordPress@endif.">Delete</button>
+                                                            @case('takedown')
+                                                                <button type="button" class="danger" wire:click="takeDown('{{ $p['id'] }}')" wire:confirm="Take this page down from WordPress? It stays in your plan and can be re-published on the same URL.">Take down</button>
                                                                 @break
                                                         @endswitch
                                                     @endforeach

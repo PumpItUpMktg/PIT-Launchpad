@@ -245,35 +245,31 @@ class Grow extends GuidedPage
     }
 
     /**
-     * Delete a page — takes it down from WordPress first when it's live (freeing the slug), then
-     * soft-deletes the control-plane row so it drops out of the workbench. If the WordPress take-down
-     * fails we abort and keep the row, so a live page is never orphaned without its record.
+     * Take a page down from WordPress — force-deletes the live post (freeing the slug) and flips the
+     * page back to a republishable state (§2's {@see DeleteFromWordpress}). The plan row STAYS, so the
+     * page can be regenerated or re-published on the same URL; only the live WordPress post goes away.
      */
-    public function delete(string $contentId): void
+    public function takeDown(string $contentId): void
     {
         $content = $this->ownedPage($contentId);
         if ($content === null) {
             return;
         }
 
-        $wasLive = (int) ($content->wp_post_id ?? 0) > 0;
-        if ($wasLive) {
-            $result = app(DeleteFromWordpress::class)->delete($content);
-            if (! $result['deleted']) {
-                Notification::make()->danger()->title('Could not remove from WordPress')
-                    ->body($result['message'])->send();
+        $result = app(DeleteFromWordpress::class)->delete($content);
 
-                return;
-            }
+        // On WordPress but the delete didn't confirm — surface the failure and leave the page as-is.
+        if (! $result['deleted'] && $result['on_wp']) {
+            Notification::make()->danger()->title('Could not take it down')->body($result['message'])->send();
+
+            return;
         }
 
-        $title = $content->title;
-        $content->delete(); // soft-delete — drops the row from the workbench, structure re-arrange can re-add it
-
-        Notification::make()->success()->title('Page deleted')
-            ->body($wasLive
-                ? "'{$title}' was taken down from WordPress and removed from your plan."
-                : "'{$title}' was removed from your plan.")->send();
+        Notification::make()->success()->title('Taken down')
+            ->body($result['on_wp']
+                ? "'{$content->title}' was removed from WordPress — it stays in your plan and can be re-published on the same URL."
+                : "'{$content->title}' wasn't on WordPress; it's ready to publish.")
+            ->send();
     }
 
     /** Bulk Approve the ticked draft-ready pages — a cheap state flip (no WordPress contact). */

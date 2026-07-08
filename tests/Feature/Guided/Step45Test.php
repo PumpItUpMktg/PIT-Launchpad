@@ -8,6 +8,8 @@ use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Grow;
 use App\Guided\GrowDashboard;
+use App\Integrations\Wordpress\WordpressClient;
+use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Jobs\BuildStructure;
 use App\Jobs\GeneratePage;
 use App\Jobs\SyncSiloCategories;
@@ -181,26 +183,50 @@ test('Grow reject falls back to a default reason when none is typed', function (
     expect($page->fresh()->reject_reason)->toBe('Rejected from the workbench');
 });
 
-test('Grow delete soft-deletes a not-live page — it drops out of the workbench', function () {
+test('Grow take-down force-deletes the live WP post and keeps the page republishable on the same slug', function () {
     growLaunched($this->site);
     $page = Content::factory()->page()->create([
-        'site_id' => $this->site->id, 'status' => ContentStatus::Candidate, 'slot_payload' => [], 'wp_post_id' => null,
+        'site_id' => $this->site->id, 'status' => ContentStatus::Published,
+        'slug' => 'services/drain-cleaning', 'wp_post_id' => 42, 'locally_edited' => true, 'slot_payload' => ['hero' => 'x'],
     ]);
 
-    Livewire::test(Grow::class)->call('delete', $page->id)->assertOk();
+    // The WP transport force-deletes (force=true) by the WP id; mirror §2's DeleteFromWordpress path.
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('forceDeletePost')->once()->with('pages', 42)->andReturn(true);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->once()->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
 
-    expect(Content::withoutGlobalScope(SiteScope::class)->find($page->id))->toBeNull()               // soft-deleted
-        ->and(Content::withoutGlobalScope(SiteScope::class)->withTrashed()->find($page->id))->not->toBeNull()
-        ->and(app(GrowDashboard::class)->pages($this->site))->toBe([]); // gone from the list
+    Livewire::test(Grow::class)->call('takeDown', $page->id)->assertOk();
+
+    $fresh = Content::withoutGlobalScope(SiteScope::class)->find($page->id);
+    expect($fresh)->not->toBeNull()                          // STAYS in the plan (not deleted)
+        ->and($fresh->wp_post_id)->toBeNull()                // WP link cleared
+        ->and($fresh->status)->toBe(ContentStatus::Approved) // ready to re-publish
+        ->and($fresh->slug)->toBe('services/drain-cleaning'); // same slug → no "-2"
 });
 
-test('Grow delete only removes owned pages — a foreign page is untouched', function () {
+test('Grow take-down of a page not on WordPress just marks it ready to publish (kept in the plan)', function () {
+    growLaunched($this->site);
+    $page = Content::factory()->page()->create([
+        'site_id' => $this->site->id, 'status' => ContentStatus::NeedsReview, 'slot_payload' => ['hero' => 'x'], 'wp_post_id' => null,
+    ]);
+
+    Livewire::test(Grow::class)->call('takeDown', $page->id)->assertOk();
+
+    $fresh = Content::withoutGlobalScope(SiteScope::class)->find($page->id);
+    expect($fresh)->not->toBeNull()
+        ->and($fresh->status)->toBe(ContentStatus::Approved)
+        ->and($fresh->wp_post_id)->toBeNull();
+});
+
+test('Grow take-down only touches owned pages — a foreign page is untouched', function () {
     growLaunched($this->site);
     $foreign = Content::factory()->page()->create([
         'site_id' => Site::factory()->create()->id, 'status' => ContentStatus::Candidate, 'slot_payload' => [],
     ]);
 
-    Livewire::test(Grow::class)->call('delete', $foreign->id)->assertOk();
+    Livewire::test(Grow::class)->call('takeDown', $foreign->id)->assertOk();
 
-    expect(Content::withoutGlobalScope(SiteScope::class)->find($foreign->id))->not->toBeNull();
+    expect(Content::withoutGlobalScope(SiteScope::class)->find($foreign->id)->status)->toBe(ContentStatus::Candidate);
 });
