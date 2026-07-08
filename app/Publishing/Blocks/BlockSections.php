@@ -2,6 +2,8 @@
 
 namespace App\Publishing\Blocks;
 
+use App\Publishing\Legal\LegalTemplates;
+
 /**
  * The mockup's page sections translated to CORE-block ARRANGEMENTS (not its CSS — styling lives in
  * theme.json). Each builder returns block markup for one section; a page composer orders them.
@@ -622,6 +624,37 @@ final class BlockSections
         $children[] = $accordion;
 
         return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-faqs', $placeholder)]);
+    }
+
+    /**
+     * Legal document: a plain, readable single-column render of a template-driven legal page (Privacy /
+     * Terms) — a page title, an effective date, and headed sections of prose. NOT AI-generated and never
+     * data-gated: the {@see LegalTemplates} content is honest boilerplate filled
+     * with real tenant data, so it always renders (no marketing hero / CTA — a legal page is not a sell).
+     *
+     * @param  list<array{heading?: string, paragraphs?: list<string>}>  $sections
+     */
+    public function legalDocument(string $title, string $effectiveDate, array $sections): string
+    {
+        $children = [$this->b->heading(1, $title !== '' ? $title : 'Legal', ['className' => 'lp-legal-title'])];
+
+        if (trim($effectiveDate) !== '') {
+            $children[] = $this->b->paragraph('Effective date: '.$this->text($effectiveDate), ['textColor' => 'muted', 'className' => 'lp-legal-eff']);
+        }
+
+        foreach ($sections as $section) {
+            $heading = trim((string) ($section['heading'] ?? ''));
+            if ($heading !== '') {
+                $children[] = $this->b->heading(3, $heading, ['className' => 'lp-legal-h']);
+            }
+            foreach (($section['paragraphs'] ?? []) as $paragraph) {
+                if (trim((string) $paragraph) !== '') {
+                    $children[] = $this->b->paragraph($this->text((string) $paragraph), ['textColor' => 'muted']);
+                }
+            }
+        }
+
+        return $this->b->group($children, ['align' => 'full', 'className' => 'lp-legal']);
     }
 
     /**

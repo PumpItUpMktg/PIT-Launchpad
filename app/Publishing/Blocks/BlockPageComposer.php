@@ -371,6 +371,22 @@ final class BlockPageComposer
         return $this->join([$hero, $areas, $cta]);
     }
 
+    /**
+     * Composes a LEGAL page (Privacy Policy / Terms of Service) — just the {@see BlockSections::legalDocument}
+     * render of a template-driven document. No marketing hero, no CTA: a legal page is a plain,
+     * readable document, not a conversion surface. The drafted hero_headline (if any) overrides the
+     * template title; everything else is the honest, tenant-filled boilerplate resolved upstream.
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  list<array{heading?: string, paragraphs?: list<string>}>  $sections
+     */
+    public function composeLegal(array $slots, string $title, string $effectiveDate, array $sections): string
+    {
+        $heading = $this->str($slots['hero_headline'] ?? '') ?: $title;
+
+        return $this->sections->legalDocument($heading, $effectiveDate, $sections);
+    }
+
     /** @param list<string> $blocks */
     private function join(array $blocks): string
     {

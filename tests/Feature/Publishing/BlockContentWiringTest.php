@@ -829,3 +829,65 @@ it('Areas We Serve: preview shows an example territory; publish omits coverage w
         ->toContain('Serving all of Northern New Jersey')  // hero + CTA still render
         ->toContain('Don’t see your town?');
 });
+
+// A legal page (Privacy / Terms): page_type Utility, standard_type, only a title slot.
+function blockLegalPage(Site $site, StandardPageType $type): Content
+{
+    return Content::factory()->create([
+        'site_id' => $site->id,
+        'kind' => ContentKind::Page,
+        'page_type' => PageType::Utility,
+        'standard_type' => $type->value,
+        'slug' => $type->value,
+        'title' => $type->label(),
+        'slot_payload' => ['hero_headline' => $type->label()],
+    ]);
+}
+
+it('composes the Privacy Policy from a real template filled with tenant data (never AI-generated)', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sewer Gurus', 'domain_url' => 'https://sewergurus.com']);
+    Location::factory()->create(['site_id' => $site->id, 'email' => 'hello@sewergurus.com']);
+
+    $page = blockLegalPage($site, StandardPageType::Privacy);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()->not->toBeEmpty()
+        ->and($markup)
+        ->toContain('lp-legal')
+        ->toContain('Privacy Policy')
+        ->toContain('Effective date:')
+        ->toContain('Sewer Gurus')                                  // real business name, filled in
+        ->toContain('sewergurus.com')                               // the site host, from the domain
+        ->toContain('hello@sewergurus.com')                         // captured contact email, not invented
+        ->toContain('Information we collect')                       // real template section
+        ->toContain('We do not sell your personal information.')    // honest, universal statement
+        // it is a plain document — no marketing hero / CTA
+        ->not->toContain('lp-hero')->not->toContain('lp-cta');
+});
+
+it('composes the Terms of Service with generic governing-law phrasing (no fabricated state)', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sewer Gurus', 'domain_url' => 'https://sewergurus.com']);
+
+    $page = blockLegalPage($site, StandardPageType::Terms);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Terms of Service')
+        ->toContain('Acceptance of terms')
+        ->toContain('the laws of the state in which Sewer Gurus operates')  // generic — never guesses a state
+        ->toContain('as is')                                                // standard warranty disclaimer (quotes are html-escaped)
+        // no contact channel captured → points at the contact page, never invents an address
+        ->toContain('contact page on this website');
+});
+
+it('legal templates degrade honestly — no brand name → "this business", no contact → the contact page', function () {
+    $site = Site::factory()->create(['brand_name' => '', 'domain_url' => null]);
+
+    $page = blockLegalPage($site, StandardPageType::Privacy);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('this business')          // graceful fallback for a missing brand
+        ->toContain('this website')           // graceful fallback for a missing site URL
+        ->toContain('contact page on this website'); // no captured channel → no invented one
+});

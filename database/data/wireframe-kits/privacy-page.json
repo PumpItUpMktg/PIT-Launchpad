@@ -1,0 +1,22 @@
+{
+    "name": "privacy-page",
+    "version": 1,
+    "page_type": "utility",
+    "elementor_template_ref": "lp-standard-v1",
+    "seo_profile_ref": "standard",
+    "slots": [
+        {
+            "key": "hero_headline",
+            "label": "Page Title",
+            "content_type": "heading",
+            "role": "hero_solution",
+            "source": "generated",
+            "cardinality": { "type": "single" },
+            "constraints": { "required": true, "min_length": 6, "max_length": 60 },
+            "client_override": true,
+            "generation_hint": "The plain page title — exactly 'Privacy Policy'. The legal body is a real, tenant-filled template, never generated.",
+            "seo_binding": "h1",
+            "elementor_binding": "lp/text"
+        }
+    ]
+}
