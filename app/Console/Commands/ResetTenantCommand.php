@@ -116,8 +116,9 @@ class ResetTenantCommand extends Command
                     continue;
                 }
                 try {
-                    $ok = $client->forceDeletePost($page['type'], $page['wp_post_id']);
-                    $ok ? $wpDeleted[] = $page['slug'] : $wpFailed[] = $page['slug'];
+                    // Delete via the companion plugin (by ULID), not the core WP route — see WordpressClient.
+                    $client->deleteContent($page['content_id']);
+                    $wpDeleted[] = $page['slug'];
                 } catch (Throwable $e) {
                     $wpFailed[] = $page['slug'];
                 }
@@ -139,15 +140,16 @@ class ResetTenantCommand extends Command
      * Launchpad-published pages/posts (those carrying a WP post id) — the cleanup targets, read from
      * Content BEFORE the wipe. `kind` maps to the core WP post type (page vs post).
      *
-     * @return list<array{wp_post_id: int, slug: string, type: 'pages'|'posts'}>
+     * @return list<array{content_id: string, wp_post_id: int, slug: string, type: 'pages'|'posts'}>
      */
     private function publishedPages(string $siteId): array
     {
         return Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
             ->whereNotNull('wp_post_id')
-            ->get(['wp_post_id', 'slug', 'kind'])
+            ->get(['id', 'wp_post_id', 'slug', 'kind'])
             ->map(fn (Content $c): array => [
+                'content_id' => (string) $c->id,
                 'wp_post_id' => (int) $c->wp_post_id,
                 'slug' => '/'.ltrim((string) $c->slug, '/'),
                 'type' => $c->kind === ContentKind::Page ? 'pages' : 'posts',

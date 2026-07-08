@@ -47,18 +47,18 @@ function counts(string $siteId): array
     ];
 }
 
-it('cleans up WP BEFORE the wipe — force-deletes the published page (force=true), then rewinds Launchpad', function () {
-    Http::fake(['*/wp-json/wp/v2/pages/*' => Http::response([], 200)]);
+it('cleans up WP BEFORE the wipe — force-deletes the published page via the plugin, then rewinds Launchpad', function () {
+    Http::fake(['*/wp-json/launchpad/v1/content/delete' => Http::response(['deleted' => true], 200)]);
     $site = populatedTenant();
 
     $this->artisan('launchpad:reset-tenant', ['site' => $site->id, '--keep-wordpress' => true, '--force' => true])
         ->assertSuccessful();
 
-    // The DELETE went out with force=true to the tracked post id — which proves Content was read
-    // (post ids intact) BEFORE the wipe, iron law #1.
-    Http::assertSent(fn ($r) => $r->method() === 'DELETE'
-        && str_contains($r->url(), '/wp-json/wp/v2/pages/123')
-        && str_contains($r->url(), 'force=true'));
+    // The delete went out to the authed plugin endpoint keyed on the control-plane ULID — which proves
+    // Content was read (ids intact) BEFORE the wipe, iron law #1. (Force-delete is server-side in the plugin.)
+    Http::assertSent(fn ($r) => $r->method() === 'POST'
+        && str_contains($r->url(), '/wp-json/launchpad/v1/content/delete')
+        && ! empty($r['content_id']));
     // only the PUBLISHED page is touched (the unpublished /about has no wp_post_id → no call)
     Http::assertSentCount(1);
 
@@ -73,7 +73,7 @@ it('cleans up WP BEFORE the wipe — force-deletes the published page (force=tru
 });
 
 it('keeps the WP connection with --keep-wordpress, removes it without', function () {
-    Http::fake(['*/wp-json/wp/v2/pages/*' => Http::response([], 200)]);
+    Http::fake(['*/wp-json/launchpad/v1/content/delete' => Http::response(['deleted' => true], 200)]);
 
     $kept = populatedTenant();
     $this->artisan('launchpad:reset-tenant', ['site' => $kept->id, '--keep-wordpress' => true, '--force' => true])->assertSuccessful();
@@ -86,7 +86,7 @@ it('keeps the WP connection with --keep-wordpress, removes it without', function
 });
 
 it('wipes brand by default, keeps it with --keep-brand', function () {
-    Http::fake(['*/wp-json/wp/v2/pages/*' => Http::response([], 200)]);
+    Http::fake(['*/wp-json/launchpad/v1/content/delete' => Http::response(['deleted' => true], 200)]);
 
     $wiped = populatedTenant();
     $this->artisan('launchpad:reset-tenant', ['site' => $wiped->id, '--keep-wordpress' => true, '--force' => true])->assertSuccessful();

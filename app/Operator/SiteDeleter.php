@@ -107,8 +107,9 @@ final class SiteDeleter
                 continue;
             }
             try {
-                $ok = $client->forceDeletePost($page['type'], $page['wp_post_id']);
-                $ok ? $deleted[] = $page['slug'] : $failed[] = $page['slug'];
+                // Delete via the companion plugin (by ULID), not the core WP route — see WordpressClient.
+                $client->deleteContent($page['content_id']);
+                $deleted[] = $page['slug'];
             } catch (Throwable) {
                 $failed[] = $page['slug'];
             }
@@ -120,15 +121,16 @@ final class SiteDeleter
     /**
      * Launchpad-published pages/posts (those carrying a WP post id).
      *
-     * @return list<array{wp_post_id: int, slug: string, type: 'pages'|'posts'}>
+     * @return list<array{content_id: string, wp_post_id: int, slug: string, type: 'pages'|'posts'}>
      */
     public function publishedPages(Site $site): array
     {
         return Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->whereNotNull('wp_post_id')
-            ->get(['wp_post_id', 'slug', 'kind'])
+            ->get(['id', 'wp_post_id', 'slug', 'kind'])
             ->map(fn (Content $c): array => [
+                'content_id' => (string) $c->id,
                 'wp_post_id' => (int) $c->wp_post_id,
                 'slug' => '/'.ltrim((string) $c->slug, '/'),
                 'type' => $c->kind === ContentKind::Page ? 'pages' : 'posts',

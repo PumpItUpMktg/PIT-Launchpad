@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.8
+Stable tag: 0.9.9
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,13 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.9 =
+* New authed endpoint POST launchpad/v1/content/delete — force-deletes a Launchpad-managed post by
+  its control-plane ULID (server-side wp_delete_post, bypassing trash to free the slug). The control
+  plane's take-down / reset / site-delete now route through this instead of the core /wp/v2 DELETE,
+  which the launchpad_service role can't authorize (it holds lp_manage_content, not delete_post) and
+  which security plugins commonly block. Idempotent: an already-absent post reports success.
 
 = 0.9.8 =
 * /content now sets the home page as WordPress' static front page (show_on_front=page,

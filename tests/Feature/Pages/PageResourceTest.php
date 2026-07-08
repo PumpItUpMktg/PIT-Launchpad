@@ -139,9 +139,9 @@ test('Delete from WordPress force-deletes the WP post and makes the page republi
         'slug' => 'drain-cleaning', 'wp_post_id' => 42, 'locally_edited' => true,
     ]);
 
-    // The WP transport force-deletes (force=true); assert we call it with the WP id.
+    // The WP transport force-deletes through the plugin endpoint; assert we call it with the ULID.
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('forceDeletePost')->once()->with('pages', 42)->andReturn(true);
+    $client->shouldReceive('deleteContent')->once()->with($page->id)->andReturn(true);
     $factory = Mockery::mock(WordpressClientFactory::class);
     $factory->shouldReceive('forSite')->once()->andReturn($client);
     app()->instance(WordpressClientFactory::class, $factory);

@@ -183,21 +183,41 @@ test('templates surfaces a WordpressException on a non-2xx', function () {
     expect(fn () => wpClient()->templates())->toThrow(WordpressException::class);
 });
 
-test('forceDeletePost permanently deletes a core WP page with force=true (never trash)', function () {
-    Http::fake(['*/wp-json/wp/v2/pages/42*' => Http::response([], 200)]);
+test('deleteContent force-deletes through the plugin endpoint by ULID (not the core WP route)', function () {
+    Http::fake(['*/wp-json/launchpad/v1/content/delete' => Http::response(['content_id' => 'ulid-1', 'wp_post_id' => 42, 'deleted' => true], 200)]);
 
-    expect(wpClient()->forceDeletePost('pages', 42))->toBeTrue();
+    expect(wpClient()->deleteContent('ulid-1'))->toBeTrue();
 
-    Http::assertSent(fn ($r) => $r->method() === 'DELETE'
-        && str_contains($r->url(), '/wp-json/wp/v2/pages/42')
-        && str_contains($r->url(), 'force=true')                       // bypass trash → frees the slug
+    Http::assertSent(fn ($r) => $r->method() === 'POST'
+        && str_contains($r->url(), '/wp-json/launchpad/v1/content/delete')   // authed plugin route, not /wp/v2
+        && $r['content_id'] === 'ulid-1'                                       // keyed on the control-plane ULID
         && $r->hasHeader('Authorization', 'Basic '.base64_encode('svc-user:app-pass')));
 });
 
-test('forceDeletePost treats an already-gone post (404) as success', function () {
-    Http::fake(['*/wp-json/wp/v2/posts/99*' => Http::response([], 404)]);
+test('deleteContent treats an already-absent post as a confirmed delete (idempotent)', function () {
+    Http::fake(['*/wp-json/launchpad/v1/content/delete' => Http::response(['content_id' => 'ulid-1', 'deleted' => true, 'already_absent' => true], 200)]);
 
-    expect(wpClient()->forceDeletePost('posts', 99))->toBeTrue();
+    expect(wpClient()->deleteContent('ulid-1'))->toBeTrue();
+});
+
+test('deleteContent surfaces WHY on a real failure — status + WordPress reason, not a bare "did not confirm"', function () {
+    // The plugin reports it could not delete (e.g. wp_delete_post refused). The reason must reach the operator.
+    Http::fake(['*/wp-json/launchpad/v1/content/delete' => Http::response(
+        ['content_id' => 'ulid-1', 'deleted' => false, 'error' => 'wp_delete_post failed'],
+        500,
+    )]);
+
+    expect(fn () => wpClient()->deleteContent('ulid-1'))
+        ->toThrow(WordpressException::class, 'HTTP 500 — wp_delete_post failed');
+});
+
+test('deleteContent flags a missing delete route as a stale companion plugin (404 ≠ success)', function () {
+    // An old plugin without the delete endpoint returns rest_no_route. That must NOT be mistaken for
+    // "already gone" — it means nothing was deleted; tell the operator to update the plugin.
+    Http::fake(['*/wp-json/launchpad/v1/content/delete' => Http::response(['code' => 'rest_no_route'], 404)]);
+
+    expect(fn () => wpClient()->deleteContent('ulid-1'))
+        ->toThrow(WordpressException::class, 'update the Launchpad companion plugin');
 });
 
 test('activateStyle posts the variation to /style', function () {

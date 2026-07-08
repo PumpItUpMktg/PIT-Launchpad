@@ -44,6 +44,17 @@ final class Routes
             'permission_callback' => $auth,
         ]);
 
+        // Force-delete a Launchpad-managed post by its control-plane ULID. A POST (not core DELETE) on the
+        // authed launchpad/v1 namespace: the service user carries lp_manage_content (the cap publishing
+        // already uses) but NOT WordPress's core delete_post capability, and this also sidesteps security
+        // plugins / WAFs that block the core REST DELETE method. Keyed on the ULID so it only ever removes
+        // a post the control plane owns, and stays idempotent (already-absent = success).
+        register_rest_route(self::NS, '/content/delete', [
+            'methods' => 'POST',
+            'callback' => [$this, 'delete_content'],
+            'permission_callback' => $auth,
+        ]);
+
         register_rest_route(self::NS, '/redirects', [
             'methods' => 'POST',
             'callback' => [$this, 'redirects'],
@@ -109,6 +120,24 @@ final class Routes
         $result = ( new ContentStore() )->upsert((array) $request->get_json_params());
 
         return new WP_REST_Response($result, 200);
+    }
+
+    public function delete_content(WP_REST_Request $request): WP_REST_Response
+    {
+        $params = (array) $request->get_json_params();
+        $result = ( new ContentStore() )->delete((string) ($params['content_id'] ?? ''));
+
+        // 422 for a missing id (bad request), 500 if WordPress refused the delete, 200 on success
+        // (including an already-absent post — idempotent).
+        if (! empty($result['deleted'])) {
+            $status = 200;
+        } elseif (($result['error'] ?? '') === 'content_id required') {
+            $status = 422;
+        } else {
+            $status = 500;
+        }
+
+        return new WP_REST_Response($result, $status);
     }
 
     public function redirects(WP_REST_Request $request): WP_REST_Response

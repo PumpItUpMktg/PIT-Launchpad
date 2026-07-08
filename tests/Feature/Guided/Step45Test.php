@@ -190,9 +190,9 @@ test('Grow take-down force-deletes the live WP post and keeps the page republish
         'slug' => 'services/drain-cleaning', 'wp_post_id' => 42, 'locally_edited' => true, 'slot_payload' => ['hero' => 'x'],
     ]);
 
-    // The WP transport force-deletes (force=true) by the WP id; mirror §2's DeleteFromWordpress path.
+    // The WP transport force-deletes through the plugin endpoint by control-plane ULID (§2's path).
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('forceDeletePost')->once()->with('pages', 42)->andReturn(true);
+    $client->shouldReceive('deleteContent')->once()->with($page->id)->andReturn(true);
     $factory = Mockery::mock(WordpressClientFactory::class);
     $factory->shouldReceive('forSite')->once()->andReturn($client);
     app()->instance(WordpressClientFactory::class, $factory);

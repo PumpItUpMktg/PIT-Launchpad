@@ -241,4 +241,40 @@ class Test_Content_Store extends WP_UnitTestCase
         $stored = json_decode((string) get_post_meta($id, '_elementor_data', true), true);
         $this->assertSame('orig111', $stored[0]['id'], 'A re-push must not clobber the operator-edited native body.');
     }
+
+    public function test_delete_force_removes_the_post_by_content_id(): void
+    {
+        $store = new ContentStore();
+        $id = $store->upsert($this->payload())['wp_post_id'];
+        $this->assertInstanceOf(WP_Post::class, get_post($id), 'Sanity: the page exists before delete.');
+
+        $result = $store->delete('01JCONTENTSERVICE000000000');
+
+        $this->assertTrue($result['deleted']);
+        $this->assertSame($id, $result['wp_post_id']);
+        $this->assertNull(get_post($id), 'The post must be permanently gone (force delete, not trashed).');
+        // The CONTENT_ID meta lookup finds nothing now → the slug is free for a same-URL re-push.
+        $found = get_posts(['post_type' => ['page', 'post'], 'post_status' => 'any', 'meta_key' => Meta::CONTENT_ID, 'meta_value' => '01JCONTENTSERVICE000000000', 'fields' => 'ids']);
+        $this->assertCount(0, $found);
+    }
+
+    public function test_delete_only_touches_launchpad_managed_posts(): void
+    {
+        // A post the control plane does NOT own (no CONTENT_ID meta) must never be deleted by ULID.
+        $foreign = self::factory()->post->create(['post_title' => 'Not ours']);
+
+        $result = (new ContentStore())->delete('01JCONTENTSERVICE000000000'); // never pushed
+
+        $this->assertTrue($result['deleted']);                 // idempotent: nothing to delete = success
+        $this->assertTrue($result['already_absent'] ?? false);
+        $this->assertInstanceOf(WP_Post::class, get_post($foreign), 'A non-Launchpad post must be untouched.');
+    }
+
+    public function test_delete_requires_a_content_id(): void
+    {
+        $result = (new ContentStore())->delete('');
+
+        $this->assertFalse($result['deleted']);
+        $this->assertSame('content_id required', $result['error']);
+    }
 }
