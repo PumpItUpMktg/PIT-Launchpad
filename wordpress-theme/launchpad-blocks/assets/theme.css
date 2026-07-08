@@ -702,6 +702,13 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem 1.5rem;
     align-content: start;
+    align-items: start;
+}
+
+/* Kill WordPress' injected `> * + *` block margin (a real class beats its :where() rule), so the
+   second column's first county aligns to the top row instead of dropping a line. */
+.lp-areas-cities > * {
+    margin-block: 0;
 }
 
 .lp-areas-countyblock {
