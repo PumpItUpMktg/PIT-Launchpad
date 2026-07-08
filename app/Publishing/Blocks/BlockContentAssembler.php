@@ -63,7 +63,7 @@ final class BlockContentAssembler
             emergencyTel: $this->contact->tel($emergencyPhone),
         );
 
-        $areas = $this->serviceAreas->resolve((string) $content->site_id);
+        $siteId = (string) $content->site_id;
 
         return $this->composer->composeHome(
             slots: $slots,
@@ -74,9 +74,8 @@ final class BlockContentAssembler
             credibilityBadges: $this->credibilityBadges($content),
             differentiators: $this->differentiators($content),
             testimonials: $this->testimonials($content),
-            serviceAreaCounties: $areas['counties'],
-            serviceAreas: $areas['cities'],
-            serviceAreasMore: $areas['more'] > 0 ? '+ '.$areas['more'].' more' : null,
+            serviceAreaCounties: $this->serviceAreas->resolve($siteId)['counties'],
+            serviceAreasByCounty: $this->serviceAreas->byCounty($siteId),
             processSteps: $this->processSteps($content),
             preview: $preview,
             serviceAreaMapAvailable: $mapAvailable,

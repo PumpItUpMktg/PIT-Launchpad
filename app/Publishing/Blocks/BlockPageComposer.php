@@ -24,12 +24,12 @@ final class BlockPageComposer
      * @param  list<string>  $credibilityBadges  substantiated trust badges (licensed/certified/rated) for the credibility strip
      * @param  list<array{title?: string, description?: string}>  $differentiators  Why-Choose-Us items (site narrative)
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
-     * @param  list<string>  $serviceAreaCounties  named counties served (the "county level"), shown first
-     * @param  list<array{label: string, url: string}>  $serviceAreas  towns largest-first, with real page links (data-gated)
+     * @param  list<string>  $serviceAreaCounties  named counties served (the pipe-separated line beneath the block)
+     * @param  list<array{county: string, cities: list<array{label: string, url: string}>}>  $serviceAreasByCounty  major cities grouped by county (the 50/50 block's cities column)
      * @param  list<array{title: string, description: string}>  $processSteps  the tenant's captured process (else a safe default)
      * @param  bool  $serviceAreaMapAvailable  whether the tenant has map geometry (served counties / geocoded
-     *                                          towns) — when true the areas section leads with the interactive
-     *                                          map; the geometry itself travels on the blob, not in this markup.
+     *                                         towns) — when true the areas section leads with the interactive
+     *                                         map; the geometry itself travels on the blob, not in this markup.
      * @param  bool  $preview  two contexts, one rule: preview (operator proof) builds ALL recommended
      *                         sections — a data-gated section with no data renders a LABELED example
      *                         placeholder so the operator sees the whole page and what's still missing;
@@ -46,8 +46,7 @@ final class BlockPageComposer
         array $differentiators = [],
         array $testimonials = [],
         array $serviceAreaCounties = [],
-        array $serviceAreas = [],
-        ?string $serviceAreasMore = null,
+        array $serviceAreasByCounty = [],
         array $processSteps = [],
         bool $preview = false,
         bool $serviceAreaMapAvailable = false,
@@ -104,14 +103,13 @@ final class BlockPageComposer
             preview: $preview,
         );
 
-        // 8. Service Areas — counties first (the "county level"), then towns largest-first.
+        // 8. Service Areas — a 50/50 map | major-cities-by-county block, county list beneath.
         //    Data-gated on real coverage (preview → example territory).
         $areas = $this->sections->serviceAreas(
             eyebrow: 'Where we work',
             heading: 'Areas we serve',
             counties: $serviceAreaCounties,
-            cities: $serviceAreas,
-            more: $serviceAreasMore,
+            byCounty: $serviceAreasByCounty,
             preview: $preview,
             mapAvailable: $serviceAreaMapAvailable,
         );
