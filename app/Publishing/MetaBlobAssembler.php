@@ -4,6 +4,7 @@ namespace App\Publishing;
 
 use App\Enums\ContentKind;
 use App\Enums\ContentSource;
+use App\Enums\PageType;
 use App\Enums\SlotContentType;
 use App\Enums\StandardPageType;
 use App\Models\Content;
@@ -152,9 +153,18 @@ class MetaBlobAssembler
         // The Gutenberg block body (non-null once a page type's block composer has shipped). When it's
         // present the page is pure blocks — so it carries NO Elementor body at all: the plugin renders
         // post_content and ignores elementor_data, and skipping the NativeComposer pass keeps a block
-        // page free of any Elementor payload. Service / location / hub pages (still Elementor-rendered)
-        // have no block body yet, so they keep their native Elementor tree.
-        $postContent = $this->blockContent->compose($content, $slots, $images, $preview, $areaMap !== null);
+        // page free of any Elementor payload. Location / hub pages (still Elementor-rendered) have no
+        // block body yet, so they keep their native Elementor tree.
+        //
+        // EXCEPTION — the form-hero variant (PageConfig.hero_variant=form) is an Elementor-only feature
+        // (a hero with an embedded lead-form iframe kses would strip from block post_content). The block
+        // path's lead form is still a preview-only placeholder (delivery deferred), so a service page
+        // that opts into the form hero stays on the Elementor library path until a block form-hero ships
+        // — every other service page migrates to blocks.
+        $keepsElementorForm = $content->page_type === PageType::Service && $this->pageConfig($content)?->usesFormHero();
+        $postContent = $keepsElementorForm
+            ? null
+            : $this->blockContent->compose($content, $slots, $images, $preview, $areaMap !== null);
 
         return [
             'content_id' => $content->id,

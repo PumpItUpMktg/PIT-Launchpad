@@ -39,12 +39,19 @@ test('placeholder preview is the SAME skeleton as generated — only content swa
     $generated = $assembler->assemble($content->fresh(), $jobs, ContentSource::Generated);
     $placeholder = $assembler->assemble($content->fresh(), $jobs, ContentSource::Placeholder);
 
-    // Same composer/surface + kit; placeholder fills EVERY slot so it's the full
-    // skeleton (a superset of the sparse generated page, which prunes unfed sections).
-    $placeholderBlocks = wfBlocks($placeholder['elementor_data']);
-    expect($placeholder['kit'])->toBe($generated['kit'])
-        ->and($placeholderBlocks)->toContain('wf-block-hero', 'wf-block-faq', 'wf-block-final-cta', 'wf-block-trust-bar')
-        ->and(array_diff(wfBlocks($generated['elementor_data']), $placeholderBlocks))->toBe([]); // generated ⊆ placeholder
+    // Service pages are pure blocks now — both bodies are core-block post_content, no Elementor tree.
+    expect($generated['elementor_data'])->toBe([])
+        ->and($placeholder['elementor_data'])->toBe([])
+        ->and($placeholder['kit'])->toBe($generated['kit']);
+
+    // Placeholder fills EVERY slot, so it renders the full block skeleton (hero + overview + features +
+    // FAQ) — a superset of the sparse generated page, which prunes unfed sections (the harness page
+    // feeds no faq / overview slots, so those sections are absent on the generated body).
+    expect($placeholder['post_content'])
+        ->toContain('lp-hero')->toContain('lp-features')->toContain('lp-prose')->toContain('lp-faq-list');
+    expect($generated['post_content'])
+        ->toContain('lp-hero')->toContain('lp-features')   // fed slots render
+        ->not->toContain('lp-faq-list');                   // no faq slot fed → pruned
 
     // Content swapped: stand-in copy + the placeholder image box, not the real ones.
     expect($placeholder['slot_payload']['hero_problem'])->not->toBe($generated['slot_payload']['hero_problem'])

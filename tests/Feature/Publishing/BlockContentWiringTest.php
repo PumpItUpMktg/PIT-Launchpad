@@ -433,9 +433,13 @@ it('preview shows the guarantee + certifications as labeled placeholders; publis
 
 it('returns null for a page type whose block pattern has not shipped (falls back to existing render)', function () {
     $site = Site::factory()->create();
-    $service = blockServicePage($site, 'Drain Cleaning', 'drain-cleaning', 'x');
+    // Location pages are the next migration phase — still on the Elementor fallback for now.
+    $location = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'slug' => 'trenton', 'title' => 'Trenton',
+    ]);
 
-    expect(app(BlockContentAssembler::class)->compose($service->fresh(), [], []))->toBeNull();
+    expect(app(BlockContentAssembler::class)->compose($location->fresh(), [], []))->toBeNull();
 });
 
 it('the areas section leads with the map mount + keeps the text fallback when geometry exists', function () {
@@ -1030,4 +1034,111 @@ it('Contact: the lead form is a preview-only placeholder — never on the publis
         ->not->toContain('lp-formsection')                             // a non-functional form never publishes
         ->not->toContain('lp-formskel')
         ->toContain('href="tel:9735550100"');                          // the real NAP still carries the page
+});
+
+/* ------------------------------------------------------------------ *
+ * Service page — the Elementor→blocks migration's first non-standard type.
+ * ------------------------------------------------------------------ */
+function blockServiceDrafted(Site $site): Content
+{
+    return Content::factory()->create([
+        'site_id' => $site->id,
+        'kind' => ContentKind::Page,
+        'page_type' => PageType::Service,
+        'slug' => 'drain-cleaning',
+        'title' => 'Drain Cleaning',
+        'slot_payload' => [
+            'service_area' => 'Drain Services · Northern NJ',
+            'hero_problem' => 'A clogged drain is backing up your whole day.',
+            'hero_solution' => 'We clear it fast and keep it clear — same-day service, no mess left behind.',
+            'problem_explainer' => 'A slow or blocked drain rarely fixes itself, and the longer it sits the worse the backup gets.',
+            'solution_overview' => '<p>Our technicians camera-inspect the line, clear the blockage at its source, and confirm free flow before we leave.</p>',
+            'service_features' => ['Hydro-jetting for stubborn clogs', 'Camera line inspection', 'Root intrusion removal', 'Preventive maintenance plans'],
+            'why_us' => 'Every technician is licensed and the work is backed by our written guarantee.',
+            'faq' => [
+                ['question' => 'How fast can you come out?', 'answer' => 'Usually same day for urgent backups.'],
+                ['question' => 'Do you offer free estimates?', 'answer' => 'Yes — every quote is free and up front.'],
+            ],
+        ],
+    ]);
+}
+
+it('composes a Service page from real inputs — problem H1, features checklist, two CTAs, real NAP', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    Location::factory()->create(['site_id' => $site->id, 'phone' => '(973) 555-0100', 'email' => 'help@sewergurus.com', 'address' => '10 Main St, Newark NJ']);
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::Warranty,
+        'payload' => ['label' => '25-year warranty'], 'is_substantiated' => true,
+    ]);
+    $page = blockServiceDrafted($site);
+
+    $markup = app(BlockContentAssembler::class)->compose(
+        $page->fresh(),
+        $page->slot_payload,
+        ['hero_image' => ['url' => 'https://cdn.example/drain.webp', 'alt' => 'Clearing a drain']],
+    );
+
+    expect($markup)->toBeString()->not->toBeEmpty()
+        // hero: the customer's problem is the H1, the solution is the subhead, the image renders
+        ->toContain('A clogged drain is backing up your whole day.')
+        ->toContain('We clear it fast and keep it clear')
+        ->toContain('https://cdn.example/drain.webp')
+        // the overview prose (both drafted body slots, HTML stripped to text)
+        ->toContain('lp-prose')
+        ->toContain('the longer it sits the worse the backup gets')
+        ->toContain('camera-inspect the line')
+        ->not->toContain('<p>Our technicians')                      // rich_text HTML stripped to plain text
+        // features checklist
+        ->toContain('lp-features-grid')
+        ->toContain('Hydro-jetting for stubborn clogs')
+        ->toContain('lp-feature')
+        // grounded why-us prose (has substantiated proof)
+        ->toContain('backed by our written guarantee')
+        // FAQ accordion (drafted pairs)
+        ->toContain('lp-faq-list')
+        ->toContain('How fast can you come out?')
+        // real NAP + both CTAs
+        ->toContain('href="tel:9735550100"')
+        ->toContain('help@sewergurus.com')
+        ->toContain('lp-cta lp-cta--bold')                          // pushy CTA
+        ->toContain('Ready to get it fixed?')
+        ->toContain('Have a question first?');                      // soft closing CTA
+});
+
+it('Service page data-gates on publish: grounded why-us, testimonials, and NAP omit when empty', function () {
+    $site = Site::factory()->create(['phone' => null]); // no phone, no location, no proof
+    $page = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'drain-cleaning', 'title' => 'Drain Cleaning',
+        'slot_payload' => [
+            'hero_problem' => 'A clogged drain is backing up your whole day.',
+            'hero_solution' => 'We clear it fast.',
+            'service_features' => ['Hydro-jetting', 'Camera inspection'],
+        ],
+    ]);
+
+    $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($publish)
+        ->toContain('A clogged drain is backing up your whole day.')  // hero still renders
+        ->toContain('lp-features-grid')                               // features present
+        ->not->toContain('lp-testimonials')                          // no reviews → omitted
+        ->not->toContain('lp-contact-grid')                          // no NAP → omitted
+        ->not->toContain('lp-placeholder');                          // never a placeholder on publish
+
+    $preview = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+    expect($preview)
+        ->toContain('lp-testimonials')                               // preview shows every section...
+        ->toContain('lp-contact')
+        ->toContain('lp-placeholder');                               // ...clearly marked as example
+});
+
+it('Service page: the blob ships block post_content and empties elementor_data', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    Location::factory()->create(['site_id' => $site->id, 'phone' => '(973) 555-0100']);
+    $page = blockServiceDrafted($site);
+
+    $blob = app(MetaBlobAssembler::class)->assemble($page->fresh(), collect());
+
+    expect($blob['post_content'])->toBeString()->toContain('lp-features-grid')
+        ->and($blob['elementor_data'])->toBe([]);                    // block body ships → elementor short-circuits
 });

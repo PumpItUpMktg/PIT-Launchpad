@@ -64,6 +64,8 @@
 .lp-why,
 .lp-guarantee,
 .lp-story,
+.lp-prose,
+.lp-features,
 .lp-statement,
 .lp-values,
 .lp-team,
@@ -86,6 +88,8 @@
 .lp-why > *,
 .lp-guarantee > *,
 .lp-story > *,
+.lp-prose > *,
+.lp-features > *,
 .lp-statement > *,
 .lp-values > *,
 .lp-team > *,
@@ -111,6 +115,8 @@
 .lp-services,
 .lp-why,
 .lp-story,
+.lp-prose,
+.lp-features,
 .lp-values,
 .lp-team,
 .lp-faqs,
@@ -398,9 +404,9 @@
    screen readers are untouched. Deliberately scoped to real headings — the eyebrow (uppercase already),
    the mission statement, and the FAQ questions keep their own treatment. */
 :is(
-    .lp-hero, .lp-credibility, .lp-certs, .lp-services, .lp-why, .lp-guarantee, .lp-story, .lp-statement,
-    .lp-values, .lp-team, .lp-faqs, .lp-legal, .lp-contact, .lp-formsection, .lp-process, .lp-proof,
-    .lp-testimonials, .lp-areas, .lp-cta
+    .lp-hero, .lp-credibility, .lp-certs, .lp-services, .lp-why, .lp-guarantee, .lp-story, .lp-prose,
+    .lp-features, .lp-statement, .lp-values, .lp-team, .lp-faqs, .lp-legal, .lp-contact, .lp-formsection,
+    .lp-process, .lp-proof, .lp-testimonials, .lp-areas, .lp-cta
 ) :is(h1, h2, h3, h4) {
     text-transform: capitalize;
 }
@@ -714,12 +720,15 @@
 /* ------------------------------------------------------------------ *
  * About page — story (prose), mission (statement), values, team.
  * ------------------------------------------------------------------ */
-/* Our Story — a readable, centered brand narrative. */
-.lp-story .lp-section-head {
+/* Our Story / generic prose — a readable, centered body-copy narrative (shared by About's story and
+   the service page's problem→solution overview + grounded "why us"). */
+.lp-story .lp-section-head,
+.lp-prose .lp-section-head {
     text-align: center;
 }
 
-.lp-story .lp-prose-p {
+.lp-story .lp-prose-p,
+.lp-prose .lp-prose-p {
     max-width: 68ch;
     margin-inline: auto;
     margin-block: 0 1rem;
@@ -728,8 +737,41 @@
     color: var(--wp--preset--color--contrast, #0f172a);
 }
 
-.lp-story .lp-prose-p:last-child {
+.lp-story .lp-prose-p:last-child,
+.lp-prose .lp-prose-p:last-child {
     margin-bottom: 0;
+}
+
+/* Service features — a check-marked "what's included" grid (two columns, collapses to one on mobile). */
+.lp-features-grid {
+    list-style: none;
+    margin: 0 auto;
+    padding: 0;
+    max-width: 900px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 2rem;
+}
+
+.lp-features-grid .lp-feature {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    font-size: 1.02rem;
+    line-height: 1.5;
+    padding-block: 0.35rem;
+    border-bottom: 1px solid var(--wp--preset--color--border, #e2e8f0);
+}
+
+.lp-features-grid .lp-feature .lp-check {
+    flex: 0 0 auto;
+    margin-top: 0.05rem;
+}
+
+@media (max-width: 640px) {
+    .lp-features-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Mission — one standout, centered statement on the light band. */

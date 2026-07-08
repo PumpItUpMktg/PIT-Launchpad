@@ -126,7 +126,7 @@ test('a standard page is stamped with its standard_type and gets its composer ki
     (new WireframeKitSeeder)->run();
     $site = Site::factory()->create();
     manifestEntry($site, BuildSource::Standard, 'about', 'About');     // composer shipped
-    manifestEntry($site, BuildSource::Standard, 'privacy', 'Privacy'); // not yet → held
+    manifestEntry($site, BuildSource::Standard, 'gallery', 'Gallery'); // not yet → held
 
     app(PageMaterializer::class)->materialize($site);
 
@@ -136,9 +136,9 @@ test('a standard page is stamped with its standard_type and gets its composer ki
         ->and($byTitle['About']->wireframe_kit_id)->not->toBeNull()
         ->and($byTitle['About']->wireframeKit->name)->toBe('about-page');
 
-    // Privacy still carries its identity, but has no kit → the surface holds it "Not ready yet".
-    expect($byTitle['Privacy']->standard_type)->toBe(StandardPageType::Privacy)
-        ->and($byTitle['Privacy']->wireframe_kit_id)->toBeNull();
+    // Gallery still carries its identity, but has no kit → the surface holds it "Not ready yet".
+    expect($byTitle['Gallery']->standard_type)->toBe(StandardPageType::Gallery)
+        ->and($byTitle['Gallery']->wireframe_kit_id)->toBeNull();
 });
 
 test('colliding titles get deterministic disambiguated permalinks', function () {
