@@ -70,6 +70,7 @@
 .lp-faqs,
 .lp-legal,
 .lp-contact,
+.lp-formsection,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -91,6 +92,7 @@
 .lp-faqs > *,
 .lp-legal > *,
 .lp-contact > *,
+.lp-formsection > *,
 .lp-process > *,
 .lp-proof > *,
 .lp-testimonials > *,
@@ -114,6 +116,7 @@
 .lp-faqs,
 .lp-legal,
 .lp-contact,
+.lp-formsection,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -990,6 +993,37 @@
 
 .lp-hours-row .lp-hours-val {
     color: var(--wp--preset--color--muted, #475569);
+}
+
+/* Contact form — preview-only placeholder sketch (omitted on publish). */
+.lp-formsection .lp-section-head {
+    text-align: center;
+}
+
+.lp-formskel {
+    max-width: 560px;
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.lp-formskel-field {
+    height: 2.75rem;
+    border-radius: var(--wp--custom--radius, 8px);
+    background: var(--wp--preset--color--surface, #f1f5f9);
+    border: 1px dashed var(--wp--preset--color--border, #cbd5e1);
+}
+
+.lp-formskel-area {
+    height: 6rem;
+}
+
+.lp-formskel-btn {
+    height: 2.75rem;
+    width: 12rem;
+    border-radius: var(--wp--custom--radius, 8px);
+    background: color-mix(in srgb, var(--wp--preset--color--accent, #ea580c) 45%, transparent);
 }
 
 /* ------------------------------------------------------------------ *

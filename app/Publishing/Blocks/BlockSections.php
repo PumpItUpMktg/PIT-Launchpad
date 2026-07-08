@@ -730,6 +730,35 @@ final class BlockSections
         return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-contact', $placeholder)]);
     }
 
+    /**
+     * Contact form — a PREVIEW-ONLY placeholder. The real lead form is a companion-plugin shortcode
+     * (kses strips inline <form>) and its delivery (email / CRM webhook) isn't decided yet, so this
+     * renders only in the operator proof-view — a labeled sketch of where the form will sit — and is
+     * OMITTED on publish. A non-functional form must never reach a visitor; the NAP details + CTA carry
+     * the live page until the real form ships. Swap this method's body for the shortcode when delivery lands.
+     */
+    public function contactForm(bool $preview = false): string
+    {
+        if (! $preview) {
+            return '';
+        }
+
+        $sketch = "<!-- wp:html -->\n"
+            .'<div class="lp-formskel" aria-hidden="true">'
+            .'<span class="lp-formskel-field"></span>'
+            .'<span class="lp-formskel-field"></span>'
+            .'<span class="lp-formskel-field lp-formskel-area"></span>'
+            .'<span class="lp-formskel-btn"></span>'
+            .'</div>'
+            ."\n<!-- /wp:html -->";
+
+        return $this->b->group([
+            $this->sectionHead('Send a message', 'Contact form', center: true),
+            $this->placeholderNote('appears once your contact form delivery is set up'),
+            $sketch,
+        ], ['align' => 'full', 'className' => $this->sectionClass('lp-formsection', true)]);
+    }
+
     /** One contact detail: an accent label over its value (the value may carry a safe inline link). */
     private function detailRow(string $label, string $valueHtml): string
     {

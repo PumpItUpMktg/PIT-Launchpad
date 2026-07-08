@@ -3,7 +3,7 @@ Theme Name: Launchpad
 Theme URI: https://pumpitup.marketing/launchpad
 Author: Pump It Up Marketing
 Description: Launchpad's standalone block theme. All brand styling lives in theme.json and its three style variations (Bold & Direct / Clean & Trustworthy / Warm & Local); pages are core Gutenberg blocks, so the client is never locked into a proprietary builder. The .lp-* section layouts + bundled heading webfonts are enqueued from assets/theme.css. Self-contained — no parent theme required.
-Version: 0.20.0
+Version: 0.21.0
 Requires at least: 6.6
 Tested up to: 6.7
 Requires PHP: 8.0
