@@ -63,6 +63,10 @@
 .lp-services,
 .lp-why,
 .lp-guarantee,
+.lp-story,
+.lp-statement,
+.lp-values,
+.lp-team,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -77,6 +81,10 @@
 .lp-services > *,
 .lp-why > *,
 .lp-guarantee > *,
+.lp-story > *,
+.lp-statement > *,
+.lp-values > *,
+.lp-team > *,
 .lp-process > *,
 .lp-proof > *,
 .lp-testimonials > *,
@@ -94,11 +102,18 @@
 
 .lp-services,
 .lp-why,
+.lp-story,
+.lp-values,
+.lp-team,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
 .lp-areas {
     padding-block: clamp(3rem, 5vw, 5rem);
+}
+
+.lp-statement {
+    padding-block: clamp(2.5rem, 4vw, 3.5rem);
 }
 
 .lp-credibility {
@@ -639,6 +654,157 @@
     font-size: 0.92rem;
     line-height: 1.55;
     opacity: 0.82;
+}
+
+/* ------------------------------------------------------------------ *
+ * About page — story (prose), mission (statement), values, team.
+ * ------------------------------------------------------------------ */
+/* Our Story — a readable, centered brand narrative. */
+.lp-story .lp-section-head {
+    text-align: center;
+}
+
+.lp-story .lp-prose-p {
+    max-width: 68ch;
+    margin-inline: auto;
+    margin-block: 0 1rem;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: var(--wp--preset--color--contrast, #0f172a);
+}
+
+.lp-story .lp-prose-p:last-child {
+    margin-bottom: 0;
+}
+
+/* Mission — one standout, centered statement on the light band. */
+.lp-statement {
+    text-align: center;
+}
+
+.lp-statement .lp-eyebrow {
+    margin-bottom: 0.5rem;
+}
+
+.lp-statement .lp-statement-text {
+    max-width: 40ch;
+    margin-inline: auto;
+    font-size: clamp(1.4rem, 3vw, 2.1rem);
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--wp--preset--color--contrast, #0f172a);
+}
+
+/* Values — light band, icon + title + line (flex, adapts to count). */
+.wp-block-columns.lp-values-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.5rem;
+    margin-block: 0;
+    margin-inline: auto;
+}
+
+.lp-values-grid > .wp-block-column {
+    flex: 1 1 220px;
+    max-width: 320px;
+    display: flex;
+    margin: 0;
+}
+
+.lp-value-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.55rem;
+    width: 100%;
+}
+
+.lp-value-item .lp-icon {
+    color: var(--wp--preset--color--accent, #ea580c);
+    background: color-mix(in srgb, var(--wp--preset--color--accent, #ea580c) 18%, transparent);
+    border-radius: var(--wp--custom--radius, 6px);
+}
+
+.lp-value-item h4 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.lp-value-item p {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--wp--preset--color--muted, #475569);
+}
+
+/* Team — member cards: avatar (photo or initials chip) + name + role + bio. */
+.wp-block-columns.lp-team-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.5rem;
+    margin-block: 0;
+    margin-inline: auto;
+}
+
+.lp-team-grid > .wp-block-column {
+    flex: 1 1 240px;
+    max-width: 300px;
+    display: flex;
+    margin: 0;
+}
+
+.lp-team-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.35rem;
+    width: 100%;
+    padding: 1.75rem 1.25rem;
+    border-radius: var(--wp--custom--radius, 12px);
+    border: 1px solid var(--wp--preset--color--border, #e2e8f0);
+}
+
+.lp-team-item .lp-team-avatar,
+.lp-team-item figure.lp-team-photo img {
+    width: 5rem;
+    height: 5rem;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.lp-team-item .lp-team-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--wp--preset--color--on-accent, #fff);
+    background: var(--wp--preset--color--accent, #ea580c);
+    margin-bottom: 0.4rem;
+}
+
+.lp-team-item figure.lp-team-photo {
+    margin: 0 0 0.4rem;
+}
+
+.lp-team-item h4 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.lp-team-item .lp-team-role {
+    margin: 0;
+    font-weight: 600;
+}
+
+.lp-team-item p:not(.lp-team-role) {
+    margin: 0.2rem 0 0;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--wp--preset--color--muted, #475569);
 }
 
 /* ------------------------------------------------------------------ *

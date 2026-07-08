@@ -530,7 +530,9 @@ final class BlockSections
         }
         $children[] = $this->b->columns($cols, ['className' => 'lp-values-grid']);
 
-        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-values', $placeholder)]);
+        // Base (light) band — the About rhythm alternates white → surface → white so no two flat
+        // sections sit adjacent (mission + credibility take the surface bands around it).
+        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-values', $placeholder)]);
     }
 
     /**
