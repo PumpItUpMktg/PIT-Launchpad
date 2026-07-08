@@ -5,6 +5,7 @@ namespace App\Publishing;
 use App\Enums\ContentKind;
 use App\Enums\ContentSource;
 use App\Enums\SlotContentType;
+use App\Enums\StandardPageType;
 use App\Models\Content;
 use App\Models\ConversionConfig;
 use App\Models\Location;
@@ -142,10 +143,11 @@ class MetaBlobAssembler
 
         // The "Areas we serve" interactive map's geometry — the served-county polygons + tiered town
         // points. It rides the blob (NOT post_content — kses would strip embedded geometry); the plugin
-        // stores it and prints it for the theme's Leaflet init. Home only; null elsewhere / no coverage.
-        $areaMap = $content->page_type?->value === 'home'
-            ? $this->serviceAreaMap->for((string) $content->site_id)
-            : null;
+        // stores it and prints it for the theme's Leaflet init. The map surfaces on the home page's areas
+        // section AND the dedicated Areas We Serve page; null elsewhere / when there's no coverage.
+        $wantsAreaMap = $content->page_type?->value === 'home'
+            || $content->standard_type === StandardPageType::AreasWeServe;
+        $areaMap = $wantsAreaMap ? $this->serviceAreaMap->for((string) $content->site_id) : null;
 
         return [
             'content_id' => $content->id,

@@ -50,9 +50,9 @@ test('the seeder persists the library kits idempotently (keyed by name, not page
     $this->seed(WireframeKitSeeder::class);
     $this->seed(WireframeKitSeeder::class);
 
-    // 2 locked page kits + 4 standard-page composer kits + 1 hub kit; re-seed updates rather than duplicates.
-    expect(WireframeKit::whereNotNull('page_type')->count())->toBe(7)
-        ->and(WireframeKit::where('page_type', 'utility')->count())->toBe(3)  // about / why-choose-us / faq share page_type
+    // 2 locked page kits + 5 standard-page composer kits + 1 hub kit; re-seed updates rather than duplicates.
+    expect(WireframeKit::whereNotNull('page_type')->count())->toBe(8)
+        ->and(WireframeKit::where('page_type', 'utility')->count())->toBe(4)  // about / why-choose-us / areas-we-serve / faq share page_type
         ->and(WireframeKit::where('page_type', 'hub')->count())->toBe(1);
 
     $service = WireframeKit::where('page_type', 'service')->sole();

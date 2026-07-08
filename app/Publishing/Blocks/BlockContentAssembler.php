@@ -67,6 +67,19 @@ final class BlockContentAssembler
             return $this->composer->composeFaq($slots, $ctx, $this->faqItems($slots), $preview);
         }
 
+        if ($content->standard_type === StandardPageType::AreasWeServe) {
+            $siteId = (string) $content->site_id;
+
+            return $this->composer->composeAreas(
+                slots: $slots,
+                ctx: $ctx,
+                counties: $this->serviceAreas->resolve($siteId)['counties'],
+                byCounty: $this->serviceAreas->byCounty($siteId),
+                preview: $preview,
+                mapAvailable: $mapAvailable,
+            );
+        }
+
         return null;
     }
 

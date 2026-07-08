@@ -753,3 +753,79 @@ it('the meta-blob carries the FAQ post_content AND slot_payload.faq (the key the
         // the resolved slot_payload keeps `faq` — the plugin emits FAQPage schema from it
         ->and($blob['slot_payload']['faq'][0]['question'] ?? null)->toBe('How soon can you come out?');
 });
+
+// An Areas We Serve page: page_type Utility, standard_type areas_we_serve, hero + intro drafted.
+function blockAreasPage(Site $site): Content
+{
+    return Content::factory()->create([
+        'site_id' => $site->id,
+        'kind' => ContentKind::Page,
+        'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::AreasWeServe->value,
+        'slug' => 'areas-we-serve',
+        'title' => 'Areas We Serve',
+        'slot_payload' => [
+            'hero_headline' => 'Serving all of Northern New Jersey',
+            'intro' => 'Find your town below — and if you don’t see it, just ask.',
+        ],
+    ]);
+}
+
+// A served county + a covered major town, wired through the same gazetteer seam the home areas use.
+function seedAreasCoverage(Site $site): void
+{
+    Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34013']]);
+    $gaz = Mockery::mock(MunicipalityGazetteer::class);
+    $gaz->shouldReceive('countiesInState')->andReturn([new County('34013', 'Essex County', '34', '013')]);
+    $gaz->shouldReceive('countyPolygons')->andReturn([
+        ['geo_id' => '34013', 'name' => 'Essex County', 'rings' => [[['lat' => 40.8, 'lng' => -74.2]]]],
+    ]);
+    app()->instance(MunicipalityGazetteer::class, $gaz);
+    CoverageArea::factory()->create([
+        'site_id' => $site->id, 'name' => 'Newark', 'type' => MunicipalityType::CountySubdivision,
+        'geo_id' => '3401351000', 'size_tier' => 'major', 'lat' => 40.73, 'lng' => -74.17,
+    ]);
+}
+
+it('composes the Areas We Serve page — reuses the serviceAreas block (map + counties + cities) from §1', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    seedAreasCoverage($site);
+
+    $page = blockAreasPage($site);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], mapAvailable: true);
+
+    expect($markup)->toBeString()->not->toBeEmpty()
+        ->and($markup)
+        ->toContain('Serving all of Northern New Jersey')  // hero (drafted headline)
+        ->toContain('The towns and counties we cover')     // areas section heading
+        ->toContain('class="lp-areas-map"')                // interactive map mount (mapAvailable)
+        ->toContain('Essex County')                        // real served county
+        ->toContain('Newark')                              // major city grouped under it
+        ->toContain('Don’t see your town?');               // closing CTA
+});
+
+it('the meta-blob emits service_area_map for the Areas We Serve page (not just home)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    seedAreasCoverage($site);
+
+    $blob = app(MetaBlobAssembler::class)->assemble(blockAreasPage($site)->fresh(), collect());
+
+    expect($blob['service_area_map'])->not->toBeNull()
+        ->and($blob['service_area_map']['counties'][0]['name'])->toBe('Essex County')
+        ->and($blob['service_area_map']['cities'][0]['name'])->toBe('Newark')
+        ->and($blob['post_content'])->toContain('class="lp-areas-map"');
+});
+
+it('Areas We Serve: preview shows an example territory; publish omits coverage when none exists', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $page = blockAreasPage($site); // no coverage seeded
+
+    $preview = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+    expect($preview)->toContain('lp-areas')->toContain('lp-placeholder');
+
+    $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($publish)
+        ->not->toContain('lp-placeholder')                 // never a placeholder on the live page
+        ->toContain('Serving all of Northern New Jersey')  // hero + CTA still render
+        ->toContain('Don’t see your town?');
+});

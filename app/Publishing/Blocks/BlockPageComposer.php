@@ -318,6 +318,59 @@ final class BlockPageComposer
         return $this->join([$hero, $faq, $cta]);
     }
 
+    /**
+     * Composes the AREAS WE SERVE page — the dedicated coverage hub: hero → the interactive service-area
+     * block (the 50/50 map | major-cities-by-county, county list beneath) → a "don't see your town?" CTA.
+     * The coverage itself is §1-derived (never invented here) and reuses the SAME {@see BlockSections::serviceAreas}
+     * the home page uses — so the "believable radius" grouping is single-sourced. Data-gates like home:
+     * preview shows an example territory, publish omits when there's no real coverage.
+     *
+     * @param  array<string, mixed>  $slots  hero headline + intro
+     * @param  list<string>  $counties  named counties served (the pipe-separated line)
+     * @param  list<array{county: string, cities: list<array{label: string, url: string}>}>  $byCounty  major cities grouped by county
+     * @param  bool  $preview  operator proof-view (example territory) vs publish (data-gated)
+     * @param  bool  $mapAvailable  whether the tenant has map geometry — leads with the interactive map when true
+     */
+    public function composeAreas(
+        array $slots,
+        PageContext $ctx,
+        array $counties = [],
+        array $byCounty = [],
+        bool $preview = false,
+        bool $mapAvailable = false,
+    ): string {
+        $hero = $this->sections->hero(
+            eyebrow: 'Where we work',
+            headline: $this->str($slots['hero_headline'] ?? '') ?: 'Areas we serve',
+            subhead: $this->str($slots['intro'] ?? $slots['hero_subhead'] ?? ''),
+            imageUrl: null,
+            imageAlt: '',
+            assessmentText: 'Get in touch',
+            assessmentUrl: '#contact',
+            trust: [],
+            ctx: $ctx,
+        );
+
+        $areas = $this->sections->serviceAreas(
+            eyebrow: 'Coverage',
+            heading: 'The towns and counties we cover',
+            counties: $counties,
+            byCounty: $byCounty,
+            preview: $preview,
+            mapAvailable: $mapAvailable,
+        );
+
+        $cta = $this->sections->cta(
+            heading: 'Don’t see your town?',
+            body: 'Give us a call — if you’re nearby, chances are we cover you.',
+            actionText: 'Contact us',
+            actionUrl: '#contact',
+            ctx: $ctx,
+        );
+
+        return $this->join([$hero, $areas, $cta]);
+    }
+
     /** @param list<string> $blocks */
     private function join(array $blocks): string
     {

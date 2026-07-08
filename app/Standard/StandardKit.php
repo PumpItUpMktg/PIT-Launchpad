@@ -21,6 +21,7 @@ final class StandardKit
         'home' => 'home-page',
         'about' => 'about-page',
         'why_choose_us' => 'why-choose-us-page',
+        'areas_we_serve' => 'areas-we-serve-page',
         'faq' => 'faq-page',
     ];
 
