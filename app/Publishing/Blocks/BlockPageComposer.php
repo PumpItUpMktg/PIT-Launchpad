@@ -65,9 +65,10 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // 2. Certifications / trust row — the single credentials band near the top (data-gated, per-item,
-        //    verbatim). It carries BOTH the tenant's captured certifications AND their substantiated proof
-        //    credentials (merged upstream), so the home page shows one trust band, never two overlapping ones.
+        // Certifications / trust row — the single credentials band (data-gated, per-item, verbatim),
+        //    placed LOW on the page (see the join order below). It carries BOTH the tenant's captured
+        //    certifications AND their substantiated proof credentials (merged upstream), so the page shows
+        //    one trust band, never two overlapping ones.
         $certs = $this->sections->certificationsRow($certifications, $preview);
 
         // 5b. Guarantee band — the tenant's guarantee as a standout promise (data-gated, verbatim).
@@ -132,8 +133,9 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // Certs reinforce credibility near the top; the guarantee lands mid-page after Why Choose Us.
-        return $this->join([$hero, $certs, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $cta]);
+        // The credentials band sits LOW — a quiet trust reinforcement just before the closing CTA, not a
+        // prominent top-of-page banner. The guarantee lands mid-page after Why Choose Us.
+        return $this->join([$hero, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $certs, $cta]);
     }
 
     /**
@@ -206,7 +208,8 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $why, $guaranteeBand, $certs, $reviews, $cta]);
+        // Credentials sit LOW here too — after the client voice, just before the CTA (quiet reinforcement).
+        return $this->join([$hero, $why, $guaranteeBand, $reviews, $certs, $cta]);
     }
 
     /**
