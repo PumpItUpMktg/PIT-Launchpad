@@ -67,6 +67,7 @@
 .lp-statement,
 .lp-values,
 .lp-team,
+.lp-faqs,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -85,6 +86,7 @@
 .lp-statement > *,
 .lp-values > *,
 .lp-team > *,
+.lp-faqs > *,
 .lp-process > *,
 .lp-proof > *,
 .lp-testimonials > *,
@@ -105,6 +107,7 @@
 .lp-story,
 .lp-values,
 .lp-team,
+.lp-faqs,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -804,6 +807,74 @@
     margin: 0.2rem 0 0;
     font-size: 0.92rem;
     line-height: 1.55;
+    color: var(--wp--preset--color--muted, #475569);
+}
+
+/* ------------------------------------------------------------------ *
+ * FAQ — native <details> accordion (no JS). Shares the .lp-faq class
+ * contract with the companion plugin's slot renderer, so both paths style
+ * the same. The FAQPage schema is emitted by the plugin from the same data.
+ * ------------------------------------------------------------------ */
+.lp-faqs .lp-section-head {
+    text-align: center;
+}
+
+.lp-faqs .lp-faq-intro {
+    text-align: center;
+    max-width: 60ch;
+    margin-inline: auto;
+    margin-bottom: 1.5rem;
+}
+
+.lp-faq-list {
+    max-width: 780px;
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.lp-faq {
+    border: 1px solid var(--wp--preset--color--border, #e2e8f0);
+    border-radius: var(--wp--custom--radius, 12px);
+    background: var(--wp--preset--color--base, #fff);
+    overflow: hidden;
+}
+
+.lp-faq__q {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.1rem 1.35rem;
+    font-weight: 600;
+    font-size: 1.02rem;
+    cursor: pointer;
+    list-style: none;
+    color: var(--wp--preset--color--contrast, #0f172a);
+}
+
+.lp-faq__q::-webkit-details-marker {
+    display: none;
+}
+
+.lp-faq__q::after {
+    content: "+";
+    flex: none;
+    font-size: 1.4rem;
+    font-weight: 400;
+    line-height: 1;
+    color: var(--wp--preset--color--accent, #ea580c);
+    transition: transform 0.2s ease;
+}
+
+.lp-faq[open] > .lp-faq__q::after {
+    transform: rotate(45deg);
+}
+
+.lp-faq__a {
+    padding: 0 1.35rem 1.2rem;
+    line-height: 1.65;
     color: var(--wp--preset--color--muted, #475569);
 }
 

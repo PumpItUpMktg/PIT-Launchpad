@@ -275,6 +275,49 @@ final class BlockPageComposer
         return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $credibility, $teamBlock, $cta]);
     }
 
+    /**
+     * Composes the FAQ page — a plain, high-utility page: hero → the accordion of drafted Q&A → a soft
+     * "still have a question?" CTA. The Q&A are drafter-generated (from trade + services), so the
+     * accordion is the page; it data-gates like every other section (preview → labeled example pair).
+     * The plugin emits the FAQPage JSON-LD from the same slot payload — schema and accordion never diverge.
+     *
+     * @param  array<string, mixed>  $slots  hero headline + intro (+ the faq repeater, resolved upstream)
+     * @param  list<array{question?: string, answer?: string}>  $faqs  the drafted question/answer pairs
+     * @param  bool  $preview  operator proof-view (accordion + placeholder) vs publish (data-gated)
+     */
+    public function composeFaq(array $slots, PageContext $ctx, array $faqs = [], bool $preview = false): string
+    {
+        $hero = $this->sections->hero(
+            eyebrow: 'FAQ',
+            headline: $this->str($slots['hero_headline'] ?? '') ?: 'Frequently asked questions',
+            subhead: $this->str($slots['intro'] ?? $slots['hero_subhead'] ?? ''),
+            imageUrl: null,
+            imageAlt: '',
+            assessmentText: 'Get in touch',
+            assessmentUrl: '#contact',
+            trust: [],
+            ctx: $ctx,
+        );
+
+        $faq = $this->sections->faqAccordion(
+            eyebrow: 'Answers',
+            heading: 'Common questions',
+            intro: '',
+            items: $faqs,
+            preview: $preview,
+        );
+
+        $cta = $this->sections->cta(
+            heading: 'Still have a question?',
+            body: 'Get in touch and we’ll get you a straight answer.',
+            actionText: 'Contact us',
+            actionUrl: '#contact',
+            ctx: $ctx,
+        );
+
+        return $this->join([$hero, $faq, $cta]);
+    }
+
     /** @param list<string> $blocks */
     private function join(array $blocks): string
     {
