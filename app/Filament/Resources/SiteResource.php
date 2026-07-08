@@ -22,6 +22,7 @@ use App\Operator\Controls\TemplateMapping;
 use App\Operator\Handover\SiteHandover;
 use App\Operator\SiteDeleter;
 use App\Publishing\LaunchOrchestrator;
+use App\Publishing\SitePreviewService;
 use App\Security\GateCheck;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -110,6 +111,7 @@ class SiteResource extends Resource
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
                     self::templatesAction(),
+                    self::previewAllSectionsAction(),
                     self::handoverAction(),
                     self::deleteAction(),
                 ]),
@@ -695,6 +697,38 @@ class SiteResource extends Resource
      * site immediately, bypassing the cadence window, and report inline. Spends
      * DataForSEO calls, so it confirms before running.
      */
+    /**
+     * Preview the WHOLE site with every section shown — the internal-only "show all sections" control.
+     * Pushes each page to WordPress as a DRAFT (data-gated sections render as clearly-labeled examples)
+     * via {@see SitePreviewService}, so the operator can review the complete design on the real
+     * instance. Drafts are visible to logged-in operators via the preview link, never to visitors, and
+     * nothing goes live — no published page or `Content.status` is touched.
+     */
+    private static function previewAllSectionsAction(): Action
+    {
+        return Action::make('preview_all_sections')
+            ->label('Preview full site')
+            ->icon('heroicon-o-eye')
+            ->requiresConfirmation()
+            ->modalHeading('Preview the full site (all sections)')
+            ->modalDescription('Pushes every page to WordPress as a DRAFT with every section shown — data-gated sections (reviews, guarantee, certifications, …) render as clearly-labeled examples. Internal-only: drafts are visible to logged-in operators via the preview link, never to visitors, and nothing goes live.')
+            ->modalSubmitActionLabel('Preview full site')
+            ->action(function (Site $record): void {
+                $results = app(SitePreviewService::class)->previewSite($record);
+
+                $ready = count(array_filter($results, fn (array $r): bool => $r['result']->isReady()));
+                $skipped = count(array_filter($results, fn (array $r): bool => $r['result']->state === 'unavailable'));
+                $failed = count($results) - $ready - $skipped;
+
+                $body = trim(($skipped > 0 ? "{$skipped} skipped (not generated yet). " : '')
+                    .($failed > 0 ? "{$failed} failed to push." : 'All sections shown; nothing went live.'));
+
+                $notification = Notification::make()->title("Previewed {$ready} page(s) as internal drafts")->body($body);
+                $failed > 0 ? $notification->warning() : $notification->success();
+                $notification->send();
+            });
+    }
+
     private static function refreshKeywordsAction(): Action
     {
         return Action::make('refresh_keywords')
