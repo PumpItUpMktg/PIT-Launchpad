@@ -392,6 +392,19 @@
     font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.25rem);
 }
 
+/* Heading conformity — every block-section headline (h1–h4) renders in Title Case (each word's first
+   letter capitalised), however the copy was authored or drafted, so the whole site reads one way.
+   VISUAL ONLY (text-transform): the DOM text keeps its original casing, so SEO, the <title>/meta, and
+   screen readers are untouched. Deliberately scoped to real headings — the eyebrow (uppercase already),
+   the mission statement, and the FAQ questions keep their own treatment. */
+:is(
+    .lp-hero, .lp-credibility, .lp-certs, .lp-services, .lp-why, .lp-guarantee, .lp-story, .lp-statement,
+    .lp-values, .lp-team, .lp-faqs, .lp-legal, .lp-contact, .lp-formsection, .lp-process, .lp-proof,
+    .lp-testimonials, .lp-areas, .lp-cta
+) :is(h1, h2, h3, h4) {
+    text-transform: capitalize;
+}
+
 /* ------------------------------------------------------------------ *
  * Services grid — up to 3 per row, wrapping by service count; equal-
  * height cards with icon, blurb, and a learn-more link.
