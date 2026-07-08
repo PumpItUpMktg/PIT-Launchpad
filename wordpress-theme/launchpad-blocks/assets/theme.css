@@ -69,6 +69,7 @@
 .lp-team,
 .lp-faqs,
 .lp-legal,
+.lp-contact,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -89,6 +90,7 @@
 .lp-team > *,
 .lp-faqs > *,
 .lp-legal > *,
+.lp-contact > *,
 .lp-process > *,
 .lp-proof > *,
 .lp-testimonials > *,
@@ -111,6 +113,7 @@
 .lp-team,
 .lp-faqs,
 .lp-legal,
+.lp-contact,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -907,6 +910,86 @@
 .lp-legal p {
     line-height: 1.7;
     margin: 0 0 1rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Contact — NAP details (phone / email / address) + an hours table.
+ * ------------------------------------------------------------------ */
+.lp-contact .lp-section-head {
+    text-align: center;
+}
+
+.wp-block-columns.lp-contact-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: clamp(1.5rem, 5vw, 4rem);
+    max-width: 900px;
+    margin-inline: auto;
+}
+
+.lp-contact-grid > .wp-block-column {
+    flex: 1 1 260px;
+    margin: 0;
+}
+
+.lp-contact-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.lp-contact-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.lp-contact-label {
+    margin: 0;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.lp-contact-value {
+    margin: 0;
+    font-size: 1.1rem;
+    line-height: 1.4;
+}
+
+.lp-contact-value a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.lp-contact-value a:hover {
+    text-decoration: underline;
+}
+
+.lp-contact-hours-h {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--wp--preset--color--accent, #ea580c);
+}
+
+.lp-hours-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin: 0 0 0.4rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--wp--preset--color--border, #e2e8f0);
+}
+
+.lp-hours-row .lp-hours-day {
+    font-weight: 600;
+}
+
+.lp-hours-row .lp-hours-val {
+    color: var(--wp--preset--color--muted, #475569);
 }
 
 /* ------------------------------------------------------------------ *

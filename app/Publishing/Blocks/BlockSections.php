@@ -658,6 +658,88 @@ final class BlockSections
     }
 
     /**
+     * Contact details (NAP): the business's real phone (click-to-call), email (mailto), address, and
+     * hours — the trust-and-SEO core of a contact page. Per-field data-gated: only the channels the
+     * tenant actually captured render, never a fabricated number or address (preview → a labeled
+     * example). Reuses the same phone the rest of the site resolves (via the caller's PageContext).
+     *
+     * @param  list<array{label: string, value: string}>  $hours  per-day rows (label + hours/closed)
+     */
+    public function contactDetails(
+        string $eyebrow,
+        string $heading,
+        ?string $phoneDisplay,
+        ?string $phoneTel,
+        ?string $email,
+        ?string $address,
+        array $hours,
+        bool $preview = false,
+    ): string {
+        $phoneDisplay = trim((string) $phoneDisplay);
+        $email = trim((string) $email);
+        $address = trim((string) $address);
+
+        $placeholder = false;
+        if ($phoneDisplay === '' && $email === '' && $address === '' && $hours === []) {
+            if (! $preview) {
+                return '';
+            }
+            $phoneDisplay = '(555) 123-4567';
+            $phoneTel = 'tel:5551234567';
+            $email = 'hello@yourbusiness.com';
+            $address = '123 Main Street, Your Town';
+            $hours = [['label' => 'Mon–Fri', 'value' => '8:00 – 5:00'], ['label' => 'Sat', 'value' => 'By appointment'], ['label' => 'Sun', 'value' => 'Closed']];
+            $placeholder = true;
+        }
+
+        $rows = [];
+        if ($phoneDisplay !== '') {
+            $value = trim((string) $phoneTel) !== ''
+                ? '<a href="'.$this->attr($phoneTel).'">'.$this->text($phoneDisplay).'</a>'
+                : $this->text($phoneDisplay);
+            $rows[] = $this->detailRow('Call us', $value);
+        }
+        if ($email !== '') {
+            $rows[] = $this->detailRow('Email', '<a href="mailto:'.$this->attr($email).'">'.$this->text($email).'</a>');
+        }
+        if ($address !== '') {
+            $rows[] = $this->detailRow('Visit', $this->text($address));
+        }
+
+        $cols = [];
+        if ($rows !== []) {
+            $cols[] = $this->b->column([$this->b->group($rows, ['className' => 'lp-contact-rows'])]);
+        }
+        if ($hours !== []) {
+            $hoursChildren = [$this->b->heading(4, 'Hours', ['className' => 'lp-contact-hours-h'])];
+            foreach ($hours as $row) {
+                $hoursChildren[] = $this->b->paragraph(
+                    '<span class="lp-hours-day">'.$this->text($row['label']).'</span><span class="lp-hours-val">'.$this->text($row['value']).'</span>',
+                    ['className' => 'lp-hours-row'],
+                );
+            }
+            $cols[] = $this->b->column([$this->b->group($hoursChildren, ['className' => 'lp-contact-hours'])]);
+        }
+
+        $children = [$this->sectionHead($eyebrow, $heading, center: true)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add your contact details');
+        }
+        $children[] = $this->b->columns($cols, ['className' => 'lp-contact-grid']);
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-contact', $placeholder)]);
+    }
+
+    /** One contact detail: an accent label over its value (the value may carry a safe inline link). */
+    private function detailRow(string $label, string $valueHtml): string
+    {
+        return $this->b->group([
+            $this->b->paragraph($this->text($label), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-contact-label']),
+            $this->b->paragraph($valueHtml, ['className' => 'lp-contact-value']),
+        ], ['className' => 'lp-contact-row']);
+    }
+
+    /**
      * A team member's avatar: their real photo when captured, else an initials chip (a classed span the
      * theme styles — kses-safe, unlike inline SVG). Never a fabricated headshot.
      */
