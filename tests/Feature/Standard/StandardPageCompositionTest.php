@@ -178,11 +178,13 @@ it('resolves a kit only for the standard pages whose composer has shipped', func
         ->and(StandardKit::isComposable(StandardPageType::Faq))->toBeTrue()
         ->and(StandardKit::isComposable(StandardPageType::WhyChooseUs))->toBeTrue()
         ->and(StandardKit::isComposable(StandardPageType::AreasWeServe))->toBeTrue()
+        ->and(StandardKit::isComposable(StandardPageType::Contact))->toBeTrue()
         ->and(StandardKit::isComposable(StandardPageType::Privacy))->toBeTrue()
         ->and(StandardKit::isComposable(StandardPageType::Terms))->toBeTrue()
-        // not yet built — these stay held ("Not ready yet") until their composer lands
-        ->and(StandardKit::isComposable(StandardPageType::Contact))->toBeFalse();
+        // not yet built — these optional pages stay held ("Not ready yet") until their composer lands
+        ->and(StandardKit::isComposable(StandardPageType::Reviews))->toBeFalse()
+        ->and(StandardKit::isComposable(StandardPageType::Gallery))->toBeFalse();
 
     expect(StandardKit::resolve(StandardPageType::About)?->name)->toBe('about-page')
-        ->and(StandardKit::resolve(StandardPageType::Contact))->toBeNull();
+        ->and(StandardKit::resolve(StandardPageType::Reviews))->toBeNull();
 });

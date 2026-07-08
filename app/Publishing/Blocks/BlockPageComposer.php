@@ -387,6 +387,60 @@ final class BlockPageComposer
         return $this->sections->legalDocument($heading, $effectiveDate, $sections);
     }
 
+    /**
+     * Composes the CONTACT page — hero → the real contact details (phone / email / address / hours) →
+     * a request-service CTA. The NAP is resolved from §1 upstream (the phone rides on the PageContext,
+     * the same number every surface uses); nothing here is fabricated, and each channel data-gates.
+     * The lead form itself is a companion-plugin shortcode (kses strips inline <form>), added separately.
+     *
+     * @param  array<string, mixed>  $slots  hero headline + intro
+     * @param  string|null  $email  the business email (from §1), or null
+     * @param  string|null  $address  the business address (from §1), or null
+     * @param  list<array{label: string, value: string}>  $hours  per-day hours rows
+     * @param  bool  $preview  operator proof-view (example details) vs publish (data-gated)
+     */
+    public function composeContact(
+        array $slots,
+        PageContext $ctx,
+        ?string $email = null,
+        ?string $address = null,
+        array $hours = [],
+        bool $preview = false,
+    ): string {
+        $hero = $this->sections->hero(
+            eyebrow: 'Get in touch',
+            headline: $this->str($slots['hero_headline'] ?? '') ?: 'Contact us',
+            subhead: $this->str($slots['intro'] ?? $slots['hero_subhead'] ?? ''),
+            imageUrl: null,
+            imageAlt: '',
+            assessmentText: 'Request service',
+            assessmentUrl: '#contact',
+            trust: [],
+            ctx: $ctx,
+        );
+
+        $details = $this->sections->contactDetails(
+            eyebrow: 'Reach us',
+            heading: 'How to get in touch',
+            phoneDisplay: $ctx->phoneDisplay,
+            phoneTel: $ctx->phoneTel,
+            email: $email,
+            address: $address,
+            hours: $hours,
+            preview: $preview,
+        );
+
+        $cta = $this->sections->cta(
+            heading: 'Ready to get started?',
+            body: 'Tell us what you need and we’ll get right back to you.',
+            actionText: 'Request service',
+            actionUrl: '#contact',
+            ctx: $ctx,
+        );
+
+        return $this->join([$hero, $details, $cta]);
+    }
+
     /** @param list<string> $blocks */
     private function join(array $blocks): string
     {

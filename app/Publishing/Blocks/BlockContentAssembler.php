@@ -16,6 +16,7 @@ use App\Publishing\Legal\LegalContext;
 use App\Publishing\Legal\LegalTemplates;
 use App\Publishing\MetaBlobAssembler;
 use App\Publishing\SiteContact;
+use App\Support\BusinessHours;
 
 /**
  * Resolves a page's real §1/§4 inputs and composes its `post_content` (core Gutenberg block markup) —
@@ -83,11 +84,65 @@ final class BlockContentAssembler
             );
         }
 
+        if ($content->standard_type === StandardPageType::Contact) {
+            return $this->composeContact($content, $slots, $ctx, $preview);
+        }
+
         if ($content->standard_type === StandardPageType::Privacy || $content->standard_type === StandardPageType::Terms) {
             return $this->composeLegal($content, $slots);
         }
 
         return null;
+    }
+
+    /**
+     * The Contact page — hero + the real NAP (phone via the shared context, email/address/hours from the
+     * primary §1 Location) + a request-service CTA. Every channel is honest and per-field data-gated.
+     *
+     * @param  array<string, mixed>  $slots
+     */
+    private function composeContact(Content $content, array $slots, PageContext $ctx, bool $preview): string
+    {
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->orderBy('created_at')
+            ->first();
+
+        return $this->composer->composeContact(
+            slots: $slots,
+            ctx: $ctx,
+            email: is_string($location?->email) && trim($location->email) !== '' ? trim($location->email) : null,
+            address: is_string($location?->address) && trim($location->address) !== '' ? trim($location->address) : null,
+            hours: $this->businessHours($location),
+            preview: $preview,
+        );
+    }
+
+    /**
+     * The primary location's hours as display rows — one per open day (closed days drop, so the block
+     * shows only real hours, never a wall of "Closed"). Empty when nothing is captured.
+     *
+     * @return list<array{label: string, value: string}>
+     */
+    private function businessHours(?Location $location): array
+    {
+        $hours = is_array($location?->hours) ? $location->hours : null;
+
+        $labels = ['mon' => 'Mon', 'tue' => 'Tue', 'wed' => 'Wed', 'thu' => 'Thu', 'fri' => 'Fri', 'sat' => 'Sat', 'sun' => 'Sun'];
+
+        $rows = [];
+        foreach (BusinessHours::fromStored($hours) as $row) {
+            if ($row['all_day']) {
+                $value = 'Open 24 hours';
+            } elseif ($row['closed'] || trim((string) $row['open']) === '') {
+                continue; // drop closed days — show only the days the business is actually open
+            } else {
+                $value = trim((string) $row['open']).' – '.trim((string) $row['close']);
+            }
+            $rows[] = ['label' => $labels[$row['day']] ?? ucfirst($row['day']), 'value' => $value];
+        }
+
+        return $rows;
     }
 
     /**

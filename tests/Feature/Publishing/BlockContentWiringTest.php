@@ -547,15 +547,15 @@ it('Why Choose Us: preview builds every section with labeled placeholders; publi
         ->toContain('Ready to get started?');
 });
 
-it('returns null for a standard page whose composer has not shipped (Contact falls back to existing render)', function () {
+it('returns null for a standard page whose composer has not shipped (Gallery falls back to existing render)', function () {
     $site = Site::factory()->create();
-    $contact = Content::factory()->create([
+    $gallery = Content::factory()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page,
-        'page_type' => PageType::Utility, 'standard_type' => StandardPageType::Contact->value,
-        'slug' => 'contact', 'title' => 'Contact',
+        'page_type' => PageType::Utility, 'standard_type' => StandardPageType::Gallery->value,
+        'slug' => 'gallery', 'title' => 'Gallery',
     ]);
 
-    expect(app(BlockContentAssembler::class)->compose($contact->fresh(), [], []))->toBeNull();
+    expect(app(BlockContentAssembler::class)->compose($gallery->fresh(), [], []))->toBeNull();
 });
 
 it('the meta-blob carries post_content for the Why Choose Us page (end-to-end publish path)', function () {
@@ -890,4 +890,58 @@ it('legal templates degrade honestly — no brand name → "this business", no c
         ->toContain('this business')          // graceful fallback for a missing brand
         ->toContain('this website')           // graceful fallback for a missing site URL
         ->toContain('contact page on this website'); // no captured channel → no invented one
+});
+
+// A Contact page: page_type Utility, standard_type contact, hero + intro drafted.
+function blockContactPage(Site $site): Content
+{
+    return Content::factory()->create([
+        'site_id' => $site->id,
+        'kind' => ContentKind::Page,
+        'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::Contact->value,
+        'slug' => 'contact',
+        'title' => 'Contact',
+        'slot_payload' => ['hero_headline' => 'Let’s talk about your project', 'intro' => 'Reach us any way you like.'],
+    ]);
+}
+
+it('composes the Contact page — real NAP (phone, email, address, hours) from §1, per-field gated', function () {
+    $site = Site::factory()->create(['phone' => '(973) 555-0100']);
+    Location::factory()->create([
+        'site_id' => $site->id,
+        'email' => 'hello@sewergurus.com',
+        'address' => '12 Main Street, Newark, NJ',
+        'phone' => null,
+        'hours' => ['mon' => ['open' => '8:00', 'close' => '17:00'], 'sat' => 'closed', 'sun' => 'closed'],
+    ]);
+
+    $page = blockContactPage($site);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()->not->toBeEmpty()
+        ->and($markup)
+        ->toContain('Let’s talk about your project')     // hero (drafted headline)
+        ->toContain('lp-contact')                         // the NAP section
+        ->toContain('href="tel:9735550100"')              // click-to-call (site phone)
+        ->toContain('(973) 555-0100')
+        ->toContain('href="mailto:hello@sewergurus.com"') // mailto
+        ->toContain('12 Main Street, Newark, NJ')         // address, verbatim
+        ->toContain('Hours')->toContain('Mon')->toContain('8:00 – 17:00') // an open day
+        ->not->toContain('>Sun<')                         // closed days drop — no wall of "Closed"
+        ->toContain('Ready to get started?');             // CTA
+});
+
+it('Contact: preview shows example details; publish omits the NAP when nothing is captured', function () {
+    $site = Site::factory()->create(['phone' => null]); // no phone, no location
+    $page = blockContactPage($site);
+
+    $preview = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+    expect($preview)->toContain('lp-contact')->toContain('appears when you add your contact details');
+
+    $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($publish)
+        ->not->toContain('lp-contact-grid')               // the NAP block omits on publish
+        ->toContain('Let’s talk about your project')      // hero + CTA still render
+        ->toContain('Ready to get started?');
 });
