@@ -6,7 +6,7 @@
     <div class="lp-scope">
         <div class="lp-shell">
             @include('filament.guided._stepper', ['steps' => $steps, 'brand' => $brand, 'grow' => $grow])
-            <main class="lp-main">
+            <main class="lp-main {{ $grow ? 'wide' : '' }}">
                 {{ $slot }}
             </main>
         </div>
