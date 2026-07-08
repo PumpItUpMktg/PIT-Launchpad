@@ -117,7 +117,7 @@ it('composes the full 9-section Home from real §1 data — credibility, differe
     );
 
     expect($markup)
-        ->toContain('NJ Master Plumber')                                        // credibility strip
+        ->toContain('NJ Master Plumber')                                        // substantiated credential (merged trust band)
         ->toContain('Preventive-first')                                         // why choose us
         ->toContain('Getting started is simple')                                // how it works (always)
         ->toContain('Caught a collapsing line before it flooded the basement.') // testimonial
@@ -311,7 +311,8 @@ it('preview builds ALL recommended sections with labeled placeholders; publish o
         ->toContain('In their words')                                   // Testimonials shown
         ->toContain('Areas we serve')                                   // Service Areas shown
         ->toContain('activates when you add reviews')                   // names what fills Testimonials
-        ->toContain('activates when you add licenses, certifications, or ratings') // Credibility
+        ->toContain('appears when you add certifications')              // the single merged credentials band
+        ->not->toContain('lp-credibility')                             // NO separate credibility strip on Home anymore
         ->toContain('add your service areas to activate this section')  // Service Areas
         ->toContain('Getting started is simple');                       // always-on section still there
 
@@ -382,6 +383,39 @@ it('omits the guarantee band + certifications row when none are captured (degrad
     $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
 
     expect($markup)->not->toContain('lp-guarantee')->not->toContain('lp-certs');
+});
+
+it('Home shows ONE trust band — captured certs + substantiated proof credentials, merged and deduped (no duplicate section)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    // Narrative certification AND a substantiated proof with the SAME label (entered in both places).
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'certifications' => [['label' => 'NJ Master Plumber', 'number' => '#1234']],
+    ]);
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::License,
+        'payload' => ['label' => 'NJ Master Plumber'], 'is_substantiated' => true, // duplicate of the cert above
+    ]);
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::Cert,
+        'payload' => ['label' => 'EPA Certified'], 'is_substantiated' => true,      // proof-only credential
+    ]);
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    // Isolate the credentials band (between its section marker and the next section) to prove the dedup
+    // there, independent of the hero trust-stat row (which separately surfaces substantiated labels).
+    $band = (string) strstr($markup, 'lp-certs', false);
+    $band = substr($band, 0, (int) strpos($band, 'lp-services') ?: strlen($band));
+
+    expect($markup)
+        ->toContain('lp-certs')                                        // the single credentials band
+        ->not->toContain('lp-credibility')                            // NO separate credibility strip
+        ->toContain('#1234')                                          // the captured cert (with its number)
+        ->toContain('EPA Certified');                                 // the proof-only credential, folded in
+    // the duplicate "NJ Master Plumber" (in BOTH the cert and the proof) renders exactly once in the band
+    expect(substr_count($band, 'NJ Master Plumber'))->toBe(1);
 });
 
 it('preview shows the guarantee + certifications as labeled placeholders; publish omits them', function () {

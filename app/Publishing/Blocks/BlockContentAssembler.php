@@ -230,13 +230,12 @@ final class BlockContentAssembler
             serviceCards: $this->serviceCards($content, $site),
             ctx: $ctx,
             trustStats: $this->trustStats($content),
-            credibilityBadges: $this->credibilityBadges($content),
             differentiators: $this->differentiators($content),
             testimonials: $this->testimonials($content),
             serviceAreaCounties: $this->serviceAreas->resolve($siteId)['counties'],
             serviceAreasByCounty: $this->serviceAreas->byCounty($siteId),
             processSteps: $this->processSteps($content),
-            certifications: $this->certifications($content),
+            certifications: $this->mergedCredentials($content),
             guarantee: $this->guarantee($content),
             preview: $preview,
             serviceAreaMapAvailable: $mapAvailable,
@@ -257,9 +256,8 @@ final class BlockContentAssembler
             images: $images,
             ctx: $ctx,
             differentiators: $this->differentiators($content),
-            credibilityBadges: $this->credibilityBadges($content),
             guarantee: $this->guarantee($content),
-            certifications: $this->certifications($content),
+            certifications: $this->mergedCredentials($content),
             testimonials: $this->testimonials($content),
             trustStats: $this->trustStats($content),
             preview: $preview,
@@ -537,6 +535,36 @@ final class BlockContentAssembler
         }
 
         return array_slice($out, 0, 6);
+    }
+
+    /**
+     * The single credentials band's items — the tenant's captured {@see certifications()} PLUS their
+     * substantiated proof {@see credibilityBadges()} (licenses / certs / ratings), folded in as
+     * label-only credentials and DEDUPED against the captured certs by label. This unifies what used to
+     * be two overlapping bands (the credibility strip + the certifications row) into one, so Home and
+     * Why-Choose-Us never show the same trust signals twice. Verbatim; never fabricated; capped.
+     *
+     * @return list<array{label: string, number: string, logo_url: string}>
+     */
+    private function mergedCredentials(Content $content): array
+    {
+        $certs = $this->certifications($content);
+
+        $seen = [];
+        foreach ($certs as $cert) {
+            $seen[mb_strtolower($cert['label'])] = true;
+        }
+
+        foreach ($this->credibilityBadges($content) as $badge) {
+            $key = mb_strtolower(trim($badge));
+            if ($key === '' || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $certs[] = ['label' => $badge, 'number' => '', 'logo_url' => ''];
+        }
+
+        return array_slice($certs, 0, 8);
     }
 
     /**

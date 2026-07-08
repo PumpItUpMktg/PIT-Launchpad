@@ -21,7 +21,6 @@ final class BlockPageComposer
      * @param  array<string, array<string, mixed>>  $images  image map keyed by slot
      * @param  list<array{title: string, blurb: string, url: string}>  $serviceCards  resolved child service pages (real internal links)
      * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats (never fabricated) for the hero trust row
-     * @param  list<string>  $credibilityBadges  substantiated trust badges (licensed/certified/rated) for the credibility strip
      * @param  list<array{title?: string, description?: string}>  $differentiators  Why-Choose-Us items (site narrative)
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
      * @param  list<string>  $serviceAreaCounties  named counties served (the pipe-separated line beneath the block)
@@ -44,7 +43,6 @@ final class BlockPageComposer
         array $serviceCards,
         PageContext $ctx,
         array $trustStats = [],
-        array $credibilityBadges = [],
         array $differentiators = [],
         array $testimonials = [],
         array $serviceAreaCounties = [],
@@ -67,11 +65,9 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // 2. Credibility strip — substantiated badges only; hides when none exist (a labeled example
-        //    placeholder stands in for preview, never for publish).
-        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
-
-        // 2b. Certifications / trust row — real credentials near the top (data-gated, per-item, verbatim).
+        // 2. Certifications / trust row — the single credentials band near the top (data-gated, per-item,
+        //    verbatim). It carries BOTH the tenant's captured certifications AND their substantiated proof
+        //    credentials (merged upstream), so the home page shows one trust band, never two overlapping ones.
         $certs = $this->sections->certificationsRow($certifications, $preview);
 
         // 5b. Guarantee band — the tenant's guarantee as a standout promise (data-gated, verbatim).
@@ -137,7 +133,7 @@ final class BlockPageComposer
         );
 
         // Certs reinforce credibility near the top; the guarantee lands mid-page after Why Choose Us.
-        return $this->join([$hero, $credibility, $certs, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $cta]);
+        return $this->join([$hero, $certs, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $cta]);
     }
 
     /**
@@ -150,7 +146,6 @@ final class BlockPageComposer
      * @param  array<string, mixed>  $slots  the page's resolved slot_payload (hero headline/subhead)
      * @param  array<string, array<string, mixed>>  $images  image map keyed by slot
      * @param  list<array{title?: string, description?: string}>  $differentiators  the real captured value props (the page's spine)
-     * @param  list<string>  $credibilityBadges  substantiated trust badges (licensed/certified/rated)
      * @param  array{name?: string, description?: string}  $guarantee  the tenant's guarantee/warranty (verbatim, data-gated)
      * @param  list<array{label?: string, number?: string, logo_url?: string}>  $certifications  real credentials (verbatim, data-gated, per-item)
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
@@ -162,7 +157,6 @@ final class BlockPageComposer
         array $images,
         PageContext $ctx,
         array $differentiators = [],
-        array $credibilityBadges = [],
         array $guarantee = [],
         array $certifications = [],
         array $testimonials = [],
@@ -180,8 +174,6 @@ final class BlockPageComposer
             trust: $this->heroTrust($ctx, $trustStats),
             ctx: $ctx,
         );
-
-        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
 
         // The page's spine: the real, captured differentiators (preview → labeled example band).
         $why = $this->sections->whyChooseUs(
@@ -214,7 +206,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $credibility, $why, $guaranteeBand, $certs, $reviews, $cta]);
+        return $this->join([$hero, $why, $guaranteeBand, $certs, $reviews, $cta]);
     }
 
     /**
