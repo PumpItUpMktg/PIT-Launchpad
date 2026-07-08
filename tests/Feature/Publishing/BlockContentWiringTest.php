@@ -945,3 +945,20 @@ it('Contact: preview shows example details; publish omits the NAP when nothing i
         ->toContain('Let’s talk about your project')      // hero + CTA still render
         ->toContain('Ready to get started?');
 });
+
+it('Contact: the lead form is a preview-only placeholder — never on the published page (delivery undecided)', function () {
+    $site = Site::factory()->create(['phone' => '(973) 555-0100']);
+    $page = blockContactPage($site);
+
+    $preview = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+    expect($preview)
+        ->toContain('lp-formsection')                                  // the placeholder section
+        ->toContain('appears once your contact form delivery is set up')
+        ->toContain('lp-formskel');                                    // the sketch
+
+    $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($publish)
+        ->not->toContain('lp-formsection')                             // a non-functional form never publishes
+        ->not->toContain('lp-formskel')
+        ->toContain('href="tel:9735550100"');                          // the real NAP still carries the page
+});

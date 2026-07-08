@@ -430,6 +430,9 @@ final class BlockPageComposer
             preview: $preview,
         );
 
+        // The lead form is a preview-only placeholder for now (delivery undecided) — omitted on publish.
+        $form = $this->sections->contactForm($preview);
+
         $cta = $this->sections->cta(
             heading: 'Ready to get started?',
             body: 'Tell us what you need and we’ll get right back to you.',
@@ -438,7 +441,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $details, $cta]);
+        return $this->join([$hero, $details, $form, $cta]);
     }
 
     /** @param list<string> $blocks */
