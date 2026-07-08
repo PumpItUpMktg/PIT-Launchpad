@@ -53,7 +53,19 @@ final class SiteChrome
         $out .= $this->navList($p['nav'] ?? [], 'lp-nav');
         $out .= $this->callbar($p);
 
-        return $out . '</div>';
+        $out .= '</div>';
+
+        // A slim secondary bar of the site's service pages, below the main menu — direct navigation to
+        // services without cluttering the primary nav. Only when there are service pages. Inherits the
+        // header tone so it reads on both a dark and a light bar.
+        $services = $this->navList($p['services'] ?? [], 'lp-services-nav');
+        if ($services !== '') {
+            $out .= '<div class="lp-header-services lp-tone-' . $tone . '"><div class="lp-header-services-inner">'
+                . '<span class="lp-services-label">Services</span>' . $services
+                . '</div></div>';
+        }
+
+        return $out;
     }
 
     public function footer(): string
