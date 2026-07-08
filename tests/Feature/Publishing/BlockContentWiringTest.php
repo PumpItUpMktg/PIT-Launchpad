@@ -504,10 +504,12 @@ it('the service_area_map is null for a tenant with no coverage (map self-prunes,
         ->and($blob['post_content'])->not->toContain('lp-areas-map');
 });
 
-it('every marketing page has TWO CTAs — a pushy one (cta1) and a softer one (cta2)', function () {
+it('every content-rich page has TWO CTAs — a pushy one (cta1) and a softer one (cta2)', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
 
-    foreach ([blockHomePage($site), blockAboutPage($site), blockFaqPage($site, [['question' => 'Q', 'answer' => 'A']]), blockAreasPage($site), blockContactPage($site)] as $page) {
+    // The content-rich pages have enough light sections to hold the pushy accent band apart from every
+    // other colored band, so they carry both CTAs.
+    foreach ([blockHomePage($site), blockAboutPage($site), blockWhyChooseUsPage($site), blockServiceDrafted($site)] as $page) {
         $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
 
         expect($markup)
@@ -515,6 +517,22 @@ it('every marketing page has TWO CTAs — a pushy one (cta1) and a softer one (c
             ->toContain('Get a free quote')   // its pushy ask
             ->toContain('Get in touch')       // cta2 — the softer, info-seeking ask
             ->toContain('has-accent-background-color'); // the bold band renders on the accent colour
+    }
+});
+
+it('a thin utility page carries ONE band CTA (the soft close) — no second colored band with nothing to separate it', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
+
+    // FAQ / Areas / Contact are short: a pushy accent band would sit against the dark hero or the dark
+    // soft-close with no light section between. So they drop it — the hero button + the soft CTA carry
+    // the conversion, and no two colored bands are ever adjacent.
+    foreach ([blockFaqPage($site, [['question' => 'Q', 'answer' => 'A']]), blockAreasPage($site), blockContactPage($site)] as $page) {
+        $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+
+        expect($markup)
+            ->not->toContain('lp-cta--bold')  // no pushy accent band
+            ->toContain('lp-cta')             // the soft close still renders
+            ->toContain('Get in touch');      // its info-seeking ask
     }
 });
 
@@ -1002,7 +1020,8 @@ it('composes the Contact page — real NAP (phone, email, address, hours) from �
         ->toContain('12 Main Street, Newark, NJ')         // address, verbatim
         ->toContain('Hours')->toContain('Mon')->toContain('8:00 – 17:00') // an open day
         ->not->toContain('>Sun<')                         // closed days drop — no wall of "Closed"
-        ->toContain('Ready to get started?');             // CTA
+        ->toContain('Prefer to just ask?')                // the soft closing CTA
+        ->not->toContain('lp-cta--bold');                 // thin page → no pushy accent band
 });
 
 it('Contact: preview shows example details; publish omits the NAP when nothing is captured', function () {
@@ -1016,7 +1035,7 @@ it('Contact: preview shows example details; publish omits the NAP when nothing i
     expect($publish)
         ->not->toContain('lp-contact-grid')               // the NAP block omits on publish
         ->toContain('Let’s talk about your project')      // hero + CTA still render
-        ->toContain('Ready to get started?');
+        ->toContain('Prefer to just ask?');
 });
 
 it('Contact: the lead form is a preview-only placeholder — never on the published page (delivery undecided)', function () {

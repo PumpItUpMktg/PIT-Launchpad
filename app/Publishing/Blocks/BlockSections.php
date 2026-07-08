@@ -269,12 +269,17 @@ final class BlockSections
     }
 
     /**
-     * Why Choose Us: a dark band of differentiators (icon + title + line). Data-gated on real
+     * Why Choose Us: a band of differentiators (icon + title + line). Data-gated on real
      * differentiators (from the site narrative) — falls back to nothing when none are captured.
+     *
+     * Two skins for background-rhythm balance: the default DARK band is the mid-page punch on pages
+     * that surround it with light sections (Home). The LIGHT variant ($dark = false) is for pages where
+     * the differentiators are the SPINE and the band would otherwise stack against another colored
+     * section (the dedicated Why-Choose-Us page) — same layout, dark text on a light background.
      *
      * @param  list<array{title?: string, description?: string}>  $items
      */
-    public function whyChooseUs(string $eyebrow, string $heading, array $items, bool $preview = false): string
+    public function whyChooseUs(string $eyebrow, string $heading, array $items, bool $preview = false, bool $dark = true): string
     {
         $items = array_values(array_filter($items, fn (array $i): bool => trim((string) ($i['title'] ?? '')) !== ''));
         $placeholder = false;
@@ -291,22 +296,31 @@ final class BlockSections
             $placeholder = true;
         }
 
-        $cols = array_map(function (array $i): string {
-            $children = [$this->icon('spark'), $this->b->heading(4, (string) $i['title'], ['textColor' => 'base'])];
+        // On the dark skin, headings/lines flip to the base (light) colour; the light skin keeps the
+        // default dark text so the same markup reads on either background.
+        $textAttr = $dark ? ['textColor' => 'base'] : [];
+        $cols = array_map(function (array $i) use ($textAttr): string {
+            $children = [$this->icon('spark'), $this->b->heading(4, (string) $i['title'], $textAttr)];
             if (trim((string) ($i['description'] ?? '')) !== '') {
-                $children[] = $this->b->paragraph((string) $i['description'], ['textColor' => 'base']);
+                $children[] = $this->b->paragraph((string) $i['description'], $textAttr);
             }
 
             return $this->b->column([$this->b->group($children, ['className' => 'lp-why-item'])]);
         }, $items);
 
-        $children = [$this->sectionHead($eyebrow, $heading, onDark: true)];
+        $children = [$this->sectionHead($eyebrow, $heading, onDark: $dark)];
         if ($placeholder) {
-            $children[] = $this->placeholderNote('activates when you add what sets you apart', onDark: true);
+            $children[] = $this->placeholderNote('activates when you add what sets you apart', onDark: $dark);
         }
         $children[] = $this->b->columns($cols, ['className' => 'lp-why-grid']);
 
-        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'primary', 'textColor' => 'base', 'className' => $this->sectionClass('lp-why', $placeholder)]);
+        $attrs = ['align' => 'full', 'className' => $this->sectionClass($dark ? 'lp-why' : 'lp-why lp-why--light', $placeholder)];
+        if ($dark) {
+            $attrs['backgroundColor'] = 'primary';
+            $attrs['textColor'] = 'base';
+        }
+
+        return $this->b->group($children, $attrs);
     }
 
     /**

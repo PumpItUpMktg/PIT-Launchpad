@@ -717,6 +717,20 @@
     opacity: 0.82;
 }
 
+/* Light skin (the dedicated Why-Choose-Us page) — dark text on a light band, each differentiator a
+   subtle surface card so they read as items on white rather than floating. Reuses the same layout. */
+.lp-why--light .lp-why-item {
+    background: var(--wp--preset--color--surface, #f8fafc);
+    border: 1px solid var(--wp--preset--color--border, #e2e8f0);
+    border-radius: var(--wp--custom--radius, 12px);
+    padding: clamp(1.25rem, 2vw, 1.75rem);
+}
+
+.lp-why--light .lp-why-item p {
+    opacity: 1;
+    color: var(--wp--preset--color--muted, #475569);
+}
+
 /* ------------------------------------------------------------------ *
  * About page — story (prose), mission (statement), values, team.
  * ------------------------------------------------------------------ */

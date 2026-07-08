@@ -125,8 +125,9 @@ final class BlockPageComposer
             mapAvailable: $serviceAreaMapAvailable,
         );
 
-        // cta1 (PUSHY) — a bold accent band that blatantly asks for the business, placed high (after the
-        // services) so it catches a visitor early.
+        // cta1 (PUSHY) — a bold accent band that blatantly asks for the business, placed MID-page (after
+        // the process, once the visitor has seen what we do and how) and buffered by light sections on
+        // both sides so no two colored bands ever sit adjacent.
         $ctaBold = $this->sections->cta(
             heading: 'Ready to get it fixed?',
             body: 'Get a fast, free, no-obligation quote today.',
@@ -145,8 +146,11 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // The credentials band sits LOW — a quiet trust reinforcement before the closing CTA.
-        return $this->join([$hero, $services, $ctaBold, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $certs, $cta]);
+        // Ordered for background rhythm: the two dark/accent bands (why, the pushy CTA) are each held
+        // apart by a light section, and the risk-reversal cluster — guarantee (accent) then the
+        // credentials/licensing row — sits LOW, just before the soft closing CTA. No two colored bands
+        // are ever adjacent: D·L·D·L·C·L·L·L·C·L·D.
+        return $this->join([$hero, $services, $why, $process, $ctaBold, $proof, $reviews, $areas, $guaranteeBand, $certs, $cta]);
     }
 
     /**
@@ -201,7 +205,8 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // cta1 (PUSHY) high on the page, right after the hero, so it catches a visitor early.
+        // cta1 (PUSHY) placed after the overview + features (once the visitor has seen the problem, the
+        // fix, and what's included) and buffered by light sections so it never sits against the hero.
         $ctaBold = $this->sections->cta(
             heading: 'Ready to get it fixed?',
             body: 'Get a fast, free, no-obligation quote today.',
@@ -281,7 +286,10 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $ctaBold, $overviewBlock, $featuresBlock, $process, $why, $reviews, $faq, $details, $cta]);
+        // Ordered for background rhythm: the hero (dark) leads into the light explainer + features, the
+        // pushy CTA (accent) lands mid-page buffered by light sections, and the soft CTA (dark) closes.
+        // No two colored bands are ever adjacent: D·L·L·C·L·L·L·L·L·D.
+        return $this->join([$hero, $overviewBlock, $featuresBlock, $ctaBold, $process, $why, $reviews, $faq, $details, $cta]);
     }
 
     /**
@@ -323,12 +331,15 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // The page's spine: the real, captured differentiators (preview → labeled example band).
+        // The page's spine: the real, captured differentiators (preview → labeled example band). Rendered
+        // on the LIGHT skin here — as the page's main content it reads better light, and it keeps the
+        // rhythm balanced (the dark hero is followed by a light spine, not a second dark band).
         $why = $this->sections->whyChooseUs(
             eyebrow: 'What sets us apart',
             heading: 'Reasons clients choose us',
             items: $differentiators,
             preview: $preview,
+            dark: false,
         );
 
         $guaranteeBand = $this->sections->guaranteeBand(
@@ -364,8 +375,10 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // Credentials sit LOW here too — after the client voice, just before the closing CTA.
-        return $this->join([$hero, $why, $ctaBold, $guaranteeBand, $reviews, $certs, $cta]);
+        // Ordered for background rhythm — the pushy CTA and the guarantee (both accent) are each held
+        // apart by a light section, and the guarantee + credentials/licensing cluster sits LOW, just
+        // before the soft closing CTA: D·L·C·L·C·L·D. No two colored bands are ever adjacent.
+        return $this->join([$hero, $why, $ctaBold, $reviews, $guaranteeBand, $certs, $cta]);
     }
 
     /**
@@ -468,16 +481,9 @@ final class BlockPageComposer
             preview: $preview,
         );
 
-        // cta1 (PUSHY) up top; cta2 (SOFT) — the existing info-seeking close — at the bottom.
-        $ctaBold = $this->sections->cta(
-            heading: 'Ready to get it fixed?',
-            body: 'Get a fast, free, no-obligation quote today.',
-            actionText: 'Get a free quote',
-            actionUrl: '#contact',
-            ctx: $ctx,
-            bold: true,
-        );
-
+        // A thin utility page carries ONE band CTA (the soft, info-seeking close) — the dark hero already
+        // holds a CTA button, and a second colored band here would sit against the hero or the close with
+        // no light section to separate them. Rhythm: D·L·D.
         $cta = $this->sections->cta(
             heading: 'Still have a question?',
             body: 'Get in touch and we’ll get you a straight answer — no pressure.',
@@ -486,7 +492,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $ctaBold, $faq, $cta]);
+        return $this->join([$hero, $faq, $cta]);
     }
 
     /**
@@ -531,16 +537,9 @@ final class BlockPageComposer
             mapAvailable: $mapAvailable,
         );
 
-        // cta1 (PUSHY) up top; cta2 (SOFT) — the existing "don't see your town?" close — at the bottom.
-        $ctaBold = $this->sections->cta(
-            heading: 'We’re probably near you',
-            body: 'Get a fast, free, no-obligation quote today.',
-            actionText: 'Get a free quote',
-            actionUrl: '#contact',
-            ctx: $ctx,
-            bold: true,
-        );
-
+        // A thin utility page carries ONE band CTA (the soft "don't see your town?" close) — the dark
+        // hero already holds a CTA button, and a second colored band would leave no light section to
+        // separate the colored bands. Rhythm: D·L·D.
         $cta = $this->sections->cta(
             heading: 'Don’t see your town?',
             body: 'Give us a call — if you’re nearby, chances are we cover you.',
@@ -549,7 +548,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $ctaBold, $areas, $cta]);
+        return $this->join([$hero, $areas, $cta]);
     }
 
     /**
@@ -614,16 +613,9 @@ final class BlockPageComposer
         // The lead form is a preview-only placeholder for now (delivery undecided) — omitted on publish.
         $form = $this->sections->contactForm($preview);
 
-        // cta1 (PUSHY) up top; cta2 (SOFT) closes the page.
-        $ctaBold = $this->sections->cta(
-            heading: 'Ready to get started?',
-            body: 'Get a fast, free, no-obligation quote today.',
-            actionText: 'Get a free quote',
-            actionUrl: '#contact',
-            ctx: $ctx,
-            bold: true,
-        );
-
+        // A thin utility page carries ONE band CTA (the soft close) — the dark hero already holds a CTA
+        // button and the NAP block is itself a call to action, so a second colored band would only stack
+        // against the hero or the close. Rhythm: D·L·(L)·D.
         $cta = $this->sections->cta(
             heading: 'Prefer to just ask?',
             body: 'Tell us what you need and we’ll get right back to you — no pressure.',
@@ -632,7 +624,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $ctaBold, $details, $form, $cta]);
+        return $this->join([$hero, $details, $form, $cta]);
     }
 
     /** @param list<string> $blocks */
