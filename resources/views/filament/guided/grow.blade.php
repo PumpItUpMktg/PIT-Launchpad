@@ -53,57 +53,49 @@
                                         {{-- whose-move line — the scannability spine (your-move vs ours) --}}
                                         <div class="pgmove">{{ $p['whose_move'] }}</div>
                                     </div>
-                                    <div class="pgstate">
-                                        {{-- the sacred client line (shared with the future client screen) --}}
-                                        <span class="pgbadge tone-{{ $p['tone'] }}">{{ $p['client_line'] }}</span>
+                                    <div class="pgright">
+                                        {{-- Status statement + every action inline: the sacred client line, then the
+                                             morphing primary, then the secondary controls — no hidden menu. --}}
+                                        <div class="pgline">
+                                            <span class="pgbadge tone-{{ $p['tone'] }}">{{ $p['client_line'] }}</span>
+                                            @foreach ($p['actions'] as $act)
+                                                @switch ($act)
+                                                    @case('generate')
+                                                        <button class="lp-btn sm" wire:click="generate('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="generate('{{ $p['id'] }}')">Generate</button>
+                                                        @break
+                                                    @case('review')
+                                                        <a class="lp-btn sm ghost" href="{{ $this->reviewUrl($p['id']) }}">Review</a>
+                                                        @break
+                                                    @case('approve')
+                                                        <button class="lp-btn sm warn" wire:click="approve('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="approve('{{ $p['id'] }}')">Approve</button>
+                                                        @break
+                                                    @case('publish')
+                                                        <button class="lp-btn sm" wire:click="publish('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="publish('{{ $p['id'] }}')">Publish</button>
+                                                        @break
+                                                    @case('view')
+                                                        @if ($p['live_url'])<a class="lp-btn sm ghost" href="{{ $p['live_url'] }}" target="_blank" rel="noopener">View</a>@endif
+                                                        @break
+                                                @endswitch
+                                            @endforeach
+                                            @foreach ($p['menu'] as $m)
+                                                @switch ($m)
+                                                    @case('regenerate')
+                                                        <button class="lp-btn sm ghost" wire:click="regenerate('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="regenerate('{{ $p['id'] }}')">Regenerate</button>
+                                                        @break
+                                                    @case('lock')
+                                                        <button class="lp-btn sm ghost" wire:click="lock('{{ $p['id'] }}')">Lock</button>
+                                                        @break
+                                                    @case('reject')
+                                                        <button class="lp-btn sm ghost" wire:click="startReject('{{ $p['id'] }}')">Reject</button>
+                                                        @break
+                                                    @case('takedown')
+                                                        <button class="lp-btn sm danger" wire:click="takeDown('{{ $p['id'] }}')" wire:confirm="Take this page down from WordPress? It stays in your plan and can be re-published on the same URL.">Take down</button>
+                                                        @break
+                                                @endswitch
+                                            @endforeach
+                                        </div>
                                         {{-- operator tail: append-only diagnostic, operator screen only --}}
                                         @if (!empty($p['operator_tail']))<div class="pgtail">{{ $p['operator_tail'] }}</div>@endif
-                                    </div>
-                                    <div class="pgact">
-                                        @foreach ($p['actions'] as $act)
-                                            @switch ($act)
-                                                @case('generate')
-                                                    <button class="lp-btn sm" wire:click="generate('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="generate('{{ $p['id'] }}')">Generate</button>
-                                                    @break
-                                                @case('review')
-                                                    <a class="lp-btn sm ghost" href="{{ $this->reviewUrl($p['id']) }}">Review</a>
-                                                    @break
-                                                @case('approve')
-                                                    <button class="lp-btn sm warn" wire:click="approve('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="approve('{{ $p['id'] }}')">Approve</button>
-                                                    @break
-                                                @case('publish')
-                                                    <button class="lp-btn sm" wire:click="publish('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="publish('{{ $p['id'] }}')">Publish</button>
-                                                    @break
-                                                @case('view')
-                                                    @if ($p['live_url'])<a class="lp-btn sm ghost" href="{{ $p['live_url'] }}" target="_blank" rel="noopener">View</a>@endif
-                                                    @break
-                                            @endswitch
-                                        @endforeach
-
-                                        {{-- Secondary lifecycle controls, tucked in a native overflow menu so the row stays uncluttered. --}}
-                                        @if (!empty($p['menu']))
-                                            <details class="lp-menu" wire:key="menu-{{ $p['id'] }}">
-                                                <summary class="lp-menu-trigger" title="More actions" aria-label="More actions">⋯</summary>
-                                                <div class="lp-menu-pop">
-                                                    @foreach ($p['menu'] as $m)
-                                                        @switch ($m)
-                                                            @case('regenerate')
-                                                                <button type="button" wire:click="regenerate('{{ $p['id'] }}')">Regenerate</button>
-                                                                @break
-                                                            @case('lock')
-                                                                <button type="button" wire:click="lock('{{ $p['id'] }}')">Lock</button>
-                                                                @break
-                                                            @case('reject')
-                                                                <button type="button" wire:click="startReject('{{ $p['id'] }}')">Reject…</button>
-                                                                @break
-                                                            @case('takedown')
-                                                                <button type="button" class="danger" wire:click="takeDown('{{ $p['id'] }}')" wire:confirm="Take this page down from WordPress? It stays in your plan and can be re-published on the same URL.">Take down</button>
-                                                                @break
-                                                        @endswitch
-                                                    @endforeach
-                                                </div>
-                                            </details>
-                                        @endif
                                     </div>
 
                                     {{-- Inline reject-reason capture — appears full-width under the row it belongs to. --}}
