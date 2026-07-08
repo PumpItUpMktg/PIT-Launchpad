@@ -32,9 +32,10 @@ final class LegalContext
 
     /**
      * The "contact us" sentence — lists only the channels actually captured (email / phone), else
-     * points to the contact page. Never invents a channel.
+     * points to the contact page. Never invents a channel. Topic-neutral so it reads correctly on both
+     * the Privacy Policy and the Terms of Service.
      */
-    public function contactSentence(string $topic): string
+    public function contactSentence(): string
     {
         $channels = [];
         if (trim((string) $this->email) !== '') {
@@ -45,9 +46,9 @@ final class LegalContext
         }
 
         if ($channels === []) {
-            return "If you have questions about this {$topic}, please reach out through the contact page on this website.";
+            return 'If you have any questions, please reach out through the contact page on this website.';
         }
 
-        return "If you have questions about this {$topic}, you can reach {$this->business} by ".implode(' or ', $channels).'.';
+        return "If you have any questions, you can reach {$this->business} by ".implode(' or ', $channels).'.';
     }
 }

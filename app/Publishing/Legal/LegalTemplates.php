@@ -67,7 +67,7 @@ final class LegalTemplates
                 [
                     'heading' => 'Contact us',
                     'paragraphs' => [
-                        $ctx->contactSentence('privacy'),
+                        $ctx->contactSentence(),
                     ],
                 ],
                 [
@@ -137,7 +137,7 @@ final class LegalTemplates
                 [
                     'heading' => 'Contact us',
                     'paragraphs' => [
-                        $ctx->contactSentence('terms'),
+                        $ctx->contactSentence(),
                     ],
                 ],
                 [

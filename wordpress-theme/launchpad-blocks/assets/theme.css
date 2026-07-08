@@ -68,6 +68,7 @@
 .lp-values,
 .lp-team,
 .lp-faqs,
+.lp-legal,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -87,6 +88,7 @@
 .lp-values > *,
 .lp-team > *,
 .lp-faqs > *,
+.lp-legal > *,
 .lp-process > *,
 .lp-proof > *,
 .lp-testimonials > *,
@@ -108,6 +110,7 @@
 .lp-values,
 .lp-team,
 .lp-faqs,
+.lp-legal,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -876,6 +879,34 @@
     padding: 0 1.35rem 1.2rem;
     line-height: 1.65;
     color: var(--wp--preset--color--muted, #475569);
+}
+
+/* ------------------------------------------------------------------ *
+ * Legal — Privacy / Terms: a plain, readable single-column document.
+ * ------------------------------------------------------------------ */
+.lp-legal > * {
+    max-width: 760px;
+}
+
+.lp-legal .lp-legal-title {
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+    margin-bottom: 0.25rem;
+}
+
+.lp-legal .lp-legal-eff {
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+}
+
+.lp-legal .lp-legal-h {
+    font-size: 1.2rem;
+    margin: 2rem 0 0.6rem;
+    color: var(--wp--preset--color--contrast, #0f172a);
+}
+
+.lp-legal p {
+    line-height: 1.7;
+    margin: 0 0 1rem;
 }
 
 /* ------------------------------------------------------------------ *
