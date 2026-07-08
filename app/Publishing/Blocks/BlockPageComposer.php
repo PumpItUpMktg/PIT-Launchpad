@@ -217,6 +217,64 @@ final class BlockPageComposer
         return $this->join([$hero, $credibility, $why, $guaranteeBand, $certs, $reviews, $cta]);
     }
 
+    /**
+     * Composes the ABOUT page — a trust-conversion brand narrative: hero → story → mission → values →
+     * credibility → team → cta. Story + mission come from the drafter (voice-expanded prose, resolved
+     * upstream); values + team from §1 intake. Same two-contexts rule: preview builds every recommended
+     * section with a labeled placeholder; publish data-gates. Nothing here is fabricated — every section
+     * hides on publish when its intake is empty.
+     *
+     * @param  array<string, mixed>  $slots  hero headline/subhead (+ hero image via $images)
+     * @param  array<string, array<string, mixed>>  $images  image map keyed by slot
+     * @param  list<string>  $story  the brand-story paragraphs (already cleaned to plain text)
+     * @param  string  $mission  the mission statement (verbatim, data-gated)
+     * @param  list<array{title?: string, description?: string}>  $values  the captured values
+     * @param  list<array{name?: string, role?: string, bio?: string, photo_url?: string}>  $team  the real team (gated)
+     * @param  list<string>  $credibilityBadges  substantiated trust badges
+     * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero
+     * @param  bool  $preview  operator proof-view (all sections + placeholders) vs publish (data-gated)
+     */
+    public function composeAbout(
+        array $slots,
+        array $images,
+        PageContext $ctx,
+        array $story = [],
+        string $mission = '',
+        array $values = [],
+        array $team = [],
+        array $credibilityBadges = [],
+        array $trustStats = [],
+        bool $preview = false,
+    ): string {
+        $hero = $this->sections->hero(
+            eyebrow: 'About us',
+            headline: $this->str($slots['hero_headline'] ?? '') ?: 'About us',
+            subhead: $this->str($slots['hero_subhead'] ?? ''),
+            imageUrl: $this->imageUrl('hero_image', $images),
+            imageAlt: $this->imageAlt('hero_image', $images),
+            assessmentText: 'Get in touch',
+            assessmentUrl: '#contact',
+            trust: $this->heroTrust($ctx, $trustStats),
+            ctx: $ctx,
+        );
+
+        $storyBlock = $this->sections->story('Our story', 'Who we are', $story, $preview);
+        $missionBlock = $this->sections->statementBand($mission, $preview);
+        $valuesBlock = $this->sections->valuesGrid('What we value', 'What we stand for', $values, $preview);
+        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
+        $teamBlock = $this->sections->teamGrid('Our team', 'The people behind the work', $team, $preview);
+
+        $cta = $this->sections->cta(
+            heading: 'Let’s work together',
+            body: 'Get in touch for a free, no-obligation assessment.',
+            actionText: 'Get in touch',
+            actionUrl: '#contact',
+            ctx: $ctx,
+        );
+
+        return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $credibility, $teamBlock, $cta]);
+    }
+
     /** @param list<string> $blocks */
     private function join(array $blocks): string
     {

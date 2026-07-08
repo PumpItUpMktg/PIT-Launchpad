@@ -547,15 +547,15 @@ it('Why Choose Us: preview builds every section with labeled placeholders; publi
         ->toContain('Ready to get started?');
 });
 
-it('returns null for a standard page whose composer has not shipped (About falls back to existing render)', function () {
+it('returns null for a standard page whose composer has not shipped (Contact falls back to existing render)', function () {
     $site = Site::factory()->create();
-    $about = Content::factory()->create([
+    $contact = Content::factory()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page,
-        'page_type' => PageType::Utility, 'standard_type' => StandardPageType::About->value,
-        'slug' => 'about', 'title' => 'About',
+        'page_type' => PageType::Utility, 'standard_type' => StandardPageType::Contact->value,
+        'slug' => 'contact', 'title' => 'Contact',
     ]);
 
-    expect(app(BlockContentAssembler::class)->compose($about->fresh(), [], []))->toBeNull();
+    expect(app(BlockContentAssembler::class)->compose($contact->fresh(), [], []))->toBeNull();
 });
 
 it('the meta-blob carries post_content for the Why Choose Us page (end-to-end publish path)', function () {
@@ -572,4 +572,114 @@ it('the meta-blob carries post_content for the Why Choose Us page (end-to-end pu
         ->and($blob['post_content'])->toContain('Reasons clients choose us')
         ->and($blob['post_content'])->toContain('Preventive-first')
         ->and($blob['service_area_map'])->toBeNull(); // areas map is home-only
+});
+
+// An About page: page_type Utility, standard_type about, hero + drafted story/mission in slots.
+function blockAboutPage(Site $site, array $slots = []): Content
+{
+    return Content::factory()->create([
+        'site_id' => $site->id,
+        'kind' => ContentKind::Page,
+        'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::About->value,
+        'slug' => 'about',
+        'title' => 'About',
+        'slot_payload' => array_merge([
+            'hero_headline' => 'Family-run plumbing, three generations deep.',
+        ], $slots),
+    ]);
+}
+
+it('composes the About page — drafted story + mission, §1 values, real team, credibility', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'story' => 'Raw captured story — should be overridden by the drafted prose.',
+        'mission' => 'Raw mission.',
+        'values' => [
+            ['title' => 'Show up on time', 'description' => 'Every appointment, every time.'],
+            ['title' => 'Leave it clean', 'description' => 'Cleaner than we found it.'],
+        ],
+        'team' => [
+            ['name' => 'Dana Rivera', 'role' => 'Master Plumber', 'bio' => 'Twenty years in the trade.'],
+        ],
+    ]);
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::License,
+        'payload' => ['label' => 'NJ Master Plumber'], 'is_substantiated' => true,
+    ]);
+
+    $page = blockAboutPage($site, [
+        'our_story' => '<p>We started in a single truck in 1987.</p><p>Today we serve all of Northern NJ.</p>',
+        'mission' => 'Keep every home’s water running — honestly and on time.',
+    ]);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()->not->toBeEmpty()
+        ->and($markup)
+        ->toContain('Family-run plumbing, three generations deep.')  // hero (drafted headline)
+        ->toContain('Who we are')                                    // story section head
+        ->toContain('We started in a single truck in 1987.')         // drafted story, split into paragraphs
+        ->toContain('Today we serve all of Northern NJ.')
+        ->not->toContain('Raw captured story')                       // drafted prose WINS over raw §1
+        ->toContain('lp-statement')->toContain('Keep every home’s water running — honestly and on time.') // mission band
+        ->toContain('What we stand for')->toContain('Show up on time')->toContain('Leave it clean')        // values grid (§1)
+        ->toContain('The people behind the work')->toContain('Dana Rivera')->toContain('Master Plumber')    // team grid (§1)
+        ->toContain('DR')                                            // initials avatar (no photo captured)
+        ->toContain('NJ Master Plumber');                           // credibility strip
+});
+
+it('About story + mission fall back to the raw §1 narrative when the drafter has not filled the slots', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'story' => 'We are a family shop serving the county since 1990.',
+        'mission' => 'Treat every home like our own.',
+        'values' => [], 'team' => null,
+    ]);
+
+    $page = blockAboutPage($site); // no our_story / mission slots
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('We are a family shop serving the county since 1990.') // §1 story fallback
+        ->toContain('Treat every home like our own.');                     // §1 mission fallback
+});
+
+it('About: preview builds every section with labeled placeholders; publish data-gates', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $page = blockAboutPage($site); // no §1 narrative captured at all
+
+    $preview = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+    expect($preview)
+        ->toContain('lp-story')->toContain('appears when you add your story')
+        ->toContain('lp-statement')->toContain('appears when you add your mission')
+        ->toContain('lp-values')->toContain('appears when you add your values')
+        ->toContain('lp-team')->toContain('appears when you add your team');
+
+    $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($publish)
+        ->not->toContain('lp-story')->not->toContain('lp-statement')
+        ->not->toContain('lp-values')->not->toContain('lp-team')
+        // ...hero + CTA always render, so a bare About still ships something honest
+        ->toContain('Family-run plumbing, three generations deep.')
+        ->toContain('Let’s work together');
+});
+
+it('the meta-blob carries post_content for the About page (end-to-end publish path)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'values' => [['title' => 'Show up on time', 'description' => 'Every appointment, every time.']],
+        'team' => null,
+    ]);
+    $page = blockAboutPage($site, ['our_story' => 'We started in a single truck in 1987.']);
+
+    $blob = app(MetaBlobAssembler::class)->assemble($page->fresh(), collect());
+
+    expect($blob)->toHaveKey('post_content')
+        ->and($blob['post_content'])->toContain('Who we are')
+        ->and($blob['post_content'])->toContain('We started in a single truck in 1987.')
+        ->and($blob['post_content'])->toContain('Show up on time')
+        ->and($blob['service_area_map'])->toBeNull();
 });
