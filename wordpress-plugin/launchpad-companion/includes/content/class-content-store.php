@@ -372,6 +372,36 @@ final class ContentStore
     }
 
     /**
+     * Force-delete the post carrying this control-plane ULID (bypassing trash so the slug frees up for a
+     * re-push on the same permalink). Only ever touches a post the control plane owns — the lookup is by
+     * our CONTENT_ID meta — and is idempotent: an already-absent post reports success. Runs server-side
+     * via wp_delete_post(), so it does NOT need the caller to hold WordPress's core delete_post capability
+     * (the endpoint's lp_manage_content gate is the authorization).
+     *
+     * @return array{content_id: string, wp_post_id?: int, deleted: bool, already_absent?: bool, error?: string}
+     */
+    public function delete(string $content_id): array
+    {
+        $content_id = trim($content_id);
+        if ($content_id === '') {
+            return ['content_id' => '', 'deleted' => false, 'error' => 'content_id required'];
+        }
+
+        $post_id = $this->find($content_id);
+        if ($post_id === 0) {
+            // Never published here, or already removed — nothing to do.
+            return ['content_id' => $content_id, 'deleted' => true, 'already_absent' => true];
+        }
+
+        $result = wp_delete_post($post_id, true); // force = true → skip trash, free the slug
+        if (! $result) {
+            return ['content_id' => $content_id, 'wp_post_id' => $post_id, 'deleted' => false, 'error' => 'wp_delete_post failed'];
+        }
+
+        return ['content_id' => $content_id, 'wp_post_id' => $post_id, 'deleted' => true];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     private function fingerprint(array $payload): string

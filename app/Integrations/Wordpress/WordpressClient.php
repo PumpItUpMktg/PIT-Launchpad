@@ -179,36 +179,46 @@ class WordpressClient
     }
 
     /**
-     * Permanently delete a core WordPress post/page by its WP id — `force=true` so it BYPASSES the
-     * trash. The REST default trashes, and a trashed post still RESERVES its slug, which would re-slug
-     * the next publish to `-2`; force-delete frees the permalink. Core `/wp/v2/{type}` route (not the
-     * launchpad/v1 contract), reached through the same Basic-auth channel as {@see ping()}.
+     * Force-delete a Launchpad-managed post by its control-plane ULID via the companion plugin's authed
+     * `launchpad/v1/content/delete` endpoint. We deliberately do NOT use the core `/wp/v2/{type}/{id}`
+     * DELETE: the service user holds `lp_manage_content` (what publishing already uses) but NOT
+     * WordPress's core `delete_post` capability, and the core DELETE method is a common security-plugin /
+     * WAF target — both surface as an opaque failure. The plugin runs `wp_delete_post(force)` server-side
+     * (bypassing trash so the slug frees for a same-URL re-push). Idempotent: an already-absent post is a
+     * confirmed delete.
      *
-     * @param  'pages'|'posts'  $type
-     * @return bool true if the post was deleted or already absent (404)
+     * @return bool true once WordPress confirms the delete
      *
-     * @throws WordpressException on a real failure (auth, capability, a blocked DELETE method) — carrying
-     *                            the HTTP status + WordPress's own reason so the operator sees WHY, not a
-     *                            bare "did not confirm". Callers that batch deletes (reset / site-delete)
-     *                            catch this per page; the single-page take-down surfaces the message.
+     * @throws WordpressException carrying the HTTP status + WordPress's reason on a real failure — so the
+     *                            operator sees WHY, not a bare "did not confirm". A 404 here means the
+     *                            delete route is missing (the companion plugin predates it) — surfaced as
+     *                            an explicit "update the plugin" message, never mistaken for success.
      */
-    public function forceDeletePost(string $type, int $id): bool
+    public function deleteContent(string $contentId): bool
     {
-        $url = rtrim($this->baseUrl, '/')."/wp-json/wp/v2/{$type}/{$id}?force=true";
+        $response = $this->request()->post(
+            rtrim($this->baseUrl, '/').self::NAMESPACE.'/content/delete',
+            ['content_id' => $contentId],
+        );
 
-        $response = $this->request()->delete($url);
+        if ($response->status() === 404) {
+            throw new WordpressException(
+                'WordPress delete endpoint not found (HTTP 404) — update the Launchpad companion plugin (needs launchpad/v1 content delete).'
+            );
+        }
 
-        // Already gone is success for cleanup purposes.
-        if ($response->successful() || $response->status() === 404) {
+        if (! $response->successful()) {
+            throw new WordpressException(
+                'WordPress delete of '.$contentId.' returned HTTP '.$response->status().$this->errorDetail($response)
+            );
+        }
+
+        $json = $response->json();
+        if (is_array($json) && ($json['deleted'] ?? false) === true) {
             return true;
         }
 
-        // A real failure — surface WHY (status + WordPress's reason): 401 (app password / stripped
-        // Authorization header), 403 (the connection user can't delete this post), 405 (a security
-        // plugin or host WAF blocking the REST DELETE method), etc.
-        throw new WordpressException(
-            "WordPress delete of {$type} {$id} returned HTTP ".$response->status().$this->errorDetail($response)
-        );
+        throw new WordpressException('WordPress did not confirm the delete of '.$contentId.$this->errorDetail($response));
     }
 
     /**

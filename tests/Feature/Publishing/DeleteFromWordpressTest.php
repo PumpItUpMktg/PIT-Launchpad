@@ -38,8 +38,8 @@ it('surfaces WHY a live take-down failed and leaves the page untouched (still on
     // The WP delete is rejected (e.g. the connection user can't delete the post) — the client throws
     // with the reason, which the take-down must report verbatim rather than a bare "did not confirm".
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('forceDeletePost')->once()->with('pages', 42)
-        ->andThrow(new WordpressException('WordPress delete of pages 42 returned HTTP 403 — Sorry, you are not allowed to delete this post.'));
+    $client->shouldReceive('deleteContent')->once()->with($page->id)
+        ->andThrow(new WordpressException('WordPress delete of '.$page->id.' returned HTTP 403 — Sorry, you are not allowed to delete this post.'));
     $factory = Mockery::mock(WordpressClientFactory::class);
     $factory->shouldReceive('forSite')->once()->andReturn($client);
     app()->instance(WordpressClientFactory::class, $factory);

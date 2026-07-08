@@ -2,8 +2,8 @@
 
 namespace App\Publishing;
 
-use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -11,14 +11,15 @@ use App\Models\Site;
 use Throwable;
 
 /**
- * Deletes a page's live WordPress post — FORCE delete (`force=true`, the same path {@see
- * \App\Console\Commands\ResetTenantCommand} uses), never trash: a trashed post still reserves its slug,
- * so a follow-up publish would land on `slug-2`. Force-delete frees the slug, and because the
- * control-plane keeps the Content row (and its slug) and clears `wp_post_id`, a Repush recreates the
- * page on the SAME permalink — no `-2`.
+ * Deletes a page's live WordPress post via the companion plugin's authed `launchpad/v1/content/delete`
+ * endpoint ({@see WordpressClient::deleteContent}) — a server-side force
+ * delete (never trash: a trashed post still reserves its slug, so a follow-up publish would land on
+ * `slug-2`). Force-delete frees the slug, and because the control-plane keeps the Content row (and its
+ * slug) and clears `wp_post_id`, a Repush recreates the page on the SAME permalink — no `-2`.
  *
  * The Content is flipped back to `approved` (ready to publish) and its stale WP-edit flag cleared, so
- * Repush isn't blocked by the locally-edited guard on a post that no longer exists.
+ * Repush isn't blocked by the locally-edited guard on a post that no longer exists. A failed delete
+ * throws (with WordPress's reason) and leaves the page exactly as it was — never stranded republishable.
  */
 final class DeleteFromWordpress
 {
@@ -38,16 +39,14 @@ final class DeleteFromWordpress
             return ['deleted' => false, 'on_wp' => false, 'message' => 'This page was not on WordPress; it is ready to publish.'];
         }
 
-        $type = $content->kind === ContentKind::Page ? 'pages' : 'posts';
-
+        // Delete through the companion plugin's authed launchpad/v1 endpoint (by control-plane ULID), not
+        // the core WP route the service user can't authorize — see {@see WordpressClient::deleteContent}.
         try {
-            $ok = $this->factory->forSite($site)->forceDeletePost($type, $wpId);
+            $this->factory->forSite($site)->deleteContent((string) $content->id);
         } catch (Throwable $e) {
+            // deleteContent confirms or throws (with the HTTP status + WordPress's reason), so a failure
+            // here carries WHY — and the page is left exactly as it was, still live, never stranded.
             return ['deleted' => false, 'on_wp' => true, 'message' => 'WordPress delete failed: '.$e->getMessage()];
-        }
-
-        if (! $ok) {
-            return ['deleted' => false, 'on_wp' => true, 'message' => 'WordPress did not confirm the delete.'];
         }
 
         $this->makeRepublishable($content);
