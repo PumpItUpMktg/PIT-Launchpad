@@ -79,7 +79,42 @@
                                                     @break
                                             @endswitch
                                         @endforeach
+
+                                        {{-- Secondary lifecycle controls, tucked in a native overflow menu so the row stays uncluttered. --}}
+                                        @if (!empty($p['menu']))
+                                            <details class="lp-menu" wire:key="menu-{{ $p['id'] }}">
+                                                <summary class="lp-menu-trigger" title="More actions" aria-label="More actions">⋯</summary>
+                                                <div class="lp-menu-pop">
+                                                    @foreach ($p['menu'] as $m)
+                                                        @switch ($m)
+                                                            @case('regenerate')
+                                                                <button type="button" wire:click="regenerate('{{ $p['id'] }}')">Regenerate</button>
+                                                                @break
+                                                            @case('lock')
+                                                                <button type="button" wire:click="lock('{{ $p['id'] }}')">Lock</button>
+                                                                @break
+                                                            @case('reject')
+                                                                <button type="button" wire:click="startReject('{{ $p['id'] }}')">Reject…</button>
+                                                                @break
+                                                            @case('delete')
+                                                                <button type="button" class="danger" wire:click="delete('{{ $p['id'] }}')" wire:confirm="Delete this page? It's removed from your plan@if ($p['live_url']) and taken down from WordPress@endif.">Delete</button>
+                                                                @break
+                                                        @endswitch
+                                                    @endforeach
+                                                </div>
+                                            </details>
+                                        @endif
                                     </div>
+
+                                    {{-- Inline reject-reason capture — appears full-width under the row it belongs to. --}}
+                                    @if ($this->rejecting === $p['id'])
+                                        <div class="pgreject" wire:key="rej-{{ $p['id'] }}">
+                                            <input type="text" wire:model="rejectReason" wire:keydown.enter="reject('{{ $p['id'] }}')"
+                                                   placeholder="Reason (optional) — helps sharpen the next draft" aria-label="Reject reason">
+                                            <button class="lp-btn sm warn" wire:click="reject('{{ $p['id'] }}')">Confirm reject</button>
+                                            <button class="lp-btn sm ghost" wire:click="cancelReject">Cancel</button>
+                                        </div>
+                                    @endif
                                 </div>
                             @endforeach
                         </ul>

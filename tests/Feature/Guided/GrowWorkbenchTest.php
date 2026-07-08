@@ -81,6 +81,27 @@ it('renders each row from the canonical vocabulary with its loop actions and bul
     expect($order->search($review->id))->toBeLessThan($order->search($planned->id));
 });
 
+it('offers the right secondary (overflow-menu) controls per state', function () {
+    $ctx = growSite();
+    $planned = $ctx['base'];
+    $review = growPage($ctx, ['slot_payload' => ['hero' => 'x'], 'status' => ContentStatus::NeedsReview]);
+    $approved = growPage($ctx, ['slot_payload' => ['hero' => 'x'], 'status' => ContentStatus::Approved]);
+    $live = growPage($ctx, ['slot_payload' => ['hero' => 'x'], 'status' => ContentStatus::Published]);
+    $generating = growPage($ctx, ['slot_payload' => [], 'meta' => ['generating_at' => now()->toIso8601String()]]);
+
+    $rows = collect(app(GrowDashboard::class)->pages($ctx['site']))->keyBy('id');
+
+    // a planned page can only be deleted (removed from the plan); no draft to regenerate/reject yet
+    expect($rows[$planned->id]['menu'])->toBe(['delete'])
+        // a review draft: regenerate a fresh one, reject it, or delete it
+        ->and($rows[$review->id]['menu'])->toBe(['regenerate', 'reject', 'delete'])
+        // approved / live pages: regenerate, lock (protect from republish clobber), delete
+        ->and($rows[$approved->id]['menu'])->toBe(['regenerate', 'lock', 'delete'])
+        ->and($rows[$live->id]['menu'])->toBe(['regenerate', 'lock', 'delete'])
+        // an in-flight (generating) page carries no menu — we never interrupt a running job
+        ->and($rows[$generating->id]['menu'])->toBe([]);
+});
+
 it('holds (no live action) a kit-bound page with no grounding — held-grounding vocabulary', function () {
     // a service page WITH a kit but on a site with no §1 Service → can't ground → no Generate
     $base = PageFixture::intakePage();
