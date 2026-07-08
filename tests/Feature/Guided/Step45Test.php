@@ -2,16 +2,21 @@
 
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Enums\SiteStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Grow;
 use App\Guided\GrowDashboard;
+use App\Integrations\Wordpress\WordpressClient;
+use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Jobs\BuildStructure;
+use App\Jobs\GeneratePage;
 use App\Jobs\SyncSiloCategories;
 use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
+use App\Models\Service;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -26,6 +31,15 @@ beforeEach(function () {
     $this->site = Site::factory()->create();
     session(['guided_site_id' => $this->site->id]);
 });
+
+/** Mark the site launched so the Grow page's gate lets it mount (and re-render on actions). */
+function growLaunched(Site $site): void
+{
+    SetupState::query()->create([
+        'site_id' => $site->id, 'current_step' => 6,
+        'services_done' => true, 'territory_done' => true, 'structure_finalized' => true, 'approved' => true, 'launched' => true,
+    ]);
+}
 
 test('Step 4 persists build config, materializes the manifest, and hands off to Grow (Onboarding → Active)', function () {
     $this->site->update(['status' => SiteStatus::Onboarding]);
@@ -112,4 +126,107 @@ test('Grow per-page approve flips a review draft to approved (no WordPress conta
         ->assertOk();
 
     expect($page->fresh()->status)->toBe(ContentStatus::Approved);
+});
+
+test('Grow regenerate queues a fresh draft on the worker for a groundable page', function () {
+    growLaunched($this->site);
+    Queue::fake();
+    // a groundable service page (a §1 Service exists so grounding readiness passes)
+    Service::factory()->create(['site_id' => $this->site->id]);
+    $page = Content::factory()->page()->create([
+        'site_id' => $this->site->id, 'page_type' => PageType::Service,
+        'status' => ContentStatus::NeedsReview, 'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    Livewire::test(Grow::class)->call('regenerate', $page->id)->assertOk();
+
+    Queue::assertPushed(GeneratePage::class);
+});
+
+test('Grow lock protects a page from a republish clobber', function () {
+    growLaunched($this->site);
+    $page = Content::factory()->page()->create([
+        'site_id' => $this->site->id, 'status' => ContentStatus::Approved, 'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    Livewire::test(Grow::class)->call('lock', $page->id)->assertOk();
+
+    expect($page->fresh()->locked)->toBeTrue();
+});
+
+test('Grow reject sends a review draft back and captures the typed reason', function () {
+    growLaunched($this->site);
+    $page = Content::factory()->page()->create([
+        'site_id' => $this->site->id, 'status' => ContentStatus::NeedsReview, 'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    Livewire::test(Grow::class)
+        ->call('startReject', $page->id)
+        ->assertSet('rejecting', $page->id)
+        ->set('rejectReason', 'Tone is off-brand')
+        ->call('reject', $page->id)
+        ->assertSet('rejecting', null);
+
+    $fresh = $page->fresh();
+    expect($fresh->status)->toBe(ContentStatus::Rejected)
+        ->and($fresh->reject_reason)->toBe('Tone is off-brand');
+});
+
+test('Grow reject falls back to a default reason when none is typed', function () {
+    growLaunched($this->site);
+    $page = Content::factory()->page()->create([
+        'site_id' => $this->site->id, 'status' => ContentStatus::NeedsReview, 'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    Livewire::test(Grow::class)->call('startReject', $page->id)->call('reject', $page->id);
+
+    expect($page->fresh()->reject_reason)->toBe('Rejected from the workbench');
+});
+
+test('Grow take-down force-deletes the live WP post and keeps the page republishable on the same slug', function () {
+    growLaunched($this->site);
+    $page = Content::factory()->page()->create([
+        'site_id' => $this->site->id, 'status' => ContentStatus::Published,
+        'slug' => 'services/drain-cleaning', 'wp_post_id' => 42, 'locally_edited' => true, 'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    // The WP transport force-deletes (force=true) by the WP id; mirror §2's DeleteFromWordpress path.
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('forceDeletePost')->once()->with('pages', 42)->andReturn(true);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->once()->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    Livewire::test(Grow::class)->call('takeDown', $page->id)->assertOk();
+
+    $fresh = Content::withoutGlobalScope(SiteScope::class)->find($page->id);
+    expect($fresh)->not->toBeNull()                          // STAYS in the plan (not deleted)
+        ->and($fresh->wp_post_id)->toBeNull()                // WP link cleared
+        ->and($fresh->status)->toBe(ContentStatus::Approved) // ready to re-publish
+        ->and($fresh->slug)->toBe('services/drain-cleaning'); // same slug → no "-2"
+});
+
+test('Grow take-down of a page not on WordPress just marks it ready to publish (kept in the plan)', function () {
+    growLaunched($this->site);
+    $page = Content::factory()->page()->create([
+        'site_id' => $this->site->id, 'status' => ContentStatus::NeedsReview, 'slot_payload' => ['hero' => 'x'], 'wp_post_id' => null,
+    ]);
+
+    Livewire::test(Grow::class)->call('takeDown', $page->id)->assertOk();
+
+    $fresh = Content::withoutGlobalScope(SiteScope::class)->find($page->id);
+    expect($fresh)->not->toBeNull()
+        ->and($fresh->status)->toBe(ContentStatus::Approved)
+        ->and($fresh->wp_post_id)->toBeNull();
+});
+
+test('Grow take-down only touches owned pages — a foreign page is untouched', function () {
+    growLaunched($this->site);
+    $foreign = Content::factory()->page()->create([
+        'site_id' => Site::factory()->create()->id, 'status' => ContentStatus::Candidate, 'slot_payload' => [],
+    ]);
+
+    Livewire::test(Grow::class)->call('takeDown', $foreign->id)->assertOk();
+
+    expect(Content::withoutGlobalScope(SiteScope::class)->find($foreign->id)->status)->toBe(ContentStatus::Candidate);
 });

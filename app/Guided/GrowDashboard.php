@@ -53,7 +53,7 @@ class GrowDashboard
      * The bulk Approve/Publish lanes act on the review/approved rows respectively (never bulk-generate
      * — generation is a deliberate per-page action).
      *
-     * @return list<array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, live_url: ?string, bulk: ?string}>
+     * @return list<array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, menu: list<string>, live_url: ?string, bulk: ?string}>
      */
     public function pages(Site $site): array
     {
@@ -73,7 +73,7 @@ class GrowDashboard
      * most-actionable-first rank WITHIN each section; empty sections are dropped, so a site with no
      * materialized town pages yet simply shows Core + Service.
      *
-     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, live_url: ?string, bulk: ?string}>}>
+     * @return list<array{key: string, label: string, count: int, pages: list<array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, menu: list<string>, live_url: ?string, bulk: ?string}>}>
      */
     public function sections(Site $site): array
     {
@@ -128,7 +128,7 @@ class GrowDashboard
     }
 
     /**
-     * @return array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, live_url: ?string, bulk: ?string, rank: int, section: string}
+     * @return array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, menu: list<string>, live_url: ?string, bulk: ?string, rank: int, section: string}
      */
     private function row(Content $c): array
     {
@@ -147,6 +147,26 @@ class GrowDashboard
             PageState::Failed => [$c->hasDraft() ? 'publish' : 'generate'],
             default => [], // Writing, Publishing, HeldComposer, HeldGrounding
         };
+
+        // Secondary lifecycle controls, tucked in a per-row overflow menu so the primary stays clean.
+        // Regenerate re-drafts anything that has (or expects) a draft; Reject sends a review draft back;
+        // Lock protects a publishable page from being clobbered. In-flight rows (Writing / Publishing)
+        // carry no menu — we never interrupt a running job.
+        $menu = match ($state) {
+            PageState::ReadyToReview => ['regenerate', 'reject'],
+            PageState::Approved, PageState::Live => ['regenerate', 'lock'],
+            PageState::Failed => ['regenerate'],
+            default => [], // ReadyToGenerate / held / in-flight — nothing to re-draft or protect
+        };
+
+        // Take down — offered only when there is actually a live WordPress post to remove. It force-
+        // deletes the post (freeing the slug) and keeps the plan row as republishable (§2's
+        // DeleteFromWordpress), so the page can be regenerated or re-published on the same URL. Never
+        // mid-job.
+        $onWp = (int) ($c->wp_post_id ?? 0) > 0;
+        if ($onWp && $state !== PageState::Writing && $state !== PageState::Publishing) {
+            $menu[] = 'takedown';
+        }
 
         // Most-actionable first within a lane: review → approved → (ready / held / failed) → in-flight → live.
         $rank = match ($state) {
@@ -172,6 +192,7 @@ class GrowDashboard
             'operator_tail' => $p->operatorTail,
             'tone' => $p->tone,
             'actions' => $actions,
+            'menu' => $menu,
             'live_url' => $state === PageState::Live ? $this->liveUrl($c) : null,
             'bulk' => $bulk,
             'rank' => $rank,

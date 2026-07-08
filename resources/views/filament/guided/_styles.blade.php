@@ -209,7 +209,20 @@
   .lp-pgrow .pgmove{font-size:11px;color:var(--ink-soft);margin-top:3px;line-height:1.35}
   .lp-pgrow .pgstate{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
   .lp-pgrow .pgtail{font-size:10.5px;color:var(--ink-soft);font-family:'Spline Sans Mono',monospace;line-height:1.3;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .lp-pgrow .pgact{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+  .lp-pgrow .pgact{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+  /* Per-row overflow menu (native <details>) — secondary lifecycle controls, kept out of the way */
+  .lp-menu{position:relative}
+  .lp-menu>summary{list-style:none;cursor:pointer;user-select:none;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--ink-soft);font-size:16px;line-height:1;font-weight:700}
+  .lp-menu>summary::-webkit-details-marker{display:none}
+  .lp-menu>summary:hover{background:#F5F7F9;color:var(--ink)}
+  .lp-menu[open]>summary{background:#F5F7F9;color:var(--ink)}
+  .lp-menu-pop{position:absolute;right:0;top:calc(100% + 4px);z-index:20;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 24px rgba(16,24,40,.12);padding:5px;min-width:150px;display:flex;flex-direction:column;gap:1px}
+  .lp-menu-pop button{appearance:none;border:none;background:none;text-align:left;font-family:'Inter',sans-serif;font-size:12.5px;font-weight:500;color:var(--ink);padding:8px 11px;border-radius:6px;cursor:pointer;white-space:nowrap}
+  .lp-menu-pop button:hover{background:#F1F4F7}
+  .lp-menu-pop button.danger{color:#A4262C}
+  .lp-menu-pop button.danger:hover{background:#FBE5E6}
+  .lp-pgrow .pgreject{grid-column:1/-1;display:flex;gap:8px;align-items:center;padding:10px 0 4px;flex-wrap:wrap}
+  .lp-pgrow .pgreject input{flex:1;min-width:200px;font-family:'Inter',sans-serif;font-size:13px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink)}
   .lp-foot-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-right:4px}
   .pgbadge{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:4px 9px;border-radius:6px;white-space:nowrap}
   .pgbadge.tone-ok{color:var(--good);background:var(--good-bg)}

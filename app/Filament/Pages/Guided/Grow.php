@@ -14,6 +14,7 @@ use App\Jobs\BuildStructure;
 use App\Jobs\GeneratePage;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
+use App\Publishing\DeleteFromWordpress;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -47,6 +48,12 @@ class Grow extends GuidedPage
      * @var array<int, string>
      */
     public array $selected = [];
+
+    /** The content id whose inline reject-reason input is open (null = none). */
+    public ?string $rejecting = null;
+
+    /** The reason typed into the open reject input (optional — improves future drafts). */
+    public string $rejectReason = '';
 
     public function step(): SetupStep
     {
@@ -163,6 +170,106 @@ class Grow extends GuidedPage
             $notification->body(implode(' ', $result->warnings));
         }
         $notification->send();
+    }
+
+    /**
+     * Regenerate — re-draft a page in place (same honest gate + worker path as {@see generate()}).
+     * Used from the overflow menu for a page that already has (or expects) a draft: a weak first draft,
+     * a stale live page, or a failed one. The existing draft/content stays until the new one lands.
+     */
+    public function regenerate(string $contentId): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        if (! app(GroundingReadiness::class)->ready($content)) {
+            Notification::make()->warning()->title('Not ready yet')
+                ->body('This page isn\'t ready to write yet — its details are still coming together.')->send();
+
+            return;
+        }
+
+        GeneratePage::enqueue($content, actorId: Auth::id());
+
+        Notification::make()->success()->title('Queued — regenerating on the worker')
+            ->body("'{$content->title}' is being re-drafted; the fresh version will appear ready for review shortly.")
+            ->send();
+    }
+
+    /** Lock a page so a future publish never overwrites operator edits (§2 honors the flag). */
+    public function lock(string $contentId): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        app(ReviewActions::class)->lock($content);
+
+        Notification::make()->success()->title('Locked')
+            ->body('Future publishes won\'t overwrite this page — unlock it to resume automatic updates.')->send();
+    }
+
+    /** Open the inline reject-reason input for a row (the reason is optional but sharpens future drafts). */
+    public function startReject(string $contentId): void
+    {
+        $this->rejecting = $contentId;
+        $this->rejectReason = '';
+    }
+
+    /** Dismiss the open reject-reason input without rejecting. */
+    public function cancelReject(): void
+    {
+        $this->rejecting = null;
+        $this->rejectReason = '';
+    }
+
+    /** Reject a review draft — flips it out of the review lane with an (optional) captured reason. */
+    public function reject(string $contentId): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        $reason = trim($this->rejectReason);
+        app(ReviewActions::class)->reject($content, $reason !== '' ? $reason : 'Rejected from the workbench');
+
+        $this->rejecting = null;
+        $this->rejectReason = '';
+
+        Notification::make()->success()->title('Rejected')
+            ->body("'{$content->title}' was sent back — regenerate it when you're ready to try again.")->send();
+    }
+
+    /**
+     * Take a page down from WordPress — force-deletes the live post (freeing the slug) and flips the
+     * page back to a republishable state (§2's {@see DeleteFromWordpress}). The plan row STAYS, so the
+     * page can be regenerated or re-published on the same URL; only the live WordPress post goes away.
+     */
+    public function takeDown(string $contentId): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        $result = app(DeleteFromWordpress::class)->delete($content);
+
+        // On WordPress but the delete didn't confirm — surface the failure and leave the page as-is.
+        if (! $result['deleted'] && $result['on_wp']) {
+            Notification::make()->danger()->title('Could not take it down')->body($result['message'])->send();
+
+            return;
+        }
+
+        Notification::make()->success()->title('Taken down')
+            ->body($result['on_wp']
+                ? "'{$content->title}' was removed from WordPress — it stays in your plan and can be re-published on the same URL."
+                : "'{$content->title}' wasn't on WordPress; it's ready to publish.")
+            ->send();
     }
 
     /** Bulk Approve the ticked draft-ready pages — a cheap state flip (no WordPress contact). */
