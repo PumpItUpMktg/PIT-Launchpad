@@ -7,10 +7,13 @@ use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Enums\StandardPageType;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteNarrative;
+use App\Publishing\Legal\LegalContext;
+use App\Publishing\Legal\LegalTemplates;
 use App\Publishing\MetaBlobAssembler;
 use App\Publishing\SiteContact;
 
@@ -80,7 +83,51 @@ final class BlockContentAssembler
             );
         }
 
+        if ($content->standard_type === StandardPageType::Privacy || $content->standard_type === StandardPageType::Terms) {
+            return $this->composeLegal($content, $slots);
+        }
+
         return null;
+    }
+
+    /**
+     * A legal page — template-driven, never AI-generated (fabricated legal terms are false
+     * representations). The {@see LegalTemplates} boilerplate is filled with the tenant's REAL data
+     * (business name, site host, captured contact channels) and stamped with a stable effective date
+     * (the page's creation date), so the same page always renders the same document.
+     *
+     * @param  array<string, mixed>  $slots
+     */
+    private function composeLegal(Content $content, array $slots): string
+    {
+        $site = $this->site($content);
+        $brand = trim((string) ($site->brand_name ?? ''));
+
+        $ctx = new LegalContext(
+            business: $brand !== '' ? $brand : 'this business',
+            siteUrl: $site?->domain_url,
+            email: $this->legalContactEmail($content),
+            phone: $site !== null ? $this->contact->phone($site) : null,
+            effectiveDate: $content->created_at?->format('F j, Y') ?? '',
+        );
+
+        $templates = new LegalTemplates;
+        $doc = $content->standard_type === StandardPageType::Terms
+            ? $templates->terms($ctx)
+            : $templates->privacy($ctx);
+
+        return $this->composer->composeLegal($slots, $doc['title'], $doc['effective_date'], $doc['sections']);
+    }
+
+    /** The tenant's primary contact email (the earliest Location's email), or null — never invented. */
+    private function legalContactEmail(Content $content): ?string
+    {
+        $email = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->orderBy('created_at')
+            ->value('email');
+
+        return is_string($email) && trim($email) !== '' ? trim($email) : null;
     }
 
     /**
