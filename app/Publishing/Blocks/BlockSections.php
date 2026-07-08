@@ -579,6 +579,52 @@ final class BlockSections
     }
 
     /**
+     * FAQ accordion: the drafted question/answer pairs as a native <details>/<summary> accordion (no
+     * JS — kses-safe, unlike inline SVG). Uses the plugin's canonical .lp-faq / .lp-faq__q / .lp-faq__a
+     * class contract so both render paths style identically. Data-gated on real Q&A (preview → a
+     * labeled example pair). The plugin emits the FAQPage schema from the same slot payload.
+     *
+     * @param  list<array{question?: string, answer?: string}>  $items
+     */
+    public function faqAccordion(string $eyebrow, string $heading, string $intro, array $items, bool $preview = false): string
+    {
+        $items = array_values(array_filter(
+            $items,
+            fn (array $i): bool => trim((string) ($i['question'] ?? '')) !== '' && trim((string) ($i['answer'] ?? '')) !== '',
+        ));
+
+        $placeholder = false;
+        if ($items === []) {
+            if (! $preview) {
+                return '';
+            }
+            $items = [
+                ['question' => 'How soon can you come out?', 'answer' => 'Add your FAQs — the real questions your customers ask, with honest answers. They read here as an expandable accordion.'],
+                ['question' => 'Do you offer free estimates?', 'answer' => 'This example shows the layout; your captured question-and-answer pairs replace it.'],
+            ];
+            $placeholder = true;
+        }
+
+        $rows = '';
+        foreach ($items as $item) {
+            $rows .= '<details class="lp-faq"><summary class="lp-faq__q">'.$this->text((string) $item['question']).'</summary>'
+                .'<div class="lp-faq__a">'.$this->text((string) $item['answer']).'</div></details>';
+        }
+        $accordion = "<!-- wp:html -->\n".'<div class="lp-faq-list">'.$rows.'</div>'."\n<!-- /wp:html -->";
+
+        $children = [$this->sectionHead($eyebrow, $heading, center: true)];
+        if (trim($intro) !== '') {
+            $children[] = $this->b->paragraph($this->text($intro), ['textColor' => 'muted', 'className' => 'lp-faq-intro']);
+        }
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add your FAQs');
+        }
+        $children[] = $accordion;
+
+        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-faqs', $placeholder)]);
+    }
+
+    /**
      * A team member's avatar: their real photo when captured, else an initials chip (a classed span the
      * theme styles — kses-safe, unlike inline SVG). Never a fabricated headshot.
      */

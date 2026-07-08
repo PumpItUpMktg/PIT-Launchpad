@@ -63,7 +63,41 @@ final class BlockContentAssembler
             return $this->composeAbout($content, $slots, $images, $ctx, $preview);
         }
 
+        if ($content->standard_type === StandardPageType::Faq) {
+            return $this->composer->composeFaq($slots, $ctx, $this->faqItems($slots), $preview);
+        }
+
         return null;
+    }
+
+    /**
+     * The drafted FAQ question/answer pairs from the resolved `faq` slot (drafter-generated, shaped to
+     * {question, answer} by the SlotShaper). Only complete pairs render; capped. Same key the plugin's
+     * FAQPage schema reads, so accordion + schema stay in lockstep.
+     *
+     * @param  array<string, mixed>  $slots
+     * @return list<array{question: string, answer: string}>
+     */
+    private function faqItems(array $slots): array
+    {
+        $raw = $slots['faq'] ?? [];
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $question = trim((string) ($item['question'] ?? $item['q'] ?? ''));
+            $answer = trim((string) ($item['answer'] ?? $item['a'] ?? ''));
+            if ($question !== '' && $answer !== '') {
+                $out[] = ['question' => $question, 'answer' => $answer];
+            }
+        }
+
+        return array_slice($out, 0, 12);
     }
 
     /**

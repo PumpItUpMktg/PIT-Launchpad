@@ -32,7 +32,7 @@
             "elementor_binding": "lp/text"
         },
         {
-            "key": "faqs",
+            "key": "faq",
             "label": "FAQs",
             "content_type": "faq",
             "role": "faq",

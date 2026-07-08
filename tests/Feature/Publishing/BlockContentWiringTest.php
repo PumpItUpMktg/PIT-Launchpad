@@ -683,3 +683,73 @@ it('the meta-blob carries post_content for the About page (end-to-end publish pa
         ->and($blob['post_content'])->toContain('Show up on time')
         ->and($blob['service_area_map'])->toBeNull();
 });
+
+// A FAQ page: page_type Utility, standard_type faq, drafted Q&A in the `faq` slot (+ hero + intro).
+function blockFaqPage(Site $site, array $faq = []): Content
+{
+    return Content::factory()->create([
+        'site_id' => $site->id,
+        'kind' => ContentKind::Page,
+        'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::Faq->value,
+        'slug' => 'faq',
+        'title' => 'FAQ',
+        'slot_payload' => [
+            'hero_headline' => 'Plumbing questions, answered',
+            'intro' => 'The answers we give most often — no jargon.',
+            'faq' => $faq,
+        ],
+    ]);
+}
+
+it('composes the FAQ page — a native <details> accordion from the drafted Q&A pairs', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $page = blockFaqPage($site, [
+        ['question' => 'How soon can you come out?', 'answer' => 'Most calls are handled the same day.'],
+        ['question' => 'Do you charge for estimates?', 'answer' => 'No — estimates are always free.'],
+        ['question' => '', 'answer' => 'dropped'],            // incomplete pair is filtered out
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()->not->toBeEmpty()
+        ->and($markup)
+        ->toContain('Plumbing questions, answered')          // hero headline
+        ->toContain('<details class="lp-faq">')              // native accordion, kses-safe
+        ->toContain('lp-faq__q')->toContain('lp-faq__a')     // plugin class contract
+        ->toContain('How soon can you come out?')->toContain('Most calls are handled the same day.')
+        ->toContain('Do you charge for estimates?')
+        ->not->toContain('>dropped<')                        // the incomplete pair never renders
+        ->toContain('Still have a question?');               // closing CTA
+});
+
+it('FAQ: preview shows the accordion with a labeled example; publish omits it when no Q&A drafted', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $page = blockFaqPage($site); // no faq pairs
+
+    $preview = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+    expect($preview)
+        ->toContain('lp-faqs')->toContain('appears when you add your FAQs')
+        ->toContain('<details class="lp-faq">');
+
+    $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($publish)
+        ->not->toContain('lp-faq-list')                      // the accordion omits on publish
+        // ...hero + CTA still render, so a bare FAQ ships something honest
+        ->toContain('Plumbing questions, answered')
+        ->toContain('Still have a question?');
+});
+
+it('the meta-blob carries the FAQ post_content AND slot_payload.faq (the key the plugin schema reads)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $page = blockFaqPage($site, [
+        ['question' => 'How soon can you come out?', 'answer' => 'Most calls are handled the same day.'],
+    ]);
+
+    $blob = app(MetaBlobAssembler::class)->assemble($page->fresh(), collect());
+
+    expect($blob)->toHaveKey('post_content')
+        ->and($blob['post_content'])->toContain('How soon can you come out?')
+        // the resolved slot_payload keeps `faq` — the plugin emits FAQPage schema from it
+        ->and($blob['slot_payload']['faq'][0]['question'] ?? null)->toBe('How soon can you come out?');
+});
