@@ -437,6 +437,173 @@ final class BlockSections
     }
 
     /**
+     * Our Story: the brand narrative as readable prose — a section head + the story paragraphs. The
+     * caller passes already-cleaned plain-text paragraphs (drafter HTML is stripped upstream). Data-
+     * gated: hidden without a story (preview → a labeled example paragraph). The About page's spine.
+     *
+     * @param  list<string>  $paragraphs
+     */
+    public function story(string $eyebrow, string $heading, array $paragraphs, bool $preview = false): string
+    {
+        $paragraphs = array_values(array_filter(array_map('trim', $paragraphs), fn (string $p): bool => $p !== ''));
+        $placeholder = false;
+        if ($paragraphs === []) {
+            if (! $preview) {
+                return '';
+            }
+            $paragraphs = ['Tell your story — how you started, who you serve, and what you stand for. It reads here as the narrative that earns a visitor\'s trust.'];
+            $placeholder = true;
+        }
+
+        $children = [$this->sectionHead($eyebrow, $heading)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add your story');
+        }
+        foreach ($paragraphs as $p) {
+            $children[] = $this->b->paragraph($this->text($p), ['className' => 'lp-prose-p']);
+        }
+
+        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-story', $placeholder)]);
+    }
+
+    /**
+     * Mission statement band: the tenant's mission as ONE standout, centered statement (an eyebrow + the
+     * line). Verbatim — never invented. Data-gated: hidden without one (preview → a labeled example).
+     */
+    public function statementBand(string $statement, bool $preview = false): string
+    {
+        $statement = trim($statement);
+        $placeholder = false;
+        if ($statement === '') {
+            if (! $preview) {
+                return '';
+            }
+            $statement = 'Add your mission — the one sentence that says why you do this work. It reads here as a standout statement.';
+            $placeholder = true;
+        }
+
+        $children = [];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add your mission');
+        }
+        $children[] = $this->b->paragraph('Our mission', ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-eyebrow']);
+        $children[] = $this->b->paragraph($this->text($statement), ['className' => 'lp-statement-text']);
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-statement', $placeholder)]);
+    }
+
+    /**
+     * Values grid: the tenant's captured values (icon + title + line) on a light band. Distinct from
+     * Why-Choose-Us (differentiators, dark): values are who the brand IS, not why it wins. Data-gated on
+     * real values — hidden when none (preview → labeled example values). Never invents a value.
+     *
+     * @param  list<array{title?: string, description?: string}>  $items
+     */
+    public function valuesGrid(string $eyebrow, string $heading, array $items, bool $preview = false): string
+    {
+        $items = array_values(array_filter($items, fn (array $i): bool => trim((string) ($i['title'] ?? '')) !== ''));
+        $placeholder = false;
+        if ($items === []) {
+            if (! $preview) {
+                return '';
+            }
+            $items = [
+                ['title' => 'Integrity', 'description' => 'We do what we say — every time.'],
+                ['title' => 'Craftsmanship', 'description' => 'The job is done right, not just done.'],
+                ['title' => 'Respect', 'description' => 'Your home and your time are treated with care.'],
+            ];
+            $placeholder = true;
+        }
+
+        $cols = array_map(function (array $i): string {
+            $children = [$this->icon('spark'), $this->b->heading(4, (string) $i['title'])];
+            if (trim((string) ($i['description'] ?? '')) !== '') {
+                $children[] = $this->b->paragraph((string) $i['description'], ['textColor' => 'muted']);
+            }
+
+            return $this->b->column([$this->b->group($children, ['className' => 'lp-value-item'])]);
+        }, $items);
+
+        $children = [$this->sectionHead($eyebrow, $heading)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add your values');
+        }
+        $children[] = $this->b->columns($cols, ['className' => 'lp-values-grid']);
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-values', $placeholder)]);
+    }
+
+    /**
+     * Team grid: the real people behind the brand — one card each (photo when captured, else an initials
+     * avatar) + name + role + a short bio. Data-gated on captured team members (preview → a labeled
+     * example card). Never invents a person. Photos ride as R2 image URLs when present.
+     *
+     * @param  list<array{name?: string, role?: string, bio?: string, photo_url?: string}>  $members
+     */
+    public function teamGrid(string $eyebrow, string $heading, array $members, bool $preview = false): string
+    {
+        $members = array_values(array_filter($members, fn (array $m): bool => trim((string) ($m['name'] ?? '')) !== ''));
+        $placeholder = false;
+        if ($members === []) {
+            if (! $preview) {
+                return '';
+            }
+            $members = [['name' => 'Your team', 'role' => 'The people behind the work', 'bio' => 'Add your team — names, roles, and a line each. Real faces build more trust than stock photos.']];
+            $placeholder = true;
+        }
+
+        $cols = array_map(function (array $m): string {
+            $name = trim((string) ($m['name'] ?? ''));
+            $children = [$this->avatar($name, trim((string) ($m['photo_url'] ?? ''))), $this->b->heading(4, $name)];
+            $role = trim((string) ($m['role'] ?? ''));
+            if ($role !== '') {
+                $children[] = $this->b->paragraph($this->text($role), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-team-role']);
+            }
+            $bio = trim((string) ($m['bio'] ?? ''));
+            if ($bio !== '') {
+                $children[] = $this->b->paragraph($this->text($bio), ['textColor' => 'muted']);
+            }
+
+            return $this->b->column([$this->b->group($children, ['backgroundColor' => 'surface', 'className' => 'lp-team-item'])]);
+        }, $members);
+
+        $children = [$this->sectionHead($eyebrow, $heading)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add your team');
+        }
+        $children[] = $this->b->columns($cols, ['className' => 'lp-team-grid']);
+
+        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-team', $placeholder)]);
+    }
+
+    /**
+     * A team member's avatar: their real photo when captured, else an initials chip (a classed span the
+     * theme styles — kses-safe, unlike inline SVG). Never a fabricated headshot.
+     */
+    private function avatar(string $name, string $photoUrl): string
+    {
+        if ($photoUrl !== '') {
+            return $this->b->image($photoUrl, $name !== '' ? $name : 'Team member', ['className' => 'lp-team-photo']);
+        }
+
+        return "<!-- wp:html -->\n".'<span class="lp-team-avatar" aria-hidden="true">'.$this->text($this->initials($name)).'</span>'."\n<!-- /wp:html -->";
+    }
+
+    /** Up to two uppercase initials from a name (falls back to a star when a name has no letters). */
+    private function initials(string $name): string
+    {
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+        $letters = '';
+        foreach ($parts as $part) {
+            if ($part !== '' && mb_strlen($letters) < 2) {
+                $letters .= mb_strtoupper(mb_substr($part, 0, 1));
+            }
+        }
+
+        return $letters !== '' ? $letters : '★';
+    }
+
+    /**
      * The "major cities from each county" column: one block per county — the county name + its largest
      * towns on a middot-separated line (a town with a real location page links; never an invented URL).
      * Returns '' when there's nothing to show.

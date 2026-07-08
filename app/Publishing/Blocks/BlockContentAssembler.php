@@ -59,6 +59,10 @@ final class BlockContentAssembler
             return $this->composeWhyChooseUs($content, $slots, $images, $ctx, $preview);
         }
 
+        if ($content->standard_type === StandardPageType::About) {
+            return $this->composeAbout($content, $slots, $images, $ctx, $preview);
+        }
+
         return null;
     }
 
@@ -111,6 +115,126 @@ final class BlockContentAssembler
             trustStats: $this->trustStats($content),
             preview: $preview,
         );
+    }
+
+    /**
+     * The About page — a brand narrative. Story + mission render the DRAFTED, voice-expanded prose
+     * (the About drafter's whole job), falling back to the raw §1 narrative when a slot is empty;
+     * values + team render from §1 intake (reliable structure). About is brand-critical and
+     * review-gated, so the voice-expanded prose is operator-checked before it can publish.
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  array<string, array<string, mixed>>  $images
+     */
+    private function composeAbout(Content $content, array $slots, array $images, PageContext $ctx, bool $preview): string
+    {
+        $narrative = SiteNarrative::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->first();
+
+        return $this->composer->composeAbout(
+            slots: $slots,
+            images: $images,
+            ctx: $ctx,
+            story: $this->storyParagraphs($this->slotString($slots, 'our_story') ?: (string) ($narrative->story ?? '')),
+            mission: trim($this->slotString($slots, 'mission') ?: (string) ($narrative->mission ?? '')),
+            values: $this->titleDescList(is_array($narrative?->values) ? $narrative->values : []),
+            team: $this->teamMembers($narrative),
+            credibilityBadges: $this->credibilityBadges($content),
+            trustStats: $this->trustStats($content),
+            preview: $preview,
+        );
+    }
+
+    /**
+     * Split brand-story prose (possibly the drafter's HTML) into clean plain-text paragraphs — the
+     * block composer emits each as its own <p>. Explicit paragraph breaks (</p> or blank lines) win;
+     * remaining tags are stripped so nothing invalid reaches the block markup.
+     *
+     * @return list<string>
+     */
+    private function storyParagraphs(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+
+        $chunks = preg_split('#</p>|\n\s*\n#i', $raw) ?: [$raw];
+
+        $out = [];
+        foreach ($chunks as $chunk) {
+            $text = trim(html_entity_decode(strip_tags((string) $chunk), ENT_QUOTES, 'UTF-8'));
+            if ($text !== '') {
+                $out[] = $text;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Normalize a {title, description} list (values / differentiators) to the section shape, capped.
+     *
+     * @param  array<int, mixed>  $items
+     * @return list<array{title: string, description: string}>
+     */
+    private function titleDescList(array $items, int $cap = 6): array
+    {
+        $out = [];
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $title = trim((string) ($item['title'] ?? ''));
+            if ($title === '') {
+                continue;
+            }
+            $out[] = ['title' => $title, 'description' => trim((string) ($item['description'] ?? ''))];
+        }
+
+        return array_slice($out, 0, $cap);
+    }
+
+    /**
+     * The tenant's real team from §1 — {name, role, bio, photo_url}, verbatim. Only members with a name
+     * appear; never fabricated. (No drafted team slot exists — the team is structured intake.)
+     *
+     * @return list<array{name: string, role: string, bio: string, photo_url: string}>
+     */
+    private function teamMembers(?SiteNarrative $narrative): array
+    {
+        $items = is_array($narrative?->team) ? $narrative->team : [];
+
+        $out = [];
+        foreach ($items as $member) {
+            if (! is_array($member)) {
+                continue;
+            }
+            $name = trim((string) ($member['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $out[] = [
+                'name' => $name,
+                'role' => trim((string) ($member['role'] ?? $member['title'] ?? '')),
+                'bio' => trim((string) ($member['bio'] ?? $member['description'] ?? '')),
+                'photo_url' => trim((string) ($member['photo_url'] ?? $member['photo'] ?? '')),
+            ];
+        }
+
+        return array_slice($out, 0, 8);
+    }
+
+    /** First scalar of a slot value (single slots may arrive as a string or a one-element array). */
+    private function slotString(array $slots, string $key): string
+    {
+        $value = $slots[$key] ?? '';
+        if (is_array($value)) {
+            $value = $value[0] ?? '';
+        }
+
+        return trim((string) $value);
     }
 
     /**
