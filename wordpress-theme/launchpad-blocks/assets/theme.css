@@ -855,6 +855,73 @@
     color: var(--wp--preset--color--contrast, #0f172a);
 }
 
+/* Services sub-bar — a slim secondary row below the main menu (plugin's [lp_header]) for direct
+   service-page navigation without cluttering the primary nav. Inherits the header tone. */
+.lp-header-services {
+    border-top: 1px solid color-mix(in srgb, var(--wp--preset--color--base, #fff) 14%, transparent);
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.lp-header-services-inner {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+    max-width: var(--wp--style--global--wide-size, 1200px);
+    margin-inline: auto;
+    padding: 0.4rem clamp(1rem, 3vw, 2rem);
+}
+
+.lp-services-label {
+    flex: none;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.6;
+}
+
+.lp-services-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(0.85rem, 2vw, 1.5rem);
+    min-width: 0;
+}
+
+.lp-services-nav a {
+    color: color-mix(in srgb, var(--wp--preset--color--base, #fff) 82%, transparent);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.lp-services-nav a:hover {
+    color: var(--wp--preset--color--base, #fff);
+}
+
+/* Light-header tone: the services bar reads on a light bar. */
+.lp-header:has(.lp-tone-light) .lp-header-services {
+    border-top-color: var(--wp--preset--color--border, #e2e8f0);
+    background: color-mix(in srgb, var(--wp--preset--color--contrast, #0f172a) 4%, transparent);
+}
+
+.lp-header:has(.lp-tone-light) .lp-services-nav a {
+    color: color-mix(in srgb, var(--wp--preset--color--contrast, #0f172a) 72%, transparent);
+}
+
+.lp-header:has(.lp-tone-light) .lp-services-nav a:hover {
+    color: var(--wp--preset--color--contrast, #0f172a);
+}
+
+/* Mobile: keep services reachable — scroll the row instead of wrapping. */
+@media (max-width: 860px) {
+    .lp-services-nav {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
 .lp-callbar {
     display: flex;
     flex-direction: column;

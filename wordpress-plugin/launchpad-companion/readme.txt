@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.6
+Stable tag: 0.9.7
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,12 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.7 =
+* [lp_header] now renders a slim SERVICES sub-bar below the main menu (.lp-header-services)
+  from the site profile's `services` links — direct navigation to service pages without
+  cluttering the primary nav. Hidden when there are no service pages. Inherits the header
+  tone (dark/light).
 
 = 0.9.6 =
 * [lp_header] now renders a `lp-tone-dark` / `lp-tone-light` class from the site profile's
