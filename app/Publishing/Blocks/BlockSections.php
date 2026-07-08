@@ -134,6 +134,41 @@ final class BlockSections
     }
 
     /**
+     * The sticky CTA bar (cta1) — the "always visible, regardless of scroll" ask. The theme pins this
+     * bar to the bottom of the viewport, so a call-to-action stays on screen wherever the visitor has
+     * scrolled. Blatant by design: a direct one-line ask + click-to-call + a strong action button. The
+     * in-page {@see cta()} section stays the gentler close (cta2). Emergency-aware — with emergency on,
+     * the call leads. Always renders (a CTA needs no data); the call button only shows with a phone.
+     */
+    public function stickyCta(PageContext $ctx, string $line, string $actionText, string $actionUrl): string
+    {
+        $primary = ['backgroundColor' => 'accent', 'textColor' => 'on-accent'];
+        $ghost = ['className' => 'is-style-outline', 'textColor' => 'base'];
+
+        $call = $ctx->hasPhone()
+            ? ['text' => 'Call '.$this->text($ctx->phoneDisplay), 'url' => (string) $ctx->phoneTel]
+            : null;
+        $action = ['text' => $actionText !== '' ? $actionText : 'Get a free quote', 'url' => $actionUrl !== '' ? $actionUrl : '#contact'];
+
+        // Emergency ON → the call leads (primary); OFF → the action leads.
+        $buttons = [];
+        if ($ctx->emergency && $call !== null) {
+            $buttons[] = $call + ['attrs' => $primary];
+            $buttons[] = $action + ['attrs' => $ghost];
+        } else {
+            $buttons[] = $action + ['attrs' => $primary];
+            if ($call !== null) {
+                $buttons[] = $call + ['attrs' => $ghost];
+            }
+        }
+
+        return $this->b->group([
+            $this->b->paragraph($this->text($line), ['textColor' => 'base', 'className' => 'lp-stickycta-line']),
+            $this->b->buttons($buttons, ['className' => 'lp-stickycta-actions']),
+        ], ['align' => 'full', 'backgroundColor' => 'primary', 'textColor' => 'base', 'className' => 'lp-stickycta']);
+    }
+
+    /**
      * The credibility strip: a slim reassurance band — an optional lead line + a row of substantiated
      * trust badges (licensed, certified, rated). Data-gated: renders nothing when there are no badges,
      * so an unsubstantiated tenant degrades to no strip rather than an empty or fabricated one.

@@ -500,6 +500,28 @@ it('the service_area_map is null for a tenant with no coverage (map self-prunes,
         ->and($blob['post_content'])->not->toContain('lp-areas-map');
 });
 
+it('every marketing page carries a sticky CTA bar (cta1) alongside the closing CTA (cta2)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100', 'offers_emergency' => true]);
+
+    foreach ([blockHomePage($site), blockAboutPage($site), blockFaqPage($site, [['question' => 'Q', 'answer' => 'A']]), blockAreasPage($site), blockContactPage($site)] as $page) {
+        $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+
+        expect($markup)
+            ->toContain('lp-stickycta')                        // the always-visible sticky bar (cta1)
+            ->toContain('lp-cta')                              // the in-page closing CTA (cta2)
+            ->toContain('href="tel:9735550100"');              // the bar's click-to-call (emergency leads)
+    }
+});
+
+it('legal pages get NO sticky sales CTA (a utility page is not a conversion surface)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
+    $page = blockLegalPage($site, StandardPageType::Privacy);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->not->toContain('lp-stickycta');
+});
+
 it('the meta-blob carries post_content for Home', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
     $home = blockHomePage($site);

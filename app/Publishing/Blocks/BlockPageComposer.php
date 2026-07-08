@@ -133,9 +133,12 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
+        // cta1 — the sticky, always-visible bar (blatant ask); cta2 is the gentler closing section above.
+        $sticky = $this->sections->stickyCta($ctx, 'Ready to get it fixed? Get your free quote today.', 'Get a free quote', '#contact');
+
         // The credentials band sits LOW — a quiet trust reinforcement just before the closing CTA, not a
         // prominent top-of-page banner. The guarantee lands mid-page after Why Choose Us.
-        return $this->join([$hero, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $certs, $cta]);
+        return $this->join([$hero, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $certs, $cta, $sticky]);
     }
 
     /**
@@ -208,8 +211,10 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
+        $sticky = $this->sections->stickyCta($ctx, 'See why clients choose us — get your free quote.', 'Get a free quote', '#contact');
+
         // Credentials sit LOW here too — after the client voice, just before the CTA (quiet reinforcement).
-        return $this->join([$hero, $why, $guaranteeBand, $reviews, $certs, $cta]);
+        return $this->join([$hero, $why, $guaranteeBand, $reviews, $certs, $cta, $sticky]);
     }
 
     /**
@@ -267,7 +272,9 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $credibility, $teamBlock, $cta]);
+        $sticky = $this->sections->stickyCta($ctx, 'Let’s get started — request your free quote.', 'Get a free quote', '#contact');
+
+        return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $credibility, $teamBlock, $cta, $sticky]);
     }
 
     /**
@@ -310,7 +317,9 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $faq, $cta]);
+        $sticky = $this->sections->stickyCta($ctx, 'Still have a question? Talk to a real person now.', 'Get in touch', '#contact');
+
+        return $this->join([$hero, $faq, $cta, $sticky]);
     }
 
     /**
@@ -363,7 +372,9 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $areas, $cta]);
+        $sticky = $this->sections->stickyCta($ctx, 'We’re in your area — get your free quote today.', 'Get a free quote', '#contact');
+
+        return $this->join([$hero, $areas, $cta, $sticky]);
     }
 
     /**
@@ -436,7 +447,9 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $details, $form, $cta]);
+        $sticky = $this->sections->stickyCta($ctx, 'Ready when you are — get your free quote.', 'Request service', '#contact');
+
+        return $this->join([$hero, $details, $form, $cta, $sticky]);
     }
 
     /** @param list<string> $blocks */
