@@ -287,6 +287,19 @@
     flex-wrap: wrap;
 }
 
+/* The secondary hero action (is-style-outline on the dark hero) — a visible ghost button, so it
+   reads as an action next to the filled primary rather than a bare text link. */
+.lp-hero .wp-block-button.is-style-outline .wp-block-button__link {
+    background: transparent;
+    border: 1.5px solid color-mix(in srgb, var(--wp--preset--color--base, #fff) 55%, transparent);
+    color: var(--wp--preset--color--base, #fff);
+}
+
+.lp-hero .wp-block-button.is-style-outline .wp-block-button__link:hover {
+    border-color: var(--wp--preset--color--base, #fff);
+    background: color-mix(in srgb, var(--wp--preset--color--base, #fff) 12%, transparent);
+}
+
 .lp-hero figure.wp-block-image {
     margin: 0;
 }
@@ -356,11 +369,13 @@
 /* ------------------------------------------------------------------ *
  * Section head — centered eyebrow + heading above the grids.
  * ------------------------------------------------------------------ */
+/* Section heads read as one system across every page: centered eyebrow + heading. (The --center
+   modifier is kept as a no-op for any caller that still passes it.) */
 .lp-section-head {
-    max-width: 54ch;
+    max-width: 60ch;
     margin-block: 0 clamp(2rem, 4vw, 3rem);
-    margin-inline: 0;
-    text-align: left;
+    margin-inline: auto;
+    text-align: center;
 }
 
 .lp-section-head--center {
@@ -375,6 +390,19 @@
 .lp-section-head h2 {
     margin: 0;
     font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.25rem);
+}
+
+/* Heading conformity — every block-section headline (h1–h4) renders in Title Case (each word's first
+   letter capitalised), however the copy was authored or drafted, so the whole site reads one way.
+   VISUAL ONLY (text-transform): the DOM text keeps its original casing, so SEO, the <title>/meta, and
+   screen readers are untouched. Deliberately scoped to real headings — the eyebrow (uppercase already),
+   the mission statement, and the FAQ questions keep their own treatment. */
+:is(
+    .lp-hero, .lp-credibility, .lp-certs, .lp-services, .lp-why, .lp-guarantee, .lp-story, .lp-statement,
+    .lp-values, .lp-team, .lp-faqs, .lp-legal, .lp-contact, .lp-formsection, .lp-process, .lp-proof,
+    .lp-testimonials, .lp-areas, .lp-cta
+) :is(h1, h2, h3, h4) {
+    text-transform: capitalize;
 }
 
 /* ------------------------------------------------------------------ *
@@ -585,6 +613,14 @@
 
 .lp-callnow {
     font-weight: 600;
+}
+
+/* The emergency call-now number sits on the dark CTA band — keep it legible (accent-on-dark fails
+   contrast), so render it white + underlined rather than the low-contrast accent link colour. */
+.lp-cta .lp-callnow a {
+    color: var(--wp--preset--color--base, #fff);
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1146,7 +1182,7 @@
 /* The 50/50 map | major-cities block, with the county list beneath. */
 .wp-block-columns.lp-areas-split {
     gap: clamp(1.5rem, 4vw, 3rem);
-    align-items: stretch;
+    align-items: center; /* a sparse city list centres against the tall map instead of floating at its top */
     margin-bottom: 1.5rem;
 }
 
