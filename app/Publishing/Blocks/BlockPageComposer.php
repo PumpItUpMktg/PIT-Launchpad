@@ -125,20 +125,28 @@ final class BlockPageComposer
             mapAvailable: $serviceAreaMapAvailable,
         );
 
+        // cta1 (PUSHY) — a bold accent band that blatantly asks for the business, placed high (after the
+        // services) so it catches a visitor early.
+        $ctaBold = $this->sections->cta(
+            heading: 'Ready to get it fixed?',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
+        // cta2 (SOFT) — the gentle closing section: info-seeking language, no pressure.
         $cta = $this->sections->cta(
-            heading: 'Ready to get started?',
-            body: 'Get in touch for a free, no-obligation assessment.',
-            actionText: 'Schedule an assessment',
+            heading: 'Have a question first?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        // cta1 — the sticky, always-visible bar (blatant ask); cta2 is the gentler closing section above.
-        $sticky = $this->sections->stickyCta($ctx, 'Ready to get it fixed? Get your free quote today.', 'Get a free quote', '#contact');
-
-        // The credentials band sits LOW — a quiet trust reinforcement just before the closing CTA, not a
-        // prominent top-of-page banner. The guarantee lands mid-page after Why Choose Us.
-        return $this->join([$hero, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $certs, $cta, $sticky]);
+        // The credentials band sits LOW — a quiet trust reinforcement before the closing CTA.
+        return $this->join([$hero, $services, $ctaBold, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $certs, $cta]);
     }
 
     /**
@@ -203,18 +211,26 @@ final class BlockPageComposer
             preview: $preview,
         );
 
+        // cta1 (PUSHY) after the differentiators; cta2 (SOFT) closes the page.
+        $ctaBold = $this->sections->cta(
+            heading: 'Ready to get it fixed?',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
         $cta = $this->sections->cta(
-            heading: 'Ready to get started?',
-            body: 'Get in touch for a free, no-obligation assessment.',
-            actionText: 'Schedule an assessment',
+            heading: 'Have a question first?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        $sticky = $this->sections->stickyCta($ctx, 'See why clients choose us — get your free quote.', 'Get a free quote', '#contact');
-
-        // Credentials sit LOW here too — after the client voice, just before the CTA (quiet reinforcement).
-        return $this->join([$hero, $why, $guaranteeBand, $reviews, $certs, $cta, $sticky]);
+        // Credentials sit LOW here too — after the client voice, just before the closing CTA.
+        return $this->join([$hero, $why, $ctaBold, $guaranteeBand, $reviews, $certs, $cta]);
     }
 
     /**
@@ -264,17 +280,25 @@ final class BlockPageComposer
         $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
         $teamBlock = $this->sections->teamGrid('Our team', 'The people behind the work', $team, $preview);
 
+        // cta1 (PUSHY) mid-page after the values; cta2 (SOFT) closes the page.
+        $ctaBold = $this->sections->cta(
+            heading: 'Ready to get started?',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
         $cta = $this->sections->cta(
-            heading: 'Let’s work together',
-            body: 'Get in touch for a free, no-obligation assessment.',
+            heading: 'Have a question first?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
             actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        $sticky = $this->sections->stickyCta($ctx, 'Let’s get started — request your free quote.', 'Get a free quote', '#contact');
-
-        return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $credibility, $teamBlock, $cta, $sticky]);
+        return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $ctaBold, $credibility, $teamBlock, $cta]);
     }
 
     /**
@@ -309,17 +333,25 @@ final class BlockPageComposer
             preview: $preview,
         );
 
+        // cta1 (PUSHY) up top; cta2 (SOFT) — the existing info-seeking close — at the bottom.
+        $ctaBold = $this->sections->cta(
+            heading: 'Ready to get it fixed?',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
         $cta = $this->sections->cta(
             heading: 'Still have a question?',
-            body: 'Get in touch and we’ll get you a straight answer.',
-            actionText: 'Contact us',
+            body: 'Get in touch and we’ll get you a straight answer — no pressure.',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        $sticky = $this->sections->stickyCta($ctx, 'Still have a question? Talk to a real person now.', 'Get in touch', '#contact');
-
-        return $this->join([$hero, $faq, $cta, $sticky]);
+        return $this->join([$hero, $ctaBold, $faq, $cta]);
     }
 
     /**
@@ -364,17 +396,25 @@ final class BlockPageComposer
             mapAvailable: $mapAvailable,
         );
 
+        // cta1 (PUSHY) up top; cta2 (SOFT) — the existing "don't see your town?" close — at the bottom.
+        $ctaBold = $this->sections->cta(
+            heading: 'We’re probably near you',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
         $cta = $this->sections->cta(
             heading: 'Don’t see your town?',
             body: 'Give us a call — if you’re nearby, chances are we cover you.',
-            actionText: 'Contact us',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        $sticky = $this->sections->stickyCta($ctx, 'We’re in your area — get your free quote today.', 'Get a free quote', '#contact');
-
-        return $this->join([$hero, $areas, $cta, $sticky]);
+        return $this->join([$hero, $ctaBold, $areas, $cta]);
     }
 
     /**
@@ -439,17 +479,25 @@ final class BlockPageComposer
         // The lead form is a preview-only placeholder for now (delivery undecided) — omitted on publish.
         $form = $this->sections->contactForm($preview);
 
-        $cta = $this->sections->cta(
+        // cta1 (PUSHY) up top; cta2 (SOFT) closes the page.
+        $ctaBold = $this->sections->cta(
             heading: 'Ready to get started?',
-            body: 'Tell us what you need and we’ll get right back to you.',
-            actionText: 'Request service',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
+        $cta = $this->sections->cta(
+            heading: 'Prefer to just ask?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        $sticky = $this->sections->stickyCta($ctx, 'Ready when you are — get your free quote.', 'Request service', '#contact');
-
-        return $this->join([$hero, $details, $form, $cta, $sticky]);
+        return $this->join([$hero, $ctaBold, $details, $form, $cta]);
     }
 
     /** @param list<string> $blocks */

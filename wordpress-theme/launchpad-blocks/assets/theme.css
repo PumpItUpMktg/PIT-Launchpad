@@ -623,61 +623,11 @@
     text-underline-offset: 3px;
 }
 
-/* ------------------------------------------------------------------ *
- * Sticky CTA bar (cta1) — pinned to the viewport bottom so a call-to-
- * action stays visible regardless of scroll. The in-page .lp-cta is cta2.
- * ------------------------------------------------------------------ */
-.lp-stickycta {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.85rem 1.5rem;
-    flex-wrap: wrap;
-    padding: 0.7rem clamp(1rem, 4vw, 2rem);
-    background: var(--wp--preset--color--primary, #123b6b);
-    color: var(--wp--preset--color--base, #fff);
-    box-shadow: 0 -6px 24px rgba(2, 12, 27, 0.22);
-}
-
-.lp-stickycta .lp-stickycta-line {
-    margin: 0;
-    font-weight: 600;
-    font-size: 0.98rem;
-}
-
-.lp-stickycta .wp-block-buttons {
-    margin: 0;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-}
-
-.lp-stickycta .wp-block-button__link {
-    padding: 9px 18px;
-    font-size: 0.9rem;
-}
-
-.lp-stickycta .is-style-outline .wp-block-button__link {
-    background: transparent;
-    border: 1.5px solid color-mix(in srgb, var(--wp--preset--color--base, #fff) 55%, transparent);
-    color: var(--wp--preset--color--base, #fff);
-}
-
-@media (max-width: 560px) {
-    .lp-stickycta {
-        gap: 0.45rem 0.75rem;
-        padding: 0.55rem 0.85rem;
-    }
-
-    .lp-stickycta .lp-stickycta-line {
-        flex-basis: 100%;
-        text-align: center;
-        font-size: 0.88rem;
-    }
+/* cta1 — the PUSHY variant: a solid brand-accent band. Overrides the section-rhythm primary gradient
+   (.lp-cta above) with higher specificity so the pushy ask visibly stands apart from the softer,
+   primary-band close (cta2). */
+.lp-cta.lp-cta--bold {
+    background: var(--wp--preset--color--accent, #1d6fd6);
 }
 
 /* ------------------------------------------------------------------ *

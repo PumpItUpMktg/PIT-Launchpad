@@ -500,26 +500,27 @@ it('the service_area_map is null for a tenant with no coverage (map self-prunes,
         ->and($blob['post_content'])->not->toContain('lp-areas-map');
 });
 
-it('every marketing page carries a sticky CTA bar (cta1) alongside the closing CTA (cta2)', function () {
-    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100', 'offers_emergency' => true]);
+it('every marketing page has TWO CTAs — a pushy one (cta1) and a softer one (cta2)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
 
     foreach ([blockHomePage($site), blockAboutPage($site), blockFaqPage($site, [['question' => 'Q', 'answer' => 'A']]), blockAreasPage($site), blockContactPage($site)] as $page) {
         $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
 
         expect($markup)
-            ->toContain('lp-stickycta')                        // the always-visible sticky bar (cta1)
-            ->toContain('lp-cta')                              // the in-page closing CTA (cta2)
-            ->toContain('href="tel:9735550100"');              // the bar's click-to-call (emergency leads)
+            ->toContain('lp-cta--bold')       // cta1 — the pushy accent band, blatantly asking for the business
+            ->toContain('Get a free quote')   // its pushy ask
+            ->toContain('Get in touch')       // cta2 — the softer, info-seeking ask
+            ->toContain('has-accent-background-color'); // the bold band renders on the accent colour
     }
 });
 
-it('legal pages get NO sticky sales CTA (a utility page is not a conversion surface)', function () {
+it('legal pages get NO sales CTA (a utility page is not a conversion surface)', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
     $page = blockLegalPage($site, StandardPageType::Privacy);
 
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
-    expect($markup)->not->toContain('lp-stickycta');
+    expect($markup)->not->toContain('lp-cta');
 });
 
 it('the meta-blob carries post_content for Home', function () {
@@ -588,7 +589,8 @@ it('composes the Why Choose Us page from real §1 data — differentiators spine
         ->toContain('lp-guarantee')->toContain('Forever Pump Warranty') // guarantee band, verbatim
         ->toContain('lp-certs')->toContain('NJ Master Plumber')->toContain('#1234') // certs, verbatim
         ->toContain('They caught a collapsing line before it flooded us.')          // substantiated client voice
-        ->toContain('Ready to get started?')                           // closing CTA
+        ->toContain('Ready to get it fixed?')                          // the pushy CTA (cta1)
+        ->toContain('Have a question first?')                          // the softer CTA (cta2)
         // this page argues WHY, not WHAT — no services grid / how-it-works / areas
         ->not->toContain('Getting started is simple')
         ->not->toContain('Areas we serve');
@@ -609,9 +611,9 @@ it('Why Choose Us: preview builds every section with labeled placeholders; publi
         ->not->toContain('lp-why')          // no differentiators → the spine section omits on publish
         ->not->toContain('lp-guarantee')
         ->not->toContain('lp-certs')
-        // ...but the hero + CTA always render, so a bare page still ships something honest
+        // ...but the hero + CTAs always render, so a bare page still ships something honest
         ->toContain('Preventive-first plumbing that saves you money.')
-        ->toContain('Ready to get started?');
+        ->toContain('Ready to get it fixed?');
 });
 
 it('returns null for a standard page whose composer has not shipped (Gallery falls back to existing render)', function () {
@@ -728,9 +730,9 @@ it('About: preview builds every section with labeled placeholders; publish data-
     expect($publish)
         ->not->toContain('lp-story')->not->toContain('lp-statement')
         ->not->toContain('lp-values')->not->toContain('lp-team')
-        // ...hero + CTA always render, so a bare About still ships something honest
+        // ...hero + CTAs always render, so a bare About still ships something honest
         ->toContain('Family-run plumbing, three generations deep.')
-        ->toContain('Let’s work together');
+        ->toContain('Have a question first?');
 });
 
 it('the meta-blob carries post_content for the About page (end-to-end publish path)', function () {

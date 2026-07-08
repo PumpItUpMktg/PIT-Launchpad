@@ -108,64 +108,44 @@ final class BlockSections
     }
 
     /**
-     * The closing CTA: a primary-background rounded group with a heading, a line, an emergency-only
-     * "call now" link, and the primary action button.
+     * A CTA band — a heading, a line, an emergency-only "call now" link, and the action button. Each
+     * marketing page uses TWO at different points: a PUSHY one ($bold: true — an accent band that
+     * blatantly asks for the business) higher up, and a SOFTER one (the default primary band, info-
+     * seeking language) as the closing section. $bold swaps the band to the brand accent + a distinct
+     * button so the pushy ask stands out from the gentle close.
      */
-    public function cta(string $heading, string $body, string $actionText, string $actionUrl, PageContext $ctx): string
+    public function cta(string $heading, string $body, string $actionText, string $actionUrl, PageContext $ctx, bool $bold = false): string
     {
+        $onAccent = $bold; // bold band = accent background, so text/links flip to the on-accent colour
+        $textColor = $onAccent ? 'on-accent' : 'base';
+
         $children = [
-            $this->b->heading(2, $heading, ['textColor' => 'base']),
-            $this->b->paragraph($body, ['textColor' => 'base']),
+            $this->b->heading(2, $heading, ['textColor' => $textColor]),
+            $this->b->paragraph($body, ['textColor' => $textColor]),
         ];
 
         if ($ctx->emergency && $ctx->hasPhone()) {
             // Emergency call-now uses the dedicated after-hours line when set, else the main number.
             $children[] = $this->b->paragraph(
                 'Or call now: <a href="'.$this->attr($ctx->emergencyCallTel()).'">'.$this->text($ctx->emergencyCallDisplay()).'</a>',
-                ['textColor' => 'base', 'className' => 'lp-callnow'],
+                ['textColor' => $textColor, 'className' => 'lp-callnow'],
             );
         }
 
+        // On the accent (bold) band the accent-filled button would vanish — use a base/contrast button instead.
+        $buttonAttrs = $bold
+            ? ['backgroundColor' => 'base', 'textColor' => 'contrast']
+            : ['backgroundColor' => 'accent', 'textColor' => 'on-accent'];
         $children[] = $this->b->buttons([
-            ['text' => $actionText, 'url' => $actionUrl !== '' ? $actionUrl : '#contact', 'attrs' => ['backgroundColor' => 'accent', 'textColor' => 'on-accent']],
+            ['text' => $actionText, 'url' => $actionUrl !== '' ? $actionUrl : '#contact', 'attrs' => $buttonAttrs],
         ]);
 
-        return $this->b->group($children, ['backgroundColor' => 'primary', 'textColor' => 'base', 'align' => 'full', 'className' => 'lp-cta']);
-    }
-
-    /**
-     * The sticky CTA bar (cta1) — the "always visible, regardless of scroll" ask. The theme pins this
-     * bar to the bottom of the viewport, so a call-to-action stays on screen wherever the visitor has
-     * scrolled. Blatant by design: a direct one-line ask + click-to-call + a strong action button. The
-     * in-page {@see cta()} section stays the gentler close (cta2). Emergency-aware — with emergency on,
-     * the call leads. Always renders (a CTA needs no data); the call button only shows with a phone.
-     */
-    public function stickyCta(PageContext $ctx, string $line, string $actionText, string $actionUrl): string
-    {
-        $primary = ['backgroundColor' => 'accent', 'textColor' => 'on-accent'];
-        $ghost = ['className' => 'is-style-outline', 'textColor' => 'base'];
-
-        $call = $ctx->hasPhone()
-            ? ['text' => 'Call '.$this->text($ctx->phoneDisplay), 'url' => (string) $ctx->phoneTel]
-            : null;
-        $action = ['text' => $actionText !== '' ? $actionText : 'Get a free quote', 'url' => $actionUrl !== '' ? $actionUrl : '#contact'];
-
-        // Emergency ON → the call leads (primary); OFF → the action leads.
-        $buttons = [];
-        if ($ctx->emergency && $call !== null) {
-            $buttons[] = $call + ['attrs' => $primary];
-            $buttons[] = $action + ['attrs' => $ghost];
-        } else {
-            $buttons[] = $action + ['attrs' => $primary];
-            if ($call !== null) {
-                $buttons[] = $call + ['attrs' => $ghost];
-            }
-        }
-
-        return $this->b->group([
-            $this->b->paragraph($this->text($line), ['textColor' => 'base', 'className' => 'lp-stickycta-line']),
-            $this->b->buttons($buttons, ['className' => 'lp-stickycta-actions']),
-        ], ['align' => 'full', 'backgroundColor' => 'primary', 'textColor' => 'base', 'className' => 'lp-stickycta']);
+        return $this->b->group($children, [
+            'backgroundColor' => $bold ? 'accent' : 'primary',
+            'textColor' => $textColor,
+            'align' => 'full',
+            'className' => $bold ? 'lp-cta lp-cta--bold' : 'lp-cta',
+        ]);
     }
 
     /**
