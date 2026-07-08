@@ -19,6 +19,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property array<int, mixed>|null $values
  * @property array<int, mixed>|null $differentiators
  * @property array<int, mixed>|null $team
+ * @property array<string, mixed>|null $guarantee {name, description} — the tenant's guarantee/warranty (verbatim)
+ * @property array<int, mixed>|null $certifications list of {label, number?, logo_url?} (verbatim credentials)
  */
 class SiteNarrative extends Model
 {
@@ -34,6 +36,8 @@ class SiteNarrative extends Model
             'values' => 'array',
             'differentiators' => 'array',
             'team' => 'array',
+            'guarantee' => 'array',
+            'certifications' => 'array',
         ];
     }
 }

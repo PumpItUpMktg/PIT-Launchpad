@@ -353,6 +353,49 @@ it('the meta-blob threads preview into post_content (placeholder in preview, gat
     expect($publishBlob['post_content'])->not->toContain('lp-placeholder')->not->toContain('Areas we serve');
 });
 
+it('renders the certifications row + guarantee band VERBATIM from the narrative (never fabricated)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'guarantee' => ['name' => 'Forever Pump Warranty', 'description' => 'If the pump fails, we replace it — free, for life.'],
+        'certifications' => [
+            ['label' => 'NJ Master Plumber', 'number' => '#1234'],
+            ['label' => 'BBB A+ Rated'],
+        ],
+    ]);
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)
+        ->toContain('lp-certs')                                              // certifications row present
+        ->toContain('NJ Master Plumber')->toContain('#1234')                 // real credential + number, verbatim
+        ->toContain('BBB A+ Rated')                                          // per-item — both shown
+        ->toContain('lp-guarantee')                                         // guarantee band present
+        ->toContain('Forever Pump Warranty')                                // the guarantee name, verbatim
+        ->toContain('If the pump fails, we replace it — free, for life.');  // its description, verbatim
+});
+
+it('omits the guarantee band + certifications row when none are captured (degrade, never invent a credential)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)->not->toContain('lp-guarantee')->not->toContain('lp-certs');
+});
+
+it('preview shows the guarantee + certifications as labeled placeholders; publish omits them', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+
+    $preview = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], preview: true);
+    expect($preview)
+        ->toContain('lp-guarantee')->toContain('appears when you add a guarantee')
+        ->toContain('lp-certs')->toContain('appears when you add certifications');
+
+    $publish = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+    expect($publish)->not->toContain('lp-guarantee')->not->toContain('lp-certs');
+});
+
 it('returns null for a page type whose block pattern has not shipped (falls back to existing render)', function () {
     $site = Site::factory()->create();
     $service = blockServicePage($site, 'Drain Cleaning', 'drain-cleaning', 'x');

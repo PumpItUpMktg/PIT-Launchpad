@@ -9,6 +9,7 @@ use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteBranding;
+use App\Models\SiteNarrative;
 use App\Models\User;
 use App\Publishing\TenantStorage;
 use Filament\Facades\Filament;
@@ -75,6 +76,28 @@ test('captures the business phone + emergency line onto the site and mirrors to 
         ->and($site->emergency_phone)->toBe('(973) 555-9111')
         // NAP stays consistent: the phone-less primary location inherits the business number
         ->and($location->fresh()->phone)->toBe('(973) 555-0100');
+});
+
+test('captures the guarantee + certifications onto the site narrative, verbatim', function () {
+    Livewire::test(Business::class)
+        ->set('businessName', 'Sewer Gurus')
+        ->set('trade', 'Sewer repair')
+        ->set('guaranteeName', 'Forever Pump Warranty')
+        ->set('guaranteeDescription', 'Free replacement for life.')
+        ->set('newCertLabel', 'NJ Master Plumber')->set('newCertNumber', '#1234')->call('addCertification')
+        ->set('newCertLabel', 'BBB A+')->call('addCertification')
+        ->assertSet('certifications', [
+            ['label' => 'NJ Master Plumber', 'number' => '#1234'],
+            ['label' => 'BBB A+', 'number' => ''],
+        ])
+        ->call('proceed');
+
+    $narrative = SiteNarrative::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->firstOrFail();
+    expect($narrative->guarantee)->toBe(['name' => 'Forever Pump Warranty', 'description' => 'Free replacement for life.'])
+        ->and($narrative->certifications)->toBe([
+            ['label' => 'NJ Master Plumber', 'number' => '#1234'],
+            ['label' => 'BBB A+', 'number' => ''],
+        ]);
 });
 
 test('choosing a logo file uploads it and stores it on SiteBranding', function () {

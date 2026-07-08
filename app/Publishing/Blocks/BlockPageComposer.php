@@ -27,6 +27,8 @@ final class BlockPageComposer
      * @param  list<string>  $serviceAreaCounties  named counties served (the pipe-separated line beneath the block)
      * @param  list<array{county: string, cities: list<array{label: string, url: string}>}>  $serviceAreasByCounty  major cities grouped by county (the 50/50 block's cities column)
      * @param  list<array{title: string, description: string}>  $processSteps  the tenant's captured process (else a safe default)
+     * @param  list<array{label?: string, number?: string, logo_url?: string}>  $certifications  real credentials (verbatim, data-gated, per-item)
+     * @param  array{name?: string, description?: string}  $guarantee  the tenant's guarantee/warranty (verbatim, data-gated)
      * @param  bool  $serviceAreaMapAvailable  whether the tenant has map geometry (served counties / geocoded
      *                                         towns) — when true the areas section leads with the interactive
      *                                         map; the geometry itself travels on the blob, not in this markup.
@@ -48,6 +50,8 @@ final class BlockPageComposer
         array $serviceAreaCounties = [],
         array $serviceAreasByCounty = [],
         array $processSteps = [],
+        array $certifications = [],
+        array $guarantee = [],
         bool $preview = false,
         bool $serviceAreaMapAvailable = false,
     ): string {
@@ -66,6 +70,16 @@ final class BlockPageComposer
         // 2. Credibility strip — substantiated badges only; hides when none exist (a labeled example
         //    placeholder stands in for preview, never for publish).
         $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
+
+        // 2b. Certifications / trust row — real credentials near the top (data-gated, per-item, verbatim).
+        $certs = $this->sections->certificationsRow($certifications, $preview);
+
+        // 5b. Guarantee band — the tenant's guarantee as a standout promise (data-gated, verbatim).
+        $guaranteeBand = $this->sections->guaranteeBand(
+            name: (string) ($guarantee['name'] ?? ''),
+            description: (string) ($guarantee['description'] ?? ''),
+            preview: $preview,
+        );
 
         $services = $this->sections->servicesGrid(
             eyebrow: 'What we do',
@@ -122,7 +136,8 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $credibility, $services, $why, $process, $proof, $reviews, $areas, $cta]);
+        // Certs reinforce credibility near the top; the guarantee lands mid-page after Why Choose Us.
+        return $this->join([$hero, $credibility, $certs, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $cta]);
     }
 
     /** @param list<string> $blocks */
