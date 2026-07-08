@@ -4,6 +4,7 @@ use App\Enums\ContentKind;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Enums\ProofType;
+use App\Enums\StandardPageType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Claude\ClaudeClient;
@@ -473,4 +474,102 @@ it('the meta-blob carries post_content for Home', function () {
 
     expect($blob)->toHaveKey('post_content')
         ->and($blob['post_content'])->toContain('Stop sewer problems');
+});
+
+// A Why Choose Us page: page_type Utility, standard_type why_choose_us, hero drafted into slots.
+function blockWhyChooseUsPage(Site $site): Content
+{
+    return Content::factory()->create([
+        'site_id' => $site->id,
+        'kind' => ContentKind::Page,
+        'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::WhyChooseUs->value,
+        'slug' => 'why-choose-us',
+        'title' => 'Why Choose Us',
+        'slot_payload' => [
+            'hero_headline' => 'Preventive-first plumbing that saves you money.',
+            'hero_subhead' => 'The reasons commercial buildings across NJ trust us.',
+        ],
+    ]);
+}
+
+it('composes the Why Choose Us page from real §1 data — differentiators spine, guarantee, certs, client voice', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'differentiators' => [
+            ['title' => 'Preventive-first', 'description' => 'We stop failures before they happen.'],
+            ['title' => 'Licensed crew', 'description' => 'Every tech is a NJ-licensed plumber.'],
+        ],
+        'guarantee' => ['name' => 'Forever Pump Warranty', 'description' => 'If the pump fails, we replace it — free, for life.'],
+        'certifications' => [['label' => 'NJ Master Plumber', 'number' => '#1234']],
+    ]);
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::Testimonial,
+        'payload' => ['text' => 'They caught a collapsing line before it flooded us.', 'author' => 'Facilities Director', 'stars' => 5],
+        'is_substantiated' => true,
+    ]);
+
+    $page = blockWhyChooseUsPage($site);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()->not->toBeEmpty()
+        ->and($markup)
+        ->toContain('Preventive-first plumbing that saves you money.')  // hero (drafted headline)
+        ->toContain('Reasons clients choose us')                        // the WCU heading
+        ->toContain('Preventive-first')->toContain('Licensed crew')     // differentiators — the page spine
+        ->toContain('lp-guarantee')->toContain('Forever Pump Warranty') // guarantee band, verbatim
+        ->toContain('lp-certs')->toContain('NJ Master Plumber')->toContain('#1234') // certs, verbatim
+        ->toContain('They caught a collapsing line before it flooded us.')          // substantiated client voice
+        ->toContain('Ready to get started?')                           // closing CTA
+        // this page argues WHY, not WHAT — no services grid / how-it-works / areas
+        ->not->toContain('Getting started is simple')
+        ->not->toContain('Areas we serve');
+});
+
+it('Why Choose Us: preview builds every section with labeled placeholders; publish data-gates', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $page = blockWhyChooseUsPage($site); // no §1 differentiators / guarantee / certs captured
+
+    $preview = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+    expect($preview)
+        ->toContain('lp-why')->toContain('activates when you add what sets you apart')
+        ->toContain('lp-guarantee')->toContain('appears when you add a guarantee')
+        ->toContain('lp-certs')->toContain('appears when you add certifications');
+
+    $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($publish)
+        ->not->toContain('lp-why')          // no differentiators → the spine section omits on publish
+        ->not->toContain('lp-guarantee')
+        ->not->toContain('lp-certs')
+        // ...but the hero + CTA always render, so a bare page still ships something honest
+        ->toContain('Preventive-first plumbing that saves you money.')
+        ->toContain('Ready to get started?');
+});
+
+it('returns null for a standard page whose composer has not shipped (About falls back to existing render)', function () {
+    $site = Site::factory()->create();
+    $about = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page,
+        'page_type' => PageType::Utility, 'standard_type' => StandardPageType::About->value,
+        'slug' => 'about', 'title' => 'About',
+    ]);
+
+    expect(app(BlockContentAssembler::class)->compose($about->fresh(), [], []))->toBeNull();
+});
+
+it('the meta-blob carries post_content for the Why Choose Us page (end-to-end publish path)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'differentiators' => [['title' => 'Preventive-first', 'description' => 'We stop failures before they happen.']],
+    ]);
+    $page = blockWhyChooseUsPage($site);
+
+    $blob = app(MetaBlobAssembler::class)->assemble($page->fresh(), collect());
+
+    expect($blob)->toHaveKey('post_content')
+        ->and($blob['post_content'])->toContain('Reasons clients choose us')
+        ->and($blob['post_content'])->toContain('Preventive-first')
+        ->and($blob['service_area_map'])->toBeNull(); // areas map is home-only
 });
