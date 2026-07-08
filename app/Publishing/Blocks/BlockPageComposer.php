@@ -21,7 +21,6 @@ final class BlockPageComposer
      * @param  array<string, array<string, mixed>>  $images  image map keyed by slot
      * @param  list<array{title: string, blurb: string, url: string}>  $serviceCards  resolved child service pages (real internal links)
      * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats (never fabricated) for the hero trust row
-     * @param  list<string>  $credibilityBadges  substantiated trust badges (licensed/certified/rated) for the credibility strip
      * @param  list<array{title?: string, description?: string}>  $differentiators  Why-Choose-Us items (site narrative)
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
      * @param  list<string>  $serviceAreaCounties  named counties served (the pipe-separated line beneath the block)
@@ -44,7 +43,6 @@ final class BlockPageComposer
         array $serviceCards,
         PageContext $ctx,
         array $trustStats = [],
-        array $credibilityBadges = [],
         array $differentiators = [],
         array $testimonials = [],
         array $serviceAreaCounties = [],
@@ -67,11 +65,10 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // 2. Credibility strip — substantiated badges only; hides when none exist (a labeled example
-        //    placeholder stands in for preview, never for publish).
-        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
-
-        // 2b. Certifications / trust row — real credentials near the top (data-gated, per-item, verbatim).
+        // Certifications / trust row — the single credentials band (data-gated, per-item, verbatim),
+        //    placed LOW on the page (see the join order below). It carries BOTH the tenant's captured
+        //    certifications AND their substantiated proof credentials (merged upstream), so the page shows
+        //    one trust band, never two overlapping ones.
         $certs = $this->sections->certificationsRow($certifications, $preview);
 
         // 5b. Guarantee band — the tenant's guarantee as a standout promise (data-gated, verbatim).
@@ -128,16 +125,28 @@ final class BlockPageComposer
             mapAvailable: $serviceAreaMapAvailable,
         );
 
+        // cta1 (PUSHY) — a bold accent band that blatantly asks for the business, placed high (after the
+        // services) so it catches a visitor early.
+        $ctaBold = $this->sections->cta(
+            heading: 'Ready to get it fixed?',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
+        // cta2 (SOFT) — the gentle closing section: info-seeking language, no pressure.
         $cta = $this->sections->cta(
-            heading: 'Ready to get started?',
-            body: 'Get in touch for a free, no-obligation assessment.',
-            actionText: 'Schedule an assessment',
+            heading: 'Have a question first?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        // Certs reinforce credibility near the top; the guarantee lands mid-page after Why Choose Us.
-        return $this->join([$hero, $credibility, $certs, $services, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $cta]);
+        // The credentials band sits LOW — a quiet trust reinforcement before the closing CTA.
+        return $this->join([$hero, $services, $ctaBold, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $certs, $cta]);
     }
 
     /**
@@ -150,7 +159,6 @@ final class BlockPageComposer
      * @param  array<string, mixed>  $slots  the page's resolved slot_payload (hero headline/subhead)
      * @param  array<string, array<string, mixed>>  $images  image map keyed by slot
      * @param  list<array{title?: string, description?: string}>  $differentiators  the real captured value props (the page's spine)
-     * @param  list<string>  $credibilityBadges  substantiated trust badges (licensed/certified/rated)
      * @param  array{name?: string, description?: string}  $guarantee  the tenant's guarantee/warranty (verbatim, data-gated)
      * @param  list<array{label?: string, number?: string, logo_url?: string}>  $certifications  real credentials (verbatim, data-gated, per-item)
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
@@ -162,7 +170,6 @@ final class BlockPageComposer
         array $images,
         PageContext $ctx,
         array $differentiators = [],
-        array $credibilityBadges = [],
         array $guarantee = [],
         array $certifications = [],
         array $testimonials = [],
@@ -180,8 +187,6 @@ final class BlockPageComposer
             trust: $this->heroTrust($ctx, $trustStats),
             ctx: $ctx,
         );
-
-        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
 
         // The page's spine: the real, captured differentiators (preview → labeled example band).
         $why = $this->sections->whyChooseUs(
@@ -206,15 +211,26 @@ final class BlockPageComposer
             preview: $preview,
         );
 
+        // cta1 (PUSHY) after the differentiators; cta2 (SOFT) closes the page.
+        $ctaBold = $this->sections->cta(
+            heading: 'Ready to get it fixed?',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
         $cta = $this->sections->cta(
-            heading: 'Ready to get started?',
-            body: 'Get in touch for a free, no-obligation assessment.',
-            actionText: 'Schedule an assessment',
+            heading: 'Have a question first?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $credibility, $why, $guaranteeBand, $certs, $reviews, $cta]);
+        // Credentials sit LOW here too — after the client voice, just before the closing CTA.
+        return $this->join([$hero, $why, $ctaBold, $guaranteeBand, $reviews, $certs, $cta]);
     }
 
     /**
@@ -264,15 +280,25 @@ final class BlockPageComposer
         $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
         $teamBlock = $this->sections->teamGrid('Our team', 'The people behind the work', $team, $preview);
 
+        // cta1 (PUSHY) mid-page after the values; cta2 (SOFT) closes the page.
+        $ctaBold = $this->sections->cta(
+            heading: 'Ready to get started?',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
         $cta = $this->sections->cta(
-            heading: 'Let’s work together',
-            body: 'Get in touch for a free, no-obligation assessment.',
+            heading: 'Have a question first?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
             actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $credibility, $teamBlock, $cta]);
+        return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $ctaBold, $credibility, $teamBlock, $cta]);
     }
 
     /**
@@ -307,15 +333,25 @@ final class BlockPageComposer
             preview: $preview,
         );
 
+        // cta1 (PUSHY) up top; cta2 (SOFT) — the existing info-seeking close — at the bottom.
+        $ctaBold = $this->sections->cta(
+            heading: 'Ready to get it fixed?',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
         $cta = $this->sections->cta(
             heading: 'Still have a question?',
-            body: 'Get in touch and we’ll get you a straight answer.',
-            actionText: 'Contact us',
+            body: 'Get in touch and we’ll get you a straight answer — no pressure.',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $faq, $cta]);
+        return $this->join([$hero, $ctaBold, $faq, $cta]);
     }
 
     /**
@@ -360,15 +396,25 @@ final class BlockPageComposer
             mapAvailable: $mapAvailable,
         );
 
+        // cta1 (PUSHY) up top; cta2 (SOFT) — the existing "don't see your town?" close — at the bottom.
+        $ctaBold = $this->sections->cta(
+            heading: 'We’re probably near you',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
         $cta = $this->sections->cta(
             heading: 'Don’t see your town?',
             body: 'Give us a call — if you’re nearby, chances are we cover you.',
-            actionText: 'Contact us',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $areas, $cta]);
+        return $this->join([$hero, $ctaBold, $areas, $cta]);
     }
 
     /**
@@ -433,15 +479,25 @@ final class BlockPageComposer
         // The lead form is a preview-only placeholder for now (delivery undecided) — omitted on publish.
         $form = $this->sections->contactForm($preview);
 
-        $cta = $this->sections->cta(
+        // cta1 (PUSHY) up top; cta2 (SOFT) closes the page.
+        $ctaBold = $this->sections->cta(
             heading: 'Ready to get started?',
-            body: 'Tell us what you need and we’ll get right back to you.',
-            actionText: 'Request service',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
+        $cta = $this->sections->cta(
+            heading: 'Prefer to just ask?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
+            actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $details, $form, $cta]);
+        return $this->join([$hero, $ctaBold, $details, $form, $cta]);
     }
 
     /** @param list<string> $blocks */

@@ -117,7 +117,7 @@ it('composes the full 9-section Home from real §1 data — credibility, differe
     );
 
     expect($markup)
-        ->toContain('NJ Master Plumber')                                        // credibility strip
+        ->toContain('NJ Master Plumber')                                        // substantiated credential (merged trust band)
         ->toContain('Preventive-first')                                         // why choose us
         ->toContain('Getting started is simple')                                // how it works (always)
         ->toContain('Caught a collapsing line before it flooded the basement.') // testimonial
@@ -311,7 +311,8 @@ it('preview builds ALL recommended sections with labeled placeholders; publish o
         ->toContain('In their words')                                   // Testimonials shown
         ->toContain('Areas we serve')                                   // Service Areas shown
         ->toContain('activates when you add reviews')                   // names what fills Testimonials
-        ->toContain('activates when you add licenses, certifications, or ratings') // Credibility
+        ->toContain('appears when you add certifications')              // the single merged credentials band
+        ->not->toContain('lp-credibility')                             // NO separate credibility strip on Home anymore
         ->toContain('add your service areas to activate this section')  // Service Areas
         ->toContain('Getting started is simple');                       // always-on section still there
 
@@ -382,6 +383,39 @@ it('omits the guarantee band + certifications row when none are captured (degrad
     $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
 
     expect($markup)->not->toContain('lp-guarantee')->not->toContain('lp-certs');
+});
+
+it('Home shows ONE trust band — captured certs + substantiated proof credentials, merged and deduped (no duplicate section)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    // Narrative certification AND a substantiated proof with the SAME label (entered in both places).
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'certifications' => [['label' => 'NJ Master Plumber', 'number' => '#1234']],
+    ]);
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::License,
+        'payload' => ['label' => 'NJ Master Plumber'], 'is_substantiated' => true, // duplicate of the cert above
+    ]);
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::Cert,
+        'payload' => ['label' => 'EPA Certified'], 'is_substantiated' => true,      // proof-only credential
+    ]);
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    // Isolate the credentials band (between its section marker and the next section) to prove the dedup
+    // there, independent of the hero trust-stat row (which separately surfaces substantiated labels).
+    $band = (string) strstr($markup, 'lp-certs', false);
+    $band = substr($band, 0, (int) strpos($band, 'lp-services') ?: strlen($band));
+
+    expect($markup)
+        ->toContain('lp-certs')                                        // the single credentials band
+        ->not->toContain('lp-credibility')                            // NO separate credibility strip
+        ->toContain('#1234')                                          // the captured cert (with its number)
+        ->toContain('EPA Certified');                                 // the proof-only credential, folded in
+    // the duplicate "NJ Master Plumber" (in BOTH the cert and the proof) renders exactly once in the band
+    expect(substr_count($band, 'NJ Master Plumber'))->toBe(1);
 });
 
 it('preview shows the guarantee + certifications as labeled placeholders; publish omits them', function () {
@@ -466,6 +500,29 @@ it('the service_area_map is null for a tenant with no coverage (map self-prunes,
         ->and($blob['post_content'])->not->toContain('lp-areas-map');
 });
 
+it('every marketing page has TWO CTAs — a pushy one (cta1) and a softer one (cta2)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
+
+    foreach ([blockHomePage($site), blockAboutPage($site), blockFaqPage($site, [['question' => 'Q', 'answer' => 'A']]), blockAreasPage($site), blockContactPage($site)] as $page) {
+        $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
+
+        expect($markup)
+            ->toContain('lp-cta--bold')       // cta1 — the pushy accent band, blatantly asking for the business
+            ->toContain('Get a free quote')   // its pushy ask
+            ->toContain('Get in touch')       // cta2 — the softer, info-seeking ask
+            ->toContain('has-accent-background-color'); // the bold band renders on the accent colour
+    }
+});
+
+it('legal pages get NO sales CTA (a utility page is not a conversion surface)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
+    $page = blockLegalPage($site, StandardPageType::Privacy);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->not->toContain('lp-cta');
+});
+
 it('the meta-blob carries post_content for Home', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
     $home = blockHomePage($site);
@@ -532,7 +589,8 @@ it('composes the Why Choose Us page from real §1 data — differentiators spine
         ->toContain('lp-guarantee')->toContain('Forever Pump Warranty') // guarantee band, verbatim
         ->toContain('lp-certs')->toContain('NJ Master Plumber')->toContain('#1234') // certs, verbatim
         ->toContain('They caught a collapsing line before it flooded us.')          // substantiated client voice
-        ->toContain('Ready to get started?')                           // closing CTA
+        ->toContain('Ready to get it fixed?')                          // the pushy CTA (cta1)
+        ->toContain('Have a question first?')                          // the softer CTA (cta2)
         // this page argues WHY, not WHAT — no services grid / how-it-works / areas
         ->not->toContain('Getting started is simple')
         ->not->toContain('Areas we serve');
@@ -553,9 +611,9 @@ it('Why Choose Us: preview builds every section with labeled placeholders; publi
         ->not->toContain('lp-why')          // no differentiators → the spine section omits on publish
         ->not->toContain('lp-guarantee')
         ->not->toContain('lp-certs')
-        // ...but the hero + CTA always render, so a bare page still ships something honest
+        // ...but the hero + CTAs always render, so a bare page still ships something honest
         ->toContain('Preventive-first plumbing that saves you money.')
-        ->toContain('Ready to get started?');
+        ->toContain('Ready to get it fixed?');
 });
 
 it('returns null for a standard page whose composer has not shipped (Gallery falls back to existing render)', function () {
@@ -672,9 +730,9 @@ it('About: preview builds every section with labeled placeholders; publish data-
     expect($publish)
         ->not->toContain('lp-story')->not->toContain('lp-statement')
         ->not->toContain('lp-values')->not->toContain('lp-team')
-        // ...hero + CTA always render, so a bare About still ships something honest
+        // ...hero + CTAs always render, so a bare About still ships something honest
         ->toContain('Family-run plumbing, three generations deep.')
-        ->toContain('Let’s work together');
+        ->toContain('Have a question first?');
 });
 
 it('the meta-blob carries post_content for the About page (end-to-end publish path)', function () {

@@ -623,6 +623,13 @@
     text-underline-offset: 3px;
 }
 
+/* cta1 — the PUSHY variant: a solid brand-accent band. Overrides the section-rhythm primary gradient
+   (.lp-cta above) with higher specificity so the pushy ask visibly stands apart from the softer,
+   primary-band close (cta2). */
+.lp-cta.lp-cta--bold {
+    background: var(--wp--preset--color--accent, #1d6fd6);
+}
+
 /* ------------------------------------------------------------------ *
  * Credibility strip — centered row of substantiated badges.
  * ------------------------------------------------------------------ */

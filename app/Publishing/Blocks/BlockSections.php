@@ -108,29 +108,44 @@ final class BlockSections
     }
 
     /**
-     * The closing CTA: a primary-background rounded group with a heading, a line, an emergency-only
-     * "call now" link, and the primary action button.
+     * A CTA band — a heading, a line, an emergency-only "call now" link, and the action button. Each
+     * marketing page uses TWO at different points: a PUSHY one ($bold: true — an accent band that
+     * blatantly asks for the business) higher up, and a SOFTER one (the default primary band, info-
+     * seeking language) as the closing section. $bold swaps the band to the brand accent + a distinct
+     * button so the pushy ask stands out from the gentle close.
      */
-    public function cta(string $heading, string $body, string $actionText, string $actionUrl, PageContext $ctx): string
+    public function cta(string $heading, string $body, string $actionText, string $actionUrl, PageContext $ctx, bool $bold = false): string
     {
+        $onAccent = $bold; // bold band = accent background, so text/links flip to the on-accent colour
+        $textColor = $onAccent ? 'on-accent' : 'base';
+
         $children = [
-            $this->b->heading(2, $heading, ['textColor' => 'base']),
-            $this->b->paragraph($body, ['textColor' => 'base']),
+            $this->b->heading(2, $heading, ['textColor' => $textColor]),
+            $this->b->paragraph($body, ['textColor' => $textColor]),
         ];
 
         if ($ctx->emergency && $ctx->hasPhone()) {
             // Emergency call-now uses the dedicated after-hours line when set, else the main number.
             $children[] = $this->b->paragraph(
                 'Or call now: <a href="'.$this->attr($ctx->emergencyCallTel()).'">'.$this->text($ctx->emergencyCallDisplay()).'</a>',
-                ['textColor' => 'base', 'className' => 'lp-callnow'],
+                ['textColor' => $textColor, 'className' => 'lp-callnow'],
             );
         }
 
+        // On the accent (bold) band the accent-filled button would vanish — use a base/contrast button instead.
+        $buttonAttrs = $bold
+            ? ['backgroundColor' => 'base', 'textColor' => 'contrast']
+            : ['backgroundColor' => 'accent', 'textColor' => 'on-accent'];
         $children[] = $this->b->buttons([
-            ['text' => $actionText, 'url' => $actionUrl !== '' ? $actionUrl : '#contact', 'attrs' => ['backgroundColor' => 'accent', 'textColor' => 'on-accent']],
+            ['text' => $actionText, 'url' => $actionUrl !== '' ? $actionUrl : '#contact', 'attrs' => $buttonAttrs],
         ]);
 
-        return $this->b->group($children, ['backgroundColor' => 'primary', 'textColor' => 'base', 'align' => 'full', 'className' => 'lp-cta']);
+        return $this->b->group($children, [
+            'backgroundColor' => $bold ? 'accent' : 'primary',
+            'textColor' => $textColor,
+            'align' => 'full',
+            'className' => $bold ? 'lp-cta lp-cta--bold' : 'lp-cta',
+        ]);
     }
 
     /**
