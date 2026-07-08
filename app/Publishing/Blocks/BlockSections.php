@@ -305,12 +305,13 @@ final class BlockSections
 
     /**
      * Service Areas: a 50/50 block — the interactive map on one side, the MAJOR CITIES from each served
-     * county on the other — with the county list beneath, pipe-separated, mirroring the block's width.
-     * The map geometry rides the meta-blob's `service_area_map` (drawn by the theme); the grouped city
-     * text + county line are the real, crawlable content (SEO / a11y / no-JS). Data-gated: hidden with no
-     * coverage (a labeled example stands in for preview). Geo lives only here + on location pages.
+     * county on the other. The county names live in the grouped subheads (so they carry the SEO), so
+     * there's no separate county line. The map geometry rides the meta-blob's `service_area_map` (drawn
+     * by the theme); the grouped city text is the real, crawlable content (SEO / a11y / no-JS). Data-
+     * gated: hidden with no coverage (a labeled example stands in for preview). Geo lives only here +
+     * on location pages.
      *
-     * @param  list<string>  $counties  named counties served (the pipe-separated line beneath)
+     * @param  list<string>  $counties  named counties served (gates the section; the names show as the group subheads)
      * @param  list<array{county: string, cities: list<array{label: string, url: string}>}>  $byCounty  major cities grouped by county, largest-first; a non-empty url is a REAL town page
      */
     public function serviceAreas(string $eyebrow, string $heading, array $counties, array $byCounty, bool $preview = false, bool $mapAvailable = false): string
@@ -341,21 +342,14 @@ final class BlockSections
         $withMap = $mapAvailable && ! $placeholder;
 
         if ($withMap && $cities !== '') {
-            // 50/50: the map beside the cities.
+            // 50/50: the map beside the cities. The grouped cities carry the county names (SEO), so no
+            // separate county line is needed beneath.
             $children[] = $this->b->columns([
                 $this->b->column([$this->areaMapMount()]),
                 $this->b->column([$cities]),
             ], ['className' => 'lp-areas-split']);
         } elseif ($cities !== '') {
             $children[] = $cities;
-        }
-
-        // The county list beneath — pipe-separated, mirroring the block width above.
-        if ($counties !== []) {
-            $children[] = $this->b->paragraph(
-                implode(' | ', array_map(fn (string $c): string => $this->text($c), $counties)),
-                ['className' => 'lp-areas-counties'],
-            );
         }
 
         $classes = $this->sectionClass('lp-areas', $placeholder).($withMap ? ' lp-areas--map' : '');

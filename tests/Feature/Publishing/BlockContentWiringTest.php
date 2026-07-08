@@ -127,7 +127,7 @@ it('composes the full 9-section Home from real §1 data — credibility, differe
         ->toContain('Jersey City');                                             // major city grouped under it
 });
 
-it('groups the major cities under each county, largest-first, with the pipe-separated county line', function () {
+it('groups the major cities under each county, largest-first, county names in the subheads', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
     Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34013', '34017']]);
 
@@ -154,10 +154,11 @@ it('groups the major cities under each county, largest-first, with the pipe-sepa
 
     expect($markup)
         ->toContain('Areas we serve')
-        ->toContain('Essex County | Hudson County') // pipe-separated county line
-        ->not->toContain('Ocean County')            // an unselected in-state county is excluded
-        ->toContain('Jersey City')                  // Hudson's town, grouped
-        ->toContain('href="https://sewergurus.com/newark"'); // real town-page link
+        ->toContain('Essex County')->toContain('Hudson County') // county names as group subheads
+        ->not->toContain('Essex County | Hudson County')        // no separate pipe county line
+        ->not->toContain('Ocean County')                        // an unselected in-state county is excluded
+        ->toContain('Jersey City')                              // Hudson's town, grouped
+        ->toContain('href="https://sewergurus.com/newark"');    // real town-page link
 
     // Within Essex: largest-first (major → medium → small).
     expect(mb_strpos($markup, 'Newark'))->toBeLessThan(mb_strpos($markup, 'Bloomfield'));
@@ -377,19 +378,19 @@ it('the areas section leads with the map mount + keeps the text fallback when ge
 
     $home = blockHomePage($site);
 
-    // Map available → the 50/50 mount + the grouped cities + the pipe county line all render.
+    // Map available → the 50/50 mount + the grouped cities (county names in subheads) render.
     $withMap = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], mapAvailable: true);
     expect($withMap)
-        ->toContain('class="lp-areas-map"')             // the Leaflet mount point
-        ->toContain('lp-areas--map')                    // section modifier
-        ->toContain('lp-areas-split')                   // the 50/50 columns
-        ->toContain('Essex County | Hudson County')     // pipe-separated county line
-        ->toContain('Newark');                          // major city grouped under Essex
+        ->toContain('class="lp-areas-map"')  // the Leaflet mount point
+        ->toContain('lp-areas--map')         // section modifier
+        ->toContain('lp-areas-split')        // the 50/50 columns
+        ->toContain('Essex County')          // county name as a group subhead
+        ->toContain('Newark');               // major city grouped under Essex
 
-    // No map → no mount; the grouped cities + pipe county line still render (crawlable).
+    // No map → no mount; the grouped cities still render (crawlable).
     $noMap = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
     expect($noMap)->not->toContain('lp-areas-map')
-        ->toContain('Essex County | Hudson County')
+        ->toContain('Essex County')
         ->toContain('Newark');
 });
 
