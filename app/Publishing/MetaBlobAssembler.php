@@ -149,6 +149,13 @@ class MetaBlobAssembler
             || $content->standard_type === StandardPageType::AreasWeServe;
         $areaMap = $wantsAreaMap ? $this->serviceAreaMap->for((string) $content->site_id) : null;
 
+        // The Gutenberg block body (non-null once a page type's block composer has shipped). When it's
+        // present the page is pure blocks — so it carries NO Elementor body at all: the plugin renders
+        // post_content and ignores elementor_data, and skipping the NativeComposer pass keeps a block
+        // page free of any Elementor payload. Service / location / hub pages (still Elementor-rendered)
+        // have no block body yet, so they keep their native Elementor tree.
+        $postContent = $this->blockContent->compose($content, $slots, $images, $preview, $areaMap !== null);
+
         return [
             'content_id' => $content->id,
             'kind' => $content->kind->value,
@@ -170,14 +177,13 @@ class MetaBlobAssembler
             'images' => $images,
             'featured_image' => $this->ogImageUrl($content, $images),
             'seo' => $this->seo($content, $images),
-            // Tier-1 native body: the page renders as native, editable Elementor
-            // widgets baked from the SAME resolved slots. Pages only; posts ([] →
-            // plugin no-op) keep the single-post template render.
-            'elementor_data' => $this->nativeBody($content, $slots, $images, $source),
-            // Gutenberg pivot: core-block markup for the WP post_content. Non-null only for page
-            // types whose block pattern has shipped (home first); the Layer-5 plugin prefers this
-            // over elementor_data when present. Composed from the SAME resolved slots + images.
-            'post_content' => $this->blockContent->compose($content, $slots, $images, $preview, $areaMap !== null),
+            // Tier-1 native Elementor body — ONLY for pages with no block body (service / location /
+            // hub, not yet migrated). A block page emits [] here: it is pure Gutenberg, so it carries no
+            // Elementor payload and the redundant NativeComposer pass is skipped. Posts are [] too.
+            'elementor_data' => $postContent !== null ? [] : $this->nativeBody($content, $slots, $images, $source),
+            // Gutenberg pivot: core-block markup for the WP post_content. Non-null once a page type's
+            // block composer has shipped; the Layer-5 plugin prefers this over elementor_data.
+            'post_content' => $postContent,
             // Service-area map geometry for the theme's Leaflet init (home only; null = no map). The
             // block markup carries only the mount container + text fallback; the geometry travels here.
             'service_area_map' => $areaMap,

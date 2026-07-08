@@ -476,6 +476,17 @@ it('the meta-blob carries post_content for Home', function () {
         ->and($blob['post_content'])->toContain('Stop sewer problems');
 });
 
+it('a block page carries NO Elementor body — it is pure Gutenberg (elementor_data is empty)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+
+    $blob = app(MetaBlobAssembler::class)->assemble($home->fresh(), collect());
+
+    // post_content present → the NativeComposer Elementor pass is skipped entirely.
+    expect($blob['post_content'])->not->toBeNull()
+        ->and($blob['elementor_data'])->toBe([]);
+});
+
 // A Why Choose Us page: page_type Utility, standard_type why_choose_us, hero drafted into slots.
 function blockWhyChooseUsPage(Site $site): Content
 {
