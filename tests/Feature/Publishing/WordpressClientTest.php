@@ -200,6 +200,18 @@ test('forceDeletePost treats an already-gone post (404) as success', function ()
     expect(wpClient()->forceDeletePost('posts', 99))->toBeTrue();
 });
 
+test('forceDeletePost surfaces WHY on a real failure — HTTP status + WordPress reason, not a bare false', function () {
+    // A capability failure (the connection user cannot delete the post) — the common cause of a
+    // take-down that "did not confirm". Force-delete must carry the reason so it is actionable.
+    Http::fake(['*/wp-json/wp/v2/pages/42*' => Http::response(
+        ['code' => 'rest_cannot_delete', 'message' => 'Sorry, you are not allowed to delete this post.'],
+        403,
+    )]);
+
+    expect(fn () => wpClient()->forceDeletePost('pages', 42))
+        ->toThrow(WordpressException::class, 'HTTP 403 — Sorry, you are not allowed to delete this post.');
+});
+
 test('activateStyle posts the variation to /style', function () {
     Http::fake([
         '*/wp-json/launchpad/v1/style' => Http::response(['updated' => true, 'variation' => 'bold'], 200),

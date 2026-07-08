@@ -186,6 +186,11 @@ class WordpressClient
      *
      * @param  'pages'|'posts'  $type
      * @return bool true if the post was deleted or already absent (404)
+     *
+     * @throws WordpressException on a real failure (auth, capability, a blocked DELETE method) — carrying
+     *                            the HTTP status + WordPress's own reason so the operator sees WHY, not a
+     *                            bare "did not confirm". Callers that batch deletes (reset / site-delete)
+     *                            catch this per page; the single-page take-down surfaces the message.
      */
     public function forceDeletePost(string $type, int $id): bool
     {
@@ -193,8 +198,17 @@ class WordpressClient
 
         $response = $this->request()->delete($url);
 
-        // Already gone is success for cleanup purposes; anything else is a real failure.
-        return $response->successful() || $response->status() === 404;
+        // Already gone is success for cleanup purposes.
+        if ($response->successful() || $response->status() === 404) {
+            return true;
+        }
+
+        // A real failure — surface WHY (status + WordPress's reason): 401 (app password / stripped
+        // Authorization header), 403 (the connection user can't delete this post), 405 (a security
+        // plugin or host WAF blocking the REST DELETE method), etc.
+        throw new WordpressException(
+            "WordPress delete of {$type} {$id} returned HTTP ".$response->status().$this->errorDetail($response)
+        );
     }
 
     /**
