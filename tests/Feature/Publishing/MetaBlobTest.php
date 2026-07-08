@@ -78,12 +78,12 @@ test('the blob carries the operator-mapped template id for the page kit (null wh
     expect(app(MetaBlobAssembler::class)->assemble($content, $outcome->jobs)['template_id'])->toBe(77);
 });
 
-test('a service page renders off the wireframe LIBRARY AND retains slot_payload for schema (send-half)', function () {
+test('a service page ships block post_content AND retains slot_payload for schema (send-half)', function () {
     PublishHarness::fakeAdapters();
     $site = PublishHarness::site();
     $content = PublishHarness::approvedPage($site); // page_type = service
 
-    // Add a faq so we can prove the FAQPage schema SOURCE survives the native swap.
+    // Add a faq so we can prove the FAQPage schema SOURCE survives alongside the block body.
     $content->slot_payload = array_merge($content->slot_payload, [
         'faq' => [['question' => 'How long does it take?', 'answer' => 'Same <strong>day</strong>.']],
     ]);
@@ -92,32 +92,19 @@ test('a service page renders off the wireframe LIBRARY AND retains slot_payload 
     $outcome = app(RenderCoordinator::class)->render($content);
     $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), $outcome->jobs);
 
-    // Service body comes from the library (wf-block-*), NOT the legacy lp-zone composer.
-    expect($payload['elementor_data'])->toBeArray()->not->toBeEmpty();
-    $topClasses = array_map(fn ($b) => (string) ($b['settings']['_css_classes'] ?? ''), $payload['elementor_data']);
-    expect(collect($topClasses)->contains(fn ($c) => str_contains($c, 'wf-block-hero')))->toBeTrue()
-        ->and(collect($topClasses)->contains(fn ($c) => str_contains($c, 'wf-block-faq')))->toBeTrue()
-        ->and(collect($topClasses)->every(fn ($c) => ! str_contains($c, 'lp-zone')))->toBeTrue();
+    // Service pages are now pure Gutenberg blocks (migrated off the Elementor library): the body is
+    // core-block post_content and elementor_data is empty — neither the wf-block-* library tree nor the
+    // legacy lp-zone composer.
+    expect($payload['elementor_data'])->toBe([])
+        ->and($payload['post_content'])->toBeString()
+        ->toContain('lp-features')          // block section markup
+        ->not->toContain('wf-block-')
+        ->not->toContain('lp-zone');
 
-    // FAQ → nested-accordion baked from the slot (found anywhere in the tree).
-    $findAccordion = function (array $els) use (&$findAccordion) {
-        foreach ($els as $el) {
-            if (($el['widgetType'] ?? null) === 'nested-accordion') {
-                return $el;
-            }
-            if (! empty($el['elements'])) {
-                $hit = $findAccordion($el['elements']);
-                if ($hit !== null) {
-                    return $hit;
-                }
-            }
-        }
-
-        return null;
-    };
-    $accordion = $findAccordion($payload['elementor_data']);
-    expect($accordion)->not->toBeNull()
-        ->and($accordion['settings']['items'][0]['item_title'])->toBe('How long does it take?');
+    // FAQ → the native <details> accordion baked from the slot (kses-safe, no JS), with the question verbatim.
+    expect($payload['post_content'])
+        ->toContain('lp-faq-list')
+        ->toContain('How long does it take?');
 
     // ...AND the faq slot is RETAINED in slot_payload — the FAQPage JSON-LD source the
     // plugin reads (schema survival, verified not assumed), with SEO still travelling.

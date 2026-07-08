@@ -269,12 +269,17 @@ final class BlockSections
     }
 
     /**
-     * Why Choose Us: a dark band of differentiators (icon + title + line). Data-gated on real
+     * Why Choose Us: a band of differentiators (icon + title + line). Data-gated on real
      * differentiators (from the site narrative) — falls back to nothing when none are captured.
+     *
+     * Two skins for background-rhythm balance: the default DARK band is the mid-page punch on pages
+     * that surround it with light sections (Home). The LIGHT variant ($dark = false) is for pages where
+     * the differentiators are the SPINE and the band would otherwise stack against another colored
+     * section (the dedicated Why-Choose-Us page) — same layout, dark text on a light background.
      *
      * @param  list<array{title?: string, description?: string}>  $items
      */
-    public function whyChooseUs(string $eyebrow, string $heading, array $items, bool $preview = false): string
+    public function whyChooseUs(string $eyebrow, string $heading, array $items, bool $preview = false, bool $dark = true): string
     {
         $items = array_values(array_filter($items, fn (array $i): bool => trim((string) ($i['title'] ?? '')) !== ''));
         $placeholder = false;
@@ -291,22 +296,31 @@ final class BlockSections
             $placeholder = true;
         }
 
-        $cols = array_map(function (array $i): string {
-            $children = [$this->icon('spark'), $this->b->heading(4, (string) $i['title'], ['textColor' => 'base'])];
+        // On the dark skin, headings/lines flip to the base (light) colour; the light skin keeps the
+        // default dark text so the same markup reads on either background.
+        $textAttr = $dark ? ['textColor' => 'base'] : [];
+        $cols = array_map(function (array $i) use ($textAttr): string {
+            $children = [$this->icon('spark'), $this->b->heading(4, (string) $i['title'], $textAttr)];
             if (trim((string) ($i['description'] ?? '')) !== '') {
-                $children[] = $this->b->paragraph((string) $i['description'], ['textColor' => 'base']);
+                $children[] = $this->b->paragraph((string) $i['description'], $textAttr);
             }
 
             return $this->b->column([$this->b->group($children, ['className' => 'lp-why-item'])]);
         }, $items);
 
-        $children = [$this->sectionHead($eyebrow, $heading, onDark: true)];
+        $children = [$this->sectionHead($eyebrow, $heading, onDark: $dark)];
         if ($placeholder) {
-            $children[] = $this->placeholderNote('activates when you add what sets you apart', onDark: true);
+            $children[] = $this->placeholderNote('activates when you add what sets you apart', onDark: $dark);
         }
         $children[] = $this->b->columns($cols, ['className' => 'lp-why-grid']);
 
-        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'primary', 'textColor' => 'base', 'className' => $this->sectionClass('lp-why', $placeholder)]);
+        $attrs = ['align' => 'full', 'className' => $this->sectionClass($dark ? 'lp-why' : 'lp-why lp-why--light', $placeholder)];
+        if ($dark) {
+            $attrs['backgroundColor'] = 'primary';
+            $attrs['textColor'] = 'base';
+        }
+
+        return $this->b->group($children, $attrs);
     }
 
     /**
@@ -345,6 +359,83 @@ final class BlockSections
             $this->sectionHead($eyebrow, $heading, center: true),
             $this->b->columns($cols, ['className' => 'lp-steps']),
         ], ['align' => 'full', 'backgroundColor' => 'surface', 'className' => 'lp-process']);
+    }
+
+    /**
+     * A prose section: a section head + readable body paragraphs. The generic body-copy block (the
+     * service page's problem/solution overview + its grounded "why us"), styled like About's story but
+     * reusable across page types. The caller passes already-cleaned plain-text paragraphs (drafter HTML
+     * stripped upstream). Data-gated: hidden without copy (preview → a labeled example paragraph). The
+     * $surface flag drops it onto the surface band so the page keeps its light/white alternation.
+     *
+     * @param  list<string>  $paragraphs
+     */
+    public function prose(string $eyebrow, string $heading, array $paragraphs, bool $surface = false, bool $preview = false, string $activates = 'appears when this copy is written'): string
+    {
+        $paragraphs = array_values(array_filter(array_map('trim', $paragraphs), fn (string $p): bool => $p !== ''));
+        $placeholder = false;
+        if ($paragraphs === []) {
+            if (! $preview) {
+                return '';
+            }
+            $paragraphs = ['This section reads here as body copy once the page is drafted — the explainer that carries the visitor from their problem to the outcome you deliver.'];
+            $placeholder = true;
+        }
+
+        $children = [$this->sectionHead($eyebrow, $heading)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote($activates);
+        }
+        foreach ($paragraphs as $p) {
+            $children[] = $this->b->paragraph($this->text($p), ['className' => 'lp-prose-p']);
+        }
+
+        $attrs = ['align' => 'full', 'className' => $this->sectionClass('lp-prose', $placeholder)];
+        if ($surface) {
+            $attrs['backgroundColor'] = 'surface';
+        }
+
+        return $this->b->group($children, $attrs);
+    }
+
+    /**
+     * Service features: the drafted "what's included" lines as a check-marked grid. Each feature is a
+     * plain string (the SlotShaper flattens the list slot), prefixed with the shared .lp-check mark and
+     * laid out in the .lp-features-grid (columns via CSS). Built as a wp:html list so the check spans +
+     * grid survive kses. Data-gated on real features (preview → a labeled example set).
+     *
+     * @param  list<string>  $features
+     */
+    public function featuresList(string $eyebrow, string $heading, array $features, bool $preview = false): string
+    {
+        $features = array_values(array_filter(array_map('trim', $features), fn (string $f): bool => $f !== ''));
+        $placeholder = false;
+        if ($features === []) {
+            if (! $preview) {
+                return '';
+            }
+            $features = [
+                'Every service you offer, listed as a clear benefit',
+                'Written from what the customer gets, not jargon',
+                'Drawn from your real scope of work',
+                'Replaces this example once the page is drafted',
+            ];
+            $placeholder = true;
+        }
+
+        $lis = '';
+        foreach ($features as $feature) {
+            $lis .= '<li class="lp-feature"><span class="lp-check" aria-hidden="true">✓</span> '.$this->text($feature).'</li>';
+        }
+        $list = "<!-- wp:html -->\n".'<ul class="lp-features-grid">'.$lis.'</ul>'."\n<!-- /wp:html -->";
+
+        $children = [$this->sectionHead($eyebrow, $heading, center: true)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when the service features are drafted');
+        }
+        $children[] = $list;
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-features', $placeholder)]);
     }
 
     /**

@@ -55,17 +55,21 @@ test('hero_variant=form swaps the standard hero for the media form hero', functi
     expect($call['settings']['editor'])->toContain('tel:+15551234567');
 });
 
-test('the default (cta) hero is untouched without a form config', function () {
+test('without a form config the service page migrates to blocks (no Elementor hero at all)', function () {
     PublishHarness::fakeAdapters();
     $site = PublishHarness::site();
     $content = PublishHarness::approvedPage($site);
 
-    $data = app(MetaBlobAssembler::class)->assemble(
+    $blob = app(MetaBlobAssembler::class)->assemble(
         $content->fresh(), app(RenderCoordinator::class)->render($content)->jobs,
-    )['elementor_data'];
+    );
 
-    expect(elByClass($data, 'wf-block-hero'))->not->toBeNull()
-        ->and(elByClass($data, 'wf-block-hero-form'))->toBeNull();
+    // No form-hero opt-in → the service page is pure blocks: a core-block hero, no Elementor tree, so
+    // neither the standard nor the form Elementor hero is present.
+    expect($blob['elementor_data'])->toBe([])
+        ->and($blob['post_content'])->toBeString()->toContain('lp-hero')
+        ->and(elByClass($blob['elementor_data'], 'wf-block-hero'))->toBeNull()
+        ->and(elByClass($blob['elementor_data'], 'wf-block-hero-form'))->toBeNull();
 });
 
 test('the form hero shows the placeholder box in placeholder mode (no embed needed)', function () {

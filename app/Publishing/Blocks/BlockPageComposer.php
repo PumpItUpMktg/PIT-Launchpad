@@ -125,8 +125,9 @@ final class BlockPageComposer
             mapAvailable: $serviceAreaMapAvailable,
         );
 
-        // cta1 (PUSHY) — a bold accent band that blatantly asks for the business, placed high (after the
-        // services) so it catches a visitor early.
+        // cta1 (PUSHY) — a bold accent band that blatantly asks for the business, placed MID-page (after
+        // the process, once the visitor has seen what we do and how) and buffered by light sections on
+        // both sides so no two colored bands ever sit adjacent.
         $ctaBold = $this->sections->cta(
             heading: 'Ready to get it fixed?',
             body: 'Get a fast, free, no-obligation quote today.',
@@ -145,8 +146,150 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // The credentials band sits LOW — a quiet trust reinforcement before the closing CTA.
-        return $this->join([$hero, $services, $ctaBold, $why, $guaranteeBand, $process, $proof, $reviews, $areas, $certs, $cta]);
+        // Ordered for background rhythm: the two dark/accent bands (why, the pushy CTA) are each held
+        // apart by a light section, and the risk-reversal cluster — guarantee (accent) then the
+        // credentials/licensing row — sits LOW, just before the soft closing CTA. No two colored bands
+        // are ever adjacent: D·L·D·L·C·L·L·L·C·L·D.
+        return $this->join([$hero, $services, $why, $process, $ctaBold, $proof, $reviews, $areas, $guaranteeBand, $certs, $cta]);
+    }
+
+    /**
+     * Composes a SERVICE page — the Elementor→blocks migration's first non-standard page type. The
+     * conversion arc: hero (the customer's problem as H1 → the outcome) → a pushy CTA → the
+     * problem/solution overview → the "what's included" feature checklist → the how-it-works process →
+     * the grounded "why us" → client voice → FAQ → the real contact details → a soft closing CTA. Every
+     * body section is drafter-generated or §1-resolved upstream; the same two-contexts rule applies
+     * (preview builds all sections with labeled placeholders; publish data-gates). Reuses the shared
+     * section builders so a service page is styled by the same theme.json variation as every other page.
+     *
+     * @param  array<string, mixed>  $slots  the page's resolved slot_payload (hero_problem/hero_solution/problem_explainer/solution_overview/service_features/why_us)
+     * @param  array<string, array<string, mixed>>  $images  image map keyed by slot (hero_image)
+     * @param  list<string>  $features  the drafted service-feature lines (SlotShaper-flattened)
+     * @param  list<string>  $overview  the problem→solution body paragraphs (drafter HTML cleaned upstream)
+     * @param  list<string>  $whyUs  the grounded "why us" paragraphs (from substantiated proof; data-gated)
+     * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero trust row
+     * @param  list<array{title: string, description: string}>  $processSteps  the tenant's captured process (else a safe default)
+     * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
+     * @param  list<array{question?: string, answer?: string}>  $faqs  the drafted question/answer pairs
+     * @param  string|null  $email  the business email (from §1), or null
+     * @param  string|null  $address  the business address (from §1), or null
+     * @param  list<array{label: string, value: string}>  $hours  per-day hours rows
+     * @param  bool  $preview  operator proof-view (all sections + placeholders) vs publish (data-gated)
+     */
+    public function composeService(
+        array $slots,
+        array $images,
+        PageContext $ctx,
+        array $features = [],
+        array $overview = [],
+        array $whyUs = [],
+        array $trustStats = [],
+        array $processSteps = [],
+        array $testimonials = [],
+        array $faqs = [],
+        ?string $email = null,
+        ?string $address = null,
+        array $hours = [],
+        bool $preview = false,
+    ): string {
+        $hero = $this->sections->hero(
+            eyebrow: $this->str($slots['service_area'] ?? '') ?: 'Our services',
+            // hero_problem is the H1 (the customer's problem in their words); hero_solution the subhead.
+            headline: $this->str($slots['hero_problem'] ?? $slots['hero_headline'] ?? ''),
+            subhead: $this->str($slots['hero_solution'] ?? $slots['hero_subhead'] ?? $slots['intro'] ?? ''),
+            imageUrl: $this->imageUrl('hero_image', $images),
+            imageAlt: $this->imageAlt('hero_image', $images),
+            assessmentText: 'Get a free quote',
+            assessmentUrl: '#contact',
+            trust: $this->heroTrust($ctx, $trustStats),
+            ctx: $ctx,
+        );
+
+        // cta1 (PUSHY) placed after the overview + features (once the visitor has seen the problem, the
+        // fix, and what's included) and buffered by light sections so it never sits against the hero.
+        $ctaBold = $this->sections->cta(
+            heading: 'Ready to get it fixed?',
+            body: 'Get a fast, free, no-obligation quote today.',
+            actionText: 'Get a free quote',
+            actionUrl: '#contact',
+            ctx: $ctx,
+            bold: true,
+        );
+
+        // The problem→solution explainer (both drafted body slots, cleaned to paragraphs upstream).
+        $overviewBlock = $this->sections->prose(
+            eyebrow: 'Overview',
+            heading: 'How we solve it',
+            paragraphs: $overview,
+            surface: false,
+            preview: $preview,
+            activates: 'appears when the page explainer is drafted',
+        );
+
+        // "What's included" — the drafted service features as a check-marked grid.
+        $featuresBlock = $this->sections->featuresList(
+            eyebrow: 'What we do',
+            heading: 'What’s included',
+            features: $features,
+            preview: $preview,
+        );
+
+        // How it works — the tenant's real process when captured, else a safe business-agnostic default.
+        $process = $this->sections->howItWorks(
+            eyebrow: 'How it works',
+            heading: 'Getting started is simple',
+            steps: $processSteps,
+        );
+
+        // Grounded "why us" — written only from the substantiated-claims set (data-gated on real proof).
+        $why = $this->sections->prose(
+            eyebrow: 'Why choose us',
+            heading: 'Why clients choose us',
+            paragraphs: $whyUs,
+            surface: true,
+            preview: $preview,
+            activates: 'appears when you add substantiated proof',
+        );
+
+        $reviews = $this->sections->testimonials(
+            eyebrow: 'What clients say',
+            heading: 'In their words',
+            quotes: $testimonials,
+            preview: $preview,
+        );
+
+        $faq = $this->sections->faqAccordion(
+            eyebrow: 'Answers',
+            heading: 'Common questions',
+            intro: '',
+            items: $faqs,
+            preview: $preview,
+        );
+
+        $details = $this->sections->contactDetails(
+            eyebrow: 'Reach us',
+            heading: 'Get in touch',
+            phoneDisplay: $ctx->phoneDisplay,
+            phoneTel: $ctx->phoneTel,
+            email: $email,
+            address: $address,
+            hours: $hours,
+            preview: $preview,
+        );
+
+        // cta2 (SOFT) — the gentle closing section.
+        $cta = $this->sections->cta(
+            heading: 'Have a question first?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
+            actionText: 'Get in touch',
+            actionUrl: '#contact',
+            ctx: $ctx,
+        );
+
+        // Ordered for background rhythm: the hero (dark) leads into the light explainer + features, the
+        // pushy CTA (accent) lands mid-page buffered by light sections, and the soft CTA (dark) closes.
+        // No two colored bands are ever adjacent: D·L·L·C·L·L·L·L·L·D.
+        return $this->join([$hero, $overviewBlock, $featuresBlock, $ctaBold, $process, $why, $reviews, $faq, $details, $cta]);
     }
 
     /**
@@ -188,12 +331,15 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // The page's spine: the real, captured differentiators (preview → labeled example band).
+        // The page's spine: the real, captured differentiators (preview → labeled example band). Rendered
+        // on the LIGHT skin here — as the page's main content it reads better light, and it keeps the
+        // rhythm balanced (the dark hero is followed by a light spine, not a second dark band).
         $why = $this->sections->whyChooseUs(
             eyebrow: 'What sets us apart',
             heading: 'Reasons clients choose us',
             items: $differentiators,
             preview: $preview,
+            dark: false,
         );
 
         $guaranteeBand = $this->sections->guaranteeBand(
@@ -229,8 +375,10 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // Credentials sit LOW here too — after the client voice, just before the closing CTA.
-        return $this->join([$hero, $why, $ctaBold, $guaranteeBand, $reviews, $certs, $cta]);
+        // Ordered for background rhythm — the pushy CTA and the guarantee (both accent) are each held
+        // apart by a light section, and the guarantee + credentials/licensing cluster sits LOW, just
+        // before the soft closing CTA: D·L·C·L·C·L·D. No two colored bands are ever adjacent.
+        return $this->join([$hero, $why, $ctaBold, $reviews, $guaranteeBand, $certs, $cta]);
     }
 
     /**
@@ -333,16 +481,9 @@ final class BlockPageComposer
             preview: $preview,
         );
 
-        // cta1 (PUSHY) up top; cta2 (SOFT) — the existing info-seeking close — at the bottom.
-        $ctaBold = $this->sections->cta(
-            heading: 'Ready to get it fixed?',
-            body: 'Get a fast, free, no-obligation quote today.',
-            actionText: 'Get a free quote',
-            actionUrl: '#contact',
-            ctx: $ctx,
-            bold: true,
-        );
-
+        // A thin utility page carries ONE band CTA (the soft, info-seeking close) — the dark hero already
+        // holds a CTA button, and a second colored band here would sit against the hero or the close with
+        // no light section to separate them. Rhythm: D·L·D.
         $cta = $this->sections->cta(
             heading: 'Still have a question?',
             body: 'Get in touch and we’ll get you a straight answer — no pressure.',
@@ -351,7 +492,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $ctaBold, $faq, $cta]);
+        return $this->join([$hero, $faq, $cta]);
     }
 
     /**
@@ -396,16 +537,9 @@ final class BlockPageComposer
             mapAvailable: $mapAvailable,
         );
 
-        // cta1 (PUSHY) up top; cta2 (SOFT) — the existing "don't see your town?" close — at the bottom.
-        $ctaBold = $this->sections->cta(
-            heading: 'We’re probably near you',
-            body: 'Get a fast, free, no-obligation quote today.',
-            actionText: 'Get a free quote',
-            actionUrl: '#contact',
-            ctx: $ctx,
-            bold: true,
-        );
-
+        // A thin utility page carries ONE band CTA (the soft "don't see your town?" close) — the dark
+        // hero already holds a CTA button, and a second colored band would leave no light section to
+        // separate the colored bands. Rhythm: D·L·D.
         $cta = $this->sections->cta(
             heading: 'Don’t see your town?',
             body: 'Give us a call — if you’re nearby, chances are we cover you.',
@@ -414,7 +548,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $ctaBold, $areas, $cta]);
+        return $this->join([$hero, $areas, $cta]);
     }
 
     /**
@@ -479,16 +613,9 @@ final class BlockPageComposer
         // The lead form is a preview-only placeholder for now (delivery undecided) — omitted on publish.
         $form = $this->sections->contactForm($preview);
 
-        // cta1 (PUSHY) up top; cta2 (SOFT) closes the page.
-        $ctaBold = $this->sections->cta(
-            heading: 'Ready to get started?',
-            body: 'Get a fast, free, no-obligation quote today.',
-            actionText: 'Get a free quote',
-            actionUrl: '#contact',
-            ctx: $ctx,
-            bold: true,
-        );
-
+        // A thin utility page carries ONE band CTA (the soft close) — the dark hero already holds a CTA
+        // button and the NAP block is itself a call to action, so a second colored band would only stack
+        // against the hero or the close. Rhythm: D·L·(L)·D.
         $cta = $this->sections->cta(
             heading: 'Prefer to just ask?',
             body: 'Tell us what you need and we’ll get right back to you — no pressure.',
@@ -497,7 +624,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $ctaBold, $details, $form, $cta]);
+        return $this->join([$hero, $details, $form, $cta]);
     }
 
     /** @param list<string> $blocks */

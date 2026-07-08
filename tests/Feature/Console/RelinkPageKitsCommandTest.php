@@ -69,11 +69,11 @@ it('never overwrites a page that already has a kit', function () {
 });
 
 it('leaves a page whose kit has no composer yet untouched', function () {
-    // Privacy has no shipped kit (StandardKit::resolve → null).
-    $page = kitlessPage($this->site->id, StandardPageType::Privacy, PageType::Utility, 'privacy');
+    // Gallery has no shipped kit (StandardKit::resolve → null).
+    $page = kitlessPage($this->site->id, StandardPageType::Gallery, PageType::Utility, 'gallery');
 
     $this->artisan('launchpad:relink-page-kits', ['site' => $this->site->id, '--apply' => true])
-        ->expectsOutputToContain('no resolvable kit yet')
+        ->expectsOutputToContain('composer hasn\'t shipped')
         ->assertSuccessful();
 
     expect($page->fresh()->wireframe_kit_id)->toBeNull();

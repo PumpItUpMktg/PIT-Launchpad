@@ -59,6 +59,10 @@ final class BlockContentAssembler
             return $this->composeHome($content, $slots, $images, $ctx, $preview, $mapAvailable);
         }
 
+        if ($content->page_type === PageType::Service) {
+            return $this->composeService($content, $slots, $images, $ctx, $preview);
+        }
+
         if ($content->standard_type === StandardPageType::WhyChooseUs) {
             return $this->composeWhyChooseUs($content, $slots, $images, $ctx, $preview);
         }
@@ -103,10 +107,7 @@ final class BlockContentAssembler
      */
     private function composeContact(Content $content, array $slots, PageContext $ctx, bool $preview): string
     {
-        $location = Location::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->orderBy('created_at')
-            ->first();
+        $location = $this->primaryLocation($content);
 
         return $this->composer->composeContact(
             slots: $slots,
@@ -177,10 +178,7 @@ final class BlockContentAssembler
     /** The tenant's primary contact email (the earliest Location's email), or null — never invented. */
     private function legalContactEmail(Content $content): ?string
     {
-        $email = Location::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->orderBy('created_at')
-            ->value('email');
+        $email = $this->primaryLocation($content)?->email;
 
         return is_string($email) && trim($email) !== '' ? trim($email) : null;
     }
@@ -240,6 +238,82 @@ final class BlockContentAssembler
             preview: $preview,
             serviceAreaMapAvailable: $mapAvailable,
         );
+    }
+
+    /**
+     * A SERVICE page — the Elementor→blocks migration's first non-standard page type. Resolves the
+     * drafted body slots (overview prose, feature lines, grounded "why us") + §1 proof (stats, process,
+     * reviews) + the real NAP, and hands them to {@see BlockPageComposer::composeService}. The features
+     * slot arrives SlotShaper-flattened to plain strings; the prose slots are cleaned to paragraphs the
+     * same way About's story is (drafter HTML stripped). Everything data-gates — nothing is fabricated.
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  array<string, array<string, mixed>>  $images
+     */
+    private function composeService(Content $content, array $slots, array $images, PageContext $ctx, bool $preview): string
+    {
+        $location = $this->primaryLocation($content);
+
+        // The problem→solution explainer: both drafted body slots, each cleaned to plain-text paragraphs
+        // (the drafter may emit HTML — solution_overview is rich_text), then concatenated in reading order.
+        $overview = array_merge(
+            $this->storyParagraphs($this->slotString($slots, 'problem_explainer')),
+            $this->storyParagraphs($this->slotString($slots, 'solution_overview')),
+        );
+
+        return $this->composer->composeService(
+            slots: $slots,
+            images: $images,
+            ctx: $ctx,
+            features: $this->stringList($slots, 'service_features'),
+            overview: $overview,
+            whyUs: $this->storyParagraphs($this->slotString($slots, 'why_us')),
+            trustStats: $this->trustStats($content),
+            processSteps: $this->processSteps($content),
+            testimonials: $this->testimonials($content),
+            faqs: $this->faqItems($slots),
+            email: is_string($location?->email) && trim($location->email) !== '' ? trim($location->email) : null,
+            address: is_string($location?->address) && trim($location->address) !== '' ? trim($location->address) : null,
+            hours: $this->businessHours($location),
+            preview: $preview,
+        );
+    }
+
+    /**
+     * A list slot's values as clean plain strings — the SlotShaper flattens a `list` slot to a plain
+     * array of strings, but read defensively (an item may still arrive as a {text/label} map). Trimmed,
+     * empties dropped, order preserved.
+     *
+     * @param  array<string, mixed>  $slots
+     * @return list<string>
+     */
+    private function stringList(array $slots, string $key): array
+    {
+        $raw = $slots[$key] ?? [];
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $item) {
+            $value = is_array($item)
+                ? trim((string) ($item['text'] ?? $item['label'] ?? $item['value'] ?? ''))
+                : trim((string) $item);
+            if ($value !== '') {
+                $out[] = $value;
+            }
+        }
+
+        return $out;
+    }
+
+    /** The tenant's primary (earliest) §1 Location, tenant-scoped, or null. */
+    private function primaryLocation(Content $content): ?Location
+    {
+        return Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->orderBy('created_at')
+            ->first();
     }
 
     /**
