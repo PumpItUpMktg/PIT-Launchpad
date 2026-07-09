@@ -218,3 +218,15 @@ it('renders the OPERATIONAL FACTS block into the page-draft prompt (or the make-
         ->toContain('offers_emergency_service')
         ->toContain('the ONLY operational claims you may make');
 });
+
+it('renders each slot\'s CHARACTER BUDGET into the prompt — the model writes within the cap, never blind', function () {
+    $page = pageWithIntake(); // the service kit: hero_problem 8..120, hero_solution 12..220
+
+    $grounding = app(PageGroundingAssembler::class)->assemble($page->fresh());
+    $prompt = app(PageDrafter::class)->preview($grounding)['prompt'];
+
+    expect($prompt)
+        ->toContain('8–120 chars — write to ~96')          // hero_problem's budget, with the write-to target
+        ->toContain('12–220 chars — write to ~176')        // hero_solution's
+        ->toContain('CHARACTER BUDGETS are hard limits');  // and the contract naming the rejection
+});

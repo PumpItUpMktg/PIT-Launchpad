@@ -189,6 +189,9 @@ class PageDrafter
 
         return 'KIT SLOTS — emit one block per slot, keyed by its EXACT slot key. Respect content_type, role '
             ."(problem→solution arc), and cardinality (repeat a slot's block once per item):\n".implode("\n", $lines)."\n\n"
+            .'CHARACTER BUDGETS are hard limits: a slot line\'s "N–M chars — write to ~T" means the '
+            .'validator REJECTS the whole draft if that slot exceeds M. Write to the ~T target; never run '
+            .'past M. '
             .'For image/gallery slots: do NOT render. Emit an image SPEC block instead (image.<slot>) and leave the slot out. '
             .'Entity-sourced slots (the platform fills them) you may omit. '
             .'Inside a body/rich-text slot, do NOT use an H1 or H2 heading — the page section already supplies its '
@@ -207,7 +210,30 @@ class PageDrafter
         $hint = $slot->generationHint !== null ? " — {$slot->generationHint}" : '';
         $fields = $this->fieldOrder($slot);
 
-        return "- {$slot->key} ({$slot->contentType->value}, role={$slot->role->value}, {$card}, {$req}){$grounded}{$fields}{$hint}";
+        return "- {$slot->key} ({$slot->contentType->value}, role={$slot->role->value}, {$card}, {$req}{$this->charBudget($slot)}){$grounded}{$fields}{$hint}";
+    }
+
+    /**
+     * The slot's character budget, rendered INTO the prompt so the model writes within it — the kit
+     * validator hard-rejects an over-budget draft (the whole page fails, not just the slot), so
+     * generating blind to the cap is a failure loop. Empty for unconstrained slots.
+     */
+    private function charBudget(SlotDefinition $slot): string
+    {
+        $min = $slot->constraints->minLength;
+        $max = $slot->constraints->maxLength;
+
+        if ($min === null && $max === null) {
+            return '';
+        }
+        if ($max === null) {
+            return ", min {$min} chars";
+        }
+
+        // An explicit write-to target ~80% of the cap leaves headroom for the model's tendency to run long.
+        $target = max((int) floor($max * 0.8), $min ?? 0);
+
+        return ', '.($min !== null ? "{$min}–{$max}" : "max {$max}")." chars — write to ~{$target}";
     }
 
     /**

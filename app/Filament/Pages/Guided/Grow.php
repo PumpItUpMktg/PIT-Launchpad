@@ -96,6 +96,17 @@ class Grow extends GuidedPage
     }
 
     /**
+     * Whether anything is IN MOTION (a queued draft writing, a publish pushing) — the view polls only
+     * while true, so a row's working state updates LIVE against the job's real status (the operator can
+     * look away and come back; the row tells the truth) without polling an idle workbench forever.
+     * tone=info is exactly the Writing/Publishing pair in the canonical vocabulary.
+     */
+    public function getPollingProperty(): bool
+    {
+        return collect($this->pages)->contains(fn (array $p): bool => ($p['tone'] ?? '') === 'info');
+    }
+
+    /**
      * The workbench grouped into Core / Service / Town lanes with per-section counts (the list the
      * view renders). The flat {@see getPagesProperty()} stays for the bulk-lane gate + counts.
      *
