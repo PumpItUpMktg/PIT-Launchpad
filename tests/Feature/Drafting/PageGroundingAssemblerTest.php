@@ -1,9 +1,12 @@
 <?php
 
+use App\ContentEngine\Drafting\PageDrafter;
 use App\ContentEngine\Drafting\PageGroundingAssembler;
 use App\Enums\PageType;
 use App\Enums\ProofType;
+use App\Enums\StandardPageType;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\Market;
 use App\Models\Offer;
 use App\Models\ProofItem;
@@ -154,4 +157,64 @@ it('surfaces a page without a wireframe kit as a failure (the guard wraps it)', 
 
     expect(fn () => app(PageGroundingAssembler::class)->assemble($page))
         ->toThrow(RuntimeException::class);
+});
+
+it('grounds the honest OPERATIONAL facts — emergency availability, real hours, contact channels', function () {
+    $site = Site::factory()->create(['offers_emergency' => true]);
+    Location::factory()->create([
+        'site_id' => $site->id,
+        'phone' => '(973) 555-0100',
+        'email' => 'help@example.com',
+        'hours' => ['mon' => ['open' => '08:00', 'close' => '17:00'], 'sun' => 'closed'],
+    ]);
+
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('name', 'faq-page')->firstOrFail();
+    $page = Content::factory()->page()->create([
+        'site_id' => $site->id,
+        'wireframe_kit_id' => $kit->id,
+        'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::Faq->value,
+        'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    $facts = app(PageGroundingAssembler::class)->assemble($page)->facts;
+
+    expect($facts['offers_emergency_service'])->toBeTrue()
+        ->and($facts['business_hours'])->toHaveKey('mon')         // real hours only — closed days drop
+        ->and($facts['business_hours'])->not->toHaveKey('sun')
+        ->and($facts['contact_channels'])->toContain('phone')->toContain('email');
+});
+
+it('omits absent operational facts entirely — the drafter has nothing to invent from', function () {
+    $site = Site::factory()->create(['offers_emergency' => false, 'phone' => null]); // no location at all
+
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('name', 'faq-page')->firstOrFail();
+    $page = Content::factory()->page()->create([
+        'site_id' => $site->id,
+        'wireframe_kit_id' => $kit->id,
+        'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::Faq->value,
+        'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    $facts = app(PageGroundingAssembler::class)->assemble($page)->facts;
+
+    expect($facts['offers_emergency_service'])->toBeFalse()       // the honest "no" IS a fact
+        ->and($facts)->not->toHaveKey('business_hours')           // absent → not present
+        ->and($facts)->not->toHaveKey('contact_channels');
+});
+
+it('renders the OPERATIONAL FACTS block into the page-draft prompt (or the make-no-claims guard)', function () {
+    $page = pageWithIntake();
+    Location::factory()->create(['site_id' => $page->site_id, 'phone' => '(973) 555-0100']);
+    $page->site->forceFill(['offers_emergency' => true])->save();
+
+    $grounding = app(PageGroundingAssembler::class)->assemble($page->fresh());
+    $prompt = app(PageDrafter::class)->preview($grounding)['prompt'];
+
+    expect($prompt)->toContain('OPERATIONAL FACTS')
+        ->toContain('offers_emergency_service')
+        ->toContain('the ONLY operational claims you may make');
 });

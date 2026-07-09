@@ -67,6 +67,7 @@ class PageDrafter
         $parts[] = $this->problemsBlock($grounding);
         $parts[] = $this->offersBlock($grounding);
         $parts[] = $this->marketsBlock($grounding);
+        $parts[] = $this->factsBlock($grounding);
         $parts[] = $this->proofBlock($grounding);
         $parts[] = $this->internalLinksBlock($grounding);
         $parts[] = $this->kitBlock($grounding);
@@ -134,6 +135,19 @@ class PageDrafter
         }
 
         return "MARKETS — the ONLY locality you may reference (honest coverage data):\n".$this->json($grounding->markets);
+    }
+
+    private function factsBlock(PageGrounding $grounding): string
+    {
+        if ($grounding->facts === []) {
+            return 'OPERATIONAL FACTS: none provided — make NO operational claims '
+                .'(no hours, no emergency availability, no response times).';
+        }
+
+        return 'OPERATIONAL FACTS — the ONLY operational claims you may make (hours, emergency '
+            .'availability, contact channels). An absent fact must not be mentioned; if '
+            .'offers_emergency_service is false, say so honestly when the question calls for it:'
+            ."\n".$this->json($grounding->facts);
     }
 
     private function proofBlock(PageGrounding $grounding): string

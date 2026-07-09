@@ -1240,3 +1240,57 @@ it('Service page: the blob ships block post_content and empties elementor_data',
     expect($blob['post_content'])->toBeString()->toContain('lp-features-grid')
         ->and($blob['elementor_data'])->toBe([]);                    // block body ships → elementor short-circuits
 });
+
+it('FAQ hero honesty: with no drafted Q&A the hero never promises answers to scroll to', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
+    $page = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::Faq->value, 'slug' => 'faq', 'title' => 'FAQ',
+        'slot_payload' => [
+            'hero_headline' => 'Plumbing questions, answered',
+            'intro' => 'Scroll through to find what you need.', // the drafted invitation
+            // no faq slot — the accordion data-gates out
+        ],
+    ]);
+
+    $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($publish)
+        ->not->toContain('lp-faq-list')                                       // no accordion...
+        ->not->toContain('Scroll through to find what you need.')             // ...so no scroll promise
+        ->toContain('Have a question? Get in touch and we’ll give you a straight answer.');
+
+    // With drafted Q&A the invitation is honest and renders as drafted.
+    $page->forceFill(['slot_payload' => array_merge($page->slot_payload, [
+        'faq' => [['question' => 'How fast can you come out?', 'answer' => 'Usually same day.']],
+    ])])->save();
+    $withFaqs = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($withFaqs)
+        ->toContain('lp-faq-list')
+        ->toContain('Scroll through to find what you need.');
+});
+
+it('every page ships its FINER identity in the blob — rich standard pages never share the utility bucket', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $mk = fn (StandardPageType $type, string $slug) => Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility,
+        'standard_type' => $type->value, 'slug' => $slug, 'title' => ucfirst($slug),
+    ]);
+
+    // The full standard-page map — each sends its OWN type, so lp-page-type-{type} can target it.
+    foreach ([
+        [StandardPageType::About, 'about'],
+        [StandardPageType::Faq, 'faq'],
+        [StandardPageType::Contact, 'contact'],
+        [StandardPageType::AreasWeServe, 'areas-we-serve'],
+        [StandardPageType::WhyChooseUs, 'why-choose-us'],
+        [StandardPageType::Privacy, 'privacy'],   // true boilerplate keeps its own fine type too
+        [StandardPageType::Terms, 'terms'],
+    ] as [$type, $slug]) {
+        $blob = app(MetaBlobAssembler::class)->assemble($mk($type, $slug)->fresh(), collect());
+        expect($blob['page_type'])->toBe($type->value);
+    }
+
+    // Non-standard pages are unchanged: their page_type IS the fine identity.
+    $service = blockServicePage($site, 'Drain Cleaning', 'drain-cleaning', 'x');
+    expect(app(MetaBlobAssembler::class)->assemble($service->fresh(), collect())['page_type'])->toBe('service');
+});

@@ -475,10 +475,17 @@ final class BlockPageComposer
      */
     public function composeFaq(array $slots, PageContext $ctx, array $faqs = [], bool $preview = false): string
     {
+        // HERO HONESTY: the drafted intro invites the reader to scroll the answers below — if the
+        // accordion data-gates out on publish (no drafted Q&A), that promise must not ship over an
+        // empty page. The subhead then swaps to an honest ask-us-directly line instead.
+        $subhead = $faqs === [] && ! $preview
+            ? 'Have a question? Get in touch and we’ll give you a straight answer.'
+            : $this->str($slots['intro'] ?? $slots['hero_subhead'] ?? '');
+
         $hero = $this->sections->hero(
             eyebrow: 'FAQ',
             headline: $this->str($slots['hero_headline'] ?? '') ?: 'Frequently asked questions',
-            subhead: $this->str($slots['intro'] ?? $slots['hero_subhead'] ?? ''),
+            subhead: $subhead,
             imageUrl: null,
             imageAlt: '',
             assessmentText: 'Get in touch',
