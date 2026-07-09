@@ -3,18 +3,21 @@
 namespace App\Filament\Pages\Guided;
 
 use App\Branding\LogoIntake;
+use App\Enums\ProofType;
 use App\Enums\SetupStep;
 use App\Guided\GuidedPage;
 use App\Guided\ServiceSuggester;
 use App\Guided\StepGate;
 use App\Interview\SiloSeed;
 use App\Models\Location;
+use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use Filament\Notifications\Notification;
+use Illuminate\Database\Eloquent\Collection;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
@@ -67,6 +70,31 @@ class Business extends GuidedPage
 
     public string $newCertNumber = '';
 
+    /** Business email — optional; stored on the primary Location; drives the Contact page email. */
+    public string $email = '';
+
+    /**
+     * Business hours — one row per day; optional. Stored on the primary Location in the canonical
+     * shape ({day: {open, close} | 'closed'}). The manual fallback until GBP import lands — a
+     * connected Google Business Profile will supply these.
+     *
+     * @var array<string, array{open: string, close: string, closed: bool}>
+     */
+    public array $hours = [];
+
+    /**
+     * Reviews the client pastes from their real review profiles — each {quote, author}. Optional;
+     * stored as client-origin testimonial proof (drives the "In their words" sections). The manual
+     * fallback until GBP import lands.
+     *
+     * @var list<array{quote: string, author: string}>
+     */
+    public array $testimonials = [];
+
+    public string $newTestimonialQuote = '';
+
+    public string $newTestimonialAuthor = '';
+
     /** The pending logo upload (optional). */
     public mixed $logo = null;
 
@@ -96,6 +124,7 @@ class Business extends GuidedPage
         $this->services = $this->stringList($seed['anchor_services'] ?? []);
         $this->logoInfo = $this->existingLogo($site);
         $this->loadTrustSignals($site);
+        $this->loadContactAndReviews($site);
 
         if ($this->trade !== '') {
             $this->suggest();
@@ -177,6 +206,135 @@ class Business extends GuidedPage
         $this->certifications = array_values($this->certifications);
     }
 
+    /** Add a pasted review (quote + optional author). Their real reviews, in their customers' words. */
+    public function addTestimonial(): void
+    {
+        $quote = trim($this->newTestimonialQuote);
+        if ($quote !== '') {
+            $this->testimonials[] = ['quote' => $quote, 'author' => trim($this->newTestimonialAuthor)];
+        }
+        $this->newTestimonialQuote = '';
+        $this->newTestimonialAuthor = '';
+    }
+
+    public function removeTestimonial(int $index): void
+    {
+        unset($this->testimonials[$index]);
+        $this->testimonials = array_values($this->testimonials);
+    }
+
+    private const DAYS = ['mon' => 'Mon', 'tue' => 'Tue', 'wed' => 'Wed', 'thu' => 'Thu', 'fri' => 'Fri', 'sat' => 'Sat', 'sun' => 'Sun'];
+
+    /** @return array<string, string> day key → display label, for the view's hours grid. */
+    public function dayLabels(): array
+    {
+        return self::DAYS;
+    }
+
+    /**
+     * Load email + hours from the primary Location and the client-pasted reviews from proof — the
+     * manual no-GBP fallback intake this step owns.
+     */
+    private function loadContactAndReviews(Site $site): void
+    {
+        $location = $this->primaryLocation($site);
+        $this->email = trim((string) ($location->email ?? ''));
+
+        $stored = is_array($location?->hours) ? $location->hours : [];
+        foreach (array_keys(self::DAYS) as $day) {
+            $row = $stored[$day] ?? null;
+            $this->hours[$day] = [
+                'open' => is_array($row) ? (string) ($row['open'] ?? '') : '',
+                'close' => is_array($row) ? (string) ($row['close'] ?? '') : '',
+                'closed' => $row === 'closed',
+            ];
+        }
+
+        $this->testimonials = [];
+        foreach ($this->clientTestimonials($site) as $item) {
+            $payload = is_array($item->payload) ? $item->payload : [];
+            $this->testimonials[] = [
+                'quote' => trim((string) ($payload['text'] ?? '')),
+                'author' => trim((string) ($payload['author'] ?? '')),
+            ];
+        }
+    }
+
+    /**
+     * Persist email + hours onto the primary Location (created when needed — name is the brand) and
+     * the pasted reviews as CLIENT-ORIGIN testimonial proof. Reviews are the client's own, pasted from
+     * their real profiles (client-attested — origin marks the provenance); GBP import replaces this
+     * manual path when it lands. Wholesale-replace on each save, so edits and removals stick.
+     */
+    private function saveContactAndReviews(Site $site): void
+    {
+        $email = trim($this->email);
+        $hours = $this->storedHours();
+
+        $location = $this->primaryLocation($site);
+        if ($location === null && ($email !== '' || $hours !== null)) {
+            $location = Location::withoutGlobalScope(SiteScope::class)->create([
+                'site_id' => $site->id,
+                'name' => trim($this->businessName) !== '' ? trim($this->businessName) : 'Main location',
+                'phone' => trim($this->phone) !== '' ? trim($this->phone) : null,
+            ]);
+        }
+        $location?->forceFill(['email' => $email !== '' ? $email : null, 'hours' => $hours])->save();
+
+        // Wholesale-replace the client-origin testimonials (operator/GBP-sourced proof is untouched).
+        foreach ($this->clientTestimonials($site) as $item) {
+            $item->forceDelete();
+        }
+        foreach ($this->testimonials as $t) {
+            $quote = trim($t['quote']);
+            if ($quote === '') {
+                continue;
+            }
+            ProofItem::withoutGlobalScope(SiteScope::class)->create([
+                'site_id' => $site->id,
+                'type' => ProofType::Testimonial->value,
+                'payload' => ['text' => $quote, 'author' => trim($t['author']), 'origin' => 'client'],
+                'is_substantiated' => true,
+                'evidence' => 'Client-provided — pasted from their own review profile in guided setup.',
+            ]);
+        }
+    }
+
+    /** The canonical stored hours shape ({day: {open, close} | 'closed'}), or null when nothing set. */
+    private function storedHours(): ?array
+    {
+        $out = [];
+        foreach (array_keys(self::DAYS) as $day) {
+            $row = $this->hours[$day] ?? ['open' => '', 'close' => '', 'closed' => false];
+            if (! empty($row['closed'])) {
+                $out[$day] = 'closed';
+            } elseif (trim((string) $row['open']) !== '' && trim((string) $row['close']) !== '') {
+                $out[$day] = ['open' => trim((string) $row['open']), 'close' => trim((string) $row['close'])];
+            }
+        }
+
+        return $out !== [] ? $out : null;
+    }
+
+    /** @return Collection<int, ProofItem> */
+    private function clientTestimonials(Site $site)
+    {
+        return ProofItem::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('type', ProofType::Testimonial->value)
+            ->get()
+            ->filter(fn (ProofItem $item): bool => is_array($item->payload) && ($item->payload['origin'] ?? null) === 'client')
+            ->values();
+    }
+
+    private function primaryLocation(Site $site): ?Location
+    {
+        return Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->orderBy('created_at')
+            ->first();
+    }
+
     /** Load the tenant's captured guarantee + certifications from the site narrative. */
     private function loadTrustSignals(Site $site): void
     {
@@ -255,6 +413,7 @@ class Business extends GuidedPage
         $emergency = trim($this->emergencyPhone);
         $site->update(['phone' => $phone !== '' ? $phone : null, 'emergency_phone' => $emergency !== '' ? $emergency : null]);
         $this->mirrorPhoneToPrimaryLocation($site, $phone);
+        $this->saveContactAndReviews($site);
 
         $blueprint = SiloBlueprint::withoutGlobalScope(SiteScope::class)->firstOrCreate(['site_id' => $site->id]);
         $seed = SiloSeed::fromArray([...($blueprint->seed ?? []), 'trade' => $this->trade, 'anchor_services' => $anchor]);

@@ -38,6 +38,10 @@
                     ⚠ Add your phone number — it's the main call-to-action in your site header, hero and CTA. Without it, visitors can't call.
                 </div>
             @endif
+            <div class="lp-field" style="margin:12px 0 0">
+                <label>Business email <span class="hint" style="font-weight:400">— optional</span></label>
+                <input class="lp-input" wire:model.blur="email" type="email" placeholder="office@yourbusiness.com" autocomplete="email">
+            </div>
         </div>
 
         <div class="lp-card">
@@ -127,6 +131,40 @@
                 <input class="lp-input" style="flex:2;min-width:180px" wire:model="newCertLabel" wire:keydown.enter.prevent="addCertification" placeholder="Credential (e.g. NJ Master Plumber, BBB A+)">
                 <input class="lp-input" style="flex:1;min-width:120px" wire:model="newCertNumber" wire:keydown.enter.prevent="addCertification" placeholder="Number (optional)">
                 <button class="lp-mini primary" wire:click="addCertification">Add</button>
+            </div>
+        </div>
+
+        <div class="lp-card">
+            <h3>Business hours <span class="hint" style="font-weight:400">— optional</span></h3>
+            <div class="hint">Shown on your Contact page. Leave a day blank to skip it; connecting your Google Business Profile will fill these automatically later.</div>
+            <div style="display:grid;gap:6px;margin-top:10px">
+                @foreach ($this->dayLabels() as $day => $label)
+                    <div style="display:flex;gap:8px;align-items:center" wire:key="hrs-{{ $day }}">
+                        <span style="width:38px;font-weight:600;font-size:.85rem">{{ $label }}</span>
+                        <input class="lp-input" style="max-width:120px" type="time" wire:model.blur="hours.{{ $day }}.open" @disabled($this->hours[$day]['closed'] ?? false)>
+                        <span class="hint">to</span>
+                        <input class="lp-input" style="max-width:120px" type="time" wire:model.blur="hours.{{ $day }}.close" @disabled($this->hours[$day]['closed'] ?? false)>
+                        <label style="display:flex;gap:5px;align-items:center;font-size:.85rem;color:var(--ungrouped);cursor:pointer">
+                            <input type="checkbox" wire:model.live="hours.{{ $day }}.closed"> Closed
+                        </label>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+
+        <div class="lp-card">
+            <h3>Reviews from your customers <span class="hint" style="font-weight:400">— optional</span></h3>
+            <div class="hint">Paste real reviews from your Google / Yelp profile — they power the "In their words" sections. Only reviews you actually received; connecting your Google Business Profile will import these automatically later.</div>
+            @foreach ($this->testimonials as $i => $t)
+                <div style="display:flex;gap:8px;align-items:baseline;margin-top:8px" wire:key="tst-{{ $i }}">
+                    <span style="flex:1">“{{ $t['quote'] }}”@if (trim($t['author']) !== '') <span class="hint">— {{ $t['author'] }}</span>@endif</span>
+                    <span class="x" style="cursor:pointer" wire:click="removeTestimonial({{ $i }})">×</span>
+                </div>
+            @endforeach
+            <div class="lp-field" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+                <input class="lp-input" style="flex:3;min-width:220px" wire:model="newTestimonialQuote" wire:keydown.enter.prevent="addTestimonial" placeholder="The review, word for word">
+                <input class="lp-input" style="flex:1;min-width:120px" wire:model="newTestimonialAuthor" wire:keydown.enter.prevent="addTestimonial" placeholder="Name (optional)">
+                <button class="lp-mini primary" wire:click="addTestimonial">Add</button>
             </div>
         </div>
 
