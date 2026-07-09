@@ -16,6 +16,7 @@ use App\Models\Location;
 use App\Models\ProofItem;
 use App\Models\Site;
 use App\Models\SiteNarrative;
+use App\Models\VoiceProfile;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\MetaBlobAssembler;
 use Tests\Support\FakeClaudeClient;
@@ -507,9 +508,10 @@ it('the service_area_map is null for a tenant with no coverage (map self-prunes,
 it('every content-rich page has TWO CTAs — a pushy one (cta1) and a softer one (cta2)', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'phone' => '(973) 555-0100']);
 
-    // The content-rich pages have enough light sections to hold the pushy accent band apart from every
-    // other colored band, so they carry both CTAs.
-    foreach ([blockHomePage($site), blockAboutPage($site), blockWhyChooseUsPage($site), blockServiceDrafted($site)] as $page) {
+    // The content-rich CONVERSION pages have enough light sections to hold the pushy accent band apart
+    // from every other colored band, so they carry both CTAs. (About is deliberately absent: an About
+    // visitor is evaluating, not converting — it carries ONE soft consultative CTA.)
+    foreach ([blockHomePage($site), blockWhyChooseUsPage($site), blockServiceDrafted($site)] as $page) {
         $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
 
         expect($markup)
@@ -714,27 +716,104 @@ it('composes the About page — drafted story + mission, §1 values, real team, 
         ->toContain('Today we serve all of Northern NJ.')
         ->not->toContain('Raw captured story')                       // drafted prose WINS over raw §1
         ->toContain('lp-statement')->toContain('Keep every home’s water running — honestly and on time.') // mission band
-        ->toContain('What we stand for')->toContain('Show up on time')->toContain('Leave it clean')        // values grid (§1)
+        ->toContain('Our promises to you')->toContain('Show up on time')->toContain('Leave it clean')      // values grid (§1)
         ->toContain('The people behind the work')->toContain('Dana Rivera')->toContain('Master Plumber')    // team grid (§1)
         ->toContain('DR')                                            // initials avatar (no photo captured)
         ->toContain('NJ Master Plumber');                           // credibility strip
 });
 
-it('About story + mission fall back to the raw §1 narrative when the drafter has not filled the slots', function () {
+it('About story falls back to the client\'s own §1 prose — but the MISSION never renders raw intake', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
     SiteNarrative::factory()->create([
         'site_id' => $site->id,
         'story' => 'We are a family shop serving the county since 1990.',
-        'mission' => 'Treat every home like our own.',
+        // The canonical raw-intake leak: the operator's brief/keywords typed into the mission field.
+        'mission' => 'prevention vs emergency, pragmatic approach, prevention of emergency service calls',
         'values' => [], 'team' => null,
     ]);
 
-    $page = blockAboutPage($site); // no our_story / mission slots
+    $page = blockAboutPage($site); // undrafted — no our_story / mission slots
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
     expect($markup)
-        ->toContain('We are a family shop serving the county since 1990.') // §1 story fallback
-        ->toContain('Treat every home like our own.');                     // §1 mission fallback
+        ->toContain('We are a family shop serving the county since 1990.')  // story: the client's OWN prose is safe
+        ->not->toContain('prevention vs emergency')                          // mission: the raw brief NEVER leaks
+        ->not->toContain('lp-statement');                                    // the band omits until drafted
+});
+
+it('About renders the drafted mission as composed prose (and values prefer the drafted promise framing)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'mission' => 'prevention vs emergency, pragmatic approach',                      // the raw brief
+        'values' => [['title' => 'On time', 'description' => 'raw label line']],         // the raw labels
+    ]);
+
+    $page = blockAboutPage($site, [
+        'mission' => 'We keep buildings running by preventing emergencies before they start.', // drafted
+        'values' => ['Camera-first honesty — we show you the problem on camera before we quote'], // drafted promise
+    ]);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('We keep buildings running by preventing emergencies before they start.')
+        ->not->toContain('prevention vs emergency')                          // drafted prose wins, raw never leaks
+        ->toContain('Camera-first honesty')                                  // "Title — line" split into the card
+        ->toContain('we show you the problem on camera before we quote')
+        ->not->toContain('raw label line');                                  // drafted promises beat the raw labels
+});
+
+it('About shows the why-us differentiator CARDS (the home pattern) and exactly ONE soft CTA', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'differentiators' => [['title' => 'Preventive-first', 'description' => 'We stop failures before they happen.']],
+    ]);
+
+    $page = blockAboutPage($site);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('lp-why')->toContain('Preventive-first')                 // differentiators as visual cards
+        ->not->toContain('lp-cta--bold')                                     // no pushy band on About
+        ->toContain('Have a question first?');                               // the single consultative close
+    expect(substr_count($markup, 'lp-cta'))->toBe(1);                        // exactly one CTA band class token
+});
+
+it('About credibility order follows the audience — commercial leads certifications, homeowner leads reviews', function () {
+    $makeProof = function (Site $site): void {
+        // Captured in "wrong" created order on purpose: review first, cert last.
+        ProofItem::factory()->create(['site_id' => $site->id, 'type' => ProofType::ReviewAggregate, 'payload' => ['label' => '4.9★ on Google'], 'is_substantiated' => true]);
+        ProofItem::factory()->create(['site_id' => $site->id, 'type' => ProofType::License, 'payload' => ['label' => 'NJ Master Plumber'], 'is_substantiated' => true]);
+        ProofItem::factory()->create(['site_id' => $site->id, 'type' => ProofType::Cert, 'payload' => ['label' => 'Backflow Certified'], 'is_substantiated' => true]);
+    };
+
+    // The hero trust row also shows proof labels (created-at order), so the ordering assertion scopes
+    // to the credibility STRIP itself.
+    $strip = fn (string $markup): string => substr($markup, (int) strpos($markup, 'lp-credibility'));
+
+    // Commercial audience (from the active voice profile) → certifications lead.
+    $commercial = Site::factory()->create(['domain_url' => 'https://a.example']);
+    $makeProof($commercial);
+    VoiceProfile::factory()->active()->create(['site_id' => $commercial->id, 'audience' => ['primary' => 'commercial building owners and facility managers']]);
+    $markup = $strip(app(BlockContentAssembler::class)->compose(blockAboutPage($commercial)->fresh(), [], []));
+    expect(strpos($markup, 'Backflow Certified'))->toBeLessThan(strpos($markup, '4.9★ on Google'));
+
+    // Homeowner (the default, no voice captured) → reviews lead.
+    $homeowner = Site::factory()->create(['domain_url' => 'https://b.example']);
+    $makeProof($homeowner);
+    $markup = $strip(app(BlockContentAssembler::class)->compose(blockAboutPage($homeowner)->fresh(), [], []));
+    expect(strpos($markup, '4.9★ on Google'))->toBeLessThan(strpos($markup, 'Backflow Certified'));
+});
+
+it('the blob carries the FINER page identity — About sends page_type "about", never the shared "utility" bucket', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+
+    $about = app(MetaBlobAssembler::class)->assemble(blockAboutPage($site)->fresh(), collect());
+    expect($about['page_type'])->toBe('about');                              // lp-page-type-about, not -utility
+
+    $home = app(MetaBlobAssembler::class)->assemble(blockHomePage($site)->fresh(), collect());
+    expect($home['page_type'])->toBe('home');                                // the plugin's front-page check is untouched
 });
 
 it('About: preview builds every section with labeled placeholders; publish data-gates', function () {
@@ -744,7 +823,7 @@ it('About: preview builds every section with labeled placeholders; publish data-
     $preview = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
     expect($preview)
         ->toContain('lp-story')->toContain('appears when you add your story')
-        ->toContain('lp-statement')->toContain('appears when you add your mission')
+        ->toContain('lp-statement')->toContain('appears when a mission is captured and the page is generated')
         ->toContain('lp-values')->toContain('appears when you add your values')
         ->toContain('lp-team')->toContain('appears when you add your team');
 

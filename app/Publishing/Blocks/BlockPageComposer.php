@@ -382,20 +382,27 @@ final class BlockPageComposer
     }
 
     /**
-     * Composes the ABOUT page — a trust-conversion brand narrative: hero → story → mission → values →
-     * credibility → team → cta. Story + mission come from the drafter (voice-expanded prose, resolved
-     * upstream); values + team from §1 intake. Same two-contexts rule: preview builds every recommended
-     * section with a labeled placeholder; publish data-gates. Nothing here is fabricated — every section
-     * hides on publish when its intake is empty.
+     * Composes the ABOUT page — the trust-conversion brand narrative. About answers ONE question
+     * ("can I trust these people?"), so the arc is trust-first, not autobiography: hero (positioning
+     * headline + the strongest real-photo slot on the site) → story → mission → values (client
+     * promises) → the why-us differentiator CARDS (reusing the home pattern — brand coherence + visual
+     * rhythm, not buried text) → audience-ordered credibility → team → ONE soft consultative CTA
+     * (About intent is evaluating, not emergency — no dual-CTA circus). Story/mission/values come from
+     * the drafter (voice-expanded prose, resolved upstream — the mission NEVER falls back to the raw
+     * intake brief); team from §1 intake. Same two-contexts rule: preview builds every recommended
+     * section with a labeled placeholder; publish data-gates — a thin-intake tenant degrades to a lean,
+     * honest About (hero + why-us + credibility + CTA), never a padded one.
      *
      * @param  array<string, mixed>  $slots  hero headline/subhead (+ hero image via $images)
      * @param  array<string, array<string, mixed>>  $images  image map keyed by slot
      * @param  list<string>  $story  the brand-story paragraphs (already cleaned to plain text)
-     * @param  string  $mission  the mission statement (verbatim, data-gated)
-     * @param  list<array{title?: string, description?: string}>  $values  the captured values
+     * @param  string  $mission  the DRAFTED mission statement (composed prose only — data-gated)
+     * @param  list<array{title?: string, description?: string}>  $values  promise-framed values (drafted, else the client's labels)
+     * @param  list<array{title?: string, description?: string}>  $differentiators  the why-us cards (site narrative)
      * @param  list<array{name?: string, role?: string, bio?: string, photo_url?: string}>  $team  the real team (gated)
-     * @param  list<string>  $credibilityBadges  substantiated trust badges
+     * @param  list<string>  $credibilityBadges  substantiated trust badges, audience-ordered upstream
      * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero
+     * @param  string  $brand  the brand name — grounds the fallback hero headline (real data, no invented positioning)
      * @param  bool  $preview  operator proof-view (all sections + placeholders) vs publish (data-gated)
      */
     public function composeAbout(
@@ -405,14 +412,18 @@ final class BlockPageComposer
         array $story = [],
         string $mission = '',
         array $values = [],
+        array $differentiators = [],
         array $team = [],
         array $credibilityBadges = [],
         array $trustStats = [],
+        string $brand = '',
         bool $preview = false,
     ): string {
         $hero = $this->sections->hero(
             eyebrow: 'About us',
-            headline: $this->str($slots['hero_headline'] ?? '') ?: 'About us',
+            // The drafted positioning headline; the fallback stays factual — the brand's real name,
+            // never an invented value claim.
+            headline: $this->str($slots['hero_headline'] ?? '') ?: ($brand !== '' ? 'The people behind '.$brand : 'The people behind the work'),
             subhead: $this->str($slots['hero_subhead'] ?? ''),
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
@@ -424,20 +435,21 @@ final class BlockPageComposer
 
         $storyBlock = $this->sections->story('Our story', 'Who we are', $story, $preview);
         $missionBlock = $this->sections->statementBand($mission, $preview);
-        $valuesBlock = $this->sections->valuesGrid('What we value', 'What we stand for', $values, $preview);
+        $valuesBlock = $this->sections->valuesGrid('What we value', 'Our promises to you', $values, $preview);
+
+        // The differentiators as VISUAL CARDS — the same dark why-us band the home page uses (brand
+        // coherence), giving About its mid-page rhythm anchor instead of burying the value props in text.
+        $why = $this->sections->whyChooseUs(
+            eyebrow: 'Why choose us',
+            heading: 'What sets us apart',
+            items: $differentiators,
+            preview: $preview,
+        );
+
         $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
         $teamBlock = $this->sections->teamGrid('Our team', 'The people behind the work', $team, $preview);
 
-        // cta1 (PUSHY) mid-page after the values; cta2 (SOFT) closes the page.
-        $ctaBold = $this->sections->cta(
-            heading: 'Ready to get started?',
-            body: 'Get a fast, free, no-obligation quote today.',
-            actionText: 'Get a free quote',
-            actionUrl: '#contact',
-            ctx: $ctx,
-            bold: true,
-        );
-
+        // ONE CTA — soft and consultative (an About visitor is evaluating, not in an emergency).
         $cta = $this->sections->cta(
             heading: 'Have a question first?',
             body: 'Tell us what you need and we’ll get right back to you — no pressure.',
@@ -446,7 +458,9 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $ctaBold, $credibility, $teamBlock, $cta]);
+        // Rhythm: D·L·Ls·L·D·Ls·L·D — the dark why-us band anchors mid-page; the surface bands
+        // (mission, credibility) buffer it so no two colored bands ever sit adjacent.
+        return $this->join([$hero, $storyBlock, $missionBlock, $valuesBlock, $why, $credibility, $teamBlock, $cta]);
     }
 
     /**
