@@ -55,8 +55,30 @@ final class SiteProfileAssembler
             'services' => $this->services($site, $home),
             'areas' => $this->areas($site),
             'company' => $this->company($site, $home),
-            'nav' => $this->company($site, $home),
+            // The header main menu: the company pages + Areas We Serve (a top-level destination, not a
+            // footer afterthought). Legal pages stay OUT of the header — they live in the footer bar.
+            'nav' => [...$this->company($site, $home), ...$this->pagesBySlug($site, $home, ['areas-we-serve', 'areas', 'service-areas'])],
+            // Privacy / Terms for the footer bottom bar — only pages that actually exist.
+            'legal_links' => $this->pagesBySlug($site, $home, ['privacy-policy', 'privacy', 'terms-of-service', 'terms']),
         ];
+    }
+
+    /**
+     * Existing pages matched by slug, as links — the chrome never advertises a page that isn't there.
+     *
+     * @param  list<string>  $slugs
+     * @return list<array{label: string, url: string}>
+     */
+    private function pagesBySlug(Site $site, string $home, array $slugs): array
+    {
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->whereIn('slug', $slugs)
+            ->orderBy('created_at')
+            ->get();
+
+        return $this->links($pages, $home);
     }
 
     /** The uploaded logo's R2 URL (served like every other image, not from the WP media library). */

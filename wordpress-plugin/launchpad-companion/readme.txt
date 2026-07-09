@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.10
+Stable tag: 0.9.11
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,11 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.11 =
+* [lp_footer] bottom bar renders the profile's `legal_links` (Privacy / Terms) beside the
+  copyright line — data-driven, only pages that exist. The control plane's site profile now
+  also puts Areas We Serve in the header main nav.
 
 = 0.9.10 =
 * /content now accepts `form_embed` — the page's lead-form embed (a GHL iframe, operator-configured
