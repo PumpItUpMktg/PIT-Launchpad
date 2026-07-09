@@ -216,6 +216,15 @@ final class ContentStore
             delete_post_meta($post_id, Meta::AREA_MAP);
         }
 
+        // The page's lead-form embed (GHL iframe) — [lp_form] renders it server-side (kses strips
+        // iframes from post_content). Cleared when the control plane stops sending one.
+        $form_embed = trim((string) ($payload['form_embed'] ?? ''));
+        if ($form_embed !== '') {
+            update_post_meta($post_id, Meta::FORM_EMBED, $form_embed);
+        } else {
+            delete_post_meta($post_id, Meta::FORM_EMBED);
+        }
+
         // §7b template mapping: stamp the kit marker (the Theme Builder display-
         // condition target) on kit PAGES, and record the operator-resolved
         // template id. Rendering is driven by the operator's condition against the

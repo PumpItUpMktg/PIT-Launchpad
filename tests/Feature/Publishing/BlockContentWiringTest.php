@@ -13,6 +13,7 @@ use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Location;
+use App\Models\PageConfig;
 use App\Models\ProofItem;
 use App\Models\Service;
 use App\Models\Site;
@@ -1513,4 +1514,32 @@ it('About credibility strip shows the CAPTURED certifications — guided intake 
     expect($markup)
         ->toContain('lp-credibility')            // the strip ACTIVATES from the captured certs
         ->toContain('NJ Master Plumber');
+});
+
+it('Contact: a configured GHL embed makes the form section REAL — [lp_form] ships on publish', function () {
+    $site = Site::factory()->create(['phone' => '(973) 555-0100']);
+    $page = blockContactPage($site);
+    PageConfig::create([
+        'site_id' => $site->id, 'content_id' => $page->id,
+        'form_embed' => '<iframe src="https://ghl.example/form/abc"></iframe>',
+    ]);
+
+    $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($publish)
+        ->toContain('lp-formsection')                       // the form section ships on PUBLISH now
+        ->toContain('[lp_form]')                            // the plugin renders the embed server-side
+        ->toContain('Request service online')
+        ->not->toContain('lp-formskel')                     // no sketch — it's the real thing
+        ->not->toContain('appears once your contact form delivery is set up');
+
+    // The iframe itself NEVER rides post_content (kses would strip it) — it travels on the blob.
+    expect($publish)->not->toContain('ghl.example');
+    $blob = app(MetaBlobAssembler::class)->assemble($page->fresh(), collect());
+    expect($blob['form_embed'])->toBe('<iframe src="https://ghl.example/form/abc"></iframe>');
+
+    // No embed configured → unchanged: preview-only placeholder, nothing on publish.
+    $bare = blockContactPage(Site::factory()->create(['phone' => '(973) 555-0100']));
+    expect(app(BlockContentAssembler::class)->compose($bare->fresh(), $bare->slot_payload, []))
+        ->not->toContain('lp-formsection')->not->toContain('[lp_form]');
+    expect(app(MetaBlobAssembler::class)->assemble($bare->fresh(), collect())['form_embed'])->toBeNull();
 });

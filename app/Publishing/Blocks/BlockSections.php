@@ -866,14 +866,21 @@ final class BlockSections
     }
 
     /**
-     * Contact form — a PREVIEW-ONLY placeholder. The real lead form is a companion-plugin shortcode
-     * (kses strips inline <form>) and its delivery (email / CRM webhook) isn't decided yet, so this
-     * renders only in the operator proof-view — a labeled sketch of where the form will sit — and is
-     * OMITTED on publish. A non-functional form must never reach a visitor; the NAP details + CTA carry
-     * the live page until the real form ships. Swap this method's body for the shortcode when delivery lands.
+     * Contact form. With a configured lead-form embed ($hasForm — a GHL iframe on the page's config),
+     * the section is REAL: it carries the plugin's `[lp_form]` shortcode, which renders the embed
+     * server-side (kses strips iframes from post_content, so the embed itself rides the blob → post
+     * meta, never the markup). Without one, a PREVIEW-ONLY placeholder — a labeled sketch of where the
+     * form will sit — omitted on publish: a form that routes nowhere never reaches a visitor.
      */
-    public function contactForm(bool $preview = false): string
+    public function contactForm(bool $preview = false, bool $hasForm = false): string
     {
+        if ($hasForm) {
+            return $this->b->group([
+                $this->sectionHead('Send a message', 'Request service online', center: true),
+                "<!-- wp:shortcode -->\n[lp_form]\n<!-- /wp:shortcode -->",
+            ], ['align' => 'full', 'className' => 'lp-formsection']);
+        }
+
         if (! $preview) {
             return '';
         }

@@ -65,6 +65,14 @@ class MetaBlobAssembler
         return $this->pageConfigs[$content->id];
     }
 
+    /** The page's configured lead-form embed (GHL iframe), or null — operator input, verbatim. */
+    private function formEmbed(Content $content): ?string
+    {
+        $embed = trim((string) ($this->pageConfig($content)->form_embed ?? ''));
+
+        return $embed !== '' ? $embed : null;
+    }
+
     /**
      * Length-representative placeholder slots for the page's kit (or a body stand-in
      * for a post) — fed to the SAME composer so the preview is the real skeleton.
@@ -202,6 +210,10 @@ class MetaBlobAssembler
             // Service-area map geometry for the theme's Leaflet init (home only; null = no map). The
             // block markup carries only the mount container + text fallback; the geometry travels here.
             'service_area_map' => $areaMap,
+            // The page's lead-form embed (a GHL iframe, operator-configured on PageConfig). It rides
+            // the blob — NOT post_content, where kses would strip the iframe — and the plugin's
+            // [lp_form] shortcode renders it server-side at the form section's position.
+            'form_embed' => $this->formEmbed($content),
         ];
     }
 

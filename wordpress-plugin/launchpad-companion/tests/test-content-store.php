@@ -270,6 +270,18 @@ class Test_Content_Store extends WP_UnitTestCase
         $this->assertInstanceOf(WP_Post::class, get_post($foreign), 'A non-Launchpad post must be untouched.');
     }
 
+    public function test_form_embed_is_stored_and_cleared_from_the_payload(): void
+    {
+        $store = new ContentStore();
+
+        $id = $store->upsert($this->payload(['form_embed' => '<iframe src="https://ghl.example/form/abc"></iframe>']))['wp_post_id'];
+        $this->assertSame('<iframe src="https://ghl.example/form/abc"></iframe>', get_post_meta($id, Meta::FORM_EMBED, true));
+
+        // A re-push without an embed clears it — no stale form after the operator removes it.
+        $store->upsert($this->payload());
+        $this->assertSame('', get_post_meta($id, Meta::FORM_EMBED, true));
+    }
+
     public function test_delete_requires_a_content_id(): void
     {
         $result = (new ContentStore())->delete('');

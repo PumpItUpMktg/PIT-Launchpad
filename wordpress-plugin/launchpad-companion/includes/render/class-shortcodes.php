@@ -34,6 +34,7 @@ final class Shortcodes
         add_shortcode('lp_cta', [$this, 'cta']);
         add_shortcode('lp_map', [$this, 'map']);
         add_shortcode('lp_image', [$this, 'image']);
+        add_shortcode('lp_form', [$this, 'form']);
     }
 
     /**
@@ -114,6 +115,31 @@ final class Shortcodes
      * @param  array<string, mixed>|string  $atts
      * @return array{0: int, 1: string}
      */
+    /**
+     * The page's lead-form embed (a GHL iframe, operator-configured on the control plane and
+     * stored in FORM_EMBED meta — kses strips iframes from post_content, so it renders here).
+     * Operator-only input via the authed contract (the same trust boundary as the Elementor
+     * form-hero before it); renders nothing when no embed is configured.
+     *
+     * @param  array<string, mixed>|string  $atts
+     */
+    public function form($atts): string
+    {
+        $atts = shortcode_atts(['id' => 0], is_array($atts) ? $atts : [], 'lp_form');
+        $id = (int) $atts['id'] > 0 ? (int) $atts['id'] : Payload::current_id();
+
+        if ($id <= 0 || ! Payload::is_managed($id)) {
+            return '';
+        }
+
+        $embed = trim((string) get_post_meta($id, Meta::FORM_EMBED, true));
+        if ($embed === '') {
+            return '';
+        }
+
+        return '<div class="lp-form-embed">' . $embed . '</div>';
+    }
+
     private function resolve($atts, string $tag): array
     {
         $atts = shortcode_atts(['key' => '', 'id' => 0], $atts, $tag);

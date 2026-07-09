@@ -9,6 +9,7 @@ use App\Enums\StandardPageType;
 use App\Enums\VoiceStatus;
 use App\Models\Content;
 use App\Models\Location;
+use App\Models\PageConfig;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
@@ -123,6 +124,11 @@ final class BlockContentAssembler
             $hours[] = ['label' => 'Emergencies', 'value' => '24/7 — call any time'];
         }
 
+        // A configured lead-form embed (GHL iframe on PageConfig) makes the form section REAL — the
+        // markup carries the [lp_form] shortcode and the plugin renders the embed server-side (the
+        // iframe itself rides the blob's form_embed, never kses'd post_content).
+        $hasForm = trim((string) (PageConfig::query()->where('content_id', $content->id)->value('form_embed') ?? '')) !== '';
+
         return $this->composer->composeContact(
             slots: $slots,
             ctx: $ctx,
@@ -131,6 +137,7 @@ final class BlockContentAssembler
             hours: $hours,
             serviceAreaBrief: $this->slotString($slots, 'service_area_brief'),
             audience: $this->audience($content),
+            hasForm: $hasForm,
             preview: $preview,
         );
     }

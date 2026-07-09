@@ -44,6 +44,11 @@ final class Meta
      * because kses would strip the embedded geometry. */
     public const AREA_MAP = '_lp_area_map';
 
+    /** The page's lead-form embed (a GHL iframe, operator-configured per page on the control
+     * plane). Stored from the /content blob's `form_embed` and rendered by the [lp_form]
+     * shortcode — kept OUT of post_content because kses strips iframes on save. */
+    public const FORM_EMBED = '_lp_form_embed';
+
     /** The operator-resolved Elementor template id for this page's kit (§7b
      * mapping). Stored for reference + the Theme Builder condition the Slots
      * screen documents; rendering is driven by the lp_kit term condition, not

@@ -632,6 +632,7 @@ final class BlockPageComposer
         array $hours = [],
         string $serviceAreaBrief = '',
         string $audience = 'homeowner',
+        bool $hasForm = false,
         bool $preview = false,
     ): string {
         $ask = $audience === 'commercial' ? 'Request an assessment' : 'Request service';
@@ -670,8 +671,10 @@ final class BlockPageComposer
             activates: 'appears when your service area is captured and the page is generated',
         );
 
-        // The lead form is a preview-only placeholder for now (delivery undecided) — omitted on publish.
-        $form = $this->sections->contactForm($preview);
+        // With a configured GHL embed the form section is REAL (the [lp_form] shortcode renders the
+        // embed server-side); without one it stays a preview-only placeholder — a form that routes
+        // nowhere never ships.
+        $form = $this->sections->contactForm($preview, $hasForm);
 
         // A thin utility page carries ONE band CTA (the soft close) — the dark hero already holds a CTA
         // button and the NAP block is itself a call to action, so a second colored band would only stack
