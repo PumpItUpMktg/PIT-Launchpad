@@ -11,6 +11,7 @@ use App\Models\Content;
 use App\Models\Location;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
+use App\Models\Service;
 use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Models\VoiceProfile;
@@ -319,25 +320,121 @@ final class BlockContentAssembler
     }
 
     /**
-     * The dedicated Why Choose Us page — its body is the §1 differentiators, reinforced by the
-     * guarantee, real credentials, and substantiated client voice (all reusing the home resolvers).
+     * The dedicated Why Choose Us page — its body IS the differentiators grid, reinforced by the
+     * audience-ordered credibility strip, real credentials, the guarantee, and substantiated client
+     * voice (all reusing the home resolvers). When the narrative captured no differentiators, honest
+     * ones are DERIVED from real §1 data ({@see derivedDifferentiators}) — a Why-Choose-Us page must
+     * have reasons; it never ships as hero + guarantee + CTAs with the "why" absent.
      *
      * @param  array<string, mixed>  $slots
      * @param  array<string, array<string, mixed>>  $images
      */
     private function composeWhyChooseUs(Content $content, array $slots, array $images, PageContext $ctx, bool $preview): string
     {
+        $audience = $this->audience($content);
+
+        $differentiators = $this->differentiators($content);
+        if ($differentiators === []) {
+            $differentiators = $this->derivedDifferentiators($content, $audience);
+        }
+
         return $this->composer->composeWhyChooseUs(
             slots: $slots,
             images: $images,
             ctx: $ctx,
-            differentiators: $this->differentiators($content),
+            differentiators: $differentiators,
             guarantee: $this->guarantee($content),
             certifications: $this->mergedCredentials($content),
             testimonials: $this->testimonials($content),
             trustStats: $this->trustStats($content),
+            credibilityBadges: $this->credibilityBadges($content, audience: $audience),
             preview: $preview,
         );
+    }
+
+    /**
+     * DERIVED differentiators — the fallback when the narrative captured none. Every card traces to a
+     * real §1 fact (the guarantee's own name, the emergency flag, a substantiated license, the actual
+     * service catalog, captured process steps); nothing is a bare marketing claim, so no card can
+     * fabricate a capability or credential. Ordered by AUDIENCE (commercial leads with process/scope —
+     * predictability and one-vendor coverage; homeowner leads with the guarantee and emergency help).
+     * Fewer than 2 derivable cards → [] (a one-card grid reads broken; the section then data-gates,
+     * degrade by omission).
+     *
+     * @return list<array{title: string, description: string}>
+     */
+    private function derivedDifferentiators(Content $content, string $audience): array
+    {
+        $cards = [];
+
+        // The tenant's real guarantee, by its own name.
+        $guarantee = $this->guarantee($content);
+        if ($guarantee['name'] !== '') {
+            $cards['guarantee'] = [
+                'title' => $guarantee['name'],
+                'description' => $guarantee['description'] !== '' ? $guarantee['description'] : 'We stand behind the work — in writing.',
+            ];
+        }
+
+        // Emergency coverage — only when the site actually offers it (§1 flag).
+        $site = $this->site($content);
+        if ((bool) $site?->offers_emergency) {
+            $cards['emergency'] = [
+                'title' => 'Emergency response',
+                'description' => 'Emergency service is part of what we offer — when something fails, call.',
+            ];
+        }
+
+        // Licensed — only when substantiated license proof exists; the description IS the real credential.
+        $license = ProofItem::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('is_substantiated', true)
+            ->where('type', ProofType::License->value)
+            ->orderBy('created_at')
+            ->first();
+        $licenseLabel = $license !== null ? $this->payloadString($license, ['label', 'text']) : '';
+        if ($licenseLabel !== '') {
+            $cards['licensed'] = ['title' => 'Licensed professionals', 'description' => $licenseLabel];
+        }
+
+        // One team for the whole job — enumerates the REAL service catalog (verifiable on the site).
+        $services = Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->orderBy('created_at')
+            ->limit(3)
+            ->pluck('name')
+            ->map(fn ($n): string => trim((string) $n))
+            ->filter(fn (string $n): bool => $n !== '')
+            ->values();
+        if ($services->count() >= 2) {
+            $cards['services'] = [
+                'title' => 'One team for the whole job',
+                'description' => 'From '.$services->slice(0, -1)->implode(', ').' to '.$services->last().' — no hand-offs.',
+            ];
+        }
+
+        // A clear process — the tenant's own captured steps (descriptive §1 intake).
+        $steps = $this->processSteps($content);
+        if ($steps !== []) {
+            $cards['process'] = [
+                'title' => 'A clear, predictable process',
+                'description' => collect($steps)->pluck('title')->implode(' → ').'.',
+            ];
+        }
+
+        // Audience sets which reasons LEAD; data already decided which exist.
+        $order = $audience === 'commercial'
+            ? ['process', 'services', 'licensed', 'guarantee', 'emergency']
+            : ['guarantee', 'emergency', 'licensed', 'services', 'process'];
+
+        $ordered = [];
+        foreach ($order as $key) {
+            if (isset($cards[$key])) {
+                $ordered[] = $cards[$key];
+            }
+        }
+
+        return count($ordered) >= 2 ? array_slice($ordered, 0, 6) : [];
     }
 
     /**

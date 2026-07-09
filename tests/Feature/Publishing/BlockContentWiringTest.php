@@ -14,6 +14,7 @@ use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\ProofItem;
+use App\Models\Service;
 use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Models\VoiceProfile;
@@ -1357,4 +1358,81 @@ it('Why Choose Us hero renders the kit hero image — AI placeholder the client 
     expect($slot)->not->toBeNull()
         ->and($slot->constraints->media?->allowFabrication)->toBeTrue()
         ->and($slot->clientOverride)->toBeTrue();
+});
+
+it('WCU derives HONEST differentiators from real §1 data when the narrative captured none', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'offers_emergency' => true]);
+    // No SiteNarrative differentiators — but real facts exist:
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'differentiators' => [],
+        'guarantee' => ['name' => 'Forever Pump Warranty', 'description' => 'If the pump fails, we replace it — free.'],
+    ]);
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::License,
+        'payload' => ['label' => 'NJ Master Plumber #1234'], 'is_substantiated' => true,
+    ]);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Drain Cleaning']);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sewer Repair']);
+
+    $page = blockWhyChooseUsPage($site);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('lp-why')                                   // the grid RENDERS — the page has its "why"
+        ->toContain('Forever Pump Warranty')                    // the real guarantee, by its own name
+        ->toContain('Emergency response')                       // grounded in the §1 flag
+        ->toContain('NJ Master Plumber #1234')                  // the real credential IS the description
+        ->toContain('One team for the whole job')
+        ->toContain('Drain Cleaning')->toContain('Sewer Repair'); // the actual catalog, verifiable
+});
+
+it('WCU derived differentiators are audience-ordered and NEVER fabricated from nothing', function () {
+    // Commercial audience → process/scope lead the derived grid.
+    $commercial = Site::factory()->create(['domain_url' => 'https://a.example', 'offers_emergency' => true]);
+    SiteNarrative::factory()->create([
+        'site_id' => $commercial->id, 'differentiators' => [],
+        'guarantee' => ['name' => 'Forever Pump Warranty', 'description' => 'x'],
+    ]);
+    Service::factory()->create(['site_id' => $commercial->id, 'name' => 'Drain Cleaning']);
+    Service::factory()->create(['site_id' => $commercial->id, 'name' => 'Sewer Repair']);
+    VoiceProfile::factory()->active()->create(['site_id' => $commercial->id, 'audience' => ['primary' => 'commercial facility managers']]);
+
+    $markup = app(BlockContentAssembler::class)->compose(blockWhyChooseUsPage($commercial)->fresh(), [], []);
+    expect(strpos($markup, 'One team for the whole job'))->toBeLessThan(strpos($markup, 'Forever Pump Warranty')); // scope before guarantee
+
+    // Homeowner default → the guarantee leads.
+    $homeowner = Site::factory()->create(['domain_url' => 'https://b.example', 'offers_emergency' => true]);
+    SiteNarrative::factory()->create([
+        'site_id' => $homeowner->id, 'differentiators' => [],
+        'guarantee' => ['name' => 'Forever Pump Warranty', 'description' => 'x'],
+    ]);
+    Service::factory()->create(['site_id' => $homeowner->id, 'name' => 'Drain Cleaning']);
+    Service::factory()->create(['site_id' => $homeowner->id, 'name' => 'Sewer Repair']);
+
+    $markup = app(BlockContentAssembler::class)->compose(blockWhyChooseUsPage($homeowner)->fresh(), [], []);
+    expect(strpos($markup, 'Forever Pump Warranty'))->toBeLessThan(strpos($markup, 'One team for the whole job'));
+
+    // A tenant with NOTHING derivable still gates the grid — reasons are never invented.
+    $bare = Site::factory()->create(['domain_url' => 'https://c.example']); // offers_emergency defaults false
+    $markup = app(BlockContentAssembler::class)->compose(blockWhyChooseUsPage($bare)->fresh(), [], []);
+    expect($markup)->not->toContain('lp-why');
+});
+
+it('WCU carries the audience-ordered credibility strip and exactly two CTA bands (mid + final)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'differentiators' => [['title' => 'Preventive-first', 'description' => 'x']],
+    ]);
+    ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::License,
+        'payload' => ['label' => 'NJ Master Plumber'], 'is_substantiated' => true,
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose(blockWhyChooseUsPage($site)->fresh(), [], []);
+
+    expect($markup)->toContain('lp-credibility')->toContain('NJ Master Plumber');
+    // 'lp-cta lp-cta--bold' counts the substring twice, the soft band once → exactly 3 = mid + final.
+    expect(substr_count($markup, 'lp-cta'))->toBe(3);
 });
