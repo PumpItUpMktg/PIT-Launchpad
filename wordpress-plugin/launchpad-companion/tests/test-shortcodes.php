@@ -156,4 +156,23 @@ class Test_Shortcodes extends WP_UnitTestCase
         $plain = (int) self::factory()->post->create();
         $this->assertSame('', do_shortcode("[lp_slot key=\"hero_problem\" id=\"{$plain}\"]"));
     }
+
+    public function test_lp_form_renders_the_stored_embed(): void
+    {
+        update_post_meta($this->post_id, Meta::FORM_EMBED, '<iframe src="https://ghl.example/form/abc"></iframe>');
+
+        $out = do_shortcode('[lp_form id="' . $this->post_id . '"]');
+
+        $this->assertStringContainsString('lp-form-embed', $out);
+        $this->assertStringContainsString('https://ghl.example/form/abc', $out);
+    }
+
+    public function test_lp_form_renders_nothing_without_an_embed_or_on_an_unmanaged_post(): void
+    {
+        $this->assertSame('', do_shortcode('[lp_form id="' . $this->post_id . '"]')); // managed, no embed
+
+        $foreign = (int) self::factory()->post->create(['post_type' => 'page']); // unmanaged
+        update_post_meta($foreign, Meta::FORM_EMBED, '<iframe src="https://x"></iframe>');
+        $this->assertSame('', do_shortcode('[lp_form id="' . $foreign . '"]'));
+    }
 }
