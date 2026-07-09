@@ -22,6 +22,7 @@ use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\PublishEligibility;
 use App\Publishing\Blocks\BlockContentAssembler;
+use App\Publishing\Blocks\NapPin;
 use App\Publishing\Blocks\ServiceAreaMap;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use App\Support\SeoTitle;
@@ -50,6 +51,7 @@ class MetaBlobAssembler
         private readonly ServiceSchemaBuilder $serviceSchema,
         private readonly BlockContentAssembler $blockContent,
         private readonly ServiceAreaMap $serviceAreaMap,
+        private readonly NapPin $napPin,
     ) {}
 
     /**
@@ -155,8 +157,22 @@ class MetaBlobAssembler
         // stores it and prints it for the theme's Leaflet init. The map surfaces on the home page's areas
         // section AND the dedicated Areas We Serve page; null elsewhere / when there's no coverage.
         $wantsAreaMap = $content->page_type?->value === 'home'
-            || $content->standard_type === StandardPageType::AreasWeServe;
+            || $content->standard_type === StandardPageType::AreasWeServe
+            || $content->standard_type === StandardPageType::Contact;
         $areaMap = $wantsAreaMap ? $this->serviceAreaMap->for((string) $content->site_id) : null;
+
+        // Contact: a STOREFRONT gets a location pin — it joins the coverage geometry (or forms the
+        // whole payload for a tenant with no coverage captured), and the pin wins the map center
+        // ("find us"). A mobile-only business keeps the pure coverage footprint; its base address is
+        // never mapped. No pin + no coverage → null → no map section (never an empty box).
+        if ($content->standard_type === StandardPageType::Contact) {
+            $pin = $this->napPin->for((string) $content->site_id);
+            if ($pin !== null) {
+                $areaMap ??= ['counties' => [], 'cities' => []];
+                $areaMap['pin'] = $pin;
+                $areaMap['center'] = ['lat' => $pin['lat'], 'lng' => $pin['lng']];
+            }
+        }
 
         // The Gutenberg block body (non-null once a page type's block composer has shipped). When it's
         // present the page is pure blocks — so it carries NO Elementor body at all: the plugin renders

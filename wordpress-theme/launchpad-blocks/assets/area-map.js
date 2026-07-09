@@ -23,7 +23,8 @@
         var data = window.lpAreaMap;
         var counties = Array.isArray(data.counties) ? data.counties : [];
         var cities = Array.isArray(data.cities) ? data.cities : [];
-        if (!counties.length && !cities.length) {
+        var pin = data.pin && typeof data.pin.lat === 'number' && typeof data.pin.lng === 'number' ? data.pin : null;
+        if (!counties.length && !cities.length && !pin) {
             return; // nothing to draw — leave the text fallback as-is
         }
 
@@ -91,8 +92,28 @@
             bounds.extend([city.lat, city.lng]);
         });
 
-        if (bounds.isValid()) {
+        // The location PIN (a Contact-page storefront) — a standout marker; the pin wins the view.
+        if (pin) {
+            var pinMarker = L.circleMarker([pin.lat, pin.lng], {
+                radius: 9,
+                color: accent,
+                weight: 3,
+                fillColor: accent,
+                fillOpacity: 0.9
+            }).addTo(map);
+            if (pin.label) {
+                pinMarker.bindTooltip(pin.label, { direction: 'top', permanent: false, className: 'lp-map-tip' });
+            }
+        }
+
+        if (pin && !counties.length) {
+            map.setView([pin.lat, pin.lng], 14); // storefront-only: street-level "find us"
+        } else if (bounds.isValid()) {
             map.fitBounds(bounds, { padding: [24, 24] });
+            if (pin) {
+                bounds.extend([pin.lat, pin.lng]);
+                map.fitBounds(bounds, { padding: [24, 24] });
+            }
         } else if (data.center) {
             map.setView([data.center.lat, data.center.lng], 9);
         }

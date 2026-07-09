@@ -66,6 +66,7 @@
 .lp-story,
 .lp-prose,
 .lp-features,
+.lp-emergency,
 .lp-statement,
 .lp-values,
 .lp-team,
@@ -90,6 +91,7 @@
 .lp-story > *,
 .lp-prose > *,
 .lp-features > *,
+.lp-emergency > *,
 .lp-statement > *,
 .lp-values > *,
 .lp-team > *,
@@ -1769,4 +1771,28 @@
     border: 0;
     min-height: 480px;
     border-radius: var(--wp--custom--radius, 12px);
+}
+
+/* Emergency strip — the slim, unmissable 24/7 alert directly under the Contact hero. */
+.lp-emergency {
+    padding-block: 0.85rem;
+}
+
+.lp-emergency .lp-emergency-line {
+    margin: 0;
+    text-align: center;
+    font-size: 1.05rem;
+}
+
+.lp-emergency .lp-emergency-line a {
+    color: inherit;
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+/* Contact map — the address / coverage line beneath the mount. */
+.lp-contactmap .lp-contactmap-line {
+    text-align: center;
+    margin: 0.85rem 0 0;
 }

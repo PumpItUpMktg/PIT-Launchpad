@@ -93,7 +93,7 @@ final class BlockContentAssembler
         }
 
         if ($content->standard_type === StandardPageType::Contact) {
-            return $this->composeContact($content, $slots, $ctx, $preview);
+            return $this->composeContact($content, $slots, $images, $ctx, $preview, $mapAvailable);
         }
 
         if ($content->standard_type === StandardPageType::Privacy || $content->standard_type === StandardPageType::Terms) {
@@ -113,8 +113,9 @@ final class BlockContentAssembler
      * NAP consistency: the same primary-Location record feeds this page, the footer, and the schema.
      *
      * @param  array<string, mixed>  $slots
+     * @param  array<string, array<string, mixed>>  $images
      */
-    private function composeContact(Content $content, array $slots, PageContext $ctx, bool $preview): string
+    private function composeContact(Content $content, array $slots, array $images, PageContext $ctx, bool $preview, bool $mapAvailable): string
     {
         $location = $this->primaryLocation($content);
         $storefront = (bool) ($location?->is_storefront);
@@ -138,6 +139,9 @@ final class BlockContentAssembler
             serviceAreaBrief: $this->slotString($slots, 'service_area_brief'),
             audience: $this->audience($content),
             hasForm: $hasForm,
+            images: $images,
+            mapAvailable: $mapAvailable,
+            storefront: $storefront,
             preview: $preview,
         );
     }

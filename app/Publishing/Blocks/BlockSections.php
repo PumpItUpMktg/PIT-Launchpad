@@ -901,6 +901,51 @@ final class BlockSections
         ], ['align' => 'full', 'className' => $this->sectionClass('lp-formsection', true)]);
     }
 
+    /**
+     * The EMERGENCY strip — a slim, unmissable accent alert directly under the Contact hero: someone
+     * in an emergency must see the emergency path immediately, not find phone framing buried in the
+     * methods list. Driven by the real offers_emergency flag + a phone (both gated upstream via the
+     * ctx) — an ordinary business never shows a false 24/7. Deliberately a slim ALERT STRIP, not a
+     * full band: it's the one sanctioned adjacency to the hero.
+     */
+    public function emergencyStrip(PageContext $ctx): string
+    {
+        if (! $ctx->emergency || ! $ctx->hasPhone()) {
+            return '';
+        }
+
+        return $this->b->group([
+            $this->b->paragraph(
+                '<strong>24/7 emergency?</strong> Call now — <a href="'.$this->attr($ctx->emergencyCallTel()).'">'.$this->text($ctx->emergencyCallDisplay()).'</a>',
+                ['textColor' => 'on-accent', 'className' => 'lp-emergency-line'],
+            ),
+        ], ['align' => 'full', 'backgroundColor' => 'accent', 'textColor' => 'on-accent', 'className' => 'lp-emergency']);
+    }
+
+    /**
+     * The Contact page's map section — the SAME Leaflet mount the areas section uses (the geometry
+     * rides the blob; the theme draws it). Two honest modes, resolved upstream: a STOREFRONT centers
+     * on its location pin ("Find us", the address beneath); a mobile-only business shows its coverage
+     * footprint ("Where we work"). Renders ONLY when geometry exists — never an empty box.
+     */
+    public function contactMap(string $eyebrow, string $heading, ?string $line, bool $available): string
+    {
+        if (! $available) {
+            return '';
+        }
+
+        $children = [
+            $this->sectionHead($eyebrow, $heading, center: true),
+            $this->areaMapMount(),
+        ];
+        if ($line !== null && trim($line) !== '') {
+            $children[] = $this->b->paragraph($this->text($line), ['textColor' => 'muted', 'className' => 'lp-contactmap-line']);
+        }
+
+        // Reuses the lp-areas--map styling (the mount's height/rounding) with its own hook class.
+        return $this->b->group($children, ['align' => 'full', 'className' => 'lp-areas lp-areas--map lp-contactmap']);
+    }
+
     /** One contact detail: an accent label over its value (the value may carry a safe inline link). */
     private function detailRow(string $label, string $valueHtml): string
     {
