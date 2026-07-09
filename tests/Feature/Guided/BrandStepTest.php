@@ -17,8 +17,11 @@ use App\Models\SiteNarrative;
 use App\Models\User;
 use App\Models\VoiceProfile;
 use App\Onboarding\MissionPolisher;
+use App\Publishing\TenantStorage;
 use App\Styling\StyleVariation;
 use Filament\Facades\Filament;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\Support\FakeClaudeClient;
 
@@ -276,4 +279,41 @@ test('Brand is gated until WordPress is prepped — the brand push cannot run fi
     ]);
 
     Livewire::test(Brand::class)->assertRedirect(ConnectWordpress::getUrl());
+});
+
+test('Brand step captures team members — photo stored to the tenant R2 prefix, persisted immediately', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+    Storage::fake(TenantStorage::DISK);
+
+    Livewire::test(Brand::class)
+        ->set('newTeamName', 'Dana Rivera')
+        ->set('newTeamRole', 'Master Plumber')
+        ->set('newTeamBio', 'Twenty years in the trade.')
+        ->set('teamPhoto', UploadedFile::fake()->image('dana.jpg', 400, 400))
+        ->call('addTeamMember')
+        ->assertSet('newTeamName', '');                       // inputs cleared after add
+
+    $team = brandNarrative($this->site->id)->team;             // persisted WITHOUT hitting Save
+    expect($team)->toHaveCount(1)
+        ->and($team[0]['name'])->toBe('Dana Rivera')
+        ->and($team[0]['role'])->toBe('Master Plumber')
+        ->and($team[0]['photo_url'])->toContain('team-dana-rivera-'); // stored under the tenant prefix
+
+    // Remove persists too.
+    Livewire::test(Brand::class)
+        ->assertSet('team.0.name', 'Dana Rivera')              // round-trips into the form
+        ->call('removeTeamMember', 0);
+    expect(brandNarrative($this->site->id)->team)->toBeNull();
+});
+
+test('a team member without a photo is captured with an empty photo_url (initials chip renders, never a stock face)', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+
+    Livewire::test(Brand::class)
+        ->set('newTeamName', 'Sam Ortiz')
+        ->call('addTeamMember');
+
+    $team = brandNarrative($this->site->id)->team;
+    expect($team[0]['name'])->toBe('Sam Ortiz')
+        ->and($team[0]['photo_url'])->toBe('');
 });

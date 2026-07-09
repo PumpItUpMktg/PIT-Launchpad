@@ -13,9 +13,14 @@ use App\Models\VoiceProfile;
 use App\Onboarding\IntakeCollector;
 use App\Onboarding\MissionPolisher;
 use App\Operator\Controls\VoiceControl;
+use App\Publishing\TenantStorage;
 use App\Styling\StyleActivator;
 use App\Styling\StyleVariation;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 
 /**
  * Step 3 · Brand — voice → look → narrative. The Gutenberg-pivot brand step: capture the brand voice,
@@ -30,6 +35,8 @@ use Filament\Notifications\Notification;
  */
 class Brand extends GuidedPage
 {
+    use WithFileUploads;
+
     protected static ?string $slug = 'setup/brand';
 
     protected static ?int $navigationSort = 3;
@@ -56,6 +63,24 @@ class Brand extends GuidedPage
 
     /** One differentiator per line. */
     public string $differentiatorsText = '';
+
+    /**
+     * The real team — each {name, role, bio, photo_url}. Drives the About team grid (real faces are
+     * the strongest trust content on the site; a member with no photo renders an initials chip, never
+     * a fabricated headshot). Persisted immediately on add/remove.
+     *
+     * @var list<array{name: string, role: string, bio: string, photo_url: string}>
+     */
+    public array $team = [];
+
+    public string $newTeamName = '';
+
+    public string $newTeamRole = '';
+
+    public string $newTeamBio = '';
+
+    /** The pending member photo upload (optional — real photos highly recommended). */
+    public mixed $teamPhoto = null;
 
     // VoiceKit voice setup (the tone the composer writes in; absent → a default voice).
     public string $voiceTone = 'professional_warm';
@@ -88,6 +113,7 @@ class Brand extends GuidedPage
             $this->missionEnhance = ($narrative->mission_raw ?? null) !== null;
             $this->valuesText = $this->toLines($narrative->values);
             $this->differentiatorsText = $this->toLines($narrative->differentiators);
+            $this->team = $this->teamRows($narrative->team);
         }
 
         $voice = VoiceProfile::withoutGlobalScope(SiteScope::class)
@@ -319,10 +345,89 @@ class Brand extends GuidedPage
                 'mission_raw' => $missionRaw,
                 'values' => $this->fromLines($this->valuesText),
                 'differentiators' => $this->fromLines($this->differentiatorsText),
+                'team' => $this->team !== [] ? $this->team : null,
             ],
         );
 
         return $outcome;
+    }
+
+    /**
+     * Add a team member — name required; the photo (optional, but real faces are the strongest trust
+     * content on the site) is stored to the tenant's R2 prefix and its URL kept on the member row.
+     * Persists immediately (an explicit Add is durable; nothing is lost before "Save").
+     */
+    public function addTeamMember(): void
+    {
+        $site = $this->getSite();
+        $name = trim($this->newTeamName);
+        if ($site === null || $name === '') {
+            return;
+        }
+
+        $photoUrl = '';
+        if ($this->teamPhoto instanceof TemporaryUploadedFile) {
+            $this->validate([
+                'teamPhoto' => ['file', 'mimetypes:image/png,image/jpeg,image/webp', 'max:6144'],
+            ], [], ['teamPhoto' => 'photo']);
+
+            $ext = strtolower($this->teamPhoto->getClientOriginalExtension() ?: (string) $this->teamPhoto->guessExtension());
+            $key = app(TenantStorage::class)->put(
+                $site,
+                'team-'.Str::slug($name).'-'.Str::lower(Str::random(6)).'.'.$ext,
+                (string) $this->teamPhoto->get(),
+            );
+            $photoUrl = Storage::disk(TenantStorage::DISK)->url($key);
+        }
+
+        $this->team[] = [
+            'name' => $name,
+            'role' => trim($this->newTeamRole),
+            'bio' => trim($this->newTeamBio),
+            'photo_url' => $photoUrl,
+        ];
+
+        $this->newTeamName = '';
+        $this->newTeamRole = '';
+        $this->newTeamBio = '';
+        $this->teamPhoto = null;
+
+        $this->persistNarrative();
+    }
+
+    public function removeTeamMember(int $index): void
+    {
+        unset($this->team[$index]);
+        $this->team = array_values($this->team);
+        $this->persistNarrative();
+    }
+
+    /**
+     * Normalize stored team rows (possibly older mixed shapes) into the form's {name, role, bio,
+     * photo_url} rows — only members with a name.
+     *
+     * @return list<array{name: string, role: string, bio: string, photo_url: string}>
+     */
+    private function teamRows(mixed $stored): array
+    {
+        $rows = [];
+        foreach (is_array($stored) ? $stored : [] as $member) {
+            if (! is_array($member)) {
+                continue;
+            }
+            $name = trim((string) ($member['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $rows[] = [
+                'name' => $name,
+                'role' => trim((string) ($member['role'] ?? $member['title'] ?? '')),
+                'bio' => trim((string) ($member['bio'] ?? $member['description'] ?? '')),
+                'photo_url' => trim((string) ($member['photo_url'] ?? $member['photo'] ?? '')),
+            ];
+        }
+
+        return $rows;
     }
 
     /**

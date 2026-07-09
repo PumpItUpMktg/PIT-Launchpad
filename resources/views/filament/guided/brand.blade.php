@@ -102,6 +102,34 @@
             <button class="lp-mini" wire:click="saveNarrative">Save brand details</button>
         </div>
 
+        <div class="lp-card">
+            <h3>Your team <span class="hint" style="font-weight:400">— optional</span></h3>
+            <div class="hint">The people behind the work — they render on your About page. REAL photos are highly recommended (a real face builds more trust than anything generated); a member without one shows an initials chip, never a stock face.</div>
+
+            @foreach ($this->team as $i => $m)
+                <div style="display:flex;gap:10px;align-items:center;margin-top:10px" wire:key="team-{{ $i }}">
+                    @if (trim($m['photo_url']) !== '')
+                        <img src="{{ $m['photo_url'] }}" alt="{{ $m['name'] }}" style="width:34px;height:34px;border-radius:50%;object-fit:cover">
+                    @else
+                        <span style="width:34px;height:34px;border-radius:50%;background:var(--surface,#eef2f7);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">{{ mb_strtoupper(mb_substr($m['name'], 0, 1)) }}</span>
+                    @endif
+                    <span style="flex:1"><strong>{{ $m['name'] }}</strong>@if (trim($m['role']) !== '') <span class="hint">— {{ $m['role'] }}</span>@endif @if (trim($m['photo_url']) === '')<span class="hint" style="color:#d97706"> · no photo yet</span>@endif</span>
+                    <span class="x" style="cursor:pointer" wire:click="removeTeamMember({{ $i }})">×</span>
+                </div>
+            @endforeach
+
+            <div class="lp-field" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+                <input class="lp-input" style="flex:1;min-width:140px" wire:model="newTeamName" placeholder="Name">
+                <input class="lp-input" style="flex:1;min-width:140px" wire:model="newTeamRole" placeholder="Role (e.g. Master Plumber)">
+            </div>
+            <div class="lp-field" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <input class="lp-input" style="flex:2;min-width:200px" wire:model="newTeamBio" placeholder="One line about them (optional)">
+                <input type="file" accept="image/png,image/jpeg,image/webp" wire:model="teamPhoto" style="flex:1;min-width:170px;font-size:.85rem">
+                <button class="lp-mini primary" wire:click="addTeamMember" wire:loading.attr="disabled" wire:target="addTeamMember,teamPhoto">Add member</button>
+            </div>
+            <div class="hint" wire:loading wire:target="teamPhoto">Uploading photo…</div>
+        </div>
+
         <div class="lp-foot">
             <a class="lp-btn ghost" href="{{ \App\Enums\SetupStep::ConnectWordpress->pageClass()::getUrl() }}" wire:navigate>Back</a>
             <button class="lp-btn" wire:click="proceed" @disabled(! $this->pushed)>Continue to territory</button>
