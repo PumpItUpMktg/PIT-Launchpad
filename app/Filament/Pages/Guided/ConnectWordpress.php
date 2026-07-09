@@ -10,7 +10,7 @@ use Filament\Notifications\Notification;
 
 /**
  * Step 2 · Connect WordPress — the WP-prep phase. Connect (URL + username + application password)
- * → verify → install companion plugin → install Elementor + Pro → clean up ({@see WordpressPrep};
+ * → verify → install companion plugin → install the Launchpad block theme → clean up ({@see WordpressPrep};
  * connect/verify real, installs stubbed). Gates on all green: `deps_ready` is the completion flag,
  * so Brand (step 3) — which pushes the brand kit — can't be reached until WordPress is prepped.
  *

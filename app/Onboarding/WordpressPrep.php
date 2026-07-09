@@ -10,10 +10,11 @@ use App\Operator\Controls\WordpressConnector;
 
 /**
  * Step 2's WordPress-prep phase. Connect + verify are real (the §9 verify-before-store
- * {@see WordpressConnector}); the companion-plugin install, Elementor + Pro install, and cleanup
- * are **clean stub seams** until the agent-driven install relay lands — same wire-or-stub
+ * {@see WordpressConnector}); the companion-plugin install, Launchpad block-theme install, and
+ * cleanup are **clean stub seams** until the agent-driven install relay lands — same wire-or-stub
  * discipline as the rest of the guided flow. `prep()` runs the whole phase and reports each
- * step's status so the page can render the checklist and gate Continue on all-green.
+ * step's status so the page can render the checklist and gate Continue on all-green. (Gutenberg
+ * pivot: pages are core blocks rendered by the block theme — no page builder is installed.)
  */
 class WordpressPrep
 {
@@ -48,7 +49,7 @@ class WordpressPrep
         // Stub seam — the agent-driven installs land in a later relay; they report success today
         // so the flow is exercised end to end (real WordPress operations slot in here unchanged).
         $this->installCompanionPlugin($site);
-        $this->installElementor($site);
+        $this->installTheme($site);
         $this->cleanup($site);
 
         return ['ready' => true, 'steps' => $this->steps(true), 'error' => null];
@@ -66,8 +67,8 @@ class WordpressPrep
         return true;
     }
 
-    /** Stub — installs Elementor + Pro (later relay). */
-    public function installElementor(Site $site): bool
+    /** Stub — installs + activates the Launchpad block theme via the agent (later relay). */
+    public function installTheme(Site $site): bool
     {
         return true;
     }
@@ -84,7 +85,7 @@ class WordpressPrep
         return [
             'Connected & verified' => $ready,
             'Companion plugin installed' => $ready,
-            'Elementor + Pro installed' => $ready,
+            'Launchpad theme installed' => $ready,
             'Cleaned up' => $ready,
         ];
     }
