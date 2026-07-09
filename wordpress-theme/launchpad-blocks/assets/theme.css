@@ -1799,3 +1799,26 @@
     text-align: center;
     margin: 0.85rem 0 0;
 }
+
+/* Footer legal links (Privacy / Terms) — inline in the bottom bar, separated by middots. */
+.lp-footer-bot .lp-flegal {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: baseline;
+}
+
+.lp-footer-bot .lp-flegal a {
+    color: inherit;
+    opacity: 0.8;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.lp-footer-bot .lp-flegal a:hover {
+    opacity: 1;
+}
+
+.lp-footer-bot .lp-flegal a + a::before {
+    content: "· ";
+    opacity: 0.6;
+}

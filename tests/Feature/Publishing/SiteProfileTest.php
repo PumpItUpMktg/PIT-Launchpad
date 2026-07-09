@@ -70,3 +70,30 @@ it('degrades cleanly for a bare site — no phone, no links, chrome falls back t
         ->and($profile['company'])->toBe([])
         ->and($profile['hours'])->toBe('');
 });
+
+it('puts Areas We Serve in the header nav and Privacy/Terms in the footer legal links — real pages only', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'about', 'title' => 'About Us']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'areas-we-serve', 'title' => 'Areas We Serve']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'privacy-policy', 'title' => 'Privacy Policy']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'terms-of-service', 'title' => 'Terms of Service']);
+
+    $profile = app(SiteProfileAssembler::class)->assemble($site->fresh());
+
+    // Header main menu: company pages + Areas We Serve; legal pages stay OUT of the header.
+    $navLabels = array_column($profile['nav'], 'label');
+    expect($navLabels)->toContain('About Us')->toContain('Areas We Serve')
+        ->not->toContain('Privacy Policy')->not->toContain('Terms of Service');
+    expect(collect($profile['nav'])->firstWhere('label', 'Areas We Serve')['url'])
+        ->toBe('https://sewergurus.com/areas-we-serve');
+
+    // Footer legal links: privacy + terms, real URLs.
+    expect(array_column($profile['legal_links'], 'label'))->toBe(['Privacy Policy', 'Terms of Service'])
+        ->and($profile['legal_links'][0]['url'])->toBe('https://sewergurus.com/privacy-policy');
+
+    // A site without those pages advertises nothing (never a dead link).
+    $bare = Site::factory()->create(['domain_url' => 'https://bare.example']);
+    $profile = app(SiteProfileAssembler::class)->assemble($bare->fresh());
+    expect($profile['legal_links'])->toBe([])
+        ->and(array_column($profile['nav'], 'label'))->not->toContain('Areas We Serve');
+});

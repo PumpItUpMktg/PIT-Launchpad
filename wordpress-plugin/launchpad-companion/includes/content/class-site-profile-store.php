@@ -57,6 +57,9 @@ final class SiteProfileStore
         return [
             'brand_name' => sanitize_text_field((string) ($p['brand_name'] ?? '')),
             'logo_url' => isset($p['logo_url']) ? (string) esc_url_raw((string) $p['logo_url']) : '',
+            // 'dark' | 'light' — the header tone the control plane chose for the logo. Was silently
+            // stripped by this whitelist (the header always rendered light); only the two values pass.
+            'header_tone' => (($p['header_tone'] ?? '') === 'dark') ? 'dark' : 'light',
             'tagline' => sanitize_text_field((string) ($p['tagline'] ?? '')),
             'phone' => sanitize_text_field((string) ($p['phone'] ?? '')),
             'phone_tel' => self::tel((string) ($p['phone_tel'] ?? '')),
@@ -68,6 +71,7 @@ final class SiteProfileStore
             'services' => self::links($p['services'] ?? []),
             'areas' => self::links($p['areas'] ?? []),
             'company' => self::links($p['company'] ?? []),
+            'legal_links' => self::links($p['legal_links'] ?? []),
         ];
     }
 

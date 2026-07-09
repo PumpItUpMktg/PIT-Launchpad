@@ -103,6 +103,10 @@ final class SiteChrome
         $legal = ! empty($p['legal']) ? (string) $p['legal'] : '© ' . esc_html(gmdate('Y')) . ' ' . $brand;
         $out .= '<div class="lp-footer-bot">';
         $out .= '<span>' . esc_html($legal) . '</span>';
+        // Legal links (Privacy / Terms) — data-driven; only pages that exist reach the profile.
+        if (! empty($p['legal_links']) && is_array($p['legal_links'])) {
+            $out .= $this->navList($p['legal_links'], 'lp-flegal');
+        }
         $out .= '<span>Standard WordPress blocks — no page builder, nothing locked in.</span>';
         $out .= '</div>';
 
