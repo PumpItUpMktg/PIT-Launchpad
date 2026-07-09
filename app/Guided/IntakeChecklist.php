@@ -71,7 +71,7 @@ final class IntakeChecklist
             $this->item('certifications', 'Licenses & certifications', $has('certifications'),
                 'the credentials row and the trust badges', 'Setup → Business'),
             $this->item('team', 'Team members', $has('team'),
-                'the team grid on About (real faces build the most trust)', 'your operator'),
+                'the team grid on About (real faces build the most trust)', 'Setup → Brand'),
             $this->item('reviews', 'Reviews / testimonials', $this->hasReviews($site),
                 'the "In their words" sections across the site', 'Setup → Business'),
             $this->item('phone', 'Business phone', $this->contact->phone($site) !== null,
