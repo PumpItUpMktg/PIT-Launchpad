@@ -35,8 +35,11 @@
             </div>
         @endif
 
-        {{-- THE primary content: the pages workbench. One row per planned page, morphing primary. --}}
-        <div class="lp-card">
+        {{-- THE primary content: the pages workbench. One row per planned page, morphing primary.
+             While anything is in motion (a draft writing, a publish pushing) the card POLLS, so each
+             row's state updates live against the job's real status — the row, not a toast, is the
+             durable source of truth for "where is this page". --}}
+        <div class="lp-card" @if ($this->polling) wire:poll.visible.5s @endif>
             <h3>Your pages</h3>
             <div class="hint">Each page generates on demand — nothing reaches WordPress until you publish.</div>
 
@@ -70,8 +73,9 @@
                                     <div class="pgmain">
                                         <div class="pgtitle">{{ $p['title'] }}</div>
                                         <div class="pgperma">{{ $p['permalink'] }}</div>
-                                        {{-- whose-move line — the scannability spine (your-move vs ours) --}}
-                                        <div class="pgmove">{{ $p['whose_move'] }}</div>
+                                        {{-- whose-move line — the scannability spine (your-move vs ours). In-motion rows
+                                             (writing / publishing) carry a live pulse so the working state is visible. --}}
+                                        <div class="pgmove">@if ($p['tone'] === 'info')<span class="lp-pulse" aria-hidden="true"></span>@endif{{ $p['whose_move'] }}</div>
                                     </div>
                                     <div class="pgright">
                                         {{-- Status statement + every action inline: the sacred client line, then the
@@ -103,13 +107,13 @@
                                                         <button class="lp-btn sm ghost" wire:click="regenerate('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="regenerate('{{ $p['id'] }}')">Regenerate</button>
                                                         @break
                                                     @case('lock')
-                                                        <button class="lp-btn sm ghost" wire:click="lock('{{ $p['id'] }}')">Lock</button>
+                                                        <button class="lp-btn sm ghost" wire:click="lock('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="lock('{{ $p['id'] }}')">Lock</button>
                                                         @break
                                                     @case('reject')
                                                         <button class="lp-btn sm ghost" wire:click="startReject('{{ $p['id'] }}')">Reject</button>
                                                         @break
                                                     @case('takedown')
-                                                        <button class="lp-btn sm danger" wire:click="takeDown('{{ $p['id'] }}')" wire:confirm="Take this page down from WordPress? It stays in your plan and can be re-published on the same URL.">Take down</button>
+                                                        <button class="lp-btn sm danger" wire:click="takeDown('{{ $p['id'] }}')" wire:confirm="Take this page down from WordPress? It stays in your plan and can be re-published on the same URL." wire:loading.attr="disabled" wire:target="takeDown('{{ $p['id'] }}')">Take down</button>
                                                         @break
                                                 @endswitch
                                             @endforeach
@@ -123,7 +127,7 @@
                                         <div class="pgreject" wire:key="rej-{{ $p['id'] }}">
                                             <input type="text" wire:model="rejectReason" wire:keydown.enter="reject('{{ $p['id'] }}')"
                                                    placeholder="Reason (optional) — helps sharpen the next draft" aria-label="Reject reason">
-                                            <button class="lp-btn sm warn" wire:click="reject('{{ $p['id'] }}')">Confirm reject</button>
+                                            <button class="lp-btn sm warn" wire:click="reject('{{ $p['id'] }}')" wire:loading.attr="disabled" wire:target="reject('{{ $p['id'] }}')">Confirm reject</button>
                                             <button class="lp-btn sm ghost" wire:click="cancelReject">Cancel</button>
                                         </div>
                                     @endif

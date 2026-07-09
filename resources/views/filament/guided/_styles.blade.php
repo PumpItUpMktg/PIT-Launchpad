@@ -208,6 +208,9 @@
   .lp-pgrow .pgperma{font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:var(--ink-soft)}
   .lp-pgrow .pgpending{font-size:11.5px;color:var(--ink-soft);font-style:italic}
   .lp-pgrow .pgmove{font-size:11px;color:var(--ink-soft);margin-top:3px;line-height:1.35}
+  /* In-motion pulse — the live working indicator on writing/publishing rows. */
+  .lp-pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--teal);margin-right:6px;vertical-align:middle;animation:lpPulse 1.2s ease-in-out infinite}
+  @keyframes lpPulse{0%,100%{opacity:.3;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
   /* Right cluster: the status statement + every action inline (no hidden menu) */
   .lp-pgrow .pgright{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
   .lp-pgrow .pgline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}

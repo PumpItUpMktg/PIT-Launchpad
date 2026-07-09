@@ -264,3 +264,22 @@ test('Grow surfaces the pre-publish content checklist — the gaps, what each un
 
     Livewire::test(Grow::class)->assertOk()->assertDontSee('Before you publish');
 });
+
+test('Grow polls only while something is IN MOTION — the row updates live against the job status', function () {
+    SetupState::query()->create([
+        'site_id' => $this->site->id, 'current_step' => 6,
+        'services_done' => true, 'territory_done' => true, 'structure_finalized' => true, 'approved' => true, 'launched' => true,
+    ]);
+
+    // Idle workbench (a planned page, nothing running) → no polling attribute.
+    $planned = Content::factory()->page()->create([
+        'site_id' => $this->site->id, 'status' => ContentStatus::Candidate, 'slot_payload' => null,
+    ]);
+    Livewire::test(Grow::class)->assertOk()->assertDontSeeHtml('wire:poll');
+
+    // A queued draft (generating) → the card polls AND the row carries the working pulse.
+    $planned->forceFill(['meta' => ['generating_at' => now()->toIso8601String()]])->save();
+    Livewire::test(Grow::class)->assertOk()
+        ->assertSeeHtml('wire:poll.visible.5s')
+        ->assertSeeHtml('lp-pulse');
+});
