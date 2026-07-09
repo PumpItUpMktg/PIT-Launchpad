@@ -3,6 +3,7 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Enums\ProofType;
 use App\Enums\SiteStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
@@ -15,11 +16,14 @@ use App\Jobs\GeneratePage;
 use App\Jobs\SyncSiloCategories;
 use App\Models\BuildPage;
 use App\Models\Content;
+use App\Models\Location;
+use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
+use App\Models\SiteNarrative;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
@@ -229,4 +233,34 @@ test('Grow take-down only touches owned pages — a foreign page is untouched', 
     Livewire::test(Grow::class)->call('takeDown', $foreign->id)->assertOk();
 
     expect(Content::withoutGlobalScope(SiteScope::class)->find($foreign->id)->status)->toBe(ContentStatus::Candidate);
+});
+
+test('Grow surfaces the pre-publish content checklist — the gaps, what each unlocks, where to add it', function () {
+    SetupState::query()->create([
+        'site_id' => $this->site->id, 'current_step' => 6,
+        'services_done' => true, 'territory_done' => true, 'structure_finalized' => true, 'approved' => true, 'launched' => true,
+    ]);
+    // Bare narrative: mission/values/certifications all missing → the checklist names them.
+    Livewire::test(Grow::class)
+        ->assertOk()
+        ->assertSee('Before you publish')
+        ->assertSee('Mission statement')
+        ->assertSee('Licenses & certifications')
+        ->assertSee('Setup → Brand');
+
+    // Capture everything the checklist watches → the card disappears (nothing to nag about).
+    SiteNarrative::factory()->create([
+        'site_id' => $this->site->id,
+        'story' => 's', 'mission' => 'm',
+        'values' => [['title' => 'v']], 'differentiators' => [['title' => 'd']],
+        'guarantee' => ['name' => 'g'], 'certifications' => [['label' => 'c']],
+        'team' => [['name' => 't']],
+    ]);
+    ProofItem::factory()->create([
+        'site_id' => $this->site->id, 'type' => ProofType::Testimonial,
+        'payload' => ['text' => 'x'], 'is_substantiated' => true,
+    ]);
+    Location::factory()->create(['site_id' => $this->site->id, 'phone' => '(973) 555-0100', 'email' => 'e@x.com']);
+
+    Livewire::test(Grow::class)->assertOk()->assertDontSee('Before you publish');
 });

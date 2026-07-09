@@ -467,7 +467,9 @@ final class BlockContentAssembler
             values: $this->aboutValues($slots, $narrative),
             differentiators: $this->differentiators($content),
             team: $this->teamMembers($narrative),
-            credibilityBadges: $this->credibilityBadges($content, audience: $this->audience($content)),
+            // includeCertifications: About's strip is its only credentials surface, so the captured
+            // narrative certifications join the badge pool (guided intake creates no ProofItems).
+            credibilityBadges: $this->credibilityBadges($content, audience: $this->audience($content), includeCertifications: true),
             trustStats: $this->trustStats($content),
             brand: trim((string) ($site->brand_name ?? '')),
             preview: $preview,
@@ -680,10 +682,16 @@ final class BlockContentAssembler
      * sets the intended emphasis only — data still decides what actually renders (a homeowner site
      * with no reviews simply leads with its next available signal).
      *
+     * With $includeCertifications, the tenant's captured narrative CERTIFICATIONS join the pool as
+     * cert-typed labels (deduped) — the guided flow captures credentials there and creates no
+     * ProofItems, so without this fold a guided tenant's strip could never activate. Used by pages
+     * whose strip is the only credentials surface (About); pages with a certifications ROW (Home /
+     * Why-Choose-Us) keep the proof-only pool so the same label never shows twice.
+     *
      * @param  'homeowner'|'commercial'|null  $audience  null = the default created-at order (home / why-us callers)
      * @return list<string>
      */
-    private function credibilityBadges(Content $content, ?string $audience = null): array
+    private function credibilityBadges(Content $content, ?string $audience = null, bool $includeCertifications = false): array
     {
         $types = [
             ProofType::License->value, ProofType::Cert->value, ProofType::Award->value,
@@ -700,30 +708,36 @@ final class BlockContentAssembler
             ->orderBy('created_at')
             ->get();
 
+        // {label, type} pool: substantiated proof + (optionally) the captured certifications, deduped.
+        $pool = [];
+        foreach ($items as $item) {
+            $label = $this->payloadString($item, ['label', 'text']);
+            if ($label !== '') {
+                $pool[] = ['label' => $label, 'type' => $item->type->value];
+            }
+        }
+        if ($includeCertifications) {
+            $seen = array_map(fn (array $b): string => mb_strtolower($b['label']), $pool);
+            foreach ($this->certifications($content) as $cert) {
+                if ($cert['label'] !== '' && ! in_array(mb_strtolower($cert['label']), $seen, true)) {
+                    $pool[] = ['label' => $cert['label'], 'type' => ProofType::Cert->value];
+                }
+            }
+        }
+
         if ($audience !== null) {
             $priority = $audience === 'commercial'
                 ? [ProofType::Cert->value, ProofType::License->value, ProofType::Award->value, ProofType::Affiliation->value, ProofType::Warranty->value, ProofType::Guarantee->value, ProofType::ReviewAggregate->value]
                 : [ProofType::ReviewAggregate->value, ProofType::Guarantee->value, ProofType::Warranty->value, ProofType::License->value, ProofType::Cert->value, ProofType::Affiliation->value, ProofType::Award->value];
 
-            $items = $items->sortBy(function (ProofItem $item) use ($priority): int {
-                $rank = array_search($item->type->value, $priority, true);
+            usort($pool, function (array $a, array $b) use ($priority): int {
+                $rank = fn (string $t): int => ($r = array_search($t, $priority, true)) === false ? count($priority) : (int) $r;
 
-                return $rank === false ? count($priority) : $rank;
-            })->values();
+                return $rank($a['type']) <=> $rank($b['type']);
+            });
         }
 
-        $badges = [];
-        foreach ($items as $item) {
-            $label = $this->payloadString($item, ['label', 'text']);
-            if ($label !== '') {
-                $badges[] = $label;
-            }
-            if (count($badges) === 4) {
-                break;
-            }
-        }
-
-        return $badges;
+        return array_slice(array_column($pool, 'label'), 0, 4);
     }
 
     /**
