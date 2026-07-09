@@ -47,6 +47,20 @@
             "elementor_binding": "lp/text"
         },
         {
+            "key": "story_image",
+            "label": "Story Image (a real team / at-work photo is HIGHLY recommended)",
+            "content_type": "image",
+            "role": "body_explainer",
+            "source": "media",
+            "cardinality": { "type": "single" },
+            "constraints": {
+                "required": false,
+                "media": { "min_width": 800, "min_height": 600, "alt_required": true, "allow_fabrication": true }
+            },
+            "client_override": true,
+            "elementor_binding": "lp/image"
+        },
+        {
             "key": "mission",
             "label": "Mission",
             "content_type": "long_text",

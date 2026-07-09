@@ -17,8 +17,10 @@ use App\Models\ProofItem;
 use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Models\VoiceProfile;
+use App\Models\WireframeKit;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\MetaBlobAssembler;
+use Database\Seeders\WireframeKitSeeder;
 use Tests\Support\FakeClaudeClient;
 
 function blockHomePage(Site $site): Content
@@ -1293,4 +1295,66 @@ it('every page ships its FINER identity in the blob — rich standard pages neve
     // Non-standard pages are unchanged: their page_type IS the fine identity.
     $service = blockServicePage($site, 'Drain Cleaning', 'drain-cleaning', 'x');
     expect(app(MetaBlobAssembler::class)->assemble($service->fresh(), collect())['page_type'])->toBe('service');
+});
+
+it('About story renders as a SPLIT beside the photo rail when a story image exists', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create(['site_id' => $site->id, 'story' => 'We started with one truck.']);
+    $page = blockAboutPage($site);
+
+    $markup = app(BlockContentAssembler::class)->compose(
+        $page->fresh(), $page->slot_payload,
+        ['story_image' => ['url' => 'https://cdn.example/team.webp', 'alt' => 'The crew on site']],
+    );
+
+    expect($markup)
+        ->toContain('lp-story--split')                    // the split skin
+        ->toContain('lp-story-rail')                      // the photo rail
+        ->toContain('https://cdn.example/team.webp')
+        ->toContain('The crew on site')                   // alt carried
+        ->toContain('We started with one truck.')         // prose beside it
+        ->not->toContain('AI stand-in photos');           // the recommendation note NEVER ships to a visitor
+
+    // Without a story image the section keeps its centered single-column layout.
+    $plain = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($plain)->toContain('lp-story')->not->toContain('lp-story--split')->not->toContain('lp-story-rail');
+});
+
+it('About story preview marks AI stand-ins loudly — real team photos are highly recommended', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    SiteNarrative::factory()->create(['site_id' => $site->id, 'story' => 'We started with one truck.']);
+    $page = blockAboutPage($site);
+
+    $preview = app(BlockContentAssembler::class)->compose(
+        $page->fresh(), $page->slot_payload,
+        ['story_image' => ['url' => 'https://cdn.example/ai-team.webp', 'alt' => 'Team']],
+        preview: true,
+    );
+
+    expect($preview)
+        ->toContain('lp-story--split')
+        ->toContain('REAL photos of your team and your work are highly recommended');
+});
+
+it('Why Choose Us hero renders the kit hero image — AI placeholder the client can swap for their own', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $page = blockWhyChooseUsPage($site);
+
+    $markup = app(BlockContentAssembler::class)->compose(
+        $page->fresh(), $page->slot_payload,
+        ['hero_image' => ['url' => 'https://cdn.example/wcu-hero.webp', 'alt' => 'Our crew at work']],
+    );
+
+    expect($markup)
+        ->toContain('https://cdn.example/wcu-hero.webp')
+        ->toContain('Our crew at work');
+
+    // The kit carries the slot the pipeline renders it from: fabricatable (AI stand-in) AND
+    // client-overridable (they swap in a real photo).
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('name', 'why-choose-us-page')->firstOrFail();
+    $slot = collect($kit->schema()->slots)->first(fn ($s) => $s->key === 'hero_image');
+    expect($slot)->not->toBeNull()
+        ->and($slot->constraints->media?->allowFabrication)->toBeTrue()
+        ->and($slot->clientOverride)->toBeTrue();
 });

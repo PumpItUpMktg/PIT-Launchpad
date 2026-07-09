@@ -549,9 +549,16 @@ final class BlockSections
      * caller passes already-cleaned plain-text paragraphs (drafter HTML is stripped upstream). Data-
      * gated: hidden without a story (preview → a labeled example paragraph). The About page's spine.
      *
+     * With $images, the section renders as a SPLIT — the prose beside a photo rail (one or two stacked
+     * images). Story photos may be AI stand-ins (the render pipeline's fabrication fallback), so the
+     * operator proof-view carries a loud note that REAL photos of the team / the work are highly
+     * recommended — authenticity is what an About page trades on. Without images the section keeps its
+     * centered single-column layout.
+     *
      * @param  list<string>  $paragraphs
+     * @param  list<array{url: string, alt: string}>  $images  the photo rail (already resolved; may be AI stand-ins)
      */
-    public function story(string $eyebrow, string $heading, array $paragraphs, bool $preview = false): string
+    public function story(string $eyebrow, string $heading, array $paragraphs, bool $preview = false, array $images = []): string
     {
         $paragraphs = array_values(array_filter(array_map('trim', $paragraphs), fn (string $p): bool => $p !== ''));
         $placeholder = false;
@@ -563,15 +570,35 @@ final class BlockSections
             $placeholder = true;
         }
 
+        $images = array_values(array_filter($images, fn (array $i): bool => trim($i['url']) !== ''));
+
         $children = [$this->sectionHead($eyebrow, $heading)];
         if ($placeholder) {
             $children[] = $this->placeholderNote('appears when you add your story');
         }
-        foreach ($paragraphs as $p) {
-            $children[] = $this->b->paragraph($this->text($p), ['className' => 'lp-prose-p']);
+        if ($images !== [] && $preview) {
+            // Operator/client proof-view only — never shipped to a visitor.
+            $children[] = $this->placeholderNote('AI stand-in photos render here until you add real ones — REAL photos of your team and your work are highly recommended; they build far more trust than any generated image');
         }
 
-        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-story', $placeholder)]);
+        $prose = array_map(fn (string $p): string => $this->b->paragraph($this->text($p), ['className' => 'lp-prose-p']), $paragraphs);
+
+        if ($images === []) {
+            return $this->b->group([...$children, ...$prose], ['align' => 'full', 'className' => $this->sectionClass('lp-story', $placeholder)]);
+        }
+
+        // Split layout: the prose column beside the photo rail (up to two stacked images).
+        $rail = array_map(
+            fn (array $i): string => $this->b->image($i['url'], $i['alt'] !== '' ? $i['alt'] : $heading, ['className' => 'lp-story-photo']),
+            array_slice($images, 0, 2),
+        );
+
+        $children[] = $this->b->columns([
+            $this->b->column($prose, ['width' => '60%']),
+            $this->b->column([$this->b->group($rail, ['className' => 'lp-story-rail'])], ['width' => '40%']),
+        ], ['className' => 'lp-story-split']);
+
+        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-story lp-story--split', $placeholder)]);
     }
 
     /**
