@@ -1096,6 +1096,7 @@
     margin: 0;
     font-size: 1.1rem;
     line-height: 1.4;
+    font-weight: 600;
 }
 
 .lp-contact-value a {
@@ -1130,6 +1131,8 @@
 
 .lp-hours-row .lp-hours-val {
     color: var(--wp--preset--color--muted, #475569);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 /* Contact form — preview-only placeholder sketch (omitted on publish). */

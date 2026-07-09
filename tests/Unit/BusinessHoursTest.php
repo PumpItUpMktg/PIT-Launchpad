@@ -59,3 +59,38 @@ it('applies the first open day to every day for "same every day"', function () {
     expect($same)->toHaveCount(7)
         ->and(collect($same)->every(fn ($r) => $r['open'] === '10:00' && $r['close'] === '16:00' && ! $r['closed']))->toBeTrue();
 });
+
+it('displayRows collapses identical consecutive days into a corporate am/pm range', function () {
+    $week = [];
+    foreach (['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as $d) {
+        $week[$d] = ['open' => '08:00', 'close' => '18:00'];
+    }
+    $week['sun'] = 'closed';
+
+    expect(BusinessHours::displayRows($week))
+        ->toBe([['label' => 'Monday – Saturday', 'value' => '8am – 6pm']]);
+});
+
+it('displayRows splits ranges honestly on a closed gap and converts edge times', function () {
+    $rows = BusinessHours::displayRows([
+        'mon' => ['open' => '08:30', 'close' => '17:00'],
+        'tue' => ['open' => '08:30', 'close' => '17:00'],
+        'wed' => 'closed',                                  // the gap breaks the run
+        'thu' => ['open' => '08:30', 'close' => '17:00'],
+        'fri' => ['open' => '00:00', 'close' => '12:00'],   // midnight + noon edges
+        'sat' => '24h',
+        'sun' => 'closed',
+    ]);
+
+    expect($rows)->toBe([
+        ['label' => 'Monday – Tuesday', 'value' => '8:30am – 5pm'],
+        ['label' => 'Thursday', 'value' => '8:30am – 5pm'],
+        ['label' => 'Friday', 'value' => '12am – 12pm'],
+        ['label' => 'Saturday', 'value' => 'Open 24 hours'],
+    ]);
+});
+
+it('displayRows is empty when nothing is captured (the hours block data-gates)', function () {
+    expect(BusinessHours::displayRows(null))->toBe([])
+        ->and(BusinessHours::displayRows([]))->toBe([]);
+});

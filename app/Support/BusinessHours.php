@@ -48,6 +48,86 @@ final class BusinessHours
         return $rows;
     }
 
+    /** @var array<string, string> */
+    private const DAY_NAMES = [
+        'mon' => 'Monday', 'tue' => 'Tuesday', 'wed' => 'Wednesday', 'thu' => 'Thursday',
+        'fri' => 'Friday', 'sat' => 'Saturday', 'sun' => 'Sunday',
+    ];
+
+    /**
+     * Stored hours → the CUSTOMER-FACING display rows: 12-hour am/pm times, full day names, and
+     * consecutive days with identical hours COLLAPSED into a range ("Monday – Saturday, 8am – 6pm").
+     * Closed days break a run and are dropped (never a wall of "Closed"); a closed gap therefore
+     * splits ranges honestly (Mon–Tue, Thu–Sat when Wednesday is closed). Display only — structured
+     * data (LocalBusiness openingHoursSpecification) stays per-day, so the collapse costs no SEO.
+     *
+     * @param  array<string, mixed>|null  $hours
+     * @return list<array{label: string, value: string}>
+     */
+    public static function displayRows(?array $hours): array
+    {
+        // Each day's display value in order; null = closed/uncaptured (breaks a run, never shown).
+        $values = [];
+        foreach (self::fromStored($hours) as $row) {
+            if ($row['all_day']) {
+                $values[$row['day']] = 'Open 24 hours';
+            } elseif (! $row['closed'] && trim((string) $row['open']) !== '' && trim((string) $row['close']) !== '') {
+                $values[$row['day']] = self::to12h((string) $row['open']).' – '.self::to12h((string) $row['close']);
+            } else {
+                $values[$row['day']] = null;
+            }
+        }
+
+        $rows = [];
+        /** @var array{start: string, end: string, value: string}|null $run */
+        $run = null;
+        foreach (self::DAYS as $day) {
+            $value = $values[$day];
+            if ($value !== null && $run !== null && $run['value'] === $value) {
+                $run['end'] = $day; // extend the run
+
+                continue;
+            }
+            if ($run !== null) {
+                $rows[] = self::runRow($run);
+            }
+            $run = $value !== null ? ['start' => $day, 'end' => $day, 'value' => $value] : null;
+        }
+        if ($run !== null) {
+            $rows[] = self::runRow($run);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  array{start: string, end: string, value: string}  $run
+     * @return array{label: string, value: string}
+     */
+    private static function runRow(array $run): array
+    {
+        $label = $run['start'] === $run['end']
+            ? self::DAY_NAMES[$run['start']]
+            : self::DAY_NAMES[$run['start']].' – '.self::DAY_NAMES[$run['end']];
+
+        return ['label' => $label, 'value' => $run['value']];
+    }
+
+    /** "08:00" → "8am", "08:30" → "8:30am", "17:00" → "5pm", "12:00" → "12pm", "00:00" → "12am". */
+    private static function to12h(string $time): string
+    {
+        if (preg_match('/^(\d{1,2}):(\d{2})/', trim($time), $m) !== 1) {
+            return trim($time); // unparseable — show as captured, never invent
+        }
+
+        $hour = (int) $m[1];
+        $minutes = $m[2];
+        $suffix = $hour >= 12 ? 'pm' : 'am';
+        $hour12 = $hour % 12 === 0 ? 12 : $hour % 12;
+
+        return $hour12.((int) $minutes > 0 ? ':'.$minutes : '').$suffix;
+    }
+
     /**
      * Coerce ANY persisted shape back to the day-keyed map, repairing the legacy
      * numeric-keyed rows the Filament repeater wrote before the round-trip was
