@@ -608,14 +608,20 @@ final class BlockPageComposer
 
     /**
      * Composes the CONTACT page — hero → the real contact details (phone / email / address / hours) →
-     * a request-service CTA. The NAP is resolved from §1 upstream (the phone rides on the PageContext,
-     * the same number every surface uses); nothing here is fabricated, and each channel data-gates.
-     * The lead form itself is a companion-plugin shortcode (kses strips inline <form>), added separately.
+     * the service-area brief → a request-service CTA. Contact is pure conversion: phone-forward (for
+     * home services the call IS the conversion; emergency treatment rides the shared hero/CTA gating),
+     * short hero, no selling. The NAP is resolved from §1 upstream (the phone rides on the PageContext,
+     * the same number every surface uses — NAP-consistent with the footer + schema); the address only
+     * arrives for a real storefront (gated upstream); nothing here is fabricated, and each channel
+     * data-gates. The lead form itself is a companion-plugin shortcode (kses strips inline <form>),
+     * added separately once its delivery destination is configured.
      *
      * @param  array<string, mixed>  $slots  hero headline + intro
      * @param  string|null  $email  the business email (from §1), or null
-     * @param  string|null  $address  the business address (from §1), or null
-     * @param  list<array{label: string, value: string}>  $hours  per-day hours rows
+     * @param  string|null  $address  the business address (from §1) — ONLY when a real storefront, or null
+     * @param  list<array{label: string, value: string}>  $hours  per-day hours rows (+ the 24/7 emergency row)
+     * @param  string  $serviceAreaBrief  the drafted one-line "where we work" (data-gated)
+     * @param  'homeowner'|'commercial'  $audience  phrases the ask — a commercial buyer requests an assessment
      * @param  bool  $preview  operator proof-view (example details) vs publish (data-gated)
      */
     public function composeContact(
@@ -624,15 +630,19 @@ final class BlockPageComposer
         ?string $email = null,
         ?string $address = null,
         array $hours = [],
+        string $serviceAreaBrief = '',
+        string $audience = 'homeowner',
         bool $preview = false,
     ): string {
+        $ask = $audience === 'commercial' ? 'Request an assessment' : 'Request service';
+
         $hero = $this->sections->hero(
             eyebrow: 'Get in touch',
             headline: $this->str($slots['hero_headline'] ?? '') ?: 'Contact us',
             subhead: $this->str($slots['intro'] ?? $slots['hero_subhead'] ?? ''),
             imageUrl: null,
             imageAlt: '',
-            assessmentText: 'Request service',
+            assessmentText: $ask,
             assessmentUrl: '#contact',
             trust: [],
             ctx: $ctx,
@@ -649,12 +659,23 @@ final class BlockPageComposer
             preview: $preview,
         );
 
+        // The drafted "where we work" line — a reader self-checks coverage before calling. Data-gated
+        // (geo comes only from the grounded markets; no coverage → no line).
+        $brief = $this->sections->prose(
+            eyebrow: 'Where we work',
+            heading: 'Our service area',
+            paragraphs: $serviceAreaBrief !== '' ? [$serviceAreaBrief] : [],
+            surface: false,
+            preview: $preview,
+            activates: 'appears when your service area is captured and the page is generated',
+        );
+
         // The lead form is a preview-only placeholder for now (delivery undecided) — omitted on publish.
         $form = $this->sections->contactForm($preview);
 
         // A thin utility page carries ONE band CTA (the soft close) — the dark hero already holds a CTA
         // button and the NAP block is itself a call to action, so a second colored band would only stack
-        // against the hero or the close. Rhythm: D·L·(L)·D.
+        // against the hero or the close. Rhythm: D·Ls·L·(L)·D.
         $cta = $this->sections->cta(
             heading: 'Prefer to just ask?',
             body: 'Tell us what you need and we’ll get right back to you — no pressure.',
@@ -663,7 +684,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $details, $form, $cta]);
+        return $this->join([$hero, $details, $brief, $form, $cta]);
     }
 
     /** @param list<string> $blocks */
