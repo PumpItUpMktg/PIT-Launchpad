@@ -1,9 +1,11 @@
 <?php
 
+use App\Enums\ProofType;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Business;
 use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Models\Location;
+use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
@@ -122,4 +124,57 @@ test('Step 1 is framed as "Add a new site" and the sidebar personalizes after a 
 
     $this->site->update(['brand_name' => 'Sewer Gurus']);
     Livewire::test(Business::class)->assertSee('Setting up Sewer Gurus');
+});
+
+test('captures email + hours onto the primary Location (creating it) — the manual no-GBP fallback', function () {
+    Livewire::test(Business::class)
+        ->set('businessName', 'Sewer Gurus')
+        ->set('email', 'office@sewergurus.com')
+        ->set('hours.mon.open', '08:00')->set('hours.mon.close', '17:00')
+        ->set('hours.sun.closed', true)
+        ->call('proceed');
+
+    $location = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->first();
+    expect($location)->not->toBeNull()                       // created on demand — none existed
+        ->and($location->email)->toBe('office@sewergurus.com')
+        ->and($location->hours['mon'])->toBe(['open' => '08:00', 'close' => '17:00'])
+        ->and($location->hours['sun'])->toBe('closed')
+        ->and($location->hours)->not->toHaveKey('tue');      // blank days simply aren't captured
+
+    // Round-trips back into the form.
+    Livewire::test(Business::class)
+        ->assertSet('email', 'office@sewergurus.com')
+        ->assertSet('hours.mon.open', '08:00')
+        ->assertSet('hours.sun.closed', true);
+});
+
+test('pasted reviews become client-origin substantiated testimonials — wholesale-replaced on re-save', function () {
+    // An operator-sourced testimonial that must NOT be touched by the client's edits.
+    ProofItem::factory()->create([
+        'site_id' => $this->site->id, 'type' => ProofType::Testimonial,
+        'payload' => ['text' => 'Operator-verified review'], 'is_substantiated' => true,
+    ]);
+
+    Livewire::test(Business::class)
+        ->set('newTestimonialQuote', 'Fixed our sump pump the same day.')
+        ->set('newTestimonialAuthor', 'M. Chen')
+        ->call('addTestimonial')
+        ->call('proceed');
+
+    $client = ProofItem::withoutGlobalScope(SiteScope::class)
+        ->where('site_id', $this->site->id)->get()
+        ->filter(fn ($p) => ($p->payload['origin'] ?? null) === 'client');
+    expect($client)->toHaveCount(1)
+        ->and($client->first()->is_substantiated)->toBeTrue()
+        ->and($client->first()->payload['text'])->toBe('Fixed our sump pump the same day.')
+        ->and($client->first()->payload['author'])->toBe('M. Chen');
+
+    // Re-save with the review removed → the client-origin item is gone; the operator one survives.
+    Livewire::test(Business::class)
+        ->call('removeTestimonial', 0)
+        ->call('proceed');
+
+    $all = ProofItem::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->get();
+    expect($all)->toHaveCount(1)
+        ->and($all->first()->payload['text'])->toBe('Operator-verified review');
 });

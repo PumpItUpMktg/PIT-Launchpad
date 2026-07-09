@@ -73,13 +73,13 @@ final class IntakeChecklist
             $this->item('team', 'Team members', $has('team'),
                 'the team grid on About (real faces build the most trust)', 'your operator'),
             $this->item('reviews', 'Reviews / testimonials', $this->hasReviews($site),
-                'the "In their words" sections across the site', 'your operator'),
+                'the "In their words" sections across the site', 'Setup → Business'),
             $this->item('phone', 'Business phone', $this->contact->phone($site) !== null,
                 'every call button and click-to-call link', 'Setup → Business'),
             $this->item('email', 'Business email', trim((string) ($location->email ?? '')) !== '',
-                'the Contact page email', 'your operator'),
+                'the Contact page email', 'Setup → Business'),
             $this->item('hours', 'Business hours', $this->hasHours($location),
-                'the hours block on Contact', 'your operator'),
+                'the hours block on Contact', 'Setup → Business'),
         ];
     }
 
