@@ -1610,3 +1610,31 @@ it('Contact hero renders the kit hero image when the pipeline supplies one', fun
 
     expect($markup)->toContain('https://cdn.example/contact-hero.webp')->toContain('Reaching the team');
 });
+
+it('the proof gallery never ships add-your-own-photo cards to a visitor — publish gates, preview directs', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+
+    // No photos → the whole section omits on publish (a photo-less gallery is not page content)…
+    $publish = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+    expect($publish)
+        ->not->toContain('lp-proof')
+        ->not->toContain('Add your own photo')
+        ->not->toContain('Show the work');                 // the old operator-direction H2 is gone everywhere
+
+    // …preview keeps the full grid + the direction, clearly labeled.
+    $preview = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, [], preview: true);
+    expect($preview)
+        ->toContain('lp-proof')->toContain('Add your own photo')
+        ->toContain('unfilled photo slots are left out on publish');
+
+    // With a real photo, publish renders ONLY the filled cell under the visitor-facing heading.
+    $withPhoto = app(BlockContentAssembler::class)->compose(
+        $home->fresh(), $home->slot_payload,
+        ['proof_image' => ['url' => 'https://cdn.example/job.webp', 'alt' => 'On site']],
+    );
+    expect($withPhoto)
+        ->toContain('Recent work we’re proud of')          // visitor-facing H2
+        ->toContain('https://cdn.example/job.webp')
+        ->not->toContain('Add your own photo');            // no empty-slot cards beside it
+});

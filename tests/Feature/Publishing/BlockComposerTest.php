@@ -103,14 +103,19 @@ it('renders the services grid from real child pages only (internal-link safe)', 
         ->and(substr_count($markup, 'sewergurus.com/'))->toBe(2);
 });
 
-it('renders proof as honest add-your-own-photo placeholders, never a fake image', function () use ($slots, $cards) {
+it('proof photos are honest — publish omits the photo-less gallery; preview shows labeled add-photo slots; never a fake image', function () use ($slots, $cards) {
     $ctx = new PageContext('(973) 555-0100', 'tel:+19735550100');
     // No proof/gallery images provided.
     $markup = composer()->composeHome($slots, ['hero_image' => ['url' => 'https://cdn.example/hero.webp']], $cards, $ctx);
 
-    expect($markup)->toContain('Add your own photo');
-    // The only <img> is the hero — proof slots are placeholders, not fabricated photos.
+    // Publish: the gallery omits entirely — an "add your own photo" card is a direction to the
+    // client, never visitor-facing content. The only <img> is the hero; nothing is fabricated.
+    expect($markup)->not->toContain('Add your own photo')->not->toContain('lp-proof');
     expect(substr_count($markup, '<img '))->toBe(1);
+
+    // Preview: the full grid with the labeled add-photo slots (the direction lives HERE).
+    $preview = composer()->composeHome($slots, ['hero_image' => ['url' => 'https://cdn.example/hero.webp']], $cards, $ctx, preview: true);
+    expect($preview)->toContain('Add your own photo')->toContain('lp-proof');
 });
 
 it('includes substantiated trust stats but never fabricates them', function () use ($slots, $images, $cards) {
