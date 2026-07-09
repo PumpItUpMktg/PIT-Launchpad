@@ -32,6 +32,21 @@
             "elementor_binding": "lp/text"
         },
         {
+            "key": "hero_image",
+            "label": "Hero Image (swap in a real photo of your team or your work — highly recommended)",
+            "content_type": "image",
+            "role": "hero_solution",
+            "source": "media",
+            "cardinality": { "type": "single" },
+            "constraints": {
+                "required": false,
+                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": true }
+            },
+            "client_override": true,
+            "seo_binding": "og_image",
+            "elementor_binding": "lp/image"
+        },
+        {
             "key": "differentiators",
             "label": "Differentiators",
             "content_type": "list",

@@ -17,8 +17,10 @@ use App\Models\ProofItem;
 use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Models\VoiceProfile;
+use App\Models\WireframeKit;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\MetaBlobAssembler;
+use Database\Seeders\WireframeKitSeeder;
 use Tests\Support\FakeClaudeClient;
 
 function blockHomePage(Site $site): Content
@@ -1332,4 +1334,27 @@ it('About story preview marks AI stand-ins loudly — real team photos are highl
     expect($preview)
         ->toContain('lp-story--split')
         ->toContain('REAL photos of your team and your work are highly recommended');
+});
+
+it('Why Choose Us hero renders the kit hero image — AI placeholder the client can swap for their own', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $page = blockWhyChooseUsPage($site);
+
+    $markup = app(BlockContentAssembler::class)->compose(
+        $page->fresh(), $page->slot_payload,
+        ['hero_image' => ['url' => 'https://cdn.example/wcu-hero.webp', 'alt' => 'Our crew at work']],
+    );
+
+    expect($markup)
+        ->toContain('https://cdn.example/wcu-hero.webp')
+        ->toContain('Our crew at work');
+
+    // The kit carries the slot the pipeline renders it from: fabricatable (AI stand-in) AND
+    // client-overridable (they swap in a real photo).
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('name', 'why-choose-us-page')->firstOrFail();
+    $slot = collect($kit->schema()->slots)->first(fn ($s) => $s->key === 'hero_image');
+    expect($slot)->not->toBeNull()
+        ->and($slot->constraints->media?->allowFabrication)->toBeTrue()
+        ->and($slot->clientOverride)->toBeTrue();
 });
