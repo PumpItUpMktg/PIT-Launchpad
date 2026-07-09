@@ -42,6 +42,14 @@
                 <label>Business email <span class="hint" style="font-weight:400">— optional</span></label>
                 <input class="lp-input" wire:model.blur="email" type="email" placeholder="office@yourbusiness.com" autocomplete="email">
             </div>
+            <div class="lp-field" style="margin:12px 0 0">
+                <label>Business address <span class="hint" style="font-weight:400">— optional</span></label>
+                <input class="lp-input" wire:model.blur="address" placeholder="12 Main Street, Newark, NJ 07102" autocomplete="street-address">
+                <label style="display:flex;align-items:flex-start;gap:.5rem;margin-top:6px;font-weight:400;font-size:.85rem;color:var(--ungrouped);cursor:pointer">
+                    <input type="checkbox" wire:model="isStorefront" style="margin-top:.15rem">
+                    <span>Customers visit this address — show it on the site with a map pin. Leave unchecked if you work at customers' locations (your address stays private).</span>
+                </label>
+            </div>
         </div>
 
         <div class="lp-card">

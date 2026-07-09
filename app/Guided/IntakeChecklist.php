@@ -78,6 +78,8 @@ final class IntakeChecklist
                 'every call button and click-to-call link', 'Setup → Business'),
             $this->item('email', 'Business email', trim((string) ($location->email ?? '')) !== '',
                 'the Contact page email', 'Setup → Business'),
+            $this->item('address', 'Business address', trim((string) ($location->address ?? '')) !== '',
+                'the Contact address + map pin (shown only when customers visit you)', 'Setup → Business'),
             $this->item('hours', 'Business hours', $this->hasHours($location),
                 'the hours block on Contact', 'Setup → Business'),
         ];

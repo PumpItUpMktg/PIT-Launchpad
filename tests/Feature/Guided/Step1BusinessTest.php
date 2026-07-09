@@ -178,3 +178,28 @@ test('pasted reviews become client-origin substantiated testimonials — wholesa
     expect($all)->toHaveCount(1)
         ->and($all->first()->payload['text'])->toBe('Operator-verified review');
 });
+
+test('captures the interview address + storefront flag; a changed address clears the cached geocode', function () {
+    Livewire::test(Business::class)
+        ->set('businessName', 'Sewer Gurus')
+        ->set('address', '12 Main Street, Newark, NJ')
+        ->set('isStorefront', true)
+        ->call('proceed');
+
+    $location = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->first();
+    expect($location->address)->toBe('12 Main Street, Newark, NJ')
+        ->and($location->is_storefront)->toBeTrue();
+
+    // Simulate a completed geocode, then change the address — the cache must clear so the pin re-resolves.
+    $location->forceFill(['latitude' => 40.7, 'longitude' => -74.1, 'geocoded_at' => now()])->save();
+    Livewire::test(Business::class)
+        ->assertSet('address', '12 Main Street, Newark, NJ')   // round-trips
+        ->assertSet('isStorefront', true)
+        ->set('address', '99 New Ave, Clifton, NJ')
+        ->call('proceed');
+
+    $fresh = $location->fresh();
+    expect($fresh->address)->toBe('99 New Ave, Clifton, NJ')
+        ->and($fresh->latitude)->toBeNull()
+        ->and($fresh->geocoded_at)->toBeNull();
+});

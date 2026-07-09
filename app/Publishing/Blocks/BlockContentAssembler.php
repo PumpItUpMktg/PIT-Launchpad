@@ -147,30 +147,16 @@ final class BlockContentAssembler
     }
 
     /**
-     * The primary location's hours as display rows — one per open day (closed days drop, so the block
-     * shows only real hours, never a wall of "Closed"). Empty when nothing is captured.
+     * The primary location's hours as CUSTOMER-FACING display rows — 12-hour am/pm times, full day
+     * names, consecutive identical days collapsed ("Monday – Saturday / 8am – 6pm"); closed days drop.
+     * Display only — when LocalBusiness openingHoursSpecification lands it stays per-day, so the
+     * collapse costs no SEO. Empty when nothing is captured.
      *
      * @return list<array{label: string, value: string}>
      */
     private function businessHours(?Location $location): array
     {
-        $hours = is_array($location?->hours) ? $location->hours : null;
-
-        $labels = ['mon' => 'Mon', 'tue' => 'Tue', 'wed' => 'Wed', 'thu' => 'Thu', 'fri' => 'Fri', 'sat' => 'Sat', 'sun' => 'Sun'];
-
-        $rows = [];
-        foreach (BusinessHours::fromStored($hours) as $row) {
-            if ($row['all_day']) {
-                $value = 'Open 24 hours';
-            } elseif ($row['closed'] || trim((string) $row['open']) === '') {
-                continue; // drop closed days — show only the days the business is actually open
-            } else {
-                $value = trim((string) $row['open']).' – '.trim((string) $row['close']);
-            }
-            $rows[] = ['label' => $labels[$row['day']] ?? ucfirst($row['day']), 'value' => $value];
-        }
-
-        return $rows;
+        return BusinessHours::displayRows(is_array($location?->hours) ? $location->hours : null);
     }
 
     /**

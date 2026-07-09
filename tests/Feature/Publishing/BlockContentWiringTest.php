@@ -1102,10 +1102,28 @@ it('composes the Contact page — real NAP (phone, email, address, hours) from �
         ->toContain('(973) 555-0100')
         ->toContain('href="mailto:hello@sewergurus.com"') // mailto
         ->toContain('12 Main Street, Newark, NJ')         // address, verbatim
-        ->toContain('Hours')->toContain('Mon')->toContain('8:00 – 17:00') // an open day
-        ->not->toContain('>Sun<')                         // closed days drop — no wall of "Closed"
+        // Corporate hours: am/pm, full day name, "Business Hours" heading (closed days still drop).
+        ->toContain('Business Hours')->toContain('Monday')->toContain('8am – 5pm')
+        ->not->toContain('17:00')                          // never military time
+        ->not->toContain('Sunday')                         // closed days drop — no wall of "Closed"
         ->toContain('Prefer to just ask?')                // the soft closing CTA
         ->not->toContain('lp-cta--bold');                 // thin page → no pushy accent band
+});
+
+it('Contact hours collapse identical consecutive days into one corporate range', function () {
+    $site = Site::factory()->create(['phone' => '(973) 555-0100']);
+    $week = ['sun' => 'closed'];
+    foreach (['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as $d) {
+        $week[$d] = ['open' => '08:00', 'close' => '18:00'];
+    }
+    Location::factory()->create(['site_id' => $site->id, 'email' => '', 'phone' => null, 'address' => null, 'hours' => $week]);
+
+    $page = blockContactPage($site);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Monday – Saturday')->toContain('8am – 6pm')
+        ->not->toContain('>Tuesday<');                    // collapsed — not seven rows
 });
 
 it('Contact: a mobile-only business (no storefront) never shows its address — no walk-ins to a garage', function () {

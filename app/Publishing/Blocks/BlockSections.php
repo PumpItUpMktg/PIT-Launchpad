@@ -823,7 +823,7 @@ final class BlockSections
             $phoneTel = 'tel:5551234567';
             $email = 'hello@yourbusiness.com';
             $address = '123 Main Street, Your Town';
-            $hours = [['label' => 'Mon–Fri', 'value' => '8:00 – 5:00'], ['label' => 'Sat', 'value' => 'By appointment'], ['label' => 'Sun', 'value' => 'Closed']];
+            $hours = [['label' => 'Monday – Friday', 'value' => '8am – 5pm'], ['label' => 'Saturday', 'value' => 'By appointment']];
             $placeholder = true;
         }
 
@@ -832,13 +832,13 @@ final class BlockSections
             $value = trim((string) $phoneTel) !== ''
                 ? '<a href="'.$this->attr($phoneTel).'">'.$this->text($phoneDisplay).'</a>'
                 : $this->text($phoneDisplay);
-            $rows[] = $this->detailRow('Call us', $value);
+            $rows[] = $this->detailRow('Phone', $value);
         }
         if ($email !== '') {
             $rows[] = $this->detailRow('Email', '<a href="mailto:'.$this->attr($email).'">'.$this->text($email).'</a>');
         }
         if ($address !== '') {
-            $rows[] = $this->detailRow('Visit', $this->text($address));
+            $rows[] = $this->detailRow('Address', $this->text($address));
         }
 
         $cols = [];
@@ -846,7 +846,7 @@ final class BlockSections
             $cols[] = $this->b->column([$this->b->group($rows, ['className' => 'lp-contact-rows'])]);
         }
         if ($hours !== []) {
-            $hoursChildren = [$this->b->heading(4, 'Hours', ['className' => 'lp-contact-hours-h'])];
+            $hoursChildren = [$this->b->heading(4, 'Business Hours', ['className' => 'lp-contact-hours-h'])];
             foreach ($hours as $row) {
                 $hoursChildren[] = $this->b->paragraph(
                     '<span class="lp-hours-day">'.$this->text($row['label']).'</span><span class="lp-hours-val">'.$this->text($row['value']).'</span>',

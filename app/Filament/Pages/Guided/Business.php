@@ -73,6 +73,13 @@ class Business extends GuidedPage
     /** Business email — optional; stored on the primary Location; drives the Contact page email. */
     public string $email = '';
 
+    /** Business address — from the initial interview; stored on the primary Location. Renders on the
+     * site (Contact address + the location-pin map) ONLY when it's a storefront customers visit. */
+    public string $address = '';
+
+    /** Whether customers visit the address (a storefront) — gates the address display + map pin. */
+    public bool $isStorefront = false;
+
     /**
      * Business hours — one row per day; optional. Stored on the primary Location in the canonical
      * shape ({day: {open, close} | 'closed'}). The manual fallback until GBP import lands — a
@@ -239,6 +246,8 @@ class Business extends GuidedPage
     {
         $location = $this->primaryLocation($site);
         $this->email = trim((string) ($location->email ?? ''));
+        $this->address = trim((string) ($location->address ?? ''));
+        $this->isStorefront = (bool) ($location->is_storefront ?? false);
 
         $stored = is_array($location?->hours) ? $location->hours : [];
         foreach (array_keys(self::DAYS) as $day) {
@@ -269,17 +278,27 @@ class Business extends GuidedPage
     private function saveContactAndReviews(Site $site): void
     {
         $email = trim($this->email);
+        $address = trim($this->address);
         $hours = $this->storedHours();
 
         $location = $this->primaryLocation($site);
-        if ($location === null && ($email !== '' || $hours !== null)) {
+        if ($location === null && ($email !== '' || $address !== '' || $hours !== null)) {
             $location = Location::withoutGlobalScope(SiteScope::class)->create([
                 'site_id' => $site->id,
                 'name' => trim($this->businessName) !== '' ? trim($this->businessName) : 'Main location',
                 'phone' => trim($this->phone) !== '' ? trim($this->phone) : null,
             ]);
         }
-        $location?->forceFill(['email' => $email !== '' ? $email : null, 'hours' => $hours])->save();
+        // A changed address invalidates the cached geocode (the Contact pin re-resolves on next push).
+        if ($location !== null && $address !== trim((string) $location->address)) {
+            $location->forceFill(['latitude' => null, 'longitude' => null, 'geocoded_at' => null]);
+        }
+        $location?->forceFill([
+            'email' => $email !== '' ? $email : null,
+            'address' => $address !== '' ? $address : null,
+            'is_storefront' => $this->isStorefront,
+            'hours' => $hours,
+        ])->save();
 
         // Wholesale-replace the client-origin testimonials (operator/GBP-sourced proof is untouched).
         foreach ($this->clientTestimonials($site) as $item) {
