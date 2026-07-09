@@ -169,7 +169,12 @@ class MetaBlobAssembler
         return [
             'content_id' => $content->id,
             'kind' => $content->kind->value,
-            'page_type' => $content->page_type?->value,
+            // The finer page identity when one exists: a standard page sends its standard_type
+            // ('about' / 'contact' / 'faq' / ...) rather than the coarse shared 'utility' bucket, so the
+            // plugin's lp-page-type-{type} body class can target About without also hitting Privacy.
+            // Home still resolves 'home' (the plugin's static-front-page check); service/location/hub
+            // have no standard_type and send their page_type unchanged.
+            'page_type' => $content->standard_type->value ?? $content->page_type?->value,
             'kit' => $this->kitName($content),
             'kit_version' => (string) ($content->wireframe_kit_version ?? ''),
             'silo_id' => $content->silo_id,

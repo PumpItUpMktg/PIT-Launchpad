@@ -575,8 +575,10 @@ final class BlockSections
     }
 
     /**
-     * Mission statement band: the tenant's mission as ONE standout, centered statement (an eyebrow + the
-     * line). Verbatim — never invented. Data-gated: hidden without one (preview → a labeled example).
+     * Mission statement band: the mission as ONE standout, centered statement (an eyebrow + the line).
+     * The caller passes COMPOSED prose only — the drafted, brand-voice statement — never the raw intake
+     * brief (rendering the operator's keyword notes verbatim was the canonical raw-intake leak).
+     * Data-gated: hidden without one (preview → a labeled example).
      */
     public function statementBand(string $statement, bool $preview = false): string
     {
@@ -586,13 +588,13 @@ final class BlockSections
             if (! $preview) {
                 return '';
             }
-            $statement = 'Add your mission — the one sentence that says why you do this work. It reads here as a standout statement.';
+            $statement = 'Your mission — the one sentence that says why you do this work — reads here as a standout statement, written in your brand voice.';
             $placeholder = true;
         }
 
         $children = [];
         if ($placeholder) {
-            $children[] = $this->placeholderNote('appears when you add your mission');
+            $children[] = $this->placeholderNote('appears when a mission is captured and the page is generated');
         }
         $children[] = $this->b->paragraph('Our mission', ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-eyebrow']);
         $children[] = $this->b->paragraph($this->text($statement), ['className' => 'lp-statement-text']);

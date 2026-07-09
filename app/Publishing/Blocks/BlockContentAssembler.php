@@ -6,12 +6,14 @@ use App\Enums\ContentKind;
 use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Enums\StandardPageType;
+use App\Enums\VoiceStatus;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteNarrative;
+use App\Models\VoiceProfile;
 use App\Publishing\Legal\LegalContext;
 use App\Publishing\Legal\LegalTemplates;
 use App\Publishing\MetaBlobAssembler;
@@ -339,10 +341,14 @@ final class BlockContentAssembler
     }
 
     /**
-     * The About page — a brand narrative. Story + mission render the DRAFTED, voice-expanded prose
-     * (the About drafter's whole job), falling back to the raw §1 narrative when a slot is empty;
-     * values + team render from §1 intake (reliable structure). About is brand-critical and
-     * review-gated, so the voice-expanded prose is operator-checked before it can publish.
+     * The About page — the trust-conversion brand narrative. Story renders the DRAFTED, voice-expanded
+     * prose, falling back to the client's OWN §1 story (their words, prose by nature). The MISSION
+     * renders ONLY the drafted slot — the raw intake field is an operator brief (often keywords), and
+     * rendering it verbatim was the canonical raw-intake leak; an ungenerated page omits the band
+     * rather than leaking the brief. Values prefer the drafted promise-framed lines (falling back to
+     * the client's short §1 labels); differentiators reuse the home why-us cards; the credibility
+     * badges are AUDIENCE-ordered (commercial leads certifications, homeowner leads reviews). About is
+     * brand-critical and review-gated, so the voice-expanded prose is operator-checked before publish.
      *
      * @param  array<string, mixed>  $slots
      * @param  array<string, array<string, mixed>>  $images
@@ -353,18 +359,80 @@ final class BlockContentAssembler
             ->where('site_id', $content->site_id)
             ->first();
 
+        $site = $this->site($content);
+
         return $this->composer->composeAbout(
             slots: $slots,
             images: $images,
             ctx: $ctx,
             story: $this->storyParagraphs($this->slotString($slots, 'our_story') ?: (string) ($narrative->story ?? '')),
-            mission: trim($this->slotString($slots, 'mission') ?: (string) ($narrative->mission ?? '')),
-            values: $this->titleDescList(is_array($narrative?->values) ? $narrative->values : []),
+            mission: $this->slotString($slots, 'mission'),
+            values: $this->aboutValues($slots, $narrative),
+            differentiators: $this->differentiators($content),
             team: $this->teamMembers($narrative),
-            credibilityBadges: $this->credibilityBadges($content),
+            credibilityBadges: $this->credibilityBadges($content, audience: $this->audience($content)),
             trustStats: $this->trustStats($content),
+            brand: trim((string) ($site->brand_name ?? '')),
             preview: $preview,
         );
+    }
+
+    /**
+     * The About values — the DRAFTED promise-framed lines when the page has been generated (the
+     * drafter phrases each captured value as a client promise), else the client's own short §1 labels
+     * ({title, description}, safe display text — unlike the mission's long-text brief). A drafted line
+     * may arrive as "Title — line" / "Title: line" or as a {title, description} map.
+     *
+     * @param  array<string, mixed>  $slots
+     * @return list<array{title: string, description: string}>
+     */
+    private function aboutValues(array $slots, ?SiteNarrative $narrative): array
+    {
+        $raw = $slots['values'] ?? [];
+        $out = [];
+        foreach (is_array($raw) ? $raw : [] as $item) {
+            if (is_array($item)) {
+                $title = trim((string) ($item['title'] ?? ''));
+                if ($title !== '') {
+                    $out[] = ['title' => $title, 'description' => trim((string) ($item['description'] ?? $item['text'] ?? ''))];
+                }
+
+                continue;
+            }
+
+            $line = trim((string) $item);
+            if ($line === '') {
+                continue;
+            }
+            // "Title — line" / "Title: line" → {title, description}; a bare line is title-only.
+            $parts = preg_split('/\s+—\s+|\s+–\s+|:\s+/', $line, 2) ?: [$line];
+            $out[] = ['title' => trim($parts[0]), 'description' => trim($parts[1] ?? '')];
+        }
+
+        if ($out !== []) {
+            return array_slice($out, 0, 6);
+        }
+
+        return $this->titleDescList(is_array($narrative?->values) ? $narrative->values : []);
+    }
+
+    /**
+     * The site's primary audience, resolved from the active voice profile's interview — 'commercial'
+     * when the captured audience reads business-facing, else 'homeowner' (the residential default).
+     * Drives EMPHASIS ONLY (which trust signals lead); data still decides what renders.
+     */
+    private function audience(Content $content): string
+    {
+        $voice = VoiceProfile::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('status', VoiceStatus::Active->value)
+            ->first();
+
+        $primary = (string) data_get($voice?->audience, 'primary', '');
+
+        return preg_match('/commercial|business|facilit|property manager|office|industrial|building owner/i', $primary) === 1
+            ? 'commercial'
+            : 'homeowner';
     }
 
     /**
@@ -509,28 +577,52 @@ final class BlockContentAssembler
      * Credibility badges — substantiated licenses / certs / awards / affiliations / warranties only.
      * Each item's short label becomes a badge; never fabricated, capped so the strip stays a strip.
      *
+     * With an $audience, the badge ORDER follows who the page is convincing (and review aggregates
+     * join the pool): a homeowner is moved by social proof first (reviews → guarantees → licensed);
+     * a commercial buyer by qualifications first (certifications → licenses → track record). Audience
+     * sets the intended emphasis only — data still decides what actually renders (a homeowner site
+     * with no reviews simply leads with its next available signal).
+     *
+     * @param  'homeowner'|'commercial'|null  $audience  null = the default created-at order (home / why-us callers)
      * @return list<string>
      */
-    private function credibilityBadges(Content $content): array
+    private function credibilityBadges(Content $content, ?string $audience = null): array
     {
         $types = [
             ProofType::License->value, ProofType::Cert->value, ProofType::Award->value,
             ProofType::Affiliation->value, ProofType::Warranty->value, ProofType::Guarantee->value,
         ];
+        if ($audience !== null) {
+            $types[] = ProofType::ReviewAggregate->value; // reviews belong in About's trust order
+        }
 
         $items = ProofItem::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
             ->where('is_substantiated', true)
             ->whereIn('type', $types)
             ->orderBy('created_at')
-            ->limit(4)
             ->get();
+
+        if ($audience !== null) {
+            $priority = $audience === 'commercial'
+                ? [ProofType::Cert->value, ProofType::License->value, ProofType::Award->value, ProofType::Affiliation->value, ProofType::Warranty->value, ProofType::Guarantee->value, ProofType::ReviewAggregate->value]
+                : [ProofType::ReviewAggregate->value, ProofType::Guarantee->value, ProofType::Warranty->value, ProofType::License->value, ProofType::Cert->value, ProofType::Affiliation->value, ProofType::Award->value];
+
+            $items = $items->sortBy(function (ProofItem $item) use ($priority): int {
+                $rank = array_search($item->type->value, $priority, true);
+
+                return $rank === false ? count($priority) : $rank;
+            })->values();
+        }
 
         $badges = [];
         foreach ($items as $item) {
             $label = $this->payloadString($item, ['label', 'text']);
             if ($label !== '') {
                 $badges[] = $label;
+            }
+            if (count($badges) === 4) {
+                break;
             }
         }
 
