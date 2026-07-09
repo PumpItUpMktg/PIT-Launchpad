@@ -1085,6 +1085,7 @@ it('composes the Contact page — real NAP (phone, email, address, hours) from �
         'site_id' => $site->id,
         'email' => 'hello@sewergurus.com',
         'address' => '12 Main Street, Newark, NJ',
+        'is_storefront' => true,                          // a real storefront → the address renders
         'phone' => null,
         'hours' => ['mon' => ['open' => '8:00', 'close' => '17:00'], 'sat' => 'closed', 'sun' => 'closed'],
     ]);
@@ -1104,6 +1105,68 @@ it('composes the Contact page — real NAP (phone, email, address, hours) from �
         ->not->toContain('>Sun<')                         // closed days drop — no wall of "Closed"
         ->toContain('Prefer to just ask?')                // the soft closing CTA
         ->not->toContain('lp-cta--bold');                 // thin page → no pushy accent band
+});
+
+it('Contact: a mobile-only business (no storefront) never shows its address — no walk-ins to a garage', function () {
+    $site = Site::factory()->create(['phone' => '(973) 555-0100']);
+    Location::factory()->create([
+        'site_id' => $site->id,
+        'email' => 'hello@sewergurus.com',
+        'address' => '12 Main Street, Newark, NJ',        // the base address exists...
+        'is_storefront' => false,                         // ...but customers don't visit it
+        'phone' => null,
+    ]);
+
+    $page = blockContactPage($site);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->not->toContain('12 Main Street, Newark, NJ')    // address omitted cleanly
+        ->toContain('href="mailto:hello@sewergurus.com"') // the other channels still render
+        ->toContain('href="tel:9735550100"');
+});
+
+it('Contact: an emergency tenant gets the honest 24/7 hours row', function () {
+    $site = Site::factory()->create(['phone' => '(973) 555-0100', 'offers_emergency' => true]);
+
+    $page = blockContactPage($site);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Emergencies')->toContain('24/7 — call any time');
+
+    // No emergency flag → no 24/7 claim.
+    $plain = Site::factory()->create(['phone' => '(973) 555-0100', 'offers_emergency' => false]);
+    $markup = app(BlockContentAssembler::class)->compose(blockContactPage($plain)->fresh(), [], []);
+    expect($markup)->not->toContain('24/7 — call any time');
+});
+
+it('Contact: the drafted service-area brief renders (and gates when undrafted); commercial asks for an assessment', function () {
+    $site = Site::factory()->create(['phone' => '(973) 555-0100']);
+    $page = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::Contact->value, 'slug' => 'contact', 'title' => 'Contact',
+        'slot_payload' => [
+            'hero_headline' => 'Let’s talk',
+            'service_area_brief' => 'We work across Essex and Hudson counties, from Newark to Hoboken.',
+        ],
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($markup)
+        ->toContain('Where we work')
+        ->toContain('We work across Essex and Hudson counties, from Newark to Hoboken.')
+        ->toContain('Request service');                   // homeowner default ask
+
+    // Undrafted → the brief gates out on publish.
+    $bare = blockContactPage(Site::factory()->create(['phone' => '(973) 555-0100']));
+    $markup = app(BlockContentAssembler::class)->compose($bare->fresh(), $bare->slot_payload, []);
+    expect($markup)->not->toContain('Where we work');
+
+    // Commercial audience phrases the ask as an assessment.
+    VoiceProfile::factory()->active()->create(['site_id' => $site->id, 'audience' => ['primary' => 'commercial property managers']]);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($markup)->toContain('Request an assessment');
 });
 
 it('Contact: preview shows example details; publish omits the NAP when nothing is captured', function () {

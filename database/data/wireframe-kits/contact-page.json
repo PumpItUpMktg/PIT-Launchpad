@@ -12,9 +12,9 @@
             "role": "hero_solution",
             "source": "generated",
             "cardinality": { "type": "single" },
-            "constraints": { "required": true, "min_length": 6, "max_length": 90 },
+            "constraints": { "required": true, "min_length": 6, "max_length": 120 },
             "client_override": true,
-            "generation_hint": "A plain, welcoming contact headline for the brand. The phone, email, address, and hours are rendered from real business data — never invented here.",
+            "generation_hint": "A plain, welcoming contact headline for the brand — short, no selling; the reader is already here to reach you. The phone, email, address, and hours are rendered from real business data — never invented here.",
             "seo_binding": "h1",
             "elementor_binding": "lp/text"
         },
@@ -32,16 +32,16 @@
             "elementor_binding": "lp/text"
         },
         {
-            "key": "cta",
-            "label": "Primary CTA",
-            "content_type": "cta",
-            "role": "cta",
-            "source": "entity",
+            "key": "service_area_brief",
+            "label": "Service Area Brief",
+            "content_type": "short_text",
+            "role": "body_explainer",
+            "source": "generated",
             "cardinality": { "type": "single" },
-            "constraints": { "required": false },
+            "constraints": { "required": false, "max_length": 200 },
             "client_override": true,
-            "generation_hint": "A confident next step to request service.",
-            "elementor_binding": "lp/cta"
+            "generation_hint": "One line naming where you work so a reader can self-check coverage — ONLY the markets provided in grounding; omit entirely if none.",
+            "elementor_binding": "lp/text"
         }
     ]
 }

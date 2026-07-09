@@ -106,18 +106,31 @@ final class BlockContentAssembler
      * The Contact page — hero + the real NAP (phone via the shared context, email/address/hours from the
      * primary §1 Location) + a request-service CTA. Every channel is honest and per-field data-gated.
      *
+     * The ADDRESS renders only for a real STOREFRONT (`Location.is_storefront`) — many home-services
+     * businesses are mobile-only with no location customers visit; showing their base address would
+     * invite walk-ins to a garage. Emergency tenants get an honest "Emergencies — 24/7" hours row.
+     * NAP consistency: the same primary-Location record feeds this page, the footer, and the schema.
+     *
      * @param  array<string, mixed>  $slots
      */
     private function composeContact(Content $content, array $slots, PageContext $ctx, bool $preview): string
     {
         $location = $this->primaryLocation($content);
+        $storefront = (bool) ($location?->is_storefront);
+
+        $hours = $this->businessHours($location);
+        if ($ctx->emergency && $ctx->hasPhone()) {
+            $hours[] = ['label' => 'Emergencies', 'value' => '24/7 — call any time'];
+        }
 
         return $this->composer->composeContact(
             slots: $slots,
             ctx: $ctx,
             email: is_string($location?->email) && trim($location->email) !== '' ? trim($location->email) : null,
-            address: is_string($location?->address) && trim($location->address) !== '' ? trim($location->address) : null,
-            hours: $this->businessHours($location),
+            address: $storefront && is_string($location->address) && trim($location->address) !== '' ? trim($location->address) : null,
+            hours: $hours,
+            serviceAreaBrief: $this->slotString($slots, 'service_area_brief'),
+            audience: $this->audience($content),
             preview: $preview,
         );
     }
