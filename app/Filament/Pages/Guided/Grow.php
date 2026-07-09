@@ -9,6 +9,7 @@ use App\Enums\SetupStep;
 use App\Filament\Pages\ProofEditor;
 use App\Guided\GrowDashboard;
 use App\Guided\GuidedPage;
+use App\Guided\IntakeChecklist;
 use App\Interview\Arrange\AutoArrangeRunner;
 use App\Jobs\BuildStructure;
 use App\Jobs\GeneratePage;
@@ -68,6 +69,20 @@ class Grow extends GuidedPage
         $site = $this->getSite();
 
         return $site === null ? ['live' => 0, 'building' => 0, 'planned' => 0] : app(GrowDashboard::class)->stats($site);
+    }
+
+    /**
+     * The content checklist — intake the pages can't show yet (missing items only). Informational,
+     * not a publish gate: pages publish honestly without these (an empty section is omitted, never
+     * fabricated), but the gaps are made loud on the page the client publishes from.
+     *
+     * @return list<array{key: string, label: string, unlocks: string, where: string}>
+     */
+    public function getChecklistProperty(): array
+    {
+        $site = $this->getSite();
+
+        return $site === null ? [] : app(IntakeChecklist::class)->missing($site);
     }
 
     /**

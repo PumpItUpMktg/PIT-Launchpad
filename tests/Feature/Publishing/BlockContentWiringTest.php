@@ -1436,3 +1436,18 @@ it('WCU carries the audience-ordered credibility strip and exactly two CTA bands
     // 'lp-cta lp-cta--bold' counts the substring twice, the soft band once → exactly 3 = mid + final.
     expect(substr_count($markup, 'lp-cta'))->toBe(3);
 });
+
+it('About credibility strip shows the CAPTURED certifications — guided intake creates no ProofItems', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    // The guided Business step stores credentials on the narrative; there are NO proof items.
+    SiteNarrative::factory()->create([
+        'site_id' => $site->id,
+        'certifications' => [['label' => 'NJ Master Plumber', 'number' => '#1234']],
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose(blockAboutPage($site)->fresh(), [], []);
+
+    expect($markup)
+        ->toContain('lp-credibility')            // the strip ACTIVATES from the captured certs
+        ->toContain('NJ Master Plumber');
+});

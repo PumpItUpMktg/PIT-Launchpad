@@ -15,6 +15,26 @@
             <div class="lp-stat"><div class="sn">{{ number_format($stats['planned']) }}</div><div class="sl">Not started</div><div class="sc">Planned — not generated yet.</div></div>
         </div>
 
+        {{-- The pre-publish content checklist: intake the page sections data-gate on that ISN'T captured
+             yet. Informational, never a publish block — pages publish honestly without these (the matching
+             section is simply left out); it answers "why isn't my mission showing?" on the page you
+             publish from. Add the item, regenerate the page, republish. --}}
+        @php $checklist = $this->checklist; @endphp
+        @if ($checklist !== [])
+            <div class="lp-card" style="border-left:3px solid #d97706">
+                <h3>Before you publish — content your pages can’t show yet</h3>
+                <div class="hint">Pages publish fine without these (the matching section is simply left out — nothing is ever invented). Add an item, then regenerate the page to unlock it.</div>
+                <ul style="margin:10px 0 0;padding:0;list-style:none;display:grid;gap:7px">
+                    @foreach ($checklist as $item)
+                        <li style="display:flex;gap:9px;align-items:baseline" wire:key="chk-{{ $item['key'] }}">
+                            <span aria-hidden="true" style="color:#d97706;font-weight:700">•</span>
+                            <span><strong>{{ $item['label'] }}</strong> — unlocks {{ $item['unlocks'] }} <span style="color:var(--ungrouped)">· add via {{ $item['where'] }}</span></span>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         {{-- THE primary content: the pages workbench. One row per planned page, morphing primary. --}}
         <div class="lp-card">
             <h3>Your pages</h3>
