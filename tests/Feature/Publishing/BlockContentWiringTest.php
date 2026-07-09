@@ -1543,3 +1543,52 @@ it('Contact: a configured GHL embed makes the form section REAL — [lp_form] sh
         ->not->toContain('lp-formsection')->not->toContain('[lp_form]');
     expect(app(MetaBlobAssembler::class)->assemble($bare->fresh(), collect())['form_embed'])->toBeNull();
 });
+
+it('Contact map: a storefront gets a location PIN; mobile-only gets the coverage footprint; neither → no map', function () {
+    // Storefront with no coverage → the pin FORMS the payload; the section says "Find us" + the address.
+    $storefront = Site::factory()->create(['phone' => '(973) 555-0100']);
+    Location::factory()->create([
+        'site_id' => $storefront->id, 'is_storefront' => true,
+        'address' => '12 Main Street, Newark, NJ',
+        'latitude' => 40.7357, 'longitude' => -74.1724, 'geocoded_at' => now(), // pre-geocoded
+    ]);
+    $blob = app(MetaBlobAssembler::class)->assemble(blockContactPage($storefront)->fresh(), collect());
+    expect($blob['service_area_map']['pin']['lat'])->toBe(40.7357)
+        ->and($blob['service_area_map']['center']['lat'])->toBe(40.7357)  // the pin wins the center
+        ->and($blob['post_content'])
+        ->toContain('lp-contactmap')->toContain('class="lp-areas-map"')
+        ->toContain('Find us')->toContain('12 Main Street, Newark, NJ');
+
+    // Mobile-only, no coverage, no pin → NO map section, never an empty box.
+    $mobile = Site::factory()->create(['phone' => '(973) 555-0100']);
+    Location::factory()->create(['site_id' => $mobile->id, 'is_storefront' => false, 'address' => '1 Yard Rd']);
+    $blob = app(MetaBlobAssembler::class)->assemble(blockContactPage($mobile)->fresh(), collect());
+    expect($blob['service_area_map'])->toBeNull()
+        ->and($blob['post_content'])->not->toContain('lp-areas-map')->not->toContain('lp-contactmap');
+});
+
+it('Contact: the emergency strip is unmissable under the hero for a 24/7 tenant — and absent otherwise', function () {
+    $site = Site::factory()->create(['phone' => '(973) 555-0100', 'offers_emergency' => true]);
+    $markup = app(BlockContentAssembler::class)->compose(blockContactPage($site)->fresh(), [], []);
+
+    expect($markup)
+        ->toContain('lp-emergency')                        // the distinct accent strip
+        ->toContain('24/7 emergency?')
+        ->toContain('href="tel:9735550100"');
+
+    $plain = Site::factory()->create(['phone' => '(973) 555-0100', 'offers_emergency' => false]);
+    $markup = app(BlockContentAssembler::class)->compose(blockContactPage($plain)->fresh(), [], []);
+    expect($markup)->not->toContain('lp-emergency');       // no false 24/7
+});
+
+it('Contact hero renders the kit hero image when the pipeline supplies one', function () {
+    $site = Site::factory()->create(['phone' => '(973) 555-0100']);
+    $page = blockContactPage($site);
+
+    $markup = app(BlockContentAssembler::class)->compose(
+        $page->fresh(), $page->slot_payload,
+        ['hero_image' => ['url' => 'https://cdn.example/contact-hero.webp', 'alt' => 'Reaching the team']],
+    );
+
+    expect($markup)->toContain('https://cdn.example/contact-hero.webp')->toContain('Reaching the team');
+});

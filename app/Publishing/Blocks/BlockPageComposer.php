@@ -633,6 +633,9 @@ final class BlockPageComposer
         string $serviceAreaBrief = '',
         string $audience = 'homeowner',
         bool $hasForm = false,
+        array $images = [],
+        bool $mapAvailable = false,
+        bool $storefront = false,
         bool $preview = false,
     ): string {
         $ask = $audience === 'commercial' ? 'Request an assessment' : 'Request service';
@@ -641,13 +644,16 @@ final class BlockPageComposer
             eyebrow: 'Get in touch',
             headline: $this->str($slots['hero_headline'] ?? '') ?: 'Contact us',
             subhead: $this->str($slots['intro'] ?? $slots['hero_subhead'] ?? ''),
-            imageUrl: null,
-            imageAlt: '',
+            imageUrl: $this->imageUrl('hero_image', $images),
+            imageAlt: $this->imageAlt('hero_image', $images),
             assessmentText: $ask,
             assessmentUrl: '#contact',
             trust: [],
             ctx: $ctx,
         );
+
+        // The unmissable emergency path, directly under the hero (offers_emergency-gated in the strip).
+        $emergency = $this->sections->emergencyStrip($ctx);
 
         $details = $this->sections->contactDetails(
             eyebrow: 'Reach us',
@@ -660,9 +666,19 @@ final class BlockPageComposer
             preview: $preview,
         );
 
-        // The drafted "where we work" line — a reader self-checks coverage before calling. Data-gated
-        // (geo comes only from the grounded markets; no coverage → no line).
-        $brief = $this->sections->prose(
+        // The MAP — a storefront centers on its pin ("Find us", the address beneath); a mobile-only
+        // business shows its coverage footprint ("Where we work", the drafted brief beneath). Renders
+        // only when geometry exists — never an empty box.
+        $map = $this->sections->contactMap(
+            eyebrow: $storefront ? 'Find us' : 'Where we work',
+            heading: $storefront ? 'Come see us' : 'The area we cover',
+            line: $storefront ? $address : ($serviceAreaBrief !== '' ? $serviceAreaBrief : null),
+            available: $mapAvailable,
+        );
+
+        // The drafted "where we work" line — a reader self-checks coverage before calling. Folded under
+        // the map when one renders (no duplicate section); standalone otherwise. Data-gated.
+        $brief = $mapAvailable ? '' : $this->sections->prose(
             eyebrow: 'Where we work',
             heading: 'Our service area',
             paragraphs: $serviceAreaBrief !== '' ? [$serviceAreaBrief] : [],
@@ -687,7 +703,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $details, $brief, $form, $cta]);
+        return $this->join([$hero, $emergency, $details, $map, $brief, $form, $cta]);
     }
 
     /** @param list<string> $blocks */

@@ -19,6 +19,21 @@
             "elementor_binding": "lp/text"
         },
         {
+            "key": "hero_image",
+            "label": "Hero Image (AI is fine here — swap in a real photo any time)",
+            "content_type": "image",
+            "role": "hero_solution",
+            "source": "media",
+            "cardinality": { "type": "single" },
+            "constraints": {
+                "required": false,
+                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": true }
+            },
+            "client_override": true,
+            "seo_binding": "og_image",
+            "elementor_binding": "lp/image"
+        },
+        {
             "key": "intro",
             "label": "Intro",
             "content_type": "short_text",
