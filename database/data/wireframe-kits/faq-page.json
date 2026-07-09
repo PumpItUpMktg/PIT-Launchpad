@@ -40,7 +40,7 @@
             "cardinality": { "type": "repeater", "min": 5, "max": 12 },
             "constraints": { "required": true },
             "client_override": true,
-            "generation_hint": "Real questions a customer of this trade asks, with honest, specific answers grounded in the services. No invented prices or guarantees.",
+            "generation_hint": "The REAL questions this trade's customers ask before hiring — objection-handling, not trivia — matched to the AUDIENCE in the voice profile: commercial buyers ask about contracts and scheduling, response times, minimizing disruption, compliance, and predictable pricing; homeowners ask about cost, mess and cleanup, timing, guarantees, and what to expect. Answer honestly and specifically from the services, offers, proof, and OPERATIONAL FACTS (hours, emergency availability). Never invent prices, policies, guarantees, or availability — if a fact isn't provided, don't raise the question that needs it.",
             "seo_binding": "faqpage",
             "elementor_binding": "lp/repeater"
         },

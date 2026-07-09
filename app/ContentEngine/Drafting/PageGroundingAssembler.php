@@ -6,6 +6,7 @@ use App\Build\Permalinks;
 use App\Enums\ContentKind;
 use App\Enums\PageType;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\Market;
 use App\Models\Offer;
 use App\Models\ProofItem;
@@ -16,6 +17,7 @@ use App\Models\SiteNarrative;
 use App\Models\WireframeKit;
 use App\PageBuilder\Schema\KitSchema;
 use App\Standard\StandardPageIntake;
+use App\Support\BusinessHours;
 use Illuminate\Database\Eloquent\Collection;
 use RuntimeException;
 
@@ -56,7 +58,52 @@ class PageGroundingAssembler
             relatedLinks: $this->relatedLinks($page),
             pageLabel: $page->standard_type?->label(),
             narrative: $this->narrative($page),
+            facts: $this->facts($page),
         );
+    }
+
+    /**
+     * Honest operational facts from §1 — the only operational claims a draft may make (emergency
+     * availability, real business hours, which contact channels exist). An FAQ answering "do you
+     * handle emergencies?" or "when are you open?" reads the truth here; an absent fact is simply
+     * not present, so the drafter has nothing to invent from (degrade by omission).
+     *
+     * @return array<string, mixed>
+     */
+    private function facts(Content $page): array
+    {
+        $site = $page->site;
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $page->site_id)
+            ->orderBy('created_at')
+            ->first();
+
+        $facts = [];
+        if ($site !== null) {
+            $facts['offers_emergency_service'] = (bool) $site->offers_emergency;
+        }
+
+        $hours = [];
+        foreach (BusinessHours::fromStored(is_array($location?->hours) ? $location->hours : null) as $row) {
+            if ($row['all_day']) {
+                $hours[$row['day']] = 'open 24 hours';
+            } elseif (! $row['closed'] && trim((string) $row['open']) !== '') {
+                $hours[$row['day']] = trim((string) $row['open']).'–'.trim((string) $row['close']);
+            }
+        }
+        if ($hours !== []) {
+            $facts['business_hours'] = $hours;
+        }
+
+        $channels = array_keys(array_filter([
+            'phone' => trim((string) ($location->phone ?? $site->phone ?? '')) !== '',
+            'email' => trim((string) ($location->email ?? '')) !== '',
+        ]));
+        if ($channels !== []) {
+            $facts['contact_channels'] = $channels;
+        }
+
+        return $facts;
     }
 
     /**

@@ -44,5 +44,14 @@ final class PageGrounding
         // differentiators), keyed by field — ONLY the fields actually present. The drafter grounds on
         // these and never invents beyond them; absent fields simply aren't here (degrade by omission).
         public readonly array $narrative = [],
+        /**
+         * Honest OPERATIONAL facts (§1 data): emergency availability, business hours, contact
+         * channels. The only operational claims a draft may make — an FAQ answering "do you handle
+         * emergencies?" must read the real answer here, never invent one. Absent facts simply aren't
+         * present (degrade by omission).
+         *
+         * @var array<string, mixed>
+         */
+        public readonly array $facts = [],
     ) {}
 }
