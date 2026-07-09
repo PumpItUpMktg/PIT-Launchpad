@@ -2,7 +2,7 @@
 <x-guided.shell :steps="$this->steps" :brand="$brand">
     <div class="lp-eyebrow">{{ \App\Enums\SetupStep::ConnectWordpress->eyebrow() }}</div>
     <h1 class="lp-h1">Connect your WordPress site</h1>
-    <p class="lp-lede">We'll connect to your live site, install the companion plugin and Elementor, and tidy up — so everything's ready before we build.</p>
+    <p class="lp-lede">We'll connect to your live site, install the companion plugin and the Launchpad theme, and tidy up — so everything's ready before we build.</p>
 
     @unless ($site)
         <div class="lp-card"><div class="lp-empty">No sites yet — create a site to begin setup.</div></div>
