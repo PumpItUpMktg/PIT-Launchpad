@@ -433,7 +433,18 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        $storyBlock = $this->sections->story('Our story', 'Who we are', $story, $preview);
+        // The story renders as a split when a story photo exists — prose beside the photo rail. The
+        // rail may carry an AI stand-in (allow_fabrication) until the client uploads real photos; the
+        // proof-view marks that loudly (real team photos are the strongest trust content on the site).
+        $storyImages = [];
+        foreach (['story_image'] as $key) {
+            $url = $this->imageUrl($key, $images);
+            if ($url !== null) {
+                $storyImages[] = ['url' => $url, 'alt' => $this->imageAlt($key, $images)];
+            }
+        }
+
+        $storyBlock = $this->sections->story('Our story', 'Who we are', $story, $preview, $storyImages);
         $missionBlock = $this->sections->statementBand($mission, $preview);
         $valuesBlock = $this->sections->valuesGrid('What we value', 'Our promises to you', $values, $preview);
 

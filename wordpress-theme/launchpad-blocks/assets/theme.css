@@ -756,6 +756,42 @@
     margin-bottom: 0;
 }
 
+/* Story split — the prose beside a photo rail (real team/at-work photos preferred; AI stand-ins until
+   then). The prose keeps its measure but left-aligns against the rail; photos stack, rounded. */
+.lp-story--split .lp-prose-p {
+    margin-inline: 0;
+    max-width: none;
+}
+
+.wp-block-columns.lp-story-split {
+    gap: clamp(1.5rem, 4vw, 3rem);
+    align-items: flex-start;
+    margin-block: 0;
+}
+
+.lp-story-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.lp-story-rail .lp-story-photo img {
+    width: 100%;
+    height: auto;
+    border-radius: var(--wp--custom--radius, 12px);
+    object-fit: cover;
+}
+
+@media (max-width: 781px) {
+    .wp-block-columns.lp-story-split {
+        flex-wrap: wrap;
+    }
+
+    .lp-story-split > .wp-block-column {
+        flex-basis: 100% !important;
+    }
+}
+
 /* Service features — a check-marked "what's included" grid (two columns, collapses to one on mobile). */
 .lp-features-grid {
     list-style: none;
