@@ -306,6 +306,7 @@ final class BlockPageComposer
      * @param  list<array{label?: string, number?: string, logo_url?: string}>  $certifications  real credentials (verbatim, data-gated, per-item)
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
      * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero trust row
+     * @param  list<string>  $credibilityBadges  substantiated trust badges, audience-ordered upstream
      * @param  bool  $preview  operator proof-view (all sections + labeled placeholders) vs publish (data-gated)
      */
     public function composeWhyChooseUs(
@@ -317,6 +318,7 @@ final class BlockPageComposer
         array $certifications = [],
         array $testimonials = [],
         array $trustStats = [],
+        array $credibilityBadges = [],
         bool $preview = false,
     ): string {
         $hero = $this->sections->hero(
@@ -342,6 +344,10 @@ final class BlockPageComposer
             dark: false,
         );
 
+        // The audience-ordered trust signals (licensed / rated / guaranteed — order resolved upstream:
+        // commercial leads certifications, homeowner leads reviews), per-item gated.
+        $credibility = $this->sections->credibilityStrip(lead: '', badges: $credibilityBadges, preview: $preview);
+
         $guaranteeBand = $this->sections->guaranteeBand(
             name: (string) ($guarantee['name'] ?? ''),
             description: (string) ($guarantee['description'] ?? ''),
@@ -357,7 +363,8 @@ final class BlockPageComposer
             preview: $preview,
         );
 
-        // cta1 (PUSHY) after the differentiators; cta2 (SOFT) closes the page.
+        // Exactly TWO CTA bands — one MID (pushy, right after the differentiators grid so it always has
+        // content above it) + one FINAL (soft close). Never CTAs wrapped around no content.
         $ctaBold = $this->sections->cta(
             heading: 'Ready to get it fixed?',
             body: 'Get a fast, free, no-obligation quote today.',
@@ -375,10 +382,10 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // Ordered for background rhythm — the pushy CTA and the guarantee (both accent) are each held
-        // apart by a light section, and the guarantee + credentials/licensing cluster sits LOW, just
-        // before the soft closing CTA: D·L·C·L·C·L·D. No two colored bands are ever adjacent.
-        return $this->join([$hero, $why, $ctaBold, $reviews, $guaranteeBand, $certs, $cta]);
+        // The trust arc: grid → mid CTA → credibility + certifications cluster → the guarantee promise →
+        // client voice → soft close. Rhythm D·L·C·Ls·Ls·C·Ls·D — the two accent bands (mid CTA,
+        // guarantee) are each buffered by light sections; no two colored bands are ever adjacent.
+        return $this->join([$hero, $why, $ctaBold, $credibility, $certs, $guaranteeBand, $reviews, $cta]);
     }
 
     /**
