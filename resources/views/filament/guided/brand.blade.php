@@ -85,6 +85,10 @@
             <div class="lp-field">
                 <label>Mission <span style="font-weight:400;color:var(--ungrouped)">— optional</span></label>
                 <textarea class="lp-input" rows="2" wire:model="mission" placeholder="What you commit to for every customer."></textarea>
+                <label style="display:flex;align-items:flex-start;gap:.5rem;margin-top:.4rem;font-weight:400;font-size:.85rem;color:var(--ungrouped);cursor:pointer">
+                    <input type="checkbox" wire:model="missionEnhance" style="margin-top:.15rem">
+                    <span>Polish my wording with AI — tightens grammar and clarity only, never adds claims. Leave unchecked to publish your mission exactly as written.</span>
+                </label>
             </div>
             <div class="lp-field">
                 <label>Values <span style="font-weight:400;color:var(--ungrouped)">— optional, one per line</span></label>

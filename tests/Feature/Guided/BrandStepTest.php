@@ -5,6 +5,8 @@ use App\Enums\VoiceStatus;
 use App\Filament\Pages\Guided\Brand;
 use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Filament\Pages\Guided\Territory;
+use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Claude\CompletionResult;
 use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Models\Scopes\SiteScope;
@@ -14,9 +16,11 @@ use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use App\Models\User;
 use App\Models\VoiceProfile;
+use App\Onboarding\MissionPolisher;
 use App\Styling\StyleVariation;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
+use Tests\Support\FakeClaudeClient;
 
 function activeVoice(string $siteId): ?VoiceProfile
 {
@@ -136,6 +140,76 @@ test('Brand step pre-fills the narrative form from an existing SiteNarrative (mi
     Livewire::test(Brand::class)
         ->assertSet('story', 'Our story')
         ->assertSet('differentiatorsText', "Fast — same day\nLicensed");
+});
+
+test('Mission is stored VERBATIM by default — no AI call, no raw copy', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+    // No MissionPolisher binding: resolving it would build the real client — verbatim must never call AI.
+
+    Livewire::test(Brand::class)
+        ->set('mission', 'we fix drains rite the first time')
+        ->call('saveNarrative')
+        ->assertOk();
+
+    $n = brandNarrative($this->site->id);
+    expect($n->mission)->toBe('we fix drains rite the first time')  // exactly as written
+        ->and($n->mission_raw)->toBeNull();
+});
+
+test('Mission enhance opt-in polishes via AI — stores the polished statement, keeps the client wording in mission_raw, shows the result', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+    app()->instance(MissionPolisher::class, new MissionPolisher(
+        new FakeClaudeClient('We fix every drain right the first time.'),
+    ));
+
+    Livewire::test(Brand::class)
+        ->set('mission', 'we fix drains rite the first time')
+        ->set('missionEnhance', true)
+        ->call('saveNarrative')
+        ->assertSet('mission', 'We fix every drain right the first time.'); // the client SEES what will render
+
+    $n = brandNarrative($this->site->id);
+    expect($n->mission)->toBe('We fix every drain right the first time.')
+        ->and($n->mission_raw)->toBe('we fix drains rite the first time');   // their words, kept
+});
+
+test('Mission enhance fails OPEN — an AI failure saves the wording verbatim, never blocks the save', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+    app()->instance(MissionPolisher::class, new MissionPolisher(new class implements ClaudeClient
+    {
+        public function complete(string $prompt, ?string $system = null): string
+        {
+            throw new RuntimeException('api down');
+        }
+
+        public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
+        {
+            throw new RuntimeException('api down');
+        }
+    }));
+
+    Livewire::test(Brand::class)
+        ->set('mission', 'our mission as typed')
+        ->set('missionEnhance', true)
+        ->call('saveNarrative')
+        ->assertOk();
+
+    $n = brandNarrative($this->site->id);
+    expect($n->mission)->toBe('our mission as typed')
+        ->and($n->mission_raw)->toBeNull();
+});
+
+test('Brand step remembers the enhance opt-in — a stored mission_raw pre-checks the box', function () {
+    SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
+    SiteNarrative::create([
+        'site_id' => $this->site->id,
+        'mission' => 'We fix every drain right the first time.',
+        'mission_raw' => 'we fix drains rite the first time',
+    ]);
+
+    Livewire::test(Brand::class)
+        ->assertSet('mission', 'We fix every drain right the first time.')
+        ->assertSet('missionEnhance', true);
 });
 
 test('Continuing from Brand persists whatever narrative was entered', function () {

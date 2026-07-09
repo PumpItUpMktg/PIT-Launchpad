@@ -70,6 +70,7 @@ use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
 use App\Locations\Dma\MetroResolver;
 use App\Models\User;
+use App\Onboarding\MissionPolisher;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
@@ -402,6 +403,12 @@ class AppServiceProvider extends ServiceProvider
         // thinking. Both clients come from the one factory so the probe can build
         // the identical client (see ClaudeClientFactory).
         $this->app->when(RelevanceScorer::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
+
+        // Mission polish is an opt-in one-sentence cleanup on the Brand intake — the cheap scoring
+        // model is plenty; the honesty constraints live in the MissionPolisher prompt.
+        $this->app->when(MissionPolisher::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
 
