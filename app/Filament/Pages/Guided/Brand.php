@@ -11,6 +11,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\SiteNarrative;
 use App\Models\VoiceProfile;
 use App\Onboarding\IntakeCollector;
+use App\Onboarding\MissionPolisher;
 use App\Operator\Controls\VoiceControl;
 use App\Styling\StyleActivator;
 use App\Styling\StyleVariation;
@@ -41,6 +42,14 @@ class Brand extends GuidedPage
     public string $story = '';
 
     public string $mission = '';
+
+    /**
+     * Opt-in AI cleanup of the mission wording (verbatim by default). When checked, a save polishes
+     * the typed mission through {@see MissionPolisher} — grammar/tightening only, never new claims —
+     * writes the result back into the field so the client sees exactly what will render, and keeps
+     * their original wording in SiteNarrative.mission_raw.
+     */
+    public bool $missionEnhance = false;
 
     /** One value per line. */
     public string $valuesText = '';
@@ -75,6 +84,8 @@ class Brand extends GuidedPage
         if ($narrative !== null) {
             $this->story = (string) ($narrative->story ?? '');
             $this->mission = (string) ($narrative->mission ?? '');
+            // A stored raw mission means the client opted into AI enhancement last time.
+            $this->missionEnhance = ($narrative->mission_raw ?? null) !== null;
             $this->valuesText = $this->toLines($narrative->values);
             $this->differentiatorsText = $this->toLines($narrative->differentiators);
         }
@@ -216,8 +227,17 @@ class Brand extends GuidedPage
             return;
         }
 
-        $this->persistNarrative();
-        Notification::make()->title('Brand details saved.')->success()->send();
+        $polish = $this->persistNarrative();
+
+        match ($polish) {
+            'polished' => Notification::make()->title('Brand details saved — mission polished.')
+                ->body('The polished wording is in the mission field above; edit and save again to adjust it.')
+                ->success()->send(),
+            'fallback' => Notification::make()->title('Brand details saved.')
+                ->body('AI enhancement wasn\'t available right now, so your mission was saved exactly as written.')
+                ->warning()->send(),
+            default => Notification::make()->title('Brand details saved.')->success()->send(),
+        };
     }
 
     /**
@@ -276,22 +296,62 @@ class Brand extends GuidedPage
         $this->redirect(SetupStep::Territory->pageClass()::getUrl());
     }
 
-    private function persistNarrative(): void
+    /**
+     * Persist the narrative, applying the opt-in mission polish. Returns the polish outcome for the
+     * caller's notification: 'polished' (AI cleaned it up — the field now shows the result),
+     * 'fallback' (enhancement was requested but unavailable — saved verbatim), or null (verbatim by
+     * choice / nothing to polish).
+     */
+    private function persistNarrative(): ?string
     {
         $site = $this->getSite();
         if ($site === null) {
-            return;
+            return null;
         }
+
+        [$mission, $missionRaw, $outcome] = $this->resolveMission();
 
         SiteNarrative::withoutGlobalScope(SiteScope::class)->updateOrCreate(
             ['site_id' => $site->id],
             [
                 'story' => $this->clean($this->story),
-                'mission' => $this->clean($this->mission),
+                'mission' => $mission,
+                'mission_raw' => $missionRaw,
                 'values' => $this->fromLines($this->valuesText),
                 'differentiators' => $this->fromLines($this->differentiatorsText),
             ],
         );
+
+        return $outcome;
+    }
+
+    /**
+     * The mission to store: the client's wording verbatim, or — when they opted into enhancement —
+     * the AI-polished statement, with their original kept in mission_raw. The polished text is written
+     * back into the field so the client always sees exactly what will render on their site. Fail-open:
+     * a failed polish stores the verbatim wording (never blocks the save, never loses their words).
+     *
+     * @return array{0: string|null, 1: string|null, 2: string|null} [mission, mission_raw, outcome]
+     */
+    private function resolveMission(): array
+    {
+        $typed = $this->clean($this->mission);
+
+        if (! $this->missionEnhance || $typed === null) {
+            return [$typed, null, null];
+        }
+
+        $polished = app(MissionPolisher::class)->polish($typed);
+        if ($polished === null) {
+            return [$typed, null, 'fallback'];
+        }
+        if ($polished === $typed) {
+            return [$typed, null, null]; // already clean — verbatim, nothing to review
+        }
+
+        $this->mission = $polished; // the client sees the published wording, editable
+
+        return [$polished, $typed, 'polished'];
     }
 
     private function clean(string $value): ?string
