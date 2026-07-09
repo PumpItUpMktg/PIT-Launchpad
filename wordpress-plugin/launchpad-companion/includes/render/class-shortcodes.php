@@ -21,6 +21,8 @@
 
 namespace Launchpad\Companion\Render;
 
+use Launchpad\Companion\Meta;
+
 if (! defined('ABSPATH')) {
     exit;
 }
