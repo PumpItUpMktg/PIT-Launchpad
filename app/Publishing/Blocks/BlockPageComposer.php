@@ -100,10 +100,13 @@ final class BlockPageComposer
             steps: $processSteps,
         );
 
+        // Visitor-facing heading — the "show the work you're proud of" DIRECTION lives in the preview
+        // placeholder note, never as the page's H2.
         $proof = $this->sections->proofGallery(
-            eyebrow: 'Proof',
-            heading: 'Show the work you’re proud of',
+            eyebrow: 'Our work',
+            heading: 'Recent work we’re proud of',
             imageUrls: $this->galleryUrls($images),
+            preview: $preview,
         );
 
         // 7. Testimonials — data-gated on substantiated reviews (preview → labeled example reviews).

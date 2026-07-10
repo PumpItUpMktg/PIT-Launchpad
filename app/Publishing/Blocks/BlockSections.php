@@ -87,12 +87,22 @@ final class BlockSections
      *
      * @param  list<string>  $imageUrls  already-resolved image urls for filled slots (may be empty)
      */
-    public function proofGallery(string $eyebrow, string $heading, array $imageUrls = [], int $slots = 3): string
+    public function proofGallery(string $eyebrow, string $heading, array $imageUrls = [], int $slots = 3, bool $preview = false): string
     {
         $imageUrls = array_values(array_filter(array_map('trim', $imageUrls), fn (string $u): bool => $u !== ''));
 
+        // Two-contexts rule, same as every section: PUBLISH renders only the photos that exist and
+        // omits the section entirely with none (a visitor never sees an "add your own photo" card —
+        // that's a direction to the client, not page content); PREVIEW keeps the full grid with the
+        // labeled add-photo slots so the client sees exactly where their photos will land.
+        $placeholder = $imageUrls === [];
+        if ($placeholder && ! $preview) {
+            return '';
+        }
+
+        $count = $preview ? max($slots, count($imageUrls)) : count($imageUrls);
         $cells = [];
-        for ($i = 0; $i < $slots; $i++) {
+        for ($i = 0; $i < $count; $i++) {
             $url = $imageUrls[$i] ?? null;
             $cells[] = $this->b->column([
                 $url !== null
@@ -101,10 +111,13 @@ final class BlockSections
             ]);
         }
 
-        return $this->b->group([
-            $this->sectionHead($eyebrow, $heading),
-            $this->b->columns($cells, ['className' => 'lp-proof-grid']),
-        ], ['align' => 'full', 'className' => 'lp-proof']);
+        $children = [$this->sectionHead($eyebrow, $heading)];
+        if ($preview && count($imageUrls) < $count) {
+            $children[] = $this->placeholderNote('unfilled photo slots are left out on publish — add real photos of your work; they build more trust than any stock image');
+        }
+        $children[] = $this->b->columns($cells, ['className' => 'lp-proof-grid']);
+
+        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-proof', $placeholder)]);
     }
 
     /**
