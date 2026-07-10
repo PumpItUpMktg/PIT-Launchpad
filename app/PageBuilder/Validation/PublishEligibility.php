@@ -53,9 +53,10 @@ class PublishEligibility
             ]));
         }
 
-        // Fail closed: a location page that doesn't know its market can't resolve
-        // the market-scoped reviews gate and must never publish.
-        if ($this->isLocationPage($content) && $content->market_id === null) {
+        // Fail closed: a MARKET-ERA location page that doesn't know its market can't resolve the
+        // market-scoped reviews gate and must never publish. (A block-era page pinned to a §1
+        // Location grounds on that record instead — see evaluateForPublish.)
+        if ($this->isLocationPage($content) && $content->location_id === null && $content->market_id === null) {
             $result = $result->merge(ValidationResult::fail([
                 new ValidationFailure(null, ValidationCode::LocationMarketMissing, 'Location page has no market assigned; market-scoped reviews cannot be resolved.'),
             ]));
@@ -71,9 +72,17 @@ class PublishEligibility
     /**
      * The §2 publish-time review gate. SERVICE pages publish WITHOUT a review gate
      * (their testimonial slot is conditional in-schema). Only LOCATION pages are
-     * gated: they must know their market (fail closed → location.market_missing)
-     * and have ≥1 market-scoped or site-wide substantiated review. A failing page
-     * is parked in review (never live). The broader structural/media/proof checks
+     * gated, by era:
+     *
+     *  - A BLOCK-ERA page pinned to a §1 Location (`location_id`) grounds on that record: it
+     *    publishes when the pin resolves and the Location carries a city or ≥1 served town (the
+     *    same bar the generate-location guard sets); a stale pin or an empty Location fails closed
+     *    (location.ungrounded). Reviews are provider-gated page SECTIONS on these pages (empty ⇒
+     *    the section omits — degrade by omission), so they are deliberately NOT a publish blocker.
+     *  - A MARKET-ERA page (no pin) keeps the original rule: it must know its market (fail closed
+     *    → location.market_missing) and have ≥1 market-scoped substantiated review.
+     *
+     * A failing page is parked in review (never live). The broader structural/media/proof checks
      * are NOT re-run here — those are the draft/render-time contract; media is
      * produced during publish and is never in slot_payload.
      */
@@ -85,7 +94,11 @@ class PublishEligibility
 
         $failures = [];
 
-        if ($content->market_id === null) {
+        if ($content->location_id !== null) {
+            if (! $this->pinnedLocationGrounded($content)) {
+                $failures[] = new ValidationFailure(null, ValidationCode::LocationUngrounded, 'Location page\'s pinned Location is missing, or has no city and no served towns; it cannot publish.');
+            }
+        } elseif ($content->market_id === null) {
             $failures[] = new ValidationFailure(null, ValidationCode::LocationMarketMissing, 'Location page has no market assigned; it cannot publish.');
         } elseif (($this->entities->count('reviews.market', $this->contextFor($content)) ?? 0) < 1) {
             $failures[] = new ValidationFailure('local_testimonials', ValidationCode::EntityBelowMinimum, 'Location page requires at least one market-scoped review before publishing.');
@@ -98,6 +111,32 @@ class PublishEligibility
         }
 
         return $result;
+    }
+
+    /**
+     * The pinned §1 Location resolves AND carries a city (geocoded or named) or ≥1 served town —
+     * the honest minimum a local landing page needs, mirroring the generate-location guard.
+     */
+    private function pinnedLocationGrounded(Content $content): bool
+    {
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->find($content->location_id);
+        if ($location === null) {
+            return false;
+        }
+
+        if (trim($location->cityState()['city']) !== '' || trim((string) $location->name) !== '') {
+            return true;
+        }
+
+        foreach ($location->served_towns ?? [] as $town) {
+            if (trim((string) ($town['name'] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

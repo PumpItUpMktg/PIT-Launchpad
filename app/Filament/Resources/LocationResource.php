@@ -127,7 +127,7 @@ class LocationResource extends Resource
                 ->map(fn (array $row): string => trim((string) $row['name']).(trim((string) ($row['state'] ?? '')) !== '' ? ', '.trim((string) $row['state']) : ''))
                 ->values()->all())
             ->rule(fn (Get $get, ?Location $record) => function (string $attribute, mixed $value, \Closure $fail) use ($get, $record): void {
-                $siteId = (string) ($get('site_id') ?? $record?->site_id ?? '');
+                $siteId = (string) ($get('site_id') ?? $record->site_id ?? '');
                 if ($siteId === '' || ! is_array($value)) {
                     return;
                 }

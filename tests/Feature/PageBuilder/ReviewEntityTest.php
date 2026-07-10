@@ -52,9 +52,9 @@ it('locks the gate-redesign kit shapes', function () {
     $proofStrip = collect($service->slots)->firstWhere('key', 'proof_strip');
     expect($proofStrip->constraints->entity)->toBe('proof.substantiated');    // proof stays
 
+    // The block-era location kit dropped its entity review slot: local reviews are a provider-gated
+    // page SECTION (empty ⇒ omitted by the composer), never a required kit slot.
     $location = PageBuilder::locationKit();
-    $localReviews = collect($location->slots)->firstWhere('key', 'local_testimonials');
-    expect($localReviews->constraints->entity)->toBe('reviews.market')        // market-scoped gate
-        ->and($localReviews->isRequired())->toBeTrue()
-        ->and($localReviews->constraints->minEntities)->toBe(1);
+    expect(collect($location->slots)->firstWhere('key', 'local_testimonials'))->toBeNull()
+        ->and(collect($location->slots)->filter(fn ($s) => $s->constraints->entity !== null)->all())->toBe([]);
 });

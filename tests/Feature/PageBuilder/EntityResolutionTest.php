@@ -44,7 +44,9 @@ test('the grounded why_us slot is OMITTED (not failed) when a site has no substa
     expect($result->failuresFor('why_us'))->toBe([]); // omitted, never an EntityBelowMinimum block
 });
 
-test('the grounded why_us_local slot fails when a site has no substantiated proof', function () {
+test('the block-era location kit stakes no grounded slots — it validates without proof', function () {
+    // The old kit's why_us_local (grounded) is gone: local reviews/jobs are provider-gated page
+    // SECTIONS (empty => omitted by the composer), so proof never blocks a location draft.
     ['context' => $context] = siteWithoutProof();
 
     $result = app(KitValidator::class)->validate(
@@ -53,8 +55,7 @@ test('the grounded why_us_local slot fails when a site has no substantiated proo
         $context,
     );
 
-    $codes = array_map(fn ($f) => $f->code, $result->failuresFor('why_us_local'));
-    expect($codes)->toContain(ValidationCode::EntityBelowMinimum);
+    expect($result->passed())->toBeTrue();
 });
 
 test('grounded proof slots pass once substantiated proof exists', function () {

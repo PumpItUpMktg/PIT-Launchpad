@@ -130,17 +130,22 @@ class PageBuilder
     }
 
     /**
-     * A structurally valid payload for the location kit.
+     * A structurally valid payload for the (block-era) location kit.
      *
      * @return array<string, mixed>
      */
     public static function validLocationPayload(): array
     {
         return [
-            'hero_heading' => 'Water Heater Repair in Austin',
+            'hero_headline' => 'Water Heater Repair in Austin, TX',
             'hero_image' => ['src' => 'austin.webp', 'alt' => 'Austin neighborhood street', 'width' => 1200, 'height' => 675],
-            'area_intro' => str_repeat('We serve Austin neighborhoods with prompt, local service. ', 3),
-            'why_us_local' => str_repeat('Local, licensed, and warrantied in your community. ', 3),
+            'loc_intro' => str_repeat('We serve Austin neighborhoods with prompt, honest local service. ', 3),
+            'loc_coverage' => 'We cover Hyde Park, Mueller, and Windsor Park — the neighborhoods around our Austin base.',
+            'faq' => [
+                ['question' => 'Do you serve Hyde Park?', 'answer' => 'Yes — it is core coverage.'],
+                ['question' => 'How fast can you come out?', 'answer' => 'Often the same day.'],
+                ['question' => 'Do you give upfront quotes?', 'answer' => 'Always, before work starts.'],
+            ],
         ];
     }
 

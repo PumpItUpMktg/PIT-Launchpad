@@ -4,6 +4,7 @@ namespace App\ContentEngine\Drafting;
 
 use App\Enums\PageType;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
@@ -18,7 +19,8 @@ use App\Standard\StandardPageIntake;
  *
  * - **Service-family pages** (service / hub / pillar / cluster) need ≥1 resolvable §1 Service —
  *   silo-scoped when the page pins a `silo_id`, else the assembler's site-wide fallback.
- * - **Location pages** need ≥1 §1 Market for the site.
+ * - **Location pages** pinned to a §1 Location (`location_id`) ground on that record — its city or
+ *   served towns (the generate-location guard); market-era pages need ≥1 §1 Market for the site.
  * - **Home / utility** (the standard-page composer's brand-narrative pages) ground on the brand
  *   itself — its identity (branding) and/or its real services. Either is enough to write honestly.
  *   (Kit presence is a separate gate the surfaces apply; a standard page with no kit stays held
@@ -43,7 +45,7 @@ class GroundingReadiness
     {
         return match ($page->page_type) {
             PageType::Service, PageType::Hub, PageType::Pillar, PageType::Cluster => $this->hasServices($page),
-            PageType::Location => $this->hasMarkets($page),
+            PageType::Location => $this->hasLocationGrounding($page) || $this->hasMarkets($page),
             PageType::Home, PageType::Utility => $this->hasNarrativeGrounding($page),
             default => false,
         };
@@ -66,6 +68,36 @@ class GroundingReadiness
 
         return $this->serviceSites[$siteId] ??= Service::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)->exists();
+    }
+
+    /**
+     * A PINNED location page grounds on its own §1 Location: a resolvable city or ≥1 served town —
+     * the same bar the generate-location command's guard sets.
+     */
+    private function hasLocationGrounding(Content $page): bool
+    {
+        if ($page->location_id === null) {
+            return false;
+        }
+
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $page->site_id)
+            ->find($page->location_id);
+        if ($location === null) {
+            return false;
+        }
+
+        if (trim($location->cityState()['city']) !== '' || trim((string) $location->name) !== '') {
+            return true;
+        }
+
+        foreach ($location->served_towns ?? [] as $town) {
+            if (trim((string) ($town['name'] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function hasMarkets(Content $page): bool

@@ -18,6 +18,7 @@ class ThinPageGuard
     public function evaluate(KitSchema $kit, ValidationContext $context): ThinPageResult
     {
         $count = 0;
+        $proofSlots = 0;
 
         foreach ($kit->slots as $slot) {
             if (! $slot->appliesTo($context->flags)) {
@@ -28,9 +29,13 @@ class ThinPageGuard
                 continue;
             }
 
+            $proofSlots++;
             $count += $this->entities->count($slot->constraints->entity, $context) ?? 0;
         }
 
-        return new ThinPageResult($count > 0, $count);
+        // A kit with NO applicable entity-proof slots has nothing to earn HERE — the block-era kits
+        // gate their proof sections in the composer (empty ⇒ the section omits), so the guard only
+        // holds pages whose kit actually stakes slots on entity proof.
+        return new ThinPageResult($proofSlots === 0 || $count > 0, $count);
     }
 }
