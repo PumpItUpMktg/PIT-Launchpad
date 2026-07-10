@@ -21,4 +21,5 @@ enum ValidationCode: string
     case MediaAltMissing = 'media_alt_missing';
     case ThinPage = 'thin_page';
     case LocationMarketMissing = 'location.market_missing';
+    case LocationUngrounded = 'location.ungrounded';
 }

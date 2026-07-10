@@ -53,5 +53,15 @@ final class PageGrounding
          * @var array<string, mixed>
          */
         public readonly array $facts = [],
+        /**
+         * A LOCATION page's subject — the pinned §1 Location resolved to prompt-ready facts:
+         * city/state, the location's own phone, the served-towns names, the operator's market notes
+         * (trusted VERBATIM — their local knowledge), and the trade-keyed grounded local facts
+         * (climate normals, elevation, census — cached on the Location). The ONLY local color the
+         * drafter may use; empty for every other page type.
+         *
+         * @var array<string, mixed>
+         */
+        public readonly array $location = [],
     ) {}
 }

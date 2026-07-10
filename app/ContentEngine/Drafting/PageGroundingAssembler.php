@@ -5,6 +5,7 @@ namespace App\ContentEngine\Drafting;
 use App\Build\Permalinks;
 use App\Enums\ContentKind;
 use App\Enums\PageType;
+use App\Local\Grounding\LocationGrounding;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
@@ -12,6 +13,7 @@ use App\Models\Offer;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\SiloBlueprint;
 use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use App\Models\WireframeKit;
@@ -34,6 +36,7 @@ class PageGroundingAssembler
     public function __construct(
         private readonly VoiceResolver $voice = new VoiceResolver,
         private readonly Permalinks $permalinks = new Permalinks,
+        private readonly LocationGrounding $grounding = new LocationGrounding,
     ) {}
 
     public function assemble(Content $page): PageGrounding
@@ -59,7 +62,63 @@ class PageGroundingAssembler
             pageLabel: $page->standard_type?->label(),
             narrative: $this->narrative($page),
             facts: $this->facts($page),
+            location: $this->location($page),
         );
+    }
+
+    /**
+     * A LOCATION page's subject block — the pinned §1 Location as prompt-ready local facts. The
+     * operator's market_notes ride VERBATIM (their local knowledge is trusted input); the grounded
+     * facts come from the trade-keyed {@see LocationGrounding} pipeline (cached on the record,
+     * refreshed past staleness at generation time — and NEVER a generation blocker: a total
+     * grounding failure just means fewer facts). Empty for non-location pages and unpinned
+     * (market-era) location pages.
+     *
+     * @return array<string, mixed>
+     */
+    private function location(Content $page): array
+    {
+        if ($page->page_type !== PageType::Location || $page->location_id === null) {
+            return [];
+        }
+
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $page->site_id)
+            ->find($page->location_id);
+        if ($location === null) {
+            return [];
+        }
+
+        ['city' => $city, 'state' => $state] = $location->cityState();
+
+        $towns = [];
+        foreach ($location->served_towns ?? [] as $row) {
+            $name = trim((string) ($row['name'] ?? ''));
+            if ($name !== '') {
+                $towns[] = $name;
+            }
+        }
+
+        $trade = SiloBlueprint::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $page->site_id)
+            ->value('trade');
+
+        try {
+            $grounded = $this->grounding->for($location, is_string($trade) ? $trade : null);
+            $facts = $grounded['facts'];
+        } catch (\Throwable) {
+            $facts = []; // grounding is color, never a blocker
+        }
+
+        return array_filter([
+            'city' => $city !== '' ? $city : trim((string) $location->name),
+            'state' => $state,
+            'phone' => trim((string) $location->phone),
+            'primary_category' => trim((string) $location->primary_category),
+            'served_towns' => $towns,
+            'market_notes' => trim((string) $location->market_notes),
+            'local_facts' => $facts,
+        ], fn ($v) => $v !== '' && $v !== []);
     }
 
     /**

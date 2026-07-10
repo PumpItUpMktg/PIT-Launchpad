@@ -438,13 +438,14 @@ it('preview shows the guarantee + certifications as labeled placeholders; publis
 
 it('returns null for a page type whose block pattern has not shipped (falls back to existing render)', function () {
     $site = Site::factory()->create();
-    // Location pages are the next migration phase — still on the Elementor fallback for now.
-    $location = Content::factory()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
-        'slug' => 'trenton', 'title' => 'Trenton',
+    // Hub pages are the next migration phase — still on the Elementor fallback for now. (Pinned
+    // location pages now compose; the unpinned-location fallback is covered in LocationPageTest.)
+    $hub = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Hub,
+        'slug' => 'services', 'title' => 'Services',
     ]);
 
-    expect(app(BlockContentAssembler::class)->compose($location->fresh(), [], []))->toBeNull();
+    expect(app(BlockContentAssembler::class)->compose($hub->fresh(), [], []))->toBeNull();
 });
 
 it('the areas section leads with the map mount + keeps the text fallback when geometry exists', function () {

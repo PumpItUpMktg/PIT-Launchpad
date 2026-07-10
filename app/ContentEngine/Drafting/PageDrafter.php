@@ -67,6 +67,7 @@ class PageDrafter
         $parts[] = $this->problemsBlock($grounding);
         $parts[] = $this->offersBlock($grounding);
         $parts[] = $this->marketsBlock($grounding);
+        $parts[] = $this->locationBlock($grounding);
         $parts[] = $this->factsBlock($grounding);
         $parts[] = $this->proofBlock($grounding);
         $parts[] = $this->internalLinksBlock($grounding);
@@ -135,6 +136,26 @@ class PageDrafter
         }
 
         return "MARKETS — the ONLY locality you may reference (honest coverage data):\n".$this->json($grounding->markets);
+    }
+
+    /**
+     * A location page's subject block: the business location this page is about. market_notes is
+     * the operator's own local knowledge — trusted verbatim as source material; local_facts are
+     * fetched data (climate/terrain/census) to weave naturally into prose, never dump. Anything
+     * local NOT in this block does not exist for the draft.
+     */
+    private function locationBlock(PageGrounding $grounding): string
+    {
+        if ($grounding->location === []) {
+            return '';
+        }
+
+        return 'LOCATION — this page\'s subject (a real business location). These are the ONLY local '
+            .'facts you may use: name only the city and served_towns given; cite local_facts naturally '
+            .'in prose (never as a data dump); treat market_notes as the owner\'s own local knowledge '
+            .'and work it in faithfully. NEVER invent local details — no water tables, soil types, '
+            .'weather patterns, landmarks, or years-serving-this-town beyond what is here:'
+            ."\n".$this->json($grounding->location);
     }
 
     private function factsBlock(PageGrounding $grounding): string

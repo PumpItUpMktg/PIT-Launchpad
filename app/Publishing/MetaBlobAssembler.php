@@ -24,6 +24,7 @@ use App\PageBuilder\Validation\PublishEligibility;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\Blocks\NapPin;
 use App\Publishing\Blocks\ServiceAreaMap;
+use App\Publishing\Schema\LocationSchemaBuilder;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use App\Support\SeoTitle;
 use Illuminate\Support\Collection;
@@ -49,6 +50,7 @@ class MetaBlobAssembler
         private readonly LibraryServiceComposer $libraryService,
         private readonly LibraryHubComposer $libraryHub,
         private readonly ServiceSchemaBuilder $serviceSchema,
+        private readonly LocationSchemaBuilder $locationSchema,
         private readonly BlockContentAssembler $blockContent,
         private readonly ServiceAreaMap $serviceAreaMap,
         private readonly NapPin $napPin,
@@ -701,7 +703,9 @@ class MetaBlobAssembler
     /**
      * The page-type schema [type, payload] pushed as seo.schema_type/schema_payload.
      * A service PAGE gets the live-composed Service node (ServiceSchemaBuilder, from
-     * §1 at assemble time); every other content keeps its stored Content columns.
+     * §1 at assemble time); a LOCATION page pinned to a §1 Location gets the
+     * live-composed LocalBusiness node; every other content keeps its stored
+     * Content columns.
      *
      * @return array{0: string|null, 1: array<string, mixed>|null}
      */
@@ -713,6 +717,18 @@ class MetaBlobAssembler
                 $home = is_string($site->domain_url) ? rtrim($site->domain_url, '/').'/' : '/';
 
                 return ['Service', $this->serviceSchema->build($content, $site, $home, $this->canonical($content))];
+            }
+        }
+
+        if ($content->kind === ContentKind::Page && $content->page_type?->value === 'location' && $content->location_id !== null) {
+            $site = $this->site($content);
+            $location = Location::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $content->site_id)
+                ->find($content->location_id);
+            if ($site !== null && $location !== null) {
+                $home = is_string($site->domain_url) ? rtrim($site->domain_url, '/').'/' : '/';
+
+                return ['LocalBusiness', $this->locationSchema->buildForLocation($content, $location, $site, $home, $this->canonical($content))];
             }
         }
 

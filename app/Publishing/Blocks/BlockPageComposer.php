@@ -709,6 +709,130 @@ final class BlockPageComposer
         return $this->join([$hero, $emergency, $details, $map, $brief, $form, $cta]);
     }
 
+    /**
+     * Composes a LOCATION page — one rich local landing page per GBP location (the second proven
+     * page type). The arc: hero (deterministic H1 formula "{Trade} in {City}, {ST}" unless the
+     * drafter honestly beat it) → the drafted local intro (grounded local facts, market notes) →
+     * the services offered here (link-when-a-live-page-exists rule, resolved upstream) → coverage
+     * prose from the served-towns list → local reviews and recent jobs nearby (STRICTLY gated:
+     * contract-first providers, empty ⇒ the section is omitted entirely in BOTH contexts — no
+     * headers over nothing, no placeholders, because no operator action can fill them yet) → the
+     * local FAQ → ONE soft closing CTA carrying the LOCATION's phone (the per-location ctx).
+     *
+     * @param  array<string, mixed>  $slots  the resolved slot_payload (hero_headline/hero_subhead/loc_services_intro)
+     * @param  array<string, array<string, mixed>>  $images  image map keyed by slot (hero_image)
+     * @param  PageContext  $ctx  the PER-LOCATION context — this location's phone, else the site number
+     * @param  list<string>  $intro  the drafted local-intro paragraphs (cleaned upstream)
+     * @param  list<array{title: string, blurb?: string, url?: string}>  $serviceCards  catalog services; a non-empty url is a LIVE service page (the link rule)
+     * @param  list<string>  $coverage  the coverage prose paragraphs (drafted, else the honest derived towns sentence)
+     * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $reviews  real local reviews (provider-fed; empty ⇒ omitted, never a placeholder)
+     * @param  list<array{title?: string, description?: string, photo?: string, town?: string, date?: string}>  $jobs  real nearby jobs (provider-fed; empty ⇒ omitted, never a placeholder)
+     * @param  list<array{question?: string, answer?: string}>  $faqs  the drafted local Q&A pairs
+     * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero trust row
+     * @param  bool  $preview  operator proof-view — drafted sections show labeled placeholders; the provider-gated reviews/jobs stay strictly data-gated even here
+     */
+    public function composeLocation(
+        array $slots,
+        array $images,
+        PageContext $ctx,
+        string $city,
+        string $state,
+        string $trade = '',
+        array $intro = [],
+        string $servicesIntro = '',
+        array $serviceCards = [],
+        array $coverage = [],
+        array $reviews = [],
+        array $jobs = [],
+        array $faqs = [],
+        array $trustStats = [],
+        bool $preview = false,
+    ): string {
+        $place = trim($city) !== '' ? (trim($state) !== '' ? trim($city).', '.trim($state) : trim($city)) : '';
+
+        // The deterministic local H1 — "{Trade} in {City}, {ST}". The drafted headline only overrides
+        // it when the drafter produced one (the kit hint tells it to draft only if it can beat the
+        // formula honestly); with no trade captured the fallback stays factual ("Serving {City, ST}").
+        $formula = $trade !== '' && $place !== ''
+            ? ucfirst($trade).' in '.$place
+            : ($place !== '' ? 'Serving '.$place : 'Our service area');
+
+        $hero = $this->sections->hero(
+            eyebrow: 'Local service',
+            headline: $this->str($slots['hero_headline'] ?? '') ?: $formula,
+            subhead: $this->str($slots['hero_subhead'] ?? ''),
+            imageUrl: $this->imageUrl('hero_image', $images),
+            imageAlt: $this->imageAlt('hero_image', $images),
+            assessmentText: 'Get a free assessment',
+            assessmentUrl: '#contact',
+            trust: $this->heroTrust($ctx, $trustStats),
+            ctx: $ctx,
+        );
+
+        // The drafted local grounding paragraphs — market notes + grounded facts woven into honest prose.
+        $introBlock = $this->sections->prose(
+            eyebrow: $place !== '' ? 'Working in '.$place : 'Working locally',
+            heading: $city !== '' ? 'Your local team in '.$city : 'Your local team',
+            paragraphs: $intro,
+            surface: false,
+            preview: $preview,
+            activates: 'appears when the page is generated (the local intro drafts from your market notes and grounded local facts)',
+        );
+
+        $services = $this->sections->servicesGrid(
+            eyebrow: 'What we do here',
+            heading: $city !== '' ? 'Services in '.$city : 'Our services',
+            cards: $serviceCards,
+            intro: $servicesIntro,
+        );
+
+        // Coverage prose from the served-towns list (readable paragraph, never a keyword dump).
+        $coverageBlock = $this->sections->prose(
+            eyebrow: 'Coverage',
+            heading: $city !== '' ? 'The towns we cover around '.$city : 'The towns we cover',
+            paragraphs: $coverage,
+            surface: true,
+            preview: $preview,
+            activates: 'appears when this location\'s served towns are captured',
+        );
+
+        // Reviews + jobs are STRICTLY provider-gated — preview: false is deliberate (no "Example"
+        // placeholder in either context; nothing an operator does today can fill them).
+        $reviewsBlock = $this->sections->testimonials(
+            eyebrow: 'What neighbors say',
+            heading: $city !== '' ? 'Reviews from around '.$city : 'Reviews nearby',
+            quotes: $reviews,
+            preview: false,
+        );
+
+        $jobsBlock = $this->sections->jobCards(
+            eyebrow: 'Recent work',
+            heading: $city !== '' ? 'Recent jobs near '.$city : 'Recent jobs nearby',
+            jobs: $jobs,
+        );
+
+        $faq = $this->sections->faqAccordion(
+            eyebrow: 'Local answers',
+            heading: 'Common questions',
+            intro: '',
+            items: $faqs,
+            preview: $preview,
+        );
+
+        // ONE soft closing CTA — its phone is the LOCATION's own number via the per-location ctx.
+        $cta = $this->sections->cta(
+            heading: $city !== '' ? 'Need help in '.$city.'?' : 'Need a hand?',
+            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
+            actionText: 'Get in touch',
+            actionUrl: '#contact',
+            ctx: $ctx,
+        );
+
+        // Rhythm: only the hero and the closing CTA are colored bands (D·L·L·Ls·Ls·L·L·D) — the
+        // gated reviews/jobs sections dropping out never puts two colored bands adjacent.
+        return $this->join([$hero, $introBlock, $services, $coverageBlock, $reviewsBlock, $jobsBlock, $faq, $cta]);
+    }
+
     /** @param list<string> $blocks */
     private function join(array $blocks): string
     {

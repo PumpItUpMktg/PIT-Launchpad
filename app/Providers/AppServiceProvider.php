@@ -68,6 +68,10 @@ use App\Interview\Volume\VolumeGrounder;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
+use App\Local\Proof\LocalJobProvider;
+use App\Local\Proof\LocalReviewProvider;
+use App\Local\Proof\NullLocalJobs;
+use App\Local\Proof\NullLocalReviews;
 use App\Locations\Dma\MetroResolver;
 use App\Models\User;
 use App\Onboarding\MissionPolisher;
@@ -397,6 +401,12 @@ class AppServiceProvider extends ServiceProvider
         // REST client (a live WordPress ping); other providers stay permissive
         // until their adapters land (e.g. GBP, with the GBP integration).
         $this->app->singleton(ConnectionVerifier::class, WordpressConnectionVerifier::class);
+
+        // Location-page gated sections — contract-first: the review-sync and field job-capture
+        // systems aren't deployed, so the null providers bind (sections omit). Real providers
+        // replace these bindings with no composer changes.
+        $this->app->bind(LocalReviewProvider::class, NullLocalReviews::class);
+        $this->app->bind(LocalJobProvider::class, NullLocalJobs::class);
 
         // Relevance scoring runs on the cheaper Haiku model with NO extended
         // thinking; drafting is quality-sensitive and runs on Sonnet with adaptive

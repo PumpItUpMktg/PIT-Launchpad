@@ -130,7 +130,7 @@ class ServiceSchemaBuilder
         ], $this->present(...));
     }
 
-    private function hasAddress(Location $location): bool
+    protected function hasAddress(Location $location): bool
     {
         return (is_array($location->address_components) && $location->address_components !== [])
             || $this->str($location->address) !== null;
@@ -142,7 +142,7 @@ class ServiceSchemaBuilder
      *
      * @return array<string, mixed>|string|null
      */
-    private function postalAddress(Location $location): array|string|null
+    protected function postalAddress(Location $location): array|string|null
     {
         $components = is_array($location->address_components) ? $location->address_components : [];
 
@@ -179,7 +179,7 @@ class ServiceSchemaBuilder
      *
      * @return list<array<string, mixed>>
      */
-    private function openingHours(Location $location): array
+    protected function openingHours(Location $location): array
     {
         $days = [
             'mon' => 'Monday', 'tue' => 'Tuesday', 'wed' => 'Wednesday', 'thu' => 'Thursday',
@@ -240,20 +240,20 @@ class ServiceSchemaBuilder
     /**
      * @return list<string>
      */
-    private function sameAs(?SiteBranding $branding): array
+    protected function sameAs(?SiteBranding $branding): array
     {
         $sameAs = is_array($branding?->same_as) ? $branding->same_as : [];
 
         return array_values(array_filter(array_map(fn ($u) => $this->str($u), $sameAs), $this->present(...)));
     }
 
-    private function absolute(?string $url): bool
+    protected function absolute(?string $url): bool
     {
         return is_string($url) && str_starts_with($url, 'http');
     }
 
     /** A trimmed non-empty string, or null. */
-    private function str(mixed $value): ?string
+    protected function str(mixed $value): ?string
     {
         if (! is_string($value)) {
             return null;
@@ -264,7 +264,7 @@ class ServiceSchemaBuilder
     }
 
     /** The single degrade-by-omission predicate: drop null / '' / []. */
-    private function present(mixed $value): bool
+    protected function present(mixed $value): bool
     {
         return $value !== null && $value !== '' && $value !== [];
     }
