@@ -4,6 +4,7 @@ use App\Integrations\Census\Geocoder;
 use App\Integrations\Census\GeocodeResult;
 use App\Locations\ServedTowns;
 use App\Models\Location;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 
 function fakeTownGeocoder(?GeocodeResult $result): void
@@ -54,7 +55,7 @@ it('the cannibalization guard names the location that already owns a town — on
     expect($conflicts)->toBe([['town' => 'Norristown, PA', 'location' => 'Trooper Office']]);
 
     // A location never conflicts with its own towns (editing in place).
-    $trooper = Location::withoutGlobalScope(App\Models\Scopes\SiteScope::class)->where('name', 'Trooper Office')->first();
+    $trooper = Location::withoutGlobalScope(SiteScope::class)->where('name', 'Trooper Office')->first();
     expect(app(ServedTowns::class)->conflicts($site->id, ['Norristown, PA'], $trooper->id))->toBe([]);
 
     // Another SITE is free to serve the same town.

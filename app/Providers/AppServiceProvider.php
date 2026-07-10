@@ -68,6 +68,10 @@ use App\Interview\Volume\VolumeGrounder;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
+use App\Local\Proof\LocalJobProvider;
+use App\Local\Proof\LocalReviewProvider;
+use App\Local\Proof\NullLocalJobs;
+use App\Local\Proof\NullLocalReviews;
 use App\Locations\Dma\MetroResolver;
 use App\Models\User;
 use App\Onboarding\MissionPolisher;
@@ -401,8 +405,8 @@ class AppServiceProvider extends ServiceProvider
         // Location-page gated sections — contract-first: the review-sync and field job-capture
         // systems aren't deployed, so the null providers bind (sections omit). Real providers
         // replace these bindings with no composer changes.
-        $this->app->bind(\App\Local\Proof\LocalReviewProvider::class, \App\Local\Proof\NullLocalReviews::class);
-        $this->app->bind(\App\Local\Proof\LocalJobProvider::class, \App\Local\Proof\NullLocalJobs::class);
+        $this->app->bind(LocalReviewProvider::class, NullLocalReviews::class);
+        $this->app->bind(LocalJobProvider::class, NullLocalJobs::class);
 
         // Relevance scoring runs on the cheaper Haiku model with NO extended
         // thinking; drafting is quality-sensitive and runs on Sonnet with adaptive

@@ -1,5 +1,12 @@
 <?php
 
+use App\Local\Grounding\AirQualityProvider;
+use App\Local\Grounding\CensusAcsProvider;
+use App\Local\Grounding\ClimateNormalsProvider;
+use App\Local\Grounding\GoogleElevationProvider;
+use App\Local\Grounding\PollenProvider;
+use App\Local\Grounding\WaterProvider;
+
 return [
 
     /*
@@ -295,12 +302,12 @@ return [
         'stale_days' => 90,
 
         'sources' => [
-            'climate' => App\Local\Grounding\ClimateNormalsProvider::class,   // seasonal normals (NOT a live weather API)
-            'elevation' => App\Local\Grounding\GoogleElevationProvider::class, // per served town; terrain context
-            'air_quality' => App\Local\Grounding\AirQualityProvider::class,    // stub seam
-            'pollen' => App\Local\Grounding\PollenProvider::class,             // stub seam
-            'census' => App\Local\Grounding\CensusAcsProvider::class,          // population / households / housing age
-            'water' => App\Local\Grounding\WaterProvider::class,               // stub seam (no Google source for hardness)
+            'climate' => ClimateNormalsProvider::class,   // seasonal normals (NOT a live weather API)
+            'elevation' => GoogleElevationProvider::class, // per served town; terrain context
+            'air_quality' => AirQualityProvider::class,    // stub seam
+            'pollen' => PollenProvider::class,             // stub seam
+            'census' => CensusAcsProvider::class,          // population / households / housing age
+            'water' => WaterProvider::class,               // stub seam (no Google source for hardness)
         ],
 
         'trade_map' => [
