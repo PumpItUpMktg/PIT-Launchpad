@@ -281,4 +281,36 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Location-page grounding (trade-keyed local facts)
+    |--------------------------------------------------------------------------
+    | Provider-agnostic enrichment for location pages: the tenant's trade picks
+    | which sources fire per location; results cache on the Location record
+    | (grounding_cache) and refetch only when stale. Drafter input ONLY — never
+    | rendered as live page widgets. A missing key / failed fetch skips the
+    | source and logs; grounding is never a generation blocker.
+    */
+    'grounding' => [
+        'stale_days' => 90,
+
+        'sources' => [
+            'climate' => App\Local\Grounding\ClimateNormalsProvider::class,   // seasonal normals (NOT a live weather API)
+            'elevation' => App\Local\Grounding\GoogleElevationProvider::class, // per served town; terrain context
+            'air_quality' => App\Local\Grounding\AirQualityProvider::class,    // stub seam
+            'pollen' => App\Local\Grounding\PollenProvider::class,             // stub seam
+            'census' => App\Local\Grounding\CensusAcsProvider::class,          // population / households / housing age
+            'water' => App\Local\Grounding\WaterProvider::class,               // stub seam (no Google source for hardness)
+        ],
+
+        'trade_map' => [
+            'waterproofing' => ['climate', 'elevation', 'census'],
+            'plumbing' => ['climate', 'census'],
+            'mold_testing' => ['air_quality', 'climate', 'census'],
+            'hvac' => ['climate', 'air_quality', 'pollen', 'census'],
+            'water_treatment' => ['water', 'census'],
+            '_default' => ['census'],
+        ],
+    ],
+
 ];

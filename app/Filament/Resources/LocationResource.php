@@ -16,9 +16,12 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use App\Locations\ServedTowns;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TagsInput;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
@@ -92,6 +95,11 @@ class LocationResource extends Resource
             Toggle::make('is_storefront')->label('Storefront (walk-in) location'),
             TextInput::make('booking_url')->label('Booking URL')->url(),
             TextInput::make('gbp_url')->label('Google Business Profile URL')->url(),
+            TextInput::make('primary_category')->label('GBP category')->maxLength(255)
+                ->helperText('The Google Business Profile primary category (the GBP import will fill this).'),
+            self::servedTownsField(),
+            Textarea::make('market_notes')->label('Market notes')->rows(4)
+                ->helperText('What only the owner knows about this market — years served, soil/water quirks, response-time claims, neighborhood familiarity. Fed to the page drafter verbatim as trusted context.'),
             self::hoursFieldset(),
             // Populated by the Google import; not operator-edited directly.
             Hidden::make('place_id'),
@@ -99,6 +107,38 @@ class LocationResource extends Resource
             Hidden::make('lng'),
             Hidden::make('address_components'),
         ]);
+    }
+
+    /**
+     * The served-towns tag input — the GBP service-area list, "Town, ST" per tag. On save the tags
+     * normalize to structured rows (new towns geocoded via the Geocoder seam; ungeocodable towns
+     * store flagged rather than blocking), and the CANNIBALIZATION GUARD rejects any town already
+     * claimed by another location on the same site, naming the conflict. The future GBP API prefills
+     * this same field.
+     */
+    private static function servedTownsField(): TagsInput
+    {
+        return TagsInput::make('served_towns')
+            ->label('Served towns')
+            ->placeholder('Montclair, NJ')
+            ->helperText('The towns this location serves (its GBP service area) — one page claims each town. "Town, ST" per entry.')
+            ->formatStateUsing(fn ($state): array => collect(is_array($state) ? $state : [])
+                ->filter(fn ($row) => is_array($row) && trim((string) ($row['name'] ?? '')) !== '')
+                ->map(fn (array $row): string => trim((string) $row['name']).(trim((string) ($row['state'] ?? '')) !== '' ? ', '.trim((string) $row['state']) : ''))
+                ->values()->all())
+            ->rule(fn (Get $get, ?Location $record) => function (string $attribute, mixed $value, \Closure $fail) use ($get, $record): void {
+                $siteId = (string) ($get('site_id') ?? $record?->site_id ?? '');
+                if ($siteId === '' || ! is_array($value)) {
+                    return;
+                }
+                foreach (app(ServedTowns::class)->conflicts($siteId, $value, $record?->id) as $conflict) {
+                    $fail("\"{$conflict['town']}\" is already served by the \"{$conflict['location']}\" location — a town can only belong to one location (one page per town, no cannibalization).");
+                }
+            })
+            ->dehydrateStateUsing(fn ($state, ?Location $record): array => app(ServedTowns::class)->normalize(
+                is_array($state) ? $state : [],
+                is_array($record?->served_towns) ? $record->served_towns : [],
+            ));
     }
 
     /**

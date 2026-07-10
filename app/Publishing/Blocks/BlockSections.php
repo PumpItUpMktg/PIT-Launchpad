@@ -2,6 +2,7 @@
 
 namespace App\Publishing\Blocks;
 
+use App\Local\Proof\LocalJobProvider;
 use App\Publishing\Legal\LegalTemplates;
 
 /**
@@ -65,7 +66,7 @@ final class BlockSections
      *
      * @param  list<array{title?: string, blurb?: string, url?: string}>  $cards
      */
-    public function servicesGrid(string $eyebrow, string $heading, array $cards): string
+    public function servicesGrid(string $eyebrow, string $heading, array $cards, string $intro = ''): string
     {
         $cards = array_values(array_filter($cards, fn (array $c): bool => trim($c['title'] ?? '') !== ''));
         if ($cards === []) {
@@ -74,10 +75,54 @@ final class BlockSections
 
         $columns = array_map(fn (array $c): string => $this->b->column([$this->serviceCard($c)]), $cards);
 
+        $children = [$this->sectionHead($eyebrow, $heading)];
+        if (trim($intro) !== '') {
+            $children[] = $this->b->paragraph($this->text($intro), ['textColor' => 'muted', 'className' => 'lp-services-intro']);
+        }
+        $children[] = $this->b->columns($columns, ['className' => 'lp-services-grid']);
+
+        return $this->b->group($children, ['align' => 'full', 'className' => 'lp-services']);
+    }
+
+    /**
+     * Recent jobs nearby: real completed work close to a location — one card per job (photo when
+     * captured, title, line, town/date meta). STRICTLY data-gated in BOTH contexts (no preview
+     * placeholder): the field job-capture system hasn't shipped, so no operator action can activate
+     * the section yet — an "Example" band would promise something nobody can fill. Empty ⇒ omitted
+     * entirely; the moment a {@see LocalJobProvider} binds with data, it renders.
+     *
+     * @param  list<array{title?: string, description?: string, photo?: string, town?: string, date?: string}>  $jobs
+     */
+    public function jobCards(string $eyebrow, string $heading, array $jobs): string
+    {
+        $jobs = array_values(array_filter($jobs, fn (array $j): bool => trim((string) ($j['title'] ?? '')) !== ''));
+        if ($jobs === []) {
+            return '';
+        }
+
+        $cols = array_map(function (array $j): string {
+            $title = trim((string) $j['title']);
+            $children = [];
+            $photo = trim((string) ($j['photo'] ?? ''));
+            if ($photo !== '') {
+                $children[] = $this->b->image($photo, $title, ['className' => 'lp-job-photo']);
+            }
+            $children[] = $this->b->heading(4, $title);
+            if (trim((string) ($j['description'] ?? '')) !== '') {
+                $children[] = $this->b->paragraph((string) $j['description'], ['textColor' => 'muted']);
+            }
+            $meta = array_values(array_filter([trim((string) ($j['town'] ?? '')), trim((string) ($j['date'] ?? ''))]));
+            if ($meta !== []) {
+                $children[] = $this->b->paragraph($this->text(implode(' · ', $meta)), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-job-meta']);
+            }
+
+            return $this->b->column([$this->b->group($children, ['backgroundColor' => 'surface', 'className' => 'lp-card lp-job'])]);
+        }, array_slice($jobs, 0, 3));
+
         return $this->b->group([
-            $this->sectionHead($eyebrow, $heading),
-            $this->b->columns($columns, ['className' => 'lp-services-grid']),
-        ], ['align' => 'full', 'className' => 'lp-services']);
+            $this->sectionHead($eyebrow, $heading, center: true),
+            $this->b->columns($cols, ['className' => 'lp-jobs-grid']),
+        ], ['align' => 'full', 'className' => 'lp-jobs']);
     }
 
     /**

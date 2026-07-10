@@ -398,6 +398,12 @@ class AppServiceProvider extends ServiceProvider
         // until their adapters land (e.g. GBP, with the GBP integration).
         $this->app->singleton(ConnectionVerifier::class, WordpressConnectionVerifier::class);
 
+        // Location-page gated sections — contract-first: the review-sync and field job-capture
+        // systems aren't deployed, so the null providers bind (sections omit). Real providers
+        // replace these bindings with no composer changes.
+        $this->app->bind(\App\Local\Proof\LocalReviewProvider::class, \App\Local\Proof\NullLocalReviews::class);
+        $this->app->bind(\App\Local\Proof\LocalJobProvider::class, \App\Local\Proof\NullLocalJobs::class);
+
         // Relevance scoring runs on the cheaper Haiku model with NO extended
         // thinking; drafting is quality-sensitive and runs on Sonnet with adaptive
         // thinking. Both clients come from the one factory so the probe can build

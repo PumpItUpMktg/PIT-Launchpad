@@ -7,12 +7,16 @@ use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Enums\StandardPageType;
 use App\Enums\VoiceStatus;
+use App\Local\Proof\LocalJobProvider;
+use App\Local\Proof\LocalReviewProvider;
+use App\Local\Proof\NullLocalReviews;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Models\VoiceProfile;
@@ -38,6 +42,8 @@ final class BlockContentAssembler
         private readonly ServiceAreaResolver $serviceAreas,
         private readonly ServiceCardBlurb $cardBlurb,
         private readonly SiteContact $contact,
+        private readonly LocalReviewProvider $localReviews,
+        private readonly LocalJobProvider $localJobs,
     ) {}
 
     /**
@@ -65,6 +71,12 @@ final class BlockContentAssembler
 
         if ($content->page_type === PageType::Service) {
             return $this->composeService($content, $slots, $images, $ctx, $preview);
+        }
+
+        // A location page pinned to its GBP Location record composes the block pattern; market-era
+        // location pages WITHOUT a pin (no location_id) keep the null fallback → the Elementor path.
+        if ($content->page_type === PageType::Location && $content->location_id !== null) {
+            return $this->composeLocation($content, $slots, $images, $preview);
         }
 
         if ($content->standard_type === StandardPageType::WhyChooseUs) {
@@ -290,6 +302,228 @@ final class BlockContentAssembler
             hours: $this->businessHours($location),
             preview: $preview,
         );
+    }
+
+    /**
+     * A LOCATION page — resolves the pinned §1 Location (its city/state, served towns, own phone),
+     * the site's trade (the deterministic H1 formula), the catalog services with the LIVE-page link
+     * rule, and the provider-fed local reviews/jobs, then hands it all to
+     * {@see BlockPageComposer::composeLocation}. A stale pin (the Location was deleted) returns null
+     * so the blob carries no post_content and the plugin falls back — never a half-composed page.
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  array<string, array<string, mixed>>  $images
+     */
+    private function composeLocation(Content $content, array $slots, array $images, bool $preview): ?string
+    {
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->find($content->location_id);
+        if ($location === null) {
+            return null;
+        }
+
+        ['city' => $city, 'state' => $state] = $location->cityState();
+        if ($city === '') {
+            $city = trim((string) $location->name);
+        }
+
+        $towns = $this->servedTownNames($location);
+
+        // Coverage prose: the drafted slot when generated, else the honest derived sentence naming
+        // ONLY the captured towns (real data, never invented — and never a bare keyword dump).
+        $coverage = $this->storyParagraphs($this->slotString($slots, 'loc_coverage'));
+        if ($coverage === [] && $towns !== []) {
+            $base = $city !== '' ? ' from our '.$city.' location' : '';
+            $coverage = ['We serve '.$this->naturalList($towns).' and the surrounding area'.$base.'.'];
+        }
+
+        return $this->composer->composeLocation(
+            slots: $slots,
+            images: $images,
+            ctx: $this->locationContext($content, $location),
+            city: $city,
+            state: $state,
+            trade: $this->trade($content),
+            intro: $this->storyParagraphs($this->slotString($slots, 'loc_intro')),
+            servicesIntro: $this->slotString($slots, 'loc_services_intro'),
+            serviceCards: $this->locationServiceCards($content),
+            coverage: $coverage,
+            reviews: $this->locationReviews($location),
+            jobs: $this->locationJobs($location),
+            faqs: $this->faqItems($slots),
+            trustStats: $this->trustStats($content),
+            preview: $preview,
+        );
+    }
+
+    /**
+     * The location page's context: this LOCATION's own phone leads (each GBP location may carry its
+     * own tracked line — the CTA and hero call button must show the number a local caller should
+     * dial), falling back to the site-wide resolution when the location has none.
+     */
+    private function locationContext(Content $content, Location $location): PageContext
+    {
+        $site = $this->site($content);
+        $phone = trim((string) $location->phone);
+        if ($phone === '') {
+            return $this->context($site);
+        }
+
+        $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
+
+        return new PageContext(
+            phoneDisplay: $phone,
+            phoneTel: $this->contact->tel($phone),
+            emergency: $site !== null && (bool) $site->offers_emergency,
+            emergencyDisplay: $emergencyPhone,
+            emergencyTel: $this->contact->tel($emergencyPhone),
+        );
+    }
+
+    /**
+     * The location's served-town names (state suffix dropped — coverage prose reads "Norristown,
+     * Audubon, and Eagleville", not a comma soup of state codes). Ungeocodable towns still count:
+     * the claim is the operator's captured list, not the geocoder's success.
+     *
+     * @return list<string>
+     */
+    private function servedTownNames(Location $location): array
+    {
+        $names = [];
+        foreach ($location->served_towns ?? [] as $row) {
+            $name = trim((string) ($row['name'] ?? ''));
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+
+        return array_slice($names, 0, 12);
+    }
+
+    /**
+     * "A", "A and B", "A, B, and C" — the readable list the coverage fallback sentence uses.
+     *
+     * @param  non-empty-list<string>  $names
+     */
+    private function naturalList(array $names): string
+    {
+        $count = count($names);
+        if ($count === 1) {
+            return $names[0];
+        }
+        if ($count === 2) {
+            return $names[0].' and '.$names[1];
+        }
+
+        return implode(', ', array_slice($names, 0, -1)).', and '.$names[$count - 1];
+    }
+
+    /** The site's captured trade (the owner interview / guided intake seed), or ''. */
+    private function trade(Content $content): string
+    {
+        $trade = SiloBlueprint::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->value('trade');
+
+        return is_string($trade) ? trim($trade) : '';
+    }
+
+    /**
+     * The service catalog as location-page cards — THE LINK RULE: a service links only when a LIVE
+     * service page exists for it (materialized + actually pushed to WordPress, `wp_post_id` set);
+     * otherwise it renders as text. A location page must never link a visitor to a 404.
+     *
+     * @return list<array{title: string, blurb: string, url: string}>
+     */
+    private function locationServiceCards(Content $content): array
+    {
+        $site = $this->site($content);
+        $home = is_string($site?->domain_url) && trim((string) $site->domain_url) !== ''
+            ? rtrim((string) $site->domain_url, '/').'/'
+            : '/';
+
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Service->value)
+            ->whereNotNull('slug')
+            ->whereNotNull('wp_post_id')
+            ->get(['title', 'slug', 'primary_service_id']);
+
+        $byService = [];
+        $byTitle = [];
+        foreach ($pages as $page) {
+            $url = $home.ltrim((string) $page->slug, '/');
+            if ($page->primary_service_id !== null) {
+                $byService[(string) $page->primary_service_id] = $url;
+            }
+            $byTitle[mb_strtolower(trim((string) $page->title))] = $url;
+        }
+
+        $services = Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->orderBy('created_at')
+            ->limit(6)
+            ->get();
+
+        $cards = [];
+        foreach ($services as $service) {
+            $name = trim((string) $service->name);
+            if ($name === '') {
+                continue;
+            }
+            $cards[] = [
+                'title' => $name,
+                'blurb' => trim((string) $service->description),
+                'url' => $byService[(string) $service->id] ?? $byTitle[mb_strtolower($name)] ?? '',
+            ];
+        }
+
+        return $cards;
+    }
+
+    /**
+     * Provider-fed local reviews mapped to the testimonials shape (author first name + town as the
+     * byline). Contract-first: the default {@see NullLocalReviews} binding returns
+     * [] and the section omits entirely — never a placeholder, never a fabricated quote.
+     *
+     * @return list<array{quote: string, author: string, role: string, stars: int}>
+     */
+    private function locationReviews(Location $location): array
+    {
+        $out = [];
+        foreach ($this->localReviews->for($location) as $review) {
+            $out[] = [
+                'quote' => $review->text,
+                'author' => $review->authorFirst,
+                'role' => $review->town,
+                'stars' => max(0, min(5, $review->rating)),
+            ];
+        }
+
+        return array_slice($out, 0, 3);
+    }
+
+    /**
+     * Provider-fed nearby jobs mapped to the job-card shape. Same contract-first gating as reviews.
+     *
+     * @return list<array{title: string, description: string, photo: string, town: string, date: string}>
+     */
+    private function locationJobs(Location $location): array
+    {
+        $out = [];
+        foreach ($this->localJobs->for($location) as $job) {
+            $out[] = [
+                'title' => $job->title,
+                'description' => $job->description,
+                'photo' => (string) ($job->photos[0] ?? ''),
+                'town' => $job->town,
+                'date' => (string) ($job->date ?? ''),
+            ];
+        }
+
+        return array_slice($out, 0, 3);
     }
 
     /**
