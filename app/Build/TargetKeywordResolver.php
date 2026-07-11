@@ -41,6 +41,11 @@ final class TargetKeywordResolver
             ->first();
 
         if ($existing !== null) {
+            // Carry the classifier's intent onto the §5 record when it doesn't have one yet.
+            if ($existing->intent === null && $spoke->intent !== null) {
+                $existing->forceFill(['intent' => $spoke->intent->value])->save();
+            }
+
             return $existing;
         }
 
@@ -49,6 +54,7 @@ final class TargetKeywordResolver
             'silo_id' => $siloId,
             'query' => $text,
             'volume' => $spoke->volume,
+            'intent' => $spoke->intent?->value,
             'source' => KeywordSource::Seed,
             'status' => 'candidate',
         ]);

@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
+ * @property string|null $intent §5 search intent (transactional/commercial/informational — string, read by scoring; longtail routing keys on it)
  * @property int $priority
  * @property string|null $target_content_id
  */
