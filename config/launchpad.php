@@ -298,6 +298,17 @@ return [
     | rendered as live page widgets. A missing key / failed fetch skips the
     | source and logs; grounding is never a generation blocker.
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Blog target queue (longtail relay)
+    |--------------------------------------------------------------------------
+    | The directed:reactive publishing mix — freshness stays news-led while the
+    | queue closes gaps steadily. Per-tenant override: Site.directed_mix.
+    */
+    'blog_queue' => [
+        'mix' => env('LAUNCHPAD_BLOG_MIX', '1:2'),
+    ],
+
     'grounding' => [
         'stale_days' => 90,
 

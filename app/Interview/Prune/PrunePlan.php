@@ -2,6 +2,7 @@
 
 namespace App\Interview\Prune;
 
+use App\Enums\KeywordIntent;
 use App\Enums\SpokeTag;
 
 /**
@@ -25,7 +26,10 @@ final class PrunePlan
      * Pre-decided defaults the owner reviews instead of deciding from scratch (§2):
      *  - pillar → always a page ('hub'), no per-spoke decision;
      *  - core ≥ bar → its own page; core < bar → fold into the pillar (still a section — floor);
-     *  - supporting (adjacent ∪ connecting) → fold into the most-related core page (opt-in to promote).
+     *  - supporting (adjacent ∪ connecting), transactional/commercial → fold into the most-related
+     *    core page (opt-in to promote);
+     *  - supporting, INFORMATIONAL → the silo's blog target queue (an article target, not a page
+     *    section — the longtail routing rule). Operator can override either direction per row.
      * `fold_into` is the target spoke id (null = the silo pillar).
      *
      * @return array<string, array{bucket: string, disposition: string, fold_into: string|null}>
@@ -48,6 +52,11 @@ final class PrunePlan
                 if ($row->tag === SpokeTag::Core) {
                     $page = ($row->volume ?? 0) >= $this->ownPageBar;
                     $out[$row->id] = ['bucket' => 'core', 'disposition' => $page ? 'page' : 'fold', 'fold_into' => $page ? null : $pillar?->id];
+
+                    continue;
+                }
+                if ($row->intent === KeywordIntent::Informational) {
+                    $out[$row->id] = ['bucket' => 'supporting', 'disposition' => 'blog_target', 'fold_into' => null];
 
                     continue;
                 }

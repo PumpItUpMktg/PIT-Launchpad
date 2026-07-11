@@ -29,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property DraftTrigger|null $draft_trigger
  * @property bool $locked
  * @property bool $locally_edited
+ * @property IntakeType|null $intake_type
  * @property int|null $wp_post_id
  * @property string|null $near_dup_of_content_id
  * @property string|null $primary_service_id
