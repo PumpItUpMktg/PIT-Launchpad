@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ProofType;
 use App\Models\Content;
 use App\Models\Market;
 use App\Models\ProofItem;
@@ -54,7 +55,7 @@ test('the thin-page guard passes when the staked proof slots are entity-backed',
     $market = Market::factory()->priority()->create(['site_id' => $site->id]);
     ProofItem::factory()->create([
         'site_id' => $site->id,
-        'type' => \App\Enums\ProofType::Testimonial,
+        'type' => ProofType::Testimonial,
         'is_substantiated' => true,
     ]);
     $content = Content::factory()->create(['site_id' => $site->id, 'market_id' => $market->id]);

@@ -785,7 +785,10 @@ class MetaBlobAssembler
 
         // Skip the silo crumb when this page IS its silo's pillar — the crumb would
         // link to (and be named the same as) this very page. Collapse to Home → Leaf.
-        if ($content->silo_id !== null && $content->silo !== null && ! $this->isOwnSiloPillar($content)) {
+        // A HUB page is its silo's head by definition (guided silos don't pin
+        // pillar_content_id), so it collapses the same way: hub = Home → {Hub}.
+        if ($content->silo_id !== null && $content->silo !== null
+            && ! $this->isOwnSiloPillar($content) && $content->page_type !== PageType::Hub) {
             $crumbs[] = ['name' => (string) $content->silo->name, 'url' => $this->siloUrl($content, $home)];
         }
 
@@ -815,6 +818,18 @@ class MetaBlobAssembler
     {
         $pillar = $content->silo?->pillarContent;
         $slug = $pillar !== null ? trim((string) $pillar->slug, '/') : '';
+
+        // Guided-flow silos carry no pillar_content_id — the silo's head is its HUB page. Resolve
+        // it directly so a spoke's breadcrumb (Home → {Hub} → {Spoke}) links the real hub.
+        if ($slug === '' && $content->silo_id !== null) {
+            $slug = trim((string) Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $content->site_id)
+                ->where('silo_id', $content->silo_id)
+                ->where('kind', ContentKind::Page->value)
+                ->where('page_type', PageType::Hub->value)
+                ->whereKeyNot($content->id)
+                ->value('slug'), '/');
+        }
 
         return $slug !== '' ? $home.$slug.'/' : '';
     }
