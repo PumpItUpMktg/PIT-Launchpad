@@ -74,7 +74,7 @@ it('drafts a bare tenant pillar end to end — no VoiceProfile/proof/services is
     // non-empty (KitValidator already enforced this before persist — a structural
     // gap would have surfaced a draft failure, not reached needs_review).
     $slots = $result->slot_payload;
-    foreach (['hero_problem', 'hero_solution', 'problem_explainer', 'solution_overview', 'service_features', 'why_us', 'faq'] as $key) {
+    foreach (['hero_headline', 'hero_subhead', 'svc_intro', 'symptoms_intro', 'scope_intro', 'cost_copy', 'faq'] as $key) {
         expect($slots)->toHaveKey($key)
             ->and($slots[$key])->not->toBeEmpty();
     }

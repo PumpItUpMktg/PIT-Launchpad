@@ -58,7 +58,7 @@ function boundWidgets(array $template): array
 }
 
 it('injects lp/* bindings onto the designer widgets by wf-<slot>, on the right controls', function () {
-    $bound = app(KitTemplateBinder::class)->bind(PageBuilder::serviceKit(), designerTemplate());
+    $bound = app(KitTemplateBinder::class)->bind(PageBuilder::legacyServiceKit(), designerTemplate());
     $w = boundWidgets($bound);
 
     $heading = $w['wf-hero_problem brand-h1']['settings'];
@@ -71,7 +71,7 @@ it('injects lp/* bindings onto the designer widgets by wf-<slot>, on the right c
 });
 
 it('preserves the designer styling and leaves decorative + unmapped widgets untouched', function () {
-    $bound = app(KitTemplateBinder::class)->bind(PageBuilder::serviceKit(), designerTemplate());
+    $bound = app(KitTemplateBinder::class)->bind(PageBuilder::legacyServiceKit(), designerTemplate());
     $w = boundWidgets($bound);
 
     // Bound heading keeps every authored style setting.
@@ -92,7 +92,7 @@ it('preserves the designer styling and leaves decorative + unmapped widgets unto
 });
 
 it('verifier reports the bound slots and flags the unmapped (icon-list) required slot', function () {
-    $kit = PageBuilder::serviceKit();
+    $kit = PageBuilder::legacyServiceKit();
     $bound = app(KitTemplateBinder::class)->bind($kit, designerTemplate());
 
     $result = app(KitTemplateVerifier::class)->verify($kit, $bound);

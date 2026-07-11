@@ -28,10 +28,15 @@ test('a page draft fills kit slots, not a post body', function () {
 
     $claude = new FakeClaudeClient(Draft::json([
         'slots' => [
-            'hero_problem' => 'No hot water when you need it most?',
-            'hero_solution' => 'Same-day tankless installation that never runs cold.',
-            'service_features' => ['Endless hot water', 'Lower bills', 'Compact footprint'],
-            'why_us' => 'We back every install with a 10-year warranty.',
+            'hero_headline' => 'Tankless water heater installation',
+            'hero_subhead' => 'Same-day tankless installation that never runs cold.',
+            'svc_intro' => 'An aging water heater rarely fails politely — lukewarm showers, rising bills, rusty water. '
+                .'We right-size a modern tankless system to your household demand, install it in a single visit, and back the work in writing so the hot water never runs out again.',
+            'faq' => [
+                ['question' => 'How long does install take?', 'answer' => 'Most installs are same-day.'],
+                ['question' => 'Will it lower my bills?', 'answer' => 'Tankless heats on demand.'],
+                ['question' => 'Do you haul the old unit?', 'answer' => 'Yes, included.'],
+            ],
         ],
         'images' => [[
             'slot' => 'hero_image',
@@ -57,8 +62,8 @@ test('a page draft fills kit slots, not a post body', function () {
     expect($content->kind)->toBe(ContentKind::Page)
         ->and($content->body)->toBeNull()
         ->and($content->slot_payload)->not->toBeNull()
-        ->and($content->slot_payload['hero_problem'])->toContain('hot water')
-        ->and($content->slot_payload['service_features'])->toHaveCount(3)
+        ->and($content->slot_payload['svc_intro'])->toContain('hot water')
+        ->and($content->slot_payload['faq'])->toHaveCount(3)
         ->and($content->wireframe_kit_id)->toBe($kit->id)
         ->and($content->page_type->value)->toBe('service')
         ->and($content->meta['image_specs'][0]['slot'])->toBe('hero_image');
@@ -69,7 +74,7 @@ test('the kit-slot definitions are surfaced to the drafter prompt', function () 
     $kit = serviceKit();
 
     $claude = new FakeClaudeClient(Draft::json([
-        'slots' => ['hero_problem' => 'x'],
+        'slots' => ['hero_headline' => 'x'],
         'claims_used' => [['text' => 'w', 'claim_id' => $claim->id]],
     ]));
 
@@ -85,7 +90,7 @@ test('the kit-slot definitions are surfaced to the drafter prompt', function () 
 
     $prompt = $claude->prompts[0];
     expect($prompt)->toContain('KIT SLOTS')
-        ->and($prompt)->toContain('hero_problem')
+        ->and($prompt)->toContain('hero_headline')
         // grounded proof slot is tagged as claims-only
         ->and($prompt)->toContain('GROUNDED')
         // image slots are spec-only, never rendered here

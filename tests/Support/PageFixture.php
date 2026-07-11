@@ -72,14 +72,13 @@ final class PageFixture
     {
         return Draft::json([
             'slots' => array_merge([
-                'hero_problem' => 'No hot water when you need it most?',
-                'hero_solution' => 'Same-day tankless installation that never runs cold.',
-                'problem_explainer' => 'An aging water heater rarely fails politely. It declines for months — lukewarm showers, a creeping utility bill, '
-                    .'rusty water, then a sudden cold morning or a tank that splits and floods the garage. The longer it limps along, the more it costs you.',
-                'solution_overview' => '<p>We right-size a modern tankless system to your household demand, install it cleanly in a single visit, and '
-                    .'back it with a written warranty — so you get endless on-demand hot water without the standby waste of an old tank.</p>',
-                'service_features' => ['Endless on-demand hot water', 'Lower monthly energy bills', 'Compact wall-mounted footprint'],
-                'why_us' => '<p>We back every tankless installation with a written 10-year warranty and a licensed, background-checked crew.</p>',
+                'hero_headline' => 'Tankless water heater installation',
+                'hero_subhead' => 'Endless on-demand hot water, installed cleanly in a single visit.',
+                'svc_intro' => 'An aging water heater rarely fails politely. It declines for months — lukewarm showers, a creeping utility bill, '
+                    .'rusty water, then a sudden cold morning. We right-size a modern tankless system to your household demand and install it cleanly in a single visit.',
+                'symptoms_intro' => 'If any of these sound familiar, the tank is telling you something.',
+                'scope_intro' => 'Every installation includes the full job — no surprise add-ons.',
+                'cost_copy' => 'Final price depends on the unit size, venting route, and your existing gas line — you get a firm written quote before any work starts.',
                 'faq' => [
                     ['question' => 'How long does install take?', 'answer' => 'Most installs are same-day.'],
                     ['question' => 'Will it lower my bills?', 'answer' => 'Tankless heats on demand, cutting standby loss.'],

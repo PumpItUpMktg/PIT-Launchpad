@@ -31,6 +31,18 @@ class PageBuilder
         return self::kitFromFile('location-page');
     }
 
+    /**
+     * The ELEMENTOR-ERA 13-slot service kit, preserved as a fixture — the legacy template-binding /
+     * native-compose tooling is still shipped code, so its tests pin against this frozen shape
+     * instead of the evolving live kit (which is block-era and no longer feeds those composers).
+     */
+    public static function legacyServiceKit(): KitSchema
+    {
+        $raw = json_decode((string) file_get_contents(base_path('tests/Support/fixtures/legacy-service-kit.json')), true);
+
+        return KitSchema::fromArray($raw);
+    }
+
     public static function kitFromFile(string $name): KitSchema
     {
         $raw = json_decode((string) file_get_contents(database_path("data/wireframe-kits/{$name}.json")), true);
@@ -113,14 +125,13 @@ class PageBuilder
     public static function validServicePayload(): array
     {
         return [
-            'hero_problem' => 'Leaking water heater flooding your garage?',
-            'hero_solution' => 'Fast, guaranteed water heater repair, often the same day.',
+            'hero_headline' => 'Water heater repair',
+            'hero_subhead' => 'Fast, guaranteed water heater repair, often the same day.',
             'hero_image' => ['src' => 'hero.webp', 'alt' => 'Technician repairing a water heater', 'width' => 1200, 'height' => 675],
-            'problem_explainer' => str_repeat('A failing water heater disrupts every routine in the home. ', 4),
-            'solution_overview' => '<p>'.str_repeat('Our licensed team diagnoses and fixes it fast. ', 5).'</p>',
-            'service_features' => ['Same-day service', 'Licensed technicians', 'Upfront pricing', 'Workmanship warranty'],
-            'process_steps' => ['Diagnose the fault', 'Quote upfront', 'Repair and test'],
-            'why_us' => str_repeat('Licensed, insured, and fully warrantied work. ', 3),
+            'svc_intro' => str_repeat('A failing water heater disrupts every routine in the home — our licensed team diagnoses and fixes it fast. ', 3),
+            'symptoms_intro' => 'If any of these sound familiar, the tank is telling you something.',
+            'scope_intro' => 'Every repair includes the full job — no surprise add-ons.',
+            'cost_copy' => 'Final price depends on the fault, the unit age, and parts availability — you get a firm written quote before any work starts.',
             'faq' => [
                 ['question' => 'How fast can you come out?', 'answer' => 'Often the same day.'],
                 ['question' => 'How much does it cost?', 'answer' => 'You get an upfront quote first.'],

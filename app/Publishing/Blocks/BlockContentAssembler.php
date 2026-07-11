@@ -10,6 +10,8 @@ use App\Enums\VoiceStatus;
 use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReviewProvider;
 use App\Local\Proof\NullLocalReviews;
+use App\Local\Proof\ServiceJobProvider;
+use App\Local\Proof\ServiceReviewProvider;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\PageConfig;
@@ -44,6 +46,8 @@ final class BlockContentAssembler
         private readonly SiteContact $contact,
         private readonly LocalReviewProvider $localReviews,
         private readonly LocalJobProvider $localJobs,
+        private readonly ServiceReviewProvider $serviceReviews,
+        private readonly ServiceJobProvider $serviceJobs,
     ) {}
 
     /**
@@ -70,7 +74,11 @@ final class BlockContentAssembler
         }
 
         if ($content->page_type === PageType::Service) {
-            return $this->composeService($content, $slots, $images, $ctx, $preview);
+            return $this->composeSpoke($content, $slots, $images, $ctx, $preview);
+        }
+
+        if ($content->page_type === PageType::Hub) {
+            return $this->composeHub($content, $slots, $images, $ctx, $preview);
         }
 
         // A location page pinned to its GBP Location record composes the block pattern; market-era
@@ -266,42 +274,358 @@ final class BlockContentAssembler
     }
 
     /**
-     * A SERVICE page — the Elementor→blocks migration's first non-standard page type. Resolves the
-     * drafted body slots (overview prose, feature lines, grounded "why us") + §1 proof (stats, process,
-     * reviews) + the real NAP, and hands them to {@see BlockPageComposer::composeService}. The features
-     * slot arrives SlotShaper-flattened to plain strings; the prose slots are cleaned to paragraphs the
-     * same way About's story is (drafter HTML stripped). Everything data-gates — nothing is fabricated.
+     * A SPOKE service page (hub+spoke relay) — resolves the pinned §1 Service's enrichment
+     * (symptoms / scope / process / cost factors + honest range / owner-triggered comparison), the
+     * page's primary keyword (the H1), the silo's related-links spine (hub + siblings, never
+     * cross-silo), and the provider-fed service-scoped jobs/reviews, then hands it all to
+     * {@see BlockPageComposer::composeSpoke}. Old-kit slot keys (hero_problem / problem_explainer /
+     * solution_overview / service_features) are honored as fallbacks so an un-regenerated v1 page
+     * still renders its copy.
      *
      * @param  array<string, mixed>  $slots
      * @param  array<string, array<string, mixed>>  $images
      */
-    private function composeService(Content $content, array $slots, array $images, PageContext $ctx, bool $preview): string
+    private function composeSpoke(Content $content, array $slots, array $images, PageContext $ctx, bool $preview): string
     {
-        $location = $this->primaryLocation($content);
+        $service = $this->pinnedService($content);
 
-        // The problem→solution explainer: both drafted body slots, each cleaned to plain-text paragraphs
-        // (the drafter may emit HTML — solution_overview is rich_text), then concatenated in reading order.
-        $overview = array_merge(
-            $this->storyParagraphs($this->slotString($slots, 'problem_explainer')),
-            $this->storyParagraphs($this->slotString($slots, 'solution_overview')),
-        );
+        // Old-kit fallbacks: v1 pages drafted hero_problem/hero_solution; the intro falls back to
+        // the v1 explainer pair so an un-regenerated page keeps its body.
+        $slots['hero_headline'] = $slots['hero_headline'] ?? $slots['hero_problem'] ?? null;
+        $slots['hero_subhead'] = $slots['hero_subhead'] ?? $slots['hero_solution'] ?? null;
+        $intro = $this->storyParagraphs($this->slotString($slots, 'svc_intro'));
+        if ($intro === []) {
+            $intro = array_merge(
+                $this->storyParagraphs($this->slotString($slots, 'problem_explainer')),
+                $this->storyParagraphs($this->slotString($slots, 'solution_overview')),
+            );
+        }
 
-        return $this->composer->composeService(
+        // Symptoms: the record field, else the service's captured problem phrases (§1) — literal
+        // customer symptoms, honest fallback. Scope: the record field, else the v1 features slot.
+        $symptoms = $this->strings($service?->symptoms);
+        if ($symptoms === [] && $service !== null) {
+            $symptoms = $service->problems()->pluck('phrase')
+                ->map(fn ($p): string => trim((string) $p))
+                ->filter(fn (string $p): bool => $p !== '')
+                ->values()->all();
+        }
+        $scope = $this->strings($service?->scope_items);
+        if ($scope === []) {
+            $scope = $this->stringList($slots, 'service_features');
+        }
+
+        return $this->composer->composeSpoke(
             slots: $slots,
             images: $images,
             ctx: $ctx,
-            features: $this->stringList($slots, 'service_features'),
-            overview: $overview,
-            whyUs: $this->storyParagraphs($this->slotString($slots, 'why_us')),
+            keyword: $this->pageKeyword($content),
+            intro: $intro,
+            symptoms: array_slice($symptoms, 0, 8),
+            symptomsIntro: $this->slotString($slots, 'symptoms_intro'),
+            scopeItems: array_slice($scope, 0, 10),
+            scopeIntro: $this->slotString($slots, 'scope_intro'),
+            processSteps: $this->serviceProcessSteps($content, $service),
+            costCopy: $this->storyParagraphs($this->slotString($slots, 'cost_copy')),
+            costFactors: array_slice($this->strings($service?->cost_factors), 0, 8),
+            costRange: $this->costRangeLine($service),
+            comparison: is_array($service?->comparison) ? $service->comparison : [],
+            jobs: $service !== null ? $this->serviceJobCards($service) : [],
+            reviews: $service !== null ? $this->serviceReviewQuotes($service) : [],
+            related: $this->relatedServiceLinks($content),
             trustStats: $this->trustStats($content),
-            processSteps: $this->processSteps($content),
-            testimonials: $this->testimonials($content),
             faqs: $this->faqItems($slots),
-            email: is_string($location?->email) && trim($location->email) !== '' ? trim($location->email) : null,
-            address: is_string($location?->address) && trim($location->address) !== '' ? trim($location->address) : null,
-            hours: $this->businessHours($location),
             preview: $preview,
         );
+    }
+
+    /**
+     * A HUB (silo pillar) page — the category keyword H1, the drafted intro/why, and the silo's
+     * SERVICES GRID: one card per child spoke, resolved fresh at compose time (so a repush after
+     * adding a spoke refreshes the grid), each linking the spoke's real permalink. Reviews aggregate
+     * across the hub's spokes via the service-scoped provider (strictly gated).
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  array<string, array<string, mixed>>  $images
+     */
+    private function composeHub(Content $content, array $slots, array $images, PageContext $ctx, bool $preview): string
+    {
+        $slots['hero_headline'] = $slots['hero_headline'] ?? $slots['hero_problem'] ?? null;
+        $slots['hero_subhead'] = $slots['hero_subhead'] ?? $slots['hero_solution'] ?? null;
+
+        $intro = $this->storyParagraphs($this->slotString($slots, 'hub_intro'));
+        if ($intro === []) {
+            $intro = $this->storyParagraphs($this->slotString($slots, 'problem_explainer'));
+        }
+
+        return $this->composer->composeHub(
+            slots: $slots,
+            images: $images,
+            ctx: $ctx,
+            keyword: $this->pageKeyword($content),
+            intro: $intro,
+            spokeCards: $this->spokeCards($content),
+            why: $this->storyParagraphs($this->slotString($slots, 'hub_why')),
+            processSteps: $this->processSteps($content),
+            certifications: $this->mergedCredentials($content),
+            reviews: $this->hubReviewQuotes($content),
+            trustStats: $this->trustStats($content),
+            faqs: $this->faqItems($slots),
+            preview: $preview,
+        );
+    }
+
+    /** The page's primary keyword (Content.target_keyword_id — the Option A carry-over), or ''. */
+    private function pageKeyword(Content $content): string
+    {
+        return trim((string) $content->targetKeyword()->withoutGlobalScope(SiteScope::class)->value('query'));
+    }
+
+    /** The spoke page's §1 Service subject: its pin, else the silo's first service. */
+    private function pinnedService(Content $content): ?Service
+    {
+        if ($content->primary_service_id !== null) {
+            $pinned = Service::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $content->site_id)
+                ->find($content->primary_service_id);
+            if ($pinned !== null) {
+                return $pinned;
+            }
+        }
+
+        if ($content->silo_id === null) {
+            return null;
+        }
+
+        return Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->whereHas('silos', fn ($q) => $q->withoutGlobalScope(SiteScope::class)->whereKey($content->silo_id))
+            ->orderBy('name')
+            ->first();
+    }
+
+    /**
+     * The spoke's process: the RECORD's ordered steps when captured (plain strings → step cards),
+     * else the tenant's captured process, else [] (the section keeps its safe default).
+     *
+     * @return list<array{title: string, description: string}>
+     */
+    private function serviceProcessSteps(Content $content, ?Service $service): array
+    {
+        $steps = $this->strings($service?->process_steps);
+        if ($steps !== []) {
+            return array_map(fn (string $step): array => ['title' => $step, 'description' => ''], array_slice($steps, 0, 6));
+        }
+
+        return $this->processSteps($content);
+    }
+
+    /**
+     * The honest price line — ONLY when the record carries a real range: "Typical range: $X–$Y per
+     * unit". Absent/partial range ⇒ '' (the cost section renders factors-only, never a blank price).
+     */
+    private function costRangeLine(?Service $service): string
+    {
+        $range = is_array($service?->price_range) ? $service->price_range : [];
+        $low = $range['low'] ?? null;
+        $high = $range['high'] ?? null;
+        if (! is_numeric($low) || ! is_numeric($high) || (float) $high <= 0) {
+            return '';
+        }
+
+        $fmt = fn (float $n): string => '$'.number_format($n, $n === floor($n) ? 0 : 2);
+        $unit = trim((string) ($range['unit'] ?? ''));
+
+        return 'Typical range: '.$fmt((float) $low).'–'.$fmt((float) $high).($unit !== '' ? ' '.$unit : '');
+    }
+
+    /**
+     * The silo's internal-link spine for a spoke: the HUB page first (always, when materialized),
+     * then up to three sibling spokes. Real permalinks only; never cross-silo.
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function relatedServiceLinks(Content $content): array
+    {
+        if ($content->silo_id === null) {
+            return [];
+        }
+
+        $site = $this->site($content);
+        $home = is_string($site?->domain_url) && trim((string) $site->domain_url) !== ''
+            ? rtrim((string) $site->domain_url, '/').'/'
+            : '/';
+
+        $links = [];
+
+        $hub = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('silo_id', $content->silo_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Hub->value)
+            ->whereNotNull('slug')
+            ->first();
+        if ($hub !== null && trim((string) $hub->title) !== '') {
+            $links[] = ['label' => 'All '.lcfirst(trim((string) $hub->title)), 'url' => $home.ltrim((string) $hub->slug, '/')];
+        }
+
+        $siblings = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('silo_id', $content->silo_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Service->value)
+            ->whereKeyNot($content->id)
+            ->whereNotNull('slug')
+            ->orderBy('title')
+            ->limit(3)
+            ->get(['title', 'slug']);
+        foreach ($siblings as $sibling) {
+            $title = trim((string) $sibling->title);
+            if ($title !== '') {
+                $links[] = ['label' => $title, 'url' => $home.ltrim((string) $sibling->slug, '/')];
+            }
+        }
+
+        return $links;
+    }
+
+    /**
+     * The hub's services grid: one card per child spoke page in the silo — title, the service's
+     * short_description (else the shared keyword-grounded blurb), and the REAL permalink. Resolved
+     * fresh on every compose, so regenerate/repush after adding a spoke refreshes the grid.
+     *
+     * @return list<array{title: string, blurb: string, url: string}>
+     */
+    private function spokeCards(Content $content): array
+    {
+        if ($content->silo_id === null) {
+            return [];
+        }
+
+        $site = $this->site($content);
+        $home = is_string($site?->domain_url) && trim((string) $site->domain_url) !== ''
+            ? rtrim((string) $site->domain_url, '/').'/'
+            : '/';
+
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('silo_id', $content->silo_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Service->value)
+            ->whereNotNull('slug')
+            ->orderBy('title')
+            ->limit(12)
+            ->get();
+
+        $cards = [];
+        foreach ($pages as $page) {
+            $title = trim((string) $page->title);
+            if ($title === '') {
+                continue;
+            }
+            $service = $page->primary_service_id !== null
+                ? Service::withoutGlobalScope(SiteScope::class)->where('site_id', $content->site_id)->find($page->primary_service_id)
+                : null;
+            $short = trim((string) ($service->short_description ?? ''));
+            $cards[] = [
+                'title' => $title,
+                'blurb' => $short !== '' ? $short : $this->cardBlurb->for($page),
+                'url' => $home.ltrim((string) $page->slug, '/'),
+            ];
+        }
+
+        return $cards;
+    }
+
+    /**
+     * Provider-fed service-scoped reviews mapped to the testimonials shape. Contract-first: the
+     * Null binding returns [] and the section omits entirely — never a placeholder or fabrication.
+     *
+     * @return list<array{quote: string, author: string, role: string, stars: int}>
+     */
+    private function serviceReviewQuotes(Service $service): array
+    {
+        $out = [];
+        foreach ($this->serviceReviews->for($service) as $review) {
+            $out[] = [
+                'quote' => $review->text,
+                'author' => $review->authorFirst,
+                'role' => $review->town,
+                'stars' => max(0, min(5, $review->rating)),
+            ];
+        }
+
+        return array_slice($out, 0, 3);
+    }
+
+    /**
+     * Provider-fed service-scoped jobs mapped to the job-card shape. Same contract-first gating.
+     *
+     * @return list<array{title: string, description: string, photo: string, town: string, date: string}>
+     */
+    private function serviceJobCards(Service $service): array
+    {
+        $out = [];
+        foreach ($this->serviceJobs->for($service) as $job) {
+            $out[] = [
+                'title' => $job->title,
+                'description' => $job->description,
+                'photo' => (string) ($job->photos[0] ?? ''),
+                'town' => $job->town,
+                'date' => (string) ($job->date ?? ''),
+            ];
+        }
+
+        return array_slice($out, 0, 3);
+    }
+
+    /**
+     * The hub's review pool: the union of its spokes' service-scoped reviews (capped). Strictly
+     * provider-gated like every review surface.
+     *
+     * @return list<array{quote: string, author: string, role: string, stars: int}>
+     */
+    private function hubReviewQuotes(Content $content): array
+    {
+        if ($content->silo_id === null) {
+            return [];
+        }
+
+        $services = Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->whereHas('silos', fn ($q) => $q->withoutGlobalScope(SiteScope::class)->whereKey($content->silo_id))
+            ->orderBy('name')
+            ->get();
+
+        $out = [];
+        foreach ($services as $service) {
+            foreach ($this->serviceReviewQuotes($service) as $quote) {
+                $out[] = $quote;
+                if (count($out) >= 3) {
+                    return $out;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * A nullable json list attribute as clean strings — trimmed, empties dropped, order kept.
+     *
+     * @return list<string>
+     */
+    private function strings(mixed $value): array
+    {
+        $out = [];
+        foreach (is_array($value) ? $value : [] as $item) {
+            $item = trim((string) $item);
+            if ($item !== '') {
+                $out[] = $item;
+            }
+        }
+
+        return $out;
     }
 
     /**

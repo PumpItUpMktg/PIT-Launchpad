@@ -40,8 +40,8 @@ it('drafts a kit-keyed slot map in place → needs_review with image specs', fun
     expect($drafted->status)->toBe(ContentStatus::NeedsReview)
         ->and($drafted->body)->toBeNull()
         ->and($drafted->hasDraft())->toBeTrue()
-        ->and($drafted->slot_payload['hero_problem'])->toContain('hot water')
-        ->and($drafted->slot_payload['service_features'])->toHaveCount(3)
+        ->and($drafted->slot_payload['svc_intro'])->toContain('water heater')
+        ->and($drafted->slot_payload['faq'])->toHaveCount(3)
         ->and($drafted->meta['image_specs'])->not->toBeEmpty()
         ->and($drafted->wireframe_kit_version)->not->toBeNull();
 
@@ -60,15 +60,16 @@ it('drops off-schema slot keys (the slot key is the render contract)', function 
     $drafted = pageEngine($claude)->draftPage($page->fresh());
 
     expect($drafted->slot_payload)->not->toHaveKey('totally_made_up_slot')
-        ->and($drafted->slot_payload)->toHaveKey('hero_problem');
+        ->and($drafted->slot_payload)->toHaveKey('svc_intro');
 });
 
 it('surfaces a missing required slot as a draft failure — no status flip', function () {
     $page = PageFixture::intakePage(['status' => ContentStatus::Scored]);
-    // Omit the required hero_problem slot — drop its sentinel block.
+    // Omit the required svc_intro slot — drop its sentinel block.
     $response = PageFixture::validResponse(proofIdFor($page->site_id));
     $response = str_replace(
-        Sentinel::block('hero_problem', 'No hot water when you need it most?'),
+        Sentinel::block('svc_intro', 'An aging water heater rarely fails politely. It declines for months — lukewarm showers, a creeping utility bill, '
+            .'rusty water, then a sudden cold morning. We right-size a modern tankless system to your household demand and install it cleanly in a single visit.'),
         '',
         $response,
     );

@@ -288,14 +288,26 @@ class PageGroundingAssembler
      */
     private function serviceArray(Service $service): array
     {
-        return [
+        // Enrichment (hub+spoke relay): the record fields the spoke drafter frames copy around.
+        // The price range rides ONLY when real — the drafter may reference it honestly; absent
+        // means the cost copy is factors-only (never an invented number).
+        $range = is_array($service->price_range) ? $service->price_range : [];
+        $hasRange = is_numeric($range['low'] ?? null) && is_numeric($range['high'] ?? null);
+
+        return array_filter([
             'name' => $service->name,
             'description' => $service->description,
+            'short_description' => $service->short_description,
             'scope' => $service->scope,
             'pricing_posture' => $service->pricing_posture,
             'primary_cta_intent' => $service->primary_cta_intent,
             'geo_applicability' => $service->geo_applicability,
-        ];
+            'symptoms' => $service->symptoms,
+            'scope_items' => $service->scope_items,
+            'process_steps' => $service->process_steps,
+            'cost_factors' => $service->cost_factors,
+            'price_range' => $hasRange ? $range : null,
+        ], fn ($v) => $v !== null && $v !== [] && $v !== '');
     }
 
     /**
@@ -351,6 +363,14 @@ class PageGroundingAssembler
      */
     private function markets(string $siteId, Content $page): array
     {
+        // GEO-NEUTRAL service layer (hub+spoke relay): service-family pages must never receive
+        // locality — the drafter's markets block then explicitly instructs "do not name any town".
+        // Geo belongs exclusively to location pages (and the brand-level home/utility pages keep
+        // their honest coverage context).
+        if (in_array($page->page_type, [PageType::Service, PageType::Hub, PageType::Pillar, PageType::Cluster], true)) {
+            return [];
+        }
+
         $markets = Market::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
             ->get();

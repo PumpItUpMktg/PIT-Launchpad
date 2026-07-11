@@ -720,6 +720,15 @@ class MetaBlobAssembler
             }
         }
 
+        if ($content->kind === ContentKind::Page && $content->page_type?->value === 'hub') {
+            $site = $this->site($content);
+            if ($site !== null) {
+                $home = is_string($site->domain_url) ? rtrim($site->domain_url, '/').'/' : '/';
+
+                return ['Service', $this->serviceSchema->buildForHub($content, $site, $home, $this->canonical($content), $this->hubSpokeItems($content, $home))];
+            }
+        }
+
         if ($content->kind === ContentKind::Page && $content->page_type?->value === 'location' && $content->location_id !== null) {
             $site = $this->site($content);
             $location = Location::withoutGlobalScope(SiteScope::class)
@@ -738,6 +747,33 @@ class MetaBlobAssembler
     }
 
     /**
+     * The hub's child spokes for the schema catalog — the silo's service pages (title + permalink),
+     * the same set the composed services grid links. Fresh on every assemble.
+     *
+     * @return list<array{name: string, url: string}>
+     */
+    private function hubSpokeItems(Content $content, string $home): array
+    {
+        if ($content->silo_id === null) {
+            return [];
+        }
+
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('silo_id', $content->silo_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Service->value)
+            ->whereNotNull('slug')
+            ->orderBy('title')
+            ->limit(12)
+            ->get(['title', 'slug'])
+            ->map(fn (Content $p): array => ['name' => trim((string) $p->title), 'url' => $home.ltrim((string) $p->slug, '/')])
+            ->filter(fn (array $i): bool => $i['name'] !== '')
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return list<array{name: string, url: string}>
      */
     private function breadcrumbs(Content $content): array
@@ -749,7 +785,10 @@ class MetaBlobAssembler
 
         // Skip the silo crumb when this page IS its silo's pillar — the crumb would
         // link to (and be named the same as) this very page. Collapse to Home → Leaf.
-        if ($content->silo_id !== null && $content->silo !== null && ! $this->isOwnSiloPillar($content)) {
+        // A HUB page is its silo's head by definition (guided silos don't pin
+        // pillar_content_id), so it collapses the same way: hub = Home → {Hub}.
+        if ($content->silo_id !== null && $content->silo !== null
+            && ! $this->isOwnSiloPillar($content) && $content->page_type !== PageType::Hub) {
             $crumbs[] = ['name' => (string) $content->silo->name, 'url' => $this->siloUrl($content, $home)];
         }
 
@@ -779,6 +818,18 @@ class MetaBlobAssembler
     {
         $pillar = $content->silo?->pillarContent;
         $slug = $pillar !== null ? trim((string) $pillar->slug, '/') : '';
+
+        // Guided-flow silos carry no pillar_content_id — the silo's head is its HUB page. Resolve
+        // it directly so a spoke's breadcrumb (Home → {Hub} → {Spoke}) links the real hub.
+        if ($slug === '' && $content->silo_id !== null) {
+            $slug = trim((string) Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $content->site_id)
+                ->where('silo_id', $content->silo_id)
+                ->where('kind', ContentKind::Page->value)
+                ->where('page_type', PageType::Hub->value)
+                ->whereKeyNot($content->id)
+                ->value('slug'), '/');
+        }
 
         return $slug !== '' ? $home.$slug.'/' : '';
     }

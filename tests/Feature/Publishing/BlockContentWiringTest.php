@@ -438,14 +438,15 @@ it('preview shows the guarantee + certifications as labeled placeholders; publis
 
 it('returns null for a page type whose block pattern has not shipped (falls back to existing render)', function () {
     $site = Site::factory()->create();
-    // Hub pages are the next migration phase — still on the Elementor fallback for now. (Pinned
-    // location pages now compose; the unpinned-location fallback is covered in LocationPageTest.)
-    $hub = Content::factory()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Hub,
+    // Pillar pages are §4-era stubs with no block composer — still on the existing fallback.
+    // (Hub and pinned-location pages now compose; their coverage lives in HubSpokePageTest /
+    // LocationPageTest.)
+    $pillar = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Pillar,
         'slug' => 'services', 'title' => 'Services',
     ]);
 
-    expect(app(BlockContentAssembler::class)->compose($hub->fresh(), [], []))->toBeNull();
+    expect(app(BlockContentAssembler::class)->compose($pillar->fresh(), [], []))->toBeNull();
 });
 
 it('the areas section leads with the map mount + keeps the text fallback when geometry exists', function () {
@@ -1247,7 +1248,7 @@ function blockServiceDrafted(Site $site): Content
     ]);
 }
 
-it('composes a Service page from real inputs — problem H1, features checklist, two CTAs, real NAP', function () {
+it('composes a Spoke page from real inputs — v1 slot fallbacks honored, checklist, two CTAs', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
     Location::factory()->create(['site_id' => $site->id, 'phone' => '(973) 555-0100', 'email' => 'help@sewergurus.com', 'address' => '10 Main St, Newark NJ']);
     ProofItem::factory()->create([
@@ -1263,27 +1264,24 @@ it('composes a Service page from real inputs — problem H1, features checklist,
     );
 
     expect($markup)->toBeString()->not->toBeEmpty()
-        // hero: the customer's problem is the H1, the solution is the subhead, the image renders
+        // hero: the v1 hero_problem/hero_solution slots still feed the hero (un-regenerated page)
         ->toContain('A clogged drain is backing up your whole day.')
         ->toContain('We clear it fast and keep it clear')
         ->toContain('https://cdn.example/drain.webp')
-        // the overview prose (both drafted body slots, HTML stripped to text)
+        // the intro prose falls back to the v1 explainer pair (HTML stripped to text)
         ->toContain('lp-prose')
         ->toContain('the longer it sits the worse the backup gets')
         ->toContain('camera-inspect the line')
         ->not->toContain('<p>Our technicians')                      // rich_text HTML stripped to plain text
-        // features checklist
+        // the scope checklist falls back to the v1 service_features slot
         ->toContain('lp-features-grid')
         ->toContain('Hydro-jetting for stubborn clogs')
         ->toContain('lp-feature')
-        // grounded why-us prose (has substantiated proof)
-        ->toContain('backed by our written guarantee')
         // FAQ accordion (drafted pairs)
         ->toContain('lp-faq-list')
         ->toContain('How fast can you come out?')
-        // real NAP + both CTAs
+        // click-to-call + both CTAs
         ->toContain('href="tel:9735550100"')
-        ->toContain('help@sewergurus.com')
         ->toContain('lp-cta lp-cta--bold')                          // pushy CTA
         ->toContain('Ready to get it fixed?')
         ->toContain('Have a question first?');                      // soft closing CTA
@@ -1304,16 +1302,17 @@ it('Service page data-gates on publish: grounded why-us, testimonials, and NAP o
     $publish = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
     expect($publish)
         ->toContain('A clogged drain is backing up your whole day.')  // hero still renders
-        ->toContain('lp-features-grid')                               // features present
-        ->not->toContain('lp-testimonials')                          // no reviews → omitted
-        ->not->toContain('lp-contact-grid')                          // no NAP → omitted
+        ->toContain('lp-features-grid')                               // scope checklist present (v1 fallback)
+        ->not->toContain('lp-testimonials')                          // provider-gated reviews → omitted
+        ->not->toContain('lp-jobs')                                  // provider-gated jobs → omitted
         ->not->toContain('lp-placeholder');                          // never a placeholder on publish
 
     $preview = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], preview: true);
     expect($preview)
-        ->toContain('lp-testimonials')                               // preview shows every section...
-        ->toContain('lp-contact')
-        ->toContain('lp-placeholder');                               // ...clearly marked as example
+        ->toContain('lp-symptoms')                                   // preview shows the operator-fillable sections...
+        ->toContain('lp-cost')
+        ->toContain('lp-placeholder')                                // ...clearly marked as example
+        ->not->toContain('lp-testimonials');                         // provider-gated stays omitted EVEN in preview
 });
 
 it('Service page: the blob ships block post_content and empties elementor_data', function () {

@@ -64,9 +64,16 @@ function hubResponse(): string
 {
     return Draft::json([
         'slots' => [
-            'hero_problem' => 'Slow or clogged drains across your home?',
-            'hero_solution' => 'Every drain-cleaning service in one place — pick the job you need.',
-            'hub_intro' => '<p>From kitchen sinks to main sewer lines, here is the full range of drain work we handle.</p>',
+            'hero_headline' => 'Drain cleaning services',
+            'hero_subhead' => 'Every drain-cleaning service in one place — pick the job you need.',
+            'hub_intro' => '<p>From kitchen sinks and tub drains to the main sewer line, here is the full range of drain work we handle — '
+                .'diagnosis, clearing, and the preventive jetting that keeps the line from clogging again.</p>',
+            'hub_why' => '<p>A slow drain rarely fixes itself — left alone it becomes a full blockage, and a blocked main line backs up into the house.</p>',
+            'faq' => [
+                ['question' => 'Which drain service do I need?', 'answer' => 'Describe the symptom and we will point you to the right fix.'],
+                ['question' => 'Do you camera-inspect first?', 'answer' => 'When the symptom suggests the main line, yes.'],
+                ['question' => 'Is hydro jetting safe for old pipes?', 'answer' => 'We assess the line first and pick the method that fits.'],
+            ],
         ],
         'images' => [[
             'slot' => 'hero_image',
@@ -91,7 +98,7 @@ it('drafts a hub page end-to-end → needs_review with its kit slots filled', fu
 
     expect($drafted->status)->toBe(ContentStatus::NeedsReview)
         ->and($drafted->hasDraft())->toBeTrue()
-        ->and($drafted->slot_payload['hero_problem'])->toContain('drains')
-        ->and($drafted->slot_payload['hero_solution'])->toContain('one place')
+        ->and($drafted->slot_payload['hero_headline'])->toContain('Drain')
+        ->and($drafted->slot_payload['hero_subhead'])->toContain('one place')
         ->and($drafted->meta['image_specs'])->not->toBeEmpty();
 });

@@ -81,12 +81,15 @@ it('omits cta and contact_block when the tenant has no location', function () {
         ->and($slots)->not->toHaveKey('contact_block');
 });
 
-it('omits the why_us section when there is no substantiated proof (conditional)', function () {
+it('a v1 leftover slot (why_us) rides the blob untouched — conditional-drop applies only to DECLARED slots', function () {
+    // Hub+spoke relay: why_us left the service kit (the block composer gates proof sections
+    // itself), so a v1-drafted page's stored why_us is off-schema — the blob passes it through
+    // harmlessly (the plugin renders only bound tags). The conditional machinery is still locked
+    // by the cta/contact_block tests above.
     $site = Site::factory()->create();
     Location::factory()->create(['site_id' => $site->id, 'phone' => '+15125550142']);
-    // no proof → has_proof false → why_us condition unmet → dropped from the blob
 
     $slots = serviceBlobSlots($site);
 
-    expect($slots)->not->toHaveKey('why_us');
+    expect($slots)->toHaveKey('why_us');
 });

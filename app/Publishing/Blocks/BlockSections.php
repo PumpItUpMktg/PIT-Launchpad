@@ -126,6 +126,166 @@ final class BlockSections
     }
 
     /**
+     * Symptoms — "signs you need this": the spoke page's search-intent hook. Record bullets with an
+     * alert marker + an optional drafted intro line. Data-gated on real symptoms (record field, else
+     * the service's captured problem phrases resolved upstream); preview → a labeled example set.
+     *
+     * @param  list<string>  $symptoms
+     */
+    public function symptomsList(string $eyebrow, string $heading, string $intro, array $symptoms, bool $preview = false): string
+    {
+        $symptoms = array_values(array_filter(array_map('trim', $symptoms), fn (string $s): bool => $s !== ''));
+        $placeholder = false;
+        if ($symptoms === []) {
+            if (! $preview) {
+                return '';
+            }
+            $symptoms = [
+                'The warning signs your customers notice first',
+                'Each symptom you add renders here as an alert bullet',
+                'Drawn from the service record — never invented',
+            ];
+            $placeholder = true;
+        }
+
+        $lis = '';
+        foreach ($symptoms as $symptom) {
+            $lis .= '<li class="lp-symptom"><span class="lp-alert-mark" aria-hidden="true">!</span> '.$this->text($symptom).'</li>';
+        }
+        $list = "<!-- wp:html -->\n".'<ul class="lp-symptoms-grid">'.$lis.'</ul>'."\n<!-- /wp:html -->";
+
+        $children = [$this->sectionHead($eyebrow, $heading, center: true)];
+        if (trim($intro) !== '') {
+            $children[] = $this->b->paragraph($this->text($intro), ['textColor' => 'muted', 'className' => 'lp-symptoms-intro']);
+        }
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add symptoms on the service record');
+        }
+        $children[] = $list;
+
+        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-symptoms', $placeholder)]);
+    }
+
+    /**
+     * The cost section: honest price transparency — the drafted qualifier copy, the record's cost
+     * factors as a checked list, and (ONLY when the record carries a real range) the "$X–$Y" line.
+     * An empty range renders factors-only; a blank price line never ships. Data-gated: with no copy,
+     * no factors, and no range the whole section omits (preview → labeled example factors).
+     *
+     * @param  list<string>  $copy  drafted qualifier paragraphs (cleaned upstream)
+     * @param  list<string>  $factors  the record's cost factors
+     * @param  string  $rangeLine  the preformatted "$X–$Y (unit)" line, '' when the record has no range
+     */
+    public function costSection(string $eyebrow, string $heading, array $copy, array $factors, string $rangeLine, bool $preview = false): string
+    {
+        $copy = array_values(array_filter(array_map('trim', $copy), fn (string $p): bool => $p !== ''));
+        $factors = array_values(array_filter(array_map('trim', $factors), fn (string $f): bool => $f !== ''));
+        $rangeLine = trim($rangeLine);
+
+        $placeholder = false;
+        if ($copy === [] && $factors === [] && $rangeLine === '') {
+            if (! $preview) {
+                return '';
+            }
+            $factors = ['Size and scope of the job', 'Materials and equipment', 'Site access and condition'];
+            $placeholder = true;
+        }
+
+        $children = [$this->sectionHead($eyebrow, $heading)];
+        if ($placeholder) {
+            $children[] = $this->placeholderNote('appears when you add cost factors (and optionally an honest price range) on the service record');
+        }
+
+        if ($rangeLine !== '') {
+            $children[] = $this->b->paragraph('<strong>'.$this->text($rangeLine).'</strong>', ['className' => 'lp-cost-range']);
+        }
+        foreach ($copy as $p) {
+            $children[] = $this->b->paragraph($this->text($p), ['className' => 'lp-prose-p']);
+        }
+        if ($factors !== []) {
+            $lis = '';
+            foreach ($factors as $factor) {
+                $lis .= '<li class="lp-feature"><span class="lp-check" aria-hidden="true">✓</span> '.$this->text($factor).'</li>';
+            }
+            $children[] = $this->b->heading(4, 'What affects the price', ['className' => 'lp-cost-factors-h']);
+            $children[] = "<!-- wp:html -->\n".'<ul class="lp-features-grid">'.$lis.'</ul>'."\n<!-- /wp:html -->";
+        }
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-cost', $placeholder)]);
+    }
+
+    /**
+     * The owner-triggered comparison (e.g. pedestal vs. submersible): two option columns of the
+     * owner's own points + an optional verdict line — rendered VERBATIM (never a fabricated technical
+     * claim). Strictly gated: renders only when enabled AND both options carry a name and points; no
+     * preview placeholder (off by default is the intended state, not a gap to nag about).
+     *
+     * @param  array{name?: string, points?: list<string>}  $optionA
+     * @param  array{name?: string, points?: list<string>}  $optionB
+     */
+    public function comparisonTable(string $title, array $optionA, array $optionB, string $verdict = ''): string
+    {
+        $column = function (array $option): ?string {
+            $name = trim((string) ($option['name'] ?? ''));
+            $points = array_values(array_filter(array_map('trim', (array) ($option['points'] ?? [])), fn (string $p): bool => $p !== ''));
+            if ($name === '' || $points === []) {
+                return null;
+            }
+
+            $lis = '';
+            foreach ($points as $point) {
+                $lis .= '<li class="lp-compare-point">'.$this->text($point).'</li>';
+            }
+
+            return $this->b->column([$this->b->group([
+                $this->b->heading(4, $name),
+                "<!-- wp:html -->\n".'<ul class="lp-compare-points">'.$lis.'</ul>'."\n<!-- /wp:html -->",
+            ], ['backgroundColor' => 'base', 'className' => 'lp-compare-option'])]);
+        };
+
+        $a = $column($optionA);
+        $b = $column($optionB);
+        if ($a === null || $b === null) {
+            return '';
+        }
+
+        $children = [
+            $this->sectionHead('Compare your options', trim($title) !== '' ? trim($title) : 'Which option fits?', center: true),
+            $this->b->columns([$a, $b], ['className' => 'lp-compare-grid']),
+        ];
+        if (trim($verdict) !== '') {
+            $children[] = $this->b->paragraph('<strong>Our take:</strong> '.$this->text($verdict), ['className' => 'lp-compare-verdict']);
+        }
+
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => 'lp-compare']);
+    }
+
+    /**
+     * Related services: the silo's internal-link spine on a spoke page — the hub link (always first)
+     * + sibling spokes, all REAL materialized permalinks resolved upstream. No cross-silo links ever
+     * reach here. Data-gated: renders nothing without links.
+     *
+     * @param  list<array{label: string, url: string}>  $links
+     */
+    public function relatedServices(string $eyebrow, string $heading, array $links): string
+    {
+        $links = array_values(array_filter($links, fn (array $l): bool => trim($l['label']) !== '' && trim($l['url']) !== ''));
+        if ($links === []) {
+            return '';
+        }
+
+        $parts = array_map(
+            fn (array $l): string => '<a href="'.$this->attr($l['url']).'">'.$this->text($l['label']).'</a>',
+            $links,
+        );
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading),
+            $this->b->paragraph(implode(' · ', $parts), ['className' => 'lp-related-links']),
+        ], ['align' => 'full', 'className' => 'lp-related']);
+    }
+
+    /**
      * The proof gallery: honest photo slots. The client's real photos beat any stock image, so unfilled
      * slots render as an explicit "add your own photo" placeholder — never a fabricated image. A
      * provided (AI/uploaded) image fills a slot; the rest stay placeholders.
@@ -402,13 +562,16 @@ final class BlockSections
         $cols = array_map(function (array $s) use (&$n): string {
             $n++;
 
-            return $this->b->column([
-                $this->b->group([
-                    $this->b->paragraph((string) $n, ['className' => 'lp-step-n']),
-                    $this->b->heading(4, (string) $s['title']),
-                    $this->b->paragraph((string) $s['description'], ['textColor' => 'muted']),
-                ], ['className' => 'lp-step']),
-            ]);
+            $children = [
+                $this->b->paragraph((string) $n, ['className' => 'lp-step-n']),
+                $this->b->heading(4, (string) $s['title']),
+            ];
+            // A record-sourced step may be title-only (the service's ordered steps) — no empty <p>.
+            if (trim((string) $s['description']) !== '') {
+                $children[] = $this->b->paragraph((string) $s['description'], ['textColor' => 'muted']);
+            }
+
+            return $this->b->column([$this->b->group($children, ['className' => 'lp-step'])]);
         }, $steps);
 
         // Surface band — keeps the light sections alternating surface→base between the dark anchors

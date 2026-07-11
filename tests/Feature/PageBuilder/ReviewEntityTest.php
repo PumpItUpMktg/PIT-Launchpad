@@ -43,14 +43,20 @@ it('reviews.market counts the page market plus site-wide reviews, not other mark
 });
 
 it('locks the gate-redesign kit shapes', function () {
+    // Hub+spoke relay: the service kit dropped its entity PROOF slots (testimonial/proof_strip) —
+    // reviews are provider-gated page SECTIONS now. Only the two platform CONVERSION slots remain
+    // entity-sourced (cta / contact_block), each condition-gated on real §1 data.
     $service = PageBuilder::serviceKit();
-    $testimonial = collect($service->slots)->firstWhere('key', 'testimonial');
-    expect($testimonial->constraints->entity)->toBe('reviews.site')          // off reviews.market
-        ->and($testimonial->condition)->not->toBeNull()                       // conditional
-        ->and($testimonial->condition->field)->toBe('has_reviews');
+    expect(collect($service->slots)->firstWhere('key', 'testimonial'))->toBeNull()
+        ->and(collect($service->slots)->firstWhere('key', 'proof_strip'))->toBeNull();
 
-    $proofStrip = collect($service->slots)->firstWhere('key', 'proof_strip');
-    expect($proofStrip->constraints->entity)->toBe('proof.substantiated');    // proof stays
+    $cta = collect($service->slots)->firstWhere('key', 'cta');
+    expect($cta->source->value)->toBe('entity')
+        ->and($cta->condition->field)->toBe('has_location_phone');
+
+    $contact = collect($service->slots)->firstWhere('key', 'contact_block');
+    expect($contact->source->value)->toBe('entity')
+        ->and($contact->condition->field)->toBe('has_location');
 
     // The block-era location kit dropped its entity review slot: local reviews are a provider-gated
     // page SECTION (empty ⇒ omitted by the composer), never a required kit slot.

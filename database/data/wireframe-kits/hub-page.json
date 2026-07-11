@@ -6,28 +6,39 @@
     "seo_profile_ref": "service",
     "slots": [
         {
-            "key": "hero_problem",
-            "label": "Hero — Headline",
+            "key": "hero_headline",
+            "label": "Hero Headline",
             "content_type": "heading",
-            "role": "hero_problem",
+            "role": "hero_solution",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": true, "min_length": 8, "max_length": 120 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "min_length": 8,
+                "max_length": 120
+            },
             "client_override": true,
-            "generation_hint": "Name this service category in the customer's words — the umbrella over the services beneath it.",
+            "generation_hint": "The category headline — the composer falls back to the hub's category keyword, so only draft this if you can beat it honestly. NO city or region names (geo lives only on location pages).",
             "seo_binding": "h1",
             "elementor_binding": "lp/text"
         },
         {
-            "key": "hero_solution",
-            "label": "Hero — Subhead",
+            "key": "hero_subhead",
+            "label": "Hero Subhead",
             "content_type": "short_text",
             "role": "hero_solution",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": true, "min_length": 12, "max_length": 220 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 220
+            },
             "client_override": true,
-            "generation_hint": "One line on the value of this whole category and who it's for.",
+            "generation_hint": "One authority line — the breadth of the category and the promise. Geo-neutral.",
             "seo_binding": "meta_description",
             "elementor_binding": "lp/text"
         },
@@ -37,26 +48,76 @@
             "content_type": "image",
             "role": "hero_solution",
             "source": "media",
-            "cardinality": { "type": "single" },
+            "cardinality": {
+                "type": "single"
+            },
             "constraints": {
                 "required": true,
-                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": true }
+                "media": {
+                    "min_width": 1200,
+                    "min_height": 675,
+                    "alt_required": true,
+                    "allow_fabrication": true
+                }
             },
-            "client_override": false,
+            "client_override": true,
             "seo_binding": "og_image",
             "elementor_binding": "lp/image"
         },
         {
             "key": "hub_intro",
             "label": "Category Intro",
-            "content_type": "rich_text",
+            "content_type": "long_text",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "min_length": 60, "max_length": 600 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": true,
+                "min_length": 120,
+                "max_length": 900
+            },
             "client_override": true,
-            "generation_hint": "A short overview of the category — what it covers and why it matters — leading into the services below. No prices or guarantees unless substantiated.",
+            "generation_hint": "What this service family covers and who needs it — the category authority explainer. Ground on the SERVICES provided; never invent capabilities, and NO city/region names.",
             "elementor_binding": "lp/text"
+        },
+        {
+            "key": "hub_why",
+            "label": "Why It Matters",
+            "content_type": "long_text",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "min_length": 80,
+                "max_length": 900
+            },
+            "client_override": true,
+            "generation_hint": "Problem framing: what happens when this category of work is ignored — the honest cost of waiting. Grounded in the customer problems provided; geo-neutral.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "faq",
+            "label": "Category FAQ",
+            "content_type": "faq",
+            "role": "faq",
+            "source": "generated",
+            "cardinality": {
+                "type": "repeater",
+                "min": 3,
+                "max": 8
+            },
+            "constraints": {
+                "required": true
+            },
+            "client_override": true,
+            "generation_hint": "Category-level Q&A — which option fits, how the family of services relates, timing/urgency. Never invent policies, and NO city/region names.",
+            "seo_binding": "faqpage",
+            "elementor_binding": "lp/repeater"
         },
         {
             "key": "sibling_services",
@@ -64,35 +125,17 @@
             "content_type": "list",
             "role": "body_explainer",
             "source": "entity",
-            "cardinality": { "type": "repeater", "min": 0, "max": 3 },
-            "constraints": { "required": false, "entity": "silo.services" },
+            "cardinality": {
+                "type": "repeater",
+                "min": 0,
+                "max": 3
+            },
+            "constraints": {
+                "required": false,
+                "entity": "silo.services"
+            },
             "client_override": false,
             "generation_hint": "The service pages beneath this hub — resolved from the silo, not drafted.",
-            "elementor_binding": "lp/repeater"
-        },
-        {
-            "key": "why_us",
-            "label": "Why choose us",
-            "content_type": "rich_text",
-            "role": "proof",
-            "source": "grounded",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "min_length": 80, "entity": "proof.substantiated", "min_entities": 1 },
-            "condition": { "field": "has_proof", "equals": true },
-            "client_override": true,
-            "generation_hint": "Write only from substantiated claims — what makes this team the one to call for this category.",
-            "elementor_binding": "lp/text"
-        },
-        {
-            "key": "testimonial",
-            "label": "Testimonials",
-            "content_type": "testimonial",
-            "role": "proof",
-            "source": "entity",
-            "cardinality": { "type": "repeater", "min": 1, "max": 3 },
-            "constraints": { "required": false, "entity": "reviews.market", "min_entities": 1 },
-            "condition": { "field": "has_reviews", "equals": true },
-            "client_override": false,
             "elementor_binding": "lp/repeater"
         },
         {
@@ -101,9 +144,16 @@
             "content_type": "cta",
             "role": "cta",
             "source": "entity",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false },
-            "condition": { "field": "has_location_phone", "equals": true },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false
+            },
+            "condition": {
+                "field": "has_location_phone",
+                "equals": true
+            },
             "client_override": false,
             "elementor_binding": "lp/cta"
         }

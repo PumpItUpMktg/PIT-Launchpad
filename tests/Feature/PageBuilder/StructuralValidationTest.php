@@ -20,18 +20,18 @@ test('a fully valid payload passes for the service kit', function () {
 
 test('a missing required slot fails', function () {
     $payload = PageBuilder::validServicePayload();
-    unset($payload['hero_problem']);
+    unset($payload['svc_intro']);
 
     $result = $this->validator->validate($this->kit, $payload, $this->context);
 
     expect($result->passed())->toBeFalse()
         ->and($result->hasCode(ValidationCode::MissingRequiredSlot))->toBeTrue()
-        ->and($result->failuresFor('hero_problem'))->toHaveCount(1);
+        ->and($result->failuresFor('svc_intro'))->toHaveCount(1);
 });
 
 test('text below the minimum length fails', function () {
     $payload = PageBuilder::validServicePayload();
-    $payload['hero_problem'] = 'Leak';
+    $payload['hero_headline'] = 'Leak';
 
     $result = $this->validator->validate($this->kit, $payload, $this->context);
 
@@ -40,7 +40,7 @@ test('text below the minimum length fails', function () {
 
 test('text above the maximum length fails', function () {
     $payload = PageBuilder::validServicePayload();
-    $payload['hero_problem'] = str_repeat('a', 200);
+    $payload['hero_headline'] = str_repeat('a', 200);
 
     $result = $this->validator->validate($this->kit, $payload, $this->context);
 
@@ -49,7 +49,7 @@ test('text above the maximum length fails', function () {
 
 test('a repeater below its minimum cardinality fails', function () {
     $payload = PageBuilder::validServicePayload();
-    $payload['service_features'] = ['Only one', 'Only two'];
+    $payload['faq'] = [['question' => 'Only one?', 'answer' => 'Yes.'], ['question' => 'Only two?', 'answer' => 'Yes.']];
 
     $result = $this->validator->validate($this->kit, $payload, $this->context);
 
@@ -58,7 +58,7 @@ test('a repeater below its minimum cardinality fails', function () {
 
 test('a repeater above its maximum cardinality fails', function () {
     $payload = PageBuilder::validServicePayload();
-    $payload['service_features'] = array_fill(0, 9, 'Feature');
+    $payload['faq'] = array_fill(0, 9, ['question' => 'Another?', 'answer' => 'Yes.']);
 
     $result = $this->validator->validate($this->kit, $payload, $this->context);
 

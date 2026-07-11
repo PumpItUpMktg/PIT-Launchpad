@@ -12,6 +12,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property string|null $short_description one-liner for hub cards
+ * @property list<string>|null $symptoms "signs you need this" bullets (spoke-page hook)
+ * @property list<string>|null $scope_items what's included (checked list)
+ * @property list<string>|null $process_steps ordered steps; tenant default process when empty
+ * @property list<string>|null $cost_factors what drives the price
+ * @property array{low?: numeric, high?: numeric, unit?: string}|null $price_range optional honest range; absent ⇒ factors-only cost section
+ * @property array{enabled?: bool, title?: string, option_a?: array{name?: string, points?: list<string>}, option_b?: array{name?: string, points?: list<string>}, verdict?: string}|null $comparison owner-triggered per spoke, off by default
+ * @property bool $warranty_applicable pulls the warranty trust copy onto the page when true
+ */
 class Service extends Model
 {
     /** @use HasFactory<ServiceFactory> */
@@ -64,6 +74,13 @@ class Service extends Model
             'peak_months' => 'array',
             'is_most_profitable' => 'boolean',
             'is_growth_priority' => 'boolean',
+            'symptoms' => 'array',
+            'scope_items' => 'array',
+            'process_steps' => 'array',
+            'cost_factors' => 'array',
+            'price_range' => 'array',
+            'comparison' => 'array',
+            'warranty_applicable' => 'boolean',
         ];
     }
 }
