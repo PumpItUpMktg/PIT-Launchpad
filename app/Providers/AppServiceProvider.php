@@ -72,6 +72,10 @@ use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReviewProvider;
 use App\Local\Proof\NullLocalJobs;
 use App\Local\Proof\NullLocalReviews;
+use App\Local\Proof\NullServiceJobs;
+use App\Local\Proof\NullServiceReviews;
+use App\Local\Proof\ServiceJobProvider;
+use App\Local\Proof\ServiceReviewProvider;
 use App\Locations\Dma\MetroResolver;
 use App\Models\User;
 use App\Onboarding\MissionPolisher;
@@ -407,6 +411,8 @@ class AppServiceProvider extends ServiceProvider
         // replace these bindings with no composer changes.
         $this->app->bind(LocalReviewProvider::class, NullLocalReviews::class);
         $this->app->bind(LocalJobProvider::class, NullLocalJobs::class);
+        $this->app->bind(ServiceReviewProvider::class, NullServiceReviews::class);
+        $this->app->bind(ServiceJobProvider::class, NullServiceJobs::class);
 
         // Relevance scoring runs on the cheaper Haiku model with NO extended
         // thinking; drafting is quality-sensitive and runs on Sonnet with adaptive

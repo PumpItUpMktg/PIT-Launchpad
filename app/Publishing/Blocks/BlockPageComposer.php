@@ -157,49 +157,59 @@ final class BlockPageComposer
     }
 
     /**
-     * Composes a SERVICE page — the Elementor→blocks migration's first non-standard page type. The
-     * conversion arc: hero (the customer's problem as H1 → the outcome) → a pushy CTA → the
-     * problem/solution overview → the "what's included" feature checklist → the how-it-works process →
-     * the grounded "why us" → client voice → FAQ → the real contact details → a soft closing CTA. Every
-     * body section is drafter-generated or §1-resolved upstream; the same two-contexts rule applies
-     * (preview builds all sections with labeled placeholders; publish data-gates). Reuses the shared
-     * section builders so a service page is styled by the same theme.json variation as every other page.
+     * Composes a SPOKE service page — the conversion page for one specific service (hub+spoke relay).
+     * The arc: hero (H1 = the page's primary keyword — the search intent, verbatim) → the drafted
+     * service intro → symptoms ("signs you need this", the intent hook) → the checked "what's
+     * included" scope → the process → the cost section (factors + the honest range line ONLY when
+     * the record carries one — never a blank price) → the owner-triggered comparison → a pushy CTA →
+     * gated jobs/reviews (provider contracts; empty ⇒ omitted entirely, both contexts) → the related
+     * services spine (hub + siblings, no cross-silo) → FAQ → the soft close. GEO-NEUTRAL by design:
+     * nothing here receives or renders locality — geo lives only on location pages.
      *
-     * @param  array<string, mixed>  $slots  the page's resolved slot_payload (hero_problem/hero_solution/problem_explainer/solution_overview/service_features/why_us)
-     * @param  array<string, array<string, mixed>>  $images  image map keyed by slot (hero_image)
-     * @param  list<string>  $features  the drafted service-feature lines (SlotShaper-flattened)
-     * @param  list<string>  $overview  the problem→solution body paragraphs (drafter HTML cleaned upstream)
-     * @param  list<string>  $whyUs  the grounded "why us" paragraphs (from substantiated proof; data-gated)
-     * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero trust row
-     * @param  list<array{title: string, description: string}>  $processSteps  the tenant's captured process (else a safe default)
-     * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
-     * @param  list<array{question?: string, answer?: string}>  $faqs  the drafted question/answer pairs
-     * @param  string|null  $email  the business email (from §1), or null
-     * @param  string|null  $address  the business address (from §1), or null
-     * @param  list<array{label: string, value: string}>  $hours  per-day hours rows
-     * @param  bool  $preview  operator proof-view (all sections + placeholders) vs publish (data-gated)
+     * @param  array<string, mixed>  $slots  resolved slot_payload (new keys, with old-kit fallbacks resolved upstream)
+     * @param  array<string, array<string, mixed>>  $images  image map keyed by slot
+     * @param  string  $keyword  the page's primary keyword — the deterministic H1 fallback
+     * @param  list<string>  $intro  the drafted service-intro paragraphs
+     * @param  list<string>  $symptoms  record symptoms (else the service's captured problem phrases)
+     * @param  list<string>  $scopeItems  the record's "what's included" list
+     * @param  list<array{title: string, description: string}>  $processSteps  record steps else tenant default
+     * @param  list<string>  $costCopy  drafted honest-qualifier cost paragraphs
+     * @param  list<string>  $costFactors  the record's cost factors
+     * @param  string  $costRange  preformatted "$X–$Y (unit)" line, '' when the record has no range
+     * @param  array{enabled?: bool, title?: string, option_a?: array{name?: string, points?: list<string>}, option_b?: array{name?: string, points?: list<string>}, verdict?: string}  $comparison
+     * @param  list<array{title?: string, description?: string, photo?: string, town?: string, date?: string}>  $jobs  provider-fed (strictly gated)
+     * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $reviews  provider-fed (strictly gated)
+     * @param  list<array{label: string, url: string}>  $related  hub link + sibling spokes (real permalinks)
+     * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero
+     * @param  list<array{question?: string, answer?: string}>  $faqs  the drafted Q&A pairs
      */
-    public function composeService(
+    public function composeSpoke(
         array $slots,
         array $images,
         PageContext $ctx,
-        array $features = [],
-        array $overview = [],
-        array $whyUs = [],
-        array $trustStats = [],
+        string $keyword = '',
+        array $intro = [],
+        array $symptoms = [],
+        string $symptomsIntro = '',
+        array $scopeItems = [],
+        string $scopeIntro = '',
         array $processSteps = [],
-        array $testimonials = [],
+        array $costCopy = [],
+        array $costFactors = [],
+        string $costRange = '',
+        array $comparison = [],
+        array $jobs = [],
+        array $reviews = [],
+        array $related = [],
+        array $trustStats = [],
         array $faqs = [],
-        ?string $email = null,
-        ?string $address = null,
-        array $hours = [],
         bool $preview = false,
     ): string {
         $hero = $this->sections->hero(
-            eyebrow: $this->str($slots['service_area'] ?? '') ?: 'Our services',
-            // hero_problem is the H1 (the customer's problem in their words); hero_solution the subhead.
-            headline: $this->str($slots['hero_problem'] ?? $slots['hero_headline'] ?? ''),
-            subhead: $this->str($slots['hero_solution'] ?? $slots['hero_subhead'] ?? $slots['intro'] ?? ''),
+            eyebrow: 'Our services',
+            // H1 = the primary keyword (the search intent) unless the drafter honestly beat it.
+            headline: $this->str($slots['hero_headline'] ?? '') ?: ($keyword !== '' ? ucfirst($keyword) : 'Our service'),
+            subhead: $this->str($slots['hero_subhead'] ?? ''),
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
             assessmentText: 'Get a free quote',
@@ -208,8 +218,63 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // cta1 (PUSHY) placed after the overview + features (once the visitor has seen the problem, the
-        // fix, and what's included) and buffered by light sections so it never sits against the hero.
+        $introBlock = $this->sections->prose(
+            eyebrow: 'Overview',
+            heading: 'What this service covers',
+            paragraphs: $intro,
+            surface: false,
+            preview: $preview,
+            activates: 'appears when the page is generated',
+        );
+
+        $symptomsBlock = $this->sections->symptomsList(
+            eyebrow: 'Warning signs',
+            heading: 'Signs you need this',
+            intro: $symptomsIntro,
+            symptoms: $symptoms,
+            preview: $preview,
+        );
+
+        $scope = $this->sections->featuresList(
+            eyebrow: 'What we do',
+            heading: 'What’s included',
+            features: $scopeItems,
+            preview: $preview,
+        );
+        if ($scopeIntro !== '' && $scope !== '') {
+            // The drafted framing line rides inside the section head's slot via prose ordering —
+            // simplest honest placement: a muted line directly above the checked list.
+            $scope = str_replace('<!-- wp:html -->', $this->b_paragraphMuted($scopeIntro).'
+
+'.'<!-- wp:html -->', $scope);
+        }
+
+        $process = $this->sections->howItWorks(
+            eyebrow: 'How it works',
+            heading: 'What to expect',
+            steps: $processSteps,
+        );
+
+        $cost = $this->sections->costSection(
+            eyebrow: 'Cost',
+            heading: 'What it costs',
+            copy: $costCopy,
+            factors: $costFactors,
+            rangeLine: $costRange,
+            preview: $preview,
+        );
+
+        // Owner-triggered, off by default; strictly gated on enabled + complete options.
+        $compare = (bool) ($comparison['enabled'] ?? false)
+            ? $this->sections->comparisonTable(
+                title: (string) ($comparison['title'] ?? ''),
+                optionA: (array) ($comparison['option_a'] ?? []),
+                optionB: (array) ($comparison['option_b'] ?? []),
+                verdict: (string) ($comparison['verdict'] ?? ''),
+            )
+            : '';
+
+        // The pushy mid-page ask — after the visitor has seen the scope and the honest cost story.
         $ctaBold = $this->sections->cta(
             heading: 'Ready to get it fixed?',
             body: 'Get a fast, free, no-obligation quote today.',
@@ -219,46 +284,25 @@ final class BlockPageComposer
             bold: true,
         );
 
-        // The problem→solution explainer (both drafted body slots, cleaned to paragraphs upstream).
-        $overviewBlock = $this->sections->prose(
-            eyebrow: 'Overview',
-            heading: 'How we solve it',
-            paragraphs: $overview,
-            surface: false,
-            preview: $preview,
-            activates: 'appears when the page explainer is drafted',
+        // Jobs + reviews are STRICTLY provider-gated — no preview placeholder in either context
+        // (nothing an operator does today can fill them; contract-first like the location page).
+        $jobsBlock = $this->sections->jobCards(
+            eyebrow: 'Recent work',
+            heading: 'Recent jobs like this',
+            jobs: $jobs,
         );
 
-        // "What's included" — the drafted service features as a check-marked grid.
-        $featuresBlock = $this->sections->featuresList(
-            eyebrow: 'What we do',
-            heading: 'What’s included',
-            features: $features,
-            preview: $preview,
-        );
-
-        // How it works — the tenant's real process when captured, else a safe business-agnostic default.
-        $process = $this->sections->howItWorks(
-            eyebrow: 'How it works',
-            heading: 'Getting started is simple',
-            steps: $processSteps,
-        );
-
-        // Grounded "why us" — written only from the substantiated-claims set (data-gated on real proof).
-        $why = $this->sections->prose(
-            eyebrow: 'Why choose us',
-            heading: 'Why clients choose us',
-            paragraphs: $whyUs,
-            surface: true,
-            preview: $preview,
-            activates: 'appears when you add substantiated proof',
-        );
-
-        $reviews = $this->sections->testimonials(
+        $reviewsBlock = $this->sections->testimonials(
             eyebrow: 'What clients say',
-            heading: 'In their words',
-            quotes: $testimonials,
-            preview: $preview,
+            heading: 'Reviews for this service',
+            quotes: $reviews,
+            preview: false,
+        );
+
+        $relatedBlock = $this->sections->relatedServices(
+            eyebrow: 'Related services',
+            heading: 'You may also need',
+            links: $related,
         );
 
         $faq = $this->sections->faqAccordion(
@@ -269,18 +313,6 @@ final class BlockPageComposer
             preview: $preview,
         );
 
-        $details = $this->sections->contactDetails(
-            eyebrow: 'Reach us',
-            heading: 'Get in touch',
-            phoneDisplay: $ctx->phoneDisplay,
-            phoneTel: $ctx->phoneTel,
-            email: $email,
-            address: $address,
-            hours: $hours,
-            preview: $preview,
-        );
-
-        // cta2 (SOFT) — the gentle closing section.
         $cta = $this->sections->cta(
             heading: 'Have a question first?',
             body: 'Tell us what you need and we’ll get right back to you — no pressure.',
@@ -289,10 +321,124 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // Ordered for background rhythm: the hero (dark) leads into the light explainer + features, the
-        // pushy CTA (accent) lands mid-page buffered by light sections, and the soft CTA (dark) closes.
-        // No two colored bands are ever adjacent: D·L·L·C·L·L·L·L·L·D.
-        return $this->join([$hero, $overviewBlock, $featuresBlock, $ctaBold, $process, $why, $reviews, $faq, $details, $cta]);
+        // Rhythm: the pushy CTA (accent) sits mid-page buffered by light sections on both sides;
+        // hero and the soft close are the only other colored bands. D·L·L·Ls·Ls·Ls·(Ls)·C·L·Ls·L·L·D.
+        return $this->join([$hero, $introBlock, $symptomsBlock, $scope, $process, $cost, $compare, $ctaBold, $jobsBlock, $reviewsBlock, $relatedBlock, $faq, $cta]);
+    }
+
+    /**
+     * Composes a HUB (silo pillar) page — ranks for the category keyword, routes to its spokes, and
+     * holds the silo's internal-link spine. The arc: hero (H1 = category keyword) → the drafted
+     * category intro → the SERVICES GRID (one card per child spoke, real links — data-bound at
+     * compose time so regenerating/repushing after adding a spoke refreshes it) → why it matters →
+     * the process → the trust strip (real credentials) → gated reviews (across the hub's spokes) →
+     * category FAQ → one soft closing CTA. Geo-neutral like every service page.
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  array<string, array<string, mixed>>  $images
+     * @param  string  $keyword  the category keyword — the deterministic H1 fallback
+     * @param  list<string>  $intro  drafted category-intro paragraphs
+     * @param  list<array{title: string, blurb: string, url: string}>  $spokeCards  one card per child spoke (real permalinks)
+     * @param  list<string>  $why  drafted "why it matters" paragraphs
+     * @param  list<array{title: string, description: string}>  $processSteps  tenant default process
+     * @param  list<array{label?: string, number?: string, logo_url?: string}>  $certifications  real credentials (verbatim)
+     * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $reviews  provider-fed (strictly gated)
+     * @param  list<array{value?: string, label?: string}>  $trustStats
+     * @param  list<array{question?: string, answer?: string}>  $faqs
+     */
+    public function composeHub(
+        array $slots,
+        array $images,
+        PageContext $ctx,
+        string $keyword = '',
+        array $intro = [],
+        array $spokeCards = [],
+        array $why = [],
+        array $processSteps = [],
+        array $certifications = [],
+        array $reviews = [],
+        array $trustStats = [],
+        array $faqs = [],
+        bool $preview = false,
+    ): string {
+        $hero = $this->sections->hero(
+            eyebrow: 'What we do',
+            headline: $this->str($slots['hero_headline'] ?? '') ?: ($keyword !== '' ? ucfirst($keyword) : 'Our services'),
+            subhead: $this->str($slots['hero_subhead'] ?? ''),
+            imageUrl: $this->imageUrl('hero_image', $images),
+            imageAlt: $this->imageAlt('hero_image', $images),
+            assessmentText: 'Get a free assessment',
+            assessmentUrl: '#contact',
+            trust: $this->heroTrust($ctx, $trustStats),
+            ctx: $ctx,
+        );
+
+        $introBlock = $this->sections->prose(
+            eyebrow: 'Overview',
+            heading: 'What this covers',
+            paragraphs: $intro,
+            surface: false,
+            preview: $preview,
+            activates: 'appears when the page is generated',
+        );
+
+        // The internal-link spine: one card per child spoke, resolved fresh at compose time.
+        $grid = $this->sections->servicesGrid(
+            eyebrow: 'The services',
+            heading: 'Choose the service you need',
+            cards: $spokeCards,
+        );
+
+        $whyBlock = $this->sections->prose(
+            eyebrow: 'Why it matters',
+            heading: 'The cost of waiting',
+            paragraphs: $why,
+            surface: true,
+            preview: $preview,
+            activates: 'appears when the page is generated',
+        );
+
+        $process = $this->sections->howItWorks(
+            eyebrow: 'How it works',
+            heading: 'Getting started is simple',
+            steps: $processSteps,
+        );
+
+        $certs = $this->sections->certificationsRow($certifications, $preview);
+
+        // Reviews across the hub's spokes — strictly provider-gated, both contexts.
+        $reviewsBlock = $this->sections->testimonials(
+            eyebrow: 'What clients say',
+            heading: 'Reviews from this work',
+            quotes: $reviews,
+            preview: false,
+        );
+
+        $faq = $this->sections->faqAccordion(
+            eyebrow: 'Answers',
+            heading: 'Common questions',
+            intro: '',
+            items: $faqs,
+            preview: $preview,
+        );
+
+        $cta = $this->sections->cta(
+            heading: 'Not sure which you need?',
+            body: 'Describe the problem and we’ll point you to the right fix — no pressure.',
+            actionText: 'Get in touch',
+            actionUrl: '#contact',
+            ctx: $ctx,
+        );
+
+        // Routing page: hero and the close are the only colored bands (D·L·L·Ls·Ls·Ls·Ls·L·D).
+        return $this->join([$hero, $introBlock, $grid, $whyBlock, $process, $certs, $reviewsBlock, $faq, $cta]);
+    }
+
+    /** A muted framing paragraph (the scope-intro line) — kept tiny and local to composeSpoke. */
+    private function b_paragraphMuted(string $text): string
+    {
+        return '<!-- wp:paragraph {"textColor":"muted","className":"lp-scope-intro"} --><p class="lp-scope-intro has-muted-color has-text-color">'
+            .htmlspecialchars(trim($text), ENT_QUOTES, 'UTF-8').'</p><!-- /wp:paragraph -->';
     }
 
     /**
