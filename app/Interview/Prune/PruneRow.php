@@ -2,6 +2,7 @@
 
 namespace App\Interview\Prune;
 
+use App\Enums\KeywordIntent;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokePageType;
 use App\Enums\SpokeStatus;
@@ -26,6 +27,7 @@ final class PruneRow
         public readonly SpokeGranularity $granularity,
         public readonly ?string $connectionNote,
         public readonly bool $isPillar,
+        public readonly ?KeywordIntent $intent = null,
     ) {}
 
     public function isFringe(): bool
@@ -51,6 +53,7 @@ final class PruneRow
             granularity: $spoke->granularity,
             connectionNote: $spoke->connection_note,
             isPillar: (bool) $spoke->is_pillar,
+            intent: $spoke->intent,
         );
     }
 
@@ -68,6 +71,7 @@ final class PruneRow
             'status' => $this->status->value,
             'volume' => $this->volume,
             'granularity' => $this->granularity->value,
+            'intent' => $this->intent?->value,
             'connection_note' => $this->connectionNote,
             'is_pillar' => $this->isPillar,
         ];

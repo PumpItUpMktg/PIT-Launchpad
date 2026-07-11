@@ -206,9 +206,9 @@ final class SiloExpander
         return $this->seedContext($seed, $voice)."\n\n"
             .$this->dimensions()."\n\n"
             .$this->tagging()."\n\n"
-            .'RULES: every spoke needs a concise, geo-neutral head_keyword. '.$this->keywordIntentRule().' granularity = "own_page" for all (maximal split; volume folds later). Audience and brand are SILOS, not flags. Do not invent services that contradict the exclusions.'."\n\n"
+            .'RULES: every spoke needs a concise, geo-neutral head_keyword. '.$this->keywordIntentRule().' '.$this->intentTagRule().' granularity = "own_page" for all (maximal split; volume folds later). Audience and brand are SILOS, not flags. Do not invent services that contradict the exclusions.'."\n\n"
             .'Respond with ONLY this JSON shape:'."\n"
-            .'{"silos":[{"name":"Sump Pumps","head_keyword":"sump pump","page_type":"service","spokes":[{"name":"Sump Pump Installation","page_type":"service","tag":"core","head_keyword":"sump pump installation","connection_note":null,"granularity":"own_page"}]}],"fringe_handoff":[{"name":"Mold Remediation","connection_note":"mold from chronic basement moisture","sibling_brand":"Trusted Mold"}]}';
+            .'{"silos":[{"name":"Sump Pumps","head_keyword":"sump pump","page_type":"service","spokes":[{"name":"Sump Pump Installation","page_type":"service","tag":"core","head_keyword":"sump pump installation","connection_note":null,"granularity":"own_page","intent":"transactional"}]}],"fringe_handoff":[{"name":"Mold Remediation","connection_note":"mold from chronic basement moisture","sibling_brand":"Trusted Mold"}]}';
     }
 
     /**
@@ -237,9 +237,9 @@ final class SiloExpander
             ."- Silo: {$name}\n"
             .($focus !== '' ? "- Focus: {$focus}\n" : '')
             .'Apply the equipment×action matrix and problem-chain adjacencies WITHIN this silo. '.$this->tagging()."\n\n"
-            .'RULES: every spoke needs a concise, geo-neutral head_keyword; '.$this->keywordIntentRule().' granularity = "own_page"; a connecting spoke REQUIRES a connection_note.'."\n\n"
+            .'RULES: every spoke needs a concise, geo-neutral head_keyword; '.$this->keywordIntentRule().' '.$this->intentTagRule().' granularity = "own_page"; a connecting spoke REQUIRES a connection_note.'."\n\n"
             .'Respond with ONLY this JSON shape:'."\n"
-            .'{"spokes":[{"name":"Sump Pump Installation","page_type":"service","tag":"core","head_keyword":"sump pump installation","connection_note":null,"granularity":"own_page"}]}';
+            .'{"spokes":[{"name":"Sump Pump Installation","page_type":"service","tag":"core","head_keyword":"sump pump installation","connection_note":null,"granularity":"own_page","intent":"transactional"}]}';
     }
 
     /**
@@ -285,6 +285,14 @@ final class SiloExpander
      * "basement dehumidification", not "basement dehumidifier"; "french drain installation",
      * not "french drain".)
      */
+    /** The intent TAG on every spoke — the longtail router's input (one extra field, no new pass). */
+    private function intentTagRule(): string
+    {
+        return 'Tag every spoke with "intent": "transactional" (hire/buy — "…installation near me"), '
+            .'"commercial" (evaluating — "best …", "cost of …"), or "informational" (learning — '
+            .'"why is my basement wet in spring").';
+    }
+
     private function keywordIntentRule(): string
     {
         return 'SERVICE-INTENT head_keyword: name the SERVICE a customer hires for (the action/outcome), '

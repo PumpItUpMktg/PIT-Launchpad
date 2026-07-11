@@ -2,6 +2,7 @@
 
 namespace App\Build;
 
+use App\ContentEngine\BlogQueue\BlogTargetQueue;
 use App\Enums\BuildSource;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
@@ -37,6 +38,7 @@ final class PageMaterializer
         private readonly Permalinks $permalinks,
         private readonly GuidedEntityProjector $projector,
         private readonly TargetKeywordResolver $keywords,
+        private readonly BlogTargetQueue $blogQueue,
     ) {}
 
     /**
@@ -130,6 +132,11 @@ final class PageMaterializer
 
                 $pages[] = $content;
             }
+
+            // Longtail routing: reconcile the silo blog-target queues with the confirmed blueprint
+            // (silos exist now). Enqueues offered blog_target spokes' keywords; removes queued rows
+            // for spokes flipped back to fold/page — one keyword, one home.
+            $this->blogQueue->sync($site);
 
             return $pages;
         });

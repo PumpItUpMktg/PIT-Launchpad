@@ -52,6 +52,7 @@ final class ExpansionPersister
                         'head_keyword' => $spoke->headKeyword !== '' ? $spoke->headKeyword : null,
                         'connection_note' => $spoke->connectionNote,
                         'granularity' => $spoke->granularity,
+                        'intent' => $spoke->intent,
                     ]);
                 }
             }

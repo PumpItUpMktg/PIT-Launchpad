@@ -2,6 +2,7 @@
 
 namespace App\Publishing;
 
+use App\ContentEngine\BlogQueue\BlogTargetQueue;
 use App\Enums\AuditAction;
 use App\Enums\ContentKind;
 use App\Enums\ContentSource;
@@ -151,6 +152,9 @@ class PublishContentService
             'wp_post_id' => $wpPostId,
             'slug' => $content->slug,
         ]);
+
+        // Longtail lane: any blog target this article consumed is now live — drafted → published.
+        app(BlogTargetQueue::class)->markPublishedByArticle($content);
 
         return PublishResult::published($content, $wpPostId);
     }

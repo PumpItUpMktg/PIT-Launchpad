@@ -170,9 +170,9 @@ final class PruneEngine
         }
 
         $attributes = [
-            'status' => SpokeStatus::Offered,            // floor: always lands as a page or section
+            'status' => SpokeStatus::Offered,            // floor: always lands as a page, a section, or an article target
             'granularity' => $granularity,
-            'fold_into_id' => $granularity === SpokeGranularity::OwnPage ? null : $foldIntoId,
+            'fold_into_id' => $granularity === SpokeGranularity::Folded ? $foldIntoId : null,
         ];
         if ($targetSilo !== null && $targetSilo !== $spoke->silo) {
             $attributes['silo'] = $targetSilo;
@@ -239,6 +239,9 @@ final class PruneEngine
                 $default = $defaults[$spoke->id] ?? ['disposition' => 'fold', 'fold_into' => null];
                 if (in_array($default['disposition'], ['hub', 'page'], true)) {
                     $this->route($spoke, PruneOutcome::Offer, null, SpokeGranularity::OwnPage);
+                } elseif ($default['disposition'] === 'blog_target') {
+                    // Supporting + informational → the silo's blog target queue (article, not a section).
+                    $this->route($spoke, PruneOutcome::Offer, null, SpokeGranularity::BlogTarget);
                 } else {
                     $this->route($spoke, PruneOutcome::Offer, null, SpokeGranularity::Folded, $default['fold_into']);
                 }
@@ -334,8 +337,8 @@ final class PruneEngine
         }
         if ($granularity !== null) {
             $attributes['granularity'] = $granularity;
-            if ($granularity === SpokeGranularity::OwnPage) {
-                $attributes['fold_into_id'] = null; // an own page isn't folded anywhere
+            if ($granularity !== SpokeGranularity::Folded) {
+                $attributes['fold_into_id'] = null; // only a folded section carries a fold target
             }
         }
         if ($foldInto !== false && ($granularity === null || $granularity === SpokeGranularity::Folded)) {

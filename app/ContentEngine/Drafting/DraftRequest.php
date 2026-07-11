@@ -81,12 +81,18 @@ final class DraftRequest
      */
     public static function forCandidate(Content $candidate, ?string $marketId = null, ?string $sourceBody = null): self
     {
+        // A DIRECTED candidate (the blog-target lane: intake_type=directed, trigger=gap, a pinned
+        // target keyword, no news source) keeps its own lane — the reactive news defaults apply to
+        // everything else, unchanged.
+        $directed = $candidate->intake_type === IntakeType::Directed;
+
         return new self(
             siteId: $candidate->site_id,
             kind: ContentKind::Post,
-            intakeType: IntakeType::Reactive,
-            trigger: DraftTrigger::News,
+            intakeType: $directed ? IntakeType::Directed : IntakeType::Reactive,
+            trigger: $directed ? DraftTrigger::Gap : DraftTrigger::News,
             siloId: $candidate->matched_silo_id ?? $candidate->silo_id,
+            targetKeywordId: $candidate->target_keyword_id !== null ? (string) $candidate->target_keyword_id : null,
             title: $candidate->title,
             angleHint: $candidate->angle_hint,
             sourceName: $candidate->source_name,

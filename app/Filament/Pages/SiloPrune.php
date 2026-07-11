@@ -134,7 +134,11 @@ class SiloPrune extends Page
             $this->spokeDecisions[$row->id] = [
                 'outcome' => PruneOutcome::Offer->value,
                 'tag' => $row->tag->value,
-                'granularity' => $default['disposition'] === 'fold' ? SpokeGranularity::Folded->value : SpokeGranularity::OwnPage->value,
+                'granularity' => match ($default['disposition']) {
+                    'fold' => SpokeGranularity::Folded->value,
+                    'blog_target' => SpokeGranularity::BlogTarget->value,
+                    default => SpokeGranularity::OwnPage->value,
+                },
                 'fold_into' => $default['fold_into'] ?? '',
             ];
         }
@@ -166,6 +170,9 @@ class SiloPrune extends Page
             'core' => [$this->siloOfSpoke($plan, (string) $targetId), SpokeGranularity::Folded, $targetId],
             'silo' => [(string) $targetId, SpokeGranularity::Folded, $this->siloDefaultCore($plan, (string) $targetId)],
             'fold' => [null, SpokeGranularity::Folded, $this->siloDefaultCore($plan, $this->siloOfSpoke($plan, $spokeId) ?? '')],
+            // The longtail override: route the keyword to the silo's blog target queue instead of a
+            // page fold. Exclusive home — the queue enqueue/removal reconciles at materialize.
+            'blog_target' => [null, SpokeGranularity::BlogTarget, null],
             default => [null, SpokeGranularity::OwnPage, null],
         };
 
@@ -212,7 +219,11 @@ class SiloPrune extends Page
         }
         if (str_ends_with($key, '.granularity')) {
             $id = substr($key, 0, -strlen('.granularity'));
-            $this->moveSpoke($id, $value === SpokeGranularity::OwnPage->value ? 'own_page' : 'fold');
+            $this->moveSpoke($id, match ($value) {
+                SpokeGranularity::OwnPage->value => 'own_page',
+                SpokeGranularity::BlogTarget->value => 'blog_target',
+                default => 'fold',
+            });
         } elseif (str_ends_with($key, '.fold_into') && is_string($value) && $value !== '') {
             $this->moveSpoke(substr($key, 0, -strlen('.fold_into')), 'core', $value);
         }
@@ -400,7 +411,11 @@ class SiloPrune extends Page
      */
     public function getGranularityOptionsProperty(): array
     {
-        return [SpokeGranularity::OwnPage->value => 'Own page', SpokeGranularity::Folded->value => 'Folded'];
+        return [
+            SpokeGranularity::OwnPage->value => 'Own page',
+            SpokeGranularity::Folded->value => 'Folded',
+            SpokeGranularity::BlogTarget->value => 'Blog queue',
+        ];
     }
 
     /**

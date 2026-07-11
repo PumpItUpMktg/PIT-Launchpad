@@ -2,6 +2,7 @@
 
 namespace App\ContentEngine\Drafting;
 
+use App\ContentEngine\BlogQueue\BlogTargetQueue;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\RefreshTrigger;
@@ -95,6 +96,12 @@ class DraftingEngine
         }
 
         $candidate->fill($attributes)->save();
+
+        // Longtail lane: a drafted article that substantially covers a queued blog target in its
+        // silo consumes it — directed (its own pinned keyword) and reactive (title/body coverage)
+        // alike, so the queue never double-assigns. Consumption is a side-effect of a REAL draft
+        // only (this line is below the empty-payload guard).
+        app(BlogTargetQueue::class)->consumeIfCovered($candidate->refresh());
 
         return new DraftResult($candidate, $payload, $verification, false);
     }

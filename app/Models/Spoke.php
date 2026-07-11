@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ArrangementSource;
+use App\Enums\KeywordIntent;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokePageType;
 use App\Enums\SpokeStatus;
@@ -29,6 +30,7 @@ use Illuminate\Support\Carbon;
  * @property SpokePageType $page_type
  * @property SpokeTag $tag
  * @property string|null $head_keyword
+ * @property KeywordIntent|null $intent search intent from the classifier (chip on the prune row)
  * @property int|null $volume
  * @property array<string, int>|null $volume_breakdown
  * @property Carbon|null $volume_at
@@ -90,6 +92,7 @@ class Spoke extends Model
             'is_pillar' => 'boolean',
             'page_type' => SpokePageType::class,
             'tag' => SpokeTag::class,
+            'intent' => KeywordIntent::class,
             'status' => SpokeStatus::class,
             'granularity' => SpokeGranularity::class,
             'is_sub_hub' => 'boolean',

@@ -2,6 +2,7 @@
 
 namespace App\Interview\Expansion;
 
+use App\Enums\KeywordIntent;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokePageType;
 use App\Enums\SpokeTag;
@@ -21,6 +22,7 @@ final class CandidateSpoke
         public readonly string $headKeyword = '',
         public readonly ?string $connectionNote = null,
         public readonly SpokeGranularity $granularity = SpokeGranularity::OwnPage,
+        public readonly ?KeywordIntent $intent = null,
     ) {}
 
     /**
@@ -35,6 +37,7 @@ final class CandidateSpoke
             'head_keyword' => $this->headKeyword,
             'connection_note' => $this->connectionNote,
             'granularity' => $this->granularity->value,
+            'intent' => $this->intent?->value,
         ];
     }
 
@@ -52,6 +55,7 @@ final class CandidateSpoke
             headKeyword: trim((string) ($data['head_keyword'] ?? '')),
             connectionNote: $note === '' ? null : $note,
             granularity: SpokeGranularity::tryFrom(EnumNormalizer::normalize($data['granularity'] ?? '')) ?? SpokeGranularity::OwnPage,
+            intent: KeywordIntent::tryFrom(EnumNormalizer::normalize($data['intent'] ?? '')),
         );
     }
 }
