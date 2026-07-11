@@ -720,6 +720,15 @@ class MetaBlobAssembler
             }
         }
 
+        if ($content->kind === ContentKind::Page && $content->page_type?->value === 'hub') {
+            $site = $this->site($content);
+            if ($site !== null) {
+                $home = is_string($site->domain_url) ? rtrim($site->domain_url, '/').'/' : '/';
+
+                return ['Service', $this->serviceSchema->buildForHub($content, $site, $home, $this->canonical($content), $this->hubSpokeItems($content, $home))];
+            }
+        }
+
         if ($content->kind === ContentKind::Page && $content->page_type?->value === 'location' && $content->location_id !== null) {
             $site = $this->site($content);
             $location = Location::withoutGlobalScope(SiteScope::class)
@@ -735,6 +744,33 @@ class MetaBlobAssembler
         $payload = is_array($content->schema_payload) ? $content->schema_payload : null;
 
         return [$content->schema_type, $payload];
+    }
+
+    /**
+     * The hub's child spokes for the schema catalog — the silo's service pages (title + permalink),
+     * the same set the composed services grid links. Fresh on every assemble.
+     *
+     * @return list<array{name: string, url: string}>
+     */
+    private function hubSpokeItems(Content $content, string $home): array
+    {
+        if ($content->silo_id === null) {
+            return [];
+        }
+
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('silo_id', $content->silo_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Service->value)
+            ->whereNotNull('slug')
+            ->orderBy('title')
+            ->limit(12)
+            ->get(['title', 'slug'])
+            ->map(fn (Content $p): array => ['name' => trim((string) $p->title), 'url' => $home.ltrim((string) $p->slug, '/')])
+            ->filter(fn (array $i): bool => $i['name'] !== '')
+            ->values()
+            ->all();
     }
 
     /**

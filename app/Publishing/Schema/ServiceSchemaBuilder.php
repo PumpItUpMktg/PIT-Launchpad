@@ -31,21 +31,115 @@ class ServiceSchemaBuilder
      */
     public function build(Content $content, Site $site, string $home, ?string $canonical): array
     {
-        $service = $this->pillarService($content, $site);
+        $service = $this->subjectService($content, $site);
+        $keyword = $this->pageKeyword($content);
 
         $node = array_filter([
             '@type' => 'Service',
             '@id' => $this->absolute($canonical) ? $canonical.'#service' : null,
             'name' => $service?->name,
-            // serviceType = the silo's pillar service; omitted when the silo has no
-            // service (name then falls back to the page title in the plugin).
-            'serviceType' => $service?->name,
+            // serviceType = the page's PRIMARY KEYWORD (the search intent, hub+spoke relay), falling
+            // back to the service name; omitted when neither resolves (the plugin then falls back to
+            // the page title).
+            'serviceType' => $keyword ?? $service?->name,
             'description' => $this->str($service?->description),
             'provider' => $this->provider($site, $home),
             'areaServed' => $this->areaServed($site),
+            // An honest price range on the record ⇒ a real Offer; absent ⇒ no offers at all.
+            'offers' => $this->priceOffer($service),
         ], $this->present(...));
 
         return $node;
+    }
+
+    /**
+     * The HUB (category) node: the category Service + a hasOfferCatalog ItemList of the silo's
+     * spoke services, each with its REAL page URL — the schema mirror of the hub's services grid.
+     *
+     * @param  list<array{name: string, url: string}>  $spokes  resolved child spokes (title + permalink)
+     * @return array<string, mixed>
+     */
+    public function buildForHub(Content $content, Site $site, string $home, ?string $canonical, array $spokes): array
+    {
+        $keyword = $this->pageKeyword($content);
+        $name = $keyword ?? $this->str($content->title);
+
+        $items = [];
+        foreach ($spokes as $i => $spoke) {
+            $items[] = [
+                '@type' => 'ListItem',
+                'position' => $i + 1,
+                'item' => array_filter([
+                    '@type' => 'Service',
+                    'name' => $spoke['name'],
+                    'url' => $this->absolute($spoke['url']) ? $spoke['url'] : null,
+                ], $this->present(...)),
+            ];
+        }
+
+        return array_filter([
+            '@type' => 'Service',
+            '@id' => $this->absolute($canonical) ? $canonical.'#service' : null,
+            'name' => $name,
+            'serviceType' => $name,
+            'provider' => $this->provider($site, $home),
+            'areaServed' => $this->areaServed($site),
+            'hasOfferCatalog' => $items !== [] ? array_filter([
+                '@type' => 'OfferCatalog',
+                'name' => $name,
+                'itemListElement' => $items,
+            ], $this->present(...)) : null,
+        ], $this->present(...));
+    }
+
+    /** The page's primary keyword (Content.target_keyword_id), or null. */
+    protected function pageKeyword(Content $content): ?string
+    {
+        return $this->str($content->targetKeyword()->withoutGlobalScope(SiteScope::class)->value('query'));
+    }
+
+    /**
+     * A real Offer node from the service record's honest price range — ONLY when both bounds exist
+     * (the cost decision: an empty range means NO price markup, never a blank or invented one).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function priceOffer(?Service $service): ?array
+    {
+        $range = is_array($service?->price_range) ? $service->price_range : [];
+        $low = $range['low'] ?? null;
+        $high = $range['high'] ?? null;
+        if (! is_numeric($low) || ! is_numeric($high) || (float) $high <= 0) {
+            return null;
+        }
+
+        return [
+            '@type' => 'Offer',
+            'priceSpecification' => [
+                '@type' => 'PriceSpecification',
+                'minPrice' => (float) $low,
+                'maxPrice' => (float) $high,
+                'priceCurrency' => 'USD',
+            ],
+        ];
+    }
+
+    /**
+     * The page's subject Service: its own pin (`primary_service_id`, the spoke's service) first,
+     * then the silo's pillar-ordered fallback.
+     */
+    private function subjectService(Content $content, Site $site): ?Service
+    {
+        if ($content->primary_service_id !== null) {
+            $pinned = Service::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)
+                ->find($content->primary_service_id);
+            if ($pinned !== null) {
+                return $pinned;
+            }
+        }
+
+        return $this->pillarService($content, $site);
     }
 
     /**
