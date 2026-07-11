@@ -27,12 +27,12 @@ test('the assembled meta-blob matches the companion-plugin /content contract', f
     // The trimmed kit contract travels with the push (feeds the plugin's
     // Slots & Shortcodes reference): key / label / content_type / cardinality / required.
     expect($payload['kit_definition'])->toBeArray()->not->toBeEmpty();
-    $hero = collect($payload['kit_definition'])->firstWhere('key', 'hero_problem');
-    expect($hero)->not->toBeNull()
-        ->and($hero)->toHaveKeys(['key', 'label', 'content_type', 'cardinality', 'required'])
-        ->and($hero['required'])->toBeTrue();
-    $features = collect($payload['kit_definition'])->firstWhere('key', 'service_features');
-    expect($features['cardinality']['type'])->toBe('repeater');
+    $intro = collect($payload['kit_definition'])->firstWhere('key', 'svc_intro');
+    expect($intro)->not->toBeNull()
+        ->and($intro)->toHaveKeys(['key', 'label', 'content_type', 'cardinality', 'required'])
+        ->and($intro['required'])->toBeTrue();
+    $faq = collect($payload['kit_definition'])->firstWhere('key', 'faq');
+    expect($faq['cardinality']['type'])->toBe('repeater');
 
     expect($payload['content_id'])->toBe($content->id)
         ->and($payload['kind'])->toBe('page')

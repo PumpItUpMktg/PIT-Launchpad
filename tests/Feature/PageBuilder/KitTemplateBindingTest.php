@@ -17,7 +17,7 @@ use Tests\Support\PageBuilder;
 function requiredSlotKeys(): array
 {
     $keys = [];
-    foreach (PageBuilder::serviceKit()->slots as $slot) {
+    foreach (PageBuilder::legacyServiceKit()->slots as $slot) {
         if ($slot->isRequired()) {
             $keys[] = $slot->key;
         }
@@ -53,7 +53,7 @@ function allWidgets(array $template): array
 }
 
 it('generates a NATIVE template that binds every required service-kit slot', function () {
-    $kit = PageBuilder::serviceKit();
+    $kit = PageBuilder::legacyServiceKit();
     $template = app(KitTemplateGenerator::class)->generate($kit, 'native');
 
     $result = app(KitTemplateVerifier::class)->verify($kit, $template);
@@ -85,7 +85,7 @@ it('generates a NATIVE template that binds every required service-kit slot', fun
 });
 
 it('groups slots into distinct, full-width designed zones', function () {
-    $kit = PageBuilder::serviceKit();
+    $kit = PageBuilder::legacyServiceKit();
     $template = app(KitTemplateGenerator::class)->generate($kit, 'native');
 
     $sections = $template['content'];
@@ -111,7 +111,7 @@ it('groups slots into distinct, full-width designed zones', function () {
 });
 
 it('lays the hero out as a two-up (copy + image) column split', function () {
-    $kit = PageBuilder::serviceKit();
+    $kit = PageBuilder::legacyServiceKit();
     $template = app(KitTemplateGenerator::class)->generate($kit, 'native');
 
     $hero = collect($template['content'])->firstWhere('settings._css_classes', 'lp-zone lp-zone--hero');
@@ -127,7 +127,7 @@ it('lays the hero out as a two-up (copy + image) column split', function () {
 });
 
 it('generates a SHORTCODE template (proven fallback) that also binds every required slot', function () {
-    $kit = PageBuilder::serviceKit();
+    $kit = PageBuilder::legacyServiceKit();
     $template = app(KitTemplateGenerator::class)->generate($kit, 'shortcode');
 
     expect(app(KitTemplateVerifier::class)->verify($kit, $template)->passes())->toBeTrue();
@@ -142,7 +142,7 @@ it('generates a SHORTCODE template (proven fallback) that also binds every requi
 });
 
 it('native cta binds the lp-cta tag and hero_image binds lp-image on an image widget', function () {
-    $kit = PageBuilder::serviceKit();
+    $kit = PageBuilder::legacyServiceKit();
     $widgets = collect(allWidgets(app(KitTemplateGenerator::class)->generate($kit, 'native')));
 
     $cta = $widgets->firstWhere('settings._css_classes', 'wf-cta');
@@ -155,7 +155,7 @@ it('native cta binds the lp-cta tag and hero_image binds lp-image on an image wi
 });
 
 it('flags a required slot whose binding was removed (guards designer restyle drift)', function () {
-    $kit = PageBuilder::serviceKit();
+    $kit = PageBuilder::legacyServiceKit();
     $template = app(KitTemplateGenerator::class)->generate($kit, 'native');
 
     // Simulate a designer deleting the hero_problem widget on restyle — strip it

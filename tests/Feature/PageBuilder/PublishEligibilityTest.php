@@ -52,7 +52,7 @@ test('a valid page passes publish-eligibility and keeps its status', function ()
 test('an invalid page is parked in review with structured reasons', function () {
     $backed = PageBuilder::backedSite();
     $payload = PageBuilder::validServicePayload();
-    unset($payload['hero_problem']);
+    unset($payload['svc_intro']);
 
     $content = contentForServiceKit($backed, $payload);
 

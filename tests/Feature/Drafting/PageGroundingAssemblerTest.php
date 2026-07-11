@@ -64,7 +64,9 @@ it('assembles page grounding from the real seeded intake entities', function () 
         ->and($grounding->problems)->toHaveCount(1)
         ->and($grounding->problems[0]['phrase'])->toBe('no hot water')
         ->and($grounding->offers[0]['name'])->toBe('Free install estimate')
-        ->and($grounding->markets[0]['region'])->toBe('TX')
+        // GEO-NEUTRAL service layer: a service page's grounding carries NO markets — the drafter is
+        // explicitly told to keep the copy geo-neutral (geo lives only on location pages).
+        ->and($grounding->markets)->toBe([])
         ->and($grounding->proof)->toHaveCount(1)
         ->and($grounding->branding['brand_name'])->toBe('Lone Star Plumbing');
 });
@@ -220,13 +222,13 @@ it('renders the OPERATIONAL FACTS block into the page-draft prompt (or the make-
 });
 
 it('renders each slot\'s CHARACTER BUDGET into the prompt — the model writes within the cap, never blind', function () {
-    $page = pageWithIntake(); // the service kit: hero_problem 8..120, hero_solution 12..220
+    $page = pageWithIntake(); // the service kit: hero_headline 8..120, svc_intro 120..900
 
     $grounding = app(PageGroundingAssembler::class)->assemble($page->fresh());
     $prompt = app(PageDrafter::class)->preview($grounding)['prompt'];
 
     expect($prompt)
-        ->toContain('8–120 chars — write to ~96')          // hero_problem's budget, with the write-to target
-        ->toContain('12–220 chars — write to ~176')        // hero_solution's
+        ->toContain('8–120 chars — write to ~96')          // hero_headline's budget, with the write-to target
+        ->toContain('120–900 chars — write to ~720')       // svc_intro's
         ->toContain('CHARACTER BUDGETS are hard limits');  // and the contract naming the rejection
 });

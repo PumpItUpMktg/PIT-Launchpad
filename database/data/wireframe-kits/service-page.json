@@ -11,8 +11,14 @@
             "content_type": "heading",
             "role": "hero_solution",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "min_length": 8, "max_length": 120 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "min_length": 8,
+                "max_length": 120
+            },
             "client_override": true,
             "generation_hint": "The service headline — the composer falls back to the page's primary keyword, so only draft this if you can beat it honestly. NO city or region names (geo lives only on location pages).",
             "seo_binding": "h1",
@@ -24,8 +30,13 @@
             "content_type": "short_text",
             "role": "hero_solution",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "max_length": 220 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 220
+            },
             "client_override": true,
             "generation_hint": "One benefit-led line — the outcome the customer gets. Geo-neutral.",
             "seo_binding": "meta_description",
@@ -37,10 +48,17 @@
             "content_type": "image",
             "role": "hero_solution",
             "source": "media",
-            "cardinality": { "type": "single" },
+            "cardinality": {
+                "type": "single"
+            },
             "constraints": {
-                "required": false,
-                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": true }
+                "required": true,
+                "media": {
+                    "min_width": 1200,
+                    "min_height": 675,
+                    "alt_required": true,
+                    "allow_fabrication": true
+                }
             },
             "client_override": true,
             "seo_binding": "og_image",
@@ -52,8 +70,14 @@
             "content_type": "long_text",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": true, "min_length": 120, "max_length": 900 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": true,
+                "min_length": 120,
+                "max_length": 900
+            },
             "client_override": true,
             "generation_hint": "The search-intent explainer: what this service is, the problem it solves, who needs it and when. Ground on the SERVICE record and its problems — never invent capabilities, and NO city/region names.",
             "elementor_binding": "lp/text"
@@ -64,8 +88,13 @@
             "content_type": "short_text",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "max_length": 220 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 220
+            },
             "client_override": true,
             "generation_hint": "One line introducing the \"signs you need this\" list (the bullets render from the service record).",
             "elementor_binding": "lp/text"
@@ -76,8 +105,13 @@
             "content_type": "short_text",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "max_length": 220 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 220
+            },
             "client_override": true,
             "generation_hint": "One line framing what's included (the checked list renders from the service record).",
             "elementor_binding": "lp/text"
@@ -88,8 +122,14 @@
             "content_type": "long_text",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "min_length": 60, "max_length": 700 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "min_length": 60,
+                "max_length": 700
+            },
             "client_override": true,
             "generation_hint": "Honest-qualifier cost copy (\"final price depends on…\") written from the COST FACTORS provided. If the record carries a price range you may reference it (\"most fall between…\"); if it does NOT, never invent a number — write factors-only.",
             "elementor_binding": "lp/text"
@@ -100,12 +140,56 @@
             "content_type": "faq",
             "role": "faq",
             "source": "generated",
-            "cardinality": { "type": "repeater", "min": 3, "max": 8 },
-            "constraints": { "required": true },
+            "cardinality": {
+                "type": "repeater",
+                "min": 3,
+                "max": 8
+            },
+            "constraints": {
+                "required": true
+            },
             "client_override": true,
             "generation_hint": "Service-specific Q&A grounded in the record and operational facts — cost/durability/timing questions a buyer asks. Never invent policies, and NO city/region names.",
             "seo_binding": "faqpage",
             "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "cta",
+            "label": "Primary CTA",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": true
+            },
+            "condition": {
+                "field": "has_location_phone",
+                "equals": true
+            },
+            "client_override": false,
+            "elementor_binding": "lp/cta"
+        },
+        {
+            "key": "contact_block",
+            "label": "Contact Block",
+            "content_type": "cta",
+            "role": "contact",
+            "source": "entity",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": true
+            },
+            "condition": {
+                "field": "has_location",
+                "equals": true
+            },
+            "client_override": false,
+            "elementor_binding": "lp/cta"
         }
     ]
 }

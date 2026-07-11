@@ -5,7 +5,9 @@ use App\PageBuilder\Schema\KitSchema;
 
 function serviceKitSchema(): KitSchema
 {
-    $raw = json_decode((string) file_get_contents(database_path('data/wireframe-kits/service-page.json')), true);
+    // The Elementor-era 13-slot shape, frozen as a fixture — NativeComposer is legacy tooling that
+    // no longer feeds the (block-era) live service kit.
+    $raw = json_decode((string) file_get_contents(base_path('tests/Support/fixtures/legacy-service-kit.json')), true);
 
     return KitSchema::fromArray($raw);
 }

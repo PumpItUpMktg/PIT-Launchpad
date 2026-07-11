@@ -44,17 +44,17 @@ test('placeholder preview is the SAME skeleton as generated — only content swa
         ->and($placeholder['elementor_data'])->toBe([])
         ->and($placeholder['kit'])->toBe($generated['kit']);
 
-    // Placeholder fills EVERY slot, so it renders the full block skeleton (hero + overview + features +
-    // FAQ) — a superset of the sparse generated page, which prunes unfed sections (the harness page
-    // feeds no faq / overview slots, so those sections are absent on the generated body).
+    // Placeholder fills EVERY drafted kit slot, so it renders the full block skeleton (hero + intro +
+    // cost + FAQ) — a superset of the sparse generated page, which prunes unfed sections (the harness
+    // page is a v1-drafted payload: hero + features via the service_features fallback, no faq).
     expect($placeholder['post_content'])
-        ->toContain('lp-hero')->toContain('lp-features')->toContain('lp-prose')->toContain('lp-faq-list');
+        ->toContain('lp-hero')->toContain('lp-prose')->toContain('lp-cost')->toContain('lp-faq-list');
     expect($generated['post_content'])
-        ->toContain('lp-hero')->toContain('lp-features')   // fed slots render
+        ->toContain('lp-hero')->toContain('lp-features')   // fed v1 slots render via the fallbacks
         ->not->toContain('lp-faq-list');                   // no faq slot fed → pruned
 
     // Content swapped: stand-in copy + the placeholder image box, not the real ones.
-    expect($placeholder['slot_payload']['hero_problem'])->not->toBe($generated['slot_payload']['hero_problem'])
+    expect($placeholder['slot_payload']['hero_headline'])->not->toBe($generated['slot_payload']['hero_problem'])
         ->and($placeholder['images']['hero_image']['url'])->toStartWith('data:image/svg+xml')
         ->and($generated['images']['hero_image']['url'])->not->toStartWith('data:image/svg+xml');
 });
@@ -66,8 +66,8 @@ test('placeholder slots are length-representative and carry a labeled form box',
 
     $slots = (new PlaceholderSlots)->forSchema($schema);
 
-    expect((string) $slots['hero_problem'])->not->toBe('')
-        ->and(strlen((string) $slots['hero_problem']))->toBeGreaterThan(12)   // a real line, not one word
+    expect((string) $slots['hero_headline'])->not->toBe('')
+        ->and(strlen((string) $slots['hero_headline']))->toBeGreaterThan(12)  // a real line, not one word
         ->and($slots['cta']['form_embed'])->toContain('Form embed')           // labeled placeholder box
         ->and($slots['cta']['phone'])->toBe('(555) 123-4567');
 });

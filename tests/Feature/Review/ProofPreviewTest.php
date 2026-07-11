@@ -6,7 +6,7 @@ use Tests\Support\PageFixture;
 
 it('renders the kit sections in order with real copy, brand kit, and the SEO strip', function () {
     $page = PageFixture::intakePage([
-        'slot_payload' => ['hero_problem' => 'No hot water?', 'hero_solution' => 'Same-day install.'],
+        'slot_payload' => ['hero_headline' => 'No hot water?', 'hero_subhead' => 'Same-day install.'],
         'meta' => ['seo' => ['title' => 'Tankless Install', 'meta_description' => 'Endless hot water.']],
     ]);
 
@@ -18,8 +18,8 @@ it('renders the kit sections in order with real copy, brand kit, and the SEO str
 
     // sections follow the kit schema order and carry the real copy
     $keys = collect($preview['sections'])->pluck('key');
-    expect($keys)->toContain('hero_problem')->toContain('hero_solution');
-    $hero = collect($preview['sections'])->firstWhere('key', 'hero_problem');
+    expect($keys)->toContain('hero_headline')->toContain('hero_subhead');
+    $hero = collect($preview['sections'])->firstWhere('key', 'hero_headline');
     expect($hero['value'])->toBe('No hot water?')
         ->and($hero['empty'])->toBeFalse()
         ->and($hero['editable'])->toBeTrue(); // generated copy is correctable in place

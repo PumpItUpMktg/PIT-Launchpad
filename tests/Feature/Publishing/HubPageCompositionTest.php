@@ -37,16 +37,15 @@ function childService(string $siteId, string $siloId, string $title, string $slu
     ]);
 }
 
-test('a hub page renders the service-hub LIBRARY body with a services-grid of its silo children', function () {
+test('a hub page ships the BLOCK body with a services-grid of its silo children (elementor short-circuits)', function () {
     PublishHarness::fakeAdapters();
     $site = PublishHarness::site();
     $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Drain Cleaning']);
 
-    // The silo's child service pages → the grid cards (resolved, not drafted).
+    // The silo's child service pages → the grid cards (resolved at compose time, not drafted).
     childService($site->id, $silo->id, 'Hydro Jetting', 'hydro-jetting', 'High-pressure drain clearing.');
     childService($site->id, $silo->id, 'Rooter Service', 'rooter-service', 'Cable-clears stubborn clogs.');
 
-    // Proof + phone so the conditional why_us / cta survive and resolve.
     ProofItem::factory()->create([
         'site_id' => $site->id, 'type' => ProofType::Warranty,
         'payload' => ['label' => 'Warrantied work'], 'is_substantiated' => true,
@@ -57,44 +56,26 @@ test('a hub page renders the service-hub LIBRARY body with a services-grid of it
 
     $payload = app(MetaBlobAssembler::class)->assemble($hub->fresh(), new Collection);
 
-    // Native body comes from the wireframe LIBRARY (wf-block-*), never the lp-zone fallback.
+    // Hub+spoke relay: the hub composes core blocks — post_content ships, elementor_data empties.
     expect($payload['page_type'])->toBe('hub')
         ->and($payload['kit'])->toBe('hub-page')
-        ->and($payload['elementor_data'])->toBeArray()->not->toBeEmpty();
+        ->and($payload['elementor_data'])->toBe([])
+        ->and($payload['post_content'])->toBeString()
+        // v1 hero_problem still feeds the hero (fallback), the drafted intro renders as prose
+        ->toContain('Slow or clogged drains across your home?')
+        ->toContain('full range of drain work')
+        // the internal-link spine: one card per child spoke with its REAL permalink
+        ->toContain('Hydro Jetting')
+        ->toContain('Rooter Service')
+        ->toContain('href="https://apex.example/hydro-jetting"')
+        ->toContain('href="https://apex.example/rooter-service"');
 
-    $topClasses = array_map(fn ($b) => (string) ($b['settings']['_css_classes'] ?? ''), $payload['elementor_data']);
-    expect(collect($topClasses)->contains(fn ($c) => str_contains($c, 'wf-block-hero')))->toBeTrue()
-        ->and(collect($topClasses)->contains(fn ($c) => str_contains($c, 'wf-block-intro')))->toBeTrue()
-        ->and(collect($topClasses)->contains(fn ($c) => str_contains($c, 'wf-block-services-grid')))->toBeTrue()
-        ->and(collect($topClasses)->every(fn ($c) => ! str_contains($c, 'lp-zone')))->toBeTrue();
-
-    // The hero headline + intro are injected from the drafted slots.
-    $titles = [];
-    $editors = [];
-    walkNodes($payload['elementor_data'], function (array $n) use (&$titles, &$editors): void {
-        if (($n['widgetType'] ?? null) === 'heading') {
-            $titles[] = (string) ($n['settings']['title'] ?? '');
-        }
-        if (($n['widgetType'] ?? null) === 'text-editor') {
-            $editors[] = (string) ($n['settings']['editor'] ?? '');
-        }
-    });
-
-    expect($titles)->toContain('Slow or clogged drains across your home?')   // wf-hero-headline
-        ->and($titles)->toContain('Hydro Jetting')                            // services-grid card 1 title
-        ->and($titles)->toContain('Rooter Service');                          // card 2 title
-
-    // Each grid card body carries a "Learn more" link to the child page slug.
-    $joinedEditors = implode("\n", $editors);
-    expect($joinedEditors)->toContain('href="https://apex.example/hydro-jetting"')
-        ->and($joinedEditors)->toContain('href="https://apex.example/rooter-service"');
-
-    // The resolved sibling_services travel in slot_payload too (source of truth alongside the body).
+    // The resolved sibling_services still travel in slot_payload (the plugin's slot reference).
     expect($payload['slot_payload']['sibling_services'])->toHaveCount(2)
         ->and($payload['slot_payload']['sibling_services'][0]['title'])->toBe('Hydro Jetting');
 });
 
-test('a hub page with no child services drops the services-grid block (no placeholder cards)', function () {
+test('a hub page with no child services drops the services-grid section (no placeholder cards)', function () {
     PublishHarness::fakeAdapters();
     $site = PublishHarness::site();
     $silo = Silo::factory()->create(['site_id' => $site->id]);
@@ -102,10 +83,9 @@ test('a hub page with no child services drops the services-grid block (no placeh
     $hub = PublishHarness::approvedHubPage($site, $silo->id);
     $payload = app(MetaBlobAssembler::class)->assemble($hub->fresh(), new Collection);
 
-    $topClasses = array_map(fn ($b) => (string) ($b['settings']['_css_classes'] ?? ''), $payload['elementor_data']);
-
-    // Hero still renders; the empty services-grid self-prunes.
-    expect(collect($topClasses)->contains(fn ($c) => str_contains($c, 'wf-block-hero')))->toBeTrue()
-        ->and(collect($topClasses)->contains(fn ($c) => str_contains($c, 'wf-block-services-grid')))->toBeFalse()
+    // Hero still renders; the empty services grid self-prunes — no headers over nothing.
+    expect($payload['post_content'])->toBeString()
+        ->toContain('Slow or clogged drains across your home?')
+        ->not->toContain('lp-services-grid')
         ->and($payload['slot_payload'])->not->toHaveKey('sibling_services');
 });

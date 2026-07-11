@@ -11,8 +11,14 @@
             "content_type": "heading",
             "role": "hero_solution",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "min_length": 8, "max_length": 120 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "min_length": 8,
+                "max_length": 120
+            },
             "client_override": true,
             "generation_hint": "The category headline — the composer falls back to the hub's category keyword, so only draft this if you can beat it honestly. NO city or region names (geo lives only on location pages).",
             "seo_binding": "h1",
@@ -24,8 +30,13 @@
             "content_type": "short_text",
             "role": "hero_solution",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "max_length": 220 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 220
+            },
             "client_override": true,
             "generation_hint": "One authority line — the breadth of the category and the promise. Geo-neutral.",
             "seo_binding": "meta_description",
@@ -37,10 +48,17 @@
             "content_type": "image",
             "role": "hero_solution",
             "source": "media",
-            "cardinality": { "type": "single" },
+            "cardinality": {
+                "type": "single"
+            },
             "constraints": {
-                "required": false,
-                "media": { "min_width": 1200, "min_height": 675, "alt_required": true, "allow_fabrication": true }
+                "required": true,
+                "media": {
+                    "min_width": 1200,
+                    "min_height": 675,
+                    "alt_required": true,
+                    "allow_fabrication": true
+                }
             },
             "client_override": true,
             "seo_binding": "og_image",
@@ -52,8 +70,14 @@
             "content_type": "long_text",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": true, "min_length": 120, "max_length": 900 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": true,
+                "min_length": 120,
+                "max_length": 900
+            },
             "client_override": true,
             "generation_hint": "What this service family covers and who needs it — the category authority explainer. Ground on the SERVICES provided; never invent capabilities, and NO city/region names.",
             "elementor_binding": "lp/text"
@@ -64,8 +88,14 @@
             "content_type": "long_text",
             "role": "body_explainer",
             "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "min_length": 80, "max_length": 900 },
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "min_length": 80,
+                "max_length": 900
+            },
             "client_override": true,
             "generation_hint": "Problem framing: what happens when this category of work is ignored — the honest cost of waiting. Grounded in the customer problems provided; geo-neutral.",
             "elementor_binding": "lp/text"
@@ -76,12 +106,56 @@
             "content_type": "faq",
             "role": "faq",
             "source": "generated",
-            "cardinality": { "type": "repeater", "min": 3, "max": 8 },
-            "constraints": { "required": true },
+            "cardinality": {
+                "type": "repeater",
+                "min": 3,
+                "max": 8
+            },
+            "constraints": {
+                "required": true
+            },
             "client_override": true,
             "generation_hint": "Category-level Q&A — which option fits, how the family of services relates, timing/urgency. Never invent policies, and NO city/region names.",
             "seo_binding": "faqpage",
             "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "sibling_services",
+            "label": "Services in this category (grid)",
+            "content_type": "list",
+            "role": "body_explainer",
+            "source": "entity",
+            "cardinality": {
+                "type": "repeater",
+                "min": 0,
+                "max": 3
+            },
+            "constraints": {
+                "required": false,
+                "entity": "silo.services"
+            },
+            "client_override": false,
+            "generation_hint": "The service pages beneath this hub — resolved from the silo, not drafted.",
+            "elementor_binding": "lp/repeater"
+        },
+        {
+            "key": "cta",
+            "label": "Primary CTA",
+            "content_type": "cta",
+            "role": "cta",
+            "source": "entity",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false
+            },
+            "condition": {
+                "field": "has_location_phone",
+                "equals": true
+            },
+            "client_override": false,
+            "elementor_binding": "lp/cta"
         }
     ]
 }

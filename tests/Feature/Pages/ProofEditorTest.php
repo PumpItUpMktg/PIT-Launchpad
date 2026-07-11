@@ -30,7 +30,7 @@ function draftedPage(): Content
 {
     return PageFixture::intakePage([
         'status' => ContentStatus::NeedsReview,
-        'slot_payload' => ['hero_problem' => 'No hot water?', 'hero_solution' => 'Same-day install.'],
+        'slot_payload' => ['hero_headline' => 'No hot water?', 'hero_subhead' => 'Same-day install.'],
         'meta' => ['seo' => ['title' => 'Tankless Install', 'meta_description' => 'Endless hot water.']],
     ]);
 }
@@ -51,13 +51,13 @@ it('captures a one-tap reason when a block is corrected in place', function () {
 
     Livewire::withQueryParams(['content' => $page->id])
         ->test(ProofEditor::class)
-        ->call('startEdit', 'hero_problem')
+        ->call('startEdit', 'hero_headline')
         ->set('editValue', 'Cold showers again?')
         ->set('editReason', 'off_brand')
         ->call('saveEdit')
         ->assertSet('editingKey', null);
 
-    expect($page->fresh()->slot_payload['hero_problem'])->toBe('Cold showers again?');
+    expect($page->fresh()->slot_payload['hero_headline'])->toBe('Cold showers again?');
     // the §7 quality signal: the edit + its reason are persisted
     expect(ContentEdit::query()->where('content_id', $page->id)->where('reason', 'off_brand')->exists())->toBeTrue();
 });
@@ -67,10 +67,10 @@ it('refuses to save an edit with no reason (signal stays honest)', function () {
 
     Livewire::withQueryParams(['content' => $page->id])
         ->test(ProofEditor::class)
-        ->call('startEdit', 'hero_problem')
+        ->call('startEdit', 'hero_headline')
         ->set('editValue', 'changed')
         ->call('saveEdit')              // no reason picked
-        ->assertSet('editingKey', 'hero_problem'); // stays open
+        ->assertSet('editingKey', 'hero_headline'); // stays open
 
     expect(ContentEdit::query()->where('content_id', $page->id)->exists())->toBeFalse();
 });

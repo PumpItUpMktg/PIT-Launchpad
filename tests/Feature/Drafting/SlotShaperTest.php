@@ -14,6 +14,17 @@ function serviceSlots(): array
     return $kit->schema()->slots;
 }
 
+/** The hub kit carries the list-type slot (sibling_services) the list-shaping tests exercise. */
+function hubKitSlots(): array
+{
+    (new WireframeKitSeeder)->run();
+
+    /** @var WireframeKit $kit */
+    $kit = WireframeKit::where('page_type', 'hub')->firstOrFail();
+
+    return $kit->schema()->slots;
+}
+
 it('shapes a faq repeater from raw ||-delimited blocks into {question, answer} items', function () {
     $slots = serviceSlots();
     $shaped = (new SlotShaper)->shape($slots, [
@@ -30,68 +41,68 @@ it('shapes a faq repeater from raw ||-delimited blocks into {question, answer} i
 });
 
 it('keeps a single text slot a scalar and a list repeater plain strings', function () {
-    $shaped = (new SlotShaper)->shape(serviceSlots(), [
-        'hero_problem' => 'No hot water?',
-        'service_features' => ['Endless hot water', 'Lower bills', 'Compact'],
+    $shaped = (new SlotShaper)->shape(serviceSlots(), ['hero_headline' => 'No hot water?']);
+    $list = (new SlotShaper)->shape(hubKitSlots(), [
+        'sibling_services' => ['Endless hot water', 'Lower bills', 'Compact'],
     ]);
 
-    expect($shaped['hero_problem'])->toBe('No hot water?')
-        ->and($shaped['service_features'])->toBe(['Endless hot water', 'Lower bills', 'Compact']);
+    expect($shaped['hero_headline'])->toBe('No hot water?')
+        ->and($list['sibling_services'])->toBe(['Endless hot water', 'Lower bills', 'Compact']);
 });
 
 it('wraps a lone repeater item into a list so cardinality is judged correctly', function () {
-    $shaped = (new SlotShaper)->shape(serviceSlots(), [
-        'service_features' => 'Just one feature', // parser gave a scalar (one block)
+    $shaped = (new SlotShaper)->shape(hubKitSlots(), [
+        'sibling_services' => 'Just one feature', // parser gave a scalar (one block)
     ]);
 
-    expect($shaped['service_features'])->toBe(['Just one feature']);
+    expect($shaped['sibling_services'])->toBe(['Just one feature']);
 });
 
 it('converts Markdown in text slots to HTML (no literal **bold** or – bullets)', function () {
     $shaped = (new SlotShaper)->shape(serviceSlots(), [
-        'problem_explainer' => "A failing heater is **expensive**.\n\n- lukewarm showers\n- rising bills",
-        'hero_solution' => 'Same-day **guaranteed** repair.',
-        'hero_problem' => 'No **hot** water?', // heading stays plain
+        'svc_intro' => "A failing heater is **expensive**.\n\n- lukewarm showers\n- rising bills",
+        'hero_subhead' => 'Same-day **guaranteed** repair.',
+        'hero_headline' => 'No **hot** water?', // heading stays plain
     ]);
 
-    expect($shaped['problem_explainer'])->toContain('<strong>expensive</strong>')
-        ->and($shaped['problem_explainer'])->toContain('<li>lukewarm showers</li>')
-        ->and($shaped['problem_explainer'])->not->toContain('**')
-        ->and($shaped['hero_solution'])->toContain('<strong>guaranteed</strong>')
-        ->and($shaped['hero_solution'])->not->toContain('<p>')      // inline: no block wrap
-        ->and($shaped['hero_problem'])->toBe('No **hot** water?');  // heading untouched
+    expect($shaped['svc_intro'])->toContain('<strong>expensive</strong>')
+        ->and($shaped['svc_intro'])->toContain('<li>lukewarm showers</li>')
+        ->and($shaped['svc_intro'])->not->toContain('**')
+        ->and($shaped['hero_subhead'])->toContain('<strong>guaranteed</strong>')
+        ->and($shaped['hero_subhead'])->not->toContain('<p>')      // inline: no block wrap
+        ->and($shaped['hero_headline'])->toBe('No **hot** water?');  // heading untouched
 });
 
 it('caps body-slot headings at H3 (the section already supplies the H2)', function () {
     $shaped = (new SlotShaper)->shape(serviceSlots(), [
         // ## → h2 (Markdown), a raw <h1>, and an existing <h3> that must stay put.
-        'problem_explainer' => "## What We Do\n\nWe fix it.\n\n<h1>Big claim</h1>\n\n### Fine print\n\nDetails.",
+        'svc_intro' => "## What We Do\n\nWe fix it.\n\n<h1>Big claim</h1>\n\n### Fine print\n\nDetails.",
     ]);
 
-    expect($shaped['problem_explainer'])
+    expect($shaped['svc_intro'])
         ->toContain('<h3>What We Do</h3>')   // ## (h2) demoted
         ->toContain('<h3>Big claim</h3>')    // raw <h1> demoted
         ->toContain('<h3>Fine print</h3>')   // ### (h3) untouched
         ->not->toContain('<h1')
-        ->and($shaped['problem_explainer'])->not->toContain('<h2');
+        ->and($shaped['svc_intro'])->not->toContain('<h2');
 });
 
 it('preserves heading attributes while demoting the level', function () {
     $shaped = (new SlotShaper)->shape(serviceSlots(), [
-        'problem_explainer' => '<h2 class="lead" id="x">Heading</h2>',
+        'svc_intro' => '<h2 class="lead" id="x">Heading</h2>',
     ]);
 
-    expect($shaped['problem_explainer'])->toContain('<h3 class="lead" id="x">Heading</h3>');
+    expect($shaped['svc_intro'])->toContain('<h3 class="lead" id="x">Heading</h3>');
 });
 
 it('converts Markdown in list repeater items to HTML (no literal **bold**)', function () {
-    $shaped = (new SlotShaper)->shape(serviceSlots(), [
-        'process_steps' => ['**Step 1 — Inspect** the system', '**Step 2 — Quote** the work'],
+    $shaped = (new SlotShaper)->shape(hubKitSlots(), [
+        'sibling_services' => ['**Step 1 — Inspect** the system', '**Step 2 — Quote** the work'],
     ]);
 
-    expect($shaped['process_steps'][0])->toContain('<strong>Step 1 — Inspect</strong>')
-        ->and($shaped['process_steps'][0])->not->toContain('**')
-        ->and($shaped['process_steps'][0])->not->toContain('<p>'); // inline: no block wrap
+    expect($shaped['sibling_services'][0])->toContain('<strong>Step 1 — Inspect</strong>')
+        ->and($shaped['sibling_services'][0])->not->toContain('**')
+        ->and($shaped['sibling_services'][0])->not->toContain('<p>'); // inline: no block wrap
 });
 
 it('converts Markdown in a faq answer to HTML', function () {
@@ -105,11 +116,11 @@ it('converts Markdown in a faq answer to HTML', function () {
 });
 
 it('splits a single bulleted block into separate list items', function () {
-    $shaped = (new SlotShaper)->shape(serviceSlots(), [
-        'service_features' => "– Endless hot water\n– Lower bills\n– Compact footprint",
+    $shaped = (new SlotShaper)->shape(hubKitSlots(), [
+        'sibling_services' => "– Endless hot water\n– Lower bills\n– Compact footprint",
     ]);
 
-    expect($shaped['service_features'])->toBe(['Endless hot water', 'Lower bills', 'Compact footprint']);
+    expect($shaped['sibling_services'])->toBe(['Endless hot water', 'Lower bills', 'Compact footprint']);
 });
 
 it('splits a labeled faq block into {question, answer} (the recurring q/a bug)', function () {
@@ -155,11 +166,11 @@ it('never lets the literal label "question" become the faq title (post-118 regre
 
 it('drops off-schema keys (the slot key is the render contract)', function () {
     $shaped = (new SlotShaper)->shape(serviceSlots(), [
-        'hero_problem' => 'kept',
+        'hero_headline' => 'kept',
         'totally_made_up' => 'dropped',
     ]);
 
-    expect($shaped)->toHaveKey('hero_problem')
+    expect($shaped)->toHaveKey('hero_headline')
         ->and($shaped)->not->toHaveKey('totally_made_up');
 });
 

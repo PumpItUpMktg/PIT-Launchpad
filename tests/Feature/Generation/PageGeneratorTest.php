@@ -44,5 +44,5 @@ it('drafts the page in place and renders its image-slots — only when invoked',
 
     expect($result->status)->toBe(ContentStatus::NeedsReview)
         ->and($result->hasDraft())->toBeTrue()
-        ->and($result->slot_payload['hero_problem'])->toContain('hot water');
+        ->and($result->slot_payload['svc_intro'])->toContain('water heater');
 });
