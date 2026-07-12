@@ -319,7 +319,7 @@ class Brand extends GuidedPage
 
         $gate = app(StepGate::class);
         $gate->complete($gate->state($site), SetupStep::Brand);
-        $this->redirect(SetupStep::Territory->pageClass()::getUrl());
+        $this->redirect(SetupStep::WhereYouWork->pageClass()::getUrl());
     }
 
     /**
