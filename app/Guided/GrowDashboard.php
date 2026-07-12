@@ -57,12 +57,26 @@ class GrowDashboard
      */
     public function pages(Site $site): array
     {
-        return $this->pageContent($site)
+        return $this->workboardContent($site)
             ->map(fn (Content $c) => $this->row($c))
             ->sortBy('rank')
             ->values()
             ->map(fn (array $r): array => $this->present($r))
             ->all();
+    }
+
+    /**
+     * The WORK BOARD set: everything not yet published. Published pages have their own home (the
+     * Live boards) — membership is state-driven, so a regenerate/take-down flows a page back here
+     * automatically. The header stats keep reading the FULL set so the "live" count never drifts.
+     *
+     * @return Collection<int, Content>
+     */
+    private function workboardContent(Site $site): Collection
+    {
+        return $this->pageContent($site)
+            ->reject(fn (Content $c) => $c->status === ContentStatus::Published)
+            ->values();
     }
 
     /**
@@ -77,7 +91,7 @@ class GrowDashboard
      */
     public function sections(Site $site): array
     {
-        $grouped = $this->pageContent($site)
+        $grouped = $this->workboardContent($site)
             ->map(fn (Content $c) => $this->row($c))
             ->groupBy('section');
 

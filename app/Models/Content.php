@@ -29,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property DraftTrigger|null $draft_trigger
  * @property bool $locked
  * @property bool $locally_edited
+ * @property string|null $parent_location_id the physical Location serving this TOWN page (Live board grouping; distinct from location_id)
  * @property IntakeType|null $intake_type
  * @property int|null $wp_post_id
  * @property string|null $near_dup_of_content_id

@@ -40,8 +40,10 @@ it('derives the header counts from the same page set as the list (no drift)', fu
     $stats = app(GrowDashboard::class)->stats($ctx['site']);
     $pages = app(GrowDashboard::class)->pages($ctx['site']);
 
+    // The stats strip reads the FULL set; the list is the WORK BOARD — published pages have
+    // their own home (the Live boards) and leave this list by state, never by data moves.
     expect($stats)->toEqual(['live' => 1, 'building' => 1, 'planned' => 1])
-        ->and($stats['live'] + $stats['building'] + $stats['planned'])->toBe(count($pages));
+        ->and($stats['building'] + $stats['planned'])->toBe(count($pages));
 });
 
 it('renders each row from the canonical vocabulary with its loop actions and bulk lane', function () {
@@ -97,8 +99,9 @@ it('offers the right secondary (overflow-menu) controls per state', function () 
         ->and($rows[$review->id]['menu'])->toBe(['regenerate', 'reject'])
         // approved page: regenerate or lock; not on WordPress → no take-down
         ->and($rows[$approved->id]['menu'])->toBe(['regenerate', 'lock'])
-        // a live page (has a WP post): regenerate, lock, and take-down (removes the live post)
-        ->and($rows[$live->id]['menu'])->toBe(['regenerate', 'lock', 'takedown'])
+        // a LIVE page is no longer on the work board — its repush/regenerate/take-down controls
+        // moved to the Live boards; it flows back here the moment those actions change its state
+        ->and($rows->has($live->id))->toBeFalse()
         // an in-flight (generating) page carries no menu — we never interrupt a running job
         ->and($rows[$generating->id]['menu'])->toBe([]);
 });

@@ -12,6 +12,8 @@ use App\Enums\AuditAction;
 use App\Enums\DataForSeoMode;
 use App\Enums\EmbeddingsProvider as EmbeddingsProviderType;
 use App\Enums\NewsProvider as NewsProviderType;
+use App\Integrations\Analytics\NullPageTraffic;
+use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\Census\CensusGeocoder;
 use App\Integrations\Census\CensusPopulation;
 use App\Integrations\Census\CensusProvider;
@@ -54,6 +56,7 @@ use App\Integrations\News\NewsProvider;
 use App\Integrations\News\OnDemandSourcePull;
 use App\Integrations\Places\GooglePlacesClient;
 use App\Integrations\Places\PlacesProvider;
+use App\Integrations\SearchConsole\NullSearchConsole;
 use App\Integrations\Serp\SerpProvider;
 use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
@@ -413,6 +416,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(LocalJobProvider::class, NullLocalJobs::class);
         $this->app->bind(ServiceReviewProvider::class, NullServiceReviews::class);
         $this->app->bind(ServiceJobProvider::class, NullServiceJobs::class);
+        $this->app->bind(\App\Integrations\SearchConsole\SearchConsoleProvider::class, NullSearchConsole::class);
+        $this->app->bind(PageTrafficProvider::class, NullPageTraffic::class);
 
         // Relevance scoring runs on the cheaper Haiku model with NO extended
         // thinking; drafting is quality-sensitive and runs on Sonnet with adaptive
