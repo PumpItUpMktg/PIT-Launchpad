@@ -6,21 +6,23 @@
 
         @forelse ($board['groups'] as $group)
             <div class="lv-locgroup" wire:key="lvg-{{ $group['location']['id'] }}">
-                <div class="lv-lochead">
-                    <div>
+                {{-- The location leads its group as a big card: identity + its territory line on
+                     the left, the towns rollup as stat blocks on the right. --}}
+                <div class="lv-loccard">
+                    <div class="id">
                         <h2>{{ $group['location']['name'] !== '' ? $group['location']['name'] : $group['location']['city'] }}
-                            <span class="lv-pin">· {{ $group['location']['storefront'] ? 'storefront' : 'service area' }}</span>
+                            <span class="badge">{{ $group['location']['storefront'] ? 'storefront' : 'service area' }}</span>
                         </h2>
                         @if ($group['location']['served'] !== [])
-                            <div class="lv-dates">Serves {{ implode(', ', $group['location']['served']) }}</div>
+                            <div class="serves">Serves {{ implode(', ', $group['location']['served']) }}</div>
                         @endif
                     </div>
-                </div>
-                <div class="lv-rollup">
-                    <span>Towns roll-up:</span>
-                    <span><b>{{ $group['rollup']['towns_live'] }}</b> town page(s) live</span>
-                    @if ($group['rollup']['avg_rank'] !== null)<span>avg position <b>#{{ $group['rollup']['avg_rank'] }}</b></span>@endif
-                    @if ($group['rollup']['impressions'] !== null)<span>GSC <b>{{ number_format($group['rollup']['impressions']) }}</b> impr · <b>{{ number_format((int) $group['rollup']['clicks']) }}</b> clicks</span>@endif
+                    <div class="lv-locstats">
+                        <div class="lv-locstat"><div class="n">{{ $group['rollup']['towns_live'] }}</div><div class="l">town pages live</div></div>
+                        <div class="lv-locstat"><div class="n">{{ $group['rollup']['avg_rank'] !== null ? '#'.$group['rollup']['avg_rank'] : '—' }}</div><div class="l">avg position</div></div>
+                        <div class="lv-locstat"><div class="n">{{ $group['rollup']['impressions'] !== null ? number_format($group['rollup']['impressions']) : '—' }}</div><div class="l">impressions · 28d</div></div>
+                        <div class="lv-locstat"><div class="n">{{ $group['rollup']['clicks'] !== null ? number_format((int) $group['rollup']['clicks']) : '—' }}</div><div class="l">clicks · 28d</div></div>
+                    </div>
                 </div>
 
                 @if ($group['location_card'] !== null)

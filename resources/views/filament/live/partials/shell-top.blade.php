@@ -39,11 +39,19 @@
     .lv-btn.primary { background:#4f46e5; border-color:#4f46e5; color:#fff; }
     .lv-btn.danger { color:#dc2626; }
     .lv-locgroup { border:1px solid rgba(148,163,184,.35); border-radius:12px; overflow:hidden; }
-    .lv-lochead { display:flex; justify-content:space-between; gap:14px; padding:14px 16px 11px; border-bottom:1px solid rgba(148,163,184,.25); flex-wrap:wrap; }
-    .lv-lochead h2 { margin:0; font-size:16px; }
     .lv-pin { font-size:11px; color:#94a3b8; font-weight:400; }
-    .lv-rollup { display:flex; gap:16px; padding:7px 16px; background:rgba(148,163,184,.08); font-size:12px; color:#64748b; border-bottom:1px solid rgba(148,163,184,.25); flex-wrap:wrap; }
-    .lv-rollup b { font-variant-numeric:tabular-nums; }
+    /* The location CARD (menu-reorg relay): the physical location leads its group as a prominent
+       card — identity left, the towns rollup as stat blocks right — instead of a plain heading. */
+    .lv-loccard { display:flex; justify-content:space-between; align-items:center; gap:18px; flex-wrap:wrap;
+        padding:16px 18px; border-bottom:1px solid rgba(148,163,184,.25); background:rgba(148,163,184,.07); }
+    .lv-loccard .id h2 { margin:0; font-size:18px; display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+    .lv-loccard .id .badge { font-size:10px; text-transform:uppercase; letter-spacing:.05em; font-weight:700;
+        padding:3px 9px; border-radius:99px; background:rgba(148,163,184,.16); color:#94a3b8; }
+    .lv-loccard .serves { font-size:12px; color:#94a3b8; margin-top:5px; max-width:56ch; }
+    .lv-locstats { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .lv-locstat { min-width:96px; padding:8px 14px; border:1px solid rgba(148,163,184,.3); border-radius:9px; text-align:center; }
+    .lv-locstat .n { font-size:19px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.2; }
+    .lv-locstat .l { font-size:10.5px; color:#94a3b8; }
     .lv-band { font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:#94a3b8; padding:11px 16px 0; }
     .lv-towns { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:11px; padding:11px 16px 14px; }
     .lv-empty { border:1px dashed rgba(148,163,184,.4); border-radius:10px; padding:14px 16px; color:#94a3b8; font-size:13px; }
