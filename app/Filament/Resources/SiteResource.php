@@ -47,6 +47,9 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontWeight;
+use Filament\Tables\Columns\Layout\Split;
+use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -84,20 +87,38 @@ class SiteResource extends Resource
 
     public static function table(Table $table): Table
     {
+        // Card grid, not rows (menu-reorg relay): one health-faced card per tenant — name +
+        // lifecycle up top, then the attention line (failures / compromised creds) and the flow
+        // line (backlog / published this week). Zero-counts render muted so a red badge always
+        // MEANS something. Row actions ride on each card unchanged.
         return $table
             ->columns([
-                TextColumn::make('id')->label('ID')->copyable()->fontFamily('mono')->size('xs')->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('brand_name')->label('Tenant')->searchable()->sortable(),
-                TextColumn::make('status')->badge()->sortable(),
-                TextColumn::make('review_backlog_count')->label('Backlog')->badge()->sortable(),
-                TextColumn::make('published_week_count')->label('Published/wk')->sortable(),
-                TextColumn::make('render_failed_count')->label('Render fail')->badge()
-                    ->color('danger')->sortable(),
-                TextColumn::make('publish_failed_count')->label('Publish fail')->badge()
-                    ->color('danger')->sortable(),
-                TextColumn::make('compromised_count')->label('Compromised creds')->badge()
-                    ->color('warning')->sortable(),
+                Stack::make([
+                    Split::make([
+                        TextColumn::make('brand_name')->label('Tenant')->weight(FontWeight::Bold)->size('lg')->searchable()->sortable(),
+                        TextColumn::make('status')->badge()->sortable()->alignEnd(),
+                    ]),
+                    Split::make([
+                        TextColumn::make('render_failed_count')->badge()->sortable()
+                            ->formatStateUsing(fn (int $state): string => "{$state} render failed")
+                            ->color(fn (int $state): string => $state > 0 ? 'danger' : 'gray'),
+                        TextColumn::make('publish_failed_count')->badge()->sortable()
+                            ->formatStateUsing(fn (int $state): string => "{$state} publish failed")
+                            ->color(fn (int $state): string => $state > 0 ? 'danger' : 'gray'),
+                        TextColumn::make('compromised_count')->badge()->sortable()
+                            ->formatStateUsing(fn (int $state): string => "{$state} creds flagged")
+                            ->color(fn (int $state): string => $state > 0 ? 'warning' : 'gray'),
+                    ]),
+                    Split::make([
+                        TextColumn::make('review_backlog_count')->badge()->sortable()
+                            ->formatStateUsing(fn (int $state): string => "{$state} awaiting review")
+                            ->color(fn (int $state): string => $state > 0 ? 'info' : 'gray'),
+                        TextColumn::make('published_week_count')->sortable()->color('gray')
+                            ->formatStateUsing(fn (int $state): string => "{$state} published this week"),
+                    ]),
+                ])->space(2),
             ])
+            ->contentGrid(['md' => 2, 'xl' => 3])
             ->defaultSort('render_failed_count', 'desc')
             ->filters([
                 SelectFilter::make('status')->options(self::statusOptions()),

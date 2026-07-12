@@ -1,5 +1,5 @@
 @php $site = $this->getSite(); $brand = $site?->brand_name ?? 'your business'; $stats = $this->stats; $sections = $this->sections; $pages = collect($sections)->flatMap(fn ($s) => $s['pages']); @endphp
-<x-guided.shell :steps="$this->steps" :brand="$brand" :grow="true">
+<x-guided.shell :steps="$this->steps" :brand="$brand" :grow="true" :embedded="true">
     <div class="lp-eyebrow">Grow · {{ $brand }}</div>
     <h1 class="lp-h1">Your pages are ready — generate them at your pace</h1>
     <p class="lp-lede">Generate each page, review the draft, then publish. Nothing reaches WordPress until you publish it.</p>

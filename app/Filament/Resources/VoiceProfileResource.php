@@ -31,6 +31,8 @@ class VoiceProfileResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
+    protected static ?int $navigationSort = 4;
+
     public static function table(Table $table): Table
     {
         return $table

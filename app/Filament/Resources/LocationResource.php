@@ -55,7 +55,7 @@ class LocationResource extends Resource
     // the §7 new-site wizard's form components but is no longer its own menu item.
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?int $navigationSort = -1;
+    protected static ?int $navigationSort = 2;
 
     public static function table(Table $table): Table
     {

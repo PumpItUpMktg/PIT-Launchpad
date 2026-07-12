@@ -25,11 +25,12 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('admin')
-            // The unified menu (relay): daily-loop order — Work → Live → Targeting → Settings, with
-            // the deep structure tools tucked into a collapsed Advanced group. Ungrouped items
-            // (Overview / Portfolio / Setup) float above by their negative sorts.
+            // The menu (reorg relay): ungrouped items float on top by sort — Overview, Portfolio,
+            // Setup, Grow (the pages workbench, kept clear of the blog pipeline) — then the
+            // daily-loop groups: Local Blog (the news/relevance pipeline) → Live (published cards)
+            // → Targeting → Settings, with the deep structure tools in a collapsed Advanced group.
             ->navigationGroups([
-                NavigationGroup::make('Work'),
+                NavigationGroup::make('Local Blog'),
                 NavigationGroup::make('Live'),
                 NavigationGroup::make('Targeting'),
                 NavigationGroup::make('Settings'),

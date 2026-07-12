@@ -34,6 +34,10 @@ class KeywordResource extends Resource
 
     protected static ?string $navigationLabel = 'Targets & gaps';
 
+    // Demoted from the nav (menu-reorg relay): the Targeting silo-cards page is the primary
+    // surface; this table stays routable as its drill-down.
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|\UnitEnum|null $navigationGroup = 'Targeting';
 
     public static function getEloquentQuery(): Builder

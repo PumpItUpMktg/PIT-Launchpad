@@ -33,7 +33,7 @@ class CandidateResource extends Resource
 
     protected static ?string $navigationLabel = 'Candidates';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Work';
+    protected static string|\UnitEnum|null $navigationGroup = 'Local Blog';
 
     protected static ?int $navigationSort = 3;
 

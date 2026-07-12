@@ -12,16 +12,23 @@
   .lp-scope .lp-mono{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums}
   .lp-shell{display:flex;min-height:100vh;overflow:hidden;background:var(--paper)}
 
-  /* Full-bleed: on guided pages only, collapse the Filament chrome so the teal rail is the
-     whole shell (matches the wireframe). Scoped via :has() — no theme build. The site-wide
-     cohesion pass (a later relay) can replace this with a dedicated layout. */
-  body:has(.lp-scope) .fi-sidebar,
-  body:has(.lp-scope) .fi-topbar,
-  body:has(.lp-scope) .fi-header,
-  body:has(.lp-scope) .fi-breadcrumbs{display:none !important}
-  body:has(.lp-scope) .fi-main-ctn,
-  body:has(.lp-scope) .fi-main{margin:0 !important;padding:0 !important;max-width:none !important}
-  body:has(.lp-scope) .fi-page{gap:0 !important}
+  /* Full-bleed: on SETUP pages only (.lp-full), collapse the Filament chrome so the teal rail is
+     the whole shell (matches the wireframe). Scoped via :has() — no theme build. The embedded
+     variant (.lp-embedded — Grow, the permanent workbench) keeps the Filament sidebar so the rest
+     of the menu stays reachable. The site-wide cohesion pass (a later relay) can replace this
+     with a dedicated layout. */
+  body:has(.lp-scope.lp-full) .fi-sidebar,
+  body:has(.lp-scope.lp-full) .fi-topbar,
+  body:has(.lp-scope.lp-full) .fi-header,
+  body:has(.lp-scope.lp-full) .fi-breadcrumbs{display:none !important}
+  body:has(.lp-scope.lp-full) .fi-main-ctn,
+  body:has(.lp-scope.lp-full) .fi-main{margin:0 !important;padding:0 !important;max-width:none !important}
+  body:has(.lp-scope.lp-full) .fi-page{gap:0 !important}
+
+  /* Embedded board (Grow inside the normal panel): the lp- board without the teal shell chrome —
+     transparent ground, no forced viewport height, content column fills the Filament page. */
+  .lp-scope.lp-embedded .lp-shell{min-height:0;background:transparent;overflow:visible}
+  .lp-scope.lp-embedded .lp-main{padding:4px 0 40px;max-width:none}
 
   .lp-rail{width:248px;flex:none;background:var(--teal-deep);color:#DCEBEA;padding:24px 20px;display:flex;flex-direction:column;gap:26px}
   .lp-brand{font-family:'Archivo',sans-serif;font-weight:800;font-size:19px;letter-spacing:-.02em;color:#fff;display:flex;align-items:center;gap:9px}

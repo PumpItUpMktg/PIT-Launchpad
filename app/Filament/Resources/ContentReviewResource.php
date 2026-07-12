@@ -47,7 +47,7 @@ class ContentReviewResource extends Resource
 
     protected static ?string $navigationLabel = 'Review queue';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Work';
+    protected static string|\UnitEnum|null $navigationGroup = 'Local Blog';
 
     protected static ?int $navigationSort = 2;
 

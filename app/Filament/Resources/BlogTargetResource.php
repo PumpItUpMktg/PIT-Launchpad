@@ -28,7 +28,7 @@ class BlogTargetResource extends Resource
 
     protected static ?string $navigationLabel = 'Blog targets';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Work';
+    protected static string|\UnitEnum|null $navigationGroup = 'Local Blog';
 
     protected static ?int $navigationSort = 4;
 
