@@ -5,7 +5,7 @@ use App\Enums\ContentStatus;
 use App\Enums\SiteStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Grow;
-use App\Filament\Pages\Guided\Structure;
+use App\Filament\Pages\Guided\WhereYouWork;
 use App\Filament\Pages\Overview;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Models\Content;
@@ -38,7 +38,7 @@ test('a card per site renders with the New site on-ramp', function () {
 test('a setup card resumes the wizard at its step; a live card opens Grow', function () {
     $live = Site::factory()->create(['brand_name' => 'LiveCo', 'status' => SiteStatus::Live]);
     $onb = Site::factory()->create(['brand_name' => 'OnbCo', 'status' => SiteStatus::Onboarding]);
-    SetupState::query()->create(['site_id' => $onb->id, 'current_step' => 5]); // Structure (5 of 7)
+    SetupState::query()->create(['site_id' => $onb->id, 'current_step' => 4]); // WhereYouWork (4 of 5)
 
     $cards = collect(Livewire::test(Overview::class)->instance()->sites);
 
@@ -48,9 +48,9 @@ test('a setup card resumes the wizard at its step; a live card opens Grow', func
     expect($liveCard['mode'])->toBe('live')
         ->and($liveCard['url'])->toBe(Grow::getUrl(['site' => $live->id]))
         ->and($onbCard['mode'])->toBe('setup')
-        ->and($onbCard['pct'])->toBe((int) round(5 / 7 * 100))             // ~71%
-        ->and($onbCard['resume'])->toContain('Step 5 of 7')
-        ->and($onbCard['url'])->toBe(Structure::getUrl(['site' => $onb->id])); // resume at step 5
+        ->and($onbCard['pct'])->toBe((int) round(4 / 5 * 100))             // 80%
+        ->and($onbCard['resume'])->toContain('Step 4 of 5')
+        ->and($onbCard['url'])->toBe(WhereYouWork::getUrl(['site' => $onb->id])); // resume at step 4
 });
 
 test('triage floats attention up — a failing live site ranks above a calm one regardless of name', function () {
@@ -74,7 +74,7 @@ test('triage floats attention up — a failing live site ranks above a calm one 
 test('an active (launched) site routes to Grow with build progress, never back into the wizard', function () {
     $site = Site::factory()->create(['brand_name' => 'BuiltCo', 'status' => SiteStatus::Active]);
     SetupState::query()->create([
-        'site_id' => $site->id, 'current_step' => 9,
+        'site_id' => $site->id, 'current_step' => 7, // Grow
         'services_done' => true, 'deps_ready' => true, 'brand_pushed' => true, 'territory_done' => true,
         'structure_finalized' => true, 'inventory_reviewed' => true, 'approved' => true, 'launched' => true,
     ]);

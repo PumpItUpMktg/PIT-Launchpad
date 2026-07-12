@@ -4,13 +4,11 @@ use App\Enums\ArrangeFlagType;
 use App\Enums\ContentKind;
 use App\Enums\SiteStatus;
 use App\Enums\UserRole;
-use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Business;
 use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Filament\Pages\Guided\Grow;
-use App\Filament\Pages\Guided\Inventory;
-use App\Filament\Pages\Guided\Structure;
-use App\Filament\Pages\Guided\Territory;
+use App\Filament\Pages\Guided\Plan;
+use App\Filament\Pages\Guided\WhereYouWork;
 use App\Models\ArrangementFlag;
 use App\Models\BuildPage;
 use App\Models\Content;
@@ -38,8 +36,8 @@ function setupState(Site $site): SetupState
 test('every step is freely reachable — tabs, not a gated wizard (unified-menu relay)', function () {
     // Fresh state: earlier the gate redirected anything beyond step 1 back to Business. Setup is
     // now a step process between tabs — each step renders its own honest empty state instead.
-    Livewire::test(Structure::class)->assertOk();
-    Livewire::test(Territory::class)->assertOk();
+    Livewire::test(WhereYouWork::class)->assertOk();
+    Livewire::test(Plan::class)->assertOk();
 });
 
 test('completing step 1 advances and unlocks step 2 (Connect WordPress)', function () {
@@ -55,9 +53,9 @@ test('completing step 1 advances and unlocks step 2 (Connect WordPress)', functi
     Livewire::test(ConnectWordpress::class)->assertOk();
 });
 
-test('Finalize is blocked while an auto-arrange flag is unresolved, then allowed once clear', function () {
-    // unlock Structure: services + territory done, sitting on step 3
-    setupState($this->site)->update(['services_done' => true, 'territory_done' => true, 'current_step' => 3]);
+test('Approve is blocked while an auto-arrange flag is unresolved, then allowed once clear', function () {
+    // unlock Plan: services + territory done, sitting on step 5
+    setupState($this->site)->update(['services_done' => true, 'territory_done' => true, 'current_step' => 5]);
 
     $spoke = Spoke::factory()->create(['site_id' => $this->site->id]);
     $flag = ArrangementFlag::query()->create([
@@ -65,42 +63,43 @@ test('Finalize is blocked while an auto-arrange flag is unresolved, then allowed
         'message' => 'x', 'candidates' => [], 'alternative' => [], 'score' => 0.9,
     ]);
 
-    // Finalize is gated — no advance.
-    Livewire::test(Structure::class)
+    // Approve is gated — the plan is neither finalized nor approved.
+    Livewire::test(Plan::class)
         ->assertOk()
-        ->call('finalize');
-    expect(setupState($this->site)->fresh()->structure_finalized)->toBeFalse();
+        ->call('approveAndBuild');
+    $state = setupState($this->site)->fresh();
+    expect($state->structure_finalized)->toBeFalse()
+        ->and($state->approved)->toBeFalse();
 
-    // Resolve the flag → finalize advances to the Page Inventory bridge.
+    // Resolve the flag → approve finalizes the structure and hands off to Grow.
     $flag->delete();
-    Livewire::test(Structure::class)
-        ->call('finalize')
-        ->assertRedirect(Inventory::getUrl());
+    Livewire::test(Plan::class)
+        ->call('approveAndBuild')
+        ->assertRedirect(Grow::getUrl());
     expect(setupState($this->site)->fresh()->structure_finalized)->toBeTrue();
 });
 
-test('the full walkthrough advances Business → … → Approve → Grow and launches', function () {
+test('the full walkthrough advances Business → … → Plan approve → Grow and launches', function () {
     Livewire::test(Business::class)->call('proceed'); // → Connect WordPress
 
     // Steps 2-3 (Connect WordPress + Brand) are covered by their own tests; simulate their gates.
     setupState($this->site)->update(['deps_ready' => true, 'brand_pushed' => true, 'current_step' => 4]);
 
-    Livewire::test(Territory::class)->call('proceed');
+    // Step 4 (Where you work) — Continue carries into the plan.
+    Livewire::test(WhereYouWork::class)->call('proceed')->assertRedirect(Plan::getUrl());
+    expect(setupState($this->site)->fresh()->territory_done)->toBeTrue();
 
-    // Simulate a built structure so Structure is "ready" (the engine chain is covered separately).
+    // Simulate a built structure so the Plan is "ready" (the engine chain is covered separately).
     $bp = SiloBlueprint::factory()->create(['site_id' => $this->site->id]);
     Spoke::factory()->create(['site_id' => $this->site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Pumps', 'name' => 'Pumps', 'is_pillar' => true]);
 
-    Livewire::test(Structure::class)->call('finalize'); // ready, no flags → Page Inventory bridge
-
-    // The inventory bridge carries into Approve.
-    Livewire::test(Inventory::class)->assertOk()->call('proceed')->assertRedirect(Approve::getUrl());
-
-    // Approve materializes the manifest into planned pages (no AI) and hands off straight to Grow.
-    Livewire::test(Approve::class)->call('approveAndBuild')->assertRedirect(Grow::getUrl());
+    // Approve finalizes the structure implicitly, materializes the manifest into planned pages
+    // (no AI), and hands off straight to Grow — Structure/Inventory/Finalize are no longer steps.
+    Livewire::test(Plan::class)->call('approveAndBuild')->assertRedirect(Grow::getUrl());
 
     $state = setupState($this->site)->fresh();
-    expect($state->approved)->toBeTrue()
+    expect($state->structure_finalized)->toBeTrue()          // finalize is implicit in approve
+        ->and($state->approved)->toBeTrue()
         ->and($state->launched)->toBeTrue()                  // handoff fires at materialize-complete
         ->and(BuildPage::query()->where('site_id', $this->site->id)->exists())->toBeTrue()
         ->and($this->site->fresh()->status)->toBe(SiteStatus::Active); // Onboarding → Active

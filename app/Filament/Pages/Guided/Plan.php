@@ -101,10 +101,11 @@ class Plan extends GuidedPage
         // is real. No-op once the operator has curated the pool.
         app(LocalRelevance::class)->seedInitialSelection($site);
 
-        // Build-config defaults (absorbed from the old Finalize step).
-        $this->localize = $state->localize;
-        $this->townPagePace = $state->town_page_pace;
-        $this->freshContent = $state->fresh_content;
+        // Build-config defaults (absorbed from the old Finalize step). A just-created state row
+        // (free-tab first visit) hasn't loaded its column defaults yet — fall back explicitly.
+        $this->localize = $state->localize ?? true;
+        $this->townPagePace = $state->town_page_pace ?? 5;
+        $this->freshContent = $state->fresh_content ?? true;
     }
 
     /**
@@ -271,8 +272,12 @@ class Plan extends GuidedPage
             return;
         }
 
-        if ($this->getStatusProperty() !== 'ready') {
-            Notification::make()->title('Still building your structure…')->warning()->send();
+        $state = app(StepGate::class)->state($site);
+
+        // An already-finalized structure may re-approve regardless of the engine state (a
+        // returning tenant); an unfinalized one must wait for the build to finish.
+        if (! $state->structure_finalized && $this->getStatusProperty() !== 'ready') {
+            Notification::make()->title('Still building your plan…')->warning()->send();
 
             return;
         }
@@ -287,8 +292,6 @@ class Plan extends GuidedPage
 
             return;
         }
-
-        $state = app(StepGate::class)->state($site);
 
         // Finalize the structure when it hasn't been committed yet (the old Structure step's
         // Finalize, now implicit in Approve): empty decision-set = keep everything as arranged,

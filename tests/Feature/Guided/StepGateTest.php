@@ -13,8 +13,8 @@ test('a fresh state unlocks only step 1', function () {
     $state = SetupState::factory()->create();
 
     expect($this->gate->isUnlocked($state, SetupStep::Business))->toBeTrue()
-        ->and($this->gate->isUnlocked($state, SetupStep::Territory))->toBeFalse()
-        ->and($this->gate->isUnlocked($state, SetupStep::Structure))->toBeFalse()
+        ->and($this->gate->isUnlocked($state, SetupStep::WhereYouWork))->toBeFalse()
+        ->and($this->gate->isUnlocked($state, SetupStep::Plan))->toBeFalse()
         ->and($this->gate->furthestUnlocked($state))->toBe(SetupStep::Business);
 });
 
@@ -26,13 +26,13 @@ test('completing a step sets its gate, advances current_step, and unlocks the ne
     expect($state->services_done)->toBeTrue()
         ->and($state->current_step)->toBe(2)
         ->and($this->gate->isUnlocked($state, SetupStep::ConnectWordpress))->toBeTrue()
-        ->and($this->gate->isUnlocked($state, SetupStep::Structure))->toBeFalse();
+        ->and($this->gate->isUnlocked($state, SetupStep::Plan))->toBeFalse();
 });
 
 test('resolve sends a locked target back to the current step, but honors an unlocked one', function () {
     $state = SetupState::factory()->create(); // fresh: on step 1
 
-    expect($this->gate->resolve($state, SetupStep::Structure))->toBe(SetupStep::Business); // locked → current
+    expect($this->gate->resolve($state, SetupStep::Plan))->toBe(SetupStep::Business); // locked → current
 
     $this->gate->complete($state, SetupStep::Business);
 

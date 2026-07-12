@@ -3,7 +3,7 @@
 use App\Enums\UserRole;
 use App\Enums\VoiceStatus;
 use App\Filament\Pages\Guided\Brand;
-use App\Filament\Pages\Guided\Territory;
+use App\Filament\Pages\Guided\WhereYouWork;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Claude\CompletionResult;
 use App\Integrations\Wordpress\WordpressClient;
@@ -98,7 +98,7 @@ test('Applying the look activates the style variation, sets brand_pushed, and Co
 
     expect(SetupState::query()->where('site_id', $this->site->id)->value('brand_pushed'))->toBe(true);
 
-    Livewire::test(Brand::class)->call('proceed')->assertRedirect(Territory::getUrl());
+    Livewire::test(Brand::class)->call('proceed')->assertRedirect(WhereYouWork::getUrl());
 });
 
 test('Choosing a style sets the operator override on the site', function () {
@@ -220,7 +220,7 @@ test('Continuing from Brand persists whatever narrative was entered', function (
         'services_done' => true, 'deps_ready' => true, 'brand_pushed' => true,
     ]);
 
-    Livewire::test(Brand::class)->set('story', 'Truck story')->call('proceed')->assertRedirect(Territory::getUrl());
+    Livewire::test(Brand::class)->set('story', 'Truck story')->call('proceed')->assertRedirect(WhereYouWork::getUrl());
 
     expect(brandNarrative($this->site->id)?->story)->toBe('Truck story');
 });
