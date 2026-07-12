@@ -8,6 +8,7 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\StandardPageType;
+use App\Locations\TownLocationAssigner;
 use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\Keyword;
@@ -137,6 +138,11 @@ final class PageMaterializer
             // (silos exist now). Enqueues offered blog_target spokes' keywords; removes queued rows
             // for spokes flipped back to fold/page — one keyword, one home.
             $this->blogQueue->sync($site);
+
+            // Live board grouping: pin each town page to the Location that serves its town
+            // (served_towns; unique by the cannibalization guard). Unmatched pages stay for the
+            // assign-location picker.
+            app(TownLocationAssigner::class)->assign($site);
 
             return $pages;
         });
