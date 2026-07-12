@@ -189,6 +189,24 @@
   .lp-loctier .lts{font-size:12.5px;color:var(--ink)}
   .lp-loctier .ltr{font-size:12px;color:var(--ink-soft);font-style:italic}
 
+  /* website plan (step 5) — the cards-first plan page */
+  .lp-plangrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:9px;margin-bottom:24px}
+  .lp-pcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 13px;display:flex;flex-direction:column;gap:5px;min-height:64px}
+  .lp-pcard .ttl{font-weight:600;font-size:13px;line-height:1.3}
+  .lp-pcard .kw{font-size:11px;color:var(--ink-soft);line-height:1.35}
+  .lp-pcard.hub{grid-column:1/-1;background:#EFF5F4;border-color:#CFE2DF;flex-direction:row;align-items:center;gap:13px;padding:13px 16px;min-height:0}
+  .lp-pcard.hub .ttl{font-size:14.5px;font-family:'Archivo',sans-serif}
+  .lp-pcard.hub .kw{margin-left:auto;text-align:right}
+  .lp-pcard.muted{opacity:.68;min-height:0}
+  .lp-ptag.town{background:#E7EDF9;color:#3B5BAA}
+  .lp-adjust{border:1px solid var(--line);border-radius:12px;background:var(--card);margin-bottom:24px;overflow:hidden}
+  .lp-adjust summary{list-style:none;display:flex;align-items:center;gap:12px;padding:15px 20px;cursor:pointer;font-weight:700;font-size:14px}
+  .lp-adjust summary::-webkit-details-marker{display:none}
+  .lp-adjust summary .sub{font-size:12px;color:var(--ink-soft);font-weight:400}
+  .lp-adjust summary .chev{margin-left:auto;transition:transform .15s;color:var(--ink-soft)}
+  .lp-adjust[open] summary .chev{transform:rotate(180deg)}
+  .lp-adjust .body{padding:4px 20px 18px}
+
   /* Pages workbench (the Active landing's primary content) */
   .lp-btn.sm{padding:7px 14px;font-size:12.5px;border-radius:7px;text-decoration:none;display:inline-block}
   .lp-btn.sm.warn{background:var(--amber-bg);color:var(--amber);border:1px solid #EAD6B0}

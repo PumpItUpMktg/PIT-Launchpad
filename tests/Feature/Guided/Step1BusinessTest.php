@@ -120,7 +120,7 @@ test('Step 1 is framed as "Add a new site" and the sidebar personalizes after a 
     $this->site->update(['brand_name' => '']);
     Livewire::test(Business::class)
         ->assertSee('Add a new site')
-        ->assertSee('Step 1 of 7');
+        ->assertSee('Step 1 of 5');
 
     $this->site->update(['brand_name' => 'Sewer Gurus']);
     Livewire::test(Business::class)->assertSee('Setting up Sewer Gurus');

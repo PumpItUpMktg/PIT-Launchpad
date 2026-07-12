@@ -6,8 +6,8 @@ use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Enums\SiteStatus;
 use App\Enums\UserRole;
-use App\Filament\Pages\Guided\Approve;
 use App\Filament\Pages\Guided\Grow;
+use App\Filament\Pages\Guided\Plan;
 use App\Guided\GrowDashboard;
 use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
@@ -45,7 +45,7 @@ function growLaunched(Site $site): void
     ]);
 }
 
-test('Step 4 persists build config, materializes the manifest, and hands off to Grow (Onboarding → Active)', function () {
+test('Plan approve persists build config, materializes the manifest, and hands off to Grow (Onboarding → Active)', function () {
     $this->site->update(['status' => SiteStatus::Onboarding]);
     SetupState::query()->create([
         'site_id' => $this->site->id, 'current_step' => 4,
@@ -53,7 +53,7 @@ test('Step 4 persists build config, materializes the manifest, and hands off to 
     ]);
     SiloBlueprint::factory()->create(['site_id' => $this->site->id]); // a structure to plan over
 
-    Livewire::test(Approve::class)
+    Livewire::test(Plan::class)
         ->set('localize', false)
         ->set('townPagePace', 8)
         ->set('freshContent', false)
@@ -68,12 +68,12 @@ test('Step 4 persists build config, materializes the manifest, and hands off to 
         ->and($state->town_page_pace)->toBe(8)
         ->and($state->fresh_content)->toBeFalse()
         ->and($this->site->fresh()->status)->toBe(SiteStatus::Active)
-        ->and(BuildPage::query()->where('site_id', $this->site->id)->count())->toBe(6); // fixed core manifest
+        ->and(BuildPage::query()->where('site_id', $this->site->id)->count())->toBe(8); // fixed core + the 2 seeded optionals (faq, why_choose_us)
     // materialized into one planned page per manifest entry (no AI)
-    expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->where('kind', ContentKind::Page->value)->count())->toBe(6);
+    expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->where('kind', ContentKind::Page->value)->count())->toBe(8);
 });
 
-test('Finalize projects the silo tree to WP categories (queued, same trigger as materialize)', function () {
+test('Plan approve projects the silo tree to WP categories (queued, same trigger as materialize)', function () {
     Queue::fake();
     $this->site->update(['status' => SiteStatus::Onboarding]);
     SetupState::query()->create([
@@ -82,7 +82,7 @@ test('Finalize projects the silo tree to WP categories (queued, same trigger as 
     ]);
     SiloBlueprint::factory()->create(['site_id' => $this->site->id]);
 
-    Livewire::test(Approve::class)->call('approveAndBuild');
+    Livewire::test(Plan::class)->call('approveAndBuild');
 
     Queue::assertPushed(SyncSiloCategories::class, fn ($job) => $job->siteId === $this->site->id);
 });
