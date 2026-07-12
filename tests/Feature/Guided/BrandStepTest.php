@@ -3,7 +3,6 @@
 use App\Enums\UserRole;
 use App\Enums\VoiceStatus;
 use App\Filament\Pages\Guided\Brand;
-use App\Filament\Pages\Guided\ConnectWordpress;
 use App\Filament\Pages\Guided\Territory;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Claude\CompletionResult;
@@ -272,13 +271,14 @@ test('Brand step shows voice as set and pre-fills from the active profile', func
         ->assertSet('voiceCredibility', 'licensed');
 });
 
-test('Brand is gated until WordPress is prepped — the brand push cannot run first', function () {
-    // services done but WordPress not prepped (deps_ready false)
+test('Brand is freely reachable even before WordPress is prepped — tabs, not a gated wizard', function () {
+    // services done but WordPress not prepped (deps_ready false) — the page renders anyway; the
+    // brand PUSH itself still requires a working WP connection (its own action-level guard).
     SetupState::query()->create([
         'site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => false,
     ]);
 
-    Livewire::test(Brand::class)->assertRedirect(ConnectWordpress::getUrl());
+    Livewire::test(Brand::class)->assertOk();
 });
 
 test('Brand step captures team members — photo stored to the tenant R2 prefix, persisted immediately', function () {

@@ -49,6 +49,9 @@ class PageResource extends Resource
 
     protected static ?string $navigationLabel = 'Pages';
 
+    // Superseded surface (unified-menu relay): Grow + the Live boards cover this — hidden, routes kept.
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|\UnitEnum|null $navigationGroup = 'Content';
 
     public static function canAccess(): bool

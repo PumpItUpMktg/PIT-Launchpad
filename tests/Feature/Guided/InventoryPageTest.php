@@ -5,7 +5,6 @@ use App\Enums\SetupStep;
 use App\Enums\SpokeStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Approve;
-use App\Filament\Pages\Guided\Business;
 use App\Filament\Pages\Guided\Inventory;
 use App\Models\BuildPage;
 use App\Models\SetupState;
@@ -53,9 +52,9 @@ test('Continue marks step 6 complete (reviewing is enough) and advances to Appro
         ->and($state->current_step)->toBe(7);                // advanced to Approve
 });
 
-test('the inventory is gated until the structure is finalized', function () {
-    // fresh state — only step 1 open
-    Livewire::test(Inventory::class)->assertRedirect(Business::getUrl());
+test('the inventory is freely reachable before the structure is finalized — tabs, not a gated wizard', function () {
+    // Fresh state — it renders (with nothing to offer yet) instead of redirecting to step 1.
+    Livewire::test(Inventory::class)->assertOk();
 });
 
 test('entering the inventory seeds the offerable optionals ON (default-selected)', function () {

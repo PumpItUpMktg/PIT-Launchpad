@@ -25,6 +25,10 @@ abstract class GuidedPage extends Page
 
     protected static string|\UnitEnum|null $navigationGroup = 'Guided Setup';
 
+    // The unified menu shows ONE "Setup" entry (SetupHome lands on the current step) — the step
+    // pages themselves stay routable but leave the sidebar; the in-page rail is the step nav.
+    protected static bool $shouldRegisterNavigation = false;
+
     public ?string $siteId = null;
 
     /** The step this page represents. */
@@ -32,18 +36,11 @@ abstract class GuidedPage extends Page
 
     public function mount(): void
     {
-        $site = $this->resolveSite();
-        if ($site === null) {
-            return; // no sites yet — the page renders its empty state
-        }
-
-        $gate = app(StepGate::class);
-        $state = $gate->state($site);
-        $target = $gate->resolve($state, $this->step());
-
-        if ($target !== $this->step()) {
-            $this->redirect($target->pageClass()::getUrl());
-        }
+        // Setup is a step process between tabs, not a gated wizard: every step is freely
+        // reachable (each renders an honest empty state without its inputs). The StepGate still
+        // TRACKS completion — the rail's done markers and SetupHome's landing read it — it just
+        // no longer redirects.
+        $this->resolveSite();
     }
 
     /** Switch the working site (session-persisted) and re-enter the flow at its current step. */
@@ -96,13 +93,13 @@ abstract class GuidedPage extends Page
         // The rail is the 7 setup steps + Grow. "Build" is no longer a stage (materialize replaced
         // the build phase; pages build on demand from Grow).
         foreach ([...SetupStep::setupSteps(), SetupStep::Grow] as $step) {
-            $unlocked = $state !== null && $gate->isUnlocked($state, $step);
             $rows[] = [
                 'step' => $step,
                 'active' => $step === $this->step(),
                 'done' => $state !== null && $state->isComplete($step),
-                'locked' => ! $unlocked,
-                'url' => $unlocked ? $step->pageClass()::getUrl() : null,
+                // Free tabs: nothing locks. Done markers still show progress; the gate only tracks.
+                'locked' => false,
+                'url' => $step->pageClass()::getUrl(),
             ];
         }
 

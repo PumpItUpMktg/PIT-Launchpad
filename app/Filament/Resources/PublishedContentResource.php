@@ -36,6 +36,9 @@ class PublishedContentResource extends Resource
 
     protected static ?string $navigationLabel = 'Published';
 
+    // Superseded surface (unified-menu relay): Grow + the Live boards cover this — hidden, routes kept.
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|\UnitEnum|null $navigationGroup = 'Content';
 
     protected static ?int $navigationSort = 1;

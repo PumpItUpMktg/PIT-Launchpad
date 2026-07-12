@@ -47,6 +47,10 @@ class ContentReviewResource extends Resource
 
     protected static ?string $navigationLabel = 'Review queue';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Work';
+
+    protected static ?int $navigationSort = 2;
+
     protected static ?string $modelLabel = 'draft';
 
     public static function canAccess(): bool

@@ -33,7 +33,9 @@ class CandidateResource extends Resource
 
     protected static ?string $navigationLabel = 'Candidates';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Content';
+    protected static string|\UnitEnum|null $navigationGroup = 'Work';
+
+    protected static ?int $navigationSort = 3;
 
     public static function getEloquentQuery(): Builder
     {

@@ -38,7 +38,7 @@ class SourceResource extends Resource
 
     protected static ?string $navigationLabel = 'Feeds';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Controls';
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
     public static function table(Table $table): Table
     {

@@ -34,7 +34,7 @@ class KeywordResource extends Resource
 
     protected static ?string $navigationLabel = 'Targets & gaps';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Coverage';
+    protected static string|\UnitEnum|null $navigationGroup = 'Targeting';
 
     public static function getEloquentQuery(): Builder
     {
