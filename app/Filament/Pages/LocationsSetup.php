@@ -21,11 +21,11 @@ class LocationsSetup extends Page
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-map-pin';
 
-    protected static ?string $navigationLabel = 'Locations';
+    protected static ?string $navigationLabel = 'Service area';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 3;
 
     protected string $view = 'filament.pages.locations-setup';
 
