@@ -37,7 +37,13 @@ class Grow extends GuidedPage
 {
     protected static ?string $slug = 'grow';
 
-    protected static ?int $navigationSort = 5;
+    // Grow is the PERMANENT workbench, not a setup step — it leads the Work group in the
+    // unified menu (the other guided steps live behind the single Setup entry).
+    protected static bool $shouldRegisterNavigation = true;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Work';
+
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $navigationLabel = 'Grow';
 

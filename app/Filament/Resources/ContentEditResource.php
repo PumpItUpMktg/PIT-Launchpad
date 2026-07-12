@@ -26,7 +26,7 @@ class ContentEditResource extends Resource
 
     protected static ?string $navigationLabel = 'Edit signal';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Content';
+    protected static string|\UnitEnum|null $navigationGroup = 'Advanced';
 
     public static function canAccess(): bool
     {

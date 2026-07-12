@@ -29,7 +29,7 @@ class VoiceProfileResource extends Resource
 
     protected static ?string $navigationLabel = 'Voice';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Controls';
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
     public static function table(Table $table): Table
     {

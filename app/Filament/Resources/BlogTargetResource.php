@@ -28,7 +28,9 @@ class BlogTargetResource extends Resource
 
     protected static ?string $navigationLabel = 'Blog targets';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Controls';
+    protected static string|\UnitEnum|null $navigationGroup = 'Work';
+
+    protected static ?int $navigationSort = 4;
 
     public static function table(Table $table): Table
     {

@@ -36,6 +36,8 @@ class OwnerInterview extends Page
 
     protected static ?string $navigationLabel = 'Owner Interview';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Advanced';
+
     protected static ?int $navigationSort = 2;
 
     protected string $view = 'filament.pages.owner-interview';

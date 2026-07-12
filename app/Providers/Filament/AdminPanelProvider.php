@@ -6,6 +6,7 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationGroup;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
@@ -24,6 +25,16 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('admin')
+            // The unified menu (relay): daily-loop order — Work → Live → Targeting → Settings, with
+            // the deep structure tools tucked into a collapsed Advanced group. Ungrouped items
+            // (Overview / Portfolio / Setup) float above by their negative sorts.
+            ->navigationGroups([
+                NavigationGroup::make('Work'),
+                NavigationGroup::make('Live'),
+                NavigationGroup::make('Targeting'),
+                NavigationGroup::make('Settings'),
+                NavigationGroup::make('Advanced')->collapsed(),
+            ])
             ->path('admin')
             ->login()
             ->colors([

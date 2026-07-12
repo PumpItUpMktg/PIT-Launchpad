@@ -48,7 +48,7 @@ class LocationResource extends Resource
 
     protected static ?string $navigationLabel = 'Locations';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Controls';
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
     // Consolidated: the single Locations surface is now the LocationsSetup page (one menu
     // item — where you are + how far you serve, auto-geocoded). This resource stays for

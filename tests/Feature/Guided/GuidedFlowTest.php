@@ -35,10 +35,11 @@ function setupState(Site $site): SetupState
     return SetupState::query()->firstOrCreate(['site_id' => $site->id]);
 }
 
-test('a step beyond the furthest-unlocked redirects back to the current step on mount', function () {
-    // fresh state: only step 1 is open
-    Livewire::test(Structure::class)->assertRedirect(Business::getUrl());
-    Livewire::test(Territory::class)->assertRedirect(Business::getUrl());
+test('every step is freely reachable — tabs, not a gated wizard (unified-menu relay)', function () {
+    // Fresh state: earlier the gate redirected anything beyond step 1 back to Business. Setup is
+    // now a step process between tabs — each step renders its own honest empty state instead.
+    Livewire::test(Structure::class)->assertOk();
+    Livewire::test(Territory::class)->assertOk();
 });
 
 test('completing step 1 advances and unlocks step 2 (Connect WordPress)', function () {

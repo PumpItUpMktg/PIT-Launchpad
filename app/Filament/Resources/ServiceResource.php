@@ -40,7 +40,7 @@ class ServiceResource extends Resource
 
     protected static ?string $navigationLabel = 'Services';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Controls';
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
     public static function table(Table $table): Table
     {

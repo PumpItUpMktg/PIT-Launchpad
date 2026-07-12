@@ -57,6 +57,8 @@ class LocationsSetup extends Page
 
     protected static ?string $navigationLabel = 'Locations';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
+
     protected static ?int $navigationSort = 4;
 
     protected string $view = 'filament.pages.locations-setup';

@@ -41,7 +41,7 @@ class ConnectionsResource extends Resource
 
     protected static ?string $navigationLabel = 'Connections';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Controls';
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
     public static function table(Table $table): Table
     {

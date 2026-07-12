@@ -42,6 +42,8 @@ class SiloPrune extends Page
 
     protected static ?string $navigationLabel = 'Prune';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Advanced';
+
     protected static ?int $navigationSort = 3;
 
     protected string $view = 'filament.pages.silo-prune';
