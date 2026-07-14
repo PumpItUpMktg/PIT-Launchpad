@@ -80,7 +80,7 @@ class LocationsStep extends GatheringPage
         // The one-town-one-location guard — same rule as everywhere else.
         $conflicts = app(ServedTowns::class)->conflicts((string) $this->siteId, $entries->all(), $location->id);
         if ($conflicts !== []) {
-            $list = collect($conflicts)->map(fn ($c) => is_array($c) ? implode(' ', array_filter(array_map('strval', $c))) : (string) $c)->join('; ');
+            $list = collect($conflicts)->map(fn (array $c) => trim($c['town'].' → '.$c['location']))->join('; ');
             Notification::make()->danger()
                 ->title('Some towns already belong to another location')
                 ->body('Remove them here or from the other location first: '.$list)

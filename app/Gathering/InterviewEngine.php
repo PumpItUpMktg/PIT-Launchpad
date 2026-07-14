@@ -66,8 +66,12 @@ class InterviewEngine
             'section_tag' => $section->value,
         ]);
 
+        // Skipped = satisfied for the meter, STICKY across later model self-assessments
+        // (the `_skipped` list survives every coverage refresh in cleanCoverage()).
         $coverage = (array) ($interview->coverage ?? []);
-        $coverage[$section->value] = 'filled'; // skipped = satisfied for the meter
+        $coverage[$section->value] = 'filled';
+        $coverage['_skipped'] = collect((array) ($coverage['_skipped'] ?? []))
+            ->push($section->value)->unique()->values()->all();
         $interview->update(['coverage' => $coverage]);
 
         return $this->ask($interview);
@@ -101,7 +105,7 @@ class InterviewEngine
         $parsed = $this->parse($raw);
 
         if (is_array($parsed['coverage'] ?? null)) {
-            $interview->update(['coverage' => $this->cleanCoverage($parsed['coverage'])]);
+            $interview->update(['coverage' => $this->cleanCoverage($parsed['coverage'], $interview)]);
         }
 
         return $interview->turns()->create([
@@ -210,14 +214,21 @@ PROMPT;
 
     /**
      * @param  array<mixed>  $coverage
-     * @return array<string, string>
+     * @return array<string, mixed>
      */
-    private function cleanCoverage(array $coverage): array
+    private function cleanCoverage(array $coverage, Interview $interview): array
     {
+        $skipped = (array) (((array) ($interview->coverage ?? []))['_skipped'] ?? []);
+
         $clean = [];
         foreach (InterviewSection::cases() as $section) {
             $value = (string) ($coverage[$section->value] ?? 'empty');
-            $clean[$section->value] = in_array($value, ['filled', 'thin', 'empty'], true) ? $value : 'empty';
+            $clean[$section->value] = in_array($section->value, $skipped, true)
+                ? 'filled' // an operator skip outranks the model's self-assessment
+                : (in_array($value, ['filled', 'thin', 'empty'], true) ? $value : 'empty');
+        }
+        if ($skipped !== []) {
+            $clean['_skipped'] = $skipped;
         }
 
         return $clean;

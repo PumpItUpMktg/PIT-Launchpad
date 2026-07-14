@@ -44,7 +44,7 @@ class InterviewStep extends GatheringPage
     /** @return list<array{section: InterviewSection, state: string}> */
     public function getMeterProperty(): array
     {
-        $coverage = (array) ($this->getInterviewProperty()?->coverage ?? []);
+        $coverage = (array) ($this->getInterviewProperty()->coverage ?? []);
 
         return collect(InterviewSection::cases())
             ->map(fn (InterviewSection $s) => [

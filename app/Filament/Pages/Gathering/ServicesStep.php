@@ -76,7 +76,7 @@ class ServicesStep extends GatheringPage
     {
         return Action::make('enrich')
             ->label('Enrich')
-            ->modalHeading(fn (array $arguments): string => 'Enrich · '.($this->owned((string) ($arguments['service'] ?? ''))?->name ?? 'service'))
+            ->modalHeading(fn (array $arguments): string => 'Enrich · '.($this->owned((string) ($arguments['service'] ?? ''))->name ?? 'service'))
             ->fillForm(function (array $arguments): array {
                 $service = $this->owned((string) ($arguments['service'] ?? ''));
 

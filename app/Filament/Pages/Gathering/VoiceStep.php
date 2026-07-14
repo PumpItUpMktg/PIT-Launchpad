@@ -41,11 +41,12 @@ class VoiceStep extends GatheringPage
     protected function afterSiteResolved(): void
     {
         $draft = $this->getDraftProperty();
-        $this->persona = trim((string) (($draft?->persona ?? [])['description'] ?? ''));
-        $this->languageRules = collect($draft?->language_rules ?? [])->map(fn ($r) => (string) $r)->implode("\n");
-        $this->audience = collect($draft?->audience ?? [])->map(fn ($a) => (string) $a)->implode("\n");
-        $this->readingLevel = (string) ($draft?->reading_level ?? '');
-        $this->ctaVoice = (string) ($draft?->cta_voice ?? '');
+        $persona = $draft->persona ?? [];
+        $this->persona = trim((string) ($persona['description'] ?? ''));
+        $this->languageRules = collect($draft->language_rules ?? [])->map(fn ($r) => (string) $r)->implode("\n");
+        $this->audience = collect($draft->audience ?? [])->map(fn ($a) => (string) $a)->implode("\n");
+        $this->readingLevel = (string) ($draft->reading_level ?? '');
+        $this->ctaVoice = (string) ($draft->cta_voice ?? '');
     }
 
     /** @return Collection<int, VoiceProfile> */

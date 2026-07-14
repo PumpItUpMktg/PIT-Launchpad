@@ -43,7 +43,7 @@ class ConnectionsStep extends GatheringPage
         return [
             'wp' => [
                 'present' => $wp !== null,
-                'compromised' => (bool) ($wp?->compromised ?? false),
+                'compromised' => (bool) ($wp->compromised ?? false),
                 'provider_count' => $connections->count(),
             ],
             'feeds' => [

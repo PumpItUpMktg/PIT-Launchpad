@@ -162,13 +162,13 @@ class BusinessStep extends GatheringPage
                 'site_id' => $site->id,
                 'name' => $details->name ?? $row['name'],
                 'address' => $details->address ?? ($row['address'] !== '' ? $row['address'] : null),
-                'address_components' => $details->addressComponents ?? null,
-                'phone' => $details->phone ?? null,
-                'lat' => $details->lat ?? null,
-                'lng' => $details->lng ?? null,
-                'gbp_url' => $details->gbpUrl ?? null,
+                'address_components' => $details?->addressComponents,
+                'phone' => $details?->phone,
+                'lat' => $details?->lat,
+                'lng' => $details?->lng,
+                'gbp_url' => $details?->gbpUrl,
                 'place_id' => $row['place_id'],
-                'hours' => $details->hours ?? null,
+                'hours' => $details?->hours,
             ])->save();
 
             $this->bulkResults[$i]['status'] = 'imported';

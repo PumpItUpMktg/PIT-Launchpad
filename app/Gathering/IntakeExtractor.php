@@ -181,7 +181,7 @@ PROMPT;
 
                 if ($candidates->isNotEmpty()) {
                     $conflicts = $this->servedTowns->conflicts($site->id, $candidates->all(), $location->id);
-                    $conflicted = collect($conflicts)->map(fn ($c) => mb_strtolower(is_array($c) ? (string) ($c['town'] ?? '') : (string) $c));
+                    $conflicted = collect($conflicts)->map(fn (array $c) => mb_strtolower((string) $c['town']));
 
                     $current = collect($location->served_towns ?? []);
                     $currentKeys = $current->map(fn ($t) => mb_strtolower(trim((string) ($t['name'] ?? '')).', '.trim((string) ($t['state'] ?? ''))));
