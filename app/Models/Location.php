@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property array<int, array<string, mixed>>|null $served_towns GBP service-area towns {name, state, lat, lng, geocoded} — one location owns a town per site
  * @property string|null $market_notes operator free-text market context, fed VERBATIM to the location-page drafter
  * @property array<string, mixed>|null $grounding_cache cached local facts {facts, sources, fetched_at} (90-day staleness)
+ * @property array<string, mixed>|null $coverage_suggestions extraction prompts (gathering relay): {towns: list<string> conflicting candidates, phrases: list<string> unresolved coverage phrases}
  * @property string|null $primary_category the GBP primary category label
  */
 class Location extends Model
@@ -47,6 +48,7 @@ class Location extends Model
             'county_geoids' => 'array',
             'served_towns' => 'array',
             'grounding_cache' => 'array',
+            'coverage_suggestions' => 'array',
         ];
     }
 

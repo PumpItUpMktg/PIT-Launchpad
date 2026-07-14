@@ -22,6 +22,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property bool $offers_emergency
  * @property StyleVariation|null $style_variation
  * @property bool $use_logo_colors
+ * @property string|null $license_number trust fact (gathering relay) — manual or interview-seeded
+ * @property bool|null $insured trust fact — null = unknown, distinct from "no"
+ * @property int|null $years_in_business trust fact
+ * @property string|null $warranty_program trust fact
+ * @property string|null $guarantees trust fact
  */
 class Site extends Model
 {
@@ -215,6 +220,8 @@ class Site extends Model
             'budget_ceiling' => 'integer',
             'silo_own_page_bar' => 'integer',
             'coverage_thresholds' => 'array',
+            'insured' => 'boolean',
+            'years_in_business' => 'integer',
         ];
     }
 }

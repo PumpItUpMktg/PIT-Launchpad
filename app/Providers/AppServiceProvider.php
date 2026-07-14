@@ -12,6 +12,8 @@ use App\Enums\AuditAction;
 use App\Enums\DataForSeoMode;
 use App\Enums\EmbeddingsProvider as EmbeddingsProviderType;
 use App\Enums\NewsProvider as NewsProviderType;
+use App\Gathering\IntakeExtractor;
+use App\Gathering\InterviewEngine;
 use App\Integrations\Analytics\NullPageTraffic;
 use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\Census\CensusGeocoder;
@@ -446,6 +448,13 @@ class AppServiceProvider extends ServiceProvider
             DraftCall::class,
             fn ($app) => new DraftCall($app->make(ClaudeClientFactory::class)->drafting()),
         );
+
+        // The gathering interview + extraction run on the Sonnet drafting lane —
+        // conversation quality matters, turns stay cheap, no tools in the loop.
+        // Tests bind fakes on ClaudeClient as usual.
+        $this->app->when([InterviewEngine::class, IntakeExtractor::class])
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->drafting());
     }
 
     /**

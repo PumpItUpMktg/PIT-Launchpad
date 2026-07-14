@@ -30,6 +30,9 @@ class AdminPanelProvider extends PanelProvider
             // daily-loop groups: Local Blog (the news/relevance pipeline) → Live (published cards)
             // → Targeting → Settings, with the deep structure tools in a collapsed Advanced group.
             ->navigationGroups([
+                // The NEW Setup group (gathering relay) — parallel build behind
+                // launchpad.new_setup_enabled; empty (hidden) while the flag is off.
+                NavigationGroup::make('Setup'),
                 NavigationGroup::make('Local Blog'),
                 NavigationGroup::make('Live'),
                 NavigationGroup::make('Targeting'),
