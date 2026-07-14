@@ -23,6 +23,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | New Operate group (operate relay — parallel build)
+    |--------------------------------------------------------------------------
+    |
+    | Sibling flag to new_setup_enabled: gates the Operate nav group (Dashboard,
+    | the unified Blog pipeline, and Grow/Live re-registered under it). Off ⇒
+    | the admin is identical to before. Cutover is a later relay.
+    */
+    'new_operate_enabled' => (bool) env('LAUNCHPAD_NEW_OPERATE', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Standard pages
     |--------------------------------------------------------------------------
     |

@@ -1,0 +1,181 @@
+<x-filament-panels::page>
+    <style>
+        .ob-wrap { display:flex; flex-direction:column; gap:14px; }
+        .ob-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .ob-tabs { display:inline-flex; gap:4px; border:1px solid rgba(148,163,184,.35); border-radius:9px; padding:3px; }
+        .ob-tab { border:0; background:transparent; font-size:13px; font-weight:600; padding:6px 15px; border-radius:7px; cursor:pointer; color:#64748b; }
+        .ob-tab.on { background:#4f46e5; color:#fff; }
+        .ob-select { font-size:12px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:4px 8px; background:transparent; }
+        .ob-btn { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:5px 12px; border-radius:7px; border:1px solid rgba(148,163,184,.4); background:transparent; cursor:pointer; text-decoration:none; }
+        .ob-btn.primary { background:#4f46e5; border-color:#4f46e5; color:#fff; }
+        .ob-btn.danger { color:#dc2626; }
+        .ob-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:11px; }
+        .ob-card { border:1px solid rgba(148,163,184,.35); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+        .ob-card h3 { margin:0; font-size:14px; line-height:1.35; }
+        .ob-chips { display:flex; gap:6px; flex-wrap:wrap; }
+        .ob-chip { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 8px; border-radius:5px; background:rgba(148,163,184,.15); color:#64748b; }
+        .ob-chip.kw { background:rgba(79,70,229,.12); color:#6366f1; text-transform:none; letter-spacing:0; }
+        .ob-chip.warn { background:rgba(217,119,6,.13); color:#b45309; }
+        .ob-chip.danger { background:rgba(220,38,38,.12); color:#dc2626; }
+        .ob-muted { color:#94a3b8; font-size:12px; }
+        .ob-excerpt { font-size:12.5px; color:#64748b; line-height:1.45; max-height:5.8em; overflow:hidden; }
+        .ob-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:auto; }
+        .ob-group { border:1px solid rgba(148,163,184,.35); border-radius:11px; overflow:hidden; }
+        .ob-ghead { display:flex; align-items:center; gap:10px; padding:11px 14px; background:rgba(148,163,184,.07); border-bottom:1px solid rgba(148,163,184,.2); flex-wrap:wrap; }
+        .ob-ghead .arrow { color:#94a3b8; }
+        .ob-ghead strong { font-size:13.5px; }
+        .ob-count { margin-left:auto; font-size:11px; color:#94a3b8; font-variant-numeric:tabular-nums; }
+        .ob-articles { display:flex; flex-direction:column; }
+        .ob-article { display:flex; align-items:center; gap:10px; padding:8px 14px; border-bottom:1px solid rgba(148,163,184,.12); font-size:13px; }
+        .ob-article:last-child { border-bottom:0; }
+        .ob-bare { padding:9px 14px; font-size:12px; color:#b45309; font-style:italic; }
+        .ob-empty { border:1px dashed rgba(148,163,184,.4); border-radius:10px; padding:15px; color:#94a3b8; font-size:13px; }
+        .ob-drawer { border:1px solid rgba(79,70,229,.4); border-radius:11px; padding:13px 16px; }
+        .ob-target { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid rgba(148,163,184,.12); font-size:12.5px; }
+        .ob-target:last-child { border-bottom:0; }
+        .ob-reject { display:flex; gap:8px; align-items:center; }
+        .ob-reject input { flex:1; font-size:12.5px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:5px 9px; background:transparent; }
+    </style>
+
+    <div class="ob-wrap">
+        <div class="ob-bar">
+            <div class="ob-tabs">
+                <button class="ob-tab {{ $tab === 'candidates' ? 'on' : '' }}" wire:click="setTab('candidates')">Candidates</button>
+                <button class="ob-tab {{ $tab === 'review' ? 'on' : '' }}" wire:click="setTab('review')">Review</button>
+                <button class="ob-tab {{ $tab === 'published' ? 'on' : '' }}" wire:click="setTab('published')">Published</button>
+            </div>
+            <select class="ob-select" wire:model.live="siteFilter">
+                <option value="">All tenants</option>
+                @foreach ($this->siteOptions as $id => $label)
+                    <option value="{{ $id }}">{{ $label }}</option>
+                @endforeach
+            </select>
+            <select class="ob-select" wire:model.live="siloFilter">
+                <option value="">All silos</option>
+                @foreach ($this->siloOptions as $id => $label)
+                    <option value="{{ $id }}">{{ $label }}</option>
+                @endforeach
+            </select>
+            <button class="ob-btn" style="margin-left:auto" wire:click="toggleTargets">
+                {{ $showTargets ? 'Hide' : 'Show' }} blog targets
+            </button>
+        </div>
+
+        @if ($showTargets)
+            <div class="ob-drawer">
+                <strong style="font-size:13px">Blog targets — the unconsumed queue (consumption is automatic; volume-led order)</strong>
+                @forelse ($this->targets as $t)
+                    <div class="ob-target" wire:key="obt-{{ $t['id'] }}">
+                        <span class="ob-chip kw">{{ $t['keyword'] }}</span>
+                        <span class="ob-muted">{{ $t['silo'] }}@if(! $siteFilter) · {{ $t['tenant'] }}@endif · {{ $t['volume'] !== null ? number_format((int) $t['volume']).'/mo' : 'no volume' }} · queued {{ $t['queued_at'] }}</span>
+                        <button class="ob-btn danger" style="margin-left:auto" wire:click="dismissTarget('{{ $t['id'] }}')">Dismiss</button>
+                    </div>
+                @empty
+                    <p class="ob-muted" style="margin:6px 0 0">No queued targets in this scope — the directed lane is starved here.</p>
+                @endforelse
+            </div>
+        @endif
+
+        {{-- ─── Candidates ─── --}}
+        @if ($tab === 'candidates')
+            <div class="ob-grid">
+                @forelse ($this->candidates as $c)
+                    <div class="ob-card" wire:key="obc-{{ $c['id'] }}">
+                        <div class="ob-chips">
+                            @if ($c['directed'])
+                                <span class="ob-chip kw">{{ $c['keyword'] }}</span>
+                            @else
+                                <span class="ob-chip">{{ $c['source'] }}</span>
+                            @endif
+                            @if ($c['silo'])<span class="ob-chip">{{ $c['silo'] }}</span>@endif
+                            @if (! $siteFilter && $c['tenant'])<span class="ob-chip warn">{{ $c['tenant'] }}</span>@endif
+                        </div>
+                        <h3>{{ $c['title'] }}</h3>
+                        @if ($c['directed'] && $c['target_page'])
+                            <span class="ob-muted">Supports: {{ $c['target_page'] }}</span>
+                        @elseif ($c['angle'])
+                            <span class="ob-muted">{{ $c['angle'] }}</span>
+                        @endif
+                        <div class="ob-actions">
+                            <button class="ob-btn primary" wire:click="promote('{{ $c['id'] }}')">Promote</button>
+                            <button class="ob-btn danger" wire:click="dismissCandidate('{{ $c['id'] }}')">Dismiss</button>
+                            @if ($c['score'] !== null)<span class="ob-muted" style="margin-left:auto">score {{ $c['score'] }}</span>@endif
+                        </div>
+                    </div>
+                @empty
+                    <div class="ob-empty">No candidates to triage in this scope.</div>
+                @endforelse
+            </div>
+        @endif
+
+        {{-- ─── Review ─── --}}
+        @if ($tab === 'review')
+            <div class="ob-grid">
+                @forelse ($this->review as $d)
+                    <div class="ob-card" wire:key="obr-{{ $d['id'] }}">
+                        <div class="ob-chips">
+                            <span class="ob-chip {{ in_array($d['status'], ['render_failed', 'publish_failed'], true) ? 'danger' : '' }}">{{ str_replace('_', ' ', $d['status']) }}</span>
+                            <span class="ob-chip kw">{{ $d['keyword'] ?? 'reactive' }}</span>
+                            @if ($d['silo'])<span class="ob-chip">{{ $d['silo'] }}</span>@endif
+                            @if (! $siteFilter && $d['tenant'])<span class="ob-chip warn">{{ $d['tenant'] }}</span>@endif
+                        </div>
+                        <h3>{{ $d['title'] }}</h3>
+                        <div class="ob-excerpt">{{ $d['excerpt'] !== '' ? $d['excerpt'] : 'No body yet.' }}</div>
+                        <div class="ob-actions">
+                            <button class="ob-btn primary" wire:click="approve('{{ $d['id'] }}')">Approve</button>
+                            <a class="ob-btn" href="{{ $this->editUrl($d['id']) }}" wire:navigate>Edit</a>
+                            <button class="ob-btn danger" wire:click="startReject('{{ $d['id'] }}')">Reject</button>
+                        </div>
+                        @if ($rejecting === $d['id'])
+                            <div class="ob-reject">
+                                <input type="text" placeholder="Reason (optional — improves future drafts)" wire:model="rejectReason" wire:keydown.enter="reject('{{ $d['id'] }}')">
+                                <button class="ob-btn danger" wire:click="reject('{{ $d['id'] }}')">Confirm</button>
+                            </div>
+                        @endif
+                    </div>
+                @empty
+                    <div class="ob-empty">Review queue is clear in this scope.</div>
+                @endforelse
+            </div>
+        @endif
+
+        {{-- ─── Published — the relevance map ─── --}}
+        @if ($tab === 'published')
+            @forelse ($this->published as $i => $g)
+                <div class="ob-group" wire:key="obp-{{ $i }}">
+                    <div class="ob-ghead">
+                        @if ($g['kind'] === 'keyword')
+                            <span class="ob-chip kw">{{ $g['keyword'] }}</span>
+                        @else
+                            <span class="ob-chip warn">Freshness</span>
+                        @endif
+                        <span class="arrow">→</span>
+                        @if ($g['target_url'])
+                            <a href="{{ $g['target_url'] }}" target="_blank" rel="noopener"><strong>{{ $g['target_page'] ?? $g['silo'] }}</strong></a>
+                        @else
+                            <strong>{{ $g['target_page'] ?? $g['silo'] ?? 'No pillar yet' }}</strong>
+                        @endif
+                        @if ($g['silo'])<span class="ob-chip">{{ $g['silo'] }}</span>@endif
+                        @if (! $siteFilter && $g['tenant'])<span class="ob-chip warn">{{ $g['tenant'] }}</span>@endif
+                        <span class="ob-count">{{ count($g['articles']) }} article(s)</span>
+                    </div>
+                    @if ($g['articles'] === [])
+                        <div class="ob-bare">No supporting article yet — {{ $g['status'] === 'queued' ? 'queued for the directed lane' : 'in flight' }}.</div>
+                    @else
+                        <div class="ob-articles">
+                            @foreach ($g['articles'] as $a)
+                                <div class="ob-article" wire:key="oba-{{ $a['id'] }}">
+                                    <span>{{ $a['title'] }}</span>
+                                    <span class="ob-muted" style="margin-left:auto">{{ $a['published_at'] }}</span>
+                                    @if ($a['url'])<a class="ob-btn" href="{{ $a['url'] }}" target="_blank" rel="noopener">View live ↗</a>@endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            @empty
+                <div class="ob-empty">Nothing published (and no queued targets) in this scope yet.</div>
+            @endforelse
+        @endif
+    </div>
+</x-filament-panels::page>
