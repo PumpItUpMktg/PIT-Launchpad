@@ -17,6 +17,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -72,6 +73,20 @@ class ServiceResource extends Resource
     {
         return $schema->components([
             Select::make('site_id')->relationship('site', 'brand_name')->searchable()->preload()->required(),
+            ...self::enrichmentComponents(),
+        ]);
+    }
+
+    /**
+     * The service-record enrichment form, minus the tenant select — THE single source for this
+     * form (the resource above and the new Setup group's Services review surface both render it;
+     * the gathering relay explicitly forbids a second copy).
+     *
+     * @return list<Component|TextInput>
+     */
+    public static function enrichmentComponents(): array
+    {
+        return [
             TextInput::make('name')->required()->maxLength(255),
             TextInput::make('short_description')->label('Card line')->maxLength(160)
                 ->helperText('One line for the hub services grid card.'),
@@ -126,7 +141,7 @@ class ServiceResource extends Resource
 
             Textarea::make('description')->label('Internal description')->rows(3)
                 ->helperText('Grounding context for the drafter (not rendered verbatim).'),
-        ]);
+        ];
     }
 
     /** @return array<string, PageRegistration> */

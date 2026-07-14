@@ -11,6 +11,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | New Setup group (gathering relay — parallel build)
+    |--------------------------------------------------------------------------
+    |
+    | Gates the NEW six-step Setup nav group (/admin/setup2/*), built alongside
+    | the existing menu. Off ⇒ the admin is identical to before; on (staging /
+    | operator env) ⇒ the group appears next to everything else. Cutover — flip
+    | the default + retire superseded items — is a later relay.
+    */
+    'new_setup_enabled' => (bool) env('LAUNCHPAD_NEW_SETUP', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Standard pages
     |--------------------------------------------------------------------------
     |

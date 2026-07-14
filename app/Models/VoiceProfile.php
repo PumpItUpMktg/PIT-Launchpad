@@ -13,6 +13,11 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $version
  * @property VoiceStatus $status
  * @property string|null $framing_model
+ * @property array<string, mixed>|null $persona
+ * @property array<int, string>|null $language_rules
+ * @property array<int, string>|null $audience
+ * @property string|null $reading_level
+ * @property string|null $cta_voice
  */
 class VoiceProfile extends Model
 {
