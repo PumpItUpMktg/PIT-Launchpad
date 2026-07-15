@@ -5,12 +5,15 @@ namespace App\Operate;
 use App\Enums\BlogTargetStatus;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\RenderStatus;
 use App\Models\BlogTarget;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
+use App\Publishing\TenantStorage;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -39,7 +42,10 @@ class BlogBoard
         $rows = $this->posts($siteId, $siloId)
             ->whereIn('status', [ContentStatus::Candidate->value, ContentStatus::Scored->value])
             ->with(['site', 'matchedSilo.pillarContent', 'targetKeyword'])
-            ->get();
+            ->get()
+            // Promote moves a candidate to the REVIEW tab the moment drafting starts — a
+            // promoted item never lingers here looking untouched.
+            ->reject(fn (Content $c) => in_array($c->generationState(), ['generating', 'failed'], true));
 
         return $rows
             ->sortBy([
@@ -76,16 +82,23 @@ class BlogBoard
             ContentStatus::NeedsReview->value,
         ];
 
+        // The review stage also owns the DRAFTING window: a promoted candidate appears here as a
+        // "writing" card the moment its job queues, and a failed draft surfaces here with a retry —
+        // never stranded invisible on the Candidates tab.
         $rows = $this->posts($siteId, $siloId)
-            ->whereIn('status', $statuses)
-            ->with(['site', 'matchedSilo', 'targetKeyword'])
-            ->get();
+            ->where(fn (Builder $q) => $q
+                ->whereIn('status', $statuses)
+                ->orWhereIn('status', [ContentStatus::Candidate->value, ContentStatus::Scored->value]))
+            ->with(['site', 'matchedSilo', 'targetKeyword', 'renderJobs'])
+            ->get()
+            ->filter(fn (Content $c) => in_array($c->status->value, $statuses, true)
+                || in_array($c->generationState(), ['generating', 'failed'], true));
 
-        $priority = array_flip($statuses);
+        $priority = array_flip($statuses); // failures 0–1, in_review 2, needs_review 3
 
         return $rows
             ->sortBy([
-                fn (Content $a, Content $b) => ($priority[$a->status->value] ?? 9) <=> ($priority[$b->status->value] ?? 9),
+                fn (Content $a, Content $b) => $this->reviewRank($a, $priority) <=> $this->reviewRank($b, $priority),
                 fn (Content $a, Content $b) => $a->created_at <=> $b->created_at,
             ])
             ->values()
@@ -93,13 +106,65 @@ class BlogBoard
                 'id' => (string) $c->id,
                 'title' => (string) $c->title,
                 'status' => $c->status->value,
+                'state' => $this->reviewState($c),
+                'has_draft' => $c->hasDraft(),
+                'draft_error' => $c->draftError(),
                 'keyword' => $c->targetKeyword->query ?? $this->consumedKeywordFor($c),
                 'silo' => $c->matchedSilo?->name,
                 'tenant' => $c->site?->brand_name,
                 'excerpt' => Str::words(trim(strip_tags((string) $c->body)), 100, '…'),
-                'has_image' => is_array($c->meta) && ($c->meta['seo']['og_image'] ?? null) !== null,
+                'image' => $this->thumbnail($c),
             ])
             ->all();
+    }
+
+    /** Any card still writing? — the tab polls only while something is in motion. */
+    public function anyWriting(?string $siteId = null, ?string $siloId = null): bool
+    {
+        return collect($this->review($siteId, $siloId))->contains(fn (array $c) => $c['state'] === 'writing');
+    }
+
+    /**
+     * The card's single lifecycle word: writing (job in flight) / draft_failed (retry) /
+     * undrafted (borderline candidate routed to review without a draft — offer Generate) /
+     * the content status for everything drafted.
+     */
+    private function reviewState(Content $c): string
+    {
+        return match (true) {
+            $c->isGenerating() => 'writing',
+            $c->draftError() !== null => 'draft_failed',
+            ! $c->hasDraft() => 'undrafted',
+            default => $c->status->value,
+        };
+    }
+
+    /**
+     * @param  array<string, int>  $priority
+     */
+    private function reviewRank(Content $c, array $priority): int
+    {
+        return match ($this->reviewState($c)) {
+            'draft_failed' => 0,             // broken first
+            'writing' => 2,                  // in motion, right behind push failures
+            'undrafted' => 4,
+            default => 3 + (int) ($priority[$c->status->value] ?? 5),
+        };
+    }
+
+    /** The generate-time rendered image (fal → R2), if one exists — the card's thumbnail. */
+    private function thumbnail(Content $c): ?string
+    {
+        $job = $c->renderJobs->first(fn ($j) => $j->status === RenderStatus::Succeeded && $j->r2_key !== null);
+        if ($job === null) {
+            return null;
+        }
+
+        try {
+            return Storage::disk(TenantStorage::DISK)->url((string) $job->r2_key);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
