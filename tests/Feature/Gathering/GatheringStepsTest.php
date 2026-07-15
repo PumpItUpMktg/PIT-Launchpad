@@ -18,6 +18,7 @@ use App\Integrations\Places\PlaceDetails;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\Places\PlacesStatus;
 use App\Locations\ServedTowns;
+use App\Models\CoverageArea;
 use App\Models\Interview;
 use App\Models\Location;
 use App\Models\Site;
@@ -135,29 +136,37 @@ it('a trust-facts save confirms seeded fields but leaves manual fields rowless',
         ->and($provenance->state($site, 'years_in_business'))->toBeNull(); // manual = no row
 });
 
-it('the Locations review surface enforces town uniqueness and flips seeded → confirmed on save', function () {
+it('the Locations step embeds the territory workspace and saving details confirms seeded fields', function () {
     $site = Site::factory()->create();
     session(['guided_site_id' => $site->id]);
     $provenance = app(Provenance::class);
 
     $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'served_towns' => [
         ['name' => 'Norristown', 'state' => 'PA', 'lat' => null, 'lng' => null, 'geocoded' => false],
-    ]]);
-    $montclair = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'served_towns' => []]);
+    ], 'coverage_suggestions' => ['towns' => [], 'phrases' => ['30 minutes from the shop']]]);
     $provenance->seed($trooper, 'served_towns');
 
-    // Claiming Trooper's town from Montclair is rejected — one town, one location.
-    Livewire::test(LocationsStep::class)
-        ->set("towns.{$montclair->id}", 'Norristown, PA')
-        ->call('saveLocation', $montclair->id);
-    expect(collect($montclair->fresh()->served_towns ?? []))->toBeEmpty();
+    // The workspace's page selection works right on the step (a coverage town toggles into the pool).
+    $area = CoverageArea::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'geo_id' => '4209153000', 'name' => 'Norristown', 'type' => 'county_subdivision',
+        'state' => 'PA', 'source_location_ids' => [$trooper->id], 'page_selected' => false, 'source' => 'county',
+    ]);
 
-    // Saving Trooper's card confirms the seeded field.
-    Livewire::test(LocationsStep::class)
-        ->set("notes.{$trooper->id}", 'High water table near the creek.')
-        ->call('saveLocation', $trooper->id);
+    $page = Livewire::test(LocationsStep::class)
+        ->assertOk()
+        ->assertSee('30 minutes from the shop')      // the interview prompt sits above the picker
+        ->call('togglePageSelection', $area->geo_id);
+    expect($area->fresh()->page_selected)->toBeTrue();
+
+    // Saving the location's details confirms what the interview seeded.
+    $page->set("notes.{$trooper->id}", 'High water table near the creek.')
+        ->call('saveDetails', $trooper->id);
     expect($provenance->state($trooper->fresh(), 'served_towns'))->toBe(ProvenanceState::Confirmed)
         ->and($trooper->fresh()->market_notes)->toContain('water table');
+
+    // Suggestions dismiss once handled.
+    $page->call('dismissSuggestions', $trooper->id);
+    expect($trooper->fresh()->coverage_suggestions)->toBeNull();
 });
 
 it('review surfaces render populated pre-provenance records cleanly (the SPG staging shape)', function () {
