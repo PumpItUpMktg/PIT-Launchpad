@@ -32,21 +32,6 @@ abstract class LiveBoardPage extends Page
 
     public ?string $siteId = null;
 
-    /**
-     * Operate relay: with the new Operate group on, the three Live boards re-register under it
-     * (after Dashboard/Blog/Grow), and the old Live group empties out of the sidebar. Untouched
-     * otherwise. Read-only re-grouping — no functional change.
-     */
-    public static function getNavigationGroup(): string|\UnitEnum|null
-    {
-        return config('launchpad.new_operate_enabled') ? 'Operate' : static::$navigationGroup;
-    }
-
-    public static function getNavigationSort(): ?int
-    {
-        return (config('launchpad.new_operate_enabled') ? 3 : 0) + (static::$navigationSort ?? 0);
-    }
-
     public function mount(): void
     {
         $requested = request()->query('site');

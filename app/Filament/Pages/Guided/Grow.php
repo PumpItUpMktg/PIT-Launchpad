@@ -49,17 +49,6 @@ class Grow extends GuidedPage
 
     protected static ?string $navigationLabel = 'Grow';
 
-    /** Operate relay: with the new Operate group on, Grow re-registers under it (untouched otherwise). */
-    public static function getNavigationGroup(): string|\UnitEnum|null
-    {
-        return config('launchpad.new_operate_enabled') ? 'Operate' : static::$navigationGroup;
-    }
-
-    public static function getNavigationSort(): ?int
-    {
-        return config('launchpad.new_operate_enabled') ? 3 : static::$navigationSort;
-    }
-
     protected string $view = 'filament.guided.grow';
 
     /**
