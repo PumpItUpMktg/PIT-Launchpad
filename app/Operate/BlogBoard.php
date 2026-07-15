@@ -131,8 +131,11 @@ class BlogBoard
      */
     private function reviewState(Content $c): string
     {
+        // The in-flight marker is checked directly (not via generationState(), which reports
+        // 'drafted' whenever a draft exists) so a REGENERATING drafted post reads as writing too.
+        // markGenerating stamps it; failure clears it; a successful draft rebuilds meta wholesale.
         return match (true) {
-            $c->isGenerating() => 'writing',
+            ($c->meta['generating_at'] ?? null) !== null => 'writing',
             $c->draftError() !== null => 'draft_failed',
             ! $c->hasDraft() => 'undrafted',
             default => $c->status->value,
