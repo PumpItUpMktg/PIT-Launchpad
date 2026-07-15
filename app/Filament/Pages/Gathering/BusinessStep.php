@@ -2,9 +2,12 @@
 
 namespace App\Filament\Pages\Gathering;
 
+use App\Gathering\Provenance;
 use App\Integrations\Places\PlacesProvider;
+use App\Interview\SiloSeed;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use App\Models\SiloBlueprint;
 use Filament\Notifications\Notification;
 
 /**
@@ -33,6 +36,10 @@ class BusinessStep extends GatheringPage
 
     public string $domainUrl = '';
 
+    // The trade — the SiloBlueprint seed the structure engine builds the silo tree from
+    // (previously captured only by the old guided Business step / old Owner Interview).
+    public string $trade = '';
+
     // Trust facts.
     public string $licenseNumber = '';
 
@@ -58,6 +65,8 @@ class BusinessStep extends GatheringPage
         }
 
         $this->brandName = (string) $site->brand_name;
+        $this->trade = (string) (SiloBlueprint::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->value('trade') ?? '');
         $this->phone = (string) ($site->phone ?? '');
         $this->domainUrl = (string) ($site->domain_url ?? '');
         $this->licenseNumber = (string) ($site->license_number ?? '');
@@ -89,10 +98,33 @@ class BusinessStep extends GatheringPage
             'guarantees' => trim($this->guarantees) !== '' ? trim($this->guarantees) : null,
         ])->save();
 
+        // The trade seeds the structure engine (SiloBlueprint) — same write as the old guided
+        // Business step, so silo-gen has its seed without the old Owner Interview.
+        if (trim($this->trade) !== '') {
+            $blueprint = SiloBlueprint::withoutGlobalScope(SiteScope::class)->firstOrCreate(['site_id' => $site->id]);
+            $seed = SiloSeed::fromArray([...($blueprint->seed ?? []), 'trade' => trim($this->trade)]);
+            $blueprint->update(['trade' => trim($this->trade), 'seed' => [...$seed->toArray(), 'suggested_confirmed' => ($blueprint->seed['suggested_confirmed'] ?? [])]]);
+            $this->confirmSeeded($blueprint, ['trade']);
+        }
+
         // A review-surface save confirms interview-seeded fields; manual fields stay rowless.
         $this->confirmSeeded($site, ['license_number', 'insured', 'years_in_business', 'warranty_program', 'guarantees']);
 
         Notification::make()->success()->title('Business saved')->send();
+    }
+
+    /** The trade field's provenance chip state ('seeded'|'confirmed'|null), from the blueprint. */
+    public function getTradeProvenanceProperty(): ?string
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return null;
+        }
+
+        $blueprint = SiloBlueprint::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->first();
+
+        return $blueprint === null ? null : app(Provenance::class)->state($blueprint, 'trade')?->value;
     }
 
     /** Resolve every non-empty line through Places into a reviewable list (nothing saved yet). */

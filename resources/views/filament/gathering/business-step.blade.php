@@ -10,6 +10,13 @@
                 <div class="g-field"><label>Business name</label><input class="g-input" type="text" wire:model="brandName"></div>
                 <div class="g-field"><label>Phone</label><input class="g-input" type="text" wire:model="phone"></div>
                 <div class="g-field"><label>Website URL</label><input class="g-input" type="text" wire:model="domainUrl"></div>
+                <div class="g-field">
+                    <label>Trade
+                        @if ($this->tradeProvenance)<span class="g-seed {{ $this->tradeProvenance }}">{{ $this->tradeProvenance === 'seeded' ? 'from interview' : 'confirmed' }}</span>@endif
+                    </label>
+                    <input class="g-input" type="text" wire:model="trade" placeholder="e.g. basement waterproofing">
+                    <div class="g-hint" style="margin-top:4px">What the business does, in a few words — the website structure is built from this.</div>
+                </div>
             </div>
         </div>
 

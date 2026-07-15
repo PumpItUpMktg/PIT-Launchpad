@@ -40,10 +40,16 @@ class OwnerInterview extends Page
 
     protected static ?int $navigationSort = 2;
 
-    /** Menu-map family tag: not yet placed in the new Setup/Operate structure — cutover decision pending. */
+    /** Superseded: the new Setup covers this (interview seeds voice + services; Business step + extraction seed the silo trade/anchors). */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return ! config('launchpad.new_setup_enabled');
+    }
+
+    /** Menu-map family tag: setup-world — superseded by the gathering interview + Business trade field. */
     public static function menuTag(): string
     {
-        return 'unaddressed';
+        return 'setup';
     }
 
     protected string $view = 'filament.pages.owner-interview';

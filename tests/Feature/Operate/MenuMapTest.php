@@ -84,7 +84,13 @@ it('duplicated legacy links hide once Operate is on; unaddressed items are tagge
 
     // Not-yet-placed surfaces carry the unaddressed tag (prune, silo interview, edit signal, …).
     $unaddressed = $all->where('tag', 'unaddressed')->pluck('label');
-    expect($unaddressed)->toContain('Prune', 'Owner Interview', 'Edit signal', 'Silos & keywords', 'Onboarding');
+    expect($unaddressed)->toContain('Prune', 'Edit signal', 'Silos & keywords', 'Onboarding');
+
+    // The old Owner Interview is now SUPERSEDED by the gathering interview + the Business trade
+    // field — setup-tagged and hidden once the new Setup menu is on.
+    $ownerInterview = $all->firstWhere('label', 'Owner Interview');
+    expect($ownerInterview['tag'])->toBe('setup')
+        ->and($ownerInterview['hidden'])->toBeTrue();
 
     // FLAG OFF ⇒ the old menu is intact: the trio still registers (the parallel-build promise).
     config()->set('launchpad.new_operate_enabled', false);
