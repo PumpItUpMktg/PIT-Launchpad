@@ -296,3 +296,22 @@ it('promote moves the candidate to Review as a writing card; undrafted review it
     expect($withThumb['image'])->not->toBeNull()
         ->and($withThumb['state'])->toBe('needs_review');
 });
+
+it('regenerate re-drafts an already-drafted review item — it flips to writing and keeps its slug', function () {
+    Queue::fake();
+    $site = opSite();
+    session(['guided_site_id' => $site->id]);
+    $stale = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview,
+        'title' => 'Pre-pipeline draft', 'body' => 'Old copy from before the proper build.', 'slug' => 'pre-pipeline-draft',
+    ]);
+
+    Livewire::test(OperateBlog::class, ['tab' => 'review'])
+        ->assertSee('Regenerate')
+        ->call('regeneratePost', $stale->id);
+
+    Queue::assertPushed(GeneratePost::class);
+    $card = collect(app(BlogBoard::class)->review($site->id))->firstWhere('id', $stale->id);
+    expect($card['state'])->toBe('writing')                     // in motion, polls itself
+        ->and($stale->fresh()->slug)->toBe('pre-pipeline-draft'); // URL never churns on re-draft
+});

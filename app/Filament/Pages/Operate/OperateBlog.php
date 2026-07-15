@@ -149,6 +149,25 @@ class OperateBlog extends OperatePage
         Notification::make()->success()->title('Dismissed.')->send();
     }
 
+    /**
+     * Re-draft an already-drafted review item — for posts written before the current pipeline
+     * (older prompts, no image, weak first pass). Same generate path; the card flips to a
+     * "writing" state and updates itself when the fresh copy + image land. Slug stays pinned.
+     */
+    public function regeneratePost(string $contentId): void
+    {
+        $content = $this->ownedPost($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        GeneratePost::enqueue($content, actorId: Auth::id());
+        Notification::make()->success()
+            ->title("Re-drafting '{$content->title}'")
+            ->body('Fresh copy + image are being generated — the card updates itself; the URL slug is kept.')
+            ->send();
+    }
+
     // ── Review actions ──────────────────────────────────────────────────────
 
     /** One-click Approve — the existing approve + publish path, nothing bespoke. */

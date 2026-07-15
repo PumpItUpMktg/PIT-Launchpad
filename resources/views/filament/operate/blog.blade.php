@@ -149,6 +149,8 @@
                             @else
                                 <button class="ob-btn primary" wire:click="approve('{{ $d['id'] }}')">Approve</button>
                                 <a class="ob-btn" href="{{ $this->editUrl($d['id']) }}" wire:navigate>Edit</a>
+                                <button class="ob-btn" wire:click="regeneratePost('{{ $d['id'] }}')"
+                                    wire:confirm="Re-draft this post from scratch (fresh copy + image)? The current draft is replaced; the URL slug is kept.">Regenerate</button>
                                 <button class="ob-btn danger" wire:click="startReject('{{ $d['id'] }}')">Reject</button>
                             @endif
                         </div>
