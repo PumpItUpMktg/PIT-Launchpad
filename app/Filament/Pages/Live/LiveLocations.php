@@ -17,7 +17,7 @@ use Filament\Notifications\Notification;
  */
 class LiveLocations extends LiveBoardPage
 {
-    protected static ?string $navigationLabel = 'Locations';
+    protected static ?string $navigationLabel = 'Location pages';
 
     protected static ?int $navigationSort = 1;
 

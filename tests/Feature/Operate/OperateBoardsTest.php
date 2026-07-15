@@ -80,7 +80,7 @@ it('flag off ⇒ Operate hidden; on ⇒ Dashboard · Blog · the three pages boa
         ->and(OperateLocationPages::getNavigationGroup())->toBe('Operate')
         // Grow + the old Live boards stay exactly where they were, flag on or off.
         ->and(Grow::getNavigationGroup())->toBeNull()
-        ->and(LiveLocations::getNavigationGroup())->toBe('Live');
+        ->and(LiveLocations::getNavigationGroup())->toBe('Live Pages');
 });
 
 it('the dashboard rolls up attention across tenants and hides clean ones', function () {
