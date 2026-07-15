@@ -7,6 +7,7 @@ use App\Locations\ServedTowns;
 use App\Models\Interview;
 use App\Models\Location;
 use App\Models\Service;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\VoiceProfile;
 use Tests\Support\FakeClaudeClient;
@@ -128,4 +129,26 @@ it('the full skip path needs no interview at all — extraction is opt-in, surfa
 
     expect(app(Provenance::class)->forModel($location))->toBe([])
         ->and(Interview::query()->where('site_id', $site->id)->exists())->toBeFalse();
+});
+
+it('extraction seeds the silo blueprint (trade + anchor services) but never a committed structure', function () {
+    [$site, $location, $interview] = gatherSite();
+
+    extractor(extractionJson(['trade' => 'basement waterproofing']))->extract($interview);
+
+    $blueprint = SiloBlueprint::withoutGlobalScopes()->where('site_id', $site->id)->first();
+    expect($blueprint->trade)->toBe('basement waterproofing')
+        ->and($blueprint->seed['trade'])->toBe('basement waterproofing')
+        ->and($blueprint->seed['anchor_services'])->toBe(['French Drain Installation'])
+        ->and(app(Provenance::class)->state($blueprint, 'trade'))->toBe(ProvenanceState::Seeded);
+
+    // Operator confirms the trade (Business-step save) → a re-run can't change it.
+    app(Provenance::class)->confirm($blueprint, 'trade');
+    extractor(extractionJson(['trade' => 'sump pump repair']))->extract($interview);
+    expect($blueprint->fresh()->trade)->toBe('basement waterproofing');
+
+    // A COMMITTED structure is never reseeded at all.
+    $blueprint->forceFill(['confirmed_at' => now()])->save();
+    extractor(extractionJson(['trade' => 'totally different trade', 'services' => [['name' => 'New Thing']]]))->extract($interview);
+    expect($blueprint->fresh()->trade)->toBe('basement waterproofing');
 });

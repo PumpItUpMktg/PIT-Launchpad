@@ -3,12 +3,14 @@
 namespace App\Gathering;
 
 use App\Integrations\Claude\ClaudeClient;
+use App\Interview\SiloSeed;
 use App\Locations\ServedTowns;
 use App\Models\Interview;
 use App\Models\InterviewTurn;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\VoiceProfile;
 
@@ -43,6 +45,7 @@ class IntakeExtractor
 
         $trust = $this->seedTrustFacts($site, (array) ($data['trust_facts'] ?? []));
         $services = $this->seedServices($site, (array) ($data['services'] ?? []));
+        $this->seedSiloSeed($site, trim((string) ($data['trade'] ?? '')), (array) ($data['services'] ?? []));
         [$locations, $suggestions] = $this->seedCoverage($site, (array) ($data['coverage'] ?? []), (array) ($data['market_notes'] ?? []));
         $voice = $this->seedVoice($site, (array) ($data['voice'] ?? []));
 
@@ -66,6 +69,7 @@ Known locations (use these exact names as the "location" keys): {$locations}
 
 Respond with ONLY a JSON object in this exact shape (omit anything the transcript does not state — NEVER invent values):
 {
+  "trade": "<the business's trade in 2-4 words, e.g. 'basement waterproofing' — from the transcript>",
   "trust_facts": {"license_number": "...", "insured": true, "years_in_business": 12, "warranty_program": "...", "guarantees": "..."},
   "services": [{"name": "...", "short_description": "...", "symptoms": ["..."], "scope_items": ["..."], "process_steps": ["..."], "cost_factors": ["..."], "price_range": {"low": 0, "high": 0, "unit": "..."}}],
   "coverage": [{"location": "<known location name>", "towns": ["Town, ST"], "unresolved": ["<fuzzy phrase that could not be resolved to town names>"]}],
@@ -86,6 +90,47 @@ PROMPT;
         })->implode("\n");
 
         return "TRANSCRIPT:\n{$lines}\n\nExtract the JSON now.";
+    }
+
+    /**
+     * The STRUCTURE seed (SiloBlueprint trade + anchor services) — the old Owner Interview's
+     * remaining job, folded into this extraction. Never touches a CONFIRMED blueprint
+     * (confirmed_at set = the structure was committed); per-field provenance guards re-runs.
+     *
+     * @param  list<array<string, mixed>>  $services
+     */
+    private function seedSiloSeed(Site $site, string $trade, array $services): void
+    {
+        $anchor = collect($services)
+            ->map(fn ($row) => trim((string) ($row['name'] ?? '')))
+            ->filter()
+            ->values()
+            ->all();
+        if ($trade === '' && $anchor === []) {
+            return;
+        }
+
+        $blueprint = SiloBlueprint::withoutGlobalScope(SiteScope::class)->firstOrCreate(['site_id' => $site->id]);
+        if ($blueprint->confirmed_at !== null) {
+            return; // the structure is committed — extraction never reseeds under it
+        }
+
+        $seed = (array) ($blueprint->seed ?? []);
+        $updates = [];
+        if ($trade !== '' && $this->provenance->canSeed($blueprint, 'trade')) {
+            $seed['trade'] = $trade;
+            $updates['trade'] = $trade;
+            $this->provenance->seed($blueprint, 'trade');
+        }
+        if ($anchor !== [] && $this->provenance->canSeed($blueprint, 'anchor_services')) {
+            $seed['anchor_services'] = $anchor;
+            $this->provenance->seed($blueprint, 'anchor_services');
+        }
+
+        if ($updates !== [] || ($seed !== (array) ($blueprint->seed ?? []))) {
+            $silo = SiloSeed::fromArray($seed);
+            $blueprint->update([...$updates, 'seed' => [...$silo->toArray(), 'suggested_confirmed' => ($seed['suggested_confirmed'] ?? [])]]);
+        }
     }
 
     private function seedTrustFacts(Site $site, array $facts): int

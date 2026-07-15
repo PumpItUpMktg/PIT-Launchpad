@@ -10,6 +10,7 @@ use App\Filament\Pages\Gathering\InterviewStep;
 use App\Filament\Pages\Gathering\LocationsStep;
 use App\Filament\Pages\Gathering\ServicesStep;
 use App\Filament\Pages\Gathering\VoiceStep;
+use App\Filament\Pages\OwnerInterview;
 use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
 use App\Gathering\Provenance;
@@ -21,6 +22,7 @@ use App\Locations\ServedTowns;
 use App\Models\CoverageArea;
 use App\Models\Interview;
 use App\Models\Location;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -245,4 +247,26 @@ it('the chat page drives the whole loop — begin, answer, end & extract into se
     expect($interview->status)->toBe(InterviewStatus::Complete)
         ->and(Site::query()->find($site->id)->license_number)->toBe('PA-777')
         ->and(app(Provenance::class)->state($site->fresh(), 'license_number'))->toBe(ProvenanceState::Seeded);
+});
+
+it('the Business step captures the trade — the structure seed the old Owner Interview used to own', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+
+    Livewire::test(BusinessStep::class)
+        ->set('trade', 'Basement Waterproofing')
+        ->call('save');
+
+    $blueprint = SiloBlueprint::withoutGlobalScopes()->where('site_id', $site->id)->first();
+    expect($blueprint->trade)->toBe('Basement Waterproofing')
+        ->and($blueprint->seed['trade'])->toBe('Basement Waterproofing');
+
+    // With the seed present, the Plan step's engine-on-entry has what it needs (hasSeed passes).
+    expect(trim((string) ($blueprint->seed['trade'] ?? '')))->not->toBe('');
+
+    // The old Owner Interview is superseded: hidden once the new Setup menu is on.
+    config()->set('launchpad.new_setup_enabled', true);
+    expect(OwnerInterview::shouldRegisterNavigation())->toBeFalse();
+    config()->set('launchpad.new_setup_enabled', false);
+    expect(OwnerInterview::shouldRegisterNavigation())->toBeTrue();
 });
