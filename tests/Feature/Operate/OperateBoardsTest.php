@@ -10,7 +10,10 @@ use App\Enums\VoiceStatus;
 use App\Filament\Pages\Guided\Grow;
 use App\Filament\Pages\Live\LiveLocations;
 use App\Filament\Pages\Operate\OperateBlog;
+use App\Filament\Pages\Operate\OperateCorePages;
 use App\Filament\Pages\Operate\OperateDashboard;
+use App\Filament\Pages\Operate\OperateLocationPages;
+use App\Filament\Pages\Operate\OperateServicePages;
 use App\Jobs\GeneratePost;
 use App\Jobs\PublishContent;
 use App\Models\BlogTarget;
@@ -59,20 +62,22 @@ function opKeyword(Site $site, Silo $silo, string $query): Keyword
     ]);
 }
 
-it('flag off ⇒ nothing changes (Operate hidden, Grow/Live in their old homes); on ⇒ re-registered', function () {
+it('flag off ⇒ Operate hidden; on ⇒ Dashboard · Blog · the three pages boards (Grow/Live untouched)', function () {
     config()->set('launchpad.new_operate_enabled', false);
     expect(OperateDashboard::shouldRegisterNavigation())->toBeFalse()
         ->and(OperateBlog::shouldRegisterNavigation())->toBeFalse()
-        ->and(Grow::getNavigationGroup())->toBeNull()          // standalone, as before
-        ->and(LiveLocations::getNavigationGroup())->toBe('Live');
+        ->and(OperateCorePages::shouldRegisterNavigation())->toBeFalse();
 
     config()->set('launchpad.new_operate_enabled', true);
     expect(OperateDashboard::shouldRegisterNavigation())->toBeTrue()
         ->and(OperateBlog::getNavigationGroup())->toBe('Operate')
-        ->and(Grow::getNavigationGroup())->toBe('Operate')
-        ->and(Grow::getNavigationSort())->toBe(3)
-        ->and(LiveLocations::getNavigationGroup())->toBe('Operate')
-        ->and(LiveLocations::getNavigationSort())->toBe(4);    // after Dashboard/Blog/Grow
+        // The pages boards ARE the Operate page surfaces — Core / Service / Location, full lifecycle.
+        ->and(OperateCorePages::getNavigationGroup())->toBe('Operate')
+        ->and(OperateServicePages::getNavigationGroup())->toBe('Operate')
+        ->and(OperateLocationPages::getNavigationGroup())->toBe('Operate')
+        // Grow + the old Live boards stay exactly where they were, flag on or off.
+        ->and(Grow::getNavigationGroup())->toBeNull()
+        ->and(LiveLocations::getNavigationGroup())->toBe('Live');
 });
 
 it('the dashboard rolls up attention across tenants and hides clean ones', function () {
