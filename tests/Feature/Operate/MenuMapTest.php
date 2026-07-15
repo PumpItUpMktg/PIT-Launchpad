@@ -55,3 +55,12 @@ it('the Menu map page renders the breakdown with URLs and flag chips', function 
         ->assertSee('new operate')
         ->assertSee('hidden');
 });
+
+it('the old Live boards read as "Live Pages" and carry the operate family tag', function () {
+    $map = app(MenuMap::class)->build();
+    $live = collect($map['groups'])->firstWhere('group', 'Live Pages');
+
+    expect($live)->not->toBeNull()
+        ->and(collect($live['items'])->pluck('label')->all())->toBe(['Location pages', 'Service pages', 'Core pages'])
+        ->and(collect($live['items'])->pluck('tag')->unique()->all())->toBe(['operate']);
+});

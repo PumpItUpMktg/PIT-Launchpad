@@ -28,7 +28,17 @@ abstract class LiveBoardPage extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-chart-bar';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Live';
+    protected static string|\UnitEnum|null $navigationGroup = 'Live Pages';
+
+    /**
+     * The Menu-map family tag: these boards belong to the OPERATE world (superseded there by the
+     * Operate pages boards; retired at cutover). Any surface can declare a menuTag() — the Menu
+     * map picks it up generically and renders it as a chip.
+     */
+    public static function menuTag(): string
+    {
+        return 'operate';
+    }
 
     public ?string $siteId = null;
 

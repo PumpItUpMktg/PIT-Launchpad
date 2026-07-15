@@ -66,6 +66,7 @@
                         <span class="mm-chips">
                             @if ($item['flag'] === 'NEW_SETUP')<span class="mm-chip setup">new setup</span>@endif
                             @if ($item['flag'] === 'NEW_OPERATE')<span class="mm-chip operate">new operate</span>@endif
+                            @if ($item['tag'] ?? null)<span class="mm-chip operate">{{ $item['tag'] }}</span>@endif
                             @if ($item['hidden'])<span class="mm-chip hidden">hidden</span>@endif
                             <span class="mm-chip">{{ $item['kind'] }}</span>
                         </span>

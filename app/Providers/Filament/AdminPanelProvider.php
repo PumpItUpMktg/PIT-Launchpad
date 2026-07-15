@@ -37,7 +37,7 @@ class AdminPanelProvider extends PanelProvider
                 // launchpad.new_setup_enabled; empty (hidden) while the flag is off.
                 NavigationGroup::make('Setup'),
                 NavigationGroup::make('Local Blog'),
-                NavigationGroup::make('Live'),
+                NavigationGroup::make('Live Pages'),
                 NavigationGroup::make('Targeting'),
                 NavigationGroup::make('Settings'),
                 NavigationGroup::make('Advanced')->collapsed(),

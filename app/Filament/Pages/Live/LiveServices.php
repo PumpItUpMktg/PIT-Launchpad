@@ -8,7 +8,7 @@ use App\Guided\LiveBoards;
 /** LIVE · Services — published hub + spoke pages with their tracking blocks. */
 class LiveServices extends LiveBoardPage
 {
-    protected static ?string $navigationLabel = 'Services';
+    protected static ?string $navigationLabel = 'Service pages';
 
     protected static ?int $navigationSort = 2;
 

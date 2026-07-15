@@ -28,7 +28,7 @@ class MenuMap
         $entries = $this->withFlagsOn(fn (): array => $this->enumerate());
 
         // Group in the panel's configured order; unknown groups follow; Top level leads.
-        $configured = ['Top level', 'Operate', 'Setup', 'Local Blog', 'Live', 'Targeting', 'Settings', 'Advanced'];
+        $configured = ['Top level', 'Operate', 'Setup', 'Local Blog', 'Live Pages', 'Targeting', 'Settings', 'Advanced'];
         $byGroup = collect($entries)->groupBy('group');
         $order = collect($configured)
             ->concat($byGroup->keys()->reject(fn ($g) => in_array($g, $configured, true))->sort())
@@ -81,6 +81,8 @@ class MenuMap
                 'flag' => $registers ? $this->requiredFlag($class) : null,
                 'hidden' => ! $registers,
                 'kind' => str_contains($class, '\\Resources\\') ? 'resource' : 'page',
+                // Surfaces may self-declare a family tag (e.g. the old Live boards → 'operate').
+                'tag' => method_exists($class, 'menuTag') ? (string) $class::menuTag() : null,
             ];
         }
 
