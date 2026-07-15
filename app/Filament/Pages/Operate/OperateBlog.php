@@ -131,7 +131,10 @@ class OperateBlog extends OperatePage
         }
 
         GeneratePost::enqueue($content, actorId: Auth::id());
-        Notification::make()->success()->title("Drafting '{$content->title}' — it will land in Review.")->send();
+        Notification::make()->success()
+            ->title("Drafting '{$content->title}'")
+            ->body('Moved to the Review tab as a writing card — copy + image land there when the worker finishes.')
+            ->send();
     }
 
     /** Dismiss at triage — recorded as a rejection so the pipeline never resurfaces it. */

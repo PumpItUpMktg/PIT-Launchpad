@@ -5,6 +5,7 @@ use App\Enums\ConnectionProvider;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\KeywordSource;
+use App\Enums\RenderStatus;
 use App\Enums\UserRole;
 use App\Enums\VoiceStatus;
 use App\Filament\Pages\Guided\Grow;
@@ -27,8 +28,10 @@ use App\Models\User;
 use App\Models\VoiceProfile;
 use App\Operate\AttentionBoard;
 use App\Operate\BlogBoard;
+use App\Publishing\TenantStorage;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -263,4 +266,33 @@ it('the targets drawer lists the unconsumed queue and dismiss flips the status',
         ->call('dismissTarget', $target->id);
 
     expect($target->fresh()->status)->toBe(BlogTargetStatus::Dismissed);
+});
+
+it('promote moves the candidate to Review as a writing card; undrafted review items can generate; thumbs render', function () {
+    Queue::fake();
+    Storage::fake(TenantStorage::DISK);
+    $site = opSite();
+    session(['guided_site_id' => $site->id]);
+    $board = app(BlogBoard::class);
+
+    // Promote: the candidate leaves the Candidates tab and shows in Review as "writing".
+    $candidate = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Candidate, 'title' => 'Storm prep', 'body' => null]);
+    Livewire::test(OperateBlog::class)->call('promote', $candidate->id);
+    expect(collect($board->candidates($site->id))->pluck('id'))->not->toContain($candidate->id);
+    $writing = collect($board->review($site->id))->firstWhere('id', $candidate->id);
+    expect($writing['state'])->toBe('writing');
+
+    // A borderline candidate routed to review WITHOUT a draft offers Generate (the same path).
+    $undrafted = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::InReview, 'title' => 'Borderline story', 'body' => null]);
+    $card = collect($board->review($site->id))->firstWhere('id', $undrafted->id);
+    expect($card['state'])->toBe('undrafted')->and($card['has_draft'])->toBeFalse();
+    Livewire::test(OperateBlog::class)->call('promote', $undrafted->id);
+    Queue::assertPushed(GeneratePost::class, 2);
+
+    // A drafted card with a generate-time render shows its image thumbnail.
+    $drafted = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview, 'title' => 'Drafted piece', 'body' => 'Real copy.']);
+    $drafted->renderJobs()->create(['site_id' => $site->id, 'status' => RenderStatus::Succeeded, 'r2_key' => 'tenants/spg/posts/drafted.jpg']);
+    $withThumb = collect($board->review($site->id))->firstWhere('id', $drafted->id);
+    expect($withThumb['image'])->not->toBeNull()
+        ->and($withThumb['state'])->toBe('needs_review');
 });

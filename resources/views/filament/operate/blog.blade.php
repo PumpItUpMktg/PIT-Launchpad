@@ -108,23 +108,49 @@
             </div>
         @endif
 
-        {{-- ─── Review ─── --}}
+        {{-- ─── Review — drafting happens INTO this tab: promoted items appear as "writing"
+             cards immediately, land reviewable with copy + image, and failed drafts retry here. --}}
         @if ($tab === 'review')
-            <div class="ob-grid">
-                @forelse ($this->review as $d)
+            @php $reviewCards = $this->review; $writing = collect($reviewCards)->contains(fn ($c) => $c['state'] === 'writing'); @endphp
+            <div class="ob-grid" @if ($writing) wire:poll.visible.10s @endif>
+                @forelse ($reviewCards as $d)
                     <div class="ob-card" wire:key="obr-{{ $d['id'] }}">
                         <div class="ob-chips">
-                            <span class="ob-chip {{ in_array($d['status'], ['render_failed', 'publish_failed'], true) ? 'danger' : '' }}">{{ str_replace('_', ' ', $d['status']) }}</span>
+                            @if ($d['state'] === 'writing')
+                                <span class="ob-chip" style="background:rgba(79,70,229,.12);color:#6366f1">✍ writing now…</span>
+                            @elseif ($d['state'] === 'draft_failed')
+                                <span class="ob-chip danger">draft failed</span>
+                            @elseif ($d['state'] === 'undrafted')
+                                <span class="ob-chip warn">no draft yet</span>
+                            @else
+                                <span class="ob-chip {{ in_array($d['status'], ['render_failed', 'publish_failed'], true) ? 'danger' : '' }}">{{ str_replace('_', ' ', $d['status']) }}</span>
+                            @endif
                             <span class="ob-chip kw">{{ $d['keyword'] ?? 'reactive' }}</span>
                             @if ($d['silo'])<span class="ob-chip">{{ $d['silo'] }}</span>@endif
                             @if (! $siteFilter && $d['tenant'])<span class="ob-chip warn">{{ $d['tenant'] }}</span>@endif
                         </div>
+                        @if ($d['image'])
+                            <img src="{{ $d['image'] }}" alt="" style="width:100%;height:120px;object-fit:cover;border-radius:8px">
+                        @endif
                         <h3>{{ $d['title'] }}</h3>
-                        <div class="ob-excerpt">{{ $d['excerpt'] !== '' ? $d['excerpt'] : 'No body yet.' }}</div>
+                        @if ($d['state'] === 'writing')
+                            <div class="ob-muted">Copy + image are being generated on the worker — this card updates itself.</div>
+                        @elseif ($d['state'] === 'draft_failed')
+                            <div class="ob-muted" style="color:#dc2626">{{ $d['draft_error'] ?: 'The draft attempt failed.' }}</div>
+                        @else
+                            <div class="ob-excerpt">{{ $d['excerpt'] !== '' ? $d['excerpt'] : 'No body yet — generate the draft to review it.' }}</div>
+                        @endif
                         <div class="ob-actions">
-                            <button class="ob-btn primary" wire:click="approve('{{ $d['id'] }}')">Approve</button>
-                            <a class="ob-btn" href="{{ $this->editUrl($d['id']) }}" wire:navigate>Edit</a>
-                            <button class="ob-btn danger" wire:click="startReject('{{ $d['id'] }}')">Reject</button>
+                            @if ($d['state'] === 'writing')
+                                {{-- in flight — never interrupt a running job --}}
+                            @elseif (! $d['has_draft'])
+                                <button class="ob-btn primary" wire:click="promote('{{ $d['id'] }}')">{{ $d['state'] === 'draft_failed' ? 'Retry draft' : 'Generate draft' }}</button>
+                                <button class="ob-btn danger" wire:click="startReject('{{ $d['id'] }}')">Reject</button>
+                            @else
+                                <button class="ob-btn primary" wire:click="approve('{{ $d['id'] }}')">Approve</button>
+                                <a class="ob-btn" href="{{ $this->editUrl($d['id']) }}" wire:navigate>Edit</a>
+                                <button class="ob-btn danger" wire:click="startReject('{{ $d['id'] }}')">Reject</button>
+                            @endif
                         </div>
                         @if ($rejecting === $d['id'])
                             <div class="ob-reject">
