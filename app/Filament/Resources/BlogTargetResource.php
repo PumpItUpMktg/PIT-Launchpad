@@ -30,6 +30,18 @@ class BlogTargetResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Local Blog';
 
+    /** Superseded by Operate → Blog: hidden once the new Operate menu is on (flag off ⇒ unchanged). */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return ! config('launchpad.new_operate_enabled');
+    }
+
+    /** Menu-map family tag: duplicated by the Operate Blog surface; retired at cutover. */
+    public static function menuTag(): string
+    {
+        return 'operate';
+    }
+
     protected static ?int $navigationSort = 4;
 
     public static function table(Table $table): Table

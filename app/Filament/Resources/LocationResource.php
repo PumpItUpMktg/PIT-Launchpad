@@ -50,6 +50,12 @@ class LocationResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
+    /** Menu-map family tag: setup-world editor (deep-linked from the new Setup steps). */
+    public static function menuTag(): string
+    {
+        return 'setup';
+    }
+
     // Consolidated: the single Locations surface is now the LocationsSetup page (one menu
     // item — where you are + how far you serve, auto-geocoded). This resource stays for
     // the §7 new-site wizard's form components but is no longer its own menu item.

@@ -49,6 +49,18 @@ class ContentReviewResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Local Blog';
 
+    /** Superseded by Operate → Blog: hidden once the new Operate menu is on (flag off ⇒ unchanged). */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return ! config('launchpad.new_operate_enabled');
+    }
+
+    /** Menu-map family tag: duplicated by the Operate Blog surface; retired at cutover. */
+    public static function menuTag(): string
+    {
+        return 'operate';
+    }
+
     protected static ?int $navigationSort = 2;
 
     protected static ?string $modelLabel = 'draft';

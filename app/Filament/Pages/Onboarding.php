@@ -34,6 +34,12 @@ class Onboarding extends Page
 
     protected static ?string $navigationLabel = 'Onboarding';
 
+    /** Menu-map family tag: not yet placed in the new Setup/Operate structure — cutover decision pending. */
+    public static function menuTag(): string
+    {
+        return 'unaddressed';
+    }
+
     protected string $view = 'filament.pages.onboarding';
 
     /**

@@ -40,6 +40,12 @@ class OwnerInterview extends Page
 
     protected static ?int $navigationSort = 2;
 
+    /** Menu-map family tag: not yet placed in the new Setup/Operate structure — cutover decision pending. */
+    public static function menuTag(): string
+    {
+        return 'unaddressed';
+    }
+
     protected string $view = 'filament.pages.owner-interview';
 
     public ?string $siteId = null;

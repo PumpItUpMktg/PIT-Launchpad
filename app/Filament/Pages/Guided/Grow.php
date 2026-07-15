@@ -49,6 +49,12 @@ class Grow extends GuidedPage
 
     protected static ?string $navigationLabel = 'Grow';
 
+    /** Menu-map family tag: operate-world workbench (partially covered by the Operate pages boards). */
+    public static function menuTag(): string
+    {
+        return 'operate';
+    }
+
     protected string $view = 'filament.guided.grow';
 
     /**

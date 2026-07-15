@@ -1,7 +1,11 @@
 <?php
 
 use App\Enums\UserRole;
+use App\Filament\Pages\Live\LiveLocations;
 use App\Filament\Pages\MenuMapPage;
+use App\Filament\Resources\BlogTargetResource;
+use App\Filament\Resources\CandidateResource;
+use App\Filament\Resources\ContentReviewResource;
 use App\Models\User;
 use App\Support\MenuMap;
 use Filament\Facades\Filament;
@@ -63,4 +67,34 @@ it('the old Live boards read as "Live Pages" and carry the operate family tag', 
     expect($live)->not->toBeNull()
         ->and(collect($live['items'])->pluck('label')->all())->toBe(['Location pages', 'Service pages', 'Core pages'])
         ->and(collect($live['items'])->pluck('tag')->unique()->all())->toBe(['operate']);
+});
+
+it('duplicated legacy links hide once Operate is on; unaddressed items are tagged for the cutover decision', function () {
+    // Enumeration forces the flags on — the Local Blog trio (duplicated by Operate → Blog) and
+    // the Live Pages trio (duplicated by the Operate pages boards) read hidden + operate-tagged.
+    $map = app(MenuMap::class)->build();
+    $all = collect($map['groups'])->flatMap(fn ($g) => $g['items']);
+
+    $localBlog = collect($map['groups'])->firstWhere('group', 'Local Blog');
+    expect(collect($localBlog['items'])->pluck('hidden')->unique()->all())->toBe([true])
+        ->and(collect($localBlog['items'])->pluck('tag')->unique()->all())->toBe(['operate']);
+
+    $livePages = collect($map['groups'])->firstWhere('group', 'Live Pages');
+    expect(collect($livePages['items'])->pluck('hidden')->unique()->all())->toBe([true]);
+
+    // Not-yet-placed surfaces carry the unaddressed tag (prune, silo interview, edit signal, …).
+    $unaddressed = $all->where('tag', 'unaddressed')->pluck('label');
+    expect($unaddressed)->toContain('Prune', 'Owner Interview', 'Edit signal', 'Silos & keywords', 'Onboarding');
+
+    // FLAG OFF ⇒ the old menu is intact: the trio still registers (the parallel-build promise).
+    config()->set('launchpad.new_operate_enabled', false);
+    expect(ContentReviewResource::shouldRegisterNavigation())->toBeTrue()
+        ->and(LiveLocations::shouldRegisterNavigation())->toBeTrue();
+
+    // FLAG ON ⇒ the duplicates leave the sidebar.
+    config()->set('launchpad.new_operate_enabled', true);
+    expect(ContentReviewResource::shouldRegisterNavigation())->toBeFalse()
+        ->and(CandidateResource::shouldRegisterNavigation())->toBeFalse()
+        ->and(BlogTargetResource::shouldRegisterNavigation())->toBeFalse()
+        ->and(LiveLocations::shouldRegisterNavigation())->toBeFalse();
 });

@@ -22,6 +22,12 @@ class SetupHome extends Page
 
     protected static ?string $slug = 'setup';
 
+    /** Menu-map family tag: setup-world flow (the Website-plan/approve step still lives only here). */
+    public static function menuTag(): string
+    {
+        return 'setup';
+    }
+
     protected string $view = 'filament.pages.setup-home';
 
     public function mount(): void

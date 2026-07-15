@@ -30,6 +30,12 @@ class Targeting extends Page
 
     protected static ?string $slug = 'targeting';
 
+    /** Menu-map family tag: not yet placed in the new Setup/Operate structure — cutover decision pending. */
+    public static function menuTag(): string
+    {
+        return 'unaddressed';
+    }
+
     protected string $view = 'filament.pages.targeting';
 
     public ?string $siteId = null;
