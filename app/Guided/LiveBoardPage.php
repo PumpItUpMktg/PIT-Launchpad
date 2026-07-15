@@ -30,6 +30,12 @@ abstract class LiveBoardPage extends Page
 
     protected static string|\UnitEnum|null $navigationGroup = 'Live Pages';
 
+    /** Superseded by the Operate pages boards: hidden once the new Operate menu is on. */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return ! config('launchpad.new_operate_enabled');
+    }
+
     /**
      * The Menu-map family tag: these boards belong to the OPERATE world (superseded there by the
      * Operate pages boards; retired at cutover). Any surface can declare a menuTag() — the Menu

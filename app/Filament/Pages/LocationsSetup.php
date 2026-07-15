@@ -25,6 +25,12 @@ class LocationsSetup extends Page
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
+    /** Menu-map family tag: setup-world editor (deep-linked from the new Setup steps). */
+    public static function menuTag(): string
+    {
+        return 'setup';
+    }
+
     protected static ?int $navigationSort = 3;
 
     protected string $view = 'filament.pages.locations-setup';

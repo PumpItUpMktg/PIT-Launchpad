@@ -43,6 +43,12 @@ class ServiceResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
+    /** Menu-map family tag: setup-world editor (deep-linked from the new Setup steps). */
+    public static function menuTag(): string
+    {
+        return 'setup';
+    }
+
     protected static ?int $navigationSort = 1;
 
     public static function table(Table $table): Table
