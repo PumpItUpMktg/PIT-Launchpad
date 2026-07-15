@@ -28,7 +28,7 @@ it('enumerates the FULL inventory — old menu, both flag-gated groups, and hidd
     expect($groups)->toHaveKeys(['Setup', 'Operate', 'Settings', 'Advanced', 'Top level']);
 
     $setupLabels = collect($groups['Setup']['items'])->pluck('label');
-    expect($setupLabels)->toContain('Business', 'Interview', 'Locations', 'Services', 'Voice')
+    expect($setupLabels)->toContain('Business', 'Interview', 'Locations', 'Services', 'Voice', 'Silos & keywords')
         ->and(collect($groups['Setup']['items'])->pluck('flag')->unique()->all())->toBe(['NEW_SETUP']);
 
     $operateLabels = collect($groups['Operate']['items'])->pluck('label');
@@ -82,15 +82,20 @@ it('duplicated legacy links hide once Operate is on; unaddressed items are tagge
     $livePages = collect($map['groups'])->firstWhere('group', 'Live Pages');
     expect(collect($livePages['items'])->pluck('hidden')->unique()->all())->toBe([true]);
 
-    // Not-yet-placed surfaces carry the unaddressed tag (prune, silo interview, edit signal, …).
+    // Not-yet-placed surfaces carry the unaddressed tag (edit signal, legacy onboarding).
     $unaddressed = $all->where('tag', 'unaddressed')->pluck('label');
-    expect($unaddressed)->toContain('Prune', 'Edit signal', 'Silos & keywords', 'Onboarding');
+    expect($unaddressed)->toContain('Edit signal', 'Onboarding')
+        ->and($unaddressed)->not->toContain('Prune', 'Silos & keywords');
 
     // The old Owner Interview is now SUPERSEDED by the gathering interview + the Business trade
-    // field — setup-tagged and hidden once the new Setup menu is on.
-    $ownerInterview = $all->firstWhere('label', 'Owner Interview');
-    expect($ownerInterview['tag'])->toBe('setup')
-        ->and($ownerInterview['hidden'])->toBeTrue();
+    // field — setup-tagged and hidden once the new Setup menu is on. Same for the structure
+    // surfaces: Silos & keywords is Setup step 7 (the generate phase) and Prune is a mode
+    // inside it, so both legacy items are setup-tagged and hidden.
+    foreach (['Owner Interview', 'Silos & keywords', 'Prune'] as $superseded) {
+        $item = $all->firstWhere(fn ($i) => $i['label'] === $superseded && $i['hidden'] === true);
+        expect($item)->not->toBeNull()
+            ->and($item['tag'])->toBe('setup');
+    }
 
     // FLAG OFF ⇒ the old menu is intact: the trio still registers (the parallel-build promise).
     config()->set('launchpad.new_operate_enabled', false);
