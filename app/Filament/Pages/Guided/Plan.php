@@ -2,11 +2,9 @@
 
 namespace App\Filament\Pages\Guided;
 
-use App\Build\BuildManifestAssembler;
+use App\Build\ApproveAndBuild;
 use App\Build\InventoryPlan;
-use App\Build\PageMaterializer;
 use App\Enums\SetupStep;
-use App\Enums\SiteStatus;
 use App\Enums\StandardPageType;
 use App\Filament\Pages\SiloPrune;
 use App\Guided\GuidedPage;
@@ -15,7 +13,6 @@ use App\Interview\Arrange\FlagResolver;
 use App\Interview\Prune\PruneEngine;
 use App\Interview\Prune\PruneRow;
 use App\Jobs\BuildStructure;
-use App\Jobs\SyncSiloCategories;
 use App\Locations\LocalRelevance;
 use App\Models\ArrangementFlag;
 use App\Models\Scopes\SiteScope;
@@ -293,43 +290,10 @@ class Plan extends GuidedPage
             return;
         }
 
-        // Finalize the structure when it hasn't been committed yet (the old Structure step's
-        // Finalize, now implicit in Approve): empty decision-set = keep everything as arranged,
-        // the stated-service floor. Idempotent — already-routed spokes are left untouched.
-        if (! $state->structure_finalized) {
-            app(PruneEngine::class)->finalize($site, []);
-        }
-
-        $state->update([
-            'structure_finalized' => true,
-            'inventory_reviewed' => true,
-            'localize' => $this->localize,
-            'town_page_pace' => max(1, $this->townPagePace),
-            'fresh_content' => $this->freshContent,
-        ]);
-
-        // Cheap + instant: assemble the manifest, then materialize it into planned page rows. No AI,
-        // no generation — pages are built one at a time, on demand, from the pages list (Grow).
-        app(BuildManifestAssembler::class)->assemble($site);
-        app(PageMaterializer::class)->materialize($site);
-
-        // Taxonomy is locked here — project the silo tree into WP categories now (queued, so approve
-        // stays network-free) so they exist before the news engine publishes a post into them.
-        // Idempotent; no-op until a WP connection is wired; the go-live launch re-pushes as a backstop.
-        SyncSiloCategories::enqueue($site);
-
-        // The wizard-completion handoff fires HERE, on materialize-complete: approve the wizard,
-        // mark launched, advance to Grow, and flip the site Onboarding → Active (the only two site
-        // states). The overview then routes this site to Grow instead of resuming the wizard.
-        $state->update([
-            'approved' => true,
-            'launched' => true,
-            'build_status' => 'live',
-            'current_step' => SetupStep::Grow->value,
-        ]);
-        if ($site->status === SiteStatus::Onboarding) {
-            $site->update(['status' => SiteStatus::Active]);
-        }
+        // The whole finalize → config → manifest → materialize → category-sync → wizard-complete
+        // sequence lives in the shared {@see ApproveAndBuild} core (also run by the new Setup's
+        // Launch step), so both surfaces launch identically.
+        app(ApproveAndBuild::class)->approve($site, $this->localize, $this->townPagePace, $this->freshContent);
 
         Notification::make()->title('Plan approved — your pages are ready.')->success()->send();
         $this->redirect(SetupStep::Grow->pageClass()::getUrl());
