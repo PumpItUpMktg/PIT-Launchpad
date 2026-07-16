@@ -87,6 +87,8 @@
         </div>
     @endif
     <div class="lv-actions">
+        {{-- The per-page QA drill-down: correct copy in place, replace images, WP preview. --}}
+        <a class="lv-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $card['id']]) }}" wire:navigate>Review</a>
         <button type="button" class="lv-btn primary" wire:click="repush('{{ $card['id'] }}')">Repush</button>
         <button type="button" class="lv-btn" wire:click="regenerate('{{ $card['id'] }}')">Regenerate</button>
         <button type="button" class="lv-btn danger" wire:click="takeDown('{{ $card['id'] }}')" wire:confirm="Remove this page from WordPress? It stays in your plan and can be republished on the same URL.">Take down</button>

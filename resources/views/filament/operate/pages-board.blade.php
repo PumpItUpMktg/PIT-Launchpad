@@ -53,6 +53,8 @@
                                     <button class="lv-btn primary" wire:click="approve('{{ $row['id'] }}')">Approve</button>
                                 @elseif ($action === 'publish')
                                     <button class="lv-btn primary" wire:click="publish('{{ $row['id'] }}')">Publish</button>
+                                @elseif ($action === 'review')
+                                    <a class="lv-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $row['id']]) }}" wire:navigate>Review</a>
                                 @elseif ($action === 'view' && $row['live_url'])
                                     <a class="lv-btn" href="{{ $row['live_url'] }}" target="_blank" rel="noopener">View</a>
                                 @endif

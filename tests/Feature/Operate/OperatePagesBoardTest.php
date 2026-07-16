@@ -70,10 +70,15 @@ it('the boards render and the work-lane primary drives the existing paths (appro
     $draft = pbPage($site, PageType::Utility, ContentStatus::NeedsReview, 'About Us');
     pbPage($site, PageType::Home, ContentStatus::Published, 'Homepage');
 
+    $homepage = Content::query()->where('title', 'Homepage')->first();
     $page = Livewire::test(OperateCorePages::class)
         ->assertOk()
         ->assertSee('About Us')      // work lane
         ->assertSee('Homepage')      // live lane
+        // The per-page QA drill-down (Proof Editor) is linked from BOTH lanes — a ready-to-review
+        // draft and a live card each carry Review, so the editor isn't stranded behind old Grow.
+        ->assertSeeHtml('proof?content='.$draft->id)
+        ->assertSeeHtml('proof?content='.$homepage->id)
         ->call('approve', $draft->id);
 
     expect($draft->fresh()->status)->toBe(ContentStatus::Approved);

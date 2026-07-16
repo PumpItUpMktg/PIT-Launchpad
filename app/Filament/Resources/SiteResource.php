@@ -9,6 +9,7 @@ use App\Console\Commands\DeleteSiteCommand;
 use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
+use App\Filament\Pages\SiteCockpit;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
 use App\Integrations\Wordpress\WordpressException;
@@ -126,6 +127,7 @@ class SiteResource extends Resource
             ->recordActions([
                 ActionGroup::make([
                     self::queueAction(),
+                    self::cockpitAction(),
                     self::brandAction(),
                     self::narrativeAction(),
                     self::launchAction(),
@@ -779,6 +781,15 @@ class SiteResource extends Resource
             ->label('Review queue')
             ->icon('heroicon-o-inbox-stack')
             ->url(fn (): string => ContentReviewResource::getUrl('index'));
+    }
+
+    /** The per-site pipeline drill-down (funnel, per-silo volume, failure counts) — re-linked here after the card redesign orphaned it. */
+    private static function cockpitAction(): Action
+    {
+        return Action::make('cockpit')
+            ->label('Pipeline cockpit')
+            ->icon('heroicon-o-chart-bar')
+            ->url(fn (Site $record): string => SiteCockpit::getUrl(['site' => $record->id]));
     }
 
     /**
