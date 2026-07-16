@@ -1,8 +1,13 @@
 <?php
 
+use App\Build\PlanSync;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Enums\SpokeGranularity;
+use App\Enums\SpokePageType;
+use App\Enums\SpokeStatus;
+use App\Enums\SpokeTag;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperateCorePages;
 use App\Filament\Pages\Operate\OperateLocationPages;
@@ -10,7 +15,9 @@ use App\Filament\Pages\Operate\OperateServicePages;
 use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\Location;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
+use App\Models\Spoke;
 use App\Models\User;
 use App\Operate\PagesBoard;
 use Filament\Facades\Filament;
@@ -99,6 +106,39 @@ it('a live card takes down back to the work lane of the SAME board (state-driven
     expect($live->fresh()->status)->toBe(ContentStatus::Approved)
         ->and(collect($board['work'])->pluck('title')->all())->toContain('Sump Pump Installation')
         ->and($board['live'])->toBe([]);
+});
+
+it('Sync plan picks up a month-3 source record as a new not-generated row with a Generate action', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+    $spoke = fn (string $name) => Spoke::factory()->create([
+        'site_id' => $site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Pumps', 'name' => $name,
+        'is_pillar' => false, 'status' => SpokeStatus::Offered,
+        'granularity' => SpokeGranularity::OwnPage,
+        'tag' => SpokeTag::Core, 'page_type' => SpokePageType::Service,
+    ]);
+
+    // Initial plan: one offered service page, materialized.
+    $spoke('Sump Pump Repair');
+    app(PlanSync::class)->sync($site);
+    expect(collect(app(PagesBoard::class)->services($site)['work'])->pluck('title')->all())->toBe(['Sump Pump Repair']);
+
+    // Month 3: a new service line lands in the structure — the board is where it gets picked up.
+    $spoke('Battery Backup Installation');
+    $page = Livewire::test(OperateServicePages::class)
+        ->assertSee('Sync plan')
+        ->call('syncPlan')
+        ->assertNotified();
+
+    $work = collect(app(PagesBoard::class)->services($site->fresh())['work']);
+    $new = $work->firstWhere('title', 'Battery Backup Installation');
+    expect($new)->not->toBeNull()
+        ->and($new['actions'])->toContain('generate'); // not generated yet → Generate is the primary
+
+    // Idempotent: a second sync adds nothing and never duplicates.
+    app(PlanSync::class)->sync($site);
+    expect(collect(app(PagesBoard::class)->services($site->fresh())['work'])->pluck('title')->filter(fn ($t) => $t === 'Battery Backup Installation'))->toHaveCount(1);
 });
 
 it('the locations board keeps the orphan-assignment controls (parent pin only)', function () {
