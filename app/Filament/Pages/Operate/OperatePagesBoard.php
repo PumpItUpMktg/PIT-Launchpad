@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Operate;
 
+use App\Build\PlanSync;
 use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
@@ -49,6 +50,27 @@ abstract class OperatePagesBoard extends OperatePage
             session(['guided_site_id' => $site->id]);
             $this->siteId = $site->id;
         }
+    }
+
+    /**
+     * The month-3 path: a client adds a service line or a location mid-contract — Sync plan
+     * reconciles the manifest with the current source records and the new pages appear in the
+     * work lane as "not generated" with a Generate action. Idempotent (existing pages untouched).
+     */
+    public function syncPlan(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $added = app(PlanSync::class)->sync($site);
+
+        Notification::make()
+            ->{$added > 0 ? 'success' : 'info'}()
+            ->title($added > 0 ? "{$added} new page(s) added to the plan" : 'Plan already up to date')
+            ->body($added > 0 ? 'They appear in the work lane below, ready to Generate.' : 'Every service, location, and standard page already has a planned row.')
+            ->send();
     }
 
     /** Switch the working site (session-persisted, shared with Grow/Live/Blog). */

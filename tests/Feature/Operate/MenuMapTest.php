@@ -32,7 +32,7 @@ it('enumerates the FULL inventory — old menu, both flag-gated groups, and hidd
         ->and(collect($groups['Setup']['items'])->pluck('flag')->unique()->all())->toBe(['NEW_SETUP']);
 
     $operateLabels = collect($groups['Operate']['items'])->pluck('label');
-    expect($operateLabels)->toContain('Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Physical locations');
+    expect($operateLabels)->toContain('Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations');
 
     // Hidden-but-routable surfaces are inventoried too, marked hidden.
     $all = collect($map['groups'])->flatMap(fn ($g) => $g['items']);
@@ -55,7 +55,7 @@ it('the Menu map page renders the breakdown with URLs and flag chips', function 
         ->assertSee('surfaces total')
         ->assertSee('Operate')
         ->assertSee('Setup')
-        ->assertSee('Physical locations')
+        ->assertSee('Location pages')
         ->assertSee('new operate')
         ->assertSee('hidden');
 });

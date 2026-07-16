@@ -32,7 +32,13 @@
         @endphp
 
         {{-- ─── Work lane ─── --}}
-        <div class="pb-band">In progress · {{ count($work) }}</div>
+        <div class="pb-band">In progress · {{ count($work) }}
+            <button type="button" class="lv-btn" style="margin-left:10px" wire:click="syncPlan" wire:loading.attr="disabled" wire:target="syncPlan"
+                title="Added a service or location since launch? Sync picks it up as a new planned page.">
+                <span wire:loading.remove wire:target="syncPlan">↻ Sync plan</span>
+                <span wire:loading wire:target="syncPlan">Syncing…</span>
+            </button>
+        </div>
         @if ($work === [])
             <div class="lv-empty">Nothing in progress — everything in this family is live (or not planned yet).</div>
         @else

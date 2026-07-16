@@ -39,7 +39,7 @@
 
         <div class="pl-head">
             <div>
-                <p class="pl-sub">Every physical location and the area it serves — from the computed service area. Overlap between locations is flagged per town (goal: zero). Soft rule, not a wall: a location should serve the county it sits in and that county's towns. Edit territory in <a href="{{ $this->serviceAreaUrl() }}" wire:navigate>Service area</a>.</p>
+                <p class="pl-sub">Every location and the area it serves — the dispatch points the engine builds from. Overlap between locations is flagged per town (goal: zero). Soft rule, not a wall: a location should serve the county it sits in and that county's towns. <a href="{{ $this->serviceAreaUrl() }}" wire:navigate>Edit territory</a> · <a href="{{ $this->addLocationUrl() }}" wire:navigate>Add a location (GBP import)</a>.</p>
             </div>
             <select class="pl-select" wire:change="setSite($event.target.value)">
                 @foreach ($this->siteOptions as $id => $label)
@@ -106,7 +106,7 @@
                                     @foreach ($card['overlaps'] as $overlap)
                                         {{ $overlap['town'] }} (also {{ implode(', ', $overlap['with']) }})@if (! $loop->last) · @endif
                                     @endforeach
-                                    <div style="margin-top:4px"><a class="pl-link" href="{{ $this->serviceAreaUrl() }}" wire:navigate>Resolve in Service area →</a></div>
+                                    <div style="margin-top:4px"><a class="pl-link" href="{{ $this->serviceAreaUrl() }}" wire:navigate>Resolve in the territory workspace →</a></div>
                                 </div>
                             @endif
 

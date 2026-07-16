@@ -2,7 +2,8 @@
 
 namespace App\Filament\Pages\Operate;
 
-use App\Filament\Pages\LocationsSetup;
+use App\Filament\Pages\Gathering\BusinessStep;
+use App\Filament\Pages\Gathering\LocationsStep;
 use App\Models\Site;
 use App\Operate\PhysicalLocations;
 
@@ -20,7 +21,7 @@ class OperatePhysicalLocations extends OperatePage
 {
     protected static ?string $slug = 'operate/locations';
 
-    protected static ?string $navigationLabel = 'Physical locations';
+    protected static ?string $navigationLabel = 'Locations';
 
     protected static ?int $navigationSort = 6;
 
@@ -77,6 +78,14 @@ class OperatePhysicalLocations extends OperatePage
     /** Territory is edited in the Service area workspace — deep link per card. */
     public function serviceAreaUrl(): string
     {
-        return LocationsSetup::getUrl();
+        // Territory edits happen on the new Setup's Locations step (same Location rows,
+        // same shared coverage workspace) — not the retiring Settings page.
+        return LocationsStep::getUrl();
+    }
+
+    /** Where a NEW dispatch point is added mid-contract — the Business step's GBP import. */
+    public function addLocationUrl(): string
+    {
+        return BusinessStep::getUrl();
     }
 }

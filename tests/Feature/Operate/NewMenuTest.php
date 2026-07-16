@@ -36,7 +36,7 @@ it('the final menu carries ONLY the newly designed surfaces, in cutover order', 
 
     // Operate: the six boards.
     expect(collect($groups['Operate']['items'])->pluck('label')->all())
-        ->toBe(['Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Physical locations']);
+        ->toBe(['Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations']);
 
     // No legacy label leaks into the final menu.
     $menuLabels = collect($m['menu'])->flatMap(fn ($g) => collect($g['items'])->pluck('label'));
