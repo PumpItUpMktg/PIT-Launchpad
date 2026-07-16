@@ -7,7 +7,27 @@
             <div class="g-row">
                 <input class="g-input" style="max-width:360px" type="text" placeholder="e.g. French Drain Installation" wire:model="newService" wire:keydown.enter="addService">
                 <button class="g-btn primary" wire:click="addService">Add</button>
+                <button class="g-btn" wire:click="suggest" wire:loading.attr="disabled" wire:target="suggest"
+                    title="Services a {{ $this->trade !== '' ? $this->trade : 'business in your trade' }} commonly also offers — advisory, from the trade on the Business step.">
+                    <span wire:loading.remove wire:target="suggest">✨ Suggest from trade</span>
+                    <span wire:loading wire:target="suggest">Thinking…</span>
+                </button>
             </div>
+            @if ($suggestions !== [])
+                <div class="g-hint" style="margin-top:2px">Commonly also offered by a {{ $this->trade }} business — add what applies, dismiss the rest:</div>
+                <div class="g-list">
+                    @foreach ($suggestions as $i => $s)
+                        <div class="g-item" wire:key="sug-{{ $i }}-{{ \Illuminate\Support\Str::slug($s['name']) }}">
+                            <strong>{{ $s['name'] }}</strong>
+                            <span class="g-muted">{{ $s['why'] }}</span>
+                            <span class="g-row" style="margin-left:auto">
+                                <button class="g-btn primary" wire:click="addSuggestion({{ $i }})">Add</button>
+                                <button class="g-btn" wire:click="dismissSuggestion({{ $i }})">Dismiss</button>
+                            </span>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
         </div>
 
         <div class="g-card">

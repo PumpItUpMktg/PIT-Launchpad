@@ -14,6 +14,7 @@ use App\Filament\Pages\OwnerInterview;
 use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
 use App\Gathering\Provenance;
+use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Places\PlaceCandidate;
 use App\Integrations\Places\PlaceDetails;
 use App\Integrations\Places\PlacesProvider;
@@ -22,6 +23,7 @@ use App\Locations\ServedTowns;
 use App\Models\CoverageArea;
 use App\Models\Interview;
 use App\Models\Location;
+use App\Models\Service;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\User;
@@ -269,4 +271,44 @@ it('the Business step captures the trade — the structure seed the old Owner In
     expect(OwnerInterview::shouldRegisterNavigation())->toBeFalse();
     config()->set('launchpad.new_setup_enabled', false);
     expect(OwnerInterview::shouldRegisterNavigation())->toBeTrue();
+});
+
+it('the Services step suggests from the captured trade — the guided suggester, ported', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    SiloBlueprint::factory()->create(['site_id' => $site->id, 'trade' => 'basement waterproofing', 'seed' => ['trade' => 'basement waterproofing']]);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Repair']);
+
+    app()->instance(ClaudeClient::class, new FakeClaudeClient((string) json_encode([
+        ['name' => 'French Drain Installation', 'why' => 'usually paired with sump work'],
+        ['name' => 'Crawl Space Encapsulation', 'why' => 'same crews, same customers'],
+    ])));
+
+    $page = Livewire::test(ServicesStep::class)
+        ->assertSee('Suggest from trade')
+        ->call('suggest');
+    expect($page->get('suggestions'))->toHaveCount(2);
+
+    // Add one: it becomes a stated service and its provenance lands on the seed.
+    $page->call('addSuggestion', 0);
+    expect(Service::withoutGlobalScopes()->where('site_id', $site->id)->pluck('name')->all())
+        ->toContain('French Drain Installation')
+        ->and(SiloBlueprint::withoutGlobalScopes()->where('site_id', $site->id)->first()->seed['suggested_confirmed'])
+        ->toBe(['French Drain Installation'])
+        ->and($page->get('suggestions'))->toHaveCount(1);
+
+    // Dismiss clears the rest without creating anything.
+    $page->call('dismissSuggestion', 0);
+    expect($page->get('suggestions'))->toBe([])
+        ->and(Service::withoutGlobalScopes()->where('site_id', $site->id)->count())->toBe(2);
+});
+
+it('suggesting without a trade is a guarded no-op pointing at the Business step', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+
+    Livewire::test(ServicesStep::class)
+        ->call('suggest')
+        ->assertNotified()
+        ->assertSet('suggestions', []);
 });
