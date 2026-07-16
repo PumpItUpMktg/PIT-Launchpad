@@ -312,3 +312,62 @@ it('suggesting without a trade is a guarded no-op pointing at the Business step'
         ->assertNotified()
         ->assertSet('suggestions', []);
 });
+
+it('AI fill drafts ONLY the empty enrichment fields as seeded — manual entry is never overwritten', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    SiloBlueprint::factory()->create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+    // The operator already typed a short description by hand — that field must survive untouched.
+    $service = Service::factory()->create([
+        'site_id' => $site->id, 'name' => 'French Drain Installation',
+        'short_description' => 'Hand-written by the owner.', 'symptoms' => null, 'scope_items' => [],
+    ]);
+
+    app()->instance(ClaudeClient::class, new FakeClaudeClient((string) json_encode([
+        'short_description' => 'AI would overwrite this — it must be ignored.',
+        'symptoms' => ['Water at the base of the walls', 'Musty smell after rain'],
+        'scope_items' => ['Perimeter trenching', 'Drain tile install'],
+        'process_steps' => ['Inspect', 'Trench', 'Install', 'Restore'],
+        'cost_factors' => ['Linear footage', 'Slab access'],
+    ])));
+
+    Livewire::test(ServicesStep::class)
+        ->assertSee('AI fill')
+        ->call('aiEnrich', $service->id)
+        ->assertNotified();
+
+    $service->refresh();
+    $provenance = app(Provenance::class);
+    expect($service->short_description)->toBe('Hand-written by the owner.') // blanks only
+        ->and($service->symptoms)->toBe(['Water at the base of the walls', 'Musty smell after rain'])
+        ->and($service->process_steps)->toBe(['Inspect', 'Trench', 'Install', 'Restore'])
+        ->and($provenance->state($service, 'symptoms'))->toBe(ProvenanceState::Seeded)
+        ->and($provenance->state($service, 'short_description'))->toBeNull(); // untouched → rowless
+
+    // Review-and-save on the Enrich form confirms the seeded fields (the step's existing
+    // contract): the modal mounts pre-filled from the record; saving flips seeded → confirmed.
+    Livewire::test(ServicesStep::class)
+        ->callAction('enrich', ['name' => $service->name, 'short_description' => (string) $service->short_description], ['service' => $service->id])
+        ->assertHasNoActionErrors();
+    expect($provenance->state($service->fresh(), 'symptoms'))->toBe(ProvenanceState::Confirmed);
+});
+
+it('a failed AI fill writes nothing; a fully-enriched service is a polite no-op', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $bare = Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pumps', 'symptoms' => null, 'short_description' => null]);
+
+    // Garbage reply → warning, no writes, no provenance.
+    app()->instance(ClaudeClient::class, new FakeClaudeClient('not json'));
+    Livewire::test(ServicesStep::class)->call('aiEnrich', $bare->id)->assertNotified();
+    expect($bare->fresh()->symptoms)->toBeNull()
+        ->and(app(Provenance::class)->forModel($bare->fresh()))->toBe([]);
+
+    // Everything already filled → nothing to draft.
+    $full = Service::factory()->create([
+        'site_id' => $site->id, 'name' => 'Grading', 'short_description' => 'x',
+        'symptoms' => ['a'], 'scope_items' => ['b'], 'process_steps' => ['c'], 'cost_factors' => ['d'],
+    ]);
+    Livewire::test(ServicesStep::class)->call('aiEnrich', $full->id)->assertNotified();
+    expect(app(Provenance::class)->forModel($full->fresh()))->toBe([]);
+});
