@@ -79,8 +79,10 @@
             @foreach ($m['retiring'] as $item)
                 <div class="nm-row" wire:key="nmr-{{ \Illuminate\Support\Str::slug($item['group'].'-'.$item['label']) }}">
                     <span class="nm-sort"></span>
-                    <span class="nm-label">{{ $item['label'] }}</span>
-                    <span class="nm-url">{{ $item['group'] }}</span>
+                    <span class="nm-label">
+                        @if ($item['url'])<a href="{{ $item['url'] }}" wire:navigate>{{ $item['label'] }}</a>@else{{ $item['label'] }}@endif
+                    </span>
+                    <span class="nm-url">{{ $item['group'] }}@if ($item['url']) · {{ parse_url($item['url'], PHP_URL_PATH) }}@endif</span>
                     <span class="nm-chips">
                         <span class="nm-chip retire">retire</span>
                         <span class="nm-chip">{{ $item['tag'] }}</span>
@@ -95,7 +97,9 @@
             @foreach ($m['drilldowns'] as $item)
                 <div class="nm-row" wire:key="nmd-{{ \Illuminate\Support\Str::slug($item['group'].'-'.$item['label']) }}">
                     <span class="nm-sort"></span>
-                    <span class="nm-label">{{ $item['label'] }}</span>
+                    <span class="nm-label">
+                        @if ($item['url'])<a href="{{ $item['url'] }}" wire:navigate>{{ $item['label'] }}</a>@else{{ $item['label'] }}@endif
+                    </span>
                     @if ($item['url'])<span class="nm-url">{{ parse_url($item['url'], PHP_URL_PATH) }}</span>@endif
                     <span class="nm-chips"><span class="nm-chip">{{ $item['kind'] }}</span></span>
                 </div>

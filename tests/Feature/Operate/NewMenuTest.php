@@ -1,7 +1,10 @@
 <?php
 
 use App\Enums\UserRole;
+use App\Filament\Pages\Gathering\LaunchStep;
+use App\Filament\Pages\Guided\Grow;
 use App\Filament\Pages\NewMenuPage;
+use App\Filament\Pages\ProofEditor;
 use App\Models\User;
 use App\Support\MenuMap;
 use App\Support\NewMenu;
@@ -62,12 +65,16 @@ it('splits the rest honestly: pending decisions, retiring legacy, and linked dri
     expect($total)->toBe(app(MenuMap::class)->build()['counts']['total']);
 });
 
-it('the New menu page renders the worksheet', function () {
+it('the New menu page renders the worksheet with every routable row clickable', function () {
     Livewire::test(NewMenuPage::class)
         ->assertOk()
         ->assertSee('in the final menu')
         ->assertSee('Silos & keywords')
         ->assertSee('Launch')
         ->assertSee('Brand studio')
-        ->assertSee('Retiring at cutover');
+        ->assertSee('Retiring at cutover')
+        // Every bucket links its live routes so each page can be opened and evaluated:
+        ->assertSeeHtml('href="'.LaunchStep::getUrl().'"')   // final menu
+        ->assertSeeHtml('href="'.Grow::getUrl().'"')            // retiring
+        ->assertSeeHtml('href="'.ProofEditor::getUrl().'"');           // drill-down
 });
