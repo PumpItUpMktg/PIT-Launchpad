@@ -28,7 +28,7 @@ it('enumerates the FULL inventory — old menu, both flag-gated groups, and hidd
     expect($groups)->toHaveKeys(['Setup', 'Operate', 'Settings', 'Advanced', 'Top level']);
 
     $setupLabels = collect($groups['Setup']['items'])->pluck('label');
-    expect($setupLabels)->toContain('Business', 'Interview', 'Locations', 'Services', 'Voice', 'Silos & keywords')
+    expect($setupLabels)->toContain('Business', 'Interview', 'Locations', 'Services', 'Voice', 'Silos & keywords', 'Launch')
         ->and(collect($groups['Setup']['items'])->pluck('flag')->unique()->all())->toBe(['NEW_SETUP']);
 
     $operateLabels = collect($groups['Operate']['items'])->pluck('label');
