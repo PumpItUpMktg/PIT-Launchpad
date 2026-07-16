@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Gathering;
 
 use App\Filament\Resources\ServiceResource;
+use App\Gathering\ServiceEnricher;
 use App\Guided\ServiceSuggester;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
@@ -138,6 +139,42 @@ class ServicesStep extends GatheringPage
     {
         unset($this->suggestions[$index]);
         $this->suggestions = array_values($this->suggestions);
+    }
+
+    /**
+     * The opt-in AI enrichment call — fills the service's EMPTY enrichment fields with generic
+     * trade knowledge as SEEDED values (manual entry is never overwritten; price/warranty/
+     * comparison stay owner-supplied). The operator reviews in Enrich; saving confirms.
+     */
+    public function aiEnrich(string $serviceId): void
+    {
+        $site = $this->getSite();
+        $service = $this->owned($serviceId);
+        if ($site === null || $service === null) {
+            return;
+        }
+
+        $filled = app(ServiceEnricher::class)->enrich($site, $service);
+
+        if ($filled === null) {
+            Notification::make()->warning()
+                ->title('AI enrichment unavailable right now')
+                ->body('Nothing was changed — try again, or fill the fields manually via Enrich.')
+                ->send();
+
+            return;
+        }
+
+        if ($filled === []) {
+            Notification::make()->info()->title("'{$service->name}' has no empty fields — edit it via Enrich.")->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title("'{$service->name}' drafted — ".count($filled).' field(s) filled')
+            ->body('Generic trade knowledge only (no prices or guarantees). Review in Enrich and save to confirm.')
+            ->send();
     }
 
     public function removeService(string $serviceId): void
