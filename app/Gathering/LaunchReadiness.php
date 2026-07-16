@@ -3,13 +3,13 @@
 namespace App\Gathering;
 
 use App\Enums\ConnectionProvider;
+use App\Filament\Pages\Gathering\BrandStep;
 use App\Filament\Pages\Gathering\BusinessStep;
 use App\Filament\Pages\Gathering\ConnectionsStep;
 use App\Filament\Pages\Gathering\LocationsStep;
 use App\Filament\Pages\Gathering\ServicesStep;
 use App\Filament\Pages\Gathering\SilosStep;
 use App\Filament\Pages\Gathering\VoiceStep;
-use App\Filament\Pages\Guided\Brand;
 use App\Guided\StepGate;
 use App\Models\ArrangementFlag;
 use App\Models\Connection;
@@ -66,14 +66,12 @@ class LaunchReadiness
             $this->item('wordpress', 'WordPress connected', $wp, false,
                 $wp ? 'App-password connection present' : 'Not connected — pages materialize but cannot push.',
                 ConnectionsStep::getUrl()),
-            // Brand look/narrative has no native new-Setup surface yet — the guided Brand step
-            // stays routable and is linked here so it is never stranded.
             $this->item('brand', 'Brand pushed', $brandPushed, false,
                 $brandPushed ? 'Brand applied to WordPress' : 'Not pushed — the site renders on default styles.',
-                Brand::getUrl()),
+                BrandStep::getUrl()),
             $this->item('structure', 'Structure generated & confirmed', $spokes && $confirmed, true,
                 match (true) {
-                    ! $spokes => 'Not generated — run step 7.',
+                    ! $spokes => 'Not generated — run step 8.',
                     ! $confirmed => 'Generated but not finalized — Launch will finalize it as arranged.',
                     default => 'Confirmed',
                 },

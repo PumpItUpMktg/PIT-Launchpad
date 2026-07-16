@@ -2,8 +2,6 @@
 
 namespace App\Support;
 
-use App\Filament\Pages\Guided\Brand;
-
 /**
  * The PROPOSED final menu — the Menu map's inventory reduced to only the newly designed
  * surfaces, in cutover order. This is the studio-rebuild worksheet: what the one admin menu
@@ -11,9 +9,8 @@ use App\Filament\Pages\Guided\Brand;
  * hand-listed) from {@see MenuMap}, so it stays true as surfaces land:
  *
  *  - **menu** — the keepers: top-level (Overview / Portfolio), the flag-gated Setup steps
- *    (1–8) and Operate boards, and the Advanced internal tools.
- *  - **pending** — items still awaiting a placement/retire decision (tag `unaddressed`),
- *    plus the one known native-rebuild hole (Brand studio — deep-linked, not rebuilt).
+ *    (1–9) and Operate boards, and the Advanced internal tools.
+ *  - **pending** — items still awaiting a placement/retire decision (tag `unaddressed`).
  *  - **retiring** — every legacy surface family-tagged `setup`/`operate`: superseded, leaves
  *    the sidebar at cutover (routes stay).
  *  - **drilldowns** — hidden routes with no menu entry, reached from inside surfaces
@@ -54,21 +51,9 @@ class NewMenu
             ->values()
             ->all();
 
-        // The one known native-rebuild hole: Brand has no new-Setup surface yet — it rides as a
-        // deep link on the Launch checklist. Surfaced here so the studio rebuild can't forget it.
-        $pending = $pending->values()
-            ->push([
-                'class' => null,
-                'label' => 'Brand studio',
-                'group' => 'Setup',
-                'sort' => 0,
-                'url' => Brand::getUrl(),
-                'flag' => null,
-                'hidden' => false,
-                'kind' => 'rebuild',
-                'tag' => 'unaddressed',
-            ])
-            ->all();
+        // Brand now has a native new-Setup surface (Gathering\BrandStep) — it enumerates into the
+        // final menu like any other step, so no synthetic pending row is needed anymore.
+        $pending = $pending->values()->all();
 
         return [
             'menu' => $menu,

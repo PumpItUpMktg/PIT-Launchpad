@@ -11,8 +11,8 @@ use App\Standard\StandardPages;
 use Filament\Notifications\Notification;
 
 /**
- * New Setup · Step 8 — Launch: the readiness checklist + the build trigger. Closes the new
- * Setup's arc (1–6 gather → 7 generate → 8 launch) with the guided Plan's Approve machinery,
+ * New Setup · Step 9 — Launch: the readiness checklist + the build trigger. Closes the new
+ * Setup's arc (1–7 gather → 8 generate → 9 launch) with the guided Plan's Approve machinery,
  * run through the shared {@see ApproveAndBuild} core: standard-pages curation, build config
  * (localize / town-page pace / fresh content), manifest assembly + page materialization, the
  * WP category sync, and the wizard-complete flip (site Onboarding → Active). The checklist is
@@ -30,7 +30,7 @@ class LaunchStep extends GatheringPage
 
     protected static ?string $navigationLabel = 'Launch';
 
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 9;
 
     protected string $view = 'filament.gathering.launch-step';
 

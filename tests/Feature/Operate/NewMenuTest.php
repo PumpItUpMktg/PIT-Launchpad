@@ -30,9 +30,9 @@ it('the final menu carries ONLY the newly designed surfaces, in cutover order', 
     // Top level keeps only the two portfolio-wide entries.
     expect(collect($groups['Top level']['items'])->pluck('label')->all())->toBe(['Overview', 'Portfolio']);
 
-    // Setup: the full 1–8 arc, in step order.
+    // Setup: the full 1–9 arc, in step order.
     expect(collect($groups['Setup']['items'])->pluck('label')->all())
-        ->toBe(['Business', 'Interview', 'Locations', 'Services', 'Voice', 'Connections & Feeds', 'Silos & keywords', 'Launch']);
+        ->toBe(['Business', 'Interview', 'Locations', 'Services', 'Voice', 'Connections & Feeds', 'Brand', 'Silos & keywords', 'Launch']);
 
     // Operate: the six boards.
     expect(collect($groups['Operate']['items'])->pluck('label')->all())
@@ -46,9 +46,10 @@ it('the final menu carries ONLY the newly designed surfaces, in cutover order', 
 it('splits the rest honestly: pending decisions, retiring legacy, and linked drill-downs', function () {
     $m = app(NewMenu::class)->build();
 
-    // Pending = the unaddressed items + the one known native-rebuild hole (Brand studio).
+    // Pending = the unaddressed items. Brand is REBUILT (Setup step 7) — no synthetic row left.
     $pending = collect($m['pending'])->pluck('label');
-    expect($pending)->toContain('Edit signal', 'Onboarding', 'Brand studio');
+    expect($pending)->toContain('Edit signal', 'Onboarding')
+        ->and($pending)->not->toContain('Brand studio');
 
     // Retiring = every setup/operate family-tagged legacy surface.
     $retiring = collect($m['retiring'])->pluck('label');
@@ -60,8 +61,7 @@ it('splits the rest honestly: pending decisions, retiring legacy, and linked dri
     expect($drill)->toContain('Proof Editor', 'Site Cockpit', 'Targets & gaps', 'Silos');
 
     // Every enumerated surface lands in exactly one bucket.
-    $total = $m['counts']['menu'] + $m['counts']['pending'] - 1 // minus the synthetic Brand studio row
-        + $m['counts']['retiring'] + $m['counts']['drilldowns'];
+    $total = $m['counts']['menu'] + $m['counts']['pending'] + $m['counts']['retiring'] + $m['counts']['drilldowns'];
     expect($total)->toBe(app(MenuMap::class)->build()['counts']['total']);
 });
 
@@ -71,7 +71,7 @@ it('the New menu page renders the worksheet with every routable row clickable', 
         ->assertSee('in the final menu')
         ->assertSee('Silos & keywords')
         ->assertSee('Launch')
-        ->assertSee('Brand studio')
+        ->assertSee('Brand')
         ->assertSee('Retiring at cutover')
         // Every bucket links its live routes so each page can be opened and evaluated:
         ->assertSeeHtml('href="'.LaunchStep::getUrl().'"')   // final menu

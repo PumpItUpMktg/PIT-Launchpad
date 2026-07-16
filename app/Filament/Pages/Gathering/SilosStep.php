@@ -16,7 +16,7 @@ use App\Operator\Coverage\TargetQueue;
 use Filament\Notifications\Notification;
 
 /**
- * New Setup · Step 7 — Silos & keywords: the GENERATE phase after steps 1–6 gather. Consumes
+ * New Setup · Step 8 — Silos & keywords: the GENERATE phase after steps 1–7 gather. Consumes
  * exactly what gathering produced (trade, stated services, coverage) and its output is the
  * structure everything downstream builds on: generate the silo blueprint from the seed →
  * prune / fold / route (a MODE inside this surface, not its own menu item — prune without
@@ -37,7 +37,7 @@ class SilosStep extends GatheringPage
 
     protected static ?string $navigationLabel = 'Silos & keywords';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 8;
 
     protected string $view = 'filament.gathering.silos-step';
 

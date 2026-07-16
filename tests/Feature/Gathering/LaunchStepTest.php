@@ -49,10 +49,10 @@ function launchReadySite(): Site
     return $site;
 }
 
-it('registers as step 8 of the Setup group, flag-gated like the rest', function () {
+it('registers as step 9 of the Setup group, flag-gated like the rest', function () {
     expect(LaunchStep::shouldRegisterNavigation())->toBeTrue()
         ->and(LaunchStep::getNavigationGroup())->toBe('Setup')
-        ->and(LaunchStep::getNavigationSort())->toBe(8);
+        ->and(LaunchStep::getNavigationSort())->toBe(9);
 
     config()->set('launchpad.new_setup_enabled', false);
     expect(LaunchStep::shouldRegisterNavigation())->toBeFalse();
@@ -71,8 +71,8 @@ it('the checklist is red-until-green and only structure / flags / services hard-
         ->and($items['voice']['required'])->toBeFalse() // advisory — thinner pages, legal launch
         ->and($readiness->canLaunch($site))->toBeFalse();
 
-    // The Brand item deep-links its (still-routable) guided surface so it is never stranded.
-    expect($items['brand']['url'])->toContain('/admin/setup/brand');
+    // The Brand item deep-links the new Setup's Brand step (step 7).
+    expect($items['brand']['url'])->toContain('/admin/setup2/brand');
 
     // Service + generated structure → launchable even before an explicit finalize
     // (generated-but-unconfirmed launches with the implicit as-arranged finalize).
