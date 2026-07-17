@@ -49,3 +49,11 @@ it('the unified menu shows one Setup entry — step pages hidden, Grow promoted 
         ->and(PageResource::shouldRegisterNavigation())->toBeFalse()
         ->and(PublishedContentResource::shouldRegisterNavigation())->toBeFalse();
 });
+
+it('Grow leaves the sidebar once the Operate boards carry its full job (flag-gated, route stays)', function () {
+    config()->set('launchpad.new_operate_enabled', false);
+    expect(Grow::shouldRegisterNavigation())->toBeTrue();
+
+    config()->set('launchpad.new_operate_enabled', true);
+    expect(Grow::shouldRegisterNavigation())->toBeFalse();
+});
