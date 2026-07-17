@@ -152,3 +152,18 @@ it('switching the working site drops out of prune mode with a clean decision-set
         ->assertSet('started', false)
         ->assertSet('spokeDecisions', []);
 });
+
+it('the generated tree is VISIBLE on the main view right after generate — no prune mode needed', function () {
+    $site = silosStepSite(); // blueprint + pillar 'Sump Pumps' + core 'Sump Pump Installation' (vol 300)
+
+    Livewire::test(SilosStep::class)
+        ->assertOk()
+        ->assertSee('Generated structure')
+        ->assertSee('Sump Pumps')                 // the silo card
+        ->assertSee('Sump Pump Installation')     // its spoke, without entering prune
+        ->assertSee('hub page')                   // pillar disposition label
+        ->assertSee('own page')                   // core disposition label
+        // No §4 Silo/Keyword rows yet → the keyword board explains itself instead of "No silos yet".
+        ->assertSee('Keyword targets attach after launch')
+        ->assertDontSee('No structure yet');
+});

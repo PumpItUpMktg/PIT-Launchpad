@@ -4,6 +4,8 @@ namespace App\Filament\Pages\Gathering;
 
 use App\Filament\Concerns\ManagesPruneSurface;
 use App\Guided\StepGate;
+use App\Interview\Prune\PruneEngine;
+use App\Interview\Prune\PruneRow;
 use App\Jobs\BuildStructure;
 use App\Models\BlogTarget;
 use App\Models\Keyword;
@@ -162,6 +164,22 @@ class SilosStep extends GatheringPage
         return $site === null
             ? ['silos' => [], 'unassigned' => [], 'unassigned_total' => 0, 'threshold' => 0]
             : app(TargetingBoard::class)->for($site);
+    }
+
+    /**
+     * The generated structure tree, grouped by silo — the READ-ONLY display of what generate /
+     * re-ground produced (spokes live on the blueprint; §4 Silo + Keyword rows only exist after
+     * launch + discovery, so the keyword board alone would show nothing here). Prune mode edits.
+     *
+     * @return array<string, list<PruneRow>>
+     */
+    public function getTreeProperty(): array
+    {
+        $site = $this->getSite();
+
+        return $site === null || ! $this->getHasSpokesProperty()
+            ? []
+            : app(PruneEngine::class)->plan($site)->bySilo();
     }
 
     /** Queued blog targets the prune routed — consumed by Operate → Blog (the continuous half). */
