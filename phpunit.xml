@@ -19,6 +19,11 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!-- The nav-cutover flags default ON in the app (config/launchpad.php); pin them OFF
+             for the suite so "flag off ⇒ legacy menu" stays the test baseline. Tests that
+             exercise the new menu set them true explicitly. -->
+        <env name="LAUNCHPAD_NEW_SETUP" value="false"/>
+        <env name="LAUNCHPAD_NEW_OPERATE" value="false"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
