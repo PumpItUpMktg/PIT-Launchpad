@@ -154,3 +154,22 @@ it('the locations board keeps the orphan-assignment controls (parent pin only)',
     expect($orphan->fresh()->parent_location_id)->toBe($trooper->id)
         ->and($orphan->fresh()->location_id)->toBeNull(); // the composeLocation pin is never touched
 });
+
+it('surfaces the real failure reason on a failed row (not just the generic client line)', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    // A publish-failed service page carries the real error on last_publish_error → operator tail.
+    $failed = pbPage($site, PageType::Service, ContentStatus::PublishFailed, 'Water Detection & Leaks', [
+        'last_publish_error' => 'fal render timed out for slot hero_image after 2 attempts',
+    ]);
+
+    Livewire::test(OperateServicePages::class)
+        ->assertOk()
+        ->assertSee('Water Detection & Leaks')
+        ->assertSee('Something went wrong')                                  // the client line stays
+        ->assertSee('fal render timed out for slot hero_image after 2 attempts'); // …AND the real reason now shows
+
+    // The read model carries it on the row for the operator audience.
+    $work = collect(app(PagesBoard::class)->services($site->fresh())['work'])->firstWhere('title', 'Water Detection & Leaks');
+    expect($work['operator_tail'])->toContain('fal render timed out');
+});
