@@ -12,10 +12,14 @@ use App\Models\Connection;
 use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use App\Models\User;
+use App\Publishing\TenantStorage;
 use App\Styling\StyleVariation;
 use Filament\Facades\Filament;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 /**
@@ -99,4 +103,25 @@ it('team members persist immediately on add and remove', function () {
 
     $page->call('removeTeamMember', 0);
     expect(SiteNarrative::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->first()->team)->toBeNull();
+});
+
+it('restores the logo upload — stored on SiteBranding via the real intake; remove clears it', function () {
+    Storage::fake(TenantStorage::DISK);
+
+    // Upload → the real LogoIntake stores it to (faked) R2 and persists logo_set; property clears.
+    $page = Livewire::test(BrandStep::class)
+        ->set('logoUpload', UploadedFile::fake()->image('brand.png', 120, 60))
+        ->assertNotified()
+        ->assertSet('logoUpload', null)
+        ->assertSet('logoInfo.url', fn ($url) => is_string($url) && $url !== '');
+
+    $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->first();
+    expect($branding->logo_set['url'] ?? null)->not->toBeNull()
+        ->and($branding->logo_set['ext'] ?? null)->toBe('png');
+
+    // Remove clears the stored logo source and the logo-colors style choice.
+    $this->site->update(['use_logo_colors' => true]);
+    $page->call('removeLogo')->assertSet('logoInfo', null);
+    expect($this->site->fresh()->use_logo_colors)->toBeFalse()
+        ->and(SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->first()->logo_set['url'] ?? null)->toBeNull();
 });
