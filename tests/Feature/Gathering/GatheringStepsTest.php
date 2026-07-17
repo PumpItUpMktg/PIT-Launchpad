@@ -4,6 +4,7 @@ use App\Enums\InterviewSection;
 use App\Enums\InterviewStatus;
 use App\Enums\ProvenanceState;
 use App\Enums\UserRole;
+use App\Enums\VoiceStatus;
 use App\Filament\Pages\Gathering\BusinessStep;
 use App\Filament\Pages\Gathering\ConnectionsStep;
 use App\Filament\Pages\Gathering\InterviewStep;
@@ -27,6 +28,7 @@ use App\Models\Service;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VoiceProfile;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Support\FakeClaudeClient;
@@ -394,4 +396,47 @@ it('the coverage meter is a RATCHET — a filled section never regresses when th
     expect($meter['trust']['state'])->toBe('filled')      // ratcheted — the downgrade is ignored
         ->and($meter['services']['state'])->toBe('thin')  // ratcheted
         ->and($meter['coverage']['state'])->toBe('thin'); // genuine progress still lands
+});
+
+it('Voice AI enhance shapes rough notes into the form — nothing stored until Save, nothing live until Activate', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    session(['guided_site_id' => $site->id]);
+    SiloBlueprint::factory()->create(['site_id' => $site->id, 'trade' => 'sump pump service']);
+
+    app()->instance(ClaudeClient::class, new FakeClaudeClient((string) json_encode([
+        'persona' => 'A straight-talking second-generation owner who explains things simply.',
+        'language_rules' => ['We say "dry basement, guaranteed process"', 'Never say "cheap"'],
+        'audience' => ['Homeowners with wet basements'],
+        'reading_level' => 'everyday plain English',
+        'cta_voice' => 'direct but no pressure',
+    ])));
+
+    $page = Livewire::test(VoiceStep::class)
+        ->assertSee('How the site should sound')     // plain-language labels
+        ->assertSee('AI enhance')
+        ->set('persona', 'sounds like Vinny, no fluff')  // the rough note
+        ->call('aiEnhance')
+        ->assertNotified()
+        ->assertSet('persona', 'A straight-talking second-generation owner who explains things simply.')
+        ->assertSet('ctaVoice', 'direct but no pressure');
+
+    // Form-only: no profile row exists until Save; Activate is still the only path to live.
+    expect(VoiceProfile::withoutGlobalScopes()->where('site_id', $site->id)->count())->toBe(0);
+
+    $page->call('save');
+    $draft = VoiceProfile::withoutGlobalScopes()->where('site_id', $site->id)->first();
+    expect($draft->status)->toBe(VoiceStatus::Draft)
+        ->and($draft->language_rules)->toBe(['We say "dry basement, guaranteed process"', 'Never say "cheap"']);
+});
+
+it('a failed Voice AI enhance leaves the operator notes untouched', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    app()->instance(ClaudeClient::class, new FakeClaudeClient('not json'));
+
+    Livewire::test(VoiceStep::class)
+        ->set('persona', 'my rough note')
+        ->call('aiEnhance')
+        ->assertNotified()
+        ->assertSet('persona', 'my rough note');
 });
