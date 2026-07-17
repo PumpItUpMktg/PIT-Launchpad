@@ -78,7 +78,22 @@
                             @endif
                         </div>
                     @endforeach
-                    <p class="g-hint">The model's own read of the transcript — filled sections won't be re-asked.</p>
+                    @php
+                        $states = collect($this->meter)->pluck('state');
+                        $thin = $states->filter(fn ($s) => $s === 'thin')->count();
+                        $allFilled = $states->every(fn ($s) => $s === 'filled');
+                        $noneEmpty = $states->doesntContain('empty');
+                    @endphp
+                    @if ($interview->status === \App\Enums\InterviewStatus::InProgress && $allFilled)
+                        <div style="border:1px solid rgba(22,163,74,.4); background:rgba(22,163,74,.07); border-radius:9px; padding:9px 12px; font-size:12.5px; color:#16a34a; font-weight:600">
+                            ✓ Every section covered — you're done whenever you are. End interview &amp; extract.
+                        </div>
+                    @elseif ($interview->status === \App\Enums\InterviewStatus::InProgress && $noneEmpty)
+                        <div style="border:1px solid rgba(217,119,6,.35); background:rgba(217,119,6,.06); border-radius:9px; padding:9px 12px; font-size:12.5px; color:#b45309">
+                            Everything touched; {{ $thin }} section(s) still thin. Go deeper, skip them, or end now — thin just means lighter seeding, and every field stays editable on the review steps.
+                        </div>
+                    @endif
+                    <p class="g-hint">The model's read of the transcript — it only ever moves up (a filled section never falls back), and filled sections won't be re-asked. Complete is YOUR call: End &amp; extract anytime; Extract re-runs safely and never touches confirmed fields.</p>
                 </div>
             </div>
         @endif

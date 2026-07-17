@@ -213,19 +213,29 @@ PROMPT;
     }
 
     /**
+     * The meter is a RATCHET: the transcript only ever gains information, so a section's
+     * coverage can only go up — the model re-grades the whole transcript every turn and its
+     * turn-to-turn second-guessing must never read as regression (filled → thin flicker).
+     *
      * @param  array<mixed>  $coverage
      * @return array<string, mixed>
      */
     private function cleanCoverage(array $coverage, Interview $interview): array
     {
-        $skipped = (array) (((array) ($interview->coverage ?? []))['_skipped'] ?? []);
+        $previous = (array) ($interview->coverage ?? []);
+        $skipped = (array) ($previous['_skipped'] ?? []);
+        $rank = ['empty' => 0, 'thin' => 1, 'filled' => 2];
 
         $clean = [];
         foreach (InterviewSection::cases() as $section) {
             $value = (string) ($coverage[$section->value] ?? 'empty');
+            $value = in_array($value, ['filled', 'thin', 'empty'], true) ? $value : 'empty';
+            $prior = (string) ($previous[$section->value] ?? 'empty');
+            $prior = in_array($prior, ['filled', 'thin', 'empty'], true) ? $prior : 'empty';
+
             $clean[$section->value] = in_array($section->value, $skipped, true)
                 ? 'filled' // an operator skip outranks the model's self-assessment
-                : (in_array($value, ['filled', 'thin', 'empty'], true) ? $value : 'empty');
+                : ($rank[$value] >= $rank[$prior] ? $value : $prior); // ratchet — never regress
         }
         if ($skipped !== []) {
             $clean['_skipped'] = $skipped;

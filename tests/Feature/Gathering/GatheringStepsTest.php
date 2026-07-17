@@ -371,3 +371,27 @@ it('a failed AI fill writes nothing; a fully-enriched service is a polite no-op'
     Livewire::test(ServicesStep::class)->call('aiEnrich', $full->id)->assertNotified();
     expect(app(Provenance::class)->forModel($full->fresh()))->toBe([]);
 });
+
+it('the coverage meter is a RATCHET — a filled section never regresses when the model second-guesses', function () {
+    $site = Site::factory()->create();
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper office', 'served_towns' => []]);
+    session(['guided_site_id' => $site->id]);
+
+    // Turn 1 grades trust filled + services thin; turn 2 second-guesses BOTH downward.
+    $this->app->instance(InterviewEngine::class, new InterviewEngine(
+        new SequencedClaudeClient([
+            json_encode(['question' => 'Q1?', 'section' => 'trust', 'coverage' => ['trust' => 'filled', 'services' => 'thin', 'coverage' => 'empty', 'market_notes' => 'empty', 'voice' => 'empty']]),
+            json_encode(['question' => 'Q2?', 'section' => 'services', 'coverage' => ['trust' => 'thin', 'services' => 'empty', 'coverage' => 'thin', 'market_notes' => 'empty', 'voice' => 'empty']]),
+        ]),
+    ));
+
+    $page = Livewire::test(InterviewStep::class)
+        ->call('begin')
+        ->set('input', 'answer one')
+        ->call('send');
+
+    $meter = collect($page->instance()->meter)->keyBy(fn ($r) => $r['section']->value);
+    expect($meter['trust']['state'])->toBe('filled')      // ratcheted — the downgrade is ignored
+        ->and($meter['services']['state'])->toBe('thin')  // ratcheted
+        ->and($meter['coverage']['state'])->toBe('thin'); // genuine progress still lands
+});
