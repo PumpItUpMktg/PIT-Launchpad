@@ -50,7 +50,7 @@ it('reports no mismatch for an unpinned page (no subject to verify)', function (
         ->and($placement['subject'])->toBeNull();
 });
 
-it('degrades honestly when the page has no silo or keyword (best-effort materialize)', function () {
+it('a DIRECTED page with no keyword reads as a gap to fix in Structure', function () {
     $page = Content::factory()->page()->create(['page_type' => PageType::Service, 'silo_id' => null, 'target_keyword_id' => null]);
 
     $rail = (new StrategyRail)->for($page);
@@ -58,5 +58,15 @@ it('degrades honestly when the page has no silo or keyword (best-effort material
     expect($rail['placement']['silo'])->toBeNull()
         ->and($rail['placement']['label'])->toBe('service page · unassigned silo')
         ->and($rail['target']['has_target'])->toBeFalse()
-        ->and($rail['target']['note'])->toBe('No keyword target set.');
+        ->and($rail['target']['note'])->toContain('assign it on the Silos & keywords step');
+});
+
+it('a FOUNDATION page (home) with no keyword reads as intentional, not a gap', function () {
+    $page = Content::factory()->page()->create(['page_type' => PageType::Home, 'target_keyword_id' => null]);
+
+    $rail = (new StrategyRail)->for($page);
+
+    expect($rail['target']['has_target'])->toBeFalse()
+        ->and($rail['target']['note'])->toBe('Ranks on the brand + overall site authority — no single keyword target, by design.')
+        ->and($rail['target']['note'])->not->toContain('No keyword target set'); // never reads like an error
 });
