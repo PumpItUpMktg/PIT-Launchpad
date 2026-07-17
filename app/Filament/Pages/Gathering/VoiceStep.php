@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Gathering;
 
 use App\Enums\VoiceStatus;
+use App\Gathering\VoiceEnhancer;
 use App\Models\Scopes\SiteScope;
 use App\Models\VoiceProfile;
 use App\Operator\Controls\VoiceControl;
@@ -100,6 +101,47 @@ class VoiceStep extends GatheringPage
         $this->confirmSeeded($draft, ['profile']);
 
         Notification::make()->success()->title("Voice draft v{$draft->version} saved")->send();
+    }
+
+    /**
+     * The opt-in AI shaping call — takes whatever rough notes are typed in the form (empty is
+     * fine; it drafts from site context alone) and fills the FORM with a cleaned, structured
+     * profile. Nothing is stored until Save; nothing writes pages until Activate.
+     */
+    public function aiEnhance(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $result = app(VoiceEnhancer::class)->enhance($site, [
+            'persona' => $this->persona,
+            'language_rules' => $this->languageRules,
+            'audience' => $this->audience,
+            'reading_level' => $this->readingLevel,
+            'cta_voice' => $this->ctaVoice,
+        ]);
+
+        if ($result === null) {
+            Notification::make()->warning()
+                ->title('AI enhance unavailable right now')
+                ->body('Nothing was changed — try again, or write it yourself.')
+                ->send();
+
+            return;
+        }
+
+        $this->persona = $result['persona'];
+        $this->languageRules = $result['language_rules'];
+        $this->audience = $result['audience'];
+        $this->readingLevel = $result['reading_level'];
+        $this->ctaVoice = $result['cta_voice'];
+
+        Notification::make()->success()
+            ->title('Voice shaped from your notes')
+            ->body('Your meaning and phrases are kept — edit anything, then Save. Nothing is stored or activated until you do.')
+            ->send();
     }
 
     /** Promote the draft through the standard one-active-per-site path. */
