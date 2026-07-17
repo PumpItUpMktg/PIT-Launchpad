@@ -1,5 +1,6 @@
 <?php
 
+use App\ContentEngine\Review\ProofPreview;
 use App\Enums\ContentStatus;
 use App\Enums\MediaKind;
 use App\Enums\RenderStatus;
@@ -167,4 +168,31 @@ it('chooses an existing library image for a slot — writes the render job and c
     expect($fresh->r2_key)->toBe('sites/x/lib.webp')
         ->and($fresh->alt)->toBe('Our crew');
     expect(ContentEdit::query()->where('content_id', $page->id)->where('field', 'image:hero_image')->exists())->toBeTrue();
+});
+
+it('renders rich-text body + FAQ answers as HTML (links live), not escaped markup', function () {
+    $page = PageFixture::intakePage([
+        'status' => ContentStatus::NeedsReview,
+        'slot_payload' => [
+            'hero_headline' => 'Waterproofing',
+            'svc_intro' => '<p>Start with our <a href="/basement-waterproofing-cost-guide">Cost Guide</a> — it explains what drives price.</p>',
+            'faq' => [
+                ['question' => 'How much does it cost?', 'answer' => 'It depends — see the <a href="/cost-guide">guide</a>. <script>alert(1)</script>'],
+            ],
+        ],
+    ]);
+
+    // The read model renders the HTML (sanitized) instead of handing back raw markup to escape.
+    $sections = collect(app(ProofPreview::class)->for($page->fresh())['sections'])->keyBy('key');
+    expect($sections['svc_intro']['html'])->toContain('<a href="/basement-waterproofing-cost-guide">Cost Guide</a>')
+        ->and($sections['faq']['faq'][0]['answer'])->toContain('<a href="/cost-guide">guide</a>')
+        ->and($sections['faq']['faq'][0]['answer'])->not->toContain('<script>'); // sanitized
+
+    // The preview surface shows the link as a real element, never escaped "&lt;a".
+    Livewire::withQueryParams(['content' => $page->id])
+        ->test(ProofEditor::class)
+        ->assertOk()
+        ->assertSeeHtml('<a href="/basement-waterproofing-cost-guide">')
+        ->assertSeeHtml('<a href="/cost-guide">')
+        ->assertDontSee('&lt;a href'); // no raw/escaped tags leaking through
 });
