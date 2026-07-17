@@ -76,11 +76,52 @@
                 @endif
             </div>
 
+            {{-- ── The generated tree (read-only — what generate / re-ground produced; prune edits) ── --}}
+            @if ($this->hasSpokes)
+                <div class="g-muted" style="font-size:11px; text-transform:uppercase; letter-spacing:.05em">Generated structure — {{ count($this->tree) }} silo(s)</div>
+                <div class="tg-grid">
+                    @foreach ($this->tree as $siloName => $rows)
+                        @php
+                            $sorted = collect($rows)->sortBy([['isPillar', 'desc'], ['volume', 'desc']])->values();
+                            $pageCount = $sorted->filter(fn ($r) => $r->isPillar || $r->granularity->value === 'own_page')->count();
+                        @endphp
+                        <div class="tg-card" wire:key="tree-{{ \Illuminate\Support\Str::slug($siloName) }}">
+                            <div class="tg-cardhead">
+                                <h3>{{ $siloName }}</h3>
+                                <span class="tg-split">{{ $pageCount }} page(s) · {{ $sorted->count() }} topic(s)</span>
+                            </div>
+                            <div class="tg-rows">
+                                @foreach ($sorted->take(10) as $row)
+                                    <div class="tg-row" wire:key="tr-{{ $row->id }}">
+                                        <span class="tg-q" title="{{ $row->name }}">{{ $row->isPillar ? '⬡ ' : '' }}{{ $row->name }}</span>
+                                        <span class="tg-num">{{ $row->volume !== null ? number_format((int) $row->volume) : '—' }}</span>
+                                        <span class="tg-cov {{ $row->isPillar || $row->granularity->value === 'own_page' ? 'covered' : 'gap' }}">
+                                            {{ $row->isPillar ? 'hub page' : match ($row->granularity->value) {
+                                                'own_page' => 'own page',
+                                                'blog_target' => 'blog queue',
+                                                default => 'section',
+                                            } }}
+                                        </span>
+                                    </div>
+                                @endforeach
+                                @if ($sorted->count() > 10)
+                                    <div class="tg-more">+ {{ $sorted->count() - 10 }} more — open Prune to see everything</div>
+                                @endif
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+
             {{-- ── Silo cards: keyword targets per silo, covered/gap, promote/demote ── --}}
             @php $board = $this->board; @endphp
 
             @if ($board['silos'] === [])
-                <div class="g-empty">No silos yet — generate the structure above; keyword targets attach as discovery runs.</div>
+                @if ($this->hasSpokes)
+                    <div class="g-muted">Keyword targets attach after launch, as discovery runs — the tree above is what gets built.</div>
+                @else
+                    <div class="g-empty">No structure yet — generate it above; keyword targets attach as discovery runs.</div>
+                @endif
             @else
                 <div class="tg-grid">
                     @foreach ($board['silos'] as $silo)
