@@ -35,6 +35,13 @@
         .pe-val{font-size:14.5px;line-height:1.55;color:var(--pe-ink)}
         .pe-val.empty{color:#9AA8AE;font-style:italic}
         .pe-val ul{margin:0;padding-left:1.1rem}
+        .pe-html p{margin:0 0 .6em}
+        .pe-html p:last-child{margin-bottom:0}
+        .pe-html a{color:var(--pe-primary);text-decoration:underline}
+        .pe-html ul,.pe-html ol{margin:.2em 0;padding-left:1.1rem}
+        .pe-faq .pe-qa{padding:8px 0;border-bottom:1px solid var(--pe-line)}
+        .pe-faq .pe-qa:last-child{border-bottom:0}
+        .pe-faq .pe-q{margin-bottom:3px}
         .pe-img{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--pe-soft);background:#F4F7F8;border:1px dashed var(--pe-line);border-radius:8px;padding:12px 14px}
         .pe-edit textarea{width:100%;border:1px solid var(--pe-primary);border-radius:8px;padding:10px;font:inherit;font-size:14px;min-height:80px}
         .pe-reasons{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
@@ -145,6 +152,19 @@
                             @endif
                             <span class="pe-note">Weird AI image? Regenerate just this one — or drop in a real photo. The rest stays put.</span>
                         </div>
+                    @elseif (($sec['faq'] ?? null) !== null && $sec['faq'] !== [])
+                        {{-- FAQ as the visitor reads it: question + answer with its internal links live. --}}
+                        <div class="pe-val pe-faq">
+                            @foreach ($sec['faq'] as $qa)
+                                <div class="pe-qa" wire:key="qa-{{ $sec['key'] }}-{{ $loop->index }}">
+                                    <div class="pe-q"><strong>{{ $qa['question'] }}</strong></div>
+                                    <div class="pe-a pe-html">{!! $qa['answer'] !!}</div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @elseif (($sec['html'] ?? null) !== null && trim($sec['html']) !== '')
+                        {{-- Rich-text body: rendered HTML (sanitized), so paragraphs + internal links read right. --}}
+                        <div class="pe-val pe-html">{!! $sec['html'] !!}</div>
                     @elseif (is_array($sec['value']))
                         <div class="pe-val"><ul>@foreach ($sec['value'] as $item)<li>{{ is_array($item) ? implode(' — ', array_map('strval', $item)) : (string) $item }}</li>@endforeach</ul></div>
                     @elseif ($sec['empty'])

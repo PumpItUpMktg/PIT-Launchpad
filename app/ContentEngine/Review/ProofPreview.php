@@ -6,6 +6,8 @@ use App\Enums\SlotContentType;
 use App\Models\Content;
 use App\PageBuilder\Schema\SlotDefinition;
 use App\Styling\StyleActivator;
+use Symfony\Component\HtmlSanitizer\HtmlSanitizer;
+use Symfony\Component\HtmlSanitizer\HtmlSanitizerConfig;
 
 /**
  * The structured proof preview (§4) — the page rendered in the kit's block structure with the brand
@@ -88,10 +90,68 @@ class ProofPreview
                 'editable' => ! $slot->source->resolvesAgainstEntities(),
                 'value' => $value,
                 'empty' => $this->isEmpty($value),
+                // Rich-text slots (body copy) hold real HTML — <p>, internal <a> links, entities.
+                // Rendered as HTML in the preview ("as a visitor reads it"), sanitized; scalar-only.
+                'html' => in_array($slot->contentType, [SlotContentType::RichText, SlotContentType::LongText], true)
+                    && is_string($value)
+                    ? $this->safeHtml($value)
+                    : null,
+                // FAQ is a list of {question, answer}; the answer is HTML. Presented as Q/A pairs with
+                // the answer rendered (sanitized), not the flat imploded list the generic path shows.
+                'faq' => $slot->contentType === SlotContentType::Faq ? $this->faqPairs($value) : null,
             ];
         }
 
         return $sections;
+    }
+
+    /**
+     * The FAQ entries with each answer rendered as sanitized HTML.
+     *
+     * @return list<array{question: string, answer: string}>
+     */
+    private function faqPairs(mixed $value): array
+    {
+        $out = [];
+        foreach (is_array($value) ? $value : [] as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+            $question = trim((string) ($entry['question'] ?? ''));
+            if ($question === '') {
+                continue;
+            }
+            $out[] = ['question' => $question, 'answer' => $this->safeHtml((string) ($entry['answer'] ?? ''))];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Sanitize engine-generated body HTML for the admin preview — an allowlist of the tags the
+     * drafter actually emits (paragraphs, internal links, lists, emphasis, headings). Strips scripts,
+     * event handlers, and dangerous URL schemes even though the source is our own drafter.
+     */
+    private function safeHtml(string $html): string
+    {
+        $config = (new HtmlSanitizerConfig)
+            ->allowElement('p')
+            ->allowElement('br')
+            ->allowElement('strong')
+            ->allowElement('em')
+            ->allowElement('b')
+            ->allowElement('i')
+            ->allowElement('ul')
+            ->allowElement('ol')
+            ->allowElement('li')
+            ->allowElement('h2')
+            ->allowElement('h3')
+            ->allowElement('h4')
+            ->allowElement('a', ['href'])
+            ->allowLinkSchemes(['https', 'http', 'mailto', 'tel'])
+            ->allowRelativeLinks();
+
+        return trim((new HtmlSanitizer($config))->sanitize($html));
     }
 
     private function isImage(SlotDefinition $slot): bool
