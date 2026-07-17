@@ -25,9 +25,11 @@ class SetupEntry extends Page
 
     protected string $view = 'filament.gathering.setup-entry';
 
+    // Not a menu item — the Setup GROUP lists the steps; this route stays as the resume
+    // deep link (/admin/setup2 lands on the first unfinished required step).
     public static function shouldRegisterNavigation(): bool
     {
-        return (bool) config('launchpad.new_setup_enabled');
+        return false;
     }
 
     public function mount(): void

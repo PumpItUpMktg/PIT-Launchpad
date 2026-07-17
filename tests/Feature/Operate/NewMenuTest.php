@@ -24,33 +24,33 @@ it('the final menu carries ONLY the newly designed surfaces, in cutover order', 
     $m = app(NewMenu::class)->build();
     $groups = collect($m['menu'])->keyBy('group');
 
-    // The stepper cleanup: Setup is ONE top-level entry (steps live on the in-page rail),
-    // so the final menu is three groups.
-    expect(collect($m['menu'])->pluck('group')->all())->toBe(['Top level', 'Operate', 'Advanced']);
+    // The FINAL IA: Setup (steps 1-9, returnable) → Operate (the working pages) → Advanced.
+    expect(collect($m['menu'])->pluck('group')->all())->toBe(['Setup', 'Operate', 'Advanced']);
 
-    // Top level: the two portfolio-wide entries + the one Setup entry.
-    expect(collect($groups['Top level']['items'])->pluck('label')->all())->toBe(['Overview', 'Portfolio', 'Setup']);
+    // Setup: the full arc, in step order.
+    expect(collect($groups['Setup']['items'])->pluck('label')->all())
+        ->toBe(['Business', 'Interview', 'Locations', 'Services', 'Voice', 'Connections & Feeds', 'Brand', 'Silos & keywords', 'Launch']);
 
-    // Operate: the six boards.
+    // Operate: Portfolio leads, then the boards.
     expect(collect($groups['Operate']['items'])->pluck('label')->all())
-        ->toBe(['Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations']);
+        ->toBe(['Portfolio', 'Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations']);
 
-    // The nine steps ride as drill-downs (routable, rail-navigated — no sidebar entries).
-    $drill = collect($m['drilldowns'])->pluck('label');
-    expect($drill)->toContain('Business', 'Interview', 'Brand', 'Silos & keywords', 'Launch');
+    // Advanced: the other pages (Edit signal now deliberately placed here) + the internal tools.
+    expect(collect($groups['Advanced']['items'])->pluck('label')->all())
+        ->toBe(['Edit signal', 'New menu', 'Menu map']);
 
     // No legacy label leaks into the final menu.
     $menuLabels = collect($m['menu'])->flatMap(fn ($g) => collect($g['items'])->pluck('label'));
-    expect($menuLabels)->not->toContain('Grow', 'Review queue', 'Candidates', 'Prune', 'Owner Interview');
+    expect($menuLabels)->not->toContain('Grow', 'Overview', 'Review queue', 'Candidates', 'Prune', 'Owner Interview', 'Service area', 'Feeds', 'Connections');
 });
 
 it('splits the rest honestly: pending decisions, retiring legacy, and linked drill-downs', function () {
     $m = app(NewMenu::class)->build();
 
-    // Pending = the unaddressed items. Brand is REBUILT (Setup step 7) — no synthetic row left.
+    // Pending = only the disabled legacy Onboarding wizard now (Edit signal is PLACED in Advanced).
     $pending = collect($m['pending'])->pluck('label');
-    expect($pending)->toContain('Edit signal', 'Onboarding')
-        ->and($pending)->not->toContain('Brand studio');
+    expect($pending)->toContain('Onboarding')
+        ->and($pending)->not->toContain('Edit signal', 'Brand studio');
 
     // Retiring = every setup/operate family-tagged legacy surface.
     $retiring = collect($m['retiring'])->pluck('label');

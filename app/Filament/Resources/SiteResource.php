@@ -72,7 +72,10 @@ class SiteResource extends Resource
 
     protected static ?string $navigationLabel = 'Portfolio';
 
-    protected static ?int $navigationSort = -2;
+    // The tenant list is operate work — it leads the Operate group in the final menu.
+    protected static string|\UnitEnum|null $navigationGroup = 'Operate';
+
+    protected static ?int $navigationSort = 0;
 
     public static function getEloquentQuery(): Builder
     {
