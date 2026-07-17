@@ -25,6 +25,13 @@ class LocationsSetup extends Page
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
+    // Superseded by the Setup steps (which deep-link this as the drill-down) — leaves the
+    // sidebar when the new Setup menu is on; the route stays.
+    public static function shouldRegisterNavigation(): bool
+    {
+        return ! config('launchpad.new_setup_enabled');
+    }
+
     /** Menu-map family tag: setup-world editor (deep-linked from the new Setup steps). */
     public static function menuTag(): string
     {

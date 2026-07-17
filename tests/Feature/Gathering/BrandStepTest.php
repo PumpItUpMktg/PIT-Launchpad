@@ -31,7 +31,7 @@ beforeEach(function () {
 });
 
 it('registers as step 7; Silos and Launch shift to 8 and 9; the guided Brand is superseded', function () {
-    expect(BrandStep::shouldRegisterNavigation())->toBeFalse() // steps live on the rail, not the sidebar
+    expect(BrandStep::shouldRegisterNavigation())->toBeTrue() // sidebar step, flag-gated
         ->and(BrandStep::getNavigationGroup())->toBe('Setup')
         ->and(BrandStep::getNavigationSort())->toBe(7)
         ->and(SilosStep::getNavigationSort())->toBe(8)

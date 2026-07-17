@@ -35,6 +35,17 @@ class Overview extends Page
 
     protected static ?int $navigationSort = -10;
 
+    /** Menu-map family tag: superseded — Operate's Dashboard + Portfolio carry the landing. */
+    public static function menuTag(): string
+    {
+        return 'operate';
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return ! config('launchpad.new_operate_enabled');
+    }
+
     protected static ?string $slug = '/'; // the panel landing
 
     protected string $view = 'filament.pages.overview';

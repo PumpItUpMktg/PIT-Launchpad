@@ -26,12 +26,11 @@ abstract class GatheringPage extends Page
 
     public ?string $siteId = null;
 
-    // The step pages leave the sidebar (menu cleanup): the ONE "Setup" entry
-    // ({@see SetupEntry}) lands on the resume step, and the in-page stepper rail is the step
-    // navigation. Every step stays routable.
+    // The steps sit IN the sidebar under the Setup group (1-9, returnable any time); the
+    // in-page rail + Next buttons carry the walk-through, /admin/setup2 still resumes.
     public static function shouldRegisterNavigation(): bool
     {
-        return false;
+        return (bool) config('launchpad.new_setup_enabled');
     }
 
     /**

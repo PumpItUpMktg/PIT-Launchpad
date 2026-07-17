@@ -27,14 +27,10 @@ it('enumerates the FULL inventory — old menu, both flag-gated groups, and hidd
     // The two parallel-build groups appear with their flag requirement recorded.
     expect($groups)->toHaveKeys(['Setup', 'Operate', 'Settings', 'Advanced', 'Top level']);
 
-    // The step pages are inventoried under Setup but hidden (the in-page rail is the step nav);
-    // the ONE visible Setup surface is the flag-gated top-level entry.
-    $setupLabels = collect($groups['Setup']['items'])->pluck('label');
-    expect($setupLabels)->toContain('Business', 'Interview', 'Locations', 'Services', 'Voice', 'Silos & keywords', 'Launch')
-        ->and(collect($groups['Setup']['items'])->pluck('hidden')->unique()->all())->toBe([true]);
-
-    $setupEntry = collect($groups['Top level']['items'])->first(fn ($i) => $i['label'] === 'Setup' && ! $i['hidden']);
-    expect($setupEntry['flag'])->toBe('NEW_SETUP');
+    // Final IA: the steps sit visibly IN the Setup group (returnable), all flag-gated.
+    $setupSteps = collect($groups['Setup']['items'])->where('hidden', false);
+    expect($setupSteps->pluck('label'))->toContain('Business', 'Interview', 'Locations', 'Services', 'Voice', 'Silos & keywords', 'Launch')
+        ->and($setupSteps->pluck('flag')->unique()->all())->toBe(['NEW_SETUP']);
 
     $operateLabels = collect($groups['Operate']['items'])->pluck('label');
     expect($operateLabels)->toContain('Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations');
@@ -87,10 +83,10 @@ it('duplicated legacy links hide once Operate is on; unaddressed items are tagge
     $livePages = collect($map['groups'])->firstWhere('group', 'Live Pages');
     expect(collect($livePages['items'])->pluck('hidden')->unique()->all())->toBe([true]);
 
-    // Not-yet-placed surfaces carry the unaddressed tag (edit signal, legacy onboarding).
+    // Only the disabled legacy Onboarding wizard is still unaddressed (Edit signal is placed in Advanced).
     $unaddressed = $all->where('tag', 'unaddressed')->pluck('label');
-    expect($unaddressed)->toContain('Edit signal', 'Onboarding')
-        ->and($unaddressed)->not->toContain('Prune', 'Silos & keywords');
+    expect($unaddressed)->toContain('Onboarding')
+        ->and($unaddressed)->not->toContain('Edit signal', 'Prune', 'Silos & keywords');
 
     // The old Owner Interview is now SUPERSEDED by the gathering interview + the Business trade
     // field — setup-tagged and hidden once the new Setup menu is on. Same for the structure
