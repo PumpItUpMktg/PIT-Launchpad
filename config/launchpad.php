@@ -11,26 +11,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | New Setup group (gathering relay — parallel build)
+    | New Setup group (gathering relay) — CUT OVER, default ON
     |--------------------------------------------------------------------------
     |
-    | Gates the NEW six-step Setup nav group (/admin/setup2/*), built alongside
-    | the existing menu. Off ⇒ the admin is identical to before; on (staging /
-    | operator env) ⇒ the group appears next to everything else. Cutover — flip
-    | the default + retire superseded items — is a later relay.
+    | Gates the NEW Setup nav group (the nine-step /admin/setup2/* flow). The
+    | cutover is done: this defaults ON, so the final IA (Setup steps 1–9 →
+    | Operate → Advanced) is the live menu and the superseded legacy items leave
+    | the sidebar. Set LAUNCHPAD_NEW_SETUP=false to fall back to the old menu
+    | (every legacy route is still registered). The test suite pins it off in
+    | phpunit.xml so flag-off assertions stay the baseline.
     */
-    'new_setup_enabled' => (bool) env('LAUNCHPAD_NEW_SETUP', false),
+    'new_setup_enabled' => (bool) env('LAUNCHPAD_NEW_SETUP', true),
 
     /*
     |--------------------------------------------------------------------------
-    | New Operate group (operate relay — parallel build)
+    | New Operate group (operate relay) — CUT OVER, default ON
     |--------------------------------------------------------------------------
     |
-    | Sibling flag to new_setup_enabled: gates the Operate nav group (Dashboard,
-    | the unified Blog pipeline, and Grow/Live re-registered under it). Off ⇒
-    | the admin is identical to before. Cutover is a later relay.
+    | Sibling flag to new_setup_enabled: gates the Operate nav group (Portfolio,
+    | Dashboard, the unified Blog pipeline, and the Core/Service/Location pages
+    | boards). Defaults ON — Grow and the Local Blog / Live Pages legacy trios
+    | leave the sidebar. Set LAUNCHPAD_NEW_OPERATE=false to fall back.
     */
-    'new_operate_enabled' => (bool) env('LAUNCHPAD_NEW_OPERATE', false),
+    'new_operate_enabled' => (bool) env('LAUNCHPAD_NEW_OPERATE', true),
 
     /*
     |--------------------------------------------------------------------------
