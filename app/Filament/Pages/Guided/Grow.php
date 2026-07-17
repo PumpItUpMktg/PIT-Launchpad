@@ -41,7 +41,6 @@ class Grow extends GuidedPage
     // clear of the blog pipeline so publishing pages has no clutter. Renders EMBEDDED (normal
     // sidebar visible) — heavily used during the initial build, then mostly for adding
     // services/locations.
-    protected static bool $shouldRegisterNavigation = true;
 
     protected static string|\UnitEnum|null $navigationGroup = null;
 
@@ -49,10 +48,17 @@ class Grow extends GuidedPage
 
     protected static ?string $navigationLabel = 'Grow';
 
-    /** Menu-map family tag: operate-world workbench (partially covered by the Operate pages boards). */
+    /** Menu-map family tag: superseded — the Operate pages boards carry its full action set + Review. */
     public static function menuTag(): string
     {
         return 'operate';
+    }
+
+    // Fully duplicated by the Operate Core/Service/Location pages boards (same actions,
+    // Review links included) — leaves the sidebar when the new Operate menu is on. Routes stay.
+    public static function shouldRegisterNavigation(): bool
+    {
+        return ! config('launchpad.new_operate_enabled');
     }
 
     protected string $view = 'filament.guided.grow';
