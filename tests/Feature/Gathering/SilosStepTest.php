@@ -51,7 +51,7 @@ function silosStepSite(): Site
 }
 
 it('registers as step 7 of the Setup group; the legacy Targeting + Prune items are superseded', function () {
-    expect(SilosStep::shouldRegisterNavigation())->toBeTrue()
+    expect(SilosStep::shouldRegisterNavigation())->toBeFalse() // steps live on the rail, not the sidebar
         ->and(SilosStep::getNavigationGroup())->toBe('Setup')
         ->and(SilosStep::getNavigationSort())->toBe(8)
         ->and(SilosStep::getNavigationLabel())->toBe('Silos & keywords')

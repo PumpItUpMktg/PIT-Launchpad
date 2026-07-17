@@ -63,6 +63,17 @@ class BrandStep extends GatheringPage
         return $connected ? null : 'Connect WordPress first (Connections & Feeds).';
     }
 
+    /** The narrative persists before moving on (the WP push stays explicit). */
+    public function savesOnContinue(): bool
+    {
+        return true;
+    }
+
+    protected function beforeContinue(): void
+    {
+        $this->saveNarrative();
+    }
+
     /** @return array{state: 'complete'|'attention'|'empty', label: string} */
     public function readiness(): array
     {

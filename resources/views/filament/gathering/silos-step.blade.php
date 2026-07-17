@@ -187,5 +187,6 @@
                 The continuous half — the blog target queue — lives in Operate → Blog (the targets drawer).
             </div>
         @endif
+        @include('filament.gathering._next')
     </div>
 </x-filament-panels::page>

@@ -27,5 +27,6 @@
                 <a class="g-btn" href="{{ $this->feedsUrl() }}" wire:navigate>Open Feeds →</a>
             </div>
         </div>
+        @include('filament.gathering._next')
     </div>
 </x-filament-panels::page>

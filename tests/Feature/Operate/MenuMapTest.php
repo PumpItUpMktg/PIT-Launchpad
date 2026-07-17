@@ -27,9 +27,14 @@ it('enumerates the FULL inventory — old menu, both flag-gated groups, and hidd
     // The two parallel-build groups appear with their flag requirement recorded.
     expect($groups)->toHaveKeys(['Setup', 'Operate', 'Settings', 'Advanced', 'Top level']);
 
+    // The step pages are inventoried under Setup but hidden (the in-page rail is the step nav);
+    // the ONE visible Setup surface is the flag-gated top-level entry.
     $setupLabels = collect($groups['Setup']['items'])->pluck('label');
     expect($setupLabels)->toContain('Business', 'Interview', 'Locations', 'Services', 'Voice', 'Silos & keywords', 'Launch')
-        ->and(collect($groups['Setup']['items'])->pluck('flag')->unique()->all())->toBe(['NEW_SETUP']);
+        ->and(collect($groups['Setup']['items'])->pluck('hidden')->unique()->all())->toBe([true]);
+
+    $setupEntry = collect($groups['Top level']['items'])->first(fn ($i) => $i['label'] === 'Setup' && ! $i['hidden']);
+    expect($setupEntry['flag'])->toBe('NEW_SETUP');
 
     $operateLabels = collect($groups['Operate']['items'])->pluck('label');
     expect($operateLabels)->toContain('Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations');
@@ -92,9 +97,9 @@ it('duplicated legacy links hide once Operate is on; unaddressed items are tagge
     // surfaces: Silos & keywords is Setup step 7 (the generate phase) and Prune is a mode
     // inside it, so both legacy items are setup-tagged and hidden.
     foreach (['Owner Interview', 'Silos & keywords', 'Prune'] as $superseded) {
-        $item = $all->firstWhere(fn ($i) => $i['label'] === $superseded && $i['hidden'] === true);
-        expect($item)->not->toBeNull()
-            ->and($item['tag'])->toBe('setup');
+        // Match the LEGACY surface (setup-tagged + hidden) — a new step page may share the label.
+        $item = $all->firstWhere(fn ($i) => $i['label'] === $superseded && $i['hidden'] === true && $i['tag'] === 'setup');
+        expect($item)->not->toBeNull();
     }
 
     // FLAG OFF ⇒ the old menu is intact: the trio still registers (the parallel-build promise).

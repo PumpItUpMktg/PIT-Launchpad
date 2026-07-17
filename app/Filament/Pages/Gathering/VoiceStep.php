@@ -158,6 +158,17 @@ class VoiceStep extends GatheringPage
         Notification::make()->success()->title("Voice v{$draft->version} is now active")->send();
     }
 
+    /** The voice draft persists before moving on (Activate stays explicit). */
+    public function savesOnContinue(): bool
+    {
+        return true;
+    }
+
+    protected function beforeContinue(): void
+    {
+        $this->save();
+    }
+
     /** @return array{state: 'complete'|'attention'|'empty', label: string} */
     public function readiness(): array
     {

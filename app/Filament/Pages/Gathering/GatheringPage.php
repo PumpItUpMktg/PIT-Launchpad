@@ -4,6 +4,7 @@ namespace App\Filament\Pages\Gathering;
 
 use App\Enums\ProvenanceState;
 use App\Gathering\Provenance;
+use App\Gathering\SetupProgress;
 use App\Models\Site;
 use BackedEnum;
 use Filament\Pages\Page;
@@ -25,9 +26,57 @@ abstract class GatheringPage extends Page
 
     public ?string $siteId = null;
 
+    // The step pages leave the sidebar (menu cleanup): the ONE "Setup" entry
+    // ({@see SetupEntry}) lands on the resume step, and the in-page stepper rail is the step
+    // navigation. Every step stays routable.
     public static function shouldRegisterNavigation(): bool
     {
-        return (bool) config('launchpad.new_setup_enabled');
+        return false;
+    }
+
+    /**
+     * The stepper rail — all nine steps with done-state, this page marked current.
+     *
+     * @return list<array{n: int, class: class-string, label: string, url: string, done: bool, optional: bool, current: bool}>
+     */
+    public function getStepsProperty(): array
+    {
+        $site = $this->getSite();
+
+        return $site === null ? [] : app(SetupProgress::class)->steps($site, static::class);
+    }
+
+    /** The step after this one (null on the last step). @return array{label: string, url: string}|null */
+    public function nextStep(): ?array
+    {
+        $steps = $this->getStepsProperty();
+        foreach ($steps as $i => $step) {
+            if ($step['current'] && isset($steps[$i + 1])) {
+                return ['label' => $steps[$i + 1]['label'], 'url' => $steps[$i + 1]['url']];
+            }
+        }
+
+        return null;
+    }
+
+    /** Whether Continue runs this page's save first (drives the button label). */
+    public function savesOnContinue(): bool
+    {
+        return false;
+    }
+
+    /** Hook: pages with a primary save persist before moving on. */
+    protected function beforeContinue(): void {}
+
+    /** The footer's "Save & continue / Next" — persist (when the page saves) and advance. */
+    public function continueToNext(): void
+    {
+        $this->beforeContinue();
+
+        $next = $this->nextStep();
+        if ($next !== null) {
+            $this->redirect($next['url'], navigate: true);
+        }
     }
 
     public function mount(): void
