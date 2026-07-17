@@ -8,10 +8,13 @@ use App\Enums\VoiceStatus;
 use App\Filament\Pages\Gathering\BusinessStep;
 use App\Filament\Pages\Gathering\ConnectionsStep;
 use App\Filament\Pages\Gathering\InterviewStep;
+use App\Filament\Pages\Gathering\LaunchStep;
 use App\Filament\Pages\Gathering\LocationsStep;
 use App\Filament\Pages\Gathering\ServicesStep;
+use App\Filament\Pages\Gathering\SetupEntry;
 use App\Filament\Pages\Gathering\VoiceStep;
 use App\Filament\Pages\OwnerInterview;
+use App\Filament\Pages\SetupHome;
 use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
 use App\Gathering\Provenance;
@@ -81,17 +84,50 @@ function fakePlaces(): void
     });
 }
 
-it('flag off ⇒ the new group does not register; flag on ⇒ all six steps do', function () {
-    config()->set('launchpad.new_setup_enabled', false);
-    expect(BusinessStep::shouldRegisterNavigation())->toBeFalse()
-        ->and(InterviewStep::shouldRegisterNavigation())->toBeFalse()
-        ->and(ConnectionsStep::shouldRegisterNavigation())->toBeFalse();
+it('ONE Setup menu entry (flag-gated); the step pages leave the sidebar but stay routable', function () {
+    // The stepper cleanup: steps never sit in the sidebar — the rail is the step nav.
+    foreach ([BusinessStep::class, InterviewStep::class, LocationsStep::class, ServicesStep::class, VoiceStep::class, ConnectionsStep::class] as $page) {
+        expect($page::shouldRegisterNavigation())->toBeFalse();
+    }
 
     config()->set('launchpad.new_setup_enabled', true);
-    foreach ([BusinessStep::class, InterviewStep::class, LocationsStep::class, ServicesStep::class, VoiceStep::class, ConnectionsStep::class] as $page) {
-        expect($page::shouldRegisterNavigation())->toBeTrue()
-            ->and($page::getNavigationGroup())->toBe('Setup');
-    }
+    expect(SetupEntry::shouldRegisterNavigation())->toBeTrue()
+        // …and it takes the legacy guided entry's sidebar slot.
+        ->and(SetupHome::shouldRegisterNavigation())->toBeFalse();
+
+    // Flag off ⇒ the old menu is exactly as before.
+    config()->set('launchpad.new_setup_enabled', false);
+    expect(SetupEntry::shouldRegisterNavigation())->toBeFalse()
+        ->and(SetupHome::shouldRegisterNavigation())->toBeTrue();
+});
+
+it('the Setup entry resumes at the first unfinished required step; the rail + Next drive the walk-through', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    session(['guided_site_id' => $site->id]);
+
+    // Bare tenant: resume = step 1 (Business).
+    Livewire::test(SetupEntry::class)
+        ->assertRedirect(BusinessStep::getUrl());
+
+    // Business done (brand name + trade seed) → resume skips to Locations (the interview is
+    // OPTIONAL — it never traps the resume).
+    SiloBlueprint::factory()->create(['site_id' => $site->id, 'trade' => 'waterproofing']);
+    Livewire::test(SetupEntry::class)
+        ->assertRedirect(LocationsStep::getUrl());
+
+    // The rail renders on every step with this page current, and the footer advances:
+    // Business saves-and-continues to Interview (its typed form persists on the way out).
+    Livewire::test(BusinessStep::class)
+        ->assertSee('Silos & keywords')  // rail shows the whole ladder
+        ->assertSee('Save & continue')
+        ->set('phone', '(555) 010-9999')
+        ->call('continueToNext')
+        ->assertRedirect(InterviewStep::getUrl());
+    expect($site->fresh()->phone)->toBe('(555) 010-9999');
+
+    // A plain step (no primary save) shows Next; the last step (Launch) has no footer button.
+    Livewire::test(ServicesStep::class)->assertSee('Next');
+    expect(Livewire::test(LaunchStep::class)->instance()->nextStep())->toBeNull();
 });
 
 it('bulk GBP import resolves lines, creates location skeletons, and keeps failures editable + non-blocking', function () {

@@ -68,5 +68,6 @@
                 <span wire:loading wire:target="launch">Building…</span>
             </button>
         </div>
+        @include('filament.gathering._next')
     </div>
 </x-filament-panels::page>

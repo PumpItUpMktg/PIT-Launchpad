@@ -22,10 +22,17 @@ class SetupHome extends Page
 
     protected static ?string $slug = 'setup';
 
-    /** Menu-map family tag: setup-world flow (the Website-plan/approve step still lives only here). */
+    /** Menu-map family tag: superseded — the new Setup covers the full arc (gather → generate → launch). */
     public static function menuTag(): string
     {
         return 'setup';
+    }
+
+    // The new Setup entry ({@see \App\Filament\Pages\Gathering\SetupEntry}) takes the sidebar
+    // slot once the flag is on; this guided flow stays routable until cutover.
+    public static function shouldRegisterNavigation(): bool
+    {
+        return ! config('launchpad.new_setup_enabled');
     }
 
     protected string $view = 'filament.pages.setup-home';

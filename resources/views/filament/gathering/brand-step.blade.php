@@ -88,5 +88,6 @@
             <div class="g-field"><label>Photo <span class="g-muted">(optional — real photos highly recommended)</span></label><input type="file" wire:model="teamPhoto" accept="image/png,image/jpeg,image/webp"></div>
             <button type="button" class="g-btn" wire:click="addTeamMember" wire:loading.attr="disabled" wire:target="addTeamMember,teamPhoto">Add member</button>
         </div>
+        @include('filament.gathering._next')
     </div>
 </x-filament-panels::page>

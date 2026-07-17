@@ -110,5 +110,6 @@
                 @include('filament.pages.partials.locations.map')
             @endif
         </div>
+        @include('filament.gathering._next')
     </div>
 </x-filament-panels::page>

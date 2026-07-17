@@ -65,5 +65,6 @@
                 </div>
             @endif
         </div>
+        @include('filament.gathering._next')
     </div>
 </x-filament-panels::page>

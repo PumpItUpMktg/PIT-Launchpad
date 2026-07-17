@@ -29,6 +29,27 @@
     .g-muted { color:#94a3b8; font-size:12px; }
 </style>
 
+{{-- The stepper rail: run once, return any time — every step always reachable, done is state. --}}
+@if ($this->steps !== [])
+    <style>
+        .g-rail { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+        .g-rstep { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:99px; border:1px solid rgba(148,163,184,.35); color:#64748b; text-decoration:none; }
+        .g-rstep .n { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:rgba(148,163,184,.2); font-size:10px; }
+        .g-rstep.done { border-color:rgba(22,163,74,.4); color:#16a34a; } .g-rstep.done .n { background:rgba(22,163,74,.15); }
+        .g-rstep.current { border-color:#4f46e5; color:#4f46e5; background:rgba(79,70,229,.06); } .g-rstep.current .n { background:rgba(79,70,229,.15); }
+        .g-rsep { color:#cbd5e1; font-size:11px; }
+    </style>
+    <div class="g-rail">
+        @foreach ($this->steps as $step)
+            <a class="g-rstep {{ $step['current'] ? 'current' : ($step['done'] ? 'done' : '') }}" href="{{ $step['url'] }}" wire:navigate
+                title="{{ $step['label'] }}{{ $step['optional'] ? ' (optional)' : '' }}{{ $step['done'] ? ' — done' : '' }}">
+                <span class="n">{{ $step['done'] && ! $step['current'] ? '✓' : $step['n'] }}</span>{{ $step['label'] }}
+            </a>
+            @if (! $loop->last)<span class="g-rsep">›</span>@endif
+        @endforeach
+    </div>
+@endif
+
 @php $r = $this->readiness(); @endphp
 <div class="g-head">
     <div>

@@ -67,6 +67,7 @@
                 @endforelse
             </div>
         </div>
+        @include('filament.gathering._next')
     </div>
 
     <x-filament-actions::modals />

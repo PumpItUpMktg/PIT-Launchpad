@@ -24,23 +24,24 @@ it('the final menu carries ONLY the newly designed surfaces, in cutover order', 
     $m = app(NewMenu::class)->build();
     $groups = collect($m['menu'])->keyBy('group');
 
-    // Group order: build first (Setup), then run (Operate); internal tools last.
-    expect(collect($m['menu'])->pluck('group')->all())->toBe(['Top level', 'Setup', 'Operate', 'Advanced']);
+    // The stepper cleanup: Setup is ONE top-level entry (steps live on the in-page rail),
+    // so the final menu is three groups.
+    expect(collect($m['menu'])->pluck('group')->all())->toBe(['Top level', 'Operate', 'Advanced']);
 
-    // Top level keeps only the two portfolio-wide entries.
-    expect(collect($groups['Top level']['items'])->pluck('label')->all())->toBe(['Overview', 'Portfolio']);
-
-    // Setup: the full 1–9 arc, in step order.
-    expect(collect($groups['Setup']['items'])->pluck('label')->all())
-        ->toBe(['Business', 'Interview', 'Locations', 'Services', 'Voice', 'Connections & Feeds', 'Brand', 'Silos & keywords', 'Launch']);
+    // Top level: the two portfolio-wide entries + the one Setup entry.
+    expect(collect($groups['Top level']['items'])->pluck('label')->all())->toBe(['Overview', 'Portfolio', 'Setup']);
 
     // Operate: the six boards.
     expect(collect($groups['Operate']['items'])->pluck('label')->all())
         ->toBe(['Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations']);
 
+    // The nine steps ride as drill-downs (routable, rail-navigated — no sidebar entries).
+    $drill = collect($m['drilldowns'])->pluck('label');
+    expect($drill)->toContain('Business', 'Interview', 'Brand', 'Silos & keywords', 'Launch');
+
     // No legacy label leaks into the final menu.
     $menuLabels = collect($m['menu'])->flatMap(fn ($g) => collect($g['items'])->pluck('label'));
-    expect($menuLabels)->not->toContain('Grow', 'Setup', 'Review queue', 'Candidates', 'Prune', 'Owner Interview');
+    expect($menuLabels)->not->toContain('Grow', 'Review queue', 'Candidates', 'Prune', 'Owner Interview');
 });
 
 it('splits the rest honestly: pending decisions, retiring legacy, and linked drill-downs', function () {

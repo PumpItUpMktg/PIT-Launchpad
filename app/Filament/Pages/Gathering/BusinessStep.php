@@ -213,6 +213,17 @@ class BusinessStep extends GatheringPage
             ->send();
     }
 
+    /** The Business form persists before moving on. */
+    public function savesOnContinue(): bool
+    {
+        return true;
+    }
+
+    protected function beforeContinue(): void
+    {
+        $this->save();
+    }
+
     /** @return array{state: 'complete'|'attention'|'empty', label: string} */
     public function readiness(): array
     {

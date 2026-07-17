@@ -50,7 +50,7 @@ function launchReadySite(): Site
 }
 
 it('registers as step 9 of the Setup group, flag-gated like the rest', function () {
-    expect(LaunchStep::shouldRegisterNavigation())->toBeTrue()
+    expect(LaunchStep::shouldRegisterNavigation())->toBeFalse() // steps live on the rail, not the sidebar
         ->and(LaunchStep::getNavigationGroup())->toBe('Setup')
         ->and(LaunchStep::getNavigationSort())->toBe(9);
 
