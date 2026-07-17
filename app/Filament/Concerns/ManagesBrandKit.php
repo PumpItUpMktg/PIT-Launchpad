@@ -3,9 +3,11 @@
 namespace App\Filament\Concerns;
 
 use App\Branding\BrandVariationBuilder;
+use App\Branding\LogoIntake;
 use App\Guided\StepGate;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use App\Onboarding\MissionPolisher;
 use App\Publishing\TenantStorage;
@@ -65,12 +67,25 @@ trait ManagesBrandKit
     /** The pending member photo upload (optional — real photos highly recommended). */
     public mixed $teamPhoto = null;
 
+    /** The pending logo upload (optional) — processed the moment it's dropped in. */
+    public mixed $logoUpload = null;
+
+    /**
+     * The stored logo for display: url + extracted primary/accent — null until one is stored.
+     * The extracted palette feeds the "Your brand colors" style option.
+     *
+     * @var array{url: string, primary: ?string, accent: ?string}|null
+     */
+    public ?array $logoInfo = null;
+
     /** A warning message when the brand push is not yet possible, or null when it may proceed. */
     abstract protected function brandPushBlocked(): ?string;
 
-    /** Load the stored narrative into the form (mount / site-switch). */
+    /** Load the stored narrative + logo into the form (mount / site-switch). */
     protected function loadBrandState(Site $site): void
     {
+        $this->logoInfo = $this->existingLogo($site);
+
         $narrative = SiteNarrative::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
         if ($narrative === null) {
             return;
@@ -83,6 +98,76 @@ trait ManagesBrandKit
         $this->valuesText = $this->toLines($narrative->values);
         $this->differentiatorsText = $this->toLines($narrative->differentiators);
         $this->team = $this->teamRows($narrative->team);
+    }
+
+    /**
+     * Optional logo — processed the MOMENT it's uploaded (stored to R2, brand colors extracted,
+     * persisted to SiteBranding.logo_set), so the "Your brand colors" style option can appear.
+     * Never blocks the step. Livewire fires this hook when the `logoUpload` property changes.
+     */
+    public function updatedLogoUpload(): void
+    {
+        $site = $this->getSite();
+        if ($site === null || ! $this->logoUpload instanceof TemporaryUploadedFile) {
+            return;
+        }
+
+        $this->validate([
+            'logoUpload' => ['file', 'mimetypes:image/png,image/jpeg,image/svg+xml,text/plain', 'max:4096'],
+        ], [], ['logoUpload' => 'logo']);
+
+        $ext = strtolower($this->logoUpload->getClientOriginalExtension() ?: (string) $this->logoUpload->guessExtension());
+        $set = app(LogoIntake::class)->store($site, (string) $this->logoUpload->get(), $ext);
+
+        $this->logoUpload = null;
+        $this->logoInfo = $this->displayLogo($set);
+
+        Notification::make()->title('Logo saved.')
+            ->body(isset($set['primary']) ? 'Your brand colors are ready as a style option below.' : 'Added to your site header.')
+            ->success()->send();
+    }
+
+    public function removeLogo(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+        if ($branding !== null) {
+            $set = is_array($branding->logo_set) ? $branding->logo_set : [];
+            unset($set['url'], $set['r2_key'], $set['ext'], $set['primary'], $set['accent']);
+            $branding->update(['logo_set' => $set]);
+        }
+        // Drop the logo-colors style choice too — its source is gone.
+        $site->update(['use_logo_colors' => false]);
+        $this->logoInfo = null;
+    }
+
+    private function existingLogo(Site $site): ?array
+    {
+        $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+
+        return $this->displayLogo(is_array($branding?->logo_set) ? $branding->logo_set : []);
+    }
+
+    /**
+     * @param  array<string, mixed>  $set
+     * @return array{url: string, primary: ?string, accent: ?string}|null
+     */
+    private function displayLogo(array $set): ?array
+    {
+        $url = trim((string) ($set['url'] ?? ''));
+        if ($url === '') {
+            return null;
+        }
+
+        return [
+            'url' => $url,
+            'primary' => isset($set['primary']) ? (string) $set['primary'] : null,
+            'accent' => isset($set['accent']) ? (string) $set['accent'] : null,
+        ];
     }
 
     public function getPushedProperty(): bool

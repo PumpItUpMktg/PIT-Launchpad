@@ -9,6 +9,32 @@
             $logo = $this->logoColors;
         @endphp
 
+        {{-- ── Logo ── --}}
+        <div class="g-card">
+            <h3>Logo <span class="g-muted" style="font-weight:400">— optional</span></h3>
+            <p class="g-hint">Uploaded to your site header. If a clear brand color is found, it becomes the "Your brand colors" style option below.</p>
+            @if ($logoInfo)
+                <div class="g-row" style="align-items:center">
+                    <img src="{{ $logoInfo['url'] }}" alt="Your logo" style="height:52px;width:auto;max-width:180px;object-fit:contain;background:#fff;border:1px solid rgba(148,163,184,.4);border-radius:8px;padding:6px">
+                    @if ($logoInfo['primary'])
+                        <span title="{{ $logoInfo['primary'] }}" style="width:22px;height:22px;border-radius:50%;background:{{ $logoInfo['primary'] }};border:1px solid rgba(148,163,184,.4)"></span>
+                        @if ($logoInfo['accent'])
+                            <span title="{{ $logoInfo['accent'] }}" style="width:22px;height:22px;border-radius:50%;background:{{ $logoInfo['accent'] }};border:1px solid rgba(148,163,184,.4)"></span>
+                        @endif
+                    @else
+                        <span class="g-muted">No clear brand color found — the logo is still in your header.</span>
+                    @endif
+                    <button type="button" class="g-btn danger" style="margin-left:auto" wire:click="removeLogo">Remove</button>
+                </div>
+                <div class="g-field"><label>Replace</label><input type="file" wire:model="logoUpload" accept="image/png,image/jpeg,image/svg+xml"></div>
+            @else
+                <div class="g-field">
+                    <input type="file" wire:model="logoUpload" accept="image/png,image/jpeg,image/svg+xml">
+                    <div wire:loading wire:target="logoUpload" class="g-muted" style="margin-top:4px">Processing…</div>
+                </div>
+            @endif
+        </div>
+
         {{-- ── Look ── --}}
         <div class="g-card">
             <h3>Look
