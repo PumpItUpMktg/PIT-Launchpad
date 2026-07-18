@@ -46,6 +46,28 @@ it('pushes the site profile (brand + nav) to the companion plugin', function () 
         && collect($r['services'])->pluck('label')->contains('Sump Pump Repair'));
 });
 
+it('saves the header-tone override and pushes it', function () {
+    Http::fake(['*/wp-json/launchpad/v1/site-profile' => Http::response(['updated' => true], 200)]);
+
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://apex.example']);
+    Connection::factory()->rotated()->create([
+        'site_id' => $site->id,
+        'provider' => ConnectionProvider::WpAppPassword->value,
+        'credentials' => ['base_url' => 'https://apex.example', 'username' => 'u', 'app_password' => 'pw'],
+    ]);
+
+    // Operator forces the light bar.
+    Livewire::test(ListSites::class)->callTableAction('syncChrome', $site, data: ['header_tone' => 'light']);
+
+    expect($site->fresh()->header_tone_override)->toBe('light');
+    Http::assertSent(fn ($r) => str_ends_with($r->url(), '/wp-json/launchpad/v1/site-profile')
+        && $r['header_tone'] === 'light');
+
+    // Auto clears the override back to null.
+    Livewire::test(ListSites::class)->callTableAction('syncChrome', $site, data: ['header_tone' => '']);
+    expect($site->fresh()->header_tone_override)->toBeNull();
+});
+
 it('surfaces a graceful failure when the site has no WordPress connection', function () {
     $site = Site::factory()->create(['brand_name' => 'No Connection Co']);
 

@@ -92,14 +92,20 @@ final class SiteProfileAssembler
     }
 
     /**
-     * The header background that best shows the logo — 'dark' or 'light', derived at logo intake
-     * ({@see LogoHeaderTone}). Defaults to 'light' (no logo / no signal) — the clean white bar, which
+     * The header background — 'dark' or 'light'. An explicit operator override wins outright
+     * (`header_tone_override`); otherwise it's derived from the uploaded logo at intake
+     * ({@see LogoHeaderTone}), defaulting to 'light' (no logo / no signal) — the clean white bar, which
      * is also the plugin's own render-time fallback, so a profile sync never repaints a no-signal
      * tenant's header. A logo only flips the bar to 'dark' when it genuinely reads better there. The
      * plugin renders the matching `lp-tone-{tone}` class.
      */
     private function headerTone(Site $site): string
     {
+        $override = trim((string) ($site->header_tone_override ?? ''));
+        if ($override === 'dark' || $override === 'light') {
+            return $override;
+        }
+
         $tone = trim((string) ($this->logoSet($site)['header_tone'] ?? ''));
 
         return $tone === 'dark' ? 'dark' : 'light';

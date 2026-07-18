@@ -613,8 +613,22 @@ class SiteResource extends Resource
             ->modalHeading('Sync header & footer')
             ->modalDescription('Pushes this tenant\'s site-wide chrome — brand, NAP, and the navigation menu (top-8 services, Areas We Serve) — to its WordPress site. Run this after the service set or contact details change; a page republish does NOT update the menu.')
             ->modalSubmitActionLabel('Push chrome')
-            ->action(function (Site $record): void {
-                $profile = app(SiteProfileAssembler::class)->assemble($record);
+            ->fillForm(fn (Site $record): array => ['header_tone' => (string) ($record->header_tone_override ?? '')])
+            ->schema([
+                Select::make('header_tone')
+                    ->label('Header background')
+                    ->options(['' => 'Auto (from logo)', 'light' => 'Light bar', 'dark' => 'Dark bar'])
+                    ->default('')
+                    ->selectablePlaceholder(false)
+                    ->helperText('Auto reads the uploaded logo (defaults to a light bar). Pick Light or Dark to force it regardless of the logo.'),
+            ])
+            ->action(function (Site $record, array $data): void {
+                // Persist the operator's tone choice first ('' = auto → null), so the assembled profile
+                // carries it.
+                $choice = (string) ($data['header_tone'] ?? '');
+                $record->forceFill(['header_tone_override' => in_array($choice, ['light', 'dark'], true) ? $choice : null])->save();
+
+                $profile = app(SiteProfileAssembler::class)->assemble($record->fresh());
 
                 try {
                     $result = app(WordpressClientFactory::class)->forSite($record)->pushSiteProfile($profile);
@@ -634,7 +648,8 @@ class SiteResource extends Resource
 
                 Notification::make()->success()->title('Header & footer synced')
                     ->body(sprintf(
-                        '%d service(s) in the nav, %d service area(s), %d company link(s)%s.',
+                        '%s header · %d service(s) in the nav, %d service area(s), %d company link(s)%s.',
+                        ucfirst((string) $profile['header_tone']),
                         count($profile['services']),
                         count($profile['areas']),
                         count($profile['company']),
