@@ -216,6 +216,11 @@ class MetaBlobAssembler
             'kit_version' => (string) ($content->wireframe_kit_version ?? ''),
             'silo_id' => $content->silo_id,
             'slug' => $content->slug,
+            // URL nesting: the parent hub's control-plane ULID. The plugin sets WP post_parent from it
+            // (resolving the parent post by content_id) and derives post_name from the slug's LAST
+            // segment — so a town page slugged `montclair-nj/springfield` lands at /montclair-nj/
+            // springfield under its hub. Null for a flat/top-level page.
+            'parent_content_id' => $content->parent_content_id,
             // 'published' → live; anything else → a WP draft (the plugin's mapping). The proof-step
             // preview-push sends 'draft' so the page renders in WP without going live.
             'status' => $wpStatus,

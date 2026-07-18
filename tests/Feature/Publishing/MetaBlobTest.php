@@ -21,7 +21,7 @@ test('the assembled meta-blob matches the companion-plugin /content contract', f
     // Top-level contract keys (per samples/content-service.json).
     expect($payload)->toHaveKeys([
         'content_id', 'kind', 'page_type', 'kit', 'kit_version',
-        'silo_id', 'slug', 'status', 'locked', 'slot_payload', 'kit_definition', 'template_id', 'images', 'seo',
+        'silo_id', 'slug', 'parent_content_id', 'status', 'locked', 'slot_payload', 'kit_definition', 'template_id', 'images', 'seo',
     ]);
 
     // The trimmed kit contract travels with the push (feeds the plugin's
@@ -141,6 +141,21 @@ test('the pushed slug equals the assigned permalink exactly — the live URL can
     // at /drain-cleaning-austin resolves to this page once it publishes.
     expect($payload['slug'])->toBe('drain-cleaning-austin')
         ->and($payload['seo']['canonical'])->toEndWith('/drain-cleaning-austin');
+});
+
+test('the meta-blob carries parent_content_id so the plugin can nest a town under its hub', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+
+    $hub = PublishHarness::approvedPage($site);
+    $hub->forceFill(['slug' => 'montclair-nj'])->save();
+
+    $town = PublishHarness::approvedPage($site);
+    $town->forceFill(['slug' => 'montclair-nj/springfield', 'parent_content_id' => $hub->id])->save();
+
+    expect(app(MetaBlobAssembler::class)->assemble($town->fresh(), new Collection)['parent_content_id'])->toBe($hub->id)
+        // a flat page carries a null parent
+        ->and(app(MetaBlobAssembler::class)->assemble($hub->fresh(), new Collection)['parent_content_id'])->toBeNull();
 });
 
 test('the breadcrumb silo crumb links to its pillar page and the leaf uses the SEO title', function () {
