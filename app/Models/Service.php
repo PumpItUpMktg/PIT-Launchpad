@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property array{low?: numeric, high?: numeric, unit?: string}|null $price_range optional honest range; absent ⇒ factors-only cost section
  * @property array{enabled?: bool, title?: string, option_a?: array{name?: string, points?: list<string>}, option_b?: array{name?: string, points?: list<string>}, verdict?: string}|null $comparison owner-triggered per spoke, off by default
  * @property bool $warranty_applicable pulls the warranty trust copy onto the page when true
+ * @property ServiceSiloRole $silo_role pillar (core) vs supporting — drives silo + nav ranking
  */
 class Service extends Model
 {

@@ -3,9 +3,11 @@
 use App\Enums\ContentKind;
 use App\Enums\MarketTier;
 use App\Enums\PageType;
+use App\Enums\ServiceSiloRole;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
+use App\Models\Service;
 use App\Models\Site;
 use App\Models\SiteBranding;
 use App\Publishing\Chrome\SiteProfileAssembler;
@@ -54,6 +56,35 @@ it('assembles the site profile from real §1 data — brand, NAP, real page link
         ->and($profile['company'][0])->toBe(['label' => 'About Us', 'url' => 'https://sewergurus.com/about'])
         // priority market ordered first
         ->and(array_column($profile['areas'], 'label'))->toBe(['Jersey City', 'Newark']);
+});
+
+it('caps the header services at 8 and ranks by importance (hub → pillar → supporting → guide last)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sg.test']);
+    $pillar = Service::factory()->create(['site_id' => $site->id, 'silo_role' => ServiceSiloRole::Pillar]);
+    $supporting = Service::factory()->create(['site_id' => $site->id, 'silo_role' => ServiceSiloRole::Supporting]);
+
+    $page = function (string $slug, PageType $type, ?string $serviceId, int $ageDays) use ($site): void {
+        Content::factory()->create([
+            'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => $type,
+            'slug' => $slug, 'title' => ucwords(str_replace('-', ' ', $slug)),
+            'primary_service_id' => $serviceId, 'created_at' => now()->subDays($ageDays),
+        ]);
+    };
+
+    $page('our-services', PageType::Hub, null, 100);                       // hub → ranks first
+    foreach (['sump-pump-installation', 'sump-pump-replacement', 'foundation-water',
+        'sewage-ejector', 'waterproofing', 'crawlspace'] as $i => $slug) {
+        $page($slug, PageType::Service, $pillar->id, 90 - $i);             // 6 core (pillar) services
+    }
+    $page('exterior-drainage', PageType::Service, $supporting->id, 30);    // supporting service
+    $page('cost-guide', PageType::Service, null, 20);                      // guide, no core link → last
+
+    $labels = array_column(app(SiteProfileAssembler::class)->assemble($site->fresh())['services'], 'label');
+
+    expect($labels)->toHaveCount(8)                 // capped (9 pages exist)
+        ->and($labels[0])->toBe('Our Services')     // the hub leads
+        ->and($labels)->toContain('Exterior Drainage')  // supporting still made the cut
+        ->and($labels)->not->toContain('Cost Guide');   // the guide sank past the cap
 });
 
 it('degrades cleanly for a bare site — no phone, no links, chrome falls back to the site title', function () {
