@@ -11,6 +11,7 @@ use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
 use App\Filament\Pages\Operate\OperateDashboard;
+use App\Filament\Pages\Operate\OrphanScan;
 use App\Filament\Pages\SiteCockpit;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
@@ -28,6 +29,7 @@ use App\Operator\Handover\SiteHandover;
 use App\Operator\SiteDeleter;
 use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Publishing\LaunchOrchestrator;
+use App\Publishing\OrphanScanner;
 use App\Publishing\SitePreviewService;
 use App\Security\GateCheck;
 use BackedEnum;
@@ -143,6 +145,7 @@ class SiteResource extends Resource
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
                     self::syncChromeAction(),
+                    self::scanOrphansAction(),
                     self::templatesAction(),
                     self::previewAllSectionsAction(),
                     self::handoverAction(),
@@ -655,6 +658,23 @@ class SiteResource extends Resource
                         count($profile['company']),
                         $profile['phone'] !== '' ? ', phone set' : '',
                     ))->send();
+            });
+    }
+
+    /**
+     * "Scan for orphans" — sets this card's tenant as the working tenant and lands on the Operate →
+     * Orphans page, which runs {@see OrphanScanner} and offers the per-finding fixes
+     * (create a 301, take a stranded page down). The safety net for a page deleted but not recreated.
+     */
+    private static function scanOrphansAction(): Action
+    {
+        return Action::make('scanOrphans')
+            ->label('Scan for orphans')
+            ->icon('heroicon-o-link-slash')
+            ->action(function (Site $record) {
+                app(ActiveTenant::class)->set($record->id);
+
+                return redirect(OrphanScan::getUrl());
             });
     }
 
