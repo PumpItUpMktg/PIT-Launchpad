@@ -59,7 +59,9 @@
     .lv-lock { font-size:11px; color:#b45309; font-weight:600; margin-left:8px; }
     .lv-navctl { display:flex; align-items:center; gap:9px; padding:7px 13px 10px; font-size:12px; color:#64748b; border-top:1px solid rgba(148,163,184,.18); }
     .lv-navctl label { display:flex; align-items:center; gap:5px; cursor:pointer; }
-    .lv-navorder { width:64px; font-size:12px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:2px 6px; background:transparent; }
+    .lv-navorder-lbl { margin-left:auto; }
+    .lv-navorder { width:58px; font-size:12px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:2px 6px; background:transparent; }
+    .lv-navorder:disabled { opacity:.4; cursor:not-allowed; }
 </style>
 
 <div class="lv-head">

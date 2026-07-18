@@ -112,11 +112,12 @@
                 <input type="checkbox" wire:click="toggleNavFeatured('{{ $card['id'] }}')" @checked($nav['featured'])>
                 In header menu
             </label>
-            @if ($nav['featured'])
-                <input type="number" min="1" class="lv-navorder" placeholder="order" value="{{ $nav['order'] }}"
+            <label class="lv-navorder-lbl" title="Menu order (lower shows first; blank = automatic). Check the box first.">
+                order
+                <input type="number" min="1" class="lv-navorder" placeholder="auto" value="{{ $nav['order'] }}"
                        wire:change="setNavOrder('{{ $card['id'] }}', $event.target.value)"
-                       title="Menu order (lower shows first; blank = automatic)">
-            @endif
+                       @disabled(! $nav['featured'])>
+            </label>
         </div>
     @endif
 </div>
