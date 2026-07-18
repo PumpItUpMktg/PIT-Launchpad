@@ -21,6 +21,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string $brand_name
  * @property string|null $header_tone_override operator override for the header bar: 'light' | 'dark' | null (auto from logo)
  * @property bool $offers_emergency
+ * @property string|null $phone corporate/main business phone (intake) — the site-wide number
+ * @property string|null $emergency_phone corporate after-hours line (intake)
+ * @property string|null $corporate_street corporate/site-wide address (intake), distinct from any Location's NAP
+ * @property string|null $corporate_city
+ * @property string|null $corporate_state
+ * @property string|null $corporate_postal_code
  * @property StyleVariation|null $style_variation
  * @property bool $use_logo_colors
  * @property string|null $license_number trust fact (gathering relay) — manual or interview-seeded
@@ -207,6 +213,26 @@ class Site extends Model
     public function ownPageBar(): int
     {
         return (int) ($this->silo_own_page_bar ?? config('launchpad.silo_volume.fold_threshold', 100));
+    }
+
+    /**
+     * The corporate / site-wide address as one display line — "10 Main St, Springfield, NJ 07081" —
+     * assembled from the structured intake fields (street + city + state + postal). This is the
+     * site-wide NAP address for the header/footer chrome, distinct from any physical Location's own
+     * address. Null when no corporate address was captured (readers fall back to the primary location).
+     */
+    public function corporateAddressLine(): ?string
+    {
+        $street = trim((string) $this->corporate_street);
+        $regionZip = trim(trim((string) $this->corporate_state).' '.trim((string) $this->corporate_postal_code));
+        $cityRegion = implode(', ', array_filter([
+            trim((string) $this->corporate_city),
+            $regionZip,
+        ], fn (string $p): bool => $p !== ''));
+
+        $line = implode(', ', array_filter([$street, $cityRegion], fn (string $p): bool => $p !== ''));
+
+        return $line !== '' ? $line : null;
     }
 
     /** @return array<string, string> */

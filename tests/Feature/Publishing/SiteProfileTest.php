@@ -58,6 +58,30 @@ it('assembles the site profile from real §1 data — brand, NAP, real page link
         ->and(array_column($profile['areas'], 'label'))->toBe(['Jersey City', 'Newark']);
 });
 
+it('chrome NAP is the corporate intake phone + address, not a physical location', function () {
+    $site = Site::factory()->create([
+        'brand_name' => 'Sewer Gurus',
+        'domain_url' => 'https://sewergurus.com',
+        'phone' => '(973) 555-0100',                 // corporate main line (intake)
+        'corporate_street' => '10 Corporate Way',
+        'corporate_city' => 'Springfield',
+        'corporate_state' => 'NJ',
+        'corporate_postal_code' => '07081',
+    ]);
+    // A physical location with its OWN, different NAP — must NOT drive the site-wide chrome.
+    Location::factory()->create([
+        'site_id' => $site->id,
+        'phone' => '(201) 555-0199',
+        'address' => '99 Depot Rd, Newark, NJ',
+    ]);
+
+    $profile = app(SiteProfileAssembler::class)->assemble($site->fresh());
+
+    expect($profile['phone'])->toBe('(973) 555-0100')
+        ->and($profile['phone_tel'])->toBe('tel:9735550100')
+        ->and($profile['address'])->toBe('10 Corporate Way, Springfield, NJ 07081');
+});
+
 it('caps the header services at 8 and ranks by importance (hub → pillar → supporting → guide last)', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sg.test']);
     $pillar = Service::factory()->create(['site_id' => $site->id, 'silo_role' => ServiceSiloRole::Pillar]);
