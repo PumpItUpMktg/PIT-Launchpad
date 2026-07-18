@@ -296,3 +296,50 @@ it('a location page WITHOUT a pin keeps the null fallback and the drafter gets n
 
     expect(app(BlockContentAssembler::class)->compose($unpinned->fresh(), [], []))->toBeNull();
 });
+
+it('the location hub renders its NAP (address + hours + phone) and LINKS to its town pages', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, [
+        'is_storefront' => true,
+        'address' => '10 Trooper Rd, Trooper, PA 19403',
+        'email' => 'trooper@drybasements.example',
+        'hours' => ['mon' => ['open' => '09:00', 'close' => '18:00'], 'tue' => ['open' => '09:00', 'close' => '18:00']],
+    ]);
+    $page = locRelayPage($site, $location);
+
+    // Two materialized town pages under this location → the hub links down to them.
+    foreach (['Norristown' => 'norristown', 'Audubon' => 'audubon'] as $title => $slug) {
+        Content::factory()->create([
+            'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+            'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null,
+            'title' => $title, 'slug' => $slug,
+        ]);
+    }
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        // NAP: storefront address + hours + the location's own phone.
+        ->toContain('10 Trooper Rd')
+        ->toContain('(610) 555-0142')
+        ->toContain('9am')
+        // areas-served grid: REAL internal links to the town pages (not just coverage prose).
+        ->toContain('lp-areas')
+        ->toContain('<a href="/norristown">Norristown</a>')
+        ->toContain('<a href="/audubon">Audubon</a>');
+});
+
+it('the location hub drops the address for a non-storefront (mobile base stays private) but keeps hours', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, [
+        'is_storefront' => false,
+        'address' => '10 Private Garage Rd, Trooper, PA',
+        'hours' => ['mon' => ['open' => '08:00', 'close' => '17:00']],
+    ]);
+    $page = locRelayPage($site, $location);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->not->toContain('Private Garage')   // mobile base address never ships
+        ->toContain('8am');                          // hours still render
+});

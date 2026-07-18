@@ -288,6 +288,32 @@ final class BlockSections
     }
 
     /**
+     * The "areas we serve" grid on a location hub — internal LINKS to each town page under it (the
+     * hub → town spine). A semantic list the theme grids (.lp-areas) so a location serving many
+     * towns stays scannable. Empty → '' (the section drops).
+     *
+     * @param  list<array{label: string, url: string}>  $links
+     */
+    public function areasServed(string $eyebrow, string $heading, array $links): string
+    {
+        $links = array_values(array_filter($links, fn (array $l): bool => trim($l['label']) !== '' && trim($l['url']) !== ''));
+        if ($links === []) {
+            return '';
+        }
+
+        $items = array_map(
+            fn (array $l): string => '<li><a href="'.$this->attr($l['url']).'">'.$this->text($l['label']).'</a></li>',
+            $links,
+        );
+        $list = "<!-- wp:html -->\n".'<ul class="lp-areas-list">'.implode('', $items).'</ul>'."\n<!-- /wp:html -->";
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading),
+            $list,
+        ], ['align' => 'full', 'className' => 'lp-areas']);
+    }
+
+    /**
      * The proof gallery: honest photo slots. The client's real photos beat any stock image, so unfilled
      * slots render as an explicit "add your own photo" placeholder — never a fabricated image. A
      * provided (AI/uploaded) image fills a slot; the rest stay placeholders.
