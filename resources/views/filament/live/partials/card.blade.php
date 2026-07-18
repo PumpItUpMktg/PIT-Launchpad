@@ -101,4 +101,22 @@
             </select>
         @endif
     </div>
+    {{-- Header-menu curation (opt-in: only the Operate pages boards pass navControl, and only they
+         define toggleNavFeatured/setNavOrder + the navState property). Check a page to pin it into the
+         site header's main menu; the order number sorts it. Changes go live on the next Sync header &
+         footer push. --}}
+    @if ($navControl ?? false)
+        @php $nav = $this->navState[$card['id']] ?? ['featured' => false, 'order' => null]; @endphp
+        <div class="lv-navctl">
+            <label title="Show this page in the site header's main menu">
+                <input type="checkbox" wire:click="toggleNavFeatured('{{ $card['id'] }}')" @checked($nav['featured'])>
+                In header menu
+            </label>
+            @if ($nav['featured'])
+                <input type="number" min="1" class="lv-navorder" placeholder="order" value="{{ $nav['order'] }}"
+                       wire:change="setNavOrder('{{ $card['id'] }}', $event.target.value)"
+                       title="Menu order (lower shows first; blank = automatic)">
+            @endif
+        </div>
+    @endif
 </div>

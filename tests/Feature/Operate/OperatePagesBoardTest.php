@@ -173,3 +173,42 @@ it('surfaces the real failure reason on a failed row (not just the generic clien
     $work = collect(app(PagesBoard::class)->services($site->fresh())['work'])->firstWhere('title', 'Water Detection & Leaks');
     expect($work['operator_tail'])->toContain('fal render timed out');
 });
+
+it('features a live page into the header menu and sets its order from the card', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]); // the board's working tenant
+    $svc = pbPage($site, PageType::Service, ContentStatus::Published, 'Sump Pump Repair');
+
+    $page = Livewire::test(OperateServicePages::class)
+        ->assertOk()
+        ->assertSee('In header menu'); // the control renders on the live card
+
+    // Not featured yet.
+    expect($svc->fresh()->nav_featured)->toBeFalse();
+
+    $page->call('toggleNavFeatured', $svc->id);
+    expect($svc->fresh()->nav_featured)->toBeTrue();
+
+    $page->call('setNavOrder', $svc->id, '2');
+    expect($svc->fresh()->nav_order)->toBe(2);
+
+    // Blank clears the order back to automatic.
+    $page->call('setNavOrder', $svc->id, '');
+    expect($svc->fresh()->nav_order)->toBeNull();
+
+    // Toggling off removes it from the menu.
+    $page->call('toggleNavFeatured', $svc->id);
+    expect($svc->fresh()->nav_featured)->toBeFalse();
+});
+
+it('navState exposes each page\'s header-menu flags for the cards to render', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $a = pbPage($site, PageType::Service, ContentStatus::Published, 'Alpha', ['nav_featured' => true, 'nav_order' => 3]);
+    $b = pbPage($site, PageType::Service, ContentStatus::Published, 'Bravo');
+
+    $state = Livewire::test(OperateServicePages::class)->instance()->getNavStateProperty();
+
+    expect($state[$a->id])->toBe(['featured' => true, 'order' => 3])
+        ->and($state[$b->id])->toBe(['featured' => false, 'order' => null]);
+});

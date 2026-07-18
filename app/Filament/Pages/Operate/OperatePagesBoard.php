@@ -232,6 +232,58 @@ abstract class OperatePagesBoard extends OperatePage
         Notification::make()->success()->title('Rejected — it can be regenerated.')->send();
     }
 
+    // ── Header-menu curation (nav_featured + nav_order) ─────────────────────
+
+    /**
+     * Current header-menu state for every page on the site, keyed by content id — so each card can
+     * render its own checkbox + order without threading the flags through the read models.
+     *
+     * @return array<string, array{featured: bool, order: int|null}>
+     */
+    public function getNavStateProperty(): array
+    {
+        if ($this->siteId === null) {
+            return [];
+        }
+
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->siteId)
+            ->where('kind', ContentKind::Page->value)
+            ->get(['id', 'nav_featured', 'nav_order'])
+            ->mapWithKeys(fn (Content $c): array => [
+                (string) $c->id => ['featured' => (bool) $c->nav_featured, 'order' => $c->nav_order],
+            ])
+            ->all();
+    }
+
+    /** Toggle whether a page appears in the site header's main menu. */
+    public function toggleNavFeatured(string $contentId): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        $content->forceFill(['nav_featured' => ! $content->nav_featured])->save();
+
+        Notification::make()->success()
+            ->title($content->nav_featured ? 'Added to the header menu' : 'Removed from the header menu')
+            ->body('Push it live with "Sync header & footer" on the Portfolio.')
+            ->send();
+    }
+
+    /** Set a page's manual sort within the header menu (blank clears it to auto order). */
+    public function setNavOrder(string $contentId, ?string $value): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        $order = ($value === null || trim($value) === '') ? null : max(1, (int) $value);
+        $content->forceFill(['nav_order' => $order])->save();
+    }
+
     // ── Live-card actions (the Live boards' proven paths) ───────────────────
 
     public function takeDown(string $contentId): void

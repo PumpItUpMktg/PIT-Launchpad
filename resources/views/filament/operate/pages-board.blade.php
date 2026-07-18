@@ -114,13 +114,13 @@
                     </div>
                     @if ($group['location_card'] !== null)
                         <div class="lv-band">Location page</div>
-                        <div class="lv-towns">@include('filament.live.partials.card', ['card' => $group['location_card']])</div>
+                        <div class="lv-towns">@include('filament.live.partials.card', ['card' => $group['location_card'], 'navControl' => true])</div>
                     @endif
                     @if ($group['towns'] !== [])
                         <div class="lv-band">Town pages</div>
                         <div class="lv-towns">
                             @foreach ($group['towns'] as $card)
-                                @include('filament.live.partials.card', ['card' => $card])
+                                @include('filament.live.partials.card', ['card' => $card, 'navControl' => true])
                             @endforeach
                         </div>
                     @endif
@@ -128,7 +128,7 @@
                         <div class="lv-band">City-service pages</div>
                         <div class="lv-towns">
                             @foreach ($group['city_services'] as $card)
-                                @include('filament.live.partials.card', ['card' => $card])
+                                @include('filament.live.partials.card', ['card' => $card, 'navControl' => true])
                             @endforeach
                         </div>
                     @endif
@@ -141,7 +141,7 @@
                     </div>
                     <div class="lv-grid" style="margin-top:8px">
                         @foreach ($live['orphans'] as $card)
-                            @include('filament.live.partials.card', ['card' => $card, 'locationOptions' => $live['location_options']])
+                            @include('filament.live.partials.card', ['card' => $card, 'locationOptions' => $live['location_options'], 'navControl' => true])
                         @endforeach
                     </div>
                 </div>
@@ -153,7 +153,7 @@
             @else
                 <div class="lv-grid">
                     @foreach ($live as $card)
-                        @include('filament.live.partials.card', ['card' => $card])
+                        @include('filament.live.partials.card', ['card' => $card, 'navControl' => true])
                     @endforeach
                 </div>
             @endif
