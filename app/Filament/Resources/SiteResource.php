@@ -10,6 +10,7 @@ use App\Console\Commands\SyncSiteProfileCommand;
 use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
+use App\Filament\Pages\Operate\HeaderMenu;
 use App\Filament\Pages\Operate\OperateDashboard;
 use App\Filament\Pages\Operate\OrphanScan;
 use App\Filament\Pages\SiteCockpit;
@@ -145,6 +146,7 @@ class SiteResource extends Resource
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
                     self::syncChromeAction(),
+                    self::headerMenuAction(),
                     self::scanOrphansAction(),
                     self::templatesAction(),
                     self::previewAllSectionsAction(),
@@ -658,6 +660,23 @@ class SiteResource extends Resource
                         count($profile['company']),
                         $profile['phone'] !== '' ? ', phone set' : '',
                     ))->send();
+            });
+    }
+
+    /**
+     * "Header menu" — sets this card's tenant as the working tenant and lands on the Operate → Header
+     * menu builder, where the operator arranges both header menus (main nav + services bar) by moving
+     * items up/down. Changes go live on the next "Sync header & footer".
+     */
+    private static function headerMenuAction(): Action
+    {
+        return Action::make('headerMenu')
+            ->label('Header menu')
+            ->icon('heroicon-o-bars-arrow-down')
+            ->action(function (Site $record) {
+                app(ActiveTenant::class)->set($record->id);
+
+                return redirect(HeaderMenu::getUrl());
             });
     }
 
