@@ -129,17 +129,41 @@ final class BlockBuilder
             .$this->close('button');
     }
 
+    /**
+     * A wp:image block. Performance defaults: below-the-fold images `loading="lazy"` +
+     * `decoding="async"` so off-screen images don't block the initial load. The LCP/hero image should
+     * pass `['loading' => 'eager']`, which drops lazy and adds `fetchpriority="high"` so it isn't
+     * deprioritized. `width`/`height` (when known) are emitted to reserve space and avoid layout shift.
+     * Only WordPress block props (className/sizeSlug) ride the block comment; the perf attrs are HTML-only.
+     *
+     * @param  array<string, mixed>  $attrs  className, plus optional loading ('lazy'|'eager'), width, height
+     */
     public function image(string $url, string $alt, array $attrs = []): string
     {
         $url = trim($url);
         if ($url === '') {
             return '';
         }
-        $attrs = ['sizeSlug' => 'large'] + $attrs;
-        $figureClasses = $this->classList('wp-block-image size-large', ['className' => $attrs['className'] ?? null]);
 
-        return $this->comment('image', $attrs)
-            ."\n<figure class=\"{$figureClasses}\"><img src=\"".$this->esc($url).'" alt="'.$this->esc($alt).'"/></figure>'."\n"
+        $eager = ($attrs['loading'] ?? 'lazy') === 'eager';
+        $width = (int) ($attrs['width'] ?? 0);
+        $height = (int) ($attrs['height'] ?? 0);
+
+        // Only WP block properties belong in the block comment — not the HTML-only perf attributes.
+        $blockAttrs = ['sizeSlug' => 'large'];
+        if (isset($attrs['className'])) {
+            $blockAttrs['className'] = $attrs['className'];
+        }
+        $figureClasses = $this->classList('wp-block-image size-large', ['className' => $blockAttrs['className'] ?? null]);
+
+        $img = '<img src="'.$this->esc($url).'" alt="'.$this->esc($alt).'"'
+            .($eager ? ' loading="eager" fetchpriority="high"' : ' loading="lazy"')
+            .' decoding="async"'
+            .($width > 0 && $height > 0 ? ' width="'.$width.'" height="'.$height.'"' : '')
+            .'/>';
+
+        return $this->comment('image', $blockAttrs)
+            ."\n<figure class=\"{$figureClasses}\">{$img}</figure>\n"
             .$this->close('image');
     }
 

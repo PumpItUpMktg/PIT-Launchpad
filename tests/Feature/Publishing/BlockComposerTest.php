@@ -48,6 +48,12 @@ it('emits ONLY core blocks and balanced block comments', function () use ($slots
         ->toContain('wp:columns')
         ->toContain('<img src="https://cdn.example/hero.webp"')
         ->toContain('Stop sewer problems before they shut you down.');
+
+    // Perf: the hero image is the LCP — eager + high priority + async decode, never lazy.
+    expect($markup)->toContain('src="https://cdn.example/hero.webp" alt="')
+        ->toMatch('/hero\.webp"[^>]*loading="eager"[^>]*fetchpriority="high"/')
+        ->toContain('decoding="async"')
+        ->not->toMatch('/hero\.webp"[^>]*loading="lazy"/');
 });
 
 it('emergency ON makes the phone the primary CTA with 24/7 framing', function () use ($slots, $images, $cards) {
