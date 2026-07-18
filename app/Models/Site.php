@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property array<string, int>|null $coverage_thresholds
  * @property string|null $domain_url
  * @property string $brand_name
+ * @property string|null $header_tone_override operator override for the header bar: 'light' | 'dark' | null (auto from logo)
  * @property bool $offers_emergency
  * @property StyleVariation|null $style_variation
  * @property bool $use_logo_colors

@@ -87,6 +87,23 @@ it('caps the header services at 8 and ranks by importance (hub → pillar → su
         ->and($labels)->not->toContain('Cost Guide');   // the guide sank past the cap
 });
 
+it('lets an operator override the header tone regardless of the logo', function () {
+    $site = Site::factory()->create();
+    // A logo that reads as dark, so the override has something to win over.
+    SiteBranding::factory()->create(['site_id' => $site->id, 'logo_set' => ['url' => 'https://cdn.example/x.png', 'header_tone' => 'dark']]);
+
+    // No override → the logo-derived dark tone.
+    expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['header_tone'])->toBe('dark');
+
+    // Operator forces light → the override wins.
+    $site->forceFill(['header_tone_override' => 'light'])->save();
+    expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['header_tone'])->toBe('light');
+
+    // Operator forces dark on a no-logo site → dark, over the light default.
+    $bare = Site::factory()->create(['header_tone_override' => 'dark']);
+    expect(app(SiteProfileAssembler::class)->assemble($bare->fresh())['header_tone'])->toBe('dark');
+});
+
 it('degrades cleanly for a bare site — no phone, no links, chrome falls back to the site title', function () {
     $site = Site::factory()->create(['brand_name' => 'Bare Co', 'domain_url' => 'https://bare.test', 'offers_emergency' => false]);
 
