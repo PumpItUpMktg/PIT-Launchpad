@@ -69,12 +69,23 @@ class MetaBlobAssembler
         return $this->pageConfigs[$content->id];
     }
 
-    /** The page's configured lead-form embed (GHL iframe), or null — operator input, verbatim. */
+    /**
+     * The page's lead-form embed (GHL iframe) the plugin's [lp_form] renders — the per-page
+     * PageConfig.form_embed, else the site-wide ConversionConfig.ghl_form_embed (one paste covers
+     * every service page), else null. Verbatim operator input.
+     */
     private function formEmbed(Content $content): ?string
     {
         $embed = trim((string) ($this->pageConfig($content)->form_embed ?? ''));
+        if ($embed !== '') {
+            return $embed;
+        }
 
-        return $embed !== '' ? $embed : null;
+        $site = ConversionConfig::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->value('ghl_form_embed');
+
+        return is_string($site) && trim($site) !== '' ? trim($site) : null;
     }
 
     /**

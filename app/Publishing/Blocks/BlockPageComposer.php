@@ -204,6 +204,7 @@ final class BlockPageComposer
         array $trustStats = [],
         array $faqs = [],
         bool $preview = false,
+        bool $hasForm = false,
     ): string {
         $hero = $this->sections->hero(
             eyebrow: 'Our services',
@@ -218,14 +219,23 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        $introBlock = $this->sections->prose(
-            eyebrow: 'Overview',
-            heading: 'What this service covers',
-            paragraphs: $intro,
-            surface: false,
-            preview: $preview,
-            activates: 'appears when the page is generated',
-        );
+        // With a lead form configured, the description row becomes a 60/40 two-column (copy + form);
+        // otherwise the plain full-width prose. Same copy either way — only the layout differs.
+        $introBlock = $hasForm
+            ? $this->sections->proseWithForm(
+                eyebrow: 'Overview',
+                heading: 'What this service covers',
+                paragraphs: $intro,
+                preview: $preview,
+            )
+            : $this->sections->prose(
+                eyebrow: 'Overview',
+                heading: 'What this service covers',
+                paragraphs: $intro,
+                surface: false,
+                preview: $preview,
+                activates: 'appears when the page is generated',
+            );
 
         $symptomsBlock = $this->sections->symptomsList(
             eyebrow: 'Warning signs',
