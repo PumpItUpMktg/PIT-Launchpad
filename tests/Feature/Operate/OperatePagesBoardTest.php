@@ -181,7 +181,8 @@ it('features a live page into the header menu and sets its order from the card',
 
     $page = Livewire::test(OperateServicePages::class)
         ->assertOk()
-        ->assertSee('In header menu'); // the control renders on the live card
+        ->assertSee('In header menu')        // the checkbox renders on the live card
+        ->assertSeeHtml('lv-navorder');      // the order field renders too (disabled until checked)
 
     // Not featured yet.
     expect($svc->fresh()->nav_featured)->toBeFalse();
