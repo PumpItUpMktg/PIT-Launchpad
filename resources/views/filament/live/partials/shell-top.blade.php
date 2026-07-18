@@ -57,6 +57,9 @@
     .lv-empty { border:1px dashed rgba(148,163,184,.4); border-radius:10px; padding:14px 16px; color:#94a3b8; font-size:13px; }
     .lv-select { font-size:12px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:3px 8px; background:transparent; }
     .lv-lock { font-size:11px; color:#b45309; font-weight:600; margin-left:8px; }
+    .lv-navctl { display:flex; align-items:center; gap:9px; padding:7px 13px 10px; font-size:12px; color:#64748b; border-top:1px solid rgba(148,163,184,.18); }
+    .lv-navctl label { display:flex; align-items:center; gap:5px; cursor:pointer; }
+    .lv-navorder { width:64px; font-size:12px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:2px 6px; background:transparent; }
 </style>
 
 <div class="lv-head">
