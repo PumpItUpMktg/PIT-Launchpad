@@ -8,6 +8,7 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\StandardPageType;
+use App\Locations\LocationLandingSync;
 use App\Locations\TownLocationAssigner;
 use App\Models\BuildPage;
 use App\Models\Content;
@@ -143,6 +144,10 @@ final class PageMaterializer
             // (served_towns; unique by the cannibalization guard). Unmatched pages stay for the
             // assign-location picker.
             app(TownLocationAssigner::class)->assign($site);
+
+            // Ensure the landing/hub page exists per base Location (the page that IS the location —
+            // its town pages nest beneath it). Idempotent; skips a location with nothing honest to say.
+            app(LocationLandingSync::class)->sync($site);
 
             return $pages;
         });
