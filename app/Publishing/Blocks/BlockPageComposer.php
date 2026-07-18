@@ -59,6 +59,7 @@ final class BlockPageComposer
             subhead: $this->str($slots['hero_subhead'] ?? $slots['intro'] ?? ''),
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
+            imageAttrs: $this->imageAttrs('hero_image', $images),
             assessmentText: 'Get a free assessment',
             assessmentUrl: '#contact',
             trust: $this->heroTrust($ctx, $trustStats),
@@ -213,6 +214,7 @@ final class BlockPageComposer
             subhead: $this->str($slots['hero_subhead'] ?? ''),
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
+            imageAttrs: $this->imageAttrs('hero_image', $images),
             assessmentText: 'Get a free quote',
             assessmentUrl: '#contact',
             trust: $this->heroTrust($ctx, $trustStats),
@@ -377,6 +379,7 @@ final class BlockPageComposer
             subhead: $this->str($slots['hero_subhead'] ?? ''),
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
+            imageAttrs: $this->imageAttrs('hero_image', $images),
             assessmentText: 'Get a free assessment',
             assessmentUrl: '#contact',
             trust: $this->heroTrust($ctx, $trustStats),
@@ -486,6 +489,7 @@ final class BlockPageComposer
             subhead: $this->str($slots['hero_subhead'] ?? $slots['intro'] ?? ''),
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
+            imageAttrs: $this->imageAttrs('hero_image', $images),
             assessmentText: 'Get a free assessment',
             assessmentUrl: '#contact',
             trust: $this->heroTrust($ctx, $trustStats),
@@ -593,6 +597,7 @@ final class BlockPageComposer
             subhead: $this->str($slots['hero_subhead'] ?? ''),
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
+            imageAttrs: $this->imageAttrs('hero_image', $images),
             assessmentText: 'Get in touch',
             assessmentUrl: '#contact',
             trust: $this->heroTrust($ctx, $trustStats),
@@ -805,6 +810,7 @@ final class BlockPageComposer
             subhead: $this->str($slots['intro'] ?? $slots['hero_subhead'] ?? ''),
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
+            imageAttrs: $this->imageAttrs('hero_image', $images),
             assessmentText: $ask,
             assessmentUrl: '#contact',
             trust: [],
@@ -923,6 +929,7 @@ final class BlockPageComposer
             subhead: $this->str($slots['hero_subhead'] ?? ''),
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
+            imageAttrs: $this->imageAttrs('hero_image', $images),
             assessmentText: 'Get a free assessment',
             assessmentUrl: '#contact',
             trust: $this->heroTrust($ctx, $trustStats),
@@ -1082,5 +1089,31 @@ final class BlockPageComposer
     private function imageAlt(string $key, array $images): string
     {
         return (string) ($images[$key]['alt'] ?? '');
+    }
+
+    /**
+     * The responsive/dimension attributes an <img> for slot $key should carry: `srcset` (the render's
+     * downscale candidate widths) + intrinsic `width`/`height` (to reserve space). Empty when the slot
+     * has no image or the render produced no variants — the section then emits the single source image
+     * with no srcset. `sizes` is a layout concern the section supplies (how wide the image displays).
+     *
+     * @param  array<string, array<string, mixed>>  $images
+     * @return array<string, mixed>
+     */
+    private function imageAttrs(string $key, array $images): array
+    {
+        $image = $images[$key] ?? null;
+        if (! is_array($image)) {
+            return [];
+        }
+
+        $attrs = [];
+        foreach (['srcset', 'width', 'height'] as $attr) {
+            if (isset($image[$attr]) && $image[$attr] !== '') {
+                $attrs[$attr] = $image[$attr];
+            }
+        }
+
+        return $attrs;
     }
 }

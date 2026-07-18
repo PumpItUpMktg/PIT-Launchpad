@@ -26,6 +26,7 @@ class ImageRenderer
         private readonly FalClient $fal,
         private readonly VisionClient $vision,
         private readonly TenantStorage $storage,
+        private readonly ImageVariantGenerator $variants = new ImageVariantGenerator,
     ) {}
 
     /**
@@ -54,6 +55,14 @@ class ImageRenderer
 
                 $r2Key = $this->storage->put($site, $filename, $image->bytes);
 
+                // Responsive downscale variants (best-effort): a phone loads a 400/800-wide image
+                // instead of the full render. A source too small to downscale, or a GD build without
+                // WebP, yields none — the page then serves the single source image (no srcset).
+                $variantKeys = [];
+                foreach ($this->variants->derive($image->bytes, $image->width) as $width => $bytes) {
+                    $variantKeys[$width] = $this->storage->put($site, $this->variantFilename($filename, $width), $bytes);
+                }
+
                 $alt = $this->vision->describe(
                     Storage::disk(TenantStorage::DISK)->url($r2Key),
                     $job->alt ?: $job->title,
@@ -63,6 +72,7 @@ class ImageRenderer
                     'r2_key' => $r2Key,
                     'width' => $image->width,
                     'height' => $image->height,
+                    'variants' => $variantKeys !== [] ? $variantKeys : null,
                     'alt' => $alt,
                     'status' => RenderStatus::Succeeded,
                     'error' => null,
@@ -102,5 +112,18 @@ class ImageRenderer
         }
 
         return $filename.'.'.$extension;
+    }
+
+    /**
+     * Insert a "-{width}w" marker before the extension so a variant sits beside its source in R2 with
+     * an obvious key: "water-heater-hero.webp" → "water-heater-hero-400w.webp". Variants are always
+     * re-encoded WebP, so the extension is normalized to .webp regardless of the source filename.
+     */
+    private function variantFilename(string $filename, int $width): string
+    {
+        $ext = pathinfo($filename, PATHINFO_EXTENSION);
+        $base = $ext !== '' ? substr($filename, 0, -(strlen($ext) + 1)) : $filename;
+
+        return $base.'-'.$width.'w.webp';
     }
 }

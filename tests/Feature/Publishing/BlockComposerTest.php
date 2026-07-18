@@ -56,6 +56,37 @@ it('emits ONLY core blocks and balanced block comments', function () use ($slots
         ->not->toMatch('/hero\.webp"[^>]*loading="lazy"/');
 });
 
+it('emits a responsive srcset + sizes on the hero when the render produced variants', function () use ($slots, $cards) {
+    $ctx = new PageContext('(973) 555-0100', 'tel:+19735550100');
+    // The hero image object carries the srcset (variants + source) and intrinsic dimensions.
+    $images = ['hero_image' => [
+        'url' => 'https://cdn.example/hero.webp',
+        'alt' => 'A technician on site',
+        'width' => 1200,
+        'height' => 675,
+        'srcset' => 'https://cdn.example/hero-400w.webp 400w, https://cdn.example/hero-800w.webp 800w, https://cdn.example/hero.webp 1200w',
+    ]];
+    $markup = composer()->composeHome($slots, $images, $cards, $ctx);
+
+    expect($markup)->toContain('srcset="https://cdn.example/hero-400w.webp 400w, https://cdn.example/hero-800w.webp 800w, https://cdn.example/hero.webp 1200w"')
+        ->toContain('sizes="(min-width: 783px) 40vw, 100vw"')
+        // intrinsic dimensions reserve space, and the hero stays eager (LCP).
+        ->toContain('width="1200"')->toContain('height="675"')
+        ->toMatch('/hero\.webp"[^>]*srcset=/')
+        ->toMatch('/hero\.webp"[^>]*loading="eager"/');
+});
+
+it('omits srcset entirely when the render produced no variants (single source image)', function () use ($slots, $cards) {
+    $ctx = new PageContext('(973) 555-0100', 'tel:+19735550100');
+    // No srcset on the object — an image rendered before variants existed, or too small to downscale.
+    $images = ['hero_image' => ['url' => 'https://cdn.example/hero.webp', 'alt' => 'A technician on site']];
+    $markup = composer()->composeHome($slots, $images, $cards, $ctx);
+
+    expect($markup)->toContain('src="https://cdn.example/hero.webp"')
+        ->not->toContain('srcset=')
+        ->not->toContain('sizes=');
+});
+
 it('emergency ON makes the phone the primary CTA with 24/7 framing', function () use ($slots, $images, $cards) {
     $ctx = new PageContext('(973) 555-0100', 'tel:+19735550100', emergency: true);
     $markup = composer()->composeHome($slots, $images, $cards, $ctx);

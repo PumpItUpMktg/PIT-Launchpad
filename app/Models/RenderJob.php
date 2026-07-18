@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Storage;
  * @property int $attempts
  * @property int|null $width
  * @property int|null $height
+ * @property array<int|string, string>|null $variants
  */
 class RenderJob extends Model
 {
@@ -72,7 +73,39 @@ class RenderJob extends Model
             'caption' => $this->caption,
             'width' => $this->width,
             'height' => $this->height,
+            'srcset' => $this->srcset(),
         ], fn ($v) => $v !== null && $v !== '');
+    }
+
+    /**
+     * A responsive `srcset` string built from the derived variants plus the source render as the
+     * largest candidate — e.g. "https://cdn/…-400w.webp 400w, https://cdn/…-800w.webp 800w,
+     * https://cdn/…hero.webp 1200w". Null when no variants were derived (the page then serves the
+     * single source `url` with no srcset). Descending duplicates and widths at/above the source
+     * would be redundant, so the source width always caps the list.
+     */
+    public function srcset(): ?string
+    {
+        $variants = is_array($this->variants) ? $this->variants : [];
+        if ($variants === [] || $this->r2_key === null || ! $this->width) {
+            return null;
+        }
+
+        $disk = Storage::disk('r2');
+        $candidates = [];
+        foreach ($variants as $width => $key) {
+            $w = (int) $width;
+            if ($w > 0 && $w < $this->width && $key !== '') {
+                $candidates[$w] = $disk->url($key).' '.$w.'w';
+            }
+        }
+        if ($candidates === []) {
+            return null;
+        }
+        $candidates[$this->width] = $disk->url($this->r2_key).' '.$this->width.'w';
+        ksort($candidates);
+
+        return implode(', ', $candidates);
     }
 
     /** @return array<string, string> */
@@ -85,6 +118,7 @@ class RenderJob extends Model
             'attempts' => 'integer',
             'width' => 'integer',
             'height' => 'integer',
+            'variants' => 'array',
         ];
     }
 }
