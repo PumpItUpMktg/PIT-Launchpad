@@ -95,7 +95,7 @@ it('degrades cleanly for a bare site — no phone, no links, chrome falls back t
     expect($profile['brand_name'])->toBe('Bare Co')
         ->and($profile['phone'])->toBe('')
         ->and($profile['phone_tel'])->toBe('')
-        ->and($profile['header_tone'])->toBe('dark') // no logo → the platform's standard dark header
+        ->and($profile['header_tone'])->toBe('light') // no logo → the clean default bar (matches the plugin's render fallback)
         ->and($profile['services'])->toBe([])
         ->and($profile['areas'])->toBe([])
         ->and($profile['company'])->toBe([])

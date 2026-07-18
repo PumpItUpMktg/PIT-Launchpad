@@ -1430,8 +1430,8 @@
 }
 
 /* Logo-driven header tone. The plugin stamps .lp-tone-dark / .lp-tone-light (from the control-plane's
-   LogoHeaderTone) on the header inner. Dark is the platform default (the .lp-header rule above); a
-   dark-ink logo flips the whole bar to light so the mark stays legible. */
+   LogoHeaderTone) on the header inner. Light (this rule) is the default bar; a light-ink logo flips the
+   whole bar to dark (the .lp-header rule above) so the mark stays legible. */
 .lp-header:has(.lp-tone-light) {
     background: var(--wp--preset--color--base, #fff);
     color: var(--wp--preset--color--contrast, #0f172a);
