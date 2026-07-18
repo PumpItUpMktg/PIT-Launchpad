@@ -6,6 +6,7 @@ use App\Branding\BrandBrief;
 use App\Branding\BrandStudio;
 use App\Branding\Scheme;
 use App\Console\Commands\DeleteSiteCommand;
+use App\Console\Commands\SyncSiteProfileCommand;
 use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
@@ -13,6 +14,7 @@ use App\Filament\Pages\Operate\OperateDashboard;
 use App\Filament\Pages\SiteCockpit;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
+use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\Models\Scopes\SiteScope;
@@ -24,6 +26,7 @@ use App\Operator\Controls\CadenceControl;
 use App\Operator\Controls\TemplateMapping;
 use App\Operator\Handover\SiteHandover;
 use App\Operator\SiteDeleter;
+use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Publishing\LaunchOrchestrator;
 use App\Publishing\SitePreviewService;
 use App\Security\GateCheck;
@@ -139,6 +142,7 @@ class SiteResource extends Resource
                     self::launchAction(),
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
+                    self::syncChromeAction(),
                     self::templatesAction(),
                     self::previewAllSectionsAction(),
                     self::handoverAction(),
@@ -593,6 +597,52 @@ class SiteResource extends Resource
      * stored engine-side (versioned). The §2 push stamps the resolved template on
      * the /content blob.
      */
+    /**
+     * Push the site's universal header/footer PROFILE (brand + NAP + nav) to the companion plugin —
+     * the one-click surface of {@see SyncSiteProfileCommand}. The chrome is
+     * SITE-WIDE, so it never rides a page push: repushing pages leaves the header/footer menu
+     * untouched. This is the action to run after the service set or NAP changes (e.g. the ranked
+     * top-8 services nav). Idempotent; verify-safe (the plugin echoes `updated`).
+     */
+    private static function syncChromeAction(): Action
+    {
+        return Action::make('syncChrome')
+            ->label('Sync header & footer')
+            ->icon('heroicon-o-bars-3')
+            ->requiresConfirmation()
+            ->modalHeading('Sync header & footer')
+            ->modalDescription('Pushes this tenant\'s site-wide chrome — brand, NAP, and the navigation menu (top-8 services, Areas We Serve) — to its WordPress site. Run this after the service set or contact details change; a page republish does NOT update the menu.')
+            ->modalSubmitActionLabel('Push chrome')
+            ->action(function (Site $record): void {
+                $profile = app(SiteProfileAssembler::class)->assemble($record);
+
+                try {
+                    $result = app(WordpressClientFactory::class)->forSite($record)->pushSiteProfile($profile);
+                } catch (WordpressException $e) {
+                    Notification::make()->danger()->title('Chrome push failed')
+                        ->body($e->getMessage())->send();
+
+                    return;
+                }
+
+                if (empty($result['updated'])) {
+                    Notification::make()->warning()->title('Chrome not updated')
+                        ->body('The companion plugin rejected the profile push.')->send();
+
+                    return;
+                }
+
+                Notification::make()->success()->title('Header & footer synced')
+                    ->body(sprintf(
+                        '%d service(s) in the nav, %d service area(s), %d company link(s)%s.',
+                        count($profile['services']),
+                        count($profile['areas']),
+                        count($profile['company']),
+                        $profile['phone'] !== '' ? ', phone set' : '',
+                    ))->send();
+            });
+    }
+
     private static function templatesAction(): Action
     {
         return Action::make('templates')
