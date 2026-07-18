@@ -178,6 +178,29 @@ it('a trust-facts save confirms seeded fields but leaves manual fields rowless',
         ->and($provenance->state($site, 'years_in_business'))->toBeNull(); // manual = no row
 });
 
+it('the Business step captures the corporate main phone + structured site-wide address', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+
+    Livewire::test(BusinessStep::class)
+        ->set('phone', '(973) 555-0100')
+        ->set('emergencyPhone', '(973) 555-9111')
+        ->set('corporateStreet', '10 Corporate Way')
+        ->set('corporateCity', 'Springfield')
+        ->set('corporateState', 'NJ')
+        ->set('corporatePostalCode', '07081')
+        ->call('save');
+
+    $site->refresh();
+    expect($site->phone)->toBe('(973) 555-0100')
+        ->and($site->emergency_phone)->toBe('(973) 555-9111')
+        ->and($site->corporate_street)->toBe('10 Corporate Way')
+        ->and($site->corporate_city)->toBe('Springfield')
+        ->and($site->corporate_state)->toBe('NJ')
+        ->and($site->corporate_postal_code)->toBe('07081')
+        ->and($site->corporateAddressLine())->toBe('10 Corporate Way, Springfield, NJ 07081');
+});
+
 it('the Locations step embeds the territory workspace and saving details confirms seeded fields', function () {
     $site = Site::factory()->create();
     session(['guided_site_id' => $site->id]);
