@@ -9,6 +9,7 @@ use App\Console\Commands\DeleteSiteCommand;
 use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
+use App\Filament\Pages\Operate\OperateDashboard;
 use App\Filament\Pages\SiteCockpit;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
@@ -17,6 +18,7 @@ use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteNarrative;
+use App\Operator\ActiveTenant;
 use App\Operator\Controls\BudgetControl;
 use App\Operator\Controls\CadenceControl;
 use App\Operator\Controls\TemplateMapping;
@@ -128,6 +130,7 @@ class SiteResource extends Resource
                 SelectFilter::make('status')->options(self::statusOptions()),
             ])
             ->recordActions([
+                self::selectTenantAction(),
                 ActionGroup::make([
                     self::queueAction(),
                     self::cockpitAction(),
@@ -142,6 +145,25 @@ class SiteResource extends Resource
                     self::deleteAction(),
                 ]),
             ]);
+    }
+
+    /**
+     * "Work on this tenant" — the Portfolio's primary card action. Sets the operator's active tenant
+     * (the session key every Setup/Operate page reads) and enters the tenant at its Dashboard. This is
+     * the switch point: return here from the topbar "Switch tenant" link and pick another card.
+     */
+    private static function selectTenantAction(): Action
+    {
+        return Action::make('selectTenant')
+            ->label('Work on this')
+            ->icon('heroicon-m-arrow-right-circle')
+            ->button()
+            ->color('primary')
+            ->action(function (Site $record) {
+                app(ActiveTenant::class)->set($record->id);
+
+                return redirect(OperateDashboard::getUrl());
+            });
     }
 
     /**
