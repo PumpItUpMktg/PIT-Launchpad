@@ -135,8 +135,11 @@ final class BlockBuilder
      * pass `['loading' => 'eager']`, which drops lazy and adds `fetchpriority="high"` so it isn't
      * deprioritized. `width`/`height` (when known) are emitted to reserve space and avoid layout shift.
      * Only WordPress block props (className/sizeSlug) ride the block comment; the perf attrs are HTML-only.
+     * A `srcset` (responsive candidate widths) plus `sizes` let the browser fetch a smaller image on a
+     * phone; when a srcset is given without `sizes`, `100vw` is the safe default (never picks too-small
+     * a candidate). Both are HTML-only, like the loading/dimension attrs.
      *
-     * @param  array<string, mixed>  $attrs  className, plus optional loading ('lazy'|'eager'), width, height
+     * @param  array<string, mixed>  $attrs  className, plus optional loading ('lazy'|'eager'), width, height, srcset, sizes
      */
     public function image(string $url, string $alt, array $attrs = []): string
     {
@@ -148,6 +151,11 @@ final class BlockBuilder
         $eager = ($attrs['loading'] ?? 'lazy') === 'eager';
         $width = (int) ($attrs['width'] ?? 0);
         $height = (int) ($attrs['height'] ?? 0);
+        $srcset = is_string($attrs['srcset'] ?? null) ? trim($attrs['srcset']) : '';
+        $sizes = is_string($attrs['sizes'] ?? null) ? trim($attrs['sizes']) : '';
+        if ($srcset !== '' && $sizes === '') {
+            $sizes = '100vw';
+        }
 
         // Only WP block properties belong in the block comment — not the HTML-only perf attributes.
         $blockAttrs = ['sizeSlug' => 'large'];
@@ -157,6 +165,7 @@ final class BlockBuilder
         $figureClasses = $this->classList('wp-block-image size-large', ['className' => $blockAttrs['className'] ?? null]);
 
         $img = '<img src="'.$this->esc($url).'" alt="'.$this->esc($alt).'"'
+            .($srcset !== '' ? ' srcset="'.$this->esc($srcset).'" sizes="'.$this->esc($sizes).'"' : '')
             .($eager ? ' loading="eager" fetchpriority="high"' : ' loading="lazy"')
             .' decoding="async"'
             .($width > 0 && $height > 0 ? ' width="'.$width.'" height="'.$height.'"' : '')

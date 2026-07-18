@@ -37,6 +37,7 @@ final class BlockSections
         string $assessmentUrl,
         array $trust,
         PageContext $ctx,
+        array $imageAttrs = [],
     ): string {
         $left = [
             $this->b->paragraph($eyebrow, ['textColor' => 'base', 'fontSize' => 'small', 'className' => 'lp-eyebrow']),
@@ -48,8 +49,14 @@ final class BlockSections
 
         $right = [];
         if ($imageUrl !== null && trim($imageUrl) !== '') {
-            // The hero image is the LCP element — load it eager + high priority, never lazy.
-            $right[] = $this->b->image($imageUrl, $imageAlt !== '' ? $imageAlt : $headline, ['loading' => 'eager']);
+            // The hero image is the LCP element — load it eager + high priority, never lazy. It sits in
+            // the 40% column, so on desktop it renders ~half-width; a phone drops to full-width. The
+            // srcset/width/height ride in via $imageAttrs when the render produced variants.
+            $right[] = $this->b->image(
+                $imageUrl,
+                $imageAlt !== '' ? $imageAlt : $headline,
+                ['loading' => 'eager', 'sizes' => '(min-width: 783px) 40vw, 100vw'] + $imageAttrs,
+            );
         }
 
         $columns = [$this->b->column($left, ['width' => '60%'])];
