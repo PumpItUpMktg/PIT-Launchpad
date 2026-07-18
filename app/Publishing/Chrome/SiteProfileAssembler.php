@@ -45,6 +45,15 @@ final class SiteProfileAssembler
         $phone = trim((string) $this->contact->phone($site));
         $address = $location !== null ? trim((string) $location->address) : '';
 
+        $services = $this->services($site, $home);
+        // Never list the same page twice: a page an operator pinned into the header (services) is
+        // dropped from the company group so it can't appear in both menus.
+        $serviceUrls = array_column($services, 'url');
+        $company = array_values(array_filter(
+            $this->company($site, $home),
+            fn (array $link): bool => ! in_array($link['url'], $serviceUrls, true),
+        ));
+
         return [
             'brand_name' => (string) $site->brand_name,
             'logo_url' => $this->logoUrl($site),
@@ -56,12 +65,12 @@ final class SiteProfileAssembler
             'address' => $address,
             'hours' => $this->hours($location, (bool) $site->offers_emergency),
             'legal' => '',
-            'services' => $this->services($site, $home),
+            'services' => $services,
             'areas' => $this->areas($site),
-            'company' => $this->company($site, $home),
+            'company' => $company,
             // The header main menu: the company pages + Areas We Serve (a top-level destination, not a
             // footer afterthought). Legal pages stay OUT of the header — they live in the footer bar.
-            'nav' => [...$this->company($site, $home), ...$this->pagesBySlug($site, $home, ['areas-we-serve', 'areas', 'service-areas'])],
+            'nav' => [...$company, ...$this->pagesBySlug($site, $home, ['areas-we-serve', 'areas', 'service-areas'])],
             // Privacy / Terms for the footer bottom bar — only pages that actually exist.
             'legal_links' => $this->pagesBySlug($site, $home, ['privacy-policy', 'privacy', 'terms-of-service', 'terms']),
         ];
@@ -137,16 +146,41 @@ final class SiteProfileAssembler
     }
 
     /**
-     * The site's service / hub pages as nav links — real internal links only. A header bar can't
-     * hold every service, so it's capped; the shown ones are ranked by IMPORTANCE (not creation
-     * order) so the cap keeps the pages that matter: the category hub first, then core (pillar)
-     * services, then supporting services, and longtail "guide" pages (no core service link) sink
-     * last. Every service stays reachable from the hub ("Our services") page + the footer.
+     * The header main menu links — real internal links only. TWO modes:
+     *
+     *  - OPERATOR-CURATED: if the site has any `nav_featured` page, the header shows exactly those, in
+     *    the operator's manual `nav_order` (ascending, nulls last; importance then age break ties).
+     *    Uncapped — the operator decides how many top-level items there are.
+     *  - AUTOMATIC (no page featured): the service/hub pages ranked by IMPORTANCE (category hub first,
+     *    then core/pillar, then supporting, then longtail guides), capped at {@see HEADER_SERVICE_LIMIT}.
+     *    Every service still stays reachable from the hub ("Our services") page + the footer.
      *
      * @return list<array{label: string, url: string}>
      */
     private function services(Site $site, string $home): array
     {
+        $featured = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('nav_featured', true)
+            ->whereNotNull('slug')
+            ->with('primaryService:id,silo_role')
+            ->get();
+
+        if ($featured->isNotEmpty()) {
+            // Operator order first (nulls last), then importance, then age — a stable composite key.
+            $pages = $featured
+                ->sortBy(fn (Content $p): string => sprintf(
+                    '%010d-%d-%015d',
+                    $p->nav_order ?? 999999,
+                    $this->serviceNavRank($p),
+                    $p->created_at->getTimestamp(),
+                ))
+                ->values();
+
+            return $this->links($pages, $home);
+        }
+
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
