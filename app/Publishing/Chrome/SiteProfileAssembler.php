@@ -43,10 +43,12 @@ final class SiteProfileAssembler
             ->orderBy('created_at')
             ->first();
 
-        // The chrome phone resolves the same way every surface does — the primary location's number,
-        // else the site business phone — so a guided-onboarded tenant's header never ships empty.
+        // The chrome NAP is the SITE-WIDE corporate one from the business intake — the main business
+        // phone (sites.phone) and corporate address — never a physical location's, so a multi-location
+        // tenant's header/footer shows the corporate line, not whichever location happens to be first.
+        // Both fall back to the earliest Location only when no corporate value was captured (legacy).
         $phone = trim((string) $this->contact->phone($site));
-        $address = $location !== null ? trim((string) $location->address) : '';
+        $address = trim((string) $this->contact->address($site));
 
         $services = $this->services($site, $home);
         // Never list the same page twice: a page an operator pinned into the header (services) is

@@ -34,7 +34,19 @@ class BusinessStep extends GatheringPage
 
     public string $phone = '';
 
+    public string $emergencyPhone = '';
+
     public string $domainUrl = '';
+
+    // Corporate / site-wide address — the NAP address for the ENTIRE site (header/footer chrome),
+    // distinct from each physical location's own address (those come from the GBP import / Locations step).
+    public string $corporateStreet = '';
+
+    public string $corporateCity = '';
+
+    public string $corporateState = '';
+
+    public string $corporatePostalCode = '';
 
     // The trade — the SiloBlueprint seed the structure engine builds the silo tree from
     // (previously captured only by the old guided Business step / old Owner Interview).
@@ -68,7 +80,12 @@ class BusinessStep extends GatheringPage
         $this->trade = (string) (SiloBlueprint::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->value('trade') ?? '');
         $this->phone = (string) ($site->phone ?? '');
+        $this->emergencyPhone = (string) ($site->emergency_phone ?? '');
         $this->domainUrl = (string) ($site->domain_url ?? '');
+        $this->corporateStreet = (string) ($site->corporate_street ?? '');
+        $this->corporateCity = (string) ($site->corporate_city ?? '');
+        $this->corporateState = (string) ($site->corporate_state ?? '');
+        $this->corporatePostalCode = (string) ($site->corporate_postal_code ?? '');
         $this->licenseNumber = (string) ($site->license_number ?? '');
         $this->insured = $site->insured === null ? 'unknown' : ($site->insured ? 'yes' : 'no');
         $this->yearsInBusiness = $site->years_in_business !== null ? (string) $site->years_in_business : '';
@@ -86,7 +103,12 @@ class BusinessStep extends GatheringPage
         $site->forceFill([
             'brand_name' => trim($this->brandName) !== '' ? trim($this->brandName) : $site->brand_name,
             'phone' => trim($this->phone) !== '' ? trim($this->phone) : null,
+            'emergency_phone' => trim($this->emergencyPhone) !== '' ? trim($this->emergencyPhone) : null,
             'domain_url' => trim($this->domainUrl) !== '' ? trim($this->domainUrl) : null,
+            'corporate_street' => trim($this->corporateStreet) !== '' ? trim($this->corporateStreet) : null,
+            'corporate_city' => trim($this->corporateCity) !== '' ? trim($this->corporateCity) : null,
+            'corporate_state' => trim($this->corporateState) !== '' ? trim($this->corporateState) : null,
+            'corporate_postal_code' => trim($this->corporatePostalCode) !== '' ? trim($this->corporatePostalCode) : null,
             'license_number' => trim($this->licenseNumber) !== '' ? trim($this->licenseNumber) : null,
             'insured' => match ($this->insured) {
                 'yes' => true,

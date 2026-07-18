@@ -8,7 +8,8 @@
             <h3>Identity</h3>
             <div class="g-grid2">
                 <div class="g-field"><label>Business name</label><input class="g-input" type="text" wire:model="brandName"></div>
-                <div class="g-field"><label>Phone</label><input class="g-input" type="text" wire:model="phone"></div>
+                <div class="g-field"><label>Main phone</label><input class="g-input" type="text" wire:model="phone"><div class="g-hint" style="margin-top:4px">The site-wide number in the header, hero &amp; CTA. A location's own number still shows on its location page.</div></div>
+                <div class="g-field"><label>Emergency / after-hours phone <span style="opacity:.6">(optional)</span></label><input class="g-input" type="text" wire:model="emergencyPhone"></div>
                 <div class="g-field"><label>Website URL</label><input class="g-input" type="text" wire:model="domainUrl"></div>
                 <div class="g-field">
                     <label>Trade
@@ -17,6 +18,15 @@
                     <input class="g-input" type="text" wire:model="trade" placeholder="e.g. basement waterproofing">
                     <div class="g-hint" style="margin-top:4px">What the business does, in a few words — the website structure is built from this.</div>
                 </div>
+            </div>
+
+            <h3 style="margin-top:1.25rem">Corporate address</h3>
+            <div class="g-hint" style="margin-bottom:.5rem">The site-wide address for the header &amp; footer. Each physical location keeps its own address on the Locations step.</div>
+            <div class="g-grid2">
+                <div class="g-field"><label>Street</label><input class="g-input" type="text" wire:model="corporateStreet" placeholder="10 Main St"></div>
+                <div class="g-field"><label>City</label><input class="g-input" type="text" wire:model="corporateCity" placeholder="Springfield"></div>
+                <div class="g-field"><label>State</label><input class="g-input" type="text" wire:model="corporateState" placeholder="NJ"></div>
+                <div class="g-field"><label>ZIP</label><input class="g-input" type="text" wire:model="corporatePostalCode" placeholder="07081"></div>
             </div>
         </div>
 
