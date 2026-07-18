@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Http\Middleware\EnsureTenantSelected;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -11,6 +12,8 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -45,6 +48,12 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Amber,
             ])
+            // The active-tenant banner — the operator's current working tenant (logo + name) shown
+            // prominently on EVERY admin page, with a Switch link back to the Portfolio picker.
+            ->renderHook(
+                PanelsRenderHook::TOPBAR_START,
+                fn (): View => view('filament.operator.tenant-banner'),
+            )
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             // The landing is the per-site Overview (App\Filament\Pages\Overview, slug '/') — the
@@ -63,6 +72,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                // Hard tenant gate: an operator with no active tenant is sent to the Portfolio picker.
+                EnsureTenantSelected::class,
             ]);
     }
 }
