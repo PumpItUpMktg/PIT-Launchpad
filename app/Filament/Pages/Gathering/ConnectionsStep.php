@@ -30,18 +30,19 @@ class ConnectionsStep extends GatheringPage
     protected string $view = 'filament.gathering.connections-step';
 
     /**
-     * The site's GoHighLevel lead-form embed snippet (iframe + loader). Site-level, so
-     * one paste covers every service page. Empty = call-button-only (the phone floor).
+     * The site's embedded lead-capture form snippet (any provider's iframe + loader — GoHighLevel,
+     * Jotform, a plain HTML form, …). Site-level, so one paste covers every service page. Empty =
+     * call-button-only (the phone floor).
      */
-    public ?string $ghlFormEmbed = null;
+    public ?string $formEmbed = null;
 
     protected function afterSiteResolved(): void
     {
-        $this->ghlFormEmbed = $this->siteId === null
+        $this->formEmbed = $this->siteId === null
             ? null
             : ConversionConfig::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $this->siteId)
-                ->value('ghl_form_embed');
+                ->value('form_embed');
     }
 
     /** Persist the lead-form embed for the working site (upsert on the unique site_id row). */
@@ -58,7 +59,7 @@ class ConnectionsStep extends GatheringPage
     /** True once a non-empty embed is on file — drives the status chip and the 60/40 service layout. */
     public function leadFormSet(): bool
     {
-        return is_string($this->ghlFormEmbed) && trim($this->ghlFormEmbed) !== '';
+        return is_string($this->formEmbed) && trim($this->formEmbed) !== '';
     }
 
     public function savesOnContinue(): bool
@@ -77,12 +78,12 @@ class ConnectionsStep extends GatheringPage
             return;
         }
 
-        $embed = is_string($this->ghlFormEmbed) ? trim($this->ghlFormEmbed) : '';
-        $this->ghlFormEmbed = $embed === '' ? null : $embed;
+        $embed = is_string($this->formEmbed) ? trim($this->formEmbed) : '';
+        $this->formEmbed = $embed === '' ? null : $embed;
 
         ConversionConfig::withoutGlobalScope(SiteScope::class)->updateOrCreate(
             ['site_id' => $this->siteId],
-            ['ghl_form_embed' => $this->ghlFormEmbed],
+            ['form_embed' => $this->formEmbed],
         );
     }
 

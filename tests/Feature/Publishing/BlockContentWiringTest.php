@@ -1534,7 +1534,7 @@ it('About credibility strip shows the CAPTURED certifications — guided intake 
         ->toContain('NJ Master Plumber');
 });
 
-it('Contact: a configured GHL embed makes the form section REAL — [lp_form] ships on publish', function () {
+it('Contact: a configured form embed makes the form section REAL — [lp_form] ships on publish', function () {
     $site = Site::factory()->create(['phone' => '(973) 555-0100']);
     $page = blockContactPage($site);
     PageConfig::create([

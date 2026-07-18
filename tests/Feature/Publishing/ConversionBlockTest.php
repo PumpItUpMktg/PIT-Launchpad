@@ -15,7 +15,7 @@ use Illuminate\Support\Collection;
 /**
  * §3a/§2 dual-conversion block: the service-page `cta` is platform-DERIVED — a
  * "Call Now" tel: link from the primary location's phone plus, when configured,
- * the site's GHL form embed — and `contact_block` resolves the location NAP. Both
+ * the site's embedded form — and `contact_block` resolves the location NAP. Both
  * overwrite any model copy; both omit gracefully when their floor is absent.
  */
 function serviceBlobSlots(Site $site): array
@@ -40,12 +40,12 @@ function serviceBlobSlots(Site $site): array
     return app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection)['slot_payload'];
 }
 
-it('derives the dual conversion block: tel from the location phone + the GHL form embed', function () {
+it('derives the dual conversion block: tel from the location phone + the embedded form', function () {
     $site = Site::factory()->create();
     Location::factory()->create([
         'site_id' => $site->id, 'name' => 'Trooper', 'address' => '1 Main St', 'phone' => '+15125550142',
     ]);
-    ConversionConfig::factory()->create(['site_id' => $site->id, 'ghl_form_embed' => '<iframe src="https://ghl/form"></iframe>']);
+    ConversionConfig::factory()->create(['site_id' => $site->id, 'form_embed' => '<iframe src="https://ghl/form"></iframe>']);
 
     $slots = serviceBlobSlots($site);
 
@@ -61,7 +61,7 @@ it('derives the dual conversion block: tel from the location phone + the GHL for
         ]);
 });
 
-it('renders call-button-only when no GHL form is configured (graceful)', function () {
+it('renders call-button-only when no form is configured (graceful)', function () {
     $site = Site::factory()->create();
     Location::factory()->create(['site_id' => $site->id, 'phone' => '+15125550142']);
     // no ConversionConfig → no form embed

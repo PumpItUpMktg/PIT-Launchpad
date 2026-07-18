@@ -149,10 +149,10 @@ it('a configured site lead form makes the service-description row a 60/40 two-co
     $service = hsService($site, $silo);
     $page = hsSpokePage($site, $silo, $service);
 
-    // Site-wide GHL embed configured (the Connections & Feeds setup input).
+    // Site-wide form embed configured (the Connections & Feeds setup input).
     ConversionConfig::withoutGlobalScope(SiteScope::class)->create([
         'site_id' => $site->id,
-        'ghl_form_embed' => '<iframe src="https://api.leadconnectorhq.com/widget/form/xyz"></iframe>',
+        'form_embed' => '<iframe src="https://api.leadconnectorhq.com/widget/form/xyz"></iframe>',
     ]);
 
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);

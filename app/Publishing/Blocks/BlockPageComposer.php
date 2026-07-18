@@ -846,7 +846,7 @@ final class BlockPageComposer
             activates: 'appears when your service area is captured and the page is generated',
         );
 
-        // With a configured GHL embed the form section is REAL (the [lp_form] shortcode renders the
+        // With a configured form embed the form section is REAL (the [lp_form] shortcode renders the
         // embed server-side); without one it stays a preview-only placeholder — a form that routes
         // nowhere never ships.
         $form = $this->sections->contactForm($preview, $hasForm);

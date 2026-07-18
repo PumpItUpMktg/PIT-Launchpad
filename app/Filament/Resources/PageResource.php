@@ -405,8 +405,8 @@ class PageResource extends Resource
                     ->options(['cta' => 'CTA (default)', 'form' => 'Form'])->default('cta')->required()
                     ->helperText('Form shows the embed in a media hero; CTA keeps the standard hero.'),
                 Textarea::make('form_embed')->label('Form embed')->rows(3)
-                    ->placeholder('GHL form URL / embed snippet')
-                    ->helperText('Wins over the site GHL config for this page. Empty → placeholder box in form hero.'),
+                    ->placeholder('Form URL / embed snippet (any provider)')
+                    ->helperText('Wins over the site form config for this page. Empty → placeholder box in form hero.'),
                 TextInput::make('phone_override')->label('Phone override')
                     ->placeholder('falls back to the site/location phone'),
                 TextInput::make('hero_image_override')->label('Hero image override (URL)')

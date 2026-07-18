@@ -147,7 +147,7 @@ final class BlockContentAssembler
             $hours[] = ['label' => 'Emergencies', 'value' => '24/7 — call any time'];
         }
 
-        // A configured lead-form embed (GHL iframe on PageConfig) makes the form section REAL — the
+        // A configured lead-form embed (any provider's iframe on PageConfig) makes the form section REAL — the
         // markup carries the [lp_form] shortcode and the plugin renders the embed server-side (the
         // iframe itself rides the blob's form_embed, never kses'd post_content).
         $hasForm = trim((string) (PageConfig::query()->where('content_id', $content->id)->value('form_embed') ?? '')) !== '';
@@ -345,7 +345,7 @@ final class BlockContentAssembler
     /**
      * A configured lead-capture form makes the service-description row a 60/40 two-column (copy +
      * [lp_form]). The embed is resolved per-page (PageConfig.form_embed) OR site-wide
-     * (ConversionConfig.ghl_form_embed) — the same fallback the meta-blob's form_embed uses, so the
+     * (ConversionConfig.form_embed) — the same fallback the meta-blob's form_embed uses, so the
      * two-column and the rendered embed always agree.
      */
     private function hasLeadForm(Content $content): bool
@@ -357,7 +357,7 @@ final class BlockContentAssembler
 
         $site = ConversionConfig::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
-            ->value('ghl_form_embed');
+            ->value('form_embed');
 
         return is_string($site) && trim($site) !== '';
     }

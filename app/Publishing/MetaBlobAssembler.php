@@ -70,9 +70,9 @@ class MetaBlobAssembler
     }
 
     /**
-     * The page's lead-form embed (GHL iframe) the plugin's [lp_form] renders — the per-page
-     * PageConfig.form_embed, else the site-wide ConversionConfig.ghl_form_embed (one paste covers
-     * every service page), else null. Verbatim operator input.
+     * The page's embedded lead-capture form the plugin's [lp_form] renders — the per-page
+     * PageConfig.form_embed, else the site-wide ConversionConfig.form_embed (one paste covers every
+     * service page), else null. Any provider's embed snippet; verbatim operator input.
      */
     private function formEmbed(Content $content): ?string
     {
@@ -83,7 +83,7 @@ class MetaBlobAssembler
 
         $site = ConversionConfig::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
-            ->value('ghl_form_embed');
+            ->value('form_embed');
 
         return is_string($site) && trim($site) !== '' ? trim($site) : null;
     }
@@ -244,8 +244,8 @@ class MetaBlobAssembler
             // Service-area map geometry for the theme's Leaflet init (home only; null = no map). The
             // block markup carries only the mount container + text fallback; the geometry travels here.
             'service_area_map' => $areaMap,
-            // The page's lead-form embed (a GHL iframe, operator-configured on PageConfig). It rides
-            // the blob — NOT post_content, where kses would strip the iframe — and the plugin's
+            // The page's embedded lead form (any provider's snippet, operator-configured on PageConfig).
+            // It rides the blob — NOT post_content, where kses would strip the iframe — and the plugin's
             // [lp_form] shortcode renders it server-side at the form section's position.
             'form_embed' => $this->formEmbed($content),
         ];
@@ -398,7 +398,7 @@ class MetaBlobAssembler
      *
      *  - `cta` → the dual conversion block: a "Call Now" tel: link derived from the
      *    primary location's phone (the always-present floor) PLUS, when configured,
-     *    the site's GoHighLevel lead-form embed. No phone → the slot is omitted
+     *    the site's embedded lead-capture form. No phone → the slot is omitted
      *    (the has_location_phone floor wasn't met); no form → call-button-only.
      *  - `contact_block` → the primary location's NAP. No location → omitted.
      *
@@ -506,12 +506,12 @@ class MetaBlobAssembler
             return $slots;
         }
 
-        // The per-page form embed (user-owned) wins over the site GHL config.
+        // The per-page form embed (user-owned) wins over the site form config.
         $formEmbed = $config?->form_embed;
         if (! is_string($formEmbed) || trim($formEmbed) === '') {
             $formEmbed = ConversionConfig::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $content->site_id)
-                ->value('ghl_form_embed');
+                ->value('form_embed');
         }
 
         $slots['cta'] = array_filter([
