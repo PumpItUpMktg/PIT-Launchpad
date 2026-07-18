@@ -10,7 +10,7 @@ use Filament\Facades\Filament;
 use Livewire\Livewire;
 
 /**
- * New Setup step 6 — Connections & Feeds: the operator pastes the site's GoHighLevel
+ * New Setup step 6 — Connections & Feeds: the operator pastes the site's embedded
  * lead-form embed here (one paste, site-wide). It persists to ConversionConfig.ghl_form_embed,
  * which already flows onto every service page's conversion block.
  */
@@ -26,19 +26,19 @@ function siteEmbed(Site $site): ?string
 {
     return ConversionConfig::withoutGlobalScope(SiteScope::class)
         ->where('site_id', $site->id)
-        ->value('ghl_form_embed');
+        ->value('form_embed');
 }
 
-it('saves the pasted GHL embed to the site conversion config (upsert, site-wide)', function () {
+it('saves the pasted form embed to the site conversion config (upsert, site-wide)', function () {
     $embed = '<iframe src="https://api.leadconnectorhq.com/widget/form/abc"></iframe><script src="https://link.msgsndr.com/js/form_embed.js"></script>';
 
     Livewire::test(ConnectionsStep::class)
         ->assertOk()
         ->assertSee('Lead-capture form')
-        ->set('ghlFormEmbed', $embed)
+        ->set('formEmbed', $embed)
         ->call('saveLeadForm')
         ->assertNotified()
-        ->assertSet('ghlFormEmbed', $embed);
+        ->assertSet('formEmbed', $embed);
 
     expect(siteEmbed($this->site))->toBe($embed);
 });
@@ -47,25 +47,25 @@ it('loads an existing embed on mount and reports it on file', function () {
     $embed = '<iframe src="https://api.leadconnectorhq.com/widget/form/xyz"></iframe>';
     ConversionConfig::withoutGlobalScope(SiteScope::class)->create([
         'site_id' => $this->site->id,
-        'ghl_form_embed' => $embed,
+        'form_embed' => $embed,
     ]);
 
     Livewire::test(ConnectionsStep::class)
         ->assertOk()
-        ->assertSet('ghlFormEmbed', $embed)
+        ->assertSet('formEmbed', $embed)
         ->assertSee('on file');
 });
 
 it('clears the embed to null when saved blank (call-button-only floor)', function () {
     ConversionConfig::withoutGlobalScope(SiteScope::class)->create([
         'site_id' => $this->site->id,
-        'ghl_form_embed' => '<iframe src="x"></iframe>',
+        'form_embed' => '<iframe src="x"></iframe>',
     ]);
 
     Livewire::test(ConnectionsStep::class)
-        ->set('ghlFormEmbed', '   ')
+        ->set('formEmbed', '   ')
         ->call('saveLeadForm')
-        ->assertSet('ghlFormEmbed', null);
+        ->assertSet('formEmbed', null);
 
     expect(siteEmbed($this->site))->toBeNull();
 });
@@ -76,7 +76,7 @@ it('persists the embed when advancing with Save & continue', function () {
     $page = Livewire::test(ConnectionsStep::class);
     expect($page->instance()->savesOnContinue())->toBeTrue();
 
-    $page->set('ghlFormEmbed', $embed)
+    $page->set('formEmbed', $embed)
         ->call('continueToNext');
 
     expect(siteEmbed($this->site))->toBe($embed);

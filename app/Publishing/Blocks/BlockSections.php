@@ -649,7 +649,7 @@ final class BlockSections
 
     /**
      * The service-description row WITH a lead form beside it: a 60/40 two-column — the prose copy on
-     * the left (60%), the GoHighLevel form in a card on the right (40%, the plugin's `[lp_form]`
+     * the left (60%), the embedded form in a card on the right (40%, the plugin's `[lp_form]`
      * shortcode). Used in place of {@see prose} on the service page's "What this service covers" block
      * when a lead-form embed is configured; native wp:columns stacks on mobile. With no copy yet it
      * degrades to the plain prose block (preview placeholder / empty on publish) — the form never
@@ -1151,7 +1151,7 @@ final class BlockSections
     }
 
     /**
-     * Contact form. With a configured lead-form embed ($hasForm — a GHL iframe on the page's config),
+     * Contact form. With a configured lead-form embed ($hasForm — any provider's iframe on the page's config),
      * the section is REAL: it carries the plugin's `[lp_form]` shortcode, which renders the embed
      * server-side (kses strips iframes from post_content, so the embed itself rides the blob → post
      * meta, never the markup). Without one, a PREVIEW-ONLY placeholder — a labeled sketch of where the

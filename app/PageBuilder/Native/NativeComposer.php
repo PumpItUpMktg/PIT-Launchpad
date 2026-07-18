@@ -139,7 +139,7 @@ final class NativeComposer
 
     /**
      * The CTA as a native Button — the always-present call action from a conversion
-     * block (label + tel: link). The embedded GHL form is Tier-2.
+     * block (label + tel: link). The embedded lead form is Tier-2.
      *
      * @return array<string, mixed>|null
      */

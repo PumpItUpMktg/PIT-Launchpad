@@ -11,8 +11,8 @@ namespace App\PageBuilder\Library;
  *
  * Built as native Elementor widgets (same shapes as the library): heading=title,
  * text-editor=editor, image=image{url,id}, html=html (the cross-origin form iframe,
- * styled in GHL — not by our tokens). The form embed is passed in (the real embed or
- * the placeholder box).
+ * styled by the form provider — not by our tokens). The form embed is passed in (the real
+ * embed or the placeholder box).
  */
 final class FormHeroComposer
 {
