@@ -1,13 +1,21 @@
 <?php
 
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperatePhysicalLocations;
+use App\Jobs\GeneratePage;
+use App\Jobs\PublishContent;
+use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
+use App\Models\Market;
 use App\Models\Site;
 use App\Models\User;
 use App\Operate\PhysicalLocations;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -89,4 +97,81 @@ it('renders under Operate with the overlap tile and the soft-rule chips', functi
     // An unlocated location surfaces the locate advisory instead of a false soft-rule flag.
     Location::factory()->create(['site_id' => $site->id, 'name' => 'Ghost office', 'lat' => null, 'lng' => null, 'home_county_geoid' => null]);
     Livewire::test(OperatePhysicalLocations::class)->assertSee('Not located yet');
+});
+
+it('surfaces each location card page state — none, drafted, published', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+
+    // No page yet.
+    $bare = Location::factory()->create(['site_id' => $site->id, 'name' => 'No Page Yet']);
+    // A drafted (but unpublished) landing page.
+    $drafted = Location::factory()->create(['site_id' => $site->id, 'name' => 'Drafted']);
+    Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Candidate, 'title' => 'Drafted, ST', 'slug' => 'drafted-st', 'version' => 1,
+        'location_id' => $drafted->id, 'slot_payload' => ['hero_headline' => 'We serve Drafted'],
+    ]);
+    // A published landing page.
+    $live = Location::factory()->create(['site_id' => $site->id, 'name' => 'Live']);
+    Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'title' => 'Live, ST', 'slug' => 'live-st', 'version' => 1,
+        'location_id' => $live->id, 'slot_payload' => ['hero_headline' => 'We serve Live'],
+    ]);
+
+    $cards = collect(app(PhysicalLocations::class)->build($site)['cards'])->keyBy('name');
+
+    expect($cards['No Page Yet']['page'])->toMatchArray(['state' => 'none', 'can_generate' => true, 'can_publish' => false, 'can_repush' => false]);
+    expect($cards['Drafted']['page'])->toMatchArray(['drafted' => true, 'published' => false, 'can_publish' => true, 'can_repush' => false]);
+    expect($cards['Live']['page'])->toMatchArray(['published' => true, 'can_publish' => false, 'can_repush' => true]);
+});
+
+it('Generate creates the location landing page and queues the drafter', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    Market::factory()->create(['site_id' => $site->id]); // grounding: a §1 Market makes a location page ready
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper']);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('generatePage', $loc->id);
+
+    $landing = Content::withoutGlobalScopes()
+        ->where('page_type', PageType::Location->value)->where('location_id', $loc->id)->first();
+    expect($landing)->not->toBeNull()
+        ->and($landing->meta['generating_at'] ?? null)->not->toBeNull();
+    Queue::assertPushed(GeneratePage::class);
+});
+
+it('Publish approves + pushes a drafted location page; Repush re-pushes a live one', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper']);
+    $landing = Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Candidate, 'title' => 'Trooper, PA', 'slug' => 'trooper-pa', 'version' => 1,
+        'location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'We serve Trooper'],
+    ]);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('publishPage', $loc->id);
+    expect($landing->refresh()->status)->toBe(ContentStatus::Approved);
+    Queue::assertPushed(PublishContent::class);
+
+    // Repush on the now-published page dispatches another idempotent push.
+    $landing->forceFill(['status' => ContentStatus::Published])->save();
+    Queue::fake();
+    Livewire::test(OperatePhysicalLocations::class)->call('repushPage', $loc->id);
+    Queue::assertPushed(PublishContent::class);
+});
+
+it('Publish is a no-op with a helpful notice when the location has no page yet', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper']);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('publishPage', $loc->id);
+
+    Queue::assertNothingPushed();
 });

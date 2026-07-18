@@ -32,6 +32,15 @@
         .pl-band strong { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px; }
         .pl-empty { border:1px dashed rgba(148,163,184,.4); border-radius:10px; padding:15px; color:#94a3b8; font-size:13px; }
         .pl-link { font-size:12px; }
+        .pl-foot { display:flex; align-items:center; gap:9px; flex-wrap:wrap; padding:10px 15px; border-top:1px solid rgba(148,163,184,.2); background:rgba(148,163,184,.04); }
+        .pl-state { font-size:11.5px; color:#64748b; margin-right:auto; }
+        .pl-state b { color:#334155; font-weight:600; }
+        .pl-btn { font-size:12px; font-weight:600; padding:5px 12px; border-radius:7px; border:1px solid rgba(148,163,184,.5); background:transparent; color:#334155; cursor:pointer; }
+        .pl-btn:hover { border-color:rgba(100,116,139,.8); }
+        .pl-btn.primary { background:#2563eb; border-color:#2563eb; color:#fff; }
+        .pl-btn.primary:hover { background:#1d4ed8; }
+        .pl-btn[disabled] { opacity:.5; cursor:not-allowed; }
+        .pl-btn .sp { display:inline-block; }
     </style>
 
     <div class="pl-wrap">
@@ -113,6 +122,34 @@
                             @foreach ($card['advisories'] as $advisory)
                                 <div class="pl-band advisory">{{ $advisory }}</div>
                             @endforeach
+                        </div>
+
+                        @php $pg = $card['page']; @endphp
+                        <div class="pl-foot">
+                            <span class="pl-state">Page: <b>{{ $pg['label'] }}</b></span>
+
+                            <button class="pl-btn" wire:click="generatePage('{{ $card['id'] }}')"
+                                @disabled(! $pg['can_generate'])
+                                wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">
+                                <span wire:loading.remove wire:target="generatePage('{{ $card['id'] }}')">{{ $pg['drafted'] ? 'Regenerate' : 'Generate' }}</span>
+                                <span class="sp" wire:loading wire:target="generatePage('{{ $card['id'] }}')">Queuing…</span>
+                            </button>
+
+                            @if ($pg['can_publish'])
+                                <button class="pl-btn primary" wire:click="publishPage('{{ $card['id'] }}')"
+                                    wire:loading.attr="disabled" wire:target="publishPage('{{ $card['id'] }}')">
+                                    <span wire:loading.remove wire:target="publishPage('{{ $card['id'] }}')">Publish</span>
+                                    <span class="sp" wire:loading wire:target="publishPage('{{ $card['id'] }}')">Publishing…</span>
+                                </button>
+                            @endif
+
+                            @if ($pg['can_repush'])
+                                <button class="pl-btn" wire:click="repushPage('{{ $card['id'] }}')"
+                                    wire:loading.attr="disabled" wire:target="repushPage('{{ $card['id'] }}')">
+                                    <span wire:loading.remove wire:target="repushPage('{{ $card['id'] }}')">Repush</span>
+                                    <span class="sp" wire:loading wire:target="repushPage('{{ $card['id'] }}')">Pushing…</span>
+                                </button>
+                            @endif
                         </div>
                     </div>
                 @endforeach
