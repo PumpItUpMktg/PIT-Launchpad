@@ -27,6 +27,9 @@ final class SiteProfileAssembler
     /** The most services the header bar shows (importance-ranked); the rest live on the hub + footer. */
     private const HEADER_SERVICE_LIMIT = 8;
 
+    /** The pages eligible for the header MAIN menu — company pages + the Areas We Serve page. */
+    public const MAIN_NAV_SLUGS = ['about', 'about-us', 'faq', 'contact', 'why-choose-us', 'why-us', 'areas-we-serve', 'areas', 'service-areas'];
+
     public function __construct(private readonly SiteContact $contact) {}
 
     /**
@@ -47,10 +50,14 @@ final class SiteProfileAssembler
 
         $services = $this->services($site, $home);
         // Never list the same page twice: a page an operator pinned into the header (services) is
-        // dropped from the company group so it can't appear in both menus.
+        // dropped from the main-nav + company groups so it can't appear in two menus.
         $serviceUrls = array_column($services, 'url');
         $company = array_values(array_filter(
             $this->company($site, $home),
+            fn (array $link): bool => ! in_array($link['url'], $serviceUrls, true),
+        ));
+        $mainNav = array_values(array_filter(
+            $this->mainNav($site, $home),
             fn (array $link): bool => ! in_array($link['url'], $serviceUrls, true),
         ));
 
@@ -69,8 +76,9 @@ final class SiteProfileAssembler
             'areas' => $this->areas($site),
             'company' => $company,
             // The header main menu: the company pages + Areas We Serve (a top-level destination, not a
-            // footer afterthought). Legal pages stay OUT of the header — they live in the footer bar.
-            'nav' => [...$company, ...$this->pagesBySlug($site, $home, ['areas-we-serve', 'areas', 'service-areas'])],
+            // footer afterthought), in the operator's Header-menu-builder order. Legal pages stay OUT of
+            // the header — they live in the footer bar.
+            'nav' => $mainNav,
             // Privacy / Terms for the footer bottom bar — only pages that actually exist.
             'legal_links' => $this->pagesBySlug($site, $home, ['privacy-policy', 'privacy', 'terms-of-service', 'terms']),
         ];
@@ -250,6 +258,27 @@ final class SiteProfileAssembler
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
             ->whereIn('slug', ['about', 'about-us', 'faq', 'contact', 'why-choose-us', 'why-us'])
+            ->orderBy('created_at')
+            ->get();
+
+        return $this->links($pages, $home);
+    }
+
+    /**
+     * The header MAIN menu items — company pages + the Areas We Serve page — in the operator's chosen
+     * order (`nav_order`, ascending, nulls last; then creation order). This is what the Header-menu
+     * builder reorders; with no order set it falls back to creation order (the historical behaviour).
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function mainNav(Site $site, string $home): array
+    {
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->whereIn('slug', self::MAIN_NAV_SLUGS)
+            ->orderByRaw('nav_order is null')
+            ->orderBy('nav_order')
             ->orderBy('created_at')
             ->get();
 
