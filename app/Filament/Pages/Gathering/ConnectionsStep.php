@@ -6,8 +6,10 @@ use App\Enums\ConnectionProvider;
 use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\SourceResource;
 use App\Models\Connection;
+use App\Models\ConversionConfig;
 use App\Models\Scopes\SiteScope;
 use App\Models\Source;
+use Filament\Notifications\Notification;
 
 /**
  * New Setup · Step 6 — Connections & Feeds (operator-only, one page). The existing Connections and
@@ -26,6 +28,63 @@ class ConnectionsStep extends GatheringPage
     protected static ?int $navigationSort = 6;
 
     protected string $view = 'filament.gathering.connections-step';
+
+    /**
+     * The site's GoHighLevel lead-form embed snippet (iframe + loader). Site-level, so
+     * one paste covers every service page. Empty = call-button-only (the phone floor).
+     */
+    public ?string $ghlFormEmbed = null;
+
+    protected function afterSiteResolved(): void
+    {
+        $this->ghlFormEmbed = $this->siteId === null
+            ? null
+            : ConversionConfig::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $this->siteId)
+                ->value('ghl_form_embed');
+    }
+
+    /** Persist the lead-form embed for the working site (upsert on the unique site_id row). */
+    public function saveLeadForm(): void
+    {
+        $this->persistLeadForm();
+
+        Notification::make()
+            ->title($this->leadFormSet() ? 'Lead form saved' : 'Lead form cleared')
+            ->success()
+            ->send();
+    }
+
+    /** True once a non-empty embed is on file — drives the status chip and the 60/40 service layout. */
+    public function leadFormSet(): bool
+    {
+        return is_string($this->ghlFormEmbed) && trim($this->ghlFormEmbed) !== '';
+    }
+
+    public function savesOnContinue(): bool
+    {
+        return true;
+    }
+
+    protected function beforeContinue(): void
+    {
+        $this->persistLeadForm();
+    }
+
+    private function persistLeadForm(): void
+    {
+        if ($this->siteId === null) {
+            return;
+        }
+
+        $embed = is_string($this->ghlFormEmbed) ? trim($this->ghlFormEmbed) : '';
+        $this->ghlFormEmbed = $embed === '' ? null : $embed;
+
+        ConversionConfig::withoutGlobalScope(SiteScope::class)->updateOrCreate(
+            ['site_id' => $this->siteId],
+            ['ghl_form_embed' => $this->ghlFormEmbed],
+        );
+    }
 
     /**
      * @return array{wp: array{present: bool, compromised: bool, provider_count: int}, feeds: array{total: int, enabled: int}}
