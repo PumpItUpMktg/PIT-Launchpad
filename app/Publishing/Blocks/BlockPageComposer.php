@@ -902,6 +902,10 @@ final class BlockPageComposer
         array $jobs = [],
         array $faqs = [],
         array $trustStats = [],
+        ?string $address = null,
+        ?string $email = null,
+        array $hours = [],
+        array $townLinks = [],
         bool $preview = false,
     ): string {
         $place = trim($city) !== '' ? (trim($state) !== '' ? trim($city).', '.trim($state) : trim($city)) : '';
@@ -942,6 +946,20 @@ final class BlockPageComposer
             intro: $servicesIntro,
         );
 
+        // The location's own NAP — address (storefront only), click-to-call, email, hours. A GBP
+        // location hub leads with its real contact truths; per-field data-gated (empty → the block
+        // drops, never a fabricated line).
+        $nap = $this->sections->contactDetails(
+            eyebrow: 'Visit or call',
+            heading: $city !== '' ? 'Our '.$city.' location' : 'Contact this location',
+            phoneDisplay: $ctx->phoneDisplay,
+            phoneTel: $ctx->phoneTel,
+            email: $email,
+            address: $address,
+            hours: $hours,
+            preview: $preview,
+        );
+
         // Coverage prose from the served-towns list (readable paragraph, never a keyword dump).
         $coverageBlock = $this->sections->prose(
             eyebrow: 'Coverage',
@@ -950,6 +968,14 @@ final class BlockPageComposer
             surface: true,
             preview: $preview,
             activates: 'appears when this location\'s served towns are captured',
+        );
+
+        // The "areas we serve" grid — real internal LINKS to each town page under this location (the
+        // hub → town spine). Empty when no town pages are materialized yet → the section drops.
+        $areas = $this->sections->areasServed(
+            eyebrow: 'Areas we serve',
+            heading: $city !== '' ? 'Towns we serve from '.$city : 'Towns we serve',
+            links: $townLinks,
         );
 
         // Reviews + jobs are STRICTLY provider-gated — preview: false is deliberate (no "Example"
@@ -984,9 +1010,10 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        // Rhythm: only the hero and the closing CTA are colored bands (D·L·L·Ls·Ls·L·L·D) — the
-        // gated reviews/jobs sections dropping out never puts two colored bands adjacent.
-        return $this->join([$hero, $introBlock, $services, $coverageBlock, $reviewsBlock, $jobsBlock, $faq, $cta]);
+        // Rhythm: hero + closing CTA are the colored bands; the NAP leads the body (contact truths
+        // first), the areas-served link grid follows the coverage prose (prose intro → the real
+        // linked towns). Gated reviews/jobs dropping out never puts two colored bands adjacent.
+        return $this->join([$hero, $nap, $introBlock, $services, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $faq, $cta]);
     }
 
     /** @param list<string> $blocks */

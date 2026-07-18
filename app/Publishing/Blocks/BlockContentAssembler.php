@@ -2,6 +2,7 @@
 
 namespace App\Publishing\Blocks;
 
+use App\Build\Permalinks;
 use App\Enums\ContentKind;
 use App\Enums\PageType;
 use App\Enums\ProofType;
@@ -684,6 +685,13 @@ final class BlockContentAssembler
             $coverage = ['We serve '.$this->naturalList($towns).' and the surrounding area'.$base.'.'];
         }
 
+        // The location's own NAP — its address (only for a real STOREFRONT, like the contact page:
+        // a mobile business's base address stays private), email, and hours. This is a GBP location
+        // hub, so its own contact truths lead.
+        $storefront = (bool) $location->is_storefront;
+        $address = $storefront && is_string($location->address) && trim($location->address) !== '' ? trim($location->address) : null;
+        $email = is_string($location->email) && trim($location->email) !== '' ? trim($location->email) : null;
+
         return $this->composer->composeLocation(
             slots: $slots,
             images: $images,
@@ -699,8 +707,35 @@ final class BlockContentAssembler
             jobs: $this->locationJobs($location),
             faqs: $this->faqItems($slots),
             trustStats: $this->trustStats($content),
+            address: $address,
+            email: $email,
+            hours: $this->businessHours($location),
+            townLinks: $this->locationTownLinks($content, $location),
             preview: $preview,
         );
+    }
+
+    /**
+     * The town pages parented to this location, as internal links for the hub's "areas we serve"
+     * grid — real town pages only (pure town pages, not city-service pages), each pointing at its
+     * permalink. Empty when no towns are materialized yet (the section then drops).
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function locationTownLinks(Content $content, Location $location): array
+    {
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->where('parent_location_id', $location->id)
+            ->whereNull('location_id')
+            ->whereNull('primary_service_id')
+            ->whereNotNull('slug')
+            ->orderBy('title')
+            ->get()
+            ->map(fn (Content $c): array => ['label' => (string) $c->title, 'url' => (new Permalinks)->path($c)])
+            ->all();
     }
 
     /**
