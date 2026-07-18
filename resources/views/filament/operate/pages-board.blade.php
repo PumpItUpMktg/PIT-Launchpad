@@ -13,6 +13,8 @@
             .pb-title { font-weight:600; font-size:13.5px; }
             .pb-perma { font-size:11.5px; color:#94a3b8; font-family:ui-monospace, monospace; }
             .pb-move { font-size:12px; color:#64748b; }
+            .pb-tail { font-size:11.5px; color:#64748b; margin-top:3px; line-height:1.4; }
+            .pb-tail.err { color:#dc2626; }
             .pb-tone { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:3px 9px; border-radius:6px; white-space:nowrap; }
             .pb-tone.ok { color:#16a34a; background:rgba(22,163,74,.12); }
             .pb-tone.warn { color:#b45309; background:rgba(217,119,6,.13); }
@@ -48,6 +50,11 @@
                         <div>
                             <div class="pb-title">{{ $row['title'] }}</div>
                             <div class="pb-perma">{{ $row['permalink'] }}</div>
+                            {{-- The real operator diagnostic (draft/publish error, queued state, …). For a
+                                 failed page this is WHY it failed — otherwise the card only says "something went wrong". --}}
+                            @if (! empty($row['operator_tail']))
+                                <div class="pb-tail {{ $row['tone'] === 'danger' ? 'err' : '' }}">{{ $row['operator_tail'] }}</div>
+                            @endif
                         </div>
                         <span class="pb-move">{{ $row['whose_move'] }}</span>
                         <div class="pb-right">
