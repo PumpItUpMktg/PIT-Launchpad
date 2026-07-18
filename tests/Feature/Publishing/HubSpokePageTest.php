@@ -9,13 +9,16 @@ use App\Enums\PageType;
 use App\Local\Proof\LocalReview;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Models\Content;
+use App\Models\ConversionConfig;
 use App\Models\Keyword;
 use App\Models\Market;
+use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Silo;
 use App\Models\Site;
 use App\Models\WireframeKit;
 use App\Publishing\Blocks\BlockContentAssembler;
+use App\Publishing\MetaBlobAssembler;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use Database\Seeders\WireframeKitSeeder;
 use Tests\Support\FakeClaudeClient;
@@ -138,6 +141,47 @@ it('composes the spoke: keyword H1, symptoms, scope, record process, cost with t
         // Gated reviews/jobs stay out with the null providers.
         ->not->toContain('lp-testimonials')
         ->not->toContain('lp-jobs');
+});
+
+it('a configured site lead form makes the service-description row a 60/40 two-column with [lp_form]', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Services']);
+    $service = hsService($site, $silo);
+    $page = hsSpokePage($site, $silo, $service);
+
+    // Site-wide GHL embed configured (the Connections & Feeds setup input).
+    ConversionConfig::withoutGlobalScope(SiteScope::class)->create([
+        'site_id' => $site->id,
+        'ghl_form_embed' => '<iframe src="https://api.leadconnectorhq.com/widget/form/xyz"></iframe>',
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    // The description row is now the 60/40 form layout carrying the plugin's [lp_form] shortcode.
+    expect($markup)->toContain('lp-prose-form')
+        ->toContain('[lp_form]')
+        ->toContain('flex-basis:60%')
+        ->toContain('flex-basis:40%')
+        ->toContain('What this service covers');
+
+    // The [lp_form] shortcode renders the blob's form_embed — which falls back to the site embed,
+    // so the shortcode isn't empty. The iframe never rides post_content (kses strips it).
+    expect($markup)->not->toContain('leadconnectorhq');
+    $blob = app(MetaBlobAssembler::class)->assemble($page->fresh(), collect());
+    expect($blob['form_embed'])->toBe('<iframe src="https://api.leadconnectorhq.com/widget/form/xyz"></iframe>');
+});
+
+it('with NO lead form the description row stays single-column prose (no [lp_form])', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Services']);
+    $service = hsService($site, $silo);
+    $page = hsSpokePage($site, $silo, $service);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toContain('What this service covers')
+        ->not->toContain('lp-prose-form')
+        ->not->toContain('[lp_form]');
 });
 
 it('the cost section renders factors-only when the record has no range — never a blank price line', function () {

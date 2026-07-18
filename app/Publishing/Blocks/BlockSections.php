@@ -620,6 +620,40 @@ final class BlockSections
     }
 
     /**
+     * The service-description row WITH a lead form beside it: a 60/40 two-column — the prose copy on
+     * the left (60%), the GoHighLevel form in a card on the right (40%, the plugin's `[lp_form]`
+     * shortcode). Used in place of {@see prose} on the service page's "What this service covers" block
+     * when a lead-form embed is configured; native wp:columns stacks on mobile. With no copy yet it
+     * degrades to the plain prose block (preview placeholder / empty on publish) — the form never
+     * ships beside an empty column.
+     *
+     * @param  list<string>  $paragraphs
+     */
+    public function proseWithForm(string $eyebrow, string $heading, array $paragraphs, bool $preview = false): string
+    {
+        $paragraphs = array_values(array_filter(array_map('trim', $paragraphs), fn (string $p): bool => $p !== ''));
+        if ($paragraphs === []) {
+            return $this->prose($eyebrow, $heading, $paragraphs, preview: $preview, activates: 'appears when the page is generated');
+        }
+
+        $copy = [$this->sectionHead($eyebrow, $heading)];
+        foreach ($paragraphs as $p) {
+            $copy[] = $this->b->paragraph($this->text($p), ['className' => 'lp-prose-p']);
+        }
+
+        $formCard = $this->b->group([
+            "<!-- wp:shortcode -->\n[lp_form]\n<!-- /wp:shortcode -->",
+        ], ['className' => 'lp-prose-form-card']);
+
+        $columns = $this->b->columns([
+            $this->b->column($copy, ['width' => '60%']),
+            $this->b->column([$formCard], ['width' => '40%']),
+        ], ['className' => 'lp-prose-form-cols']);
+
+        return $this->b->group([$columns], ['align' => 'full', 'className' => $this->sectionClass('lp-prose', false).' lp-prose-form']);
+    }
+
+    /**
      * Service features: the drafted "what's included" lines as a check-marked grid. Each feature is a
      * plain string (the SlotShaper flattens the list slot), prefixed with the shared .lp-check mark and
      * laid out in the .lp-features-grid (columns via CSS). Built as a wp:html list so the check spans +

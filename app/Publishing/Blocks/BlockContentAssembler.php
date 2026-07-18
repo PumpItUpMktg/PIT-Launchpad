@@ -13,6 +13,7 @@ use App\Local\Proof\NullLocalReviews;
 use App\Local\Proof\ServiceJobProvider;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Models\Content;
+use App\Models\ConversionConfig;
 use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\ProofItem;
@@ -336,7 +337,28 @@ final class BlockContentAssembler
             trustStats: $this->trustStats($content),
             faqs: $this->faqItems($slots),
             preview: $preview,
+            hasForm: $this->hasLeadForm($content),
         );
+    }
+
+    /**
+     * A configured lead-capture form makes the service-description row a 60/40 two-column (copy +
+     * [lp_form]). The embed is resolved per-page (PageConfig.form_embed) OR site-wide
+     * (ConversionConfig.ghl_form_embed) — the same fallback the meta-blob's form_embed uses, so the
+     * two-column and the rendered embed always agree.
+     */
+    private function hasLeadForm(Content $content): bool
+    {
+        $page = trim((string) (PageConfig::query()->where('content_id', $content->id)->value('form_embed') ?? ''));
+        if ($page !== '') {
+            return true;
+        }
+
+        $site = ConversionConfig::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->value('ghl_form_embed');
+
+        return is_string($site) && trim($site) !== '';
     }
 
     /**
