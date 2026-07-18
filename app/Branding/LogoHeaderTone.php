@@ -14,9 +14,10 @@ namespace App\Branding;
  *  - a logo with a baked-in solid background → MATCH that background: a white-card logo wants a light
  *    header, a dark-card logo a dark one, so the logo's own panel blends into the bar.
  *
- * Defaults to 'dark' whenever the tone can't be read (undecodable bytes, an all-transparent image, or an
- * SVG with no declared colors) — 'dark' is the platform's standard branded header, so an unreadable logo
- * simply keeps the status quo rather than flipping the whole bar. The operator can override downstream.
+ * Defaults to 'light' whenever the tone can't be read (undecodable bytes, an all-transparent image, or an
+ * SVG with no declared colors) — 'light' is the clean default bar (and the plugin's own render fallback),
+ * so an unreadable logo simply lands on the neutral white header rather than forcing the branded bar. A
+ * logo only flips to 'dark' when its ink genuinely reads better there. The operator can override downstream.
  */
 final class LogoHeaderTone
 {
@@ -38,7 +39,7 @@ final class LogoHeaderTone
     {
         $image = @imagecreatefromstring($bytes);
         if ($image === false) {
-            return self::DARK;
+            return self::LIGHT;
         }
 
         [$w, $h] = [imagesx($image), imagesy($image)];
@@ -72,7 +73,7 @@ final class LogoHeaderTone
         imagedestroy($image);
 
         if ($opaque === 0) {
-            return self::DARK;
+            return self::LIGHT;
         }
 
         $avg = $lumSum / $opaque;
@@ -86,7 +87,7 @@ final class LogoHeaderTone
 
     /**
      * SVG logos are transparent-background by convention, so contrast the declared ink: a predominantly
-     * light wordmark wants a dark header. Averages every declared color's luminance; no colors → dark.
+     * light wordmark wants a dark header. Averages every declared color's luminance; no colors → light.
      */
     private function fromSvg(string $bytes): string
     {
@@ -106,7 +107,7 @@ final class LogoHeaderTone
         }
 
         if ($lums === []) {
-            return self::DARK;
+            return self::LIGHT;
         }
 
         return array_sum($lums) / count($lums) >= 0.6 ? self::DARK : self::LIGHT;

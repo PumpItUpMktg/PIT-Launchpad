@@ -44,11 +44,11 @@ it('MATCHES a baked-in background: white card → light, dark card → dark', fu
         ->and(new LogoHeaderTone()->forLogo($darkCard, 'png'))->toBe(LogoHeaderTone::DARK);
 });
 
-it('reads an SVG by its declared ink, defaulting to DARK (the status-quo header) when undecidable', function () {
+it('reads an SVG by its declared ink, defaulting to LIGHT (the clean default bar) when undecidable', function () {
     $tone = new LogoHeaderTone;
     expect($tone->forLogo('<svg><path fill="#ffffff"/><path fill="#f4f4f4"/></svg>', 'svg'))->toBe(LogoHeaderTone::DARK)
         ->and($tone->forLogo('<svg><path fill="#111827"/></svg>', 'svg'))->toBe(LogoHeaderTone::LIGHT)
-        // no signal → keep the platform's standard dark header, don't flip the whole bar
-        ->and($tone->forLogo('<svg></svg>', 'svg'))->toBe(LogoHeaderTone::DARK)
-        ->and($tone->forLogo('not an image', 'png'))->toBe(LogoHeaderTone::DARK);
+        // no signal → the clean light bar (also the plugin's render fallback), don't force the branded bar
+        ->and($tone->forLogo('<svg></svg>', 'svg'))->toBe(LogoHeaderTone::LIGHT)
+        ->and($tone->forLogo('not an image', 'png'))->toBe(LogoHeaderTone::LIGHT);
 });
