@@ -48,7 +48,8 @@ final class BlockSections
 
         $right = [];
         if ($imageUrl !== null && trim($imageUrl) !== '') {
-            $right[] = $this->b->image($imageUrl, $imageAlt !== '' ? $imageAlt : $headline);
+            // The hero image is the LCP element — load it eager + high priority, never lazy.
+            $right[] = $this->b->image($imageUrl, $imageAlt !== '' ? $imageAlt : $headline, ['loading' => 'eager']);
         }
 
         $columns = [$this->b->column($left, ['width' => '60%'])];
