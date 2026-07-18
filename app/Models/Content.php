@@ -30,6 +30,7 @@ use Illuminate\Support\Carbon;
  * @property bool $locked
  * @property bool $locally_edited
  * @property string|null $parent_location_id the physical Location serving this TOWN page (Live board grouping; distinct from location_id)
+ * @property string|null $parent_content_id the parent hub landing Content this page nests under (URL nesting; distinct from parent_location_id)
  * @property IntakeType|null $intake_type
  * @property int|null $wp_post_id
  * @property string|null $near_dup_of_content_id
@@ -221,6 +222,18 @@ class Content extends Model
     public function nearDupOf(): BelongsTo
     {
         return $this->belongsTo(Content::class, 'near_dup_of_content_id');
+    }
+
+    /**
+     * The hub landing page this page nests under (a town page → its location hub, e.g.
+     * /montclair/springfield). FK is not DB-enforced (additive ALTER; §1 deferred-FK pattern) —
+     * the nested slug + WP post_parent are built from it.
+     *
+     * @return BelongsTo<Content, $this>
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Content::class, 'parent_content_id');
     }
 
     /** @return HasMany<RefreshEvent, $this> */
