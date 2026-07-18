@@ -78,6 +78,12 @@ class PageDraftingEngine
         // conditioned slot count as required when its intake IS present.
         $flags = $this->intakeFlags($grounding);
         $slots = $this->dropConditionedOut($kit, $slots, $flags);
+
+        // Repair over-length text before validating: an LLM draft that overshoots a char cap by a
+        // little (or a lot) is clamped to the kit max at a sentence/word boundary, not hard-rejected.
+        // Only over-max scalar text is touched; in-bounds slots pass through unchanged.
+        $slots = $this->clampTextLengths($kit, $slots);
+
         $structural = $this->structuralFailures(
             $this->validator->validate($kit, $slots, new ValidationContext($page, flags: $flags)),
         );
@@ -135,6 +141,30 @@ class PageDraftingEngine
                 && ! $slot->appliesTo($flags)) {
                 unset($slots[$key]);
             }
+        }
+
+        return $slots;
+    }
+
+    /**
+     * Clamp each scalar text slot to its kit `max_length` (repeaters + non-text slots untouched).
+     * The deterministic acceptance repair for over-length copy — {@see SlotLengthClamp}.
+     *
+     * @param  array<string, mixed>  $slots
+     * @return array<string, mixed>
+     */
+    private function clampTextLengths(KitSchema $kit, array $slots): array
+    {
+        foreach ($slots as $key => $value) {
+            $slot = $kit->slot((string) $key);
+            if ($slot === null || $slot->isRepeater() || ! $slot->contentType->isText()) {
+                continue;
+            }
+            $max = $slot->constraints->maxLength;
+            if ($max === null || ! is_string($value)) {
+                continue;
+            }
+            $slots[$key] = SlotLengthClamp::clamp($value, $max);
         }
 
         return $slots;
