@@ -2,6 +2,10 @@
 
 namespace App\Operate;
 
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Enums\PageType;
+use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -37,8 +41,18 @@ class PhysicalLocations
 
         $names = $locations->pluck('name', 'id');
 
+        // The landing/hub page that IS each base location (page_type=Location, pinned location_id),
+        // keyed by location — so each card can surface its page's build state and lifecycle actions.
+        $landings = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->whereNotNull('location_id')
+            ->get()
+            ->keyBy(fn (Content $c): string => (string) $c->location_id);
+
         $cards = $locations
-            ->map(fn (Location $location) => $this->card($location, $areas, $names))
+            ->map(fn (Location $location) => $this->card($location, $areas, $names, $landings->get((string) $location->id)))
             ->values()
             ->all();
 
@@ -58,7 +72,7 @@ class PhysicalLocations
      * @param  Collection<int|string, string>  $names
      * @return array<string, mixed>
      */
-    private function card(Location $location, Collection $areas, Collection $names): array
+    private function card(Location $location, Collection $areas, Collection $names, ?Content $landing): array
     {
         $own = $areas->filter(fn (CoverageArea $a) => in_array($location->id, $this->sources($a), true))->values();
 
@@ -121,6 +135,44 @@ class PhysicalLocations
                 ->all(),
             'overlaps' => $overlaps,
             'advisories' => $advisories,
+            'page' => $this->pageState($landing),
+        ];
+    }
+
+    /**
+     * The landing/hub page's build state for the card's lifecycle controls — reusing Content's own
+     * single-source-of-truth state machine so the badge + button gating match every other surface.
+     *
+     * @return array<string, mixed>
+     */
+    private function pageState(?Content $landing): array
+    {
+        if ($landing === null) {
+            return [
+                'content_id' => null,
+                'label' => 'Not created yet',
+                'state' => 'none',
+                'drafted' => false,
+                'published' => false,
+                'can_generate' => true,   // "Generate" find-or-creates the landing page, then drafts it
+                'can_publish' => false,
+                'can_repush' => false,
+            ];
+        }
+
+        $state = $landing->generationState();          // awaiting | generating | failed | drafted
+        $published = $landing->status === ContentStatus::Published;
+        $drafted = $landing->hasDraft();
+
+        return [
+            'content_id' => (string) $landing->id,
+            'label' => $landing->buildStateLabel(),
+            'state' => $state,
+            'drafted' => $drafted,
+            'published' => $published,
+            'can_generate' => $state !== 'generating',
+            'can_publish' => $drafted && ! $published && $state !== 'generating',
+            'can_repush' => $published,
         ];
     }
 

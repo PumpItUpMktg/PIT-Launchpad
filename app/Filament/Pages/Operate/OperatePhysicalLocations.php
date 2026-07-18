@@ -2,10 +2,20 @@
 
 namespace App\Filament\Pages\Operate;
 
+use App\ContentEngine\Drafting\GroundingReadiness;
+use App\ContentEngine\Review\ReviewActions;
+use App\Enums\PageType;
 use App\Filament\Pages\Gathering\BusinessStep;
 use App\Filament\Pages\Gathering\LocationsStep;
+use App\Jobs\GeneratePage;
+use App\Locations\LocationLandingFactory;
+use App\Models\Content;
+use App\Models\Location;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PhysicalLocations;
+use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * Operate · Physical locations — one card per base location with the areas it serves. Surfaces
@@ -73,6 +83,110 @@ class OperatePhysicalLocations extends OperatePage
         return $site === null
             ? ['summary' => ['locations' => 0, 'towns_covered' => 0, 'towns_selected' => 0, 'overlaps' => 0], 'cards' => []]
             : app(PhysicalLocations::class)->build($site);
+    }
+
+    // ── Per-location page lifecycle (targets the location's landing/hub page) ──
+
+    /**
+     * Generate the location's landing page — find-or-creates the ONE page pinned to this location
+     * (so it works even before the build materialized it), then queues the drafter on the worker.
+     * Same honest grounding gate + queued path the pages board uses.
+     */
+    public function generatePage(string $locationId): void
+    {
+        $location = $this->ownedLocation($locationId);
+        if ($location === null) {
+            return;
+        }
+
+        $content = app(LocationLandingFactory::class)->findOrCreate($location);
+
+        if (! app(GroundingReadiness::class)->ready($content)) {
+            Notification::make()->warning()->title('Not ready yet')
+                ->body('This location isn\'t ready to write yet — its details are still coming together.')->send();
+
+            return;
+        }
+
+        GeneratePage::enqueue($content, actorId: Auth::id());
+        Notification::make()->success()->title('Queued — generating on the worker')
+            ->body("'{$content->title}' is being drafted; it will be ready to publish shortly.")->send();
+    }
+
+    /** Approve + publish the location's landing page (compose + push to WordPress, idempotent by ULID). */
+    public function publishPage(string $locationId): void
+    {
+        $content = $this->landingFor($locationId);
+        if ($content === null) {
+            Notification::make()->warning()->title('Generate the page first')
+                ->body('There\'s no page for this location yet — generate it, then publish.')->send();
+
+            return;
+        }
+
+        $review = app(ReviewActions::class);
+        $approve = $review->approve($content, Auth::id());
+        if ($approve->isBlocked()) {
+            Notification::make()->danger()->title('Cannot publish')->body((string) $approve->blockedReason)->send();
+
+            return;
+        }
+
+        $publish = $review->publish($content->refresh(), Auth::id());
+        if ($publish->isBlocked()) {
+            Notification::make()->danger()->title('Cannot publish')->body((string) $publish->blockedReason)->send();
+
+            return;
+        }
+
+        Notification::make()->success()->title('Publishing — composing and pushing to WordPress')->send();
+    }
+
+    /** Re-push an already-live location page — the same idempotent publish path, same URL. */
+    public function repushPage(string $locationId): void
+    {
+        $content = $this->landingFor($locationId);
+        if ($content === null) {
+            return;
+        }
+
+        $result = app(ReviewActions::class)->publish($content, Auth::id());
+        if ($result->isBlocked()) {
+            Notification::make()->danger()->title('Cannot re-push')->body((string) $result->blockedReason)->send();
+
+            return;
+        }
+
+        Notification::make()->success()->title('Re-pushing to WordPress')->send();
+    }
+
+    /** A base Location owned by the working site, or null. */
+    private function ownedLocation(string $locationId): ?Location
+    {
+        $site = $this->getSite();
+        if ($site === null || $locationId === '') {
+            return null;
+        }
+
+        return Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereKey($locationId)
+            ->first();
+    }
+
+    /** The existing landing page pinned to a location (not created here — generate does that). */
+    private function landingFor(string $locationId): ?Content
+    {
+        $site = $this->getSite();
+        if ($site === null || $locationId === '') {
+            return null;
+        }
+
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('page_type', PageType::Location->value)
+            ->where('location_id', $locationId)
+            ->first();
     }
 
     /** Territory is edited in the Service area workspace — deep link per card. */
