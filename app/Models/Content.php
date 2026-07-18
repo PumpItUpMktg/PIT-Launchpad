@@ -31,6 +31,8 @@ use Illuminate\Support\Carbon;
  * @property bool $locally_edited
  * @property string|null $parent_location_id the physical Location serving this TOWN page (Live board grouping; distinct from location_id)
  * @property string|null $parent_content_id the parent hub landing Content this page nests under (URL nesting; distinct from parent_location_id)
+ * @property bool $nav_featured operator-pinned into the header main menu
+ * @property int|null $nav_order manual sort within the header menu (ascending, nulls last)
  * @property IntakeType|null $intake_type
  * @property int|null $wp_post_id
  * @property string|null $near_dup_of_content_id
@@ -302,6 +304,8 @@ class Content extends Model
             'refresh_count' => 'integer',
             'locked' => 'boolean',
             'locally_edited' => 'boolean',
+            'nav_featured' => 'boolean',
+            'nav_order' => 'integer',
         ];
     }
 }

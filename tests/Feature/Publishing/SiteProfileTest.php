@@ -87,6 +87,59 @@ it('caps the header services at 8 and ranks by importance (hub → pillar → su
         ->and($labels)->not->toContain('Cost Guide');   // the guide sank past the cap
 });
 
+it('uses the automatic top-8 service ranking when no page is featured', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    // 9 service pages, no featured → capped at 8, hub first.
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Hub, 'slug' => 'services', 'title' => 'Our Services']);
+    foreach (range(1, 9) as $n) {
+        Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => "svc-{$n}", 'title' => "Service {$n}"]);
+    }
+
+    $services = app(SiteProfileAssembler::class)->assemble($site->fresh())['services'];
+    expect($services)->toHaveCount(8)
+        ->and($services[0]['label'])->toBe('Our Services'); // hub ranks first
+});
+
+it('shows exactly the operator-featured pages, in manual order, uncapped', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    // 10 service pages exist, but the operator features 3 (a subset) in an explicit order.
+    foreach (range(1, 10) as $n) {
+        Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => "svc-{$n}", 'title' => "Service {$n}"]);
+    }
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'a', 'title' => 'Alpha', 'nav_featured' => true, 'nav_order' => 3]);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'b', 'title' => 'Bravo', 'nav_featured' => true, 'nav_order' => 1]);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'c', 'title' => 'Charlie', 'nav_featured' => true, 'nav_order' => 2]);
+
+    $services = app(SiteProfileAssembler::class)->assemble($site->fresh())['services'];
+
+    // Exactly the 3 featured, ordered by nav_order — NOT the automatic 8.
+    expect(array_column($services, 'label'))->toBe(['Bravo', 'Charlie', 'Alpha']);
+});
+
+it('can feature MORE than the automatic cap of 8 (operator decides the count)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    foreach (range(1, 11) as $n) {
+        Content::factory()->create([
+            'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+            'slug' => "svc-{$n}", 'title' => "Service {$n}", 'nav_featured' => true, 'nav_order' => $n,
+        ]);
+    }
+
+    expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['services'])->toHaveCount(11);
+});
+
+it('never lists a featured page in both the services and company menus', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    // The About page is a company link by slug — but the operator pins it into the header.
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'about', 'title' => 'About Us', 'nav_featured' => true, 'nav_order' => 1]);
+
+    $profile = app(SiteProfileAssembler::class)->assemble($site->fresh());
+
+    expect(array_column($profile['services'], 'label'))->toContain('About Us')
+        ->and(array_column($profile['company'], 'label'))->not->toContain('About Us')  // deduped
+        ->and(array_column($profile['nav'], 'label'))->not->toContain('About Us');
+});
+
 it('lets an operator override the header tone regardless of the logo', function () {
     $site = Site::factory()->create();
     // A logo that reads as dark, so the override has something to win over.
