@@ -5,6 +5,7 @@ namespace App\Publishing\Chrome;
 use App\Branding\LogoHeaderTone;
 use App\Enums\ContentKind;
 use App\Enums\PageType;
+use App\Enums\ServiceSiloRole;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
@@ -23,6 +24,9 @@ use Illuminate\Support\Collection;
  */
 final class SiteProfileAssembler
 {
+    /** The most services the header bar shows (importance-ranked); the rest live on the hub + footer. */
+    private const HEADER_SERVICE_LIMIT = 8;
+
     public function __construct(private readonly SiteContact $contact) {}
 
     /**
@@ -126,7 +130,11 @@ final class SiteProfileAssembler
     }
 
     /**
-     * The site's service / hub pages as nav links — real internal links only.
+     * The site's service / hub pages as nav links — real internal links only. A header bar can't
+     * hold every service, so it's capped; the shown ones are ranked by IMPORTANCE (not creation
+     * order) so the cap keeps the pages that matter: the category hub first, then core (pillar)
+     * services, then supporting services, and longtail "guide" pages (no core service link) sink
+     * last. Every service stays reachable from the hub ("Our services") page + the footer.
      *
      * @return list<array{label: string, url: string}>
      */
@@ -137,11 +145,28 @@ final class SiteProfileAssembler
             ->where('kind', ContentKind::Page->value)
             ->whereIn('page_type', [PageType::Service->value, PageType::Hub->value])
             ->whereNotNull('slug')
-            ->orderBy('created_at')
-            ->limit(6)
-            ->get();
+            ->with('primaryService:id,silo_role')
+            ->get()
+            // rank ASC, then oldest-first — a stable composite key ("rank-timestamp").
+            ->sortBy(fn (Content $p): string => sprintf('%d-%015d', $this->serviceNavRank($p), $p->created_at->getTimestamp()))
+            ->take(self::HEADER_SERVICE_LIMIT)
+            ->values();
 
         return $this->links($pages, $home);
+    }
+
+    /** Header nav priority: category hub → core (pillar) service → supporting service → guide/other. */
+    private function serviceNavRank(Content $page): int
+    {
+        if ($page->page_type === PageType::Hub) {
+            return 0;
+        }
+
+        return match ($page->primaryService?->silo_role) {
+            ServiceSiloRole::Pillar => 1,
+            ServiceSiloRole::Supporting => 2,
+            default => 3, // no core service link (longtail / guide pages) sink last
+        };
     }
 
     /**
