@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.11
+Stable tag: 0.9.12
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,14 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.12 =
+* URL nesting for location pages. /content now accepts `parent_content_id` (the parent hub's
+  control-plane ULID); the store sets WordPress post_parent from it so a town page nests under its
+  location hub (e.g. /montclair-nj/springfield), and post_name is now taken from the slug's LAST
+  segment (the full path rides in `slug`). Order-independent: a child pushed before its parent stores
+  the parent ULID as meta and is adopted when the hub arrives; a cleared parent detaches to root. This
+  is what lets duplicate town names across locations coexist at distinct nested URLs.
 
 = 0.9.11 =
 * [lp_footer] bottom bar renders the profile's `legal_links` (Privacy / Terms) beside the

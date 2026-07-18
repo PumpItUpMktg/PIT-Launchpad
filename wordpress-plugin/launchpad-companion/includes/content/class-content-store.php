@@ -57,7 +57,12 @@ final class ContentStore
             'post_content' => $block_content,
         ];
         if (! empty($payload['slug'])) {
-            $postarr['post_name'] = sanitize_title((string) $payload['slug']);
+            // The control plane sends the FULL path as the slug (e.g. `montclair-nj/springfield` for a
+            // nested town page). WordPress builds the hierarchical URL from post_parent + each post's
+            // own post_name, so post_name is only the LAST segment — the parent segments come from the
+            // post_parent chain (set in apply_parent below). A flat slug has one segment (itself).
+            $slug_parts = explode('/', trim((string) $payload['slug'], '/'));
+            $postarr['post_name'] = sanitize_title((string) end($slug_parts));
         }
         if ($existing_id > 0) {
             $postarr['ID'] = $existing_id;
@@ -101,6 +106,10 @@ final class ContentStore
 
         EditGuard::record_push($post_id, $this->fingerprint($payload));
 
+        // URL nesting: resolve post_parent for a town page under its location hub (and adopt any
+        // children that were pushed before this hub existed). Order-independent by design.
+        $this->apply_parent($post_id, $content_id, $payload);
+
         // The home page becomes WordPress' static front page — but only once it's actually published
         // (a preview-push is a draft and must never repoint the site's front page).
         if (($payload['page_type'] ?? '') === 'home' && get_post_status($post_id) === 'publish') {
@@ -124,6 +133,66 @@ final class ContentStore
         return ! empty($payload['locked'])
             || get_post_meta($post_id, Meta::LOCKED, true) === '1'
             || EditGuard::is_locally_edited($post_id);
+    }
+
+    /**
+     * Resolve WordPress post_parent for URL nesting (a town page under its location hub). The parent is
+     * identified by the control-plane ULID in `parent_content_id`; we store it as PARENT_ID meta and,
+     * when the parent post already exists here, set post_parent so the permalink nests
+     * (/montclair-nj/springfield). Because a child can be pushed BEFORE its parent, we ALSO reconcile
+     * the other direction on every upsert: any post whose PARENT_ID meta equals THIS content_id is
+     * adopted (re-parented to this post). So the nested URL self-heals regardless of push order. A
+     * cleared parent (empty payload value) detaches the page back to the site root.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function apply_parent(int $post_id, string $content_id, array $payload): void
+    {
+        $parent_ulid = isset($payload['parent_content_id']) ? trim((string) $payload['parent_content_id']) : '';
+
+        if ($parent_ulid !== '') {
+            update_post_meta($post_id, Meta::PARENT_ID, $parent_ulid);
+            $parent_post = $this->find($parent_ulid);
+            if ($parent_post > 0) {
+                $this->set_parent($post_id, $parent_post);
+            }
+            // Parent not pushed yet → leave post_parent untouched; the parent's own upsert adopts us
+            // via the PARENT_ID meta below.
+        } else {
+            delete_post_meta($post_id, Meta::PARENT_ID);
+            $this->set_parent($post_id, 0); // explicit detach to root
+        }
+
+        // Adopt any children pushed before this page existed (their PARENT_ID points at us).
+        if ($content_id !== '') {
+            $children = get_posts([
+                'post_type' => ['page', 'post'],
+                'post_status' => 'any',
+                'numberposts' => -1,
+                'fields' => 'ids',
+                'meta_key' => Meta::PARENT_ID,
+                'meta_value' => $content_id,
+                'suppress_filters' => false,
+            ]);
+            foreach ($children as $child_id) {
+                $this->set_parent((int) $child_id, $post_id);
+            }
+        }
+    }
+
+    /**
+     * Set post_parent only when it actually changes (avoids a needless save + save_post churn), under
+     * the edit guard so the write is not mistaken for a human edit.
+     */
+    private function set_parent(int $post_id, int $parent_id): void
+    {
+        if ((int) wp_get_post_parent_id($post_id) === $parent_id) {
+            return;
+        }
+
+        EditGuard::during_write(static function () use ($post_id, $parent_id): void {
+            wp_update_post(['ID' => $post_id, 'post_parent' => $parent_id]);
+        });
     }
 
     /**

@@ -38,6 +38,12 @@ final class Meta
     public const SILO_ID = '_lp_silo_id';
     public const LOCKED = '_lp_locked';
 
+    /** The control-plane ULID of this page's PARENT hub (URL nesting: a town page under its location
+     * hub). Stored from the /content blob's `parent_content_id` so post_parent can be resolved even if
+     * the parent is pushed AFTER the child — a later hub upsert re-parents its orphaned children by
+     * matching this meta. Empty for a flat/top-level page. */
+    public const PARENT_ID = '_lp_parent_id';
+
     /** The "Areas we serve" interactive-map geometry (served-county polygons + tiered town
      * points). Stored from the /content blob's `service_area_map` and printed as a
      * `window.lpAreaMap` global for the block theme's Leaflet init — kept OUT of post_content
