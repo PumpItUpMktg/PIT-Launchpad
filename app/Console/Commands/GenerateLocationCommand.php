@@ -2,18 +2,11 @@
 
 namespace App\Console\Commands;
 
-use App\Build\PageMaterializer;
-use App\Build\Permalinks;
 use App\ContentEngine\Drafting\DraftFailedException;
 use App\ContentEngine\Generation\PageGenerator;
-use App\Enums\ContentKind;
-use App\Enums\ContentStatus;
-use App\Enums\PageType;
-use App\Models\Content;
+use App\Locations\LocationLandingFactory;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
-use App\Models\Site;
-use App\SiloCreator\PillarFactory;
 use Illuminate\Console\Command;
 
 /**
@@ -33,7 +26,7 @@ class GenerateLocationCommand extends Command
 
     protected $description = 'Create (or reuse) and generate the location page for a §1 Location — drafts (Sonnet) + renders (fal) → review queue.';
 
-    public function handle(PageGenerator $generator, Permalinks $permalinks): int
+    public function handle(PageGenerator $generator): int
     {
         $location = Location::withoutGlobalScope(SiteScope::class)->find($this->argument('location'));
         if ($location === null) {
@@ -42,7 +35,7 @@ class GenerateLocationCommand extends Command
             return self::FAILURE;
         }
 
-        ['city' => $city, 'state' => $state] = $location->cityState();
+        ['city' => $city] = $location->cityState();
         if ($city === '') {
             $city = trim((string) $location->name);
         }
@@ -64,7 +57,7 @@ class GenerateLocationCommand extends Command
             $location->forceFill(['grounding_cache' => null])->save();
         }
 
-        $page = $this->findOrCreatePage($location, $city, $state, $permalinks);
+        $page = app(LocationLandingFactory::class)->findOrCreate($location);
         $this->line(sprintf('Location page: %s (%s)', $page->title, $page->id));
 
         try {
@@ -77,42 +70,5 @@ class GenerateLocationCommand extends Command
         }
 
         return self::SUCCESS;
-    }
-
-    /**
-     * The Location's page — found by its `location_id` pin (idempotent), else created planned/
-     * undrafted with its permalink assigned up front, mirroring {@see PageMaterializer}.
-     */
-    private function findOrCreatePage(Location $location, string $city, string $state, Permalinks $permalinks): Content
-    {
-        $existing = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $location->site_id)
-            ->where('kind', ContentKind::Page->value)
-            ->where('page_type', PageType::Location->value)
-            ->where('location_id', $location->id)
-            ->first();
-        if ($existing !== null) {
-            return $existing;
-        }
-
-        $title = $city !== '' ? ($state !== '' ? "{$city}, {$state}" : $city) : trim((string) $location->name);
-
-        /** @var Site $site */
-        $site = Site::withoutGlobalScope(SiteScope::class)->findOrFail($location->site_id);
-        $slug = $permalinks->uniqueSlug($title, $permalinks->takenSlugs($site));
-        $kit = PillarFactory::resolveKit(PageType::Location, (string) $location->site_id);
-
-        return Content::create([
-            'site_id' => $location->site_id,
-            'kind' => ContentKind::Page,
-            'page_type' => PageType::Location,
-            'status' => ContentStatus::Candidate,
-            'title' => $title,
-            'slug' => $slug,
-            'version' => 1,
-            'location_id' => $location->id,
-            'wireframe_kit_id' => $kit?->id,
-            'wireframe_kit_version' => $kit?->version,
-        ]);
     }
 }
