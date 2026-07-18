@@ -184,6 +184,28 @@ it('with NO lead form the description row stays single-column prose (no [lp_form
         ->not->toContain('[lp_form]');
 });
 
+it('renders FAQ answer inline HTML (internal links) instead of shipping escaped raw tags', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Services']);
+    $service = hsService($site, $silo);
+    $page = hsSpokePage($site, $silo, $service, [
+        'slot_payload' => [
+            'svc_intro' => 'We size, install, and test sump systems that hold through the worst spring surge.',
+            'faq' => [[
+                'question' => 'How much does it cost?',
+                'answer' => 'It depends — start with our <a href="/basement-waterproofing-cost-guide">Cost Guide</a>. <script>alert(1)</script>',
+            ]],
+        ],
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('<a href="/basement-waterproofing-cost-guide">Cost Guide</a>') // the link renders
+        ->not->toContain('&lt;a href')                                             // NOT escaped raw tags
+        ->not->toContain('<script>');                                              // sanitized away
+});
+
 it('the cost section renders factors-only when the record has no range — never a blank price line', function () {
     $site = hsSite();
     $silo = Silo::factory()->create(['site_id' => $site->id]);
