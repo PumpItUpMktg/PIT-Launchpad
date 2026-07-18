@@ -87,6 +87,25 @@ it('surfaces a missing required slot as a draft failure — no status flip', fun
         ->and($after->draftError())->toContain('kit schema');
 });
 
+it('clamps over-length text to the kit max instead of failing the page (the 221>220 case)', function () {
+    $page = PageFixture::intakePage();
+    // The drafter overshoots: a subhead past the 220 cap and an intro past the 900 cap. Pre-clamp,
+    // either LengthAboveMaximum hard-rejected the whole page ("Your move — try again").
+    $claude = new FakeClaudeClient(PageFixture::validResponse(proofIdFor($page->site_id), [
+        'hero_subhead' => str_repeat('an extra-long benefit line ', 12),   // ~324 chars > 220
+        'svc_intro' => str_repeat('This service explains the problem and the honest fix in plain terms. ', 20), // ~1360 > 900
+    ]));
+
+    $drafted = pageEngine($claude)->draftPage($page->fresh());
+
+    expect($drafted->status)->toBe(ContentStatus::NeedsReview)   // drafted, not failed
+        ->and($drafted->hasDraft())->toBeTrue()
+        ->and($drafted->draftError())->toBeNull()
+        ->and(mb_strlen(trim($drafted->slot_payload['hero_subhead'])))->toBeLessThanOrEqual(220)
+        ->and(mb_strlen(trim($drafted->slot_payload['svc_intro'])))->toBeLessThanOrEqual(900)
+        ->and(mb_strlen(trim($drafted->slot_payload['svc_intro'])))->toBeGreaterThanOrEqual(120); // still ≥ min
+});
+
 it('surfaces budget exhaustion (empty page draft) through the shared guard', function () {
     $page = PageFixture::intakePage(['status' => ContentStatus::Scored]);
     $claude = new FakeClaudeClient('', stopReason: 'max_tokens', outputTokens: 12000, thinkingTokens: 8000);
