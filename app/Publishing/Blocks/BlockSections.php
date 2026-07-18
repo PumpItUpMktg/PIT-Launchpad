@@ -4,6 +4,8 @@ namespace App\Publishing\Blocks;
 
 use App\Local\Proof\LocalJobProvider;
 use App\Publishing\Legal\LegalTemplates;
+use Symfony\Component\HtmlSanitizer\HtmlSanitizer;
+use Symfony\Component\HtmlSanitizer\HtmlSanitizerConfig;
 
 /**
  * The mockup's page sections translated to CORE-block ARRANGEMENTS (not its CSS — styling lives in
@@ -999,8 +1001,10 @@ final class BlockSections
 
         $rows = '';
         foreach ($items as $item) {
+            // The question is a plain label (escaped); the ANSWER is rich prose — the drafter emits
+            // real inline HTML (internal <a> links, <strong>/<em>) that must render, not ship escaped.
             $rows .= '<details class="lp-faq"><summary class="lp-faq__q">'.$this->text((string) $item['question']).'</summary>'
-                .'<div class="lp-faq__a">'.$this->text((string) $item['answer']).'</div></details>';
+                .'<div class="lp-faq__a">'.$this->richText((string) $item['answer']).'</div></details>';
         }
         $accordion = "<!-- wp:html -->\n".'<div class="lp-faq-list">'.$rows.'</div>'."\n<!-- /wp:html -->";
 
@@ -1406,6 +1410,32 @@ final class BlockSections
     private function text(?string $v): string
     {
         return htmlspecialchars(trim((string) $v), ENT_QUOTES, 'UTF-8');
+    }
+
+    /**
+     * Rich inline prose (FAQ answers) — the drafter's real inline HTML rendered, NOT escaped like a
+     * plain label. Sanitized to an inline allowlist (internal links + emphasis + line breaks) so
+     * scripts, event handlers, and unsafe URL schemes are stripped even though the source is our own
+     * engine. Plain text passes through unchanged.
+     */
+    private function richText(?string $v): string
+    {
+        $html = trim((string) $v);
+        if ($html === '') {
+            return '';
+        }
+
+        $config = (new HtmlSanitizerConfig)
+            ->allowElement('a', ['href'])
+            ->allowElement('strong')
+            ->allowElement('em')
+            ->allowElement('b')
+            ->allowElement('i')
+            ->allowElement('br')
+            ->allowLinkSchemes(['https', 'http', 'mailto', 'tel'])
+            ->allowRelativeLinks();
+
+        return trim((new HtmlSanitizer($config))->sanitize($html));
     }
 
     private function attr(?string $v): string
