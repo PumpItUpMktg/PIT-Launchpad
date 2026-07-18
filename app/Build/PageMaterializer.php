@@ -18,6 +18,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\Spoke;
 use App\SiloCreator\PillarFactory;
+use App\SiloCreator\SiloNesting;
 use App\Standard\StandardKit;
 use Illuminate\Support\Facades\DB;
 
@@ -153,6 +154,10 @@ final class PageMaterializer
             // URL nesting: pin each town page under its location hub and rewrite its slug to the full
             // nested path (/montclair/springfield), so duplicate town names across locations coexist.
             app(LocationNesting::class)->nest($site);
+
+            // URL nesting for the silo tree: pin each child service page under its silo hub and nest its
+            // slug (/drain-services/drain-cleaning), so the built pages match the Silos & pruning tree.
+            app(SiloNesting::class)->nest($site);
 
             return $pages;
         });
