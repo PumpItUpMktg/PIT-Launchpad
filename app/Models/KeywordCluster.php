@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $volume
  * @property int $member_count
  * @property bool $dropped
+ * @property bool $demand_dismissed
  * @property string $serp_status
  */
 class KeywordCluster extends Model
@@ -45,6 +46,7 @@ class KeywordCluster extends Model
             'volume' => 'integer',
             'member_count' => 'integer',
             'dropped' => 'boolean',
+            'demand_dismissed' => 'boolean',
         ];
     }
 }
