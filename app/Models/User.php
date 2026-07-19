@@ -31,8 +31,59 @@ class User extends Authenticatable implements FilamentUser
     {
         return match ($panel->getId()) {
             'client' => $this->role === UserRole::Client,
-            default => $this->role === UserRole::Operator,
+            default => $this->role->isStaff(), // admin + operator reach the operator panel
         };
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === UserRole::Admin;
+    }
+
+    /**
+     * The site ids this user may see, or NULL for unrestricted (all sites). Admin is always
+     * unrestricted; an operator is unrestricted UNTIL they carry membership rows (back-compat —
+     * "operators seeded manually", so no memberships means the pre-gating behavior), then limited to:
+     *  - every site named directly by a per-site membership (`site_id` set), plus
+     *  - every site under an account granted account-wide (a membership with `site_id` null).
+     *
+     * @return list<string>|null
+     */
+    public function permittedSiteIds(): ?array
+    {
+        if ($this->isAdmin()) {
+            return null;
+        }
+
+        $memberships = $this->memberships()->get(['account_id', 'site_id']);
+        if ($memberships->isEmpty()) {
+            return null; // unrestricted until membership is seeded
+        }
+
+        $siteIds = $memberships->pluck('site_id')->filter()->values();
+
+        $accountWide = $memberships->whereNull('site_id')->pluck('account_id')->filter()->values();
+        if ($accountWide->isNotEmpty()) {
+            $siteIds = $siteIds->merge(
+                Site::query()->whereIn('account_id', $accountWide->all())->pluck('id'),
+            );
+        }
+
+        return $siteIds->unique()->values()->all();
+    }
+
+    /** Whether this user may see a given site (or its id). */
+    public function canSeeSite(Site|string|null $site): bool
+    {
+        if ($site === null) {
+            return false;
+        }
+        $permitted = $this->permittedSiteIds();
+        if ($permitted === null) {
+            return true; // unrestricted
+        }
+
+        return in_array($site instanceof Site ? $site->id : $site, $permitted, true);
     }
 
     /**
