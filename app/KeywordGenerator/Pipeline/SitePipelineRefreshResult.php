@@ -13,5 +13,6 @@ final class SitePipelineRefreshResult
         public readonly int $keywordsScored,
         public readonly bool $trackingRan,
         public readonly int $snapshots,
+        public readonly int $keywordsGenerated = 0,
     ) {}
 }

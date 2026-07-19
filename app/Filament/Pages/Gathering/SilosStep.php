@@ -205,9 +205,11 @@ class SilosStep extends GatheringPage
     }
 
     /**
-     * Run §5 keyword discovery on demand — fills the silo keyword-target board instead of waiting for
-     * the daily pipeline. Queued (a slow DataForSEO pull off the web request); needs the silos to have
-     * rule_sets (materialize derives them) so discovery has somewhere to route the keywords.
+     * Run §5 keyword discovery on demand — GENERATES fresh keyword ideas per silo (real provider pull),
+     * routes + scores them, and fills the board. Runs synchronously in-request (like Rebuild) so the
+     * results are on the board when the page settles — the queued path only lands if a worker is running,
+     * which left the board looking empty. Needs the silos to carry rule_sets (generate/materialize derive
+     * them) so there are seeds to expand and somewhere to route.
      */
     public function discoverKeywords(): void
     {
@@ -216,11 +218,11 @@ class SilosStep extends GatheringPage
             return;
         }
 
-        DiscoverKeywords::dispatch($site->id);
+        DiscoverKeywords::dispatchSync($site->id);
 
         Notification::make()->success()
-            ->title('Keyword discovery started')
-            ->body('Discovery is filling your silos with keyword targets — refresh in a bit to see them land.')
+            ->title('Keyword discovery complete')
+            ->body('Pulled fresh keyword targets into your silos — thin silos should now be filling in.')
             ->send();
     }
 

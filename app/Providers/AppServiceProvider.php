@@ -73,6 +73,7 @@ use App\Interview\Arrange\SubClusterDetector;
 use App\Interview\Expansion\SiloExpander;
 use App\Interview\Volume\VolumeGrounder;
 use App\KeywordGenerator\Cluster\ClusterLabeler;
+use App\KeywordGenerator\Discovery\SiloKeywordGenerator;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
@@ -389,6 +390,7 @@ class AppServiceProvider extends ServiceProvider
             $app->make(PositionTracker::class),
             $app->make(SerpProvider::class),
             $app->make(LocalGridProvider::class),
+            $app->make(SiloKeywordGenerator::class),
             (int) config('content_engine.pipeline.tracking_cadence_days', 1),
             (int) config('content_engine.pipeline.discovery_cadence_days', 7),
         ));

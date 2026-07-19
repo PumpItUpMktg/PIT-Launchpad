@@ -35,8 +35,8 @@ class DiscoverKeywordsCommand extends Command
 
         $total = 0;
         foreach ($sites as $site) {
-            $result = $refresher->refresh($site, PipelineTrigger::Manual, force: true);
-            $this->line("<info>{$site->brand_name}</info> ({$site->id}) — {$result->keywordsScored} keyword(s) scored.");
+            $result = $refresher->refresh($site, PipelineTrigger::Manual, force: true, generate: true);
+            $this->line("<info>{$site->brand_name}</info> ({$site->id}) — {$result->keywordsGenerated} generated, {$result->keywordsScored} keyword(s) scored.");
             $total += $result->keywordsScored;
         }
 
