@@ -1,5 +1,4 @@
-<x-filament-panels::page>
-    @include('filament._lp-styles')
+<x-lp.shell variant="board">
     <style>
         .lp-manage { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; }
         .lp-manage-item { display:flex; flex-direction:column; gap:2px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; text-decoration:none; background:#fff; transition:border-color .12s, box-shadow .12s; }
@@ -19,8 +18,7 @@
         $funnelMax = max(1, ...array_values($funnel));
         $funnelLabels = ['candidate' => 'Candidates', 'scored' => 'Scored', 'drafted' => 'Drafted', 'in_review' => 'In review', 'approved' => 'Approved', 'published' => 'Published'];
     @endphp
-    <div class="lpa">
-        @unless ($site)
+    @unless ($site)
             <div class="lp-card">
                 <x-lp.empty title="No sites yet" action="Add your first site" :href="\App\Filament\Resources\SiteResource::getUrl('create')">
                     Launchpad builds and feeds a WordPress site for each of your clients.
@@ -70,7 +68,9 @@
                 @forelse ($this->perSilo as $silo)
                     <div class="lp-srow"><span>{{ $silo['silo_name'] }}</span><span class="lp-progtxt">{{ $silo['total'] }}</span></div>
                 @empty
-                    <div class="lp-empty" style="padding:16px">No content yet.</div>
+                    <x-lp.empty title="No content yet" action="Go to Blog" :href="\App\Filament\Pages\Operate\OperateBlog::getUrl(['site' => $site->id])">
+                        Generate posts and pages from the Blog board — they'll appear here per silo.
+                    </x-lp.empty>
                 @endforelse
             </div>
 
@@ -88,5 +88,4 @@
                 </div>
             </div>
         @endunless
-    </div>
-</x-filament-panels::page>
+</x-lp.shell>

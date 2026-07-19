@@ -10,8 +10,8 @@ use BackedEnum;
 /**
  * The single source of the state-chip vocabulary — the ONE place a state value becomes a
  * (label, tone) chip. Before this, ~20 blades each styled their own status pill with hand-picked
- * colors and casing; the {@see \App\View\Components\Lp\Chip} component funnels every one of them
- * through here so the palette and wording are decided once.
+ * colors and casing; the `<x-lp.chip>` component funnels every one of them through here so the
+ * palette and wording are decided once.
  *
  * Callers pass a known enum ({@see ContentStatus}, {@see SiteStatus}, {@see ReviewFlag}) or a raw
  * state string; anything unrecognized degrades to a neutral chip with a humanized label (never a

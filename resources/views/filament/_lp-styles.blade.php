@@ -59,6 +59,12 @@
   .lpa .lp-scope-dot{width:7px;height:7px;border-radius:50%;background:var(--teal-mid)}
   .lpa .lp-scope-name{color:var(--ink);font-weight:700}
 
+  /* The three page shells (x-lp.shell): board = card grid/stack, table = full-width list,
+     workspace = main + right rail. The header + scope live above; these set the body layout. */
+  .lpa.lp-shell--workspace .lp-workspace{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+  .lpa.lp-shell--workspace .lp-workspace-aside{position:sticky;top:12px}
+  @media (max-width:900px){.lpa.lp-shell--workspace .lp-workspace{grid-template-columns:1fr}}
+
   /* Standard empty state (x-lp.empty): title + guidance + a named next action — never a dead end. */
   .lpa .lp-empty{padding:30px;text-align:center;color:var(--ink-soft);font-size:14px}
   .lpa .lp-empty-title{font-family:'Archivo',sans-serif;font-weight:700;font-size:15px;color:var(--ink);margin-bottom:4px}
