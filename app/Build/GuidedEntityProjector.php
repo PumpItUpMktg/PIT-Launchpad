@@ -37,6 +37,8 @@ use App\Onboarding\IntakeCollector;
  */
 class GuidedEntityProjector
 {
+    public function __construct(private readonly SiloRuleSetDeriver $ruleSets = new SiloRuleSetDeriver) {}
+
     /**
      * @return array<string, Silo> the projected silos keyed by silo name (for pinning page silo_id)
      */
@@ -80,6 +82,10 @@ class GuidedEntityProjector
         }
 
         $this->projectTerritories($site);
+
+        // Give each silo a topical rule_set (from its spokes) so §5 discovery can route keywords into
+        // it — without this a guided silo has no bucketing terms and stays "thin" forever.
+        $this->ruleSets->deriveForSite($site);
 
         return $silos;
     }
