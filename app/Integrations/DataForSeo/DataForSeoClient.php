@@ -102,9 +102,28 @@ class DataForSeoClient
     }
 
     /**
+     * The strings-only related-keywords call. Kept for existing callers (the SERP provider's expansion
+     * hint); prefer {@see relatedKeywordsWithMetrics()} when you need the volume/difficulty the endpoint
+     * already returns.
+     *
      * @return list<string>
      */
     public function relatedKeywords(string $keyword, int $locationCode, string $language, int $limit): array
+    {
+        return array_values(array_unique(array_map(
+            fn (KeywordIdea $idea): string => $idea->keyword,
+            $this->relatedKeywordsWithMetrics($keyword, $locationCode, $language, $limit),
+        )));
+    }
+
+    /**
+     * Related keywords WITH their metrics (volume / competition / difficulty) — the accumulation seam
+     * for the keyword-first corpus builder. Same endpoint + cache path as {@see relatedKeywords()};
+     * this variant just keeps the metrics the strings-only parser discards.
+     *
+     * @return list<KeywordIdea>
+     */
+    public function relatedKeywordsWithMetrics(string $keyword, int $locationCode, string $language, int $limit): array
     {
         $json = $this->request('/v3/dataforseo_labs/google/related_keywords/live', [[
             'keyword' => $keyword,
@@ -113,7 +132,7 @@ class DataForSeoClient
             'limit' => $limit,
         ]]);
 
-        return self::parseRelated($this->firstTaskResult($json));
+        return self::parseRelatedIdeas($this->firstTaskResult($json));
     }
 
     // --- SERP API: organic (live) ---
@@ -277,6 +296,38 @@ class DataForSeoClient
         }
 
         return array_values(array_unique($terms));
+    }
+
+    /**
+     * Parse related_keywords items into metric-carrying ideas. Each item nests the term + metrics under
+     * `keyword_data` (`keyword_info.search_volume` / `.competition`, `keyword_properties.keyword_difficulty`);
+     * defensive against missing nodes. Deduped by keyword, keeping the first (highest-ranked) occurrence.
+     *
+     * @param  array<int, mixed>  $result
+     * @return list<KeywordIdea>
+     */
+    public static function parseRelatedIdeas(array $result): array
+    {
+        $out = [];
+        foreach ($result as $row) {
+            $data = is_array($row['keyword_data'] ?? null) ? $row['keyword_data'] : (is_array($row) ? $row : []);
+            $term = $data['keyword'] ?? ($row['keyword'] ?? null);
+            if (! is_string($term) || $term === '' || isset($out[$term])) {
+                continue;
+            }
+
+            $info = is_array($data['keyword_info'] ?? null) ? $data['keyword_info'] : [];
+            $props = is_array($data['keyword_properties'] ?? null) ? $data['keyword_properties'] : [];
+
+            $out[$term] = new KeywordIdea(
+                keyword: $term,
+                volume: (int) ($info['search_volume'] ?? 0),
+                competition: isset($info['competition']) && is_numeric($info['competition']) ? (float) $info['competition'] : null,
+                difficulty: isset($props['keyword_difficulty']) && is_numeric($props['keyword_difficulty']) ? (int) $props['keyword_difficulty'] : null,
+            );
+        }
+
+        return array_values($out);
     }
 
     /**
