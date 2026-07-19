@@ -7,6 +7,7 @@ use App\Interview\Expansion\ExpansionPersister;
 use App\Interview\Expansion\SiloExpander;
 use App\Interview\SiloSeed;
 use App\Interview\Volume\VolumeGrounder;
+use App\KeywordGenerator\KeywordFirstBuilder;
 use App\Models\Scopes\SiteScope;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
@@ -32,7 +33,7 @@ class BuildStructure implements ShouldQueue
 
     public function __construct(public string $siteId) {}
 
-    public function handle(SiloExpander $expander, ExpansionPersister $persister, VolumeGrounder $grounder, AutoArrangeRunner $arranger): void
+    public function handle(SiloExpander $expander, ExpansionPersister $persister, VolumeGrounder $grounder, AutoArrangeRunner $arranger, KeywordFirstBuilder $keywordFirst): void
     {
         $site = Site::query()->find($this->siteId);
         if ($site === null) {
@@ -49,13 +50,19 @@ class BuildStructure implements ShouldQueue
         }
 
         try {
-            $hasSpokes = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->exists();
-            if (! $hasSpokes) {
-                $persister->persist($site, $expander->expand(SiloSeed::fromArray($blueprint->seed)));
-            }
+            if (config('launchpad.keyword_first.enabled')) {
+                // Keyword-first: accumulate demand → cluster → derive the tree → arrange. Structure is
+                // shaped by measured demand, not the catalog. Regeneration replaces the candidate tree.
+                $keywordFirst->build($site);
+            } else {
+                $hasSpokes = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->exists();
+                if (! $hasSpokes) {
+                    $persister->persist($site, $expander->expand(SiloSeed::fromArray($blueprint->seed)));
+                }
 
-            $grounder->ground($site);
-            $arranger->run($site);
+                $grounder->ground($site);
+                $arranger->run($site);
+            }
 
             $state->update(['structure_status' => 'ready']);
         } catch (Throwable $e) {
