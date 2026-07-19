@@ -115,6 +115,44 @@ it('maps services onto the derived clusters, flagging non-matches', function () 
     expect($orphan->fresh()->structure_home_flagged)->toBeTrue(); // no real cluster match
 });
 
+it('accounts for every STATED service — SPG: mold maps, radon + leak-detection trip the unmatched flag', function () {
+    // SPG's confirmed stated services after the projection-contamination cleanup. The old tree
+    // silently handed off two of them; the mapper must map each to a home OR flag it — never drop.
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $mold = kfCluster($site, 'Mold', [['mold remediation', 2100, 'transactional'], ['mold removal cost', 900, 'commercial'], ['black mold', 700, 'informational']]);
+
+    $moldTesting = Service::factory()->create(['site_id' => $site->id, 'name' => 'Mold Testing']);
+    $radon = Service::factory()->create(['site_id' => $site->id, 'name' => 'Radon Mitigation']);
+    $flo = Service::factory()->create(['site_id' => $site->id, 'name' => 'Moen Flo leak detection']);
+
+    // Embeddings: mold-family co-locates Mold Testing with the Mold cluster; radon + leak are orthogonal.
+    $emb = new class implements EmbeddingProvider
+    {
+        public function embed(string $text): array
+        {
+            $t = mb_strtolower($text);
+
+            return match (true) {
+                str_contains($t, 'mold') => [1.0, 0.0, 0.0, 0.0],
+                str_contains($t, 'radon') => [0.0, 1.0, 0.0, 0.0],
+                str_contains($t, 'leak') || str_contains($t, 'flo') => [0.0, 0.0, 1.0, 0.0],
+                default => [0.0, 0.0, 0.0, 1.0],
+            };
+        }
+    };
+
+    $result = (new ServiceStructureMapper($emb))->map($site, [$mold]);
+
+    // All three pinned to a home cluster; two of them flagged for review — none left unaccounted.
+    expect($result)->toBe(['mapped' => 3, 'flagged' => 2]);
+    expect($moldTesting->fresh()->structure_home_cluster_id)->toBe($mold->id)
+        ->and($moldTesting->fresh()->structure_home_flagged)->toBeFalse();
+    foreach ([$radon, $flo] as $stranded) {
+        expect($stranded->fresh()->structure_home_cluster_id)->not->toBeNull()       // pinned to nearest…
+            ->and($stranded->fresh()->structure_home_flagged)->toBeTrue();           // …but flagged for review
+    }
+});
+
 it('reports high-demand clusters with no matching service (the BD output)', function () {
     $site = Site::factory()->create();
     $drainage = kfCluster($site, 'Drainage', [['french drain installation', 5180, 'transactional'], ['french drain cost', 2400, 'commercial'], ['french drain repair', 1200, 'transactional']]);

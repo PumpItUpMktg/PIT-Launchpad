@@ -15,6 +15,8 @@ use App\Filament\Pages\Operate\OperateServicePages;
 use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\Location;
+use App\Models\Scopes\SiteScope;
+use App\Models\Service;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -118,6 +120,13 @@ it('Sync plan picks up a month-3 source record as a new not-generated row with a
         'granularity' => SpokeGranularity::OwnPage,
         'tag' => SpokeTag::Core, 'page_type' => SpokePageType::Service,
     ]);
+
+    // The STATED services behind the structure — a service page grounds (and so becomes
+    // generatable) only against a real §1 Service; structure no longer fabricates them.
+    foreach (['Sump Pump Repair', 'Battery Backup Installation'] as $name) {
+        Service::withoutGlobalScope(SiteScope::class)
+            ->create(['site_id' => $site->id, 'name' => $name]);
+    }
 
     // Initial plan: one offered service page, materialized.
     $spoke('Sump Pump Repair');

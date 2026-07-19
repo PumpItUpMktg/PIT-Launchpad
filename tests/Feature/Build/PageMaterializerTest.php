@@ -12,6 +12,7 @@ use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
+use App\Models\Service;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -106,6 +107,11 @@ test('a service page is pinned to its OWN projected service; hub / standard / lo
     manifestEntry($site, BuildSource::Service, $service->id, 'Toilet Replacement', ['spoke_id' => $service->id]);
     manifestEntry($site, BuildSource::Standard, 'about', 'About');
     manifestEntry($site, BuildSource::Location, 'twn1', 'Clifton, NJ');
+
+    // The STATED service behind the spoke — structure no longer fabricates it, so the page can only
+    // pin a real one (services → structure is one-way; the projector links, never creates).
+    Service::withoutGlobalScope(SiteScope::class)
+        ->create(['site_id' => $site->id, 'name' => 'Toilet Replacement']);
 
     app(PageMaterializer::class)->materialize($site);
 
