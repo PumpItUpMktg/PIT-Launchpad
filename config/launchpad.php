@@ -342,6 +342,8 @@ return [
         'total_cap' => (int) env('LAUNCHPAD_KF_TOTAL_CAP', 600),        // corpus ceiling after merge
         'cluster_cosine' => (float) env('LAUNCHPAD_KF_CLUSTER_COSINE', 0.70), // similarity floor to join a cluster
         'serp_overlap' => (float) env('LAUNCHPAD_KF_SERP_OVERLAP', 0.4),      // head-candidate SERP overlap = same intent
+        'service_match_floor' => (float) env('LAUNCHPAD_KF_SERVICE_MATCH', 0.5), // service→cluster match floor (below = flagged)
+        'demand_report_volume' => (int) env('LAUNCHPAD_KF_DEMAND_VOLUME', 500), // a head above this with no service = a finding
     ],
 
     'grounding' => [

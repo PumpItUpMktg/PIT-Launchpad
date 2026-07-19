@@ -9,6 +9,7 @@ use Database\Factories\ServiceFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -22,6 +23,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property array{enabled?: bool, title?: string, option_a?: array{name?: string, points?: list<string>}, option_b?: array{name?: string, points?: list<string>}, verdict?: string}|null $comparison owner-triggered per spoke, off by default
  * @property bool $warranty_applicable pulls the warranty trust copy onto the page when true
  * @property ServiceSiloRole $silo_role pillar (core) vs supporting — drives silo + nav ranking
+ * @property string|null $structure_home_cluster_id demand-derived home cluster (keyword-first)
+ * @property bool $structure_home_flagged mapped to nearest cluster with no true match — needs review
  */
 class Service extends Model
 {
@@ -40,6 +43,17 @@ class Service extends Model
     public function silos(): BelongsToMany
     {
         return $this->belongsToMany(Silo::class, 'silo_service');
+    }
+
+    /**
+     * The demand-derived structure home — the keyword cluster (≈ silo) this service maps onto, assigned
+     * by service→cluster matching at derivation (keyword-first). Null before derivation runs.
+     *
+     * @return BelongsTo<KeywordCluster, $this>
+     */
+    public function structureHome(): BelongsTo
+    {
+        return $this->belongsTo(KeywordCluster::class, 'structure_home_cluster_id');
     }
 
     /** @return BelongsToMany<Market, $this> */
@@ -75,6 +89,7 @@ class Service extends Model
             'peak_months' => 'array',
             'is_most_profitable' => 'boolean',
             'is_growth_priority' => 'boolean',
+            'structure_home_flagged' => 'boolean',
             'symptoms' => 'array',
             'scope_items' => 'array',
             'process_steps' => 'array',
