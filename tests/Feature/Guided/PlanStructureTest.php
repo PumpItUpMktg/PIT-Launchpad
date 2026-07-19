@@ -75,6 +75,7 @@ test('BuildStructure fails cleanly when there is no seed', function () {
         app(ExpansionPersister::class),
         app(VolumeGrounder::class),
         app(AutoArrangeRunner::class),
+        app(App\KeywordGenerator\KeywordFirstBuilder::class),
     );
 
     expect(SetupState::query()->where('site_id', $this->site->id)->value('structure_status'))->toBe('failed');
