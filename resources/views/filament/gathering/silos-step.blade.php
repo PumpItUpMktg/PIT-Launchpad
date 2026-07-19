@@ -159,6 +159,26 @@
                 </div>
             @endif
 
+            @if ($this->demandReport !== [])
+                <div class="tg-card" style="border-color:rgba(217,119,6,.4)">
+                    <div class="tg-cardhead" style="background:rgba(217,119,6,.08)">
+                        <h3>Demand without a service</h3>
+                        <span class="tg-badge thin">{{ count($this->demandReport) }}</span>
+                        <span class="tg-split">real search demand you don't yet offer a service for</span>
+                    </div>
+                    <div class="tg-rows">
+                        @foreach ($this->demandReport as $finding)
+                            <div class="tg-row" wire:key="dws-{{ $finding['cluster_id'] }}">
+                                <span class="tg-q">{{ $finding['label'] ?: $finding['head_term'] }}</span>
+                                <span class="tg-num">{{ $finding['volume'] !== null ? number_format((int) $finding['volume']).'/mo' : '—' }}</span>
+                                <button type="button" class="tg-btn" title="Create a service linked into this silo" wire:click="createServiceFromDemand('{{ $finding['cluster_id'] }}')">+ Add service</button>
+                                <button type="button" class="tg-btn" title="Dismiss this finding" wire:click="dismissDemand('{{ $finding['cluster_id'] }}')">Dismiss</button>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             @if ($board['unassigned_total'] > 0)
                 <div class="tg-card">
                     <div class="tg-cardhead">

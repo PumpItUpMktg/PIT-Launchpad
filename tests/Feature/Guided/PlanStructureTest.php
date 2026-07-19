@@ -8,6 +8,7 @@ use App\Interview\Expansion\ExpansionPersister;
 use App\Interview\Expansion\SiloExpander;
 use App\Interview\Volume\VolumeGrounder;
 use App\Jobs\BuildStructure;
+use App\KeywordGenerator\KeywordFirstBuilder;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -75,6 +76,7 @@ test('BuildStructure fails cleanly when there is no seed', function () {
         app(ExpansionPersister::class),
         app(VolumeGrounder::class),
         app(AutoArrangeRunner::class),
+        app(KeywordFirstBuilder::class),
     );
 
     expect(SetupState::query()->where('site_id', $this->site->id)->value('structure_status'))->toBe('failed');

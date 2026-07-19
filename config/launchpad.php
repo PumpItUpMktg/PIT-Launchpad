@@ -344,6 +344,10 @@ return [
         'serp_overlap' => (float) env('LAUNCHPAD_KF_SERP_OVERLAP', 0.4),      // head-candidate SERP overlap = same intent
         'service_match_floor' => (float) env('LAUNCHPAD_KF_SERVICE_MATCH', 0.5), // service→cluster match floor (below = flagged)
         'demand_report_volume' => (int) env('LAUNCHPAD_KF_DEMAND_VOLUME', 500), // a head above this with no service = a finding
+        // Structure generation runs on the keyword-first pipeline (accumulate→cluster→derive) instead of
+        // the catalog-first expander when enabled. Corpus re-accumulates only when older than the window.
+        'enabled' => (bool) env('LAUNCHPAD_KEYWORD_FIRST', false),
+        'corpus_stale_days' => (int) env('LAUNCHPAD_KF_STALE_DAYS', 30),
     ],
 
     'grounding' => [

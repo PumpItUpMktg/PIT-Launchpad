@@ -2,14 +2,18 @@
 
 namespace App\Filament\Pages\Gathering;
 
+use App\Enums\ServiceSiloRole;
 use App\Filament\Concerns\ManagesPruneSurface;
 use App\Guided\StepGate;
 use App\Interview\Prune\PruneEngine;
 use App\Interview\Prune\PruneRow;
 use App\Jobs\BuildStructure;
+use App\KeywordGenerator\Derive\DemandWithoutServiceReport;
 use App\Models\BlogTarget;
 use App\Models\Keyword;
+use App\Models\KeywordCluster;
 use App\Models\Scopes\SiteScope;
+use App\Models\Service;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -45,6 +49,9 @@ class SilosStep extends GatheringPage
 
     /** Prune is a mode inside this surface — toggled, never a separate menu item. */
     public bool $pruneMode = false;
+
+    /** Armed after the first Generate click on a confirmed structure — the destructive-regen warning. */
+    public bool $regenArmed = false;
 
     protected function pruneSite(): ?Site
     {
@@ -120,6 +127,20 @@ class SilosStep extends GatheringPage
             return;
         }
 
+        // Destructive-regen guard (keyword-first v1): re-deriving replaces the tree, so an operator
+        // must confirm before regenerating a CONFIRMED structure. First click arms the warning; the
+        // second (or a fresh, unconfirmed structure) proceeds.
+        if (config('launchpad.keyword_first.enabled') && $this->getBlueprintConfirmedProperty() && ! $this->regenArmed) {
+            $this->regenArmed = true;
+            Notification::make()->warning()
+                ->title('Regenerating replaces your confirmed structure')
+                ->body('Re-deriving from demand rebuilds the tree — you\'ll re-prune. Click Generate again to confirm.')
+                ->send();
+
+            return;
+        }
+        $this->regenArmed = false;
+
         app(StepGate::class)->state($site)->update(['structure_status' => 'building']);
         BuildStructure::dispatchSync($site->id); // stamps ready/failed itself
 
@@ -190,6 +211,63 @@ class SilosStep extends GatheringPage
         return $site === null ? 0 : BlogTarget::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->count();
+    }
+
+    /**
+     * The demand-without-service findings (keyword-first): high-demand clusters with no matching
+     * service — "Crawl space encapsulation — 3,360/mo — no service. Add it?". The BD output of the
+     * keyword-first pipeline; empty (and hidden) when the pipeline isn't enabled.
+     *
+     * @return list<array{cluster_id: string, label: string|null, head_term: string|null, volume: int|null}>
+     */
+    public function getDemandReportProperty(): array
+    {
+        $site = $this->getSite();
+        if ($site === null || ! config('launchpad.keyword_first.enabled')) {
+            return [];
+        }
+
+        return app(DemandWithoutServiceReport::class)->for($site);
+    }
+
+    /** Create a service from a demand finding — links it straight into the structure (its home cluster). */
+    public function createServiceFromDemand(string $clusterId): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $cluster = KeywordCluster::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($clusterId)->first();
+        if ($cluster === null) {
+            return;
+        }
+
+        $name = trim((string) ($cluster->head_term ?? $cluster->label ?? ''));
+        if ($name === '') {
+            return;
+        }
+
+        Service::withoutGlobalScope(SiteScope::class)->firstOrCreate(
+            ['site_id' => $site->id, 'name' => $name],
+            ['silo_role' => ServiceSiloRole::Supporting, 'structure_home_cluster_id' => $cluster->id, 'structure_home_flagged' => false],
+        );
+
+        Notification::make()->success()->title("Added '{$name}' — linked into its silo.")->send();
+    }
+
+    /** Dismiss a demand finding — it stops surfacing on the report (the demand still exists in the tree). */
+    public function dismissDemand(string $clusterId): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        KeywordCluster::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($clusterId)
+            ->update(['demand_dismissed' => true]);
     }
 
     public function promote(string $keywordId): void

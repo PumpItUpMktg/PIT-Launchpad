@@ -32,6 +32,7 @@ final class DemandWithoutServiceReport
         return KeywordCluster::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('dropped', false)
+            ->where('demand_dismissed', false)
             ->where('volume', '>=', $threshold)
             ->whereNotIn('id', $covered)
             ->orderByDesc('volume')
