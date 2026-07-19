@@ -8,6 +8,7 @@ use App\Guided\StepGate;
 use App\Interview\Prune\PruneEngine;
 use App\Interview\Prune\PruneRow;
 use App\Jobs\BuildStructure;
+use App\Jobs\DiscoverKeywords;
 use App\KeywordGenerator\Derive\DemandWithoutServiceReport;
 use App\Models\BlogTarget;
 use App\Models\Keyword;
@@ -152,6 +153,26 @@ class SilosStep extends GatheringPage
 
         // A regenerate invalidates any in-progress decision-set view.
         $this->reset(['pruneMode', 'started', 'finalized', 'spokeDecisions', 'siloDecisions']);
+    }
+
+    /**
+     * Run §5 keyword discovery on demand — fills the silo keyword-target board instead of waiting for
+     * the daily pipeline. Queued (a slow DataForSEO pull off the web request); needs the silos to have
+     * rule_sets (materialize derives them) so discovery has somewhere to route the keywords.
+     */
+    public function discoverKeywords(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        DiscoverKeywords::dispatch($site->id);
+
+        Notification::make()->success()
+            ->title('Keyword discovery started')
+            ->body('Discovery is filling your silos with keyword targets — refresh in a bit to see them land.')
+            ->send();
     }
 
     /** Enter prune mode — seeds the decision-set from the candidate tree. */

@@ -116,6 +116,16 @@
             {{-- ── Silo cards: keyword targets per silo, covered/gap, promote/demote ── --}}
             @php $board = $this->board; @endphp
 
+            @if ($this->hasSpokes)
+                <div class="g-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 8px">
+                    <div class="g-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Silo keyword targets</div>
+                    <button type="button" class="g-btn" wire:click="discoverKeywords"
+                        wire:confirm="Run keyword discovery for this site? It fills each silo's targets from DataForSEO (may take a moment).">
+                        ⌕ Discover keywords
+                    </button>
+                </div>
+            @endif
+
             @if ($board['silos'] === [])
                 @if ($this->hasSpokes)
                     <div class="g-muted">Keyword targets attach after launch, as discovery runs — the tree above is what gets built.</div>
