@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Gathering;
 
+use App\Build\GuidedEntityProjector;
 use App\Build\StructureResetter;
 use App\Enums\ServiceSiloRole;
 use App\Filament\Concerns\ManagesPruneSurface;
@@ -147,6 +148,9 @@ class SilosStep extends GatheringPage
         app(StepGate::class)->state($site)->update(['structure_status' => 'building']);
         BuildStructure::dispatchSync($site->id); // stamps ready/failed itself
 
+        if ($this->getHasSpokesProperty()) {
+            $this->syncBoardToTree($site); // §4 silos follow the freshly-built tree (not just at materialize)
+        }
         $status = $this->getStructureStatusProperty();
         Notification::make()
             ->{$status === 'ready' ? 'success' : 'warning'}()
@@ -244,6 +248,9 @@ class SilosStep extends GatheringPage
         app(StepGate::class)->state($site)->update(['structure_status' => 'building']);
         BuildStructure::dispatchSync($site->id);            // fresh expand → honors bound_to_services
 
+        if ($this->getHasSpokesProperty()) {
+            $this->syncBoardToTree($site); // §4 silos follow the rebuilt tree so the board isn't stale
+        }
         $status = $this->getStructureStatusProperty();
         Notification::make()
             ->{$status === 'ready' ? 'success' : 'warning'}()
@@ -251,6 +258,19 @@ class SilosStep extends GatheringPage
             ->send();
 
         $this->reset(['pruneMode', 'started', 'finalized', 'spokeDecisions', 'siloDecisions', 'regenArmed']);
+    }
+
+    /**
+     * Bring the §4 board (Silo + rule_sets) into line with the spoke tree that generate/rebuild just
+     * produced. Without this the board's silos only reconcile at materialize, so a regenerate that
+     * renamed/dropped silos leaves a STALE board — its silos don't match the tree, and discover /
+     * re-file then route keywords into the wrong (or vanished) silos. {@see GuidedEntityProjector::project}
+     * is idempotent: it creates the current silos by name, reconciles away the stale ones, and derives
+     * their rule_sets — no Content pages (those wait for materialize). Board follows tree.
+     */
+    private function syncBoardToTree(Site $site): void
+    {
+        app(GuidedEntityProjector::class)->project($site);
     }
 
     /**
