@@ -11,49 +11,53 @@ use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
 use App\Models\User;
-use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
-it('the command forces a discovery run and reports the keywords scored', function () {
+it('the command forces a discovery run that GENERATES, and reports both counts', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
 
     $refresher = Mockery::mock(SitePipelineRefresher::class);
     $refresher->shouldReceive('refresh')
         ->once()
-        ->withArgs(fn (Site $s, PipelineTrigger $t, bool $force) => $s->id === $site->id && $t === PipelineTrigger::Manual && $force === true)
-        ->andReturn(new SitePipelineRefreshResult(discoveryRan: true, keywordsScored: 12, trackingRan: false, snapshots: 0));
+        ->withArgs(fn (Site $s, PipelineTrigger $t, bool $force, bool $generate) => $s->id === $site->id && $t === PipelineTrigger::Manual && $force === true && $generate === true)
+        ->andReturn(new SitePipelineRefreshResult(discoveryRan: true, keywordsScored: 12, trackingRan: false, snapshots: 0, keywordsGenerated: 40));
     $this->app->instance(SitePipelineRefresher::class, $refresher);
 
     $this->artisan('launchpad:discover-keywords', ['--site' => $site->id])
-        ->expectsOutputToContain('12 keyword(s) scored')
+        ->expectsOutputToContain('40 generated, 12 keyword(s) scored')
         ->assertSuccessful();
 });
 
-it('the job runs a forced discovery refresh for its site', function () {
+it('the job runs a forced, GENERATING discovery refresh for its site', function () {
     $site = Site::factory()->create();
 
     $refresher = Mockery::mock(SitePipelineRefresher::class);
     $refresher->shouldReceive('refresh')
         ->once()
-        ->withArgs(fn (Site $s, PipelineTrigger $t, bool $force) => $s->id === $site->id && $force === true)
-        ->andReturn(new SitePipelineRefreshResult(true, 3, false, 0));
+        ->withArgs(fn (Site $s, PipelineTrigger $t, bool $force, bool $generate) => $s->id === $site->id && $force === true && $generate === true)
+        ->andReturn(new SitePipelineRefreshResult(true, 3, false, 0, 9));
 
     (new DiscoverKeywords($site->id))->handle($refresher);
 });
 
-it('the Silos step action queues discovery for the working site', function () {
-    Queue::fake();
+it('the Silos step action runs discovery synchronously (in-request, not a queued no-op)', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
     Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $bp->id]);
     session(['guided_site_id' => $site->id]);
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
 
+    // dispatchSync runs the job inline → the refresher is invoked in-request (generate:true).
+    $refresher = Mockery::mock(SitePipelineRefresher::class);
+    $refresher->shouldReceive('refresh')
+        ->once()
+        ->withArgs(fn (Site $s, PipelineTrigger $t, bool $force, bool $generate) => $s->id === $site->id && $generate === true)
+        ->andReturn(new SitePipelineRefreshResult(true, 5, false, 0, 5));
+    $this->app->instance(SitePipelineRefresher::class, $refresher);
+
     Livewire::test(SilosStep::class)
         ->call('discoverKeywords')
         ->assertNotified();
-
-    Queue::assertPushed(DiscoverKeywords::class, fn (DiscoverKeywords $job) => $job->siteId === $site->id);
 });
 
 it('the discover button shows once structure exists', function () {

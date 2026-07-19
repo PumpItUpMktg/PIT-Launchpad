@@ -6,6 +6,7 @@ use App\Enums\MarketTier;
 use App\Enums\PipelineTrigger;
 use App\Integrations\LocalGrid\LocalGridProvider;
 use App\Integrations\Serp\SerpProvider;
+use App\KeywordGenerator\Discovery\SiloKeywordGenerator;
 use App\KeywordGenerator\Tracking\PositionTracker;
 use App\Models\Keyword;
 use App\Models\Market;
@@ -38,17 +39,28 @@ class SitePipelineRefresher
         private readonly PositionTracker $tracker,
         private readonly SerpProvider $serp,
         private readonly LocalGridProvider $grid,
+        private readonly SiloKeywordGenerator $generator,
         private readonly int $trackingCadenceDays,
         private readonly int $discoveryCadenceDays,
     ) {}
 
-    public function refresh(Site $site, PipelineTrigger $trigger, bool $force = false): SitePipelineRefreshResult
+    /**
+     * @param  bool  $generate  When true, first pull FRESH keyword ideas per silo (real provider calls)
+     *                          before scoring — the on-demand path fills empty silos. Left false on the
+     *                          scheduled cadence so a routine sweep only re-scores (no new API spend).
+     */
+    public function refresh(Site $site, PipelineTrigger $trigger, bool $force = false, bool $generate = false): SitePipelineRefreshResult
     {
         $startedAt = now();
         $discoveryRan = false;
+        $keywordsGenerated = 0;
         $keywordsScored = 0;
         $trackingRan = false;
         $snapshots = 0;
+
+        if ($generate && ($force || $this->dueForDiscovery($site))) {
+            $keywordsGenerated = $this->generator->generate($site);
+        }
 
         if ($force || $this->dueForDiscovery($site)) {
             $keywordsScored = count($this->pipeline->run($site)->scored);
@@ -64,6 +76,7 @@ class SitePipelineRefresher
             'site_id' => $site->id,
             'trigger' => $trigger->value,
             'discovery_ran' => $discoveryRan,
+            'keywords_generated' => $keywordsGenerated,
             'keywords_scored' => $keywordsScored,
             'tracking_ran' => $trackingRan,
             'snapshots' => $snapshots,
@@ -71,7 +84,7 @@ class SitePipelineRefresher
             'finished_at' => now()->toIso8601String(),
         ]);
 
-        return new SitePipelineRefreshResult($discoveryRan, $keywordsScored, $trackingRan, $snapshots);
+        return new SitePipelineRefreshResult($discoveryRan, $keywordsScored, $trackingRan, $snapshots, $keywordsGenerated);
     }
 
     private function dueForDiscovery(Site $site): bool

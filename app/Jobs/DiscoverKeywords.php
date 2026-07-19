@@ -29,6 +29,6 @@ class DiscoverKeywords implements ShouldQueue
             return;
         }
 
-        $refresher->refresh($site, PipelineTrigger::Manual, force: true);
+        $refresher->refresh($site, PipelineTrigger::Manual, force: true, generate: true);
     }
 }
