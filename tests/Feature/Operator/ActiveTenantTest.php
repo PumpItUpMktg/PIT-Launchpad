@@ -1,10 +1,14 @@
 <?php
 
+use App\Enums\UserRole;
+use App\Livewire\TenantSwitcher;
 use App\Models\Account;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteBranding;
+use App\Models\User;
 use App\Operator\ActiveTenant;
+use Livewire\Livewire;
 
 function activeTenant(): ActiveTenant
 {
@@ -60,17 +64,18 @@ it('the banner prefers the site logo, then the account logo, then name-only', fu
         ->and(activeTenant()->banner()['name'])->toBe('Sump Pump Gurus');
 });
 
-it('renders the topbar banner partial with the tenant name, logo, and a Switch link', function () {
+it('renders the topbar switcher with the tenant name, logo, and a way to switch', function () {
     $site = Site::factory()->create(['brand_name' => 'Basement Guard']);
+    Site::factory()->create(); // a second accessible tenant → real switcher, not static
     SiteBranding::withoutGlobalScope(SiteScope::class)->create([
         'site_id' => $site->id, 'logo_set' => ['url' => 'https://cdn/bg.png'],
     ]);
+    $this->actingAs(User::factory()->create(['role' => UserRole::Admin]));
     activeTenant()->set($site->id);
 
-    $html = view('filament.operator.tenant-banner')->render();
-
-    expect($html)->toContain('Basement Guard')
-        ->toContain('https://cdn/bg.png')
-        ->toContain('Working on')
-        ->toContain('Switch tenant');
+    Livewire::test(TenantSwitcher::class)
+        ->assertSee('Basement Guard')
+        ->assertSee('Working on')
+        ->assertSee('Go to Portfolio')
+        ->assertSeeHtml('https://cdn/bg.png');
 });
