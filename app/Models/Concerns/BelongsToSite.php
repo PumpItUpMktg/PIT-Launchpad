@@ -3,6 +3,7 @@
 namespace App\Models\Concerns;
 
 use App\Models\Scopes\SiteScope;
+use App\Models\Scopes\VisibleTenantScope;
 use App\Models\Site;
 use App\Support\CurrentSite;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,6 +19,7 @@ trait BelongsToSite
     public static function bootBelongsToSite(): void
     {
         static::addGlobalScope(new SiteScope);
+        static::addGlobalScope(new VisibleTenantScope);
 
         static::creating(function (self $model): void {
             if ($model->getAttribute('site_id') === null && CurrentSite::id() !== null) {

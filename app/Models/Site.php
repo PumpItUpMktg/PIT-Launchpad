@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\SiteStatus;
+use App\Models\Scopes\VisibleSiteScope;
 use App\Styling\StyleVariation;
 use Database\Factories\SiteFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -41,6 +42,14 @@ class Site extends Model
     use HasFactory, HasUlids;
 
     protected $guarded = [];
+
+    protected static function booted(): void
+    {
+        // Gating layer 1: every Site query is limited to the actor's permitted set (no-op for admins /
+        // no-membership operators / console). Portfolio, the switcher list, and tenant resolution all
+        // flow through Site::query(), so a non-permitted site is invisible everywhere at once.
+        static::addGlobalScope(new VisibleSiteScope);
+    }
 
     /** @return BelongsTo<Account, $this> */
     public function account(): BelongsTo

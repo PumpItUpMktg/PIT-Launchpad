@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Filament\Resources\SiteResource;
+use App\Models\User;
 use App\Operator\ActiveTenant;
 use Closure;
 use Illuminate\Http\Request;
@@ -24,8 +25,31 @@ class EnsureTenantSelected
     public function handle(Request $request, Closure $next): Response
     {
         // Only gate top-level page loads — never form posts, Livewire updates, or downloads.
-        if ($this->tenant->has() || ! $request->isMethod('GET') || $request->ajax()) {
+        if (! $request->isMethod('GET') || $request->ajax()) {
             return $next($request);
+        }
+
+        $user = $request->user();
+
+        // Gating layer 2: a URL-guessed tenant this operator can't see is REFUSED here (not just
+        // hidden) — a non-member ?site never renders.
+        $requested = $request->query('site');
+        if (is_string($requested) && $requested !== '' && $user instanceof User && ! $user->canSeeSite($requested)) {
+            return redirect(SiteResource::getUrl('index'));
+        }
+
+        if ($this->tenant->has()) {
+            return $next($request);
+        }
+
+        // A single-site operator auto-selects their one tenant instead of being sent to the picker.
+        if ($user instanceof User) {
+            $permitted = $user->permittedSiteIds();
+            if (is_array($permitted) && count($permitted) === 1) {
+                $this->tenant->set($permitted[0]);
+
+                return $next($request);
+            }
         }
 
         $route = (string) ($request->route()?->getName() ?? '');
