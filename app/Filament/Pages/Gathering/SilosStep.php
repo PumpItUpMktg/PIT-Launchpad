@@ -18,6 +18,7 @@ use App\Models\Keyword;
 use App\Models\KeywordCluster;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\Silo;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -290,6 +291,61 @@ class SilosStep extends GatheringPage
             ->title($count > 0 ? "Re-filed {$count} keyword(s) into silos" : 'No unassigned keywords matched a silo')
             ->body($count === 0 ? 'The silos may lack rule_sets — generate (or discover) so they have matching terms.' : null)
             ->send();
+    }
+
+    /**
+     * The site's silos as {id: name} — the option list for the per-keyword "Move to silo" control.
+     * Ordered by name to match the board's silo cards.
+     *
+     * @return array<string, string>
+     */
+    public function getSiloOptionsProperty(): array
+    {
+        $site = $this->getSite();
+
+        return $site === null ? [] : Silo::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
+    /**
+     * Hand-file one keyword into a silo (or unfile it) — the manual override for when rule_set
+     * matching misses (e.g. "battery backup sump pump installation" the operator wants under
+     * Sump Pumps, or a covered keyword sitting in the wrong silo). `''` is the placeholder no-op;
+     * `'none'` unassigns; anything else is a silo id. Sets `silo_id` directly (no Bucketer), so it
+     * always wins over auto-routing.
+     */
+    public function assignKeywordToSilo(string $keywordId, string $siloId): void
+    {
+        if ($siloId === '') {
+            return; // placeholder selected — nothing to do
+        }
+
+        $keyword = $this->ownedKeyword($keywordId);
+        if ($keyword === null) {
+            return;
+        }
+
+        if ($siloId === 'none') {
+            $keyword->forceFill(['silo_id' => null])->save();
+            Notification::make()->success()->title("Unfiled '{$keyword->query}' — back in Unassigned.")->send();
+
+            return;
+        }
+
+        $site = $this->getSite();
+        $silo = $site === null ? null : Silo::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereKey($siloId)
+            ->first();
+        if ($silo === null) {
+            return;
+        }
+
+        $keyword->forceFill(['silo_id' => $silo->id])->save();
+        Notification::make()->success()->title("Moved '{$keyword->query}' into {$silo->name}.")->send();
     }
 
     /** Enter prune mode — seeds the decision-set from the candidate tree. */
