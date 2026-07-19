@@ -49,10 +49,16 @@
                     <div class="g-empty">No seed yet — capture the trade on the Business step (or run the interview). The silo tree is generated from it plus the stated services.</div>
                 @elseif (! $this->hasSpokes)
                     <p class="g-hint">Seed ready ({{ $this->structureStatus === 'failed' ? 'last generation failed — retry below' : 'trade + services gathered' }}). Generation expands the seed into the candidate tree, grounds it on search volume, and auto-arranges it.</p>
-                    <button type="button" class="g-btn primary" wire:click="generate" wire:loading.attr="disabled">
-                        <span wire:loading.remove wire:target="generate">⚙ Generate structure</span>
-                        <span wire:loading wire:target="generate">Generating…</span>
-                    </button>
+                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;cursor:pointer">
+                        <input type="checkbox" wire:click="toggleBoundToServices" @checked($this->boundToServices)>
+                        Bind to my stated services only — don't invent silos I don't offer
+                    </label>
+                    <div>
+                        <button type="button" class="g-btn primary" wire:click="generate" wire:loading.attr="disabled">
+                            <span wire:loading.remove wire:target="generate">⚙ Generate structure</span>
+                            <span wire:loading wire:target="generate">Generating…</span>
+                        </button>
+                    </div>
                 @else
                     <div class="g-row" style="justify-content:space-between">
                         <div>
@@ -64,7 +70,11 @@
                                 @endif
                             </span>
                         </div>
-                        <div class="g-row">
+                        <div class="g-row" style="align-items:center">
+                            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer" title="Bounded generation organizes ONLY your stated services into silos — no invented ones. Regenerate to apply.">
+                                <input type="checkbox" wire:click="toggleBoundToServices" @checked($this->boundToServices)>
+                                Stated services only
+                            </label>
                             <button type="button" class="g-btn" wire:click="generate" wire:loading.attr="disabled"
                                 wire:confirm="Re-ground and re-arrange the tree? Confirmed decisions are preserved; volumes and arrangement refresh.">
                                 <span wire:loading.remove wire:target="generate">↻ Re-ground & re-arrange</span>

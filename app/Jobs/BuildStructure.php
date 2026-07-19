@@ -9,6 +9,7 @@ use App\Interview\SiloSeed;
 use App\Interview\Volume\VolumeGrounder;
 use App\KeywordGenerator\KeywordFirstBuilder;
 use App\Models\Scopes\SiteScope;
+use App\Models\Service;
 use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -57,7 +58,12 @@ class BuildStructure implements ShouldQueue
             } else {
                 $hasSpokes = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->exists();
                 if (! $hasSpokes) {
-                    $persister->persist($site, $expander->expand(SiloSeed::fromArray($blueprint->seed)));
+                    $seed = SiloSeed::fromArray($blueprint->seed);
+                    // Bounded mode: organize ONLY the stated services into silos (no invented services).
+                    if (! empty($blueprint->seed['bound_to_services'])) {
+                        $seed = $seed->withBoundedServices($this->statedServiceNames($site));
+                    }
+                    $persister->persist($site, $expander->expand($seed));
                 }
 
                 $grounder->ground($site);
@@ -69,5 +75,23 @@ class BuildStructure implements ShouldQueue
             report($e);
             $state->update(['structure_status' => 'failed']);
         }
+    }
+
+    /**
+     * The site's stated service names — the authoritative scope for bounded generation.
+     *
+     * @return list<string>
+     */
+    private function statedServiceNames(Site $site): array
+    {
+        return Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->orderBy('name')
+            ->pluck('name')
+            ->map(fn ($name): string => trim((string) $name))
+            ->filter(fn (string $name): bool => $name !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 }

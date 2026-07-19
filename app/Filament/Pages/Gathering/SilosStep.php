@@ -155,6 +155,48 @@ class SilosStep extends GatheringPage
         $this->reset(['pruneMode', 'started', 'finalized', 'spokeDecisions', 'siloDecisions']);
     }
 
+    /** Whether structure generation is bound to the stated-service list (vs generous trade expansion). */
+    public function getBoundToServicesProperty(): bool
+    {
+        $blueprint = $this->blueprint();
+
+        return $blueprint !== null && (bool) (($blueprint->seed['bound_to_services'] ?? false));
+    }
+
+    /**
+     * Toggle bounded generation: when on, a (re)generate organizes ONLY the stated services into silos
+     * and never invents a service the business doesn't offer; off is the generous expand-then-prune
+     * default. Persisted on the blueprint seed so the next Generate reads it.
+     */
+    public function toggleBoundToServices(): void
+    {
+        $blueprint = $this->blueprint();
+        if ($blueprint === null) {
+            return;
+        }
+
+        $seed = is_array($blueprint->seed) ? $blueprint->seed : [];
+        $bound = ! (bool) ($seed['bound_to_services'] ?? false);
+        $seed['bound_to_services'] = $bound;
+        $blueprint->forceFill(['seed' => $seed])->save();
+
+        Notification::make()->success()
+            ->title($bound ? 'Bound to your stated services' : 'Unbound — generous expansion')
+            ->body($bound
+                ? 'Regenerate to rebuild the tree from your stated services only — no invented silos.'
+                : 'Regenerate to let the AI propose adjacent services again (prune what you don\'t offer).')
+            ->send();
+    }
+
+    private function blueprint(): ?SiloBlueprint
+    {
+        $site = $this->getSite();
+
+        return $site === null
+            ? null
+            : SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+    }
+
     /**
      * Run §5 keyword discovery on demand — fills the silo keyword-target board instead of waiting for
      * the daily pipeline. Queued (a slow DataForSEO pull off the web request); needs the silos to have

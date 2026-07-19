@@ -255,7 +255,7 @@ final class SiloExpander
         $region = $seed->region === '' ? '(not stated)' : $seed->region;
         $voiceJson = $voice === [] ? '{}' : (string) json_encode($voice, JSON_UNESCAPED_SLASHES);
 
-        return <<<PROMPT
+        $context = <<<PROMPT
             BUSINESS SEED
             - Trade: {$seed->trade}
             - Anchor services (a FEW the owner named — NOT exhaustive): {$anchors}
@@ -264,6 +264,17 @@ final class SiloExpander
             - GBP signals (ground truth for what they DO — seed the `core` set from these): {$gbp}
             - Voice profile (mine for a SECONDARY AUDIENCE signal e.g. "commercial clientele", and for BRAND names the owner installs/services): {$voiceJson}
             PROMPT;
+
+        if ($seed->isBounded()) {
+            $stated = implode(', ', $seed->boundedServices);
+            $context .= "\n\n".<<<BOUND
+                SCOPE — BOUNDED TO STATED SERVICES (this OVERRIDES every "be generous / maximal split / a forgotten service is a lost lead" instruction below):
+                The business offers EXACTLY these services and NO others — this list is COMPLETE and authoritative: {$stated}.
+                Organize ONLY these services into silos. Do NOT propose, invent, expand into, or add ANY service that is not in this list — not equipment×action variants, not problem-chain adjacencies, not "commonly also offered" services. If a matrix/adjacency service is not in the list, OMIT it. You MAY still add upstream problem/symptom or informational CONTENT spokes (page_type "content") that route to the stated services, and you MAY group the stated services into logical silos — but every SERVICE spoke (page_type "service") MUST be one of the stated services above.
+                BOUND;
+        }
+
+        return $context;
     }
 
     private function dimensions(): string

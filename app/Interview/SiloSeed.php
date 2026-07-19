@@ -20,6 +20,8 @@ final class SiloSeed
      * @param  list<string>  $anchorServices
      * @param  list<string>  $exclusions
      * @param  list<string>|null  $gbpSignals
+     * @param  list<string>  $boundedServices  the COMPLETE stated-service list when generation is bound
+     *                                         to it (empty ⇒ generous mode: expand broad, prune later)
      */
     public function __construct(
         public readonly string $trade,
@@ -27,6 +29,7 @@ final class SiloSeed
         public readonly string $region = '',
         public readonly array $exclusions = [],
         public readonly ?array $gbpSignals = null,
+        public readonly array $boundedServices = [],
     ) {}
 
     /**
@@ -40,7 +43,32 @@ final class SiloSeed
             $this->region,
             $this->exclusions,
             $gbpSignals,
+            $this->boundedServices,
         );
+    }
+
+    /**
+     * A copy bound to the COMPLETE stated-service list — the expander then organizes ONLY these into
+     * silos and never invents a service outside the list.
+     *
+     * @param  list<string>  $services
+     */
+    public function withBoundedServices(array $services): self
+    {
+        return new self(
+            $this->trade,
+            $this->anchorServices,
+            $this->region,
+            $this->exclusions,
+            $this->gbpSignals,
+            $services,
+        );
+    }
+
+    /** Whether generation is bound to a stated-service list (vs generous expansion). */
+    public function isBounded(): bool
+    {
+        return $this->boundedServices !== [];
     }
 
     /**
