@@ -80,10 +80,11 @@ class SiteResource extends Resource
 
     protected static ?string $navigationLabel = 'Portfolio';
 
-    // The tenant list is operate work — it leads the Operate group in the final menu.
-    protected static string|\UnitEnum|null $navigationGroup = 'Operate';
+    // Nav-final: Portfolio is a top-level entry (Dashboard · Portfolio · Setup), above the
+    // Operate group of pages boards.
+    protected static string|\UnitEnum|null $navigationGroup = null;
 
-    protected static ?int $navigationSort = 0;
+    protected static ?int $navigationSort = -20;
 
     public static function getEloquentQuery(): Builder
     {

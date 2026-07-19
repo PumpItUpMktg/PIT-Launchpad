@@ -19,7 +19,11 @@ class OperateDashboard extends OperatePage
 
     protected static ?string $navigationLabel = 'Dashboard';
 
-    protected static ?int $navigationSort = 1;
+    // Nav-final: the root Dashboard is a top-level entry (Dashboard · Portfolio · Setup), not a
+    // member of the Operate group — that group is the pages boards only.
+    protected static string|\UnitEnum|null $navigationGroup = null;
+
+    protected static ?int $navigationSort = -30;
 
     protected string $view = 'filament.operate.dashboard';
 

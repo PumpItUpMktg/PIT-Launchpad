@@ -28,6 +28,9 @@ class ContentEditResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Advanced';
 
+    // Nav-final: a rarely-used raw-signal editor — reached by deep link, not the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function canAccess(): bool
     {
         return auth()->user()?->role === UserRole::Operator;
