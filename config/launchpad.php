@@ -340,6 +340,8 @@ return [
     'keyword_first' => [
         'per_seed_cap' => (int) env('LAUNCHPAD_KF_PER_SEED_CAP', 40),   // top-N ideas kept per seed
         'total_cap' => (int) env('LAUNCHPAD_KF_TOTAL_CAP', 600),        // corpus ceiling after merge
+        'cluster_cosine' => (float) env('LAUNCHPAD_KF_CLUSTER_COSINE', 0.70), // similarity floor to join a cluster
+        'serp_overlap' => (float) env('LAUNCHPAD_KF_SERP_OVERLAP', 0.4),      // head-candidate SERP overlap = same intent
     ],
 
     'grounding' => [

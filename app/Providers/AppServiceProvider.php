@@ -72,6 +72,7 @@ use App\Interview\Arrange\KeywordAssigner;
 use App\Interview\Arrange\SubClusterDetector;
 use App\Interview\Expansion\SiloExpander;
 use App\Interview\Volume\VolumeGrounder;
+use App\KeywordGenerator\Cluster\ClusterLabeler;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
@@ -443,6 +444,11 @@ class AppServiceProvider extends ServiceProvider
         // Mission polish is an opt-in one-sentence cleanup on the Brand intake — the cheap scoring
         // model is plenty; the honesty constraints live in the MissionPolisher prompt.
         $this->app->when(MissionPolisher::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
+
+        // Keyword-first cluster labeling (merge/split/drop) is a cheap Haiku pass over term lists.
+        $this->app->when(ClusterLabeler::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
 
