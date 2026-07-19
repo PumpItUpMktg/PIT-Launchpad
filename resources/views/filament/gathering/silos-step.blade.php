@@ -24,6 +24,8 @@
             .tg-btn { font-size:11px; padding:1px 7px; border-radius:6px; border:1px solid rgba(148,163,184,.4); background:transparent; cursor:pointer; line-height:1.4; }
             .tg-sel { font-size:11px; padding:1px 4px; border-radius:6px; border:1px solid rgba(148,163,184,.4); background:transparent; color:inherit; cursor:pointer; max-width:118px; }
             .tg-more { padding:8px 14px 11px; font-size:12px; }
+            .tg-subhead { display:flex; align-items:center; gap:8px; padding:8px 14px 4px; font-size:10px; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:#64748b; }
+            .tg-subhead .tg-split { margin-left:auto; }
         </style>
 
         @if ($pruneMode && $started)
@@ -93,22 +95,43 @@
                 @endif
             </div>
 
-            {{-- ── The generated tree (read-only — what generate / re-ground produced; prune edits) ── --}}
+            {{-- ── Silos: one card per silo — its PAGES (the generated tree) and its KEYWORD TARGETS
+                 (what discovery fills) together, so the two aren't shown as duplicate sections. ── --}}
+            @php
+                $board = $this->board;
+                $boardBySilo = collect($board['silos'])->keyBy('name');
+                $treeNames = array_keys($this->tree);
+            @endphp
+
             @if ($this->hasSpokes)
-                <div class="g-muted" style="font-size:11px; text-transform:uppercase; letter-spacing:.05em">Generated structure — {{ count($this->tree) }} silo(s)</div>
+                <div class="g-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 8px">
+                    <div class="g-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Silos — {{ count($this->tree) }} · pages + keyword targets</div>
+                    <button type="button" class="g-btn" wire:click="discoverKeywords"
+                        wire:confirm="Run keyword discovery for this site? It fills each silo's targets from DataForSEO (may take a moment).">
+                        ⌕ Discover keywords
+                    </button>
+                </div>
+
                 <div class="tg-grid">
                     @foreach ($this->tree as $siloName => $rows)
                         @php
                             $sorted = collect($rows)->sortBy([['isPillar', 'desc'], ['volume', 'desc']])->values();
                             $pageCount = $sorted->filter(fn ($r) => $r->isPillar || $r->granularity->value === 'own_page')->count();
+                            $b = $boardBySilo[$siloName] ?? null;
                         @endphp
-                        <div class="tg-card" wire:key="tree-{{ \Illuminate\Support\Str::slug($siloName) }}">
+                        <div class="tg-card" wire:key="silo-{{ \Illuminate\Support\Str::slug($siloName) }}">
                             <div class="tg-cardhead">
                                 <h3>{{ $siloName }}</h3>
+                                @if ($b)
+                                    <span class="tg-badge {{ $b['viable'] ? 'ok' : 'thin' }}">{{ $b['viable'] ? 'viable' : 'thin' }}</span>
+                                @endif
                                 <span class="tg-split">{{ $pageCount }} page(s) · {{ $sorted->count() }} topic(s)</span>
                             </div>
+
+                            {{-- Pages (the structure the build produces) --}}
+                            <div class="tg-subhead">Pages</div>
                             <div class="tg-rows">
-                                @foreach ($sorted->take(10) as $row)
+                                @foreach ($sorted->take(8) as $row)
                                     <div class="tg-row" wire:key="tr-{{ $row->id }}">
                                         <span class="tg-q" title="{{ $row->name }}">{{ $row->isPillar ? '⬡ ' : '' }}{{ $row->name }}</span>
                                         <span class="tg-num">{{ $row->volume !== null ? number_format((int) $row->volume) : '—' }}</span>
@@ -121,48 +144,21 @@
                                         </span>
                                     </div>
                                 @endforeach
-                                @if ($sorted->count() > 10)
-                                    <div class="tg-more">+ {{ $sorted->count() - 10 }} more — open Prune to see everything</div>
+                                @if ($sorted->count() > 8)
+                                    <div class="tg-more">+ {{ $sorted->count() - 8 }} more — open Prune to see everything</div>
                                 @endif
                             </div>
-                        </div>
-                    @endforeach
-                </div>
-            @endif
 
-            {{-- ── Silo cards: keyword targets per silo, covered/gap, promote/demote ── --}}
-            @php $board = $this->board; @endphp
-
-            @if ($this->hasSpokes)
-                <div class="g-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 8px">
-                    <div class="g-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Silo keyword targets</div>
-                    <button type="button" class="g-btn" wire:click="discoverKeywords"
-                        wire:confirm="Run keyword discovery for this site? It fills each silo's targets from DataForSEO (may take a moment).">
-                        ⌕ Discover keywords
-                    </button>
-                </div>
-            @endif
-
-            @if ($board['silos'] === [])
-                @if ($this->hasSpokes)
-                    <div class="g-muted">Keyword targets attach after launch, as discovery runs — the tree above is what gets built.</div>
-                @else
-                    <div class="g-empty">No structure yet — generate it above; keyword targets attach as discovery runs.</div>
-                @endif
-            @else
-                <div class="tg-grid">
-                    @foreach ($board['silos'] as $silo)
-                        <div class="tg-card" wire:key="tg-{{ $silo['id'] }}">
-                            <div class="tg-cardhead">
-                                <h3>{{ $silo['name'] }}</h3>
-                                <span class="tg-badge {{ $silo['viable'] ? 'ok' : 'thin' }}">{{ $silo['viable'] ? 'viable' : 'thin' }}</span>
-                                <span class="tg-split">{{ $silo['covered'] }} covered · {{ $silo['gaps'] }} gaps</span>
+                            {{-- Keyword targets (what discovery routes into this silo) --}}
+                            <div class="tg-subhead">
+                                Keyword targets
+                                @if ($b)<span class="tg-split">{{ $b['covered'] }} covered · {{ $b['gaps'] }} gaps</span>@endif
                             </div>
-                            @if ($silo['warning'] !== null)
-                                <div class="tg-warn">{{ $silo['warning'] }}</div>
+                            @if ($b && $b['warning'] !== null)
+                                <div class="tg-warn">{{ $b['warning'] }}</div>
                             @endif
                             <div class="tg-rows">
-                                @forelse ($silo['keywords'] as $kw)
+                                @forelse ($b['keywords'] ?? [] as $kw)
                                     <div class="tg-row" wire:key="tgk-{{ $kw['id'] }}">
                                         <span class="tg-q" title="{{ $kw['query'] }}">{{ $kw['query'] }}</span>
                                         <span class="tg-num">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
@@ -173,7 +169,7 @@
                                             wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
                                             <option value="">move…</option>
                                             @foreach ($this->siloOptions as $sid => $sname)
-                                                @if ($sid !== $silo['id'])
+                                                @if ($sid !== $b['id'])
                                                     <option value="{{ $sid }}">{{ $sname }}</option>
                                                 @endif
                                             @endforeach
@@ -183,17 +179,51 @@
                                         <button type="button" class="tg-btn" title="Demote" wire:click="demote('{{ $kw['id'] }}')">▼</button>
                                     </div>
                                 @empty
-                                    <div class="tg-row" style="color:#94a3b8">No keyword targets yet — discovery fills this.</div>
+                                    <div class="tg-row" style="color:#94a3b8">No keyword targets yet — run Discover keywords.</div>
                                 @endforelse
                             </div>
-                            @if ($silo['total'] > count($silo['keywords']))
+                            @if ($b && $b['total'] > count($b['keywords']))
                                 <div class="tg-more">
-                                    <a href="{{ \App\Filament\Resources\KeywordResource::getUrl('index') }}" wire:navigate>+ {{ $silo['total'] - count($silo['keywords']) }} more targets →</a>
+                                    <a href="{{ \App\Filament\Resources\KeywordResource::getUrl('index') }}" wire:navigate>+ {{ $b['total'] - count($b['keywords']) }} more targets →</a>
                                 </div>
                             @endif
                         </div>
                     @endforeach
+
+                    {{-- Safety net: a §4 silo with keyword targets but no matching tree card (rare, pre-sync)
+                         still surfaces its keywords rather than hiding them. --}}
+                    @foreach ($board['silos'] as $silo)
+                        @if (! in_array($silo['name'], $treeNames, true))
+                            <div class="tg-card" wire:key="tg-orphan-{{ $silo['id'] }}" style="border-color:rgba(217,119,6,.4)">
+                                <div class="tg-cardhead">
+                                    <h3>{{ $silo['name'] }}</h3>
+                                    <span class="tg-badge thin">no page yet</span>
+                                    <span class="tg-split">{{ $silo['covered'] }} covered · {{ $silo['gaps'] }} gaps</span>
+                                </div>
+                                <div class="tg-rows">
+                                    @foreach ($silo['keywords'] as $kw)
+                                        <div class="tg-row" wire:key="tgo-{{ $kw['id'] }}">
+                                            <span class="tg-q" title="{{ $kw['query'] }}">{{ $kw['query'] }}</span>
+                                            <span class="tg-num">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
+                                            <select class="tg-sel" title="Move this keyword to another silo"
+                                                wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
+                                                <option value="">move…</option>
+                                                @foreach ($this->siloOptions as $sid => $sname)
+                                                    @if ($sid !== $silo['id'])
+                                                        <option value="{{ $sid }}">{{ $sname }}</option>
+                                                    @endif
+                                                @endforeach
+                                                <option value="none">— unassign —</option>
+                                            </select>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+                    @endforeach
                 </div>
+            @else
+                <div class="g-empty">No structure yet — generate it above; each silo's pages and keyword targets show here together.</div>
             @endif
 
             @if ($this->demandReport !== [])

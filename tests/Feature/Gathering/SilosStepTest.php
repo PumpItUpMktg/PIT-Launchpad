@@ -196,12 +196,15 @@ it('the generated tree is VISIBLE on the main view right after generate — no p
 
     Livewire::test(SilosStep::class)
         ->assertOk()
-        ->assertSee('Generated structure')
+        ->assertSee('pages + keyword targets')     // the unified silos header
         ->assertSee('Sump Pumps')                 // the silo card
         ->assertSee('Sump Pump Installation')     // its spoke, without entering prune
         ->assertSee('hub page')                   // pillar disposition label
         ->assertSee('own page')                   // core disposition label
-        // No §4 Silo/Keyword rows yet → the keyword board explains itself instead of "No silos yet".
-        ->assertSee('Keyword targets attach after launch')
+        // Pages and keyword targets live in ONE card per silo, not two duplicate sections.
+        ->assertSee('Pages')
+        ->assertSee('Keyword targets')
+        // No §4 Silo/Keyword rows yet → the card's keyword block explains itself.
+        ->assertSee('run Discover keywords')
         ->assertDontSee('No structure yet');
 });
