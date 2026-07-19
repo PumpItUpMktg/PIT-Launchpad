@@ -84,20 +84,23 @@ function fakePlaces(): void
     });
 }
 
-it('the Setup group lists steps 1-9 in the sidebar (flag-gated); the resume deep link stays off-menu', function () {
-    // Final IA: the steps ARE the Setup group, in order, so the operator can return to any of them.
+it('nav-final: a single "Setup" entry registers; the nine step pages leave the sidebar (rail-driven)', function () {
+    // Nav-final IA: Setup is ONE top-level entry ({@see SetupEntry}); the steps no longer register
+    // in the sidebar — they ride the in-page stepper rail — but stay fully routable.
     config()->set('launchpad.new_setup_enabled', true);
     foreach ([BusinessStep::class, InterviewStep::class, LocationsStep::class, ServicesStep::class, VoiceStep::class, ConnectionsStep::class] as $page) {
-        expect($page::shouldRegisterNavigation())->toBeTrue()
-            ->and($page::getNavigationGroup())->toBe('Setup');
+        expect($page::shouldRegisterNavigation())->toBeFalse();
     }
-    // /admin/setup2 keeps its resume behavior but is not a menu item; the legacy guided entry hides.
-    expect(SetupEntry::shouldRegisterNavigation())->toBeFalse()
+    // The single Setup entry is what registers; the legacy guided SetupHome stays hidden.
+    expect(SetupEntry::shouldRegisterNavigation())->toBeTrue()
+        ->and(SetupEntry::getNavigationGroup())->toBeNull() // top-level, alongside Dashboard + Portfolio
+        ->and(SetupEntry::getNavigationLabel())->toBe('Setup')
         ->and(SetupHome::shouldRegisterNavigation())->toBeFalse();
 
-    // Flag off ⇒ the old menu is exactly as before.
+    // Flag off ⇒ the old menu is exactly as before (SetupEntry off, legacy SetupHome on).
     config()->set('launchpad.new_setup_enabled', false);
-    expect(BusinessStep::shouldRegisterNavigation())->toBeFalse()
+    expect(SetupEntry::shouldRegisterNavigation())->toBeFalse()
+        ->and(BusinessStep::shouldRegisterNavigation())->toBeFalse()
         ->and(SetupHome::shouldRegisterNavigation())->toBeTrue();
 });
 

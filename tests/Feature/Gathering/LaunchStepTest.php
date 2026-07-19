@@ -49,8 +49,10 @@ function launchReadySite(): Site
     return $site;
 }
 
-it('registers as step 9 of the Setup group, flag-gated like the rest', function () {
-    expect(LaunchStep::shouldRegisterNavigation())->toBeTrue() // sidebar step, flag-gated
+it('is Setup step 9 (rail metadata kept); nav-final keeps it out of the sidebar', function () {
+    // Nav-final: the single "Setup" entry registers, not the individual steps — but the step keeps
+    // its group/sort metadata for the in-page stepper rail.
+    expect(LaunchStep::shouldRegisterNavigation())->toBeFalse()
         ->and(LaunchStep::getNavigationGroup())->toBe('Setup')
         ->and(LaunchStep::getNavigationSort())->toBe(9);
 

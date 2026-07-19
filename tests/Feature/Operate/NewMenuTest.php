@@ -24,24 +24,22 @@ it('the final menu carries ONLY the newly designed surfaces, in cutover order', 
     $m = app(NewMenu::class)->build();
     $groups = collect($m['menu'])->keyBy('group');
 
-    // The FINAL IA: Setup (steps 1-9, returnable) → Operate (the working pages) → Advanced.
-    expect(collect($m['menu'])->pluck('group')->all())->toBe(['Setup', 'Operate', 'Advanced']);
+    // The FINAL IA (nav-final): Top level (Dashboard · Portfolio · Setup) → Operate (the pages boards).
+    // The nine Setup steps and the Advanced build-time tools are off-menu now (they inventory as
+    // drilldowns), so the sidebar is just the two keeper groups.
+    expect(collect($m['menu'])->pluck('group')->all())->toBe(['Top level', 'Operate']);
 
-    // Setup: the full arc, in step order.
-    expect(collect($groups['Setup']['items'])->pluck('label')->all())
-        ->toBe(['Business', 'Interview', 'Locations', 'Services', 'Voice', 'Connections & Feeds', 'Brand', 'Silos & keywords', 'Launch']);
+    // Top level: the three entries, in cutover order (Dashboard, Portfolio, Setup).
+    expect(collect($groups['Top level']['items'])->pluck('label')->all())
+        ->toBe(['Dashboard', 'Portfolio', 'Setup']);
 
-    // Operate: Portfolio leads, then the boards.
+    // Operate: the five pages boards (Portfolio + Dashboard moved up to Top level).
     expect(collect($groups['Operate']['items'])->pluck('label')->all())
-        ->toBe(['Portfolio', 'Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations']);
+        ->toBe(['Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations']);
 
-    // Advanced: the other pages (Edit signal now deliberately placed here) + the internal tools.
-    expect(collect($groups['Advanced']['items'])->pluck('label')->all())
-        ->toBe(['Edit signal', 'New menu', 'Menu map']);
-
-    // No legacy label leaks into the final menu.
+    // No legacy label — nor any off-menu step/tool — leaks into the final sidebar.
     $menuLabels = collect($m['menu'])->flatMap(fn ($g) => collect($g['items'])->pluck('label'));
-    expect($menuLabels)->not->toContain('Grow', 'Overview', 'Review queue', 'Candidates', 'Prune', 'Owner Interview', 'Service area', 'Feeds', 'Connections');
+    expect($menuLabels)->not->toContain('Grow', 'Overview', 'Review queue', 'Candidates', 'Prune', 'Owner Interview', 'Service area', 'Feeds', 'Connections', 'Business', 'Launch', 'Edit signal', 'Menu map');
 });
 
 it('splits the rest honestly: pending decisions, retiring legacy, and linked drill-downs', function () {
@@ -75,7 +73,7 @@ it('the New menu page renders the worksheet with every routable row clickable', 
         ->assertSee('Brand')
         ->assertSee('Retiring at cutover')
         // Every bucket links its live routes so each page can be opened and evaluated:
-        ->assertSeeHtml('href="'.LaunchStep::getUrl().'"')   // final menu
+        ->assertSeeHtml('href="'.LaunchStep::getUrl().'"')   // off-menu step (drilldown), route kept
         ->assertSeeHtml('href="'.Grow::getUrl().'"')            // retiring
         ->assertSeeHtml('href="'.ProofEditor::getUrl().'"');           // drill-down
 });

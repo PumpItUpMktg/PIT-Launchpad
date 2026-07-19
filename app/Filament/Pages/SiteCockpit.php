@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Filament\Pages\LocationsSetup;
 use App\Filament\Pages\Operate\HeaderMenu;
 use App\Filament\Pages\Operate\OrphanScan;
 use App\Filament\Resources\ConnectionsResource;

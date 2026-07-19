@@ -34,8 +34,10 @@ beforeEach(function () {
     session(['guided_site_id' => $this->site->id]);
 });
 
-it('registers as step 7; Silos and Launch shift to 8 and 9; the guided Brand is superseded', function () {
-    expect(BrandStep::shouldRegisterNavigation())->toBeTrue() // sidebar step, flag-gated
+it('is Setup step 7 (rail order 7·8·9 kept); nav-final keeps it out of the sidebar; guided Brand superseded', function () {
+    // Nav-final: the single "Setup" entry registers, not the steps — but the rail order is metadata
+    // that survives (Brand 7, Silos 8, Launch 9).
+    expect(BrandStep::shouldRegisterNavigation())->toBeFalse()
         ->and(BrandStep::getNavigationGroup())->toBe('Setup')
         ->and(BrandStep::getNavigationSort())->toBe(7)
         ->and(SilosStep::getNavigationSort())->toBe(8)
