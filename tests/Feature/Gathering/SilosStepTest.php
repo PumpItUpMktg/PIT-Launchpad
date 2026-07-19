@@ -142,6 +142,42 @@ it('prune is a mode inside the surface: open → decide → finalize confirms th
     $page->call('closePrune')->assertSet('pruneMode', false)->assertSee('Re-prune');
 });
 
+it('hand-files an unassigned keyword into a chosen silo (manual override for missed rule_set matches)', function () {
+    $site = silosStepSite();
+    $sump = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pumps']);
+    $orphan = Keyword::factory()->create([
+        'site_id' => $site->id, 'silo_id' => null, 'query' => 'battery backup sump pump installation',
+    ]);
+
+    $page = Livewire::test(SilosStep::class)->assertOk();
+    // Silo options are offered for the move control…
+    expect($page->instance()->siloOptions)->toContain('Sump Pumps');
+
+    // …and moving files it under the chosen silo (silo_id set directly — no Bucketer).
+    $page->call('assignKeywordToSilo', $orphan->id, $sump->id)->assertNotified();
+    expect($orphan->fresh()->silo_id)->toBe($sump->id);
+
+    // Unassign puts it back in the Unassigned band.
+    $page->call('assignKeywordToSilo', $orphan->id, 'none');
+    expect($orphan->fresh()->silo_id)->toBeNull();
+
+    // The placeholder value is a no-op (doesn't null a filed keyword).
+    $orphan->forceFill(['silo_id' => $sump->id])->save();
+    $page->call('assignKeywordToSilo', $orphan->id, '');
+    expect($orphan->fresh()->silo_id)->toBe($sump->id);
+});
+
+it('will not move a keyword into another tenant\'s silo', function () {
+    $site = silosStepSite();
+    $mine = Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => null, 'query' => 'sump pump repair']);
+    $otherSite = Site::factory()->create(['brand_name' => 'Other Tenant']);
+    $foreignSilo = Silo::factory()->create(['site_id' => $otherSite->id, 'name' => 'Foreign Silo']);
+
+    Livewire::test(SilosStep::class)->call('assignKeywordToSilo', $mine->id, $foreignSilo->id);
+
+    expect($mine->fresh()->silo_id)->toBeNull(); // rejected — cross-tenant silo isn't a valid target
+});
+
 it('switching the working site drops out of prune mode with a clean decision-set', function () {
     $site = silosStepSite();
     $other = Site::factory()->create(['brand_name' => 'Other Tenant']);
