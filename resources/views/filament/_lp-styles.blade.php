@@ -48,5 +48,20 @@
   .lpa .lp-funnel .fv{font-family:'Spline Sans Mono',monospace;font-size:12px;font-weight:600;color:var(--teal-deep)}
   .lpa .lp-srow{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #EEF2F4;font-size:13px}
   .lpa .lp-srow:last-child{border-bottom:none}
+
+  /* Standard page header (x-lp.page-header): titles left, site-scope indicator + one action right. */
+  .lpa .lp-pagehead{align-items:flex-start}
+  .lpa .lp-pagehead-titles{min-width:0}
+  .lpa .lp-pagehead-aside{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .lpa .lp-pagehead-meta{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .lpa .lp-scope{display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 7px;border:1px solid var(--line);border-radius:20px;background:var(--card);font-size:12px;font-weight:600;color:var(--ink-soft)}
+  .lpa .lp-scope-logo{height:18px;width:auto;max-width:70px;object-fit:contain;border-radius:3px}
+  .lpa .lp-scope-dot{width:7px;height:7px;border-radius:50%;background:var(--teal-mid)}
+  .lpa .lp-scope-name{color:var(--ink);font-weight:700}
+
+  /* Standard empty state (x-lp.empty): title + guidance + a named next action — never a dead end. */
   .lpa .lp-empty{padding:30px;text-align:center;color:var(--ink-soft);font-size:14px}
+  .lpa .lp-empty-title{font-family:'Archivo',sans-serif;font-weight:700;font-size:15px;color:var(--ink);margin-bottom:4px}
+  .lpa .lp-empty-body{max-width:420px;margin:0 auto}
+  .lpa .lp-empty-cta{margin-top:16px}
 </style>

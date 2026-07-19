@@ -21,22 +21,26 @@
     @endphp
     <div class="lpa">
         @unless ($site)
-            <div class="lp-card"><div class="lp-empty">No sites yet.</div></div>
-        @else
-            <div class="lp-row">
-                <div>
-                    <div class="lp-eyebrow">Per-site cockpit</div>
-                    <div class="lp-h1">{{ $site->brand_name }}</div>
-                    <span class="lp-status {{ $site->status->value === 'live' ? 'live' : 'onboarding' }}">{{ ucfirst($site->status->value) }}</span>
-                </div>
-                @if (count($this->siteOptions) > 1)
-                    <select wire:model.live="siteId" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;background:#fff">
-                        @foreach ($this->siteOptions as $id => $name)
-                            <option value="{{ $id }}">{{ $name }}</option>
-                        @endforeach
-                    </select>
-                @endif
+            <div class="lp-card">
+                <x-lp.empty title="No sites yet" action="Add your first site" :href="\App\Filament\Resources\SiteResource::getUrl('create')">
+                    Launchpad builds and feeds a WordPress site for each of your clients.
+                </x-lp.empty>
             </div>
+        @else
+            <x-lp.page-header eyebrow="Per-site cockpit" :title="$site->brand_name" :scope="false">
+                <x-slot:meta>
+                    <x-lp.chip :for="$site->status" />
+                </x-slot:meta>
+                @if (count($this->siteOptions) > 1)
+                    <x-slot:action>
+                        <select wire:model.live="siteId" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;background:#fff">
+                            @foreach ($this->siteOptions as $id => $name)
+                                <option value="{{ $id }}">{{ $name }}</option>
+                            @endforeach
+                        </select>
+                    </x-slot:action>
+                @endif
+            </x-lp.page-header>
 
             {{-- Stat cards — counts link through to the actionable work items --}}
             <div class="lp-stats">
