@@ -2,6 +2,7 @@
 
 namespace App\Filament\Concerns;
 
+use App\Enums\ArrangeFlagType;
 use App\Enums\PruneOutcome;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokeTag;
@@ -454,7 +455,7 @@ trait ManagesPruneSurface
      * auto-arrange (§4b) recommendations awaiting operator confirm, newest grouping first.
      * Each carries the affected spoke's name + the rationale score for an at-a-glance read.
      *
-     * @return list<array{id: string, type: string, message: string, score: float|null, spoke: string}>
+     * @return list<array{id: string, type: string, type_key: string, message: string, score: float|null, spoke: string}>
      */
     public function getArrangeFlagsProperty(): array
     {
@@ -472,11 +473,47 @@ trait ManagesPruneSurface
             ->map(fn (ArrangementFlag $f) => [
                 'id' => $f->id,
                 'type' => $f->type->label(),
+                'type_key' => $f->type->value,
                 'message' => $f->message,
                 'score' => $f->score,
                 'spoke' => (string) ($names[$f->spoke_id] ?? ''),
             ])
             ->all();
+    }
+
+    /**
+     * The arrange flags grouped by kind, each group carrying its plain-language help (what the call
+     * is + what Accept/Dismiss does) so the surface can explain itself instead of showing raw
+     * "type · score" rows. Groups are ordered by type for a stable read.
+     *
+     * @return list<array{type_key: string, label: string, what: string, accept: string, dismiss: string, flags: list<array{id: string, message: string, spoke: string, score: float|null}>}>
+     */
+    public function getArrangeFlagGroupsProperty(): array
+    {
+        $groups = [];
+        foreach ($this->getArrangeFlagsProperty() as $flag) {
+            $groups[$flag['type_key']] ??= [
+                'type_key' => $flag['type_key'],
+                'label' => $flag['type'],
+                'help' => ArrangeFlagType::from($flag['type_key'])->help(),
+                'flags' => [],
+            ];
+            $groups[$flag['type_key']]['flags'][] = [
+                'id' => $flag['id'],
+                'message' => $flag['message'],
+                'spoke' => $flag['spoke'],
+                'score' => $flag['score'],
+            ];
+        }
+
+        return array_values(array_map(fn (array $g) => [
+            'type_key' => $g['type_key'],
+            'label' => $g['label'],
+            'what' => $g['help']['what'],
+            'accept' => $g['help']['accept'],
+            'dismiss' => $g['help']['dismiss'],
+            'flags' => $g['flags'],
+        ], $groups));
     }
 
     /** Run auto-arrange (B→C→A→D→E) for the site, persisting the recommended structure + flags. */
@@ -513,6 +550,24 @@ trait ManagesPruneSurface
         $this->resolveFlag($id, accept: false);
     }
 
+    /** Accept every open recommendation at once — the "looks right, apply it all" shortcut. */
+    public function acceptAllFlags(): void
+    {
+        $this->resolveFlags(null, accept: true);
+    }
+
+    /** Accept every recommendation of one kind (the group's "Accept all"). */
+    public function acceptFlagGroup(string $typeKey): void
+    {
+        $this->resolveFlags($typeKey, accept: true);
+    }
+
+    /** Dismiss every recommendation of one kind (the group's "Dismiss all"). */
+    public function dismissFlagGroup(string $typeKey): void
+    {
+        $this->resolveFlags($typeKey, accept: false);
+    }
+
     private function resolveFlag(string $id, bool $accept): void
     {
         $site = $this->pruneSite();
@@ -535,6 +590,47 @@ trait ManagesPruneSurface
         Notification::make()
             ->title($ok ? ($accept ? 'Accepted.' : 'Dismissed.') : 'Could not resolve that flag.')
             ->{$ok ? 'success' : 'warning'}()
+            ->send();
+    }
+
+    /**
+     * Resolve a batch of flags in one pass — all open flags ($typeKey === null) or just one kind.
+     * Re-seeds and notifies once for the whole batch (not per flag) so an "Accept all" is a single,
+     * legible action.
+     */
+    private function resolveFlags(?string $typeKey, bool $accept): void
+    {
+        $site = $this->pruneSite();
+        if ($site === null) {
+            return;
+        }
+
+        $flags = ArrangementFlag::query()
+            ->where('site_id', $site->id)
+            ->when($typeKey !== null, fn ($q) => $q->where('type', $typeKey))
+            ->get();
+
+        if ($flags->isEmpty()) {
+            return;
+        }
+
+        $resolver = app(FlagResolver::class);
+        $resolved = 0;
+        foreach ($flags as $flag) {
+            $ok = $accept ? $resolver->accept($site, $flag) : $resolver->dismiss($site, $flag);
+            if ($ok) {
+                $resolved++;
+            }
+        }
+
+        if ($this->started) {
+            $this->seedDecisions($site);
+        }
+
+        $verb = $accept ? 'Accepted' : 'Dismissed';
+        Notification::make()
+            ->title("{$verb} {$resolved} recommendation(s).")
+            ->{$resolved > 0 ? 'success' : 'warning'}()
             ->send();
     }
 

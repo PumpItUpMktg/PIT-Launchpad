@@ -76,3 +76,42 @@ test('dismissing a flag from the page removes it', function () {
 
     expect(ArrangementFlag::query()->whereKey($flagId)->exists())->toBeFalse();
 });
+
+test('arrange flags are grouped by kind, each group carrying its plain-language help', function () {
+    app(AutoArrangeRunner::class)->run($this->site);
+
+    $groups = Livewire::test(SiloPrune::class)->set('siteId', $this->site->id)->instance()->arrangeFlagGroups;
+
+    expect($groups)->not->toBeEmpty();
+    foreach ($groups as $group) {
+        expect($group)->toHaveKeys(['type_key', 'label', 'what', 'accept', 'dismiss', 'flags'])
+            ->and($group['flags'])->not->toBeEmpty()
+            ->and(trim($group['what']))->not->toBe('');
+        // Every flag in a group shares its kind (grouping is real, not a flat passthrough).
+        foreach ($group['flags'] as $flag) {
+            expect($flag)->toHaveKeys(['id', 'message', 'spoke', 'score']);
+        }
+    }
+});
+
+test('Accept all resolves every open recommendation at once', function () {
+    app(AutoArrangeRunner::class)->run($this->site);
+    expect(ArrangementFlag::query()->where('site_id', $this->site->id)->count())->toBeGreaterThan(0);
+
+    Livewire::test(SiloPrune::class)
+        ->set('siteId', $this->site->id)
+        ->call('acceptAllFlags');
+
+    expect(ArrangementFlag::query()->where('site_id', $this->site->id)->count())->toBe(0);
+});
+
+test('a group Dismiss-all clears every flag of that kind', function () {
+    app(AutoArrangeRunner::class)->run($this->site);
+    $typeKey = ArrangementFlag::query()->where('site_id', $this->site->id)->first()->type->value;
+
+    Livewire::test(SiloPrune::class)
+        ->set('siteId', $this->site->id)
+        ->call('dismissFlagGroup', $typeKey);
+
+    expect(ArrangementFlag::query()->where('site_id', $this->site->id)->where('type', $typeKey)->count())->toBe(0);
+});

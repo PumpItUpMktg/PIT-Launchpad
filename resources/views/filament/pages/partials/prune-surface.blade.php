@@ -33,6 +33,42 @@
     .lp-stat.build .n { color:#1b7a47; }
     .lp-stat.pending .n { color:var(--pending); }
 
+    /* Auto-arrange — grouped, self-explaining */
+    .lp-arrange { background:var(--surface); border:1px solid var(--line); border-left:5px solid var(--connecting); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
+    .lp-arrange-head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .lp-arrange-title { font-family:'Archivo',sans-serif; font-size:16px; }
+    .lp-arrange-group { border:1px solid var(--line); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:9px; background:var(--surface-2); }
+    .lp-arrange-grouphead { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; }
+    .lp-arrange-groupmeta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex:1; min-width:0; }
+    .lp-arrange-kind { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--connecting); }
+    .lp-arrange-count { font-size:11px; font-weight:700; color:var(--muted); background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:1px 8px; }
+    .lp-arrange-what { font-size:12.5px; color:var(--muted); }
+    .lp-arrange-groupactions { display:flex; gap:6px; }
+    .lp-arrange-choices { display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:var(--muted); }
+    .lp-arrange-choice { display:inline-flex; align-items:center; gap:6px; }
+    .lp-arrange-dot { width:8px; height:8px; border-radius:999px; display:inline-block; }
+    .lp-arrange-dot.ok { background:#1b7a47; }
+    .lp-arrange-dot.no { background:var(--muted); }
+    .lp-arrange-item { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+    .lp-arrange-itemmsg { font-size:13px; flex:1; min-width:220px; }
+    .lp-arrange-spoke { font-weight:600; margin-right:6px; }
+    .lp-arrange-itemactions { display:flex; gap:6px; }
+
+    /* Disposition summary chips in the silo header */
+    .lp-dispo { display:inline-flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+    .lp-chip { font-size:11px; font-weight:600; border-radius:999px; padding:2px 9px; display:inline-flex; align-items:center; gap:5px; }
+    .lp-chip.page { background:#e7f6ee; color:#1b7a47; }
+    .dark .lp-chip.page { background:rgba(27,122,71,.14); color:#5fce93; }
+    .lp-chip.sec { background:var(--surface-2); color:var(--muted); border:1px solid var(--line); }
+
+    /* Per-row page/section marker (scan without reading the dropdown) */
+    .lp-disp { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; border-radius:5px; padding:1px 6px; white-space:nowrap; }
+    .lp-disp.page { background:#e7f6ee; color:#1b7a47; }
+    .dark .lp-disp.page { background:rgba(27,122,71,.16); color:#5fce93; }
+    .lp-disp.sec { background:var(--surface-2); color:var(--muted); border:1px solid var(--line); }
+    .lp-disp.blog { background:#eef2ff; color:#4f46e5; }
+    .dark .lp-disp.blog { background:rgba(79,70,229,.16); color:#a5b4fc; }
+
     /* Silo card */
     .lp-silo { background:var(--surface); border:1px solid var(--line); border-left:5px solid var(--spine, var(--accent)); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
     .lp-silo-head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); padding-bottom:12px; }
@@ -113,27 +149,53 @@
         </div>
     </div>
 
-    {{-- auto-arrange (§4b): recommendations awaiting accept/dismiss. Eager-apply model —
-         the change is already the default; Accept locks it (or applies a sub-hub demotion),
-         Dismiss leaves the current structure and stops re-flagging. --}}
+    {{-- auto-arrange (§4b): recommendations awaiting accept/dismiss, grouped by kind so each group
+         explains itself. Eager-apply model — the change is already the default; Accept locks it (or
+         applies a sub-hub demotion), Dismiss leaves the current structure and stops re-flagging. --}}
     @if (count($this->arrangeFlags))
-        <div class="lp-card" style="border-left:5px solid var(--connecting)">
-            <strong style="font-family:'Archivo',sans-serif">Auto-arrange — {{ count($this->arrangeFlags) }} to review</strong>
-            <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px">
-                @foreach ($this->arrangeFlags as $flag)
-                    @php $scoreLabel = $flag['score'] !== null ? ' · '.number_format($flag['score'], 2) : ''; @endphp
-                    <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; border:1px solid var(--line); border-radius:10px; padding:9px 12px">
-                        <div style="min-width:240px; flex:1">
-                            <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--connecting)">{{ $flag['type'].$scoreLabel }}</div>
-                            <div style="font-size:13px; margin-top:2px">{{ $flag['message'] }}</div>
-                        </div>
-                        <div style="display:flex; gap:6px">
-                            <button type="button" wire:click="acceptFlag('{{ $flag['id'] }}')" class="lp-btn" style="padding:6px 12px">Accept</button>
-                            <button type="button" wire:click="dismissFlag('{{ $flag['id'] }}')" class="lp-btn ghost" style="padding:6px 12px">Dismiss</button>
-                        </div>
-                    </div>
-                @endforeach
+        <div class="lp-arrange">
+            <div class="lp-arrange-head">
+                <div>
+                    <strong class="lp-arrange-title">Auto-arrange — {{ count($this->arrangeFlags) }} judgment call{{ count($this->arrangeFlags) === 1 ? '' : 's' }} to review</strong>
+                    <div class="lp-muted" style="margin-top:3px">The arranger organized your tree automatically. These few calls needed a human eye — each recommendation is <em>already applied</em>. <strong>Accept</strong> keeps it; <strong>Dismiss</strong> reverts it.</div>
+                </div>
+                <button type="button" wire:click="acceptAllFlags" class="lp-btn go" style="padding:7px 14px; white-space:nowrap"
+                    wire:confirm="Accept all {{ count($this->arrangeFlags) }} recommendations as arranged?">✓ Accept all</button>
             </div>
+
+            @foreach ($this->arrangeFlagGroups as $group)
+                <div class="lp-arrange-group" wire:key="lp-ag-{{ $group['type_key'] }}">
+                    <div class="lp-arrange-grouphead">
+                        <div class="lp-arrange-groupmeta">
+                            <span class="lp-arrange-kind">{{ $group['label'] }}</span>
+                            <span class="lp-arrange-count">{{ count($group['flags']) }}</span>
+                            <span class="lp-arrange-what">{{ $group['what'] }}</span>
+                        </div>
+                        @if (count($group['flags']) > 1)
+                            <div class="lp-arrange-groupactions">
+                                <button type="button" wire:click="acceptFlagGroup('{{ $group['type_key'] }}')" class="lp-btn ghost" style="padding:4px 10px; font-size:12px">Accept all {{ count($group['flags']) }}</button>
+                                <button type="button" wire:click="dismissFlagGroup('{{ $group['type_key'] }}')" class="lp-btn ghost" style="padding:4px 10px; font-size:12px">Dismiss all</button>
+                            </div>
+                        @endif
+                    </div>
+                    <div class="lp-arrange-choices">
+                        <span class="lp-arrange-choice"><span class="lp-arrange-dot ok"></span>Accept → {{ $group['accept'] }}</span>
+                        <span class="lp-arrange-choice"><span class="lp-arrange-dot no"></span>Dismiss → {{ $group['dismiss'] }}</span>
+                    </div>
+                    @foreach ($group['flags'] as $flag)
+                        <div class="lp-arrange-item" wire:key="lp-af-{{ $flag['id'] }}">
+                            <div class="lp-arrange-itemmsg">
+                                @if ($flag['spoke'] !== '')<span class="lp-arrange-spoke">{{ $flag['spoke'] }}</span>@endif
+                                <span>{{ $flag['message'] }}</span>
+                            </div>
+                            <div class="lp-arrange-itemactions">
+                                <button type="button" wire:click="acceptFlag('{{ $flag['id'] }}')" class="lp-btn" style="padding:5px 12px">Accept</button>
+                                <button type="button" wire:click="dismissFlag('{{ $flag['id'] }}')" class="lp-btn ghost" style="padding:5px 12px">Dismiss</button>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endforeach
         </div>
     @endif
 
@@ -174,6 +236,17 @@
             $foldOptions = [];
             if ($pillar) { $foldOptions[$pillar->id] = $pillar->name.' (pillar)'; }
             foreach ($parents as $p2) { $foldOptions[$p2->id] = $p2->name; }
+
+            // Disposition tally for the header chips (what this silo actually builds): the hub always
+            // ships, plus each own-page core; everything else folds into a section or the blog queue.
+            $ownPages = count($parents) + ($pillar ? 1 : 0);
+            $sections = 0; $blogTargets = 0;
+            foreach ($rows as $r) {
+                if ($r->isPillar) { continue; }
+                $g = $dispositionOf($r);
+                if ($g === 'own_page') { continue; }
+                if ($g === 'blog_target') { $blogTargets++; } else { $sections++; }
+            }
         @endphp
 
         <div class="lp-silo" style="--spine: {{ $spine }}" wire:key="lp-silo-{{ \Illuminate\Support\Str::slug($silo) }}">
@@ -186,6 +259,11 @@
                         <div class="lp-silo-pillar">⬡ {{ $pillar->name }} · category hub · always built{{ $pillarVol }}</div>
                     @endif
                     <div class="lp-silo-meta">{{ $s['total'] }} spokes · {{ $s['core'] }} core · {{ $s['lean_ins'] }} supporting @ {{ number_format((int) $s['lean_in_volume']) }} searches</div>
+                    <div class="lp-dispo">
+                        <span class="lp-chip page" title="Pages this silo builds (the hub + each own-page core)">{{ $ownPages }} page{{ $ownPages === 1 ? '' : 's' }}</span>
+                        @if ($sections > 0)<span class="lp-chip sec" title="Topics folded into a page as a section">{{ $sections }} section{{ $sections === 1 ? '' : 's' }}</span>@endif
+                        @if ($blogTargets > 0)<span class="lp-chip sec" title="Topics routed to the blog target queue">{{ $blogTargets }} blog</span>@endif
+                    </div>
                 </div>
                 <div class="lp-silo-actions">
                     <input type="text" wire:model="siloDecisions.{{ $silo }}.rename" placeholder="rename…" class="lp-input" style="width:130px" />
