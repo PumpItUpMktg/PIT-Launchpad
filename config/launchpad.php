@@ -335,6 +335,13 @@ return [
         'mix' => env('LAUNCHPAD_BLOG_MIX', '1:2'),
     ],
 
+    // Keyword-first structure generation (accumulate → cluster → derive). Corpus breadth guardrails:
+    // cap expansion so the corpus is hundreds of quality terms, not tens of thousands.
+    'keyword_first' => [
+        'per_seed_cap' => (int) env('LAUNCHPAD_KF_PER_SEED_CAP', 40),   // top-N ideas kept per seed
+        'total_cap' => (int) env('LAUNCHPAD_KF_TOTAL_CAP', 600),        // corpus ceiling after merge
+    ],
+
     'grounding' => [
         'stale_days' => 90,
 

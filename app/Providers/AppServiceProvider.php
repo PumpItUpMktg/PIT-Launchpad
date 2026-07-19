@@ -46,6 +46,8 @@ use App\Integrations\Google\GoogleConnectionService;
 use App\Integrations\Google\GoogleOAuthClient;
 use App\Integrations\Google\GoogleSearchConsoleProvider;
 use App\Integrations\Google\SearchConsoleProvider;
+use App\Integrations\Keywords\DataForSeoKeywordIdeaProvider;
+use App\Integrations\Keywords\KeywordIdeaProvider;
 use App\Integrations\Local\LocalSignalProvider;
 use App\Integrations\Local\MockLocalSignalProvider;
 use App\Integrations\LocalGrid\LocalGridProvider;
@@ -223,6 +225,15 @@ class AppServiceProvider extends ServiceProvider
             (float) config('services.dataforseo.grid_step', 0.018),
             (int) config('services.dataforseo.cache_ttl_hours', 168),
         ));
+        // Keyword-first corpus expansion (Part 1) — DataForSEO related_keywords with metrics, geo-
+        // localized per tenant. Tests bind MockKeywordIdeaProvider; no live call in CI.
+        $this->app->singleton(KeywordIdeaProvider::class, fn () => new DataForSeoKeywordIdeaProvider(
+            $this->app->make(DataForSeoClient::class),
+            $this->app->make(DataForSeoLocations::class),
+            (int) config('services.dataforseo.location_code', 2840),
+            (string) config('services.dataforseo.language_code', 'en'),
+        ));
+
         $this->app->singleton(OnDemandSourcePull::class, MockOnDemandSourcePull::class);
 
         // §6a news source runs on a real adapter (Step 2, Adapter 2): GDELT by

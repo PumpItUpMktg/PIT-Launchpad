@@ -29,7 +29,31 @@ class GeoNeutralValidator
      */
     public function violations(string $name, RuleSet $ruleSet, string $siteId): array
     {
-        $haystack = ' '.mb_strtolower($name.' '.$ruleSet->allTerms()).' ';
+        return $this->scan($name.' '.$ruleSet->allTerms(), $siteId);
+    }
+
+    public function isGeoNeutral(string $name, RuleSet $ruleSet, string $siteId): bool
+    {
+        return $this->violations($name, $ruleSet, $siteId) === [];
+    }
+
+    /**
+     * Term-level geo check for the keyword-first corpus builder: does a bare keyword string carry any
+     * geo term (a site market, a US state, or a generic "near me")? Same lexicon as {@see violations()},
+     * so geo is single-sourced. A geo-modified keyword never enters the corpus (the derived structure
+     * stays geo-neutral; geo lives only on location pages).
+     */
+    public function hasGeoTerm(string $text, string $siteId): bool
+    {
+        return $this->scan($text, $siteId) !== [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function scan(string $text, string $siteId): array
+    {
+        $haystack = ' '.mb_strtolower($text).' ';
         $terms = [...$this->marketTerms($siteId), ...self::GENERIC, ...self::STATES];
 
         $found = [];
@@ -43,11 +67,6 @@ class GeoNeutralValidator
         }
 
         return array_keys($found);
-    }
-
-    public function isGeoNeutral(string $name, RuleSet $ruleSet, string $siteId): bool
-    {
-        return $this->violations($name, $ruleSet, $siteId) === [];
     }
 
     /**
