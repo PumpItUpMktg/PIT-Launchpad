@@ -37,7 +37,10 @@ use App\Onboarding\IntakeCollector;
  */
 class GuidedEntityProjector
 {
-    public function __construct(private readonly SiloRuleSetDeriver $ruleSets = new SiloRuleSetDeriver) {}
+    public function __construct(
+        private readonly SiloRuleSetDeriver $ruleSets = new SiloRuleSetDeriver,
+        private readonly SiloReconciler $reconciler = new SiloReconciler,
+    ) {}
 
     /**
      * @return array<string, Silo> the projected silos keyed by silo name (for pinning page silo_id)
@@ -57,6 +60,10 @@ class GuidedEntityProjector
                 ['type' => SiloType::ServicePillar],
             );
         }
+
+        // Reconcile away §4 silos left by an earlier structure — the projector only creates by name,
+        // so a regenerate that renamed/dropped silos would otherwise leave stale rows on the board.
+        $this->reconciler->reconcile($site);
 
         // Services are the STATED list — the source of truth structure is derived FROM. This
         // projection is one-way: it may LINK an already-stated service to the silo its matching spoke
