@@ -27,13 +27,19 @@ it('enumerates the FULL inventory — old menu, both flag-gated groups, and hidd
     // The two parallel-build groups appear with their flag requirement recorded.
     expect($groups)->toHaveKeys(['Setup', 'Operate', 'Settings', 'Advanced', 'Top level']);
 
-    // Final IA: the steps sit visibly IN the Setup group (returnable), all flag-gated.
-    $setupSteps = collect($groups['Setup']['items'])->where('hidden', false);
+    // Nav-final IA: the step pages left the sidebar — they still inventory under the Setup group
+    // (routes kept), all marked hidden. The single visible "Setup" entry is Top level.
+    $setupSteps = collect($groups['Setup']['items']);
     expect($setupSteps->pluck('label'))->toContain('Business', 'Interview', 'Locations', 'Services', 'Voice', 'Silos & keywords', 'Launch')
-        ->and($setupSteps->pluck('flag')->unique()->all())->toBe(['NEW_SETUP']);
+        ->and($setupSteps->where('hidden', false)->count())->toBe(0); // steps are rail-driven, not sidebar items
+
+    // Nav-final: Dashboard · Portfolio · Setup are Top level; the Operate group is the pages boards only.
+    $topLevel = collect($groups['Top level']['items'])->where('hidden', false)->pluck('label');
+    expect($topLevel)->toContain('Dashboard', 'Portfolio', 'Setup');
 
     $operateLabels = collect($groups['Operate']['items'])->pluck('label');
-    expect($operateLabels)->toContain('Dashboard', 'Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations');
+    expect($operateLabels)->toContain('Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations')
+        ->and($operateLabels)->not->toContain('Dashboard'); // Dashboard is Top level now, not in the Operate group
 
     // Hidden-but-routable surfaces are inventoried too, marked hidden.
     $all = collect($map['groups'])->flatMap(fn ($g) => $g['items']);

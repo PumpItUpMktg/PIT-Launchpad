@@ -19,17 +19,17 @@ class SetupEntry extends Page
 
     protected static ?string $navigationLabel = 'Setup';
 
-    protected static ?int $navigationSort = -1;
+    protected static ?int $navigationSort = -10;
 
     protected static ?string $slug = 'setup2';
 
     protected string $view = 'filament.gathering.setup-entry';
 
-    // Not a menu item — the Setup GROUP lists the steps; this route stays as the resume
-    // deep link (/admin/setup2 lands on the first unfinished required step).
+    // Nav-final: the SINGLE top-level "Setup" item (the nine step pages no longer register).
+    // Opening it resumes at the first unfinished required step; the in-page rail carries the rest.
     public static function shouldRegisterNavigation(): bool
     {
-        return false;
+        return (bool) config('launchpad.new_setup_enabled');
     }
 
     public function mount(): void

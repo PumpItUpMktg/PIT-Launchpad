@@ -50,8 +50,10 @@ function silosStepSite(): Site
     return $site;
 }
 
-it('registers as step 7 of the Setup group; the legacy Targeting + Prune items are superseded', function () {
-    expect(SilosStep::shouldRegisterNavigation())->toBeTrue() // sidebar step, flag-gated
+it('is Setup step 8 (rail metadata kept); nav-final keeps it out of the sidebar; legacy items superseded', function () {
+    // Nav-final: the single "Setup" entry is the only registered item — the step no longer shows in
+    // the sidebar, but its group/sort/label metadata still drive the in-page stepper rail.
+    expect(SilosStep::shouldRegisterNavigation())->toBeFalse()
         ->and(SilosStep::getNavigationGroup())->toBe('Setup')
         ->and(SilosStep::getNavigationSort())->toBe(8)
         ->and(SilosStep::getNavigationLabel())->toBe('Silos & keywords')

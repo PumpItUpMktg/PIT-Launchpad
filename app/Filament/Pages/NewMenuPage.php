@@ -24,6 +24,9 @@ class NewMenuPage extends Page
 
     protected static ?int $navigationSort = 98;
 
+    // Nav-final: a build-time IA worksheet, not a daily surface — routable, out of the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $slug = 'new-menu';
 
     protected string $view = 'filament.pages.new-menu';

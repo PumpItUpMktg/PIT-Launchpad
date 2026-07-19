@@ -8,8 +8,9 @@ namespace App\Support;
  * looks like after the flags default on and the legacy links retire. Derived (never
  * hand-listed) from {@see MenuMap}, so it stays true as surfaces land:
  *
- *  - **menu** — the keepers: top-level (Overview / Portfolio), the flag-gated Setup steps
- *    (1–9) and Operate boards, and the Advanced internal tools.
+ *  - **menu** — the keepers (nav-final): top-level (Dashboard · Portfolio · Setup) and the
+ *    Operate pages boards. The Setup steps ride the in-page rail and the Advanced tools are
+ *    deep-link only, so both inventory as drilldowns, not sidebar keepers.
  *  - **pending** — items still awaiting a placement/retire decision (tag `unaddressed`).
  *  - **retiring** — every legacy surface family-tagged `setup`/`operate`: superseded, leaves
  *    the sidebar at cutover (routes stay).

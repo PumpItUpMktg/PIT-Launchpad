@@ -24,6 +24,9 @@ class MenuMapPage extends Page
 
     protected static ?int $navigationSort = 99;
 
+    // Nav-final: a build-time IA worksheet, not a daily surface — routable, out of the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $slug = 'menu-map';
 
     protected string $view = 'filament.pages.menu-map';

@@ -1,5 +1,16 @@
 <x-filament-panels::page>
     @include('filament._lp-styles')
+    <style>
+        .lp-manage { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; }
+        .lp-manage-item { display:flex; flex-direction:column; gap:2px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; text-decoration:none; background:#fff; transition:border-color .12s, box-shadow .12s; }
+        .lp-manage-item:hover { border-color:#f59e0b; box-shadow:0 2px 8px rgba(15,23,42,.06); }
+        .lp-manage-label { font-size:14px; font-weight:700; color:#0f172a; }
+        .lp-manage-desc { font-size:12px; color:#64748b; }
+        @media (prefers-color-scheme: dark) {
+            .lp-manage-item { background:#151b24; }
+            .lp-manage-label { color:#f1f5f9; }
+        }
+    </style>
     @php
         $site = $this->getSite();
         $stats = $this->stats;
@@ -57,6 +68,20 @@
                 @empty
                     <div class="lp-empty" style="padding:16px">No content yet.</div>
                 @endforelse
+            </div>
+
+            {{-- Manage — the single home for this tenant's config surfaces (they left the sidebar in
+                 the nav-final pass; without this card each is a URL-only orphan). --}}
+            <div class="lp-card">
+                <h3>Manage {{ $site->brand_name }}</h3>
+                <div class="lp-manage">
+                    @foreach ($this->manageLinks as $link)
+                        <a class="lp-manage-item" href="{{ $link['url'] }}" wire:navigate>
+                            <span class="lp-manage-label">{{ $link['label'] }}</span>
+                            <span class="lp-manage-desc">{{ $link['desc'] }}</span>
+                        </a>
+                    @endforeach
+                </div>
             </div>
         @endunless
     </div>

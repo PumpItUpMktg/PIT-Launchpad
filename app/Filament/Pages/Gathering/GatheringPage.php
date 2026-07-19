@@ -26,11 +26,13 @@ abstract class GatheringPage extends Page
 
     public ?string $siteId = null;
 
-    // The steps sit IN the sidebar under the Setup group (1-9, returnable any time); the
-    // in-page rail + Next buttons carry the walk-through, /admin/setup2 still resumes.
+    // Nav-final: the nine step pages leave the sidebar — a single top-level "Setup" entry
+    // ({@see SetupEntry}) is the only registered item; the in-page rail + Next buttons carry
+    // the walk-through and /admin/setup2 resumes at the first unfinished step. The steps stay
+    // fully routable (deep links, rail, resume) — just out of the sidebar.
     public static function shouldRegisterNavigation(): bool
     {
-        return (bool) config('launchpad.new_setup_enabled');
+        return false;
     }
 
     /**

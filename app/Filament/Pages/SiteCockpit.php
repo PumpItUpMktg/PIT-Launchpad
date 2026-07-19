@@ -2,7 +2,14 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\Operate\HeaderMenu;
+use App\Filament\Pages\Operate\OrphanScan;
+use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\ContentReviewResource;
+use App\Filament\Resources\LocationResource;
+use App\Filament\Resources\ServiceResource;
+use App\Filament\Resources\SourceResource;
+use App\Filament\Resources\VoiceProfileResource;
 use App\Models\Site;
 use App\Operator\PipelineMetrics;
 use BackedEnum;
@@ -19,6 +26,7 @@ use Filament\Pages\Page;
  * @property-read array<string, int> $stats
  * @property-read array<string, int> $funnel
  * @property-read list<array{silo_id: string, silo_name: string, total: int}> $perSilo
+ * @property-read list<array{label: string, url: string, desc: string}> $manageLinks
  */
 class SiteCockpit extends Page
 {
@@ -90,5 +98,29 @@ class SiteCockpit extends Page
     public function reviewUrl(): string
     {
         return ContentReviewResource::getUrl();
+    }
+
+    /**
+     * The "Manage" card — the single home for the per-site config surfaces that left the sidebar in
+     * the nav-final pass (Services, Service area, Locations, Voice, Feeds, Connections, Header menu,
+     * Orphans). Without this every one is a URL-only orphan; the card closes that gap. Site-scoped
+     * pages carry `?site=`; the resources resolve the working tenant via the request site scope.
+     *
+     * @return list<array{label: string, url: string, desc: string}>
+     */
+    public function getManageLinksProperty(): array
+    {
+        $site = $this->siteId;
+
+        return [
+            ['label' => 'Services', 'url' => ServiceResource::getUrl(), 'desc' => 'Service catalog + enrichment'],
+            ['label' => 'Service area', 'url' => LocationsSetup::getUrl(['site' => $site]), 'desc' => 'Territory, towns & coverage map'],
+            ['label' => 'Locations', 'url' => LocationResource::getUrl(), 'desc' => 'Physical NAP locations'],
+            ['label' => 'Voice', 'url' => VoiceProfileResource::getUrl(), 'desc' => 'Brand voice profiles'],
+            ['label' => 'Feeds', 'url' => SourceResource::getUrl(), 'desc' => 'News & signal sources'],
+            ['label' => 'Connections', 'url' => ConnectionsResource::getUrl(), 'desc' => 'WordPress & vendor credentials'],
+            ['label' => 'Header menu', 'url' => HeaderMenu::getUrl(['site' => $site]), 'desc' => 'Reorder the site nav menus'],
+            ['label' => 'Orphans', 'url' => OrphanScan::getUrl(['site' => $site]), 'desc' => 'Unlinked pages to fix'],
+        ];
     }
 }
