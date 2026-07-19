@@ -32,35 +32,42 @@ function projSpoke(Site $site, SiloBlueprint $bp, array $attrs): Spoke
     ], $attrs));
 }
 
-it('projects the spoke structure into §1 Services + §4 Silos, attached', function () {
+it('projects §4 Silos from structure and LINKS each already-stated service to its silo — never creating one', function () {
     $site = Site::factory()->create();
     $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
     projSpoke($site, $bp, ['name' => 'Plumbing', 'silo' => 'Plumbing', 'is_pillar' => true]);
     projSpoke($site, $bp, ['name' => 'Water Heater Repair', 'silo' => 'Plumbing', 'is_pillar' => false]);
+    projSpoke($site, $bp, ['name' => 'Drain Cleaning', 'silo' => 'Plumbing', 'is_pillar' => false]); // structure-only, no stated service
+
+    // The stated list — the source of truth. Only two of the three spokes have a stated service.
+    $whr = Service::withoutGlobalScope(SiteScope::class)->create(['site_id' => $site->id, 'name' => 'Water Heater Repair']);
+    Service::withoutGlobalScope(SiteScope::class)->create(['site_id' => $site->id, 'name' => 'Plumbing']);
 
     app(GuidedEntityProjector::class)->project($site);
 
     $silos = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
     $services = Service::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
 
+    // Silos are structure — created. Services are NOT: exactly the two stated ones survive; the
+    // structure-only "Drain Cleaning" spoke fabricated nothing.
     expect($silos->pluck('name'))->toContain('Plumbing')
-        ->and($services->pluck('name'))->toContain('Plumbing')->toContain('Water Heater Repair');
+        ->and($services->pluck('name')->sort()->values()->all())->toBe(['Plumbing', 'Water Heater Repair']);
 
-    // the service is attached to its silo (so PageGroundingAssembler can silo-scope)
-    $service = $services->firstWhere('name', 'Water Heater Repair');
-    expect($service->silos()->where('silos.name', 'Plumbing')->exists())->toBeTrue();
+    // the stated service is linked to its silo (so PageGroundingAssembler can silo-scope)
+    expect($whr->silos()->where('silos.name', 'Plumbing')->exists())->toBeTrue();
 });
 
-it('is idempotent — re-projecting does not duplicate', function () {
+it('creates ZERO services from structure — a spoke tree with no stated services adds no Service rows', function () {
     $site = Site::factory()->create();
     $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
     projSpoke($site, $bp, ['name' => 'Plumbing', 'silo' => 'Plumbing', 'is_pillar' => true]);
+    projSpoke($site, $bp, ['name' => 'Water Heater Repair', 'silo' => 'Plumbing', 'is_pillar' => false]);
 
     app(GuidedEntityProjector::class)->project($site);
-    app(GuidedEntityProjector::class)->project($site);
+    app(GuidedEntityProjector::class)->project($site); // idempotent
 
     expect(Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1)
-        ->and(Service::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1);
+        ->and(Service::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0); // structure created no service
 });
 
 it('projects page-selected territories into §1 Markets, idempotently (manual towns are priority)', function () {
@@ -103,6 +110,8 @@ it('materializes a service page pinned to its silo, so grounding readiness flips
     $site = Site::factory()->create();
     $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
     $svc = projSpoke($site, $bp, ['name' => 'Water Heater Repair', 'silo' => 'Plumbing', 'is_pillar' => false]);
+    // The stated service behind the spoke — structure no longer fabricates it; grounding needs a real one.
+    Service::withoutGlobalScope(SiteScope::class)->create(['site_id' => $site->id, 'name' => 'Water Heater Repair']);
 
     BuildPage::factory()->create([
         'site_id' => $site->id, 'source' => BuildSource::Service, 'page_key' => 'whr',

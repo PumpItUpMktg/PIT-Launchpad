@@ -3,7 +3,6 @@
 namespace App\Build;
 
 use App\Enums\MarketTier;
-use App\Enums\ServiceSiloRole;
 use App\Enums\SiloType;
 use App\Enums\SpokePageType;
 use App\Enums\SpokeStatus;
@@ -19,16 +18,22 @@ use App\Onboarding\IntakeCollector;
 
 /**
  * Projects the guided flow's planning structure into the §1 grounding entities the drafter actually
- * reads, on two axes: the SERVICE axis (SiloBlueprint → Spokes → a §4 {@see Silo} per grouping + a §1
- * {@see Service} per service-bearing spoke, attached to its silo) and the GEO axis (Territory →
- * page-selected {@see CoverageArea} → a §1 {@see Market} per town). Without this, a guided-flow site
- * has spokes/towns but no §1 Service/Market — so PageGroundingAssembler resolves nothing and every
- * page reads "Not ready yet". With it, service pages ground to their own service (silo-scoped) and
- * location pages to their own town, and the milestone is walkable on a pure guided site.
+ * reads, on two axes: the SERVICE axis (SiloBlueprint → Spokes → a §4 {@see Silo} per grouping, with
+ * each already-stated {@see Service} LINKED to the silo its matching spoke heads) and the GEO axis
+ * (Territory → page-selected {@see CoverageArea} → a §1 {@see Market} per town). Without this, a
+ * guided-flow site has spokes/towns but no §4 Silo / §1 Market — so PageGroundingAssembler resolves
+ * nothing and every page reads "Not ready yet". With it, hub pages ground to the services in their
+ * silo, service pages to their own stated service, and location pages to their own town.
  *
- * Idempotent: silos/services/markets are keyed on (site_id, name), so a re-finalize reconciles rather
- * than duplicates. ProofItem/Offer enrichment and Census demographics stay with their own intake
- * ({@see IntakeCollector}); this is the spine that unblocks generation.
+ * One-way (services → structure): the projection NEVER creates a Service from a spoke — services are
+ * the stated source of truth, and writing structure output back as Service rows contaminated the
+ * catalog. A service-bearing spoke with no stated service stays unlinked (its page grounds at the
+ * silo level); the only sanctioned structure→service create is the operator's demand-without-service
+ * action (§L3).
+ *
+ * Idempotent: silos/markets are keyed on (site_id, name) and the service↔silo link is a
+ * sync-without-detaching, so a re-finalize reconciles rather than duplicates. ProofItem/Offer
+ * enrichment and Census demographics stay with their own intake ({@see IntakeCollector}).
  */
 class GuidedEntityProjector
 {
@@ -51,18 +56,25 @@ class GuidedEntityProjector
             );
         }
 
+        // Services are the STATED list — the source of truth structure is derived FROM. This
+        // projection is one-way: it may LINK an already-stated service to the silo its matching spoke
+        // heads, but it must NEVER create a Service row from structure output (that inversion is what
+        // contaminated the catalog with spoke/pillar names). A service-bearing spoke with no stated
+        // service simply stays unlinked; its page grounds at the silo level. The only sanctioned
+        // structure→service create is the operator's demand-without-service action (§L3).
+        $stated = Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->get()
+            ->keyBy(fn (Service $s) => mb_strtolower(trim((string) $s->name)));
+
         foreach ($spokes as $spoke) {
             if (! $this->isService($spoke)) {
                 continue;
             }
 
-            $service = Service::withoutGlobalScope(SiteScope::class)->firstOrCreate(
-                ['site_id' => $site->id, 'name' => (string) $spoke->name],
-                ['silo_role' => $spoke->is_pillar ? ServiceSiloRole::Pillar : ServiceSiloRole::Supporting],
-            );
-
+            $service = $stated->get(mb_strtolower(trim((string) $spoke->name)));
             $silo = $silos[$this->siloName($spoke)] ?? null;
-            if ($silo !== null) {
+            if ($service !== null && $silo !== null) {
                 $service->silos()->syncWithoutDetaching([$silo->id]);
             }
         }
