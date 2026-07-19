@@ -80,6 +80,12 @@
                                 <span wire:loading.remove wire:target="generate">↻ Re-ground & re-arrange</span>
                                 <span wire:loading wire:target="generate">Running…</span>
                             </button>
+                            <button type="button" class="g-btn" wire:click="rebuildStructure" wire:loading.attr="disabled"
+                                title="Clears the current tree and regenerates from scratch — the only way a changed seed or 'Stated services only' takes effect."
+                                wire:confirm="Rebuild the tree FROM SCRATCH? This drops the current candidate tree (and its queued blog targets) and re-runs the AI — needed for 'Stated services only' to apply.">
+                                <span wire:loading.remove wire:target="rebuildStructure">⟳ Rebuild from scratch</span>
+                                <span wire:loading wire:target="rebuildStructure">Rebuilding…</span>
+                            </button>
                             <button type="button" class="g-btn primary" wire:click="openPrune">✂ {{ $this->blueprintConfirmed ? 'Re-prune' : 'Prune & finalize' }}</button>
                         </div>
                     </div>
@@ -201,10 +207,14 @@
 
             @if ($board['unassigned_total'] > 0)
                 <div class="tg-card">
-                    <div class="tg-cardhead">
+                    <div class="tg-cardhead" style="display:flex;align-items:center;gap:8px">
                         <h3>Unassigned keywords</h3>
                         <span class="tg-badge thin">no silo</span>
                         <span class="tg-split">{{ $board['unassigned_total'] }} total</span>
+                        <button type="button" class="g-btn" style="margin-left:auto" wire:click="rebucketKeywords"
+                            title="Re-file these into silos by rule_set match (silos need rule_sets — they get them at generate).">
+                            ⇄ Re-file into silos
+                        </button>
                     </div>
                     <div class="tg-rows">
                         @foreach ($board['unassigned'] as $kw)

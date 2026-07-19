@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Gathering;
 
+use App\Build\StructureResetter;
 use App\Enums\ServiceSiloRole;
 use App\Filament\Concerns\ManagesPruneSurface;
 use App\Guided\StepGate;
@@ -10,6 +11,7 @@ use App\Interview\Prune\PruneRow;
 use App\Jobs\BuildStructure;
 use App\Jobs\DiscoverKeywords;
 use App\KeywordGenerator\Derive\DemandWithoutServiceReport;
+use App\KeywordGenerator\KeywordRebucketer;
 use App\Models\BlogTarget;
 use App\Models\Keyword;
 use App\Models\KeywordCluster;
@@ -214,6 +216,59 @@ class SilosStep extends GatheringPage
         Notification::make()->success()
             ->title('Keyword discovery started')
             ->body('Discovery is filling your silos with keyword targets — refresh in a bit to see them land.')
+            ->send();
+    }
+
+    /**
+     * Rebuild the tree FROM SCRATCH — clears the current spokes and re-expands, so a changed seed or
+     * the "Stated services only" toggle actually takes effect (plain re-ground never re-expands). This
+     * is destructive: it drops the candidate tree + its queued blog targets and re-runs the AI expand.
+     */
+    public function rebuildStructure(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        if (! $this->getHasSeedProperty()) {
+            Notification::make()->warning()
+                ->title('No seed yet')
+                ->body('Capture the trade on the Business step (or run the interview) first.')
+                ->send();
+
+            return;
+        }
+
+        app(StructureResetter::class)->reset($site);        // clears spokes/queued targets, keeps the seed (incl. the bound flag)
+        app(StepGate::class)->state($site)->update(['structure_status' => 'building']);
+        BuildStructure::dispatchSync($site->id);            // fresh expand → honors bound_to_services
+
+        $status = $this->getStructureStatusProperty();
+        Notification::make()
+            ->{$status === 'ready' ? 'success' : 'warning'}()
+            ->title($status === 'ready' ? 'Structure rebuilt from scratch' : 'Rebuild failed — check the logs and retry.')
+            ->send();
+
+        $this->reset(['pruneMode', 'started', 'finalized', 'spokeDecisions', 'siloDecisions', 'regenArmed']);
+    }
+
+    /**
+     * Re-file the board's "Unassigned" keywords into silos by rule_set match — the repair after a silo
+     * change (e.g. reconcile) orphaned them. Needs silos to carry rule_sets (they get them at generate).
+     */
+    public function rebucketKeywords(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $count = app(KeywordRebucketer::class)->rebucket($site);
+
+        Notification::make()->success()
+            ->title($count > 0 ? "Re-filed {$count} keyword(s) into silos" : 'No unassigned keywords matched a silo')
+            ->body($count === 0 ? 'The silos may lack rule_sets — generate (or discover) so they have matching terms.' : null)
             ->send();
     }
 
