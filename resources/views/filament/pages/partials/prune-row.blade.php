@@ -25,6 +25,8 @@
 <div @class(['lp-row', 'pending' => $pending]) wire:key="lp-spoke-{{ $row->id }}" data-spoke-id="{{ $row->id }}">
     <div class="lp-cell-name" style="padding-left: {{ $indent }}px">
         <span class="lp-drag" title="drag to another silo to re-home">⠿</span>
+        @php $dispClass = $blogTarget ? 'blog' : ($folded ? 'sec' : 'page'); $dispText = $blogTarget ? 'blog' : ($folded ? 'section' : 'page'); @endphp
+        <span class="lp-disp {{ $dispClass }}" title="how this topic ships">{{ $dispText }}</span>
         <span class="lp-row-name">{{ $row->name }}</span>
         @if ($row->connectionNote)
             <div class="lp-row-note">↳ {{ $row->connectionNote }}</div>
