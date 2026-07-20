@@ -56,7 +56,13 @@
                     <option value="{{ $id }}">{{ $label }}</option>
                 @endforeach
             </select>
-            <button class="ob-btn" style="margin-left:auto" wire:click="toggleTargets">
+            <button class="ob-btn primary" style="margin-left:auto" wire:click="populateBlog"
+                wire:loading.attr="disabled" wire:target="populateBlog"
+                title="Re-file keywords, rebuild the news feeds, and fetch candidates for the selected tenant">
+                <span wire:loading.remove wire:target="populateBlog">Populate blog now</span>
+                <span wire:loading wire:target="populateBlog">Populating…</span>
+            </button>
+            <button class="ob-btn" wire:click="toggleTargets">
                 {{ $showTargets ? 'Hide' : 'Show' }} blog targets
             </button>
         </div>
