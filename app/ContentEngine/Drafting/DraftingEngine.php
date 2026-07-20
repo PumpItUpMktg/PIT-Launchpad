@@ -3,6 +3,8 @@
 namespace App\ContentEngine\Drafting;
 
 use App\ContentEngine\BlogQueue\BlogTargetQueue;
+use App\ContentEngine\Linking\InternalLinkResolver;
+use App\ContentEngine\Linking\PostLinkInjector;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\RefreshTrigger;
@@ -30,6 +32,8 @@ class DraftingEngine
         private readonly Drafter $drafter,
         private readonly VerificationPass $verification,
         private readonly DraftGuard $guard,
+        private readonly InternalLinkResolver $links = new InternalLinkResolver,
+        private readonly PostLinkInjector $linkInjector = new PostLinkInjector,
     ) {}
 
     /**
@@ -175,6 +179,7 @@ class DraftingEngine
         VerificationResult $verification,
     ): array {
         $isPage = $request->kind === ContentKind::Page;
+        $linked = $isPage ? ['body' => null, 'injected' => []] : $this->linkPostBody($request, $payload);
 
         return [
             'site_id' => $request->siteId,
@@ -186,7 +191,7 @@ class DraftingEngine
             'wireframe_kit_id' => $request->wireframeKitId,
             'target_keyword_id' => $request->targetKeywordId,
             'slot_payload' => $isPage ? $payload->slots : null,
-            'body' => $isPage ? null : $payload->body,
+            'body' => $linked['body'],
             'voice_profile_version' => $grounding->voiceProfileVersion,
             'source_name' => $request->sourceName,
             'source_url' => $request->sourceUrl,
@@ -197,9 +202,37 @@ class DraftingEngine
                 'image_specs' => $payload->imageSpecsArray(),
                 'towns' => $payload->towns,
                 'sources_cited' => $verification->sourceAttributions,
+                'internal_links' => $linked['injected'],
             ],
             'verification' => $verification->toArray(),
         ];
+    }
+
+    /**
+     * Weave the internal-link mesh into a drafted POST body: a geographic link per town the drafter
+     * named that has a LIVE location page (send juice to the Trooper page), plus the topical link to
+     * the post's silo pillar. Both are drilled to the most specific live page and skipped when none
+     * exists — never a dead link. Returns the (possibly unchanged) body + the injected-link record
+     * for the review surface. Config-gated so the behavior can be turned off per environment.
+     *
+     * @return array{body: string, injected: list<array{anchor: string, path: string, kind: string}>}
+     */
+    private function linkPostBody(DraftRequest $request, DraftPayload $payload): array
+    {
+        $body = $payload->body;
+
+        if (! (bool) config('launchpad.internal_linking.local_posts', true)) {
+            return ['body' => $body, 'injected' => []];
+        }
+
+        $locationLinks = $this->links->locationLinks($request->siteId, $payload->towns);
+        $siloLink = $this->links->siloPillarLink($request->siloId);
+
+        if ($locationLinks === [] && $siloLink === null) {
+            return ['body' => $body, 'injected' => []];
+        }
+
+        return $this->linkInjector->inject($body, $locationLinks, $siloLink);
     }
 
     /**

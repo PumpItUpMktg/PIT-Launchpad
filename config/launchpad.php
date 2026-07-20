@@ -102,6 +102,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Internal linking (blog posts → the page mesh)
+    |--------------------------------------------------------------------------
+    |
+    | A drafted post weaves internal links into its body: a geographic link to a
+    | LIVE location page for each town it names (send juice to the Trooper page),
+    | plus the topical link to its silo pillar. Both drill to the most specific
+    | live page and are skipped when none exists — never a dead link. Toggle off
+    | to fall back to name-only local mentions.
+    |
+    */
+
+    'internal_linking' => [
+        'local_posts' => (bool) env('LAUNCHPAD_LINK_LOCAL_POSTS', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Brand generation (C5 — brand intake → Elementor Global Kit)
     |--------------------------------------------------------------------------
     |
