@@ -8,6 +8,7 @@ use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Service;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteBranding;
 use App\Publishing\Chrome\SiteProfileAssembler;
@@ -221,4 +222,32 @@ it('puts Areas We Serve in the header nav and Privacy/Terms in the footer legal 
     $profile = app(SiteProfileAssembler::class)->assemble($bare->fresh());
     expect($profile['legal_links'])->toBe([])
         ->and(array_column($profile['nav'], 'label'))->not->toContain('Areas We Serve');
+});
+
+it('assembles the severe-weather alert config — enabled for a rain-relevant trade with coordinates', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://drybasements.example']);
+    SiloBlueprint::factory()->create(['site_id' => $site->id, 'trade' => 'Basement Waterproofing & Sump Pumps']);
+    Location::factory()->create(['site_id' => $site->id, 'lat' => 40.1215, 'lng' => -75.3399]);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'contact', 'title' => 'Contact']);
+
+    $alert = app(SiteProfileAssembler::class)->assemble($site->fresh())['alert'];
+
+    expect($alert['enabled'])->toBeTrue()
+        ->and($alert['lat'])->toBe(40.1215)
+        ->and($alert['lng'])->toBe(-75.3399)
+        ->and($alert['noun'])->toBe('sump pump')
+        ->and($alert['cta_url'])->toBe('https://drybasements.example/contact');
+});
+
+it('disables the weather alert for a non-rain trade, and when there are no coordinates', function () {
+    // Rain-relevant trade but NO coordinates → disabled.
+    $noCoords = Site::factory()->create();
+    SiloBlueprint::factory()->create(['site_id' => $noCoords->id, 'trade' => 'Sump Pump Repair']);
+    expect(app(SiteProfileAssembler::class)->assemble($noCoords->fresh())['alert']['enabled'])->toBeFalse();
+
+    // Coordinates but an off-topic trade → disabled.
+    $offTopic = Site::factory()->create();
+    SiloBlueprint::factory()->create(['site_id' => $offTopic->id, 'trade' => 'Roofing']);
+    Location::factory()->create(['site_id' => $offTopic->id, 'lat' => 40.0, 'lng' => -75.0]);
+    expect(app(SiteProfileAssembler::class)->assemble($offTopic->fresh())['alert']['enabled'])->toBeFalse();
 });

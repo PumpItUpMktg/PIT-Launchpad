@@ -12,6 +12,7 @@ use Launchpad\Companion\Admin\SlotsScreen;
 use Launchpad\Companion\Content\EditGuard;
 use Launchpad\Companion\Content\KitTaxonomy;
 use Launchpad\Companion\Render\Assets;
+use Launchpad\Companion\Render\WeatherAlert;
 use Launchpad\Companion\Render\Shortcodes;
 use Launchpad\Companion\Render\SiteChrome;
 use Launchpad\Companion\Render\TagManager;
@@ -69,6 +70,7 @@ final class Plugin
         // Baseline design layer — styles the lp-* blocks (keyed to the Global Kit
         // CSS variables) so a generated page is presentable without a designer.
         ( new Assets() )->register();
+        ( new WeatherAlert() )->register();
 
         // SEO (native; suppress competing SEO plugins on managed posts).
         // Force core title-tag so the document <title> is emitted ONCE, through

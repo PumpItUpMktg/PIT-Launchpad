@@ -372,4 +372,20 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Severe-weather alert banner (companion plugin)
+    |--------------------------------------------------------------------------
+    | A LIVE, dismissible "heavy rain expected — is your {noun} ready?" banner
+    | the companion plugin renders when Open-Meteo's forecast shows heavy rain
+    | ahead. The control plane pushes the config (coords + on/off) on the site
+    | profile; the plugin fetches the forecast itself (transient-cached) so the
+    | alert stays fresh without republishing. Only rain-relevant trades enable
+    | it — the site's captured trade is keyword-matched against `trades`.
+    */
+    'weather_alert' => [
+        'trades' => ['waterproof', 'basement', 'sump', 'foundation', 'drainage', 'plumb', 'flood', 'crawl space'],
+        'noun' => 'sump pump',
+    ],
+
 ];

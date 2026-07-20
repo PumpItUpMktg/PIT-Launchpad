@@ -72,6 +72,32 @@ final class SiteProfileStore
             'areas' => self::links($p['areas'] ?? []),
             'company' => self::links($p['company'] ?? []),
             'legal_links' => self::links($p['legal_links'] ?? []),
+            'alert' => self::alert($p['alert'] ?? []),
+        ];
+    }
+
+    /**
+     * The severe-weather-alert config the {@see \Launchpad\Companion\Render\WeatherAlert} banner reads.
+     * Coordinates must be finite numbers or the alert is forced off — a bad push can never point the
+     * forecast fetch at garbage, and the CTA url is esc_url_raw'd like every other link.
+     *
+     * @param  mixed  $raw
+     * @return array{enabled: bool, lat: float, lng: float, noun: string, cta_label: string, cta_url: string}
+     */
+    private static function alert(mixed $raw): array
+    {
+        $raw = is_array($raw) ? $raw : [];
+        $lat = isset($raw['lat']) && is_numeric($raw['lat']) ? (float) $raw['lat'] : null;
+        $lng = isset($raw['lng']) && is_numeric($raw['lng']) ? (float) $raw['lng'] : null;
+        $hasCoords = $lat !== null && $lng !== null && abs($lat) <= 90 && abs($lng) <= 180;
+
+        return [
+            'enabled' => ! empty($raw['enabled']) && $hasCoords,
+            'lat' => $hasCoords ? (float) $lat : 0.0,
+            'lng' => $hasCoords ? (float) $lng : 0.0,
+            'noun' => sanitize_text_field((string) ($raw['noun'] ?? 'sump pump')),
+            'cta_label' => sanitize_text_field((string) ($raw['cta_label'] ?? 'Learn more')),
+            'cta_url' => isset($raw['cta_url']) ? (string) esc_url_raw((string) $raw['cta_url']) : '',
         ];
     }
 
