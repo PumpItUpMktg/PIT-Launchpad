@@ -3,10 +3,12 @@
 namespace App\Filament\Pages\Operate;
 
 use App\ContentEngine\BlogQueue\BlogTargetQueue;
+use App\ContentEngine\Feeds\BlogPopulator;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
 use App\Filament\Resources\ContentReviewResource;
 use App\Jobs\GeneratePost;
+use App\Jobs\PopulateBlog;
 use App\Models\BlogTarget;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -118,6 +120,43 @@ class OperateBlog extends OperatePage
     public function getTargetsProperty(): array
     {
         return app(BlogBoard::class)->targets($this->siteFilter, $this->filterSilo());
+    }
+
+    /**
+     * "Populate blog now": run the cheap stages inline (re-file keywords → reconcile feeds) for an
+     * instant readiness read, then hand the HTTP-heavy fetch to a queued job so candidates fill in
+     * off the request. If the chain isn't even ready (no keywords, or none routed to a silo), say so
+     * plainly instead of dispatching a fetch that can only find nothing. Requires a single tenant
+     * selected — populate is per-site.
+     */
+    public function populateBlog(): void
+    {
+        if ($this->siteFilter === null) {
+            Notification::make()->warning()->title('Pick a tenant first')
+                ->body('Choose a site above, then populate its blog.')->send();
+
+            return;
+        }
+
+        $site = Site::query()->find($this->siteFilter);
+        if ($site === null) {
+            return;
+        }
+
+        // Cheap DB stages inline; the expensive feed fetch is deferred to the worker.
+        $report = app(BlogPopulator::class)->populate($site, ingest: false);
+
+        if (! $report->ready()) {
+            Notification::make()->warning()->title('Nothing to populate yet')
+                ->body($report->diagnosis())->persistent()->send();
+
+            return;
+        }
+
+        PopulateBlog::dispatch($site->id);
+
+        Notification::make()->success()->title('Populating the blog')
+            ->body($report->diagnosis())->send();
     }
 
     // ── Candidate actions ───────────────────────────────────────────────────
