@@ -12,14 +12,13 @@
  */
 
 $dir = dirname(__DIR__).'/assets';
-$src = $dir.'/theme.css';
-$out = $dir.'/theme.min.css';
 
-$css = file_get_contents($src);
-if ($css === false) {
-    fwrite(STDERR, "cannot read {$src}\n");
-    exit(1);
-}
+// Every readable source stylesheet the theme serves → its .min build. theme.css is the design system;
+// vendor/leaflet is the map lib (its shipped .css is unminified). Both are enqueued minified.
+$targets = [
+    $dir.'/theme.css' => $dir.'/theme.min.css',
+    $dir.'/vendor/leaflet/leaflet.css' => $dir.'/vendor/leaflet/leaflet.min.css',
+];
 
 // PCRE limits: the alternation below scans the whole ~58KB file; the JIT stack overruns on it, and the
 // default backtrack/recursion limits are comfortably clear once JIT is off.
@@ -27,39 +26,58 @@ ini_set('pcre.jit', '0');
 ini_set('pcre.backtrack_limit', '10000000');
 ini_set('pcre.recursion_limit', '10000000');
 
-// One ordered pass. The scan is left-to-right and alternatives are tried in order, so a comment starting
-// before a quote is consumed as a whole comment first — the quote inside it never opens a string match.
-//   1. /* … */              → dropped
-//   2. "…" / '…'            → protected (placeheld) so its whitespace survives the collapse
-//   3. url( … )             → protected (data: URIs, font paths)
-$store = [];
-$protect = static function (string $text) use (&$store): string {
-    $token = "\0P".count($store)."\0";
-    $store[$token] = $text;
-
-    return $token;
-};
-$css = preg_replace_callback(
-    '~/\*.*?\*/|"(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'|url\((?:[^)"\']|"[^"]*"|\'[^\']*\')*\)~is',
-    static fn (array $m): string => str_starts_with($m[0], '/*') ? '' : $protect($m[0]),
-    $css,
-);
-if ($css === null) {
-    fwrite(STDERR, 'protect/comment pass failed: '.preg_last_error_msg()."\n");
-    exit(1);
+foreach ($targets as $src => $out) {
+    if (! is_file($src)) {
+        continue;
+    }
+    minify_css_file($src, $out);
 }
 
-// Collapse whitespace and drop it around structural punctuation.
-$css = preg_replace('/\s+/', ' ', $css);
-$css = preg_replace('/\s*([{}:;,>~+])\s*/', '$1', (string) $css);
-$css = str_replace(';}', '}', (string) $css);   // drop the last semicolon in a block
-$css = trim((string) $css);
+/**
+ * Minify one stylesheet. One ordered pass: the scan is left-to-right and alternatives are tried in
+ * order, so a comment starting before a quote is consumed as a whole comment first — the quote inside
+ * it never opens a string match.
+ *   1. comments               → dropped
+ *   2. "…" / '…'            → protected (placeheld) so its whitespace survives the collapse
+ *   3. url( … )             → protected (data: URIs, font paths)
+ */
+function minify_css_file(string $src, string $out): void
+{
+    $css = file_get_contents($src);
+    if ($css === false) {
+        fwrite(STDERR, "cannot read {$src}\n");
+        exit(1);
+    }
 
-// Restore the protected literals.
-$css = strtr($css, $store);
+    $store = [];
+    $protect = static function (string $text) use (&$store): string {
+        $token = "\0P".count($store)."\0";
+        $store[$token] = $text;
 
-if (file_put_contents($out, $css) === false) {
-    fwrite(STDERR, "cannot write {$out}\n");
-    exit(1);
+        return $token;
+    };
+    $css = preg_replace_callback(
+        '~/\*.*?\*/|"(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'|url\((?:[^)"\']|"[^"]*"|\'[^\']*\')*\)~is',
+        static fn (array $m): string => str_starts_with($m[0], '/*') ? '' : $protect($m[0]),
+        $css,
+    );
+    if ($css === null) {
+        fwrite(STDERR, 'protect/comment pass failed: '.preg_last_error_msg()."\n");
+        exit(1);
+    }
+
+    // Collapse whitespace and drop it around structural punctuation.
+    $css = preg_replace('/\s+/', ' ', $css);
+    $css = preg_replace('/\s*([{}:;,>~+])\s*/', '$1', (string) $css);
+    $css = str_replace(';}', '}', (string) $css);   // drop the last semicolon in a block
+    $css = trim((string) $css);
+
+    // Restore the protected literals.
+    $css = strtr($css, $store);
+
+    if (file_put_contents($out, $css) === false) {
+        fwrite(STDERR, "cannot write {$out}\n");
+        exit(1);
+    }
+    printf("minified %d → %d bytes (%s)\n", filesize($src), strlen($css), $out);
 }
-printf("minified %d → %d bytes (%s)\n", filesize($src), strlen($css), $out);
