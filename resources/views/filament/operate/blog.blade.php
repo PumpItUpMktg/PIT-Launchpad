@@ -44,12 +44,6 @@
                 <button class="ob-tab {{ $tab === 'review' ? 'on' : '' }}" wire:click="setTab('review')">Review</button>
                 <button class="ob-tab {{ $tab === 'published' ? 'on' : '' }}" wire:click="setTab('published')">Published</button>
             </div>
-            <select class="ob-select" wire:model.live="siteFilter">
-                <option value="">All tenants</option>
-                @foreach ($this->siteOptions as $id => $label)
-                    <option value="{{ $id }}">{{ $label }}</option>
-                @endforeach
-            </select>
             <select class="ob-select" wire:model.live="siloFilter">
                 <option value="">All silos</option>
                 @foreach ($this->siloOptions as $id => $label)

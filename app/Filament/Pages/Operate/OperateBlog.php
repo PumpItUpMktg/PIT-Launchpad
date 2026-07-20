@@ -14,6 +14,7 @@ use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\BlogBoard;
+use App\Operator\ActiveTenant;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Url;
@@ -27,7 +28,10 @@ use Livewire\Attributes\Url;
  * supports, bare targets first; reactive articles bucket per-silo under Freshness. Blog targets
  * are a drawer here, not a nav item.
  *
- * @property-read array<string, string> $siteOptions
+ * Tenant scope is the panel-wide active tenant ({@see ActiveTenant}, enforced by the hard gate) —
+ * this page has NO tenant switcher of its own; you change tenants from the Portfolio. Only the
+ * per-silo filter is local.
+ *
  * @property-read array<string, string> $siloOptions
  */
 class OperateBlog extends OperatePage
@@ -43,7 +47,7 @@ class OperateBlog extends OperatePage
     #[Url]
     public string $tab = 'candidates';
 
-    #[Url(as: 'site')]
+    /** The active tenant — set from ActiveTenant, not switchable here (no per-page tenant picker). */
     public ?string $siteFilter = null;
 
     #[Url(as: 'silo')]
@@ -59,19 +63,13 @@ class OperateBlog extends OperatePage
 
     public function mount(): void
     {
-        // Sticky filters: explicit query params win, else the last session choice.
-        $this->siteFilter = $this->validSite($this->siteFilter) ?? $this->validSite(session('operate_blog_site'));
+        // Scope is the panel-wide active tenant (the hard gate guarantees one is selected); the
+        // silo filter stays sticky per session. No tenant switcher on this page.
+        $this->siteFilter = app(ActiveTenant::class)->id();
         $this->siloFilter = $this->siloFilter ?? session('operate_blog_silo');
         if (! in_array($this->tab, ['candidates', 'review', 'published'], true)) {
             $this->tab = 'candidates';
         }
-    }
-
-    public function updatedSiteFilter(): void
-    {
-        session(['operate_blog_site' => $this->siteFilter]);
-        $this->siloFilter = null; // silos are per-site — a site change resets the silo filter
-        session(['operate_blog_silo' => null]);
     }
 
     public function updatedSiloFilter(): void
@@ -84,12 +82,6 @@ class OperateBlog extends OperatePage
         if (in_array($tab, ['candidates', 'review', 'published'], true)) {
             $this->tab = $tab;
         }
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
     }
 
     /** @return array<string, string> */
@@ -132,8 +124,8 @@ class OperateBlog extends OperatePage
     public function populateBlog(): void
     {
         if ($this->siteFilter === null) {
-            Notification::make()->warning()->title('Pick a tenant first')
-                ->body('Choose a site above, then populate its blog.')->send();
+            Notification::make()->warning()->title('No active tenant')
+                ->body('Pick a tenant from the Portfolio, then populate its blog.')->send();
 
             return;
         }
@@ -284,11 +276,6 @@ class OperateBlog extends OperatePage
     private function filterSilo(): ?string
     {
         return $this->siloFilter !== null && $this->siloFilter !== '' ? $this->siloFilter : null;
-    }
-
-    private function validSite(mixed $siteId): ?string
-    {
-        return is_string($siteId) && $siteId !== '' && Site::query()->whereKey($siteId)->exists() ? $siteId : null;
     }
 
     private function ownedPost(string $contentId): ?Content

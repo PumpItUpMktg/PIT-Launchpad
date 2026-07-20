@@ -146,7 +146,6 @@ it('candidates sort directed-first and carry the keyword + the page it will supp
 it('promote queues the existing generate path; dismiss records a rejection', function () {
     Queue::fake();
     $site = opSite();
-    session(['operate_blog_site' => null]);
     $candidate = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Candidate, 'title' => 'Storm season prep']);
     $other = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Candidate]);
 
@@ -230,24 +229,25 @@ it('published groups by consumed keyword → pillar page, bare targets first, re
         ->and($freshness['articles'][0]['title'])->toBe('County storm alert: what to check');
 });
 
-it('site + silo filters persist across the three tabs and across visits (session)', function () {
+it('scopes to the active tenant (no per-page switcher) and the silo filter persists across tabs + visits', function () {
     $site = opSite();
-    $other = opSite('OtherCo');
+    opSite('OtherCo'); // a second tenant that must NOT be selectable from this page
     $silo = opSilo($site);
+    session(['guided_site_id' => $site->id]); // the panel-wide active tenant
 
     $page = Livewire::test(OperateBlog::class)
-        ->set('siteFilter', $site->id)
+        ->assertDontSee('All tenants') // the tenant switcher is gone
         ->set('siloFilter', $silo->id)
         ->call('setTab', 'review')
         ->call('setTab', 'published');
 
-    // Same component instance ⇒ the filters ride along; the tab switch never clears them.
+    // Scope is the active tenant; the silo filter rides along; the tab switch never clears it.
     expect($page->get('siteFilter'))->toBe($site->id)
         ->and($page->get('siloFilter'))->toBe($silo->id)
         ->and($page->get('tab'))->toBe('published');
 
-    // A fresh visit resumes the sticky site filter from the session.
-    expect(session('operate_blog_site'))->toBe($site->id);
+    // A fresh visit re-derives the tenant from the panel and resumes the sticky silo filter.
+    expect(session('operate_blog_silo'))->toBe($silo->id);
     Livewire::test(OperateBlog::class)->assertSet('siteFilter', $site->id);
 });
 
