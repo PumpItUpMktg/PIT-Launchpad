@@ -1,9 +1,18 @@
 <?php
 
 use App\Enums\AuditAction;
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\PageType;
+use App\Enums\ProofType;
+use App\Jobs\PublishContent;
 use App\Models\AuditLog;
+use App\Models\Content;
+use App\Models\Location;
+use App\Models\Market;
+use App\Models\ProofItem;
 use App\Publishing\PublishContentService;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\PublishHarness;
 
@@ -126,4 +135,57 @@ test('a push failure lands the content in publish_failed with the error surfaced
     expect($result->hasFailed())->toBeTrue()
         ->and($content->fresh()->status)->toBe(ContentStatus::PublishFailed)
         ->and($content->fresh()->last_publish_error)->not->toBeNull();
+});
+
+test('publishing a town page re-publishes its already-live parent hub (fresh "areas we serve" links)', function () {
+    PublishHarness::fakeAdapters();
+    fakeContentEndpoint(wpPostId: 321);
+    $site = PublishHarness::site();
+
+    // The physical location + its already-published hub page (carries the baked town-links grid).
+    $location = Location::factory()->create(['site_id' => $site->id]);
+    $hub = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => $location->id, 'status' => ContentStatus::Published, 'wp_post_id' => 99, 'slug' => 'trooper',
+    ]);
+
+    // A town page nested under the hub, freshly approved and about to go live (market + tagged
+    // review → the location review gate passes).
+    $market = Market::factory()->create(['site_id' => $site->id]);
+    $review = ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::Testimonial, 'is_substantiated' => true,
+    ]);
+    $review->markets()->attach($market->id);
+    $town = PublishHarness::approvedLocationPage($site, $market->id);
+    $town->forceFill(['parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null])->save();
+
+    Bus::fake();
+    $result = app(PublishContentService::class)->publish($town->fresh());
+
+    // The town went live, and its parent hub is re-published so the Areas-we-serve grid picks it up.
+    expect($result->isPublished())->toBeTrue();
+    Bus::assertDispatched(PublishContent::class, fn (PublishContent $job) => $job->contentId === $hub->id);
+});
+
+test('publishing the hub itself never re-triggers a hub republish (no loop)', function () {
+    PublishHarness::fakeAdapters();
+    fakeContentEndpoint(wpPostId: 100);
+    $site = PublishHarness::site();
+
+    $location = Location::factory()->create(['site_id' => $site->id]);
+    // A real, publishable hub (market + tagged review) so the success hook actually runs — the loop
+    // guard is what keeps it from re-dispatching, not a failed gate short-circuiting earlier.
+    $market = Market::factory()->create(['site_id' => $site->id]);
+    $review = ProofItem::factory()->create([
+        'site_id' => $site->id, 'type' => ProofType::Testimonial, 'is_substantiated' => true,
+    ]);
+    $review->markets()->attach($market->id);
+    $hub = PublishHarness::approvedLocationPage($site, $market->id);
+    $hub->forceFill(['location_id' => $location->id, 'parent_location_id' => null])->save();
+
+    Bus::fake();
+    $result = app(PublishContentService::class)->publish($hub->fresh());
+
+    expect($result->isPublished())->toBeTrue();
+    Bus::assertNotDispatched(PublishContent::class);
 });
