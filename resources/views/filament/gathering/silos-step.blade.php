@@ -3,7 +3,7 @@
         @include('filament.gathering._top', ['subtitle' => 'The generate phase: steps 1–6 gathered the business — this turns it into the structure everything downstream builds on. Generate the silo tree from the trade + services, then prune (fold / route / drop) and finalize. Routed longtails land in the blog target queue Operate consumes.'])
 
         <style>
-            .tg-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(360px, 1fr)); gap:12px; }
+            .tg-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:12px; }
             .tg-card { border:1px solid rgba(148,163,184,.35); border-radius:11px; overflow:hidden; display:flex; flex-direction:column; }
             .tg-cardhead { display:flex; align-items:center; gap:10px; padding:12px 14px; background:rgba(148,163,184,.07); border-bottom:1px solid rgba(148,163,184,.25); flex-wrap:wrap; }
             .tg-cardhead h3 { margin:0; font-size:15px; }
@@ -26,6 +26,12 @@
             .tg-more { padding:8px 14px 11px; font-size:12px; }
             .tg-subhead { display:flex; align-items:center; gap:8px; padding:8px 14px 4px; font-size:10px; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:#64748b; }
             .tg-subhead .tg-split { margin-left:auto; }
+            /* Keyword rows stack: the full query on its own line (always readable), metrics + controls below. */
+            .tg-krow { display:flex; flex-direction:column; gap:5px; padding:8px 14px; border-bottom:1px solid rgba(148,163,184,.15); }
+            .tg-krow:last-child { border-bottom:0; }
+            .tg-kq { font-size:12.5px; line-height:1.3; word-break:break-word; }
+            .tg-kmeta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+            .tg-kmeta .tg-num { min-width:34px; }
         </style>
 
         @if ($pruneMode && $started)
@@ -159,24 +165,26 @@
                             @endif
                             <div class="tg-rows">
                                 @forelse ($b['keywords'] ?? [] as $kw)
-                                    <div class="tg-row" wire:key="tgk-{{ $kw['id'] }}">
-                                        <span class="tg-q" title="{{ $kw['query'] }}">{{ $kw['query'] }}</span>
-                                        <span class="tg-num">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
-                                        <span class="tg-num">{{ $kw['opportunity'] !== null ? number_format($kw['opportunity'], 2) : '—' }}</span>
-                                        <span class="tg-cov {{ $kw['covered'] ? 'covered' : 'gap' }}">{{ $kw['covered'] ? 'covered' : 'gap' }}</span>
-                                        <span class="tg-pri" title="Priority override">{{ $kw['priority'] }}</span>
-                                        <select class="tg-sel" title="Move this keyword to another silo"
-                                            wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
-                                            <option value="">move…</option>
-                                            @foreach ($this->siloOptions as $sid => $sname)
-                                                @if ($sid !== $b['id'])
-                                                    <option value="{{ $sid }}">{{ $sname }}</option>
-                                                @endif
-                                            @endforeach
-                                            <option value="none">— unassign —</option>
-                                        </select>
-                                        <button type="button" class="tg-btn" title="Promote" wire:click="promote('{{ $kw['id'] }}')">▲</button>
-                                        <button type="button" class="tg-btn" title="Demote" wire:click="demote('{{ $kw['id'] }}')">▼</button>
+                                    <div class="tg-krow" wire:key="tgk-{{ $kw['id'] }}">
+                                        <div class="tg-kq" title="{{ $kw['query'] }}">{{ $kw['query'] }}</div>
+                                        <div class="tg-kmeta">
+                                            <span class="tg-num" title="Monthly search volume">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
+                                            <span class="tg-num" title="Opportunity score">{{ $kw['opportunity'] !== null ? number_format($kw['opportunity'], 2) : '—' }}</span>
+                                            <span class="tg-cov {{ $kw['covered'] ? 'covered' : 'gap' }}">{{ $kw['covered'] ? 'covered' : 'gap' }}</span>
+                                            <span class="tg-pri" title="Priority override">{{ $kw['priority'] }}</span>
+                                            <select class="tg-sel" title="Move this keyword to another silo"
+                                                wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
+                                                <option value="">move…</option>
+                                                @foreach ($this->siloOptions as $sid => $sname)
+                                                    @if ($sid !== $b['id'])
+                                                        <option value="{{ $sid }}">{{ $sname }}</option>
+                                                    @endif
+                                                @endforeach
+                                                <option value="none">— unassign —</option>
+                                            </select>
+                                            <button type="button" class="tg-btn" title="Promote" wire:click="promote('{{ $kw['id'] }}')">▲</button>
+                                            <button type="button" class="tg-btn" title="Demote" wire:click="demote('{{ $kw['id'] }}')">▼</button>
+                                        </div>
                                     </div>
                                 @empty
                                     <div class="tg-row" style="color:#94a3b8">No keyword targets yet — run Discover keywords.</div>
@@ -202,19 +210,21 @@
                                 </div>
                                 <div class="tg-rows">
                                     @foreach ($silo['keywords'] as $kw)
-                                        <div class="tg-row" wire:key="tgo-{{ $kw['id'] }}">
-                                            <span class="tg-q" title="{{ $kw['query'] }}">{{ $kw['query'] }}</span>
-                                            <span class="tg-num">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
-                                            <select class="tg-sel" title="Move this keyword to another silo"
-                                                wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
-                                                <option value="">move…</option>
-                                                @foreach ($this->siloOptions as $sid => $sname)
-                                                    @if ($sid !== $silo['id'])
-                                                        <option value="{{ $sid }}">{{ $sname }}</option>
-                                                    @endif
-                                                @endforeach
-                                                <option value="none">— unassign —</option>
-                                            </select>
+                                        <div class="tg-krow" wire:key="tgo-{{ $kw['id'] }}">
+                                            <div class="tg-kq" title="{{ $kw['query'] }}">{{ $kw['query'] }}</div>
+                                            <div class="tg-kmeta">
+                                                <span class="tg-num" title="Monthly search volume">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
+                                                <select class="tg-sel" title="Move this keyword to another silo"
+                                                    wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
+                                                    <option value="">move…</option>
+                                                    @foreach ($this->siloOptions as $sid => $sname)
+                                                        @if ($sid !== $silo['id'])
+                                                            <option value="{{ $sid }}">{{ $sname }}</option>
+                                                        @endif
+                                                    @endforeach
+                                                    <option value="none">— unassign —</option>
+                                                </select>
+                                            </div>
                                         </div>
                                     @endforeach
                                 </div>
@@ -259,19 +269,21 @@
                     </div>
                     <div class="tg-rows">
                         @foreach ($board['unassigned'] as $kw)
-                            <div class="tg-row" wire:key="tgu-{{ $kw['id'] }}">
-                                <span class="tg-q" title="{{ $kw['query'] }}">{{ $kw['query'] }}</span>
-                                <span class="tg-num">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
-                                <span class="tg-cov {{ $kw['covered'] ? 'covered' : 'gap' }}">{{ $kw['covered'] ? 'covered' : 'gap' }}</span>
-                                <select class="tg-sel" title="File this keyword into a silo"
-                                    wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
-                                    <option value="">move to silo…</option>
-                                    @foreach ($this->siloOptions as $sid => $sname)
-                                        <option value="{{ $sid }}">{{ $sname }}</option>
-                                    @endforeach
-                                </select>
-                                <button type="button" class="tg-btn" title="Promote" wire:click="promote('{{ $kw['id'] }}')">▲</button>
-                                <button type="button" class="tg-btn" title="Demote" wire:click="demote('{{ $kw['id'] }}')">▼</button>
+                            <div class="tg-krow" wire:key="tgu-{{ $kw['id'] }}">
+                                <div class="tg-kq" title="{{ $kw['query'] }}">{{ $kw['query'] }}</div>
+                                <div class="tg-kmeta">
+                                    <span class="tg-num" title="Monthly search volume">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
+                                    <span class="tg-cov {{ $kw['covered'] ? 'covered' : 'gap' }}">{{ $kw['covered'] ? 'covered' : 'gap' }}</span>
+                                    <select class="tg-sel" title="File this keyword into a silo"
+                                        wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
+                                        <option value="">move to silo…</option>
+                                        @foreach ($this->siloOptions as $sid => $sname)
+                                            <option value="{{ $sid }}">{{ $sname }}</option>
+                                        @endforeach
+                                    </select>
+                                    <button type="button" class="tg-btn" title="Promote" wire:click="promote('{{ $kw['id'] }}')">▲</button>
+                                    <button type="button" class="tg-btn" title="Demote" wire:click="demote('{{ $kw['id'] }}')">▼</button>
+                                </div>
                             </div>
                         @endforeach
                     </div>
