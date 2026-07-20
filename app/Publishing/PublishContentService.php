@@ -7,8 +7,10 @@ use App\Enums\AuditAction;
 use App\Enums\ContentKind;
 use App\Enums\ContentSource;
 use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
+use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -156,7 +158,41 @@ class PublishContentService
         // Longtail lane: any blog target this article consumed is now live — drafted → published.
         app(BlogTargetQueue::class)->markPublishedByArticle($content);
 
+        // Location page-drip: a newly-live TOWN page adds a link to its parent hub's "Areas we serve"
+        // grid — but that grid is BAKED into the hub at publish time, so the hub would stay stale as
+        // towns drip in. Re-publish the already-live parent hub so its town links stay complete.
+        $this->republishParentHub($content);
+
         return PublishResult::published($content, $wpPostId);
+    }
+
+    /**
+     * Re-publish a town page's parent location hub so its baked "Areas we serve" link grid picks up the
+     * newly-live town. Fires only for a TOWN page — a location page nested under a hub (parent set,
+     * no own location, no service pin, matching the hub grid's inclusion rule) — and only when the
+     * parent hub is already published. The hub itself has its own location_id and no parent, so it
+     * never re-triggers this: no loop. Idempotent by ULID (a re-push updates, never duplicates).
+     */
+    private function republishParentHub(Content $town): void
+    {
+        if ($town->page_type !== PageType::Location
+            || $town->parent_location_id === null
+            || $town->location_id !== null
+            || $town->primary_service_id !== null) {
+            return;
+        }
+
+        $hub = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $town->site_id)
+            ->where('page_type', PageType::Location->value)
+            ->where('location_id', $town->parent_location_id)
+            ->where('status', ContentStatus::Published->value)
+            ->whereNotNull('wp_post_id')
+            ->first();
+
+        if ($hub !== null) {
+            PublishContent::dispatch($hub->id);
+        }
     }
 
     /**
