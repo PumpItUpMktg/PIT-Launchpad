@@ -67,11 +67,11 @@ it('the discover button shows once structure exists', function () {
     session(['guided_site_id' => $site->id]);
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
 
-    Livewire::test(SilosStep::class)->assertSee('Discover keywords');
+    Livewire::test(SilosStep::class)->assertSee('Find search terms');
 
     // No structure yet → no discover button (nothing to fill).
     $bare = Site::factory()->create();
     Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $bare->id)->delete();
     session(['guided_site_id' => $bare->id]);
-    Livewire::test(SilosStep::class)->assertDontSee('Discover keywords');
+    Livewire::test(SilosStep::class)->assertDontSee('Find search terms');
 });
