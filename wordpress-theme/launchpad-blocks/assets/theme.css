@@ -74,6 +74,7 @@
 .lp-legal,
 .lp-contact,
 .lp-formsection,
+.lp-mapsection,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -99,6 +100,7 @@
 .lp-legal > *,
 .lp-contact > *,
 .lp-formsection > *,
+.lp-mapsection > *,
 .lp-process > *,
 .lp-proof > *,
 .lp-testimonials > *,
@@ -125,6 +127,7 @@
 .lp-legal,
 .lp-contact,
 .lp-formsection,
+.lp-mapsection,
 .lp-process,
 .lp-proof,
 .lp-testimonials,
@@ -1755,6 +1758,21 @@
     font-size: 0.8rem;
     border: 0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+}
+
+/* The location "find us" embed ([lp_map] → .lp-map iframe): fills the section, sized + rounded like
+   the areas map. Without this the raw iframe renders at the 300×150 browser default. */
+.lp-map-embed {
+    max-width: 960px;
+    margin-inline: auto;
+}
+
+.lp-map {
+    display: block;
+    width: 100%;
+    height: clamp(300px, 42vh, 460px);
+    border: 1px solid color-mix(in srgb, var(--wp--preset--color--contrast, #172a2f) 12%, transparent);
+    border-radius: 14px;
 }
 
 /* In the 50/50 block the map fills its column height (its own --live height is a floor). */

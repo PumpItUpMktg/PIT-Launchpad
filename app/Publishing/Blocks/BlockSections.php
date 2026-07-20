@@ -730,6 +730,30 @@ final class BlockSections
     }
 
     /**
+     * A "find us" map for a location hub — the plugin's `[lp_map]` shortcode reading the {lat,lng}
+     * (or {embed_url}) value from the named slot, rendered server-side as a lazy Google Maps iframe.
+     * The raw iframe would be kses-stripped from block content, so it MUST go through the shortcode
+     * (rendered with the plugin's caps); the keyless Google embed needs no API key. Caller emits this
+     * only when the location has mappable coordinates AND the matching `{slotKey}` value rides the blob
+     * — otherwise the shortcode resolves to '' and the section would be empty, so we return '' up front.
+     */
+    public function mapEmbed(string $eyebrow, string $heading, string $slotKey): string
+    {
+        $slotKey = trim($slotKey);
+        if ($slotKey === '') {
+            return '';
+        }
+
+        $shortcode = "<!-- wp:shortcode -->\n[lp_map key=\"".$slotKey."\"]\n<!-- /wp:shortcode -->";
+        $embed = $this->b->group([$shortcode], ['className' => 'lp-map-embed']);
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading, center: true),
+            $embed,
+        ], ['align' => 'full', 'className' => $this->sectionClass('lp-mapsection', false)]);
+    }
+
+    /**
      * Testimonials: a three-up of client quotes. Data-gated — renders only when real, substantiated
      * reviews exist; never fabricates a quote or a star rating.
      *
