@@ -197,7 +197,7 @@ class ServicesStep extends GatheringPage
             ->fillForm(function (array $arguments): array {
                 $service = $this->owned((string) ($arguments['service'] ?? ''));
 
-                return $service === null ? [] : $service->only(self::ENRICHMENT_FIELDS);
+                return $service === null ? [] : $this->enrichmentFormState($service);
             })
             ->schema(ServiceResource::enrichmentComponents())
             ->action(function (array $data, array $arguments): void {
@@ -212,6 +212,84 @@ class ServicesStep extends GatheringPage
 
                 Notification::make()->success()->title("'{$service->name}' saved")->send();
             });
+    }
+
+    /**
+     * A form-safe snapshot for the enrich modal: coerce every field into the exact shape the schema
+     * expects, so a legacy/foreign data shape can never break the modal render ("Error while loading
+     * page"). The simple() repeaters (symptoms / scope / process / cost / comparison points) need FLAT
+     * lists of strings — a stored null, a bare string, or a nested `[{item: …}]` list would otherwise
+     * throw during render; price_range / comparison must be arrays; toggles bools; text strings.
+     *
+     * @return array<string, mixed>
+     */
+    private function enrichmentFormState(Service $service): array
+    {
+        return [
+            'name' => (string) $service->name,
+            'short_description' => (string) $service->short_description,
+            'symptoms' => $this->flatStringList($service->symptoms),
+            'scope_items' => $this->flatStringList($service->scope_items),
+            'process_steps' => $this->flatStringList($service->process_steps),
+            'cost_factors' => $this->flatStringList($service->cost_factors),
+            'price_range' => is_array($service->price_range) ? $service->price_range : [],
+            'comparison' => $this->normalizeComparison(is_array($service->comparison) ? $service->comparison : []),
+            'warranty_applicable' => (bool) $service->warranty_applicable,
+            'description' => (string) $service->description,
+        ];
+    }
+
+    /**
+     * Flatten the comparison block's simple() point repeaters (option_a/b → points) so a nested/legacy
+     * shape can't break the render when the owner has the comparison section on. Left as-is otherwise.
+     *
+     * @param  array<string, mixed>  $comparison
+     * @return array<string, mixed>
+     */
+    private function normalizeComparison(array $comparison): array
+    {
+        foreach (['option_a', 'option_b'] as $opt) {
+            $side = $comparison[$opt] ?? null;
+            if (is_array($side)) {
+                $side['points'] = $this->flatStringList($side['points'] ?? []);
+                $comparison[$opt] = $side;
+            }
+        }
+
+        return $comparison;
+    }
+
+    /**
+     * Coerce any stored shape into a flat list of non-empty strings — what a simple() Repeater expects.
+     * Tolerates null, a bare string, a flat list, and the nested `[{item: …}]` / `[{value: …}]` shapes.
+     *
+     * @return list<string>
+     */
+    private function flatStringList(mixed $value): array
+    {
+        if (is_string($value)) {
+            return trim($value) === '' ? [] : [trim($value)];
+        }
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($value as $item) {
+            if (is_string($item) || is_numeric($item)) {
+                $s = trim((string) $item);
+            } elseif (is_array($item)) {
+                $candidate = $item['item'] ?? $item['value'] ?? null;
+                $s = (is_string($candidate) || is_numeric($candidate)) ? trim((string) $candidate) : '';
+            } else {
+                $s = '';
+            }
+            if ($s !== '') {
+                $out[] = $s;
+            }
+        }
+
+        return $out;
     }
 
     /** @return array{state: 'complete'|'attention'|'empty', label: string} */
