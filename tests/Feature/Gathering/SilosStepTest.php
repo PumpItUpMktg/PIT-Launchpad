@@ -167,6 +167,21 @@ it('hand-files an unassigned keyword into a chosen silo (manual override for mis
     expect($orphan->fresh()->silo_id)->toBe($sump->id);
 });
 
+it('promotes a folded page into its own topic and syncs a §4 silo for it', function () {
+    $site = silosStepSite(); // pillar 'Sump Pumps' + spoke 'Sump Pump Installation'
+    $spoke = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('name', 'Sump Pump Installation')->first();
+
+    Livewire::test(SilosStep::class)
+        ->call('promoteToOwnTopic', $spoke->id)
+        ->assertNotified();
+
+    // The spoke now heads its own topic group…
+    expect($spoke->fresh()->is_pillar)->toBeTrue()
+        ->and($spoke->fresh()->silo)->toBe('Sump Pump Installation')
+        // …and the §4 board has a matching silo (so it can take its own keyword targets).
+        ->and(Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('name', 'Sump Pump Installation')->exists())->toBeTrue();
+});
+
 it('will not move a keyword into another tenant\'s silo', function () {
     $site = silosStepSite();
     $mine = Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => null, 'query' => 'sump pump repair']);

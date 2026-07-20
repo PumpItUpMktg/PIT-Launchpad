@@ -160,6 +160,11 @@
                                                 default => 'section',
                                             } }}
                                         </span>
+                                        @unless ($row->isPillar)
+                                            <button type="button" class="tg-btn" title="Pull this out into its own topic group instead of a section here"
+                                                wire:click="promoteToOwnTopic('{{ $row->id }}')"
+                                                wire:confirm="Make “{{ $row->name }}” its own topic? It becomes a standalone section of your site with its own page.">↗ Own topic</button>
+                                        @endunless
                                     </div>
                                 @endforeach
                                 @if ($sorted->count() > 8)

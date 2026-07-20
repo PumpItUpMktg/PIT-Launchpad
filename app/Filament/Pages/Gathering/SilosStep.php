@@ -350,6 +350,39 @@ class SilosStep extends GatheringPage
         Notification::make()->success()->title("Moved '{$keyword->query}' into {$silo->name}.")->send();
     }
 
+    /**
+     * Promote a folded page into its OWN topic group (silo) — the operator lever for when the
+     * auto-arranger folded a service too aggressively (e.g. Mold Testing under Basement
+     * Waterproofing). Splits it out via {@see PruneEngine::promoteToOwnSilo}, then re-syncs the §4
+     * board so the new topic shows up ready for its own keyword targets.
+     */
+    public function promoteToOwnTopic(string $spokeId): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $spoke = Spoke::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereKey($spokeId)
+            ->first();
+
+        if ($spoke === null || ! app(PruneEngine::class)->promoteToOwnSilo($site, $spokeId)) {
+            Notification::make()->warning()->title('That page is already its own topic.')->send();
+
+            return;
+        }
+
+        $this->syncBoardToTree($site); // §4 silo + rule_set for the new topic
+        $this->reset(['pruneMode', 'started', 'finalized', 'spokeDecisions', 'siloDecisions']);
+
+        Notification::make()->success()
+            ->title("“{$spoke->name}” is now its own topic")
+            ->body('Click “Find search terms” to fill it with keyword targets.')
+            ->send();
+    }
+
     /** Enter prune mode — seeds the decision-set from the candidate tree. */
     public function openPrune(): void
     {
