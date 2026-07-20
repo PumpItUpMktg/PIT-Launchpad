@@ -81,7 +81,7 @@ it('reads the gathered seed: empty without a trade, generate-ready with one, and
 
     // The Business-step trade (or interview extraction) seeds the blueprint → generate unlocks.
     SiloBlueprint::factory()->create(['site_id' => $site->id, 'seed' => ['trade' => 'waterproofing']]);
-    $page = Livewire::test(SilosStep::class)->assertOk()->assertSee('Generate structure');
+    $page = Livewire::test(SilosStep::class)->assertOk()->assertSee('Build my plan');
     expect($page->instance()->readiness())->toBe(['state' => 'attention', 'label' => 'Seed ready — generate the structure']);
 });
 
@@ -97,7 +97,7 @@ it('generate runs the structure chain synchronously and surfaces a failure as re
     Livewire::test(SilosStep::class)
         ->call('generate')
         ->assertOk()
-        ->assertSee('retry');
+        ->assertSee('try again');
 
     expect(SetupState::query()->where('site_id', $site->id)->value('structure_status'))->toBe('failed');
 });
@@ -115,7 +115,7 @@ it('shows the silo cards with keyword targets and promote/demote adjusts the que
         ->assertOk()
         ->assertSee('Sump Pumps')
         ->assertSee('battery backup sump pump')
-        ->assertSee('1 blog target(s) queued') // the seeded queue Operate's Blog drawer consumes
+        ->assertSee('1 blog idea(s) queued') // the seeded queue Operate's Blog drawer consumes
         ->call('promote', $kw->id);
 
     expect($kw->fresh()->priority)->toBe(1);
@@ -126,7 +126,7 @@ it('prune is a mode inside the surface: open → decide → finalize confirms th
     $install = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('name', 'Sump Pump Installation')->first();
 
     $page = Livewire::test(SilosStep::class)
-        ->assertSee('Prune & finalize')
+        ->assertSee('Review & approve')
         ->call('openPrune')
         ->assertSet('pruneMode', true)
         ->assertSet('started', true)
@@ -139,7 +139,7 @@ it('prune is a mode inside the surface: open → decide → finalize confirms th
         ->and($page->instance()->readiness())->toBe(['state' => 'complete', 'label' => 'Structure confirmed']);
 
     // Back to the cards view; the step now offers a re-prune (real business change → regenerate, re-prune).
-    $page->call('closePrune')->assertSet('pruneMode', false)->assertSee('Re-prune');
+    $page->call('closePrune')->assertSet('pruneMode', false)->assertSee('Review again');
 });
 
 it('hand-files an unassigned keyword into a chosen silo (manual override for missed rule_set matches)', function () {
@@ -196,15 +196,15 @@ it('the generated tree is VISIBLE on the main view right after generate — no p
 
     Livewire::test(SilosStep::class)
         ->assertOk()
-        ->assertSee('pages + keyword targets')     // the unified silos header
+        ->assertSee('Topic groups')                // the unified, plain-language silos header
         ->assertSee('Sump Pumps')                 // the silo card
         ->assertSee('Sump Pump Installation')     // its spoke, without entering prune
         ->assertSee('hub page')                   // pillar disposition label
         ->assertSee('own page')                   // core disposition label
-        // Pages and keyword targets live in ONE card per silo, not two duplicate sections.
-        ->assertSee('Pages')
-        ->assertSee('Keyword targets')
-        // No §4 Silo/Keyword rows yet → the card's keyword block explains itself.
-        ->assertSee('run Discover keywords')
+        // Pages and search terms live in ONE card per silo, not two duplicate sections.
+        ->assertSee('Pages we\'ll build', false) // escape:false — literal apostrophe in the markup
+        ->assertSee('Search terms we target')
+        // No §4 Silo/Keyword rows yet → the card's keyword block explains itself in plain words.
+        ->assertSee('Find search terms')
         ->assertDontSee('No structure yet');
 });

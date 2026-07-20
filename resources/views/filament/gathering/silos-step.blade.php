@@ -1,6 +1,6 @@
 <x-filament-panels::page>
     <div class="g-wrap">
-        @include('filament.gathering._top', ['subtitle' => 'The generate phase: steps 1–6 gathered the business — this turns it into the structure everything downstream builds on. Generate the silo tree from the trade + services, then prune (fold / route / drop) and finalize. Routed longtails land in the blog target queue Operate consumes.'])
+        @include('filament.gathering._top', ['subtitle' => 'This turns everything you told us into your website plan — the topic groups, the pages, and the search terms each page targets. Build the plan, review it, and approve. Extra ideas become blog posts later in Operate → Blog.'])
 
         <style>
             .tg-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:12px; }
@@ -43,9 +43,9 @@
 
             @if ($finalized)
                 <div class="g-card" style="border-color:rgba(22,163,74,.4); background:rgba(22,163,74,.06)">
-                    <h3>Structure confirmed</h3>
-                    <p class="g-hint">The directed-coverage layer is locked — this is the page inventory generation builds from. Routed longtails are queued for the blog lane.</p>
-                    <button type="button" class="g-btn primary" wire:click="closePrune">Back to targets</button>
+                    <h3>Plan approved</h3>
+                    <p class="g-hint">Your plan is locked in — this is the set of pages we'll build for your site. Extra blog ideas are queued for later.</p>
+                    <button type="button" class="g-btn primary" wire:click="closePrune">Back to my plan</button>
                 </div>
             @else
                 @include('filament.pages.partials.prune-surface')
@@ -53,49 +53,50 @@
         @else
             {{-- ── Generate ── --}}
             <div class="g-card">
-                <h3>Structure</h3>
+                <h3>Your website plan</h3>
                 @if (! $this->hasSeed)
-                    <div class="g-empty">No seed yet — capture the trade on the Business step (or run the interview). The silo tree is generated from it plus the stated services.</div>
+                    <div class="g-empty">Nothing to plan yet — first tell us your trade on the Business step (or run the interview). We build the plan from that plus the services you list.</div>
                 @elseif (! $this->hasSpokes)
-                    <p class="g-hint">Seed ready ({{ $this->structureStatus === 'failed' ? 'last generation failed — retry below' : 'trade + services gathered' }}). Generation expands the seed into the candidate tree, grounds it on search volume, and auto-arranges it.</p>
+                    <p class="g-hint">Ready to go ({{ $this->structureStatus === 'failed' ? 'last attempt didn\'t finish — try again below' : 'your trade + services are in' }}). We'll turn your services into a set of topic groups and pages, sized by what people search for.</p>
                     <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;cursor:pointer">
                         <input type="checkbox" wire:click="toggleBoundToServices" @checked($this->boundToServices)>
-                        Bind to my stated services only — don't invent silos I don't offer
+                        Only use the services I listed — don't add ones I don't offer
                     </label>
                     <div>
                         <button type="button" class="g-btn primary" wire:click="generate" wire:loading.attr="disabled">
-                            <span wire:loading.remove wire:target="generate">⚙ Generate structure</span>
-                            <span wire:loading wire:target="generate">Generating…</span>
+                            <span wire:loading.remove wire:target="generate">⚙ Build my plan</span>
+                            <span wire:loading wire:target="generate">Building…</span>
                         </button>
                     </div>
                 @else
                     <div class="g-row" style="justify-content:space-between">
                         <div>
-                            <span class="g-seed {{ $this->blueprintConfirmed ? 'confirmed' : '' }}">{{ $this->blueprintConfirmed ? 'confirmed' : 'candidate' }}</span>
+                            <span class="g-seed {{ $this->blueprintConfirmed ? 'confirmed' : '' }}">{{ $this->blueprintConfirmed ? 'approved' : 'draft' }}</span>
                             <span class="g-muted" style="margin-left:6px">
-                                {{ $this->blueprintConfirmed ? 'Structure finalized — prune again after a real business change.' : 'Candidate tree generated — prune & finalize to lock it.' }}
+                                {{ $this->blueprintConfirmed ? 'Your plan is approved — you only need to redo this if your business changes.' : 'Here\'s your draft plan — review it below, then approve to lock it in.' }}
                                 @if ($this->blogTargetCount > 0)
-                                    {{ $this->blogTargetCount }} blog target(s) queued for Operate → Blog.
+                                    {{ $this->blogTargetCount }} blog idea(s) queued for Operate → Blog.
                                 @endif
                             </span>
                         </div>
                         <div class="g-row" style="align-items:center">
-                            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer" title="Bounded generation organizes ONLY your stated services into silos — no invented ones. Regenerate to apply.">
+                            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer" title="Only organize the services you actually offer — don't add adjacent ones. Rebuild to apply.">
                                 <input type="checkbox" wire:click="toggleBoundToServices" @checked($this->boundToServices)>
-                                Stated services only
+                                My services only
                             </label>
                             <button type="button" class="g-btn" wire:click="generate" wire:loading.attr="disabled"
-                                wire:confirm="Re-ground and re-arrange the tree? Confirmed decisions are preserved; volumes and arrangement refresh.">
-                                <span wire:loading.remove wire:target="generate">↻ Re-ground & re-arrange</span>
+                                title="Refreshes search volumes and tidies the arrangement, but keeps your plan and any choices you've approved."
+                                wire:confirm="Refresh your plan? Your approved choices are kept; search volumes and the arrangement update.">
+                                <span wire:loading.remove wire:target="generate">↻ Refresh (keep my plan)</span>
                                 <span wire:loading wire:target="generate">Running…</span>
                             </button>
                             <button type="button" class="g-btn" wire:click="rebuildStructure" wire:loading.attr="disabled"
-                                title="Clears the current tree and regenerates from scratch — the only way a changed seed or 'Stated services only' takes effect."
-                                wire:confirm="Rebuild the tree FROM SCRATCH? This drops the current candidate tree (and its queued blog targets) and re-runs the AI — needed for 'Stated services only' to apply.">
-                                <span wire:loading.remove wire:target="rebuildStructure">⟳ Rebuild from scratch</span>
+                                title="Throws away the current plan and builds a brand-new one — use this only if you want to start over (e.g. after turning on 'My services only')."
+                                wire:confirm="Start the plan over from scratch? This throws away the current plan (and its queued blog ideas) and builds a new one.">
+                                <span wire:loading.remove wire:target="rebuildStructure">⟳ Start over</span>
                                 <span wire:loading wire:target="rebuildStructure">Rebuilding…</span>
                             </button>
-                            <button type="button" class="g-btn primary" wire:click="openPrune">✂ {{ $this->blueprintConfirmed ? 'Re-prune' : 'Prune & finalize' }}</button>
+                            <button type="button" class="g-btn primary" wire:click="openPrune">✓ {{ $this->blueprintConfirmed ? 'Review again' : 'Review & approve' }}</button>
                         </div>
                     </div>
                 @endif
@@ -110,11 +111,22 @@
             @endphp
 
             @if ($this->hasSpokes)
+                {{-- Plain-language how-to: what this screen is + the 3 things to do, for a non-SEO owner. --}}
+                <div class="g-card" style="background:rgba(59,130,246,.06); border-color:rgba(59,130,246,.3)">
+                    <h3 style="margin-bottom:4px">Your website plan</h3>
+                    <p class="g-hint" style="margin-bottom:8px">We grouped your services into <strong>topics</strong>. Each topic becomes a set of pages on your site, and each page targets the words people type into Google to find that service.</p>
+                    <ol class="g-hint" style="margin:0; padding-left:18px; line-height:1.7">
+                        <li>Look over the <strong>topic groups</strong> below — each one is a section of your website.</li>
+                        <li>Click <strong>“Find search terms”</strong> to fill each topic with the words people actually search for.</li>
+                        <li>If something's in the wrong group, use <strong>“Move”</strong> to shift it — then <strong>“Review &amp; approve”</strong> up top to lock the plan in.</li>
+                    </ol>
+                </div>
+
                 <div class="g-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 8px">
-                    <div class="g-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Silos — {{ count($this->tree) }} · pages + keyword targets</div>
+                    <div class="g-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Topic groups — {{ count($this->tree) }}</div>
                     <button type="button" class="g-btn" wire:click="discoverKeywords"
-                        wire:confirm="Run keyword discovery for this site? It fills each silo's targets from DataForSEO (may take a moment).">
-                        ⌕ Discover keywords
+                        wire:confirm="Find the search terms for each topic? This looks up what people search for and fills in your targets (may take a moment).">
+                        🔎 Find search terms
                     </button>
                 </div>
 
@@ -129,13 +141,13 @@
                             <div class="tg-cardhead">
                                 <h3>{{ $siloName }}</h3>
                                 @if ($b)
-                                    <span class="tg-badge {{ $b['viable'] ? 'ok' : 'thin' }}">{{ $b['viable'] ? 'viable' : 'thin' }}</span>
+                                    <span class="tg-badge {{ $b['viable'] ? 'ok' : 'thin' }}" title="{{ $b['viable'] ? 'Enough search terms to build strong pages' : 'Needs more search terms — click Find search terms' }}">{{ $b['viable'] ? 'ready' : 'needs more' }}</span>
                                 @endif
                                 <span class="tg-split">{{ $pageCount }} page(s) · {{ $sorted->count() }} topic(s)</span>
                             </div>
 
                             {{-- Pages (the structure the build produces) --}}
-                            <div class="tg-subhead">Pages</div>
+                            <div class="tg-subhead">Pages we'll build</div>
                             <div class="tg-rows">
                                 @foreach ($sorted->take(8) as $row)
                                     <div class="tg-row" wire:key="tr-{{ $row->id }}">
@@ -151,14 +163,14 @@
                                     </div>
                                 @endforeach
                                 @if ($sorted->count() > 8)
-                                    <div class="tg-more">+ {{ $sorted->count() - 8 }} more — open Prune to see everything</div>
+                                    <div class="tg-more">+ {{ $sorted->count() - 8 }} more — open “Review &amp; approve” to see everything</div>
                                 @endif
                             </div>
 
                             {{-- Keyword targets (what discovery routes into this silo) --}}
                             <div class="tg-subhead">
-                                Keyword targets
-                                @if ($b)<span class="tg-split">{{ $b['covered'] }} covered · {{ $b['gaps'] }} gaps</span>@endif
+                                Search terms we target
+                                @if ($b)<span class="tg-split">{{ $b['covered'] }} have a page · {{ $b['gaps'] }} need one</span>@endif
                             </div>
                             @if ($b && $b['warning'] !== null)
                                 <div class="tg-warn">{{ $b['warning'] }}</div>
@@ -169,10 +181,10 @@
                                         <div class="tg-kq" title="{{ $kw['query'] }}">{{ $kw['query'] }}</div>
                                         <div class="tg-kmeta">
                                             <span class="tg-num" title="Monthly search volume">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
-                                            <span class="tg-num" title="Opportunity score">{{ $kw['opportunity'] !== null ? number_format($kw['opportunity'], 2) : '—' }}</span>
-                                            <span class="tg-cov {{ $kw['covered'] ? 'covered' : 'gap' }}">{{ $kw['covered'] ? 'covered' : 'gap' }}</span>
-                                            <span class="tg-pri" title="Priority override">{{ $kw['priority'] }}</span>
-                                            <select class="tg-sel" title="Move this keyword to another silo"
+                                            <span class="tg-num" title="How good an opportunity this term is (higher = better)">{{ $kw['opportunity'] !== null ? number_format($kw['opportunity'], 2) : '—' }}</span>
+                                            <span class="tg-cov {{ $kw['covered'] ? 'covered' : 'gap' }}" title="{{ $kw['covered'] ? 'A page targets this term' : 'No page targets this term yet' }}">{{ $kw['covered'] ? 'has page' : 'needs page' }}</span>
+                                            <span class="tg-pri" title="Priority (use ▲ ▼ to raise or lower)">{{ $kw['priority'] }}</span>
+                                            <select class="tg-sel" title="Move this search term to another topic group"
                                                 wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
                                                 <option value="">move…</option>
                                                 @foreach ($this->siloOptions as $sid => $sname)
@@ -187,12 +199,12 @@
                                         </div>
                                     </div>
                                 @empty
-                                    <div class="tg-row" style="color:#94a3b8">No keyword targets yet — run Discover keywords.</div>
+                                    <div class="tg-row" style="color:#94a3b8">No search terms yet — click “Find search terms” above.</div>
                                 @endforelse
                             </div>
                             @if ($b && $b['total'] > count($b['keywords']))
                                 <div class="tg-more">
-                                    <a href="{{ \App\Filament\Resources\KeywordResource::getUrl('index') }}" wire:navigate>+ {{ $b['total'] - count($b['keywords']) }} more targets →</a>
+                                    <a href="{{ \App\Filament\Resources\KeywordResource::getUrl('index') }}" wire:navigate>+ {{ $b['total'] - count($b['keywords']) }} more search terms →</a>
                                 </div>
                             @endif
                         </div>
@@ -206,7 +218,7 @@
                                 <div class="tg-cardhead">
                                     <h3>{{ $silo['name'] }}</h3>
                                     <span class="tg-badge thin">no page yet</span>
-                                    <span class="tg-split">{{ $silo['covered'] }} covered · {{ $silo['gaps'] }} gaps</span>
+                                    <span class="tg-split">{{ $silo['covered'] }} have a page · {{ $silo['gaps'] }} need one</span>
                                 </div>
                                 <div class="tg-rows">
                                     @foreach ($silo['keywords'] as $kw)
@@ -239,9 +251,9 @@
             @if ($this->demandReport !== [])
                 <div class="tg-card" style="border-color:rgba(217,119,6,.4)">
                     <div class="tg-cardhead" style="background:rgba(217,119,6,.08)">
-                        <h3>Demand without a service</h3>
+                        <h3>Searches with no matching service</h3>
                         <span class="tg-badge thin">{{ count($this->demandReport) }}</span>
-                        <span class="tg-split">real search demand you don't yet offer a service for</span>
+                        <span class="tg-split">people search for these, but you don't list the service yet</span>
                     </div>
                     <div class="tg-rows">
                         @foreach ($this->demandReport as $finding)
@@ -259,12 +271,12 @@
             @if ($board['unassigned_total'] > 0)
                 <div class="tg-card">
                     <div class="tg-cardhead" style="display:flex;align-items:center;gap:8px">
-                        <h3>Unassigned keywords</h3>
-                        <span class="tg-badge thin">no silo</span>
+                        <h3>Search terms not sorted yet</h3>
+                        <span class="tg-badge thin">no topic</span>
                         <span class="tg-split">{{ $board['unassigned_total'] }} total</span>
                         <button type="button" class="g-btn" style="margin-left:auto" wire:click="rebucketKeywords"
-                            title="Re-file these into silos by rule_set match (silos need rule_sets — they get them at generate).">
-                            ⇄ Re-file into silos
+                            title="Let the system sort these into the closest matching topic. Anything it can't place stays here for you to move by hand.">
+                            ⇄ Auto-sort into topics
                         </button>
                     </div>
                     <div class="tg-rows">
@@ -273,10 +285,10 @@
                                 <div class="tg-kq" title="{{ $kw['query'] }}">{{ $kw['query'] }}</div>
                                 <div class="tg-kmeta">
                                     <span class="tg-num" title="Monthly search volume">{{ $kw['volume'] !== null ? number_format((int) $kw['volume']) : '—' }}</span>
-                                    <span class="tg-cov {{ $kw['covered'] ? 'covered' : 'gap' }}">{{ $kw['covered'] ? 'covered' : 'gap' }}</span>
-                                    <select class="tg-sel" title="File this keyword into a silo"
+                                    <span class="tg-cov {{ $kw['covered'] ? 'covered' : 'gap' }}" title="{{ $kw['covered'] ? 'A page targets this term' : 'No page targets this term yet' }}">{{ $kw['covered'] ? 'has page' : 'needs page' }}</span>
+                                    <select class="tg-sel" title="Add this search term to a topic group"
                                         wire:change="assignKeywordToSilo('{{ $kw['id'] }}', $event.target.value)">
-                                        <option value="">move to silo…</option>
+                                        <option value="">add to a topic…</option>
                                         @foreach ($this->siloOptions as $sid => $sname)
                                             <option value="{{ $sid }}">{{ $sname }}</option>
                                         @endforeach
@@ -291,10 +303,10 @@
             @endif
 
             <div class="g-muted">
-                Drill-downs:
-                <a href="{{ \App\Filament\Resources\KeywordResource::getUrl('index') }}" wire:navigate>full keyword table</a> ·
-                <a href="{{ \App\Filament\Resources\SiloManagementResource::getUrl('index') }}" wire:navigate>silo table</a>.
-                The continuous half — the blog target queue — lives in Operate → Blog (the targets drawer).
+                Want the full detail? See the
+                <a href="{{ \App\Filament\Resources\KeywordResource::getUrl('index') }}" wire:navigate>full list of search terms</a> or the
+                <a href="{{ \App\Filament\Resources\SiloManagementResource::getUrl('index') }}" wire:navigate>topic list</a>.
+                Ongoing blog ideas live in Operate → Blog.
             </div>
         @endif
         @include('filament.gathering._next')
