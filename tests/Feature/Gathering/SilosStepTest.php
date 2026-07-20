@@ -167,6 +167,25 @@ it('hand-files an unassigned keyword into a chosen silo (manual override for mis
     expect($orphan->fresh()->silo_id)->toBe($sump->id);
 });
 
+it('reads "ready" when a topic has a standalone service page, even before any search terms', function () {
+    silosStepSite(); // Sump Pumps pillar + 'Sump Pump Installation' as an own-page service; no §4 keywords yet
+
+    Livewire::test(SilosStep::class)
+        ->assertOk()
+        ->assertSee('ready')                 // page-aware: own-page service ⇒ ready
+        ->assertDontSee('needs search terms');
+});
+
+it('reads "needs search terms" when a topic has only sections and no search terms', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id, 'seed' => ['trade' => 'waterproofing']]);
+    Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Odds & Ends', 'name' => 'Odds & Ends', 'is_pillar' => true, 'tag' => SpokeTag::Core, 'page_type' => SpokePageType::Service, 'status' => SpokeStatus::Candidate, 'granularity' => SpokeGranularity::OwnPage]);
+    Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $bp->id, 'silo' => 'Odds & Ends', 'name' => 'Minor Thing', 'tag' => SpokeTag::Core, 'page_type' => SpokePageType::Service, 'status' => SpokeStatus::Candidate, 'granularity' => SpokeGranularity::Folded]);
+
+    Livewire::test(SilosStep::class)->assertOk()->assertSee('needs search terms');
+});
+
 it('promotes a folded page into its own topic and syncs a §4 silo for it', function () {
     $site = silosStepSite(); // pillar 'Sump Pumps' + spoke 'Sump Pump Installation'
     $spoke = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('name', 'Sump Pump Installation')->first();
