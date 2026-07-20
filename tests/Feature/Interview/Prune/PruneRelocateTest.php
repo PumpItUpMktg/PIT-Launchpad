@@ -112,3 +112,24 @@ it('moveSpoke re-targets a spoke onto a core page in another silo (the drag/sele
         ->and($spoke->granularity)->toBe(SpokeGranularity::Folded)
         ->and($spoke->fold_into_id)->toBe($target->id);
 });
+
+test('engine promoteToOwnSilo turns a folded section into its own silo (a new hub page)', function () {
+    $site = relocateSite();
+    $spoke = rspk($site, 'Battery Backup System'); // currently a spoke under Backup Power
+
+    expect(app(PruneEngine::class)->promoteToOwnSilo($site, $spoke->id))->toBeTrue();
+
+    $spoke->refresh();
+    expect($spoke->silo)->toBe('Battery Backup System')       // its own grouping…
+        ->and($spoke->is_pillar)->toBeTrue()                  // …as the hub page
+        ->and($spoke->granularity)->toBe(SpokeGranularity::OwnPage)
+        ->and($spoke->tag)->toBe(SpokeTag::Core)
+        ->and($spoke->fold_into_id)->toBeNull();
+});
+
+test('promoteToOwnSilo refuses a spoke that already heads a silo', function () {
+    $site = relocateSite();
+    $pillar = rspk($site, 'Sump Pumps'); // already a pillar
+
+    expect(app(PruneEngine::class)->promoteToOwnSilo($site, $pillar->id))->toBeFalse();
+});

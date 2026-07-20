@@ -183,6 +183,38 @@ final class PruneEngine
     }
 
     /**
+     * Promote a folded/section spoke into ITS OWN silo — the operator override for when the
+     * auto-fold was too aggressive (e.g. "Mold Testing" tucked under Basement Waterproofing that
+     * deserves to stand on its own). The spoke becomes the pillar of a new silo named after it: a
+     * hub page, its own topic group, ready for its own keyword targets. The inverse of {@see foldSilo}
+     * at the spoke level. Returns false if the spoke is missing or already heads a silo.
+     */
+    public function promoteToOwnSilo(Site $site, string $spokeId): bool
+    {
+        $spoke = Spoke::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereKey($spokeId)
+            ->first();
+
+        if ($spoke === null || $spoke->is_pillar) {
+            return false;
+        }
+
+        $spoke->update([
+            'silo' => (string) $spoke->name,   // its own grouping — a new top-level topic
+            'is_pillar' => true,               // …headed by this spoke as the hub page
+            'is_sub_hub' => false,
+            'parent_silo_id' => null,
+            'granularity' => SpokeGranularity::OwnPage,
+            'fold_into_id' => null,
+            'tag' => SpokeTag::Core,
+            'status' => SpokeStatus::Offered,
+        ]);
+
+        return true;
+    }
+
+    /**
      * Fold one silo into another: its spokes move under the target pillar and its own
      * pillar becomes a regular member there. Collapses thin silos (e.g. sewage / grinder
      * under a single pumps pillar) when volume shows them too light to stand alone.
