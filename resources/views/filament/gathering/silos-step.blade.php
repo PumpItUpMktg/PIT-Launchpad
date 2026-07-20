@@ -135,14 +135,18 @@
                         @php
                             $sorted = collect($rows)->sortBy([['isPillar', 'desc'], ['volume', 'desc']])->values();
                             $pageCount = $sorted->filter(fn ($r) => $r->isPillar || $r->granularity->value === 'own_page')->count();
+                            // Own-page SERVICES (excluding the hub) — a topic with real standalone pages is
+                            // worth building regardless of how many keyword terms have been routed yet.
+                            $ownPageServices = $sorted->filter(fn ($r) => ! $r->isPillar && $r->granularity->value === 'own_page')->count();
                             $b = $boardBySilo[$siloName] ?? null;
+                            // "Ready" = has standalone service pages OR enough keyword targets. So a topic
+                            // isn't flagged just because discovery hasn't filled its search terms yet.
+                            $ready = $ownPageServices >= 1 || ($b && $b['viable']);
                         @endphp
                         <div class="tg-card" wire:key="silo-{{ \Illuminate\Support\Str::slug($siloName) }}">
                             <div class="tg-cardhead">
                                 <h3>{{ $siloName }}</h3>
-                                @if ($b)
-                                    <span class="tg-badge {{ $b['viable'] ? 'ok' : 'thin' }}" title="{{ $b['viable'] ? 'Enough search terms to build strong pages' : 'Needs more search terms — click Find search terms' }}">{{ $b['viable'] ? 'ready' : 'needs more' }}</span>
-                                @endif
+                                <span class="tg-badge {{ $ready ? 'ok' : 'thin' }}" title="{{ $ready ? 'This topic has enough to build strong pages' : 'Add search terms — click Find search terms' }}">{{ $ready ? 'ready' : 'needs search terms' }}</span>
                                 <span class="tg-split">{{ $pageCount }} page(s) · {{ $sorted->count() }} topic(s)</span>
                             </div>
 
@@ -177,8 +181,8 @@
                                 Search terms we target
                                 @if ($b)<span class="tg-split">{{ $b['covered'] }} have a page · {{ $b['gaps'] }} need one</span>@endif
                             </div>
-                            @if ($b && $b['warning'] !== null)
-                                <div class="tg-warn">{{ $b['warning'] }}</div>
+                            @if ($b && count($b['keywords']) > 0 && $b['total'] < $board['threshold'])
+                                <div class="tg-more" style="color:#94a3b8; padding-bottom:2px">Only {{ $b['total'] }} search term{{ $b['total'] === 1 ? '' : 's' }} so far — click “Find search terms” to add more.</div>
                             @endif
                             <div class="tg-rows">
                                 @forelse ($b['keywords'] ?? [] as $kw)
