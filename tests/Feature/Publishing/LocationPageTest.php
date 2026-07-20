@@ -110,8 +110,28 @@ it('composes the location page: formula H1, live-page link rule, coverage from s
         // The CTA/hero carry the LOCATION's own phone.
         ->toContain('tel:6105550142')
         ->toContain('(610) 555-0142')
-        ->toContain('Do you serve Norristown?');
+        ->toContain('Do you serve Norristown?')
+        // Local conditions: the cached grounding facts now render as a section, not drafter-only.
+        ->toContain('About Trooper')
+        ->toContain('Annual precipitation averages about 48 inches.');
     expect($markup)->not->toContain('href="https://drybasements.example/french');
+});
+
+it('drops the Local conditions section when the location has no grounding facts', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, ['grounding_cache' => null]); // never grounded
+    $sump = Service::withoutGlobalScope(SiteScope::class)->create(['site_id' => $site->id, 'name' => 'Sump Pump Installation']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'status' => ContentStatus::Published, 'title' => 'Sump Pump Installation', 'slug' => 'sump-pump-installation',
+        'primary_service_id' => $sump->id, 'wp_post_id' => 77,
+    ]);
+
+    $page = locRelayPage($site, $location);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    // Data-gated: no facts → no "About {City}" conditions block (never a fabricated local stat).
+    expect($markup)->toBeString()->not->toContain('About Trooper');
 });
 
 it('a drafted hero headline overrides the formula', function () {

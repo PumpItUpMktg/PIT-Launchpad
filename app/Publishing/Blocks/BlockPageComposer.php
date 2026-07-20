@@ -912,6 +912,7 @@ final class BlockPageComposer
         ?string $email = null,
         array $hours = [],
         array $townLinks = [],
+        array $localConditions = [],
         bool $preview = false,
     ): string {
         $place = trim($city) !== '' ? (trim($state) !== '' ? trim($city).', '.trim($state) : trim($city)) : '';
@@ -967,6 +968,16 @@ final class BlockPageComposer
             preview: $preview,
         );
 
+        // Local conditions — the trade-keyed local FACTS we already fetch (climate normals, elevation,
+        // census) surfaced as a scannable section, not only woven into the drafted prose. Each fact is
+        // a display-ready statement from the grounding pipeline; data-gated (no facts → the block drops).
+        // This is the one place location grounding renders as a widget rather than staying drafter-only.
+        $conditions = $this->sections->featuresList(
+            eyebrow: 'Local conditions',
+            heading: $city !== '' ? 'About '.$city : 'About this area',
+            features: $localConditions,
+        );
+
         // Coverage prose from the served-towns list (readable paragraph, never a keyword dump).
         $coverageBlock = $this->sections->prose(
             eyebrow: 'Coverage',
@@ -1020,7 +1031,7 @@ final class BlockPageComposer
         // Rhythm: hero + closing CTA are the colored bands; the NAP leads the body (contact truths
         // first), the areas-served link grid follows the coverage prose (prose intro → the real
         // linked towns). Gated reviews/jobs dropping out never puts two colored bands adjacent.
-        return $this->join([$hero, $nap, $introBlock, $services, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $faq, $cta]);
+        return $this->join([$hero, $nap, $introBlock, $conditions, $services, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $faq, $cta]);
     }
 
     /** @param list<string> $blocks */
