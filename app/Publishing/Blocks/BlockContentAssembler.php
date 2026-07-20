@@ -8,6 +8,7 @@ use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Enums\StandardPageType;
 use App\Enums\VoiceStatus;
+use App\Local\Grounding\LocationGrounding;
 use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReviewProvider;
 use App\Local\Proof\NullLocalReviews;
@@ -711,8 +712,28 @@ final class BlockContentAssembler
             email: $email,
             hours: $this->businessHours($location),
             townLinks: $this->locationTownLinks($content, $location),
+            localConditions: $this->locationGroundingFacts($location),
             preview: $preview,
         );
+    }
+
+    /**
+     * The location's cached local-grounding facts (climate normals, elevation, census — trade-keyed),
+     * surfaced as the "Local conditions" section. A cache-only read (no network at publish time): the
+     * facts were fetched when the page drafted ({@see LocationGrounding}). Every
+     * entry is a display-ready statement; a bad/absent cache yields [] and the section drops.
+     *
+     * @return list<string>
+     */
+    private function locationGroundingFacts(Location $location): array
+    {
+        $cache = $location->grounding_cache;
+        $facts = is_array($cache) && is_array($cache['facts'] ?? null) ? $cache['facts'] : [];
+
+        return array_values(array_filter(
+            array_map(fn ($f): string => is_string($f) ? trim($f) : '', $facts),
+            fn (string $f): bool => $f !== '',
+        ));
     }
 
     /**
