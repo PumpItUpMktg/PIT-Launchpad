@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.12
+Stable tag: 0.9.13
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements

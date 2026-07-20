@@ -10,6 +10,7 @@ use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteBranding;
 use App\Publishing\SiteContact;
@@ -83,7 +84,74 @@ final class SiteProfileAssembler
             'nav' => $mainNav,
             // Privacy / Terms for the footer bottom bar — only pages that actually exist.
             'legal_links' => $this->pagesBySlug($site, $home, ['privacy-policy', 'privacy', 'terms-of-service', 'terms']),
+            // Severe-weather banner config — coords + on/off; the plugin fetches the live forecast itself.
+            'alert' => $this->weatherAlert($site, $location, $home),
         ];
+    }
+
+    /**
+     * The severe-weather-alert config the companion plugin renders a banner from. Enabled only for a
+     * rain-relevant trade (keyword-matched) WITH real coordinates — the site's own location first, else
+     * a priority market. The plugin owns the live forecast + threshold; this just hands it where to look
+     * and where the CTA points. A non-rain trade or no coords → disabled (the banner never shows).
+     *
+     * @return array{enabled: bool, lat: float|null, lng: float|null, noun: string, cta_label: string, cta_url: string}
+     */
+    private function weatherAlert(Site $site, ?Location $location, string $home): array
+    {
+        $trade = mb_strtolower($this->trade($site));
+        $relevant = false;
+        foreach ((array) config('launchpad.weather_alert.trades', []) as $keyword) {
+            $keyword = mb_strtolower(trim((string) $keyword));
+            if ($keyword !== '' && str_contains($trade, $keyword)) {
+                $relevant = true;
+                break;
+            }
+        }
+
+        [$lat, $lng] = $this->alertCoords($site, $location);
+        $contact = $this->pagesBySlug($site, $home, ['contact', 'contact-us']);
+
+        return [
+            'enabled' => $relevant && $lat !== null && $lng !== null,
+            'lat' => $lat,
+            'lng' => $lng,
+            'noun' => (string) config('launchpad.weather_alert.noun', 'sump pump'),
+            'cta_label' => 'Book a check',
+            'cta_url' => $contact[0]['url'] ?? $home,
+        ];
+    }
+
+    /**
+     * The coordinates to forecast against: the business's own location, else the nearest thing we have —
+     * a priority market's centroid. Null pair when neither carries geocoded coordinates.
+     *
+     * @return array{0: float|null, 1: float|null}
+     */
+    private function alertCoords(Site $site, ?Location $location): array
+    {
+        if ($location !== null && $location->lat !== null && $location->lng !== null) {
+            return [(float) $location->lat, (float) $location->lng];
+        }
+
+        $market = Market::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereNotNull('lat')
+            ->whereNotNull('lng')
+            ->orderByRaw('CASE WHEN tier = ? THEN 0 ELSE 1 END', ['priority'])
+            ->first();
+
+        return $market !== null ? [(float) $market->lat, (float) $market->lng] : [null, null];
+    }
+
+    /** The site's captured trade (guided intake seed), or ''. */
+    private function trade(Site $site): string
+    {
+        $trade = SiloBlueprint::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->value('trade');
+
+        return is_string($trade) ? trim($trade) : '';
     }
 
     /**
