@@ -9,12 +9,14 @@ use App\Enums\ContentKind;
 use App\Filament\Resources\ContentReviewResource;
 use App\Jobs\GeneratePost;
 use App\Jobs\PopulateBlog;
+use App\Jobs\PublishContent;
 use App\Models\BlogTarget;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\BlogBoard;
 use App\Operator\ActiveTenant;
+use App\Publishing\DeleteFromWordpress;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Url;
@@ -271,6 +273,55 @@ class OperateBlog extends OperatePage
 
         app(BlogTargetQueue::class)->dismiss($target);
         Notification::make()->success()->title('Target dismissed.')->send();
+    }
+
+    // ── Published-article actions ───────────────────────────────────────────
+
+    /**
+     * Re-push a live post — the idempotent §2 publish on the same ULID (same URL). Used to re-sync a
+     * post after a fix (e.g. the body/silo-category repairs): it re-sends the meta-blob and re-pushes
+     * the silo category. Guarded on hasDraft() so an undrafted row can never push an empty post.
+     */
+    public function repushPost(string $contentId): void
+    {
+        $content = $this->ownedPost($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        if (! $content->hasDraft()) {
+            Notification::make()->warning()->title('Nothing to publish')
+                ->body('This post has no drafted body yet.')->send();
+
+            return;
+        }
+
+        PublishContent::dispatch($content->id, Auth::id());
+        Notification::make()->success()->title('Re-pushing')
+            ->body("'{$content->title}' is being re-published to WordPress on the same URL.")->send();
+    }
+
+    /**
+     * Take a live post off WordPress — §2's force-delete (frees the slug) which flips the row back to
+     * approved, so it leaves the Published tab and a later Re-push recreates it on the SAME URL. A
+     * failed delete leaves the post live and surfaces WordPress's reason.
+     */
+    public function takeDownPost(string $contentId): void
+    {
+        $content = $this->ownedPost($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        $result = app(DeleteFromWordpress::class)->delete($content);
+        if (! $result['deleted'] && $result['on_wp']) {
+            Notification::make()->danger()->title('Could not take it down')->body($result['message'])->send();
+
+            return;
+        }
+
+        Notification::make()->success()->title('Taken down')
+            ->body("'{$content->title}' was removed from WordPress; Re-push recreates it on the same URL.")->send();
     }
 
     private function filterSilo(): ?string
