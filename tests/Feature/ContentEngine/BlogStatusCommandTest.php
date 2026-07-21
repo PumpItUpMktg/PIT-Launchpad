@@ -40,6 +40,26 @@ test('blog-status reports the placeholder category, its description, and a faile
         ->and($out)->toContain('fal 401 unauthorized');            // the actual render error
 });
 
+test('blog-status surfaces posts stuck at "queued to publish" and points at the drain command', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    // Two posts approved (dispatched but never rendered) = the stalled-worker symptom.
+    Content::factory()->count(2)->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved,
+    ]);
+    // One published post so the report body renders too.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published,
+        'slug' => 'live-one', 'title' => 'Live One', 'wp_post_id' => 9, 'meta' => ['image_specs' => []],
+    ]);
+
+    Artisan::call('launchpad:blog-status', ['site' => $site->id]);
+    $out = Artisan::output();
+
+    expect($out)->toContain('Publish queue')
+        ->and($out)->toContain('2 stuck at "queued to publish"')
+        ->and($out)->toContain('launchpad:drain-publish '.$site->id);
+});
+
 test('blog-status flags a post drafted before the hero-image fix', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     Content::factory()->create([

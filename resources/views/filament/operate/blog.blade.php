@@ -71,10 +71,23 @@
                 <div class="ob-publishing" role="status">
                     <span class="ob-spinner" aria-hidden="true"></span>
                     <strong>Publishing {{ count($this->publishing) }} {{ \Illuminate\Support\Str::plural('post', count($this->publishing)) }}…</strong>
-                    <span class="ob-muted">Approve queues a background job — it renders the image and pushes to WordPress, then moves to Published. This updates automatically.</span>
+                    @php $stalled = collect($this->publishing)->where('stalled', true)->count(); @endphp
+                    @if ($stalled > 0)
+                        <span class="ob-muted" style="color:#b45309">{{ $stalled }} stuck at “queued to publish” for 5+ min — the queue worker may be down. Use “Publish now” to push inline, or run <code>launchpad:drain-publish</code>.</span>
+                    @else
+                        <span class="ob-muted">Approve queues a background job — it renders the image and pushes to WordPress, then moves to Published. This updates automatically.</span>
+                    @endif
                     <div class="ob-publishing-list">
                         @foreach ($this->publishing as $p)
-                            <span class="ob-chip" wire:key="obp-{{ $p['id'] }}">{{ $p['title'] }} · {{ $p['state'] }}@if(! $siteFilter && $p['tenant']) · {{ $p['tenant'] }}@endif</span>
+                            <span class="ob-chip" wire:key="obp-{{ $p['id'] }}">
+                                {{ $p['title'] }} · {{ $p['state'] }}@if(! $siteFilter && $p['tenant']) · {{ $p['tenant'] }}@endif
+                                @if ($p['stalled'])
+                                    <button class="ob-btn primary" style="margin-left:6px;padding:1px 7px;font-size:11px"
+                                            wire:click="publishNowSync('{{ $p['id'] }}')"
+                                            wire:loading.attr="disabled" wire:target="publishNowSync"
+                                            wire:confirm="Publish '{{ $p['title'] }}' now, synchronously? This renders the image and pushes to WordPress on this request.">Publish now</button>
+                                @endif
+                            </span>
                         @endforeach
                     </div>
                 </div>

@@ -17,6 +17,7 @@ use App\Models\Site;
 use App\Operate\BlogBoard;
 use App\Operator\ActiveTenant;
 use App\Publishing\DeleteFromWordpress;
+use App\Publishing\PostPublisher;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Url;
@@ -233,6 +234,37 @@ class OperateBlog extends OperatePage
         }
 
         Notification::make()->success()->title("'{$content->title}' approved — publishing now.")->send();
+    }
+
+    /**
+     * "Publish now" — the stalled-worker escape hatch on an in-flight post. Runs §2's publish INLINE
+     * on the web request (via PostPublisher, same gate + idempotent-by-ULID push) instead of waiting
+     * on the background worker. Surfaced only when a post is stuck at "queued to publish" (a dispatched
+     * job that never started). Single post per click — a full backlog drains via launchpad:drain-publish.
+     */
+    public function publishNowSync(string $contentId): void
+    {
+        $content = $this->ownedPost($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        $result = app(PostPublisher::class)->publish($content, Auth::id());
+
+        if ($result->isPublished()) {
+            Notification::make()->success()->title('Published')
+                ->body("'{$content->title}' was rendered and pushed to WordPress.")->send();
+
+            return;
+        }
+
+        if ($result->wasSkipped()) {
+            Notification::make()->warning()->title('Skipped')->body((string) $result->message)->send();
+
+            return;
+        }
+
+        Notification::make()->danger()->title('Publish failed')->body((string) $result->message)->send();
     }
 
     /** The full draft editor (existing review edit page); save returns here via back-nav. */

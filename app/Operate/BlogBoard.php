@@ -32,6 +32,9 @@ class BlogBoard
     /** Queued-target counts at or below this read as "near-empty" on the dashboard. */
     public const NEAR_EMPTY = 1;
 
+    /** An approved post older than this (seconds) with no rendering progress = a stalled publish job. */
+    public const STALLED_AFTER_SECONDS = 300;
+
     /**
      * Candidates awaiting triage — directed (queued keyword targets) first, then reactive by score.
      *
@@ -95,6 +98,11 @@ class BlogBoard
                     ContentStatus::Publishing => 'pushing to WordPress',
                     default => 'queued to publish',
                 },
+                // "Stuck": approved (job dispatched, never started rendering) for longer than a job
+                // should ever sit unprocessed. Flags a stalled worker and offers the inline escape hatch.
+                'stalled' => $c->status === ContentStatus::Approved
+                    && $c->updated_at !== null
+                    && $c->updated_at->lt(now()->subSeconds(self::STALLED_AFTER_SECONDS)),
             ])
             ->all();
     }
