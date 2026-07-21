@@ -41,6 +41,9 @@ final class ServedTowns
         $out = [];
         $seen = [];
         foreach ($entries as $entry) {
+            if (! self::isValidEntry((string) $entry)) {
+                continue; // parse artifact ("1, Abingdon") or a non-locality — kept out of served_towns
+            }
             [$name, $state] = $this->parse((string) $entry);
             if ($name === '') {
                 continue;
@@ -130,6 +133,23 @@ final class ServedTowns
             'lng' => $result?->lng,
             'geocoded' => $result !== null,
         ];
+    }
+
+    /**
+     * A served-town entry is valid only if it's a resolvable locality name — NOT a numbered parse
+     * artifact ("1, Abingdon", "2, Halls Cross Roads") and NOT a bare number. This gate is what keeps
+     * junk out of areaServed at the write path (rather than silently landing it in schema).
+     */
+    public static function isValidEntry(string $entry): bool
+    {
+        $raw = trim($entry);
+        if ($raw === '' || preg_match('/^\d+[,\s]/', $raw) === 1) {
+            return false;
+        }
+        $name = trim(explode(',', $raw, 2)[0]);
+
+        // Require an actual locality name (contains a letter) — never a bare "12".
+        return $name !== '' && preg_match('/\p{L}/u', $name) === 1;
     }
 
     /** "Montclair, NJ" → [Montclair, NJ]; a bare name has no state. @return array{0: string, 1: string} */

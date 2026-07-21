@@ -117,7 +117,7 @@ final class BlockSections
             if ($photo !== '') {
                 $children[] = $this->b->image($photo, $title, ['className' => 'lp-job-photo']);
             }
-            $children[] = $this->b->heading(4, $title);
+            $children[] = $this->b->heading(3, $title);
             if (trim((string) ($j['description'] ?? '')) !== '') {
                 $children[] = $this->b->paragraph((string) $j['description'], ['textColor' => 'muted']);
             }
@@ -217,7 +217,7 @@ final class BlockSections
             foreach ($factors as $factor) {
                 $lis .= '<li class="lp-feature"><span class="lp-check" aria-hidden="true">✓</span> '.$this->text($factor).'</li>';
             }
-            $children[] = $this->b->heading(4, 'What affects the price', ['className' => 'lp-cost-factors-h']);
+            $children[] = $this->b->heading(3, 'What affects the price', ['className' => 'lp-cost-factors-h']);
             $children[] = "<!-- wp:html -->\n".'<ul class="lp-features-grid">'.$lis.'</ul>'."\n<!-- /wp:html -->";
         }
 
@@ -248,7 +248,7 @@ final class BlockSections
             }
 
             return $this->b->column([$this->b->group([
-                $this->b->heading(4, $name),
+                $this->b->heading(3, $name),
                 "<!-- wp:html -->\n".'<ul class="lp-compare-points">'.$lis.'</ul>'."\n<!-- /wp:html -->",
             ], ['backgroundColor' => 'base', 'className' => 'lp-compare-option'])]);
         };
@@ -398,6 +398,9 @@ final class BlockSections
             'backgroundColor' => $bold ? 'accent' : 'primary',
             'textColor' => $textColor,
             'align' => 'full',
+            // The soft-close CTA is on EVERY page and is where the site's #contact links land — give it
+            // the id so those anchors always resolve (never a dead #contact).
+            'anchor' => 'contact',
             'className' => $bold ? 'lp-cta lp-cta--bold' : 'lp-cta',
         ]);
     }
@@ -554,7 +557,7 @@ final class BlockSections
         // default dark text so the same markup reads on either background.
         $textAttr = $dark ? ['textColor' => 'base'] : [];
         $cols = array_map(function (array $i) use ($textAttr): string {
-            $children = [$this->icon('spark'), $this->b->heading(4, (string) $i['title'], $textAttr)];
+            $children = [$this->icon('spark'), $this->b->heading(3, (string) $i['title'], $textAttr)];
             if (trim((string) ($i['description'] ?? '')) !== '') {
                 $children[] = $this->b->paragraph((string) $i['description'], $textAttr);
             }
@@ -600,7 +603,7 @@ final class BlockSections
 
             $children = [
                 $this->b->paragraph((string) $n, ['className' => 'lp-step-n']),
-                $this->b->heading(4, (string) $s['title']),
+                $this->b->heading(3, (string) $s['title']),
             ];
             // A record-sourced step may be title-only (the service's ordered steps) — no empty <p>.
             if (trim((string) $s['description']) !== '') {
@@ -968,7 +971,7 @@ final class BlockSections
         }
 
         $cols = array_map(function (array $i): string {
-            $children = [$this->icon('spark'), $this->b->heading(4, (string) $i['title'])];
+            $children = [$this->icon('spark'), $this->b->heading(3, (string) $i['title'])];
             if (trim((string) ($i['description'] ?? '')) !== '') {
                 $children[] = $this->b->paragraph((string) $i['description'], ['textColor' => 'muted']);
             }
@@ -1008,7 +1011,7 @@ final class BlockSections
 
         $cols = array_map(function (array $m): string {
             $name = trim((string) ($m['name'] ?? ''));
-            $children = [$this->avatar($name, trim((string) ($m['photo_url'] ?? ''))), $this->b->heading(4, $name)];
+            $children = [$this->avatar($name, trim((string) ($m['photo_url'] ?? ''))), $this->b->heading(3, $name)];
             $role = trim((string) ($m['role'] ?? ''));
             if ($role !== '') {
                 $children[] = $this->b->paragraph($this->text($role), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-team-role']);
@@ -1163,7 +1166,7 @@ final class BlockSections
             $cols[] = $this->b->column([$this->b->group($rows, ['className' => 'lp-contact-rows'])]);
         }
         if ($hours !== []) {
-            $hoursChildren = [$this->b->heading(4, 'Business Hours', ['className' => 'lp-contact-hours-h'])];
+            $hoursChildren = [$this->b->heading(3, 'Business Hours', ['className' => 'lp-contact-hours-h'])];
             foreach ($hours as $row) {
                 $hoursChildren[] = $this->b->paragraph(
                     '<span class="lp-hours-day">'.$this->text($row['label']).'</span><span class="lp-hours-val">'.$this->text($row['value']).'</span>',
@@ -1441,7 +1444,7 @@ final class BlockSections
     private function photoPlaceholder(): string
     {
         return $this->b->group([
-            $this->b->heading(4, 'Add your own photo'),
+            $this->b->heading(3, 'Add your own photo'),
             $this->b->paragraph('Your crew on site builds more trust than any stock image.', ['textColor' => 'muted', 'fontSize' => 'small']),
         ], ['backgroundColor' => 'surface', 'className' => 'lp-photo-placeholder']);
     }

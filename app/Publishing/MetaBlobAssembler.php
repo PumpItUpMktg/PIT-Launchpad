@@ -855,11 +855,25 @@ class MetaBlobAssembler
             $crumbs[] = ['name' => (string) $content->silo->name, 'url' => $this->siloUrl($content, $home)];
         }
 
-        // Leaf = the CURRENT page title (the normalized SEO title), not the stale
-        // internal Content.title.
-        $crumbs[] = ['name' => $this->seoTitle($content), 'url' => ''];
+        // Leaf = the page's SHORT name — the head of the SEO title before a subtitle separator, so the
+        // breadcrumb reads "Basement Waterproofing", not the full "…: Rules, Violations & Fixes".
+        $crumbs[] = ['name' => $this->breadcrumbShortName($content), 'url' => ''];
 
         return $crumbs;
+    }
+
+    /** The breadcrumb leaf's short name: the SEO title's head segment before a colon/pipe/dash subtitle. */
+    private function breadcrumbShortName(Content $content): string
+    {
+        $title = $this->seoTitle($content);
+        foreach ([' — ', ' – ', ' | ', ': ', ' - '] as $sep) {
+            $pos = mb_strpos($title, $sep);
+            if ($pos !== false && $pos > 0) {
+                return trim(mb_substr($title, 0, $pos));
+            }
+        }
+
+        return $title;
     }
 
     /**
