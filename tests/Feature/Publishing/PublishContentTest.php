@@ -11,6 +11,7 @@ use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\ProofItem;
+use App\Models\Silo;
 use App\Publishing\PublishContentService;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
@@ -135,6 +136,44 @@ test('a push failure lands the content in publish_failed with the error surfaced
     expect($result->hasFailed())->toBeTrue()
         ->and($content->fresh()->status)->toBe(ContentStatus::PublishFailed)
         ->and($content->fresh()->last_publish_error)->not->toBeNull();
+});
+
+test('publishing content whose silo is unmapped pushes the silo (real name) to /silo first, filling wp_category_id', function () {
+    PublishHarness::fakeAdapters();
+    Http::fake([
+        '*/wp-json/launchpad/v1/silo' => Http::response(['silo_id' => 'x', 'wp_category_id' => 42], 200),
+        '*/wp-json/launchpad/v1/content' => Http::response(['wp_post_id' => 200, 'status' => 'publish', 'skipped' => false], 200),
+    ]);
+    $site = PublishHarness::site();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sewer & Water Lines', 'wp_category_id' => null]);
+
+    // A blog post routed to the silo (no review gate on posts) with a real body to publish.
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'silo_id' => $silo->id,
+        'status' => ContentStatus::Approved, 'slug' => 'sewer-costs-rising', 'body' => '<p>Real body.</p>',
+    ]);
+
+    $result = app(PublishContentService::class)->publish($post);
+
+    // The silo went up with its HUMAN name (not a "Silo {ulid}" placeholder) and its category id landed.
+    expect($result->isPublished())->toBeTrue()
+        ->and($silo->fresh()->wp_category_id)->toBe(42);
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/launchpad/v1/silo') && $r['name'] === 'Sewer & Water Lines');
+});
+
+test('a silo already mapped to a category is NOT re-pushed on publish', function () {
+    PublishHarness::fakeAdapters();
+    fakeContentEndpoint(wpPostId: 201);
+    $site = PublishHarness::site();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Drains', 'wp_category_id' => 9]);
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'silo_id' => $silo->id,
+        'status' => ContentStatus::Approved, 'slug' => 'drain-tips', 'body' => '<p>Body.</p>',
+    ]);
+
+    app(PublishContentService::class)->publish($post);
+
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), '/launchpad/v1/silo'));
 });
 
 test('publishing a town page re-publishes its already-live parent hub (fresh "areas we serve" links)', function () {
