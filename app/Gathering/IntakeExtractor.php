@@ -234,7 +234,10 @@ PROMPT;
                     $clean = $candidates->reject(function (string $town) use ($conflicted, $currentKeys) {
                         $lower = mb_strtolower($town);
 
-                        return $conflicted->contains(fn ($c) => $c !== '' && str_contains($lower, $c) || str_contains((string) $c, $lower))
+                        // Same write-time gate as the operator path: never seed a numbered parse
+                        // artifact ("1, Abingdon") or a non-locality into served_towns.
+                        return ! ServedTowns::isValidEntry($town)
+                            || $conflicted->contains(fn ($c) => $c !== '' && str_contains($lower, $c) || str_contains((string) $c, $lower))
                             || $currentKeys->contains($lower);
                     });
 

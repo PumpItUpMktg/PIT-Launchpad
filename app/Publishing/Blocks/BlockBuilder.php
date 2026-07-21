@@ -40,7 +40,10 @@ final class BlockBuilder
      */
     public function paragraph(string $html, array $attrs = []): string
     {
-        $html = trim($html);
+        // A paragraph carries INLINE content only — this method supplies the single `<p>` wrapper. A
+        // drafted slot value that already carries `<p>`/`</p>` tags (or a stray unbalanced `</p>`) would
+        // otherwise double-wrap into invalid, unbalanced markup, so strip any paragraph tags first.
+        $html = trim((string) preg_replace('#</?p\b[^>]*>#i', '', $html));
         if ($html === '') {
             return '';
         }
@@ -60,9 +63,14 @@ final class BlockBuilder
     {
         $attrs = $attrs + ['layout' => ['type' => 'constrained']];
         $classes = $this->classList('wp-block-group', $attrs);
+        // A Gutenberg `anchor` attr becomes the block's HTML id — so an in-page link (#contact) has a
+        // real target. Kept in the block comment attrs too, the WP-standard place for it.
+        $id = isset($attrs['anchor']) && is_string($attrs['anchor']) && trim($attrs['anchor']) !== ''
+            ? ' id="'.trim($attrs['anchor']).'"'
+            : '';
 
         return $this->comment('group', $attrs)
-            ."\n<div class=\"{$classes}\">\n".$this->render($children)."\n</div>\n"
+            ."\n<div{$id} class=\"{$classes}\">\n".$this->render($children)."\n</div>\n"
             .$this->close('group');
     }
 
