@@ -13,6 +13,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteBranding;
+use App\Publishing\PhoneNumber;
 use App\Publishing\SiteContact;
 use Illuminate\Support\Collection;
 
@@ -69,7 +70,7 @@ final class SiteProfileAssembler
             'logo_url' => $this->logoUrl($site),
             'header_tone' => $this->headerTone($site),
             'tagline' => $this->tagline($site),
-            'phone' => $phone,
+            'phone' => PhoneNumber::display($phone) ?? '',
             'phone_tel' => $this->tel($phone),
             'emergency' => (bool) $site->offers_emergency,
             'address' => $address,
@@ -401,11 +402,6 @@ final class SiteProfileAssembler
 
     private function tel(string $phone): string
     {
-        if ($phone === '') {
-            return '';
-        }
-        $digits = (string) preg_replace('/[^0-9+]/', '', $phone);
-
-        return $digits !== '' ? 'tel:'.$digits : '';
+        return PhoneNumber::tel($phone) ?? '';
     }
 }
