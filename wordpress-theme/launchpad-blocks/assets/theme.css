@@ -1840,3 +1840,21 @@
     content: "· ";
     opacity: 0.6;
 }
+
+/* ── Blog post imagery ──────────────────────────────────────────────────────
+ * The companion plugin sideloads a blog post's hero as its featured image; single.html and the
+ * index loop render it via wp:post-featured-image. Constrain the aspect so a tall source image
+ * doesn't dominate the single view, and keep archive thumbnails uniform. */
+.wp-block-post-featured-image img {
+    width: 100%;
+    height: auto;
+    object-fit: cover;
+}
+
+.wp-block-query .wp-block-post-featured-image img {
+    aspect-ratio: 16 / 9;
+}
+
+body.single .wp-block-post-featured-image img {
+    max-height: 460px;
+}

@@ -24,6 +24,16 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Featured-image (post-thumbnail) support. Block themes get this implicitly, but declaring it
+ * explicitly guarantees `set_post_thumbnail()` (the companion plugin sideloads the blog hero and sets
+ * it as the thumbnail) and the `wp:post-featured-image` block in single/index render the hero — without
+ * it a blog post shows title + body but no image.
+ */
+add_action('after_setup_theme', function (): void {
+    add_theme_support('post-thumbnails');
+});
+
 add_action('wp_enqueue_scripts', function (): void {
     $theme = wp_get_theme();
     $version = (string) $theme->get('Version');
