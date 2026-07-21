@@ -99,6 +99,12 @@ class OperateBlog extends OperatePage
     }
 
     /** @return list<array<string, mixed>> */
+    public function getPublishingProperty(): array
+    {
+        return app(BlogBoard::class)->publishing($this->siteFilter, $this->filterSilo());
+    }
+
+    /** @return list<array<string, mixed>> */
     public function getReviewProperty(): array
     {
         return app(BlogBoard::class)->review($this->siteFilter, $this->filterSilo());
