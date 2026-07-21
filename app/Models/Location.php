@@ -3,13 +3,16 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToSite;
+use App\Models\Scopes\ActiveLocationScope;
 use Database\Factories\LocationFactory;
+use Illuminate\Database\Eloquent\Attributes\ScopedBy;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
+ * @property string|null $merged_into_id the NAP-reconcile survivor this row was folded into (hidden when set)
  * @property array<string, mixed>|null $hours
  * @property array<int, array<string, mixed>>|null $address_components
  * @property string|null $gbp_url
@@ -28,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property array<string, mixed>|null $coverage_suggestions extraction prompts (gathering relay): {towns: list<string> conflicting candidates, phrases: list<string> unresolved coverage phrases}
  * @property string|null $primary_category the GBP primary category label
  */
+#[ScopedBy(ActiveLocationScope::class)]
 class Location extends Model
 {
     /** @use HasFactory<LocationFactory> */
