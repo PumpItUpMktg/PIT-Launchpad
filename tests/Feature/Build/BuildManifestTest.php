@@ -8,6 +8,7 @@ use App\Enums\SpokeStatus;
 use App\Enums\StandardPageType;
 use App\Models\BuildPage;
 use App\Models\CoverageArea;
+use App\Models\Location;
 use App\Models\ProofItem;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -40,6 +41,35 @@ test('assemble builds the manifest across standard, service, and location source
         ->and($rows->firstWhere('page_key', 'home')->priority)->toBe(0)
         ->and($rows->firstWhere('page_key', 'home')->review_required)->toBeTrue()       // brand-critical
         ->and($rows->firstWhere('page_key', 'reviews')->review_required)->toBeFalse();
+});
+
+test('a town that is a physical location\'s own city is not planned as a duplicate town page', function () {
+    $site = Site::factory()->create();
+    SiloBlueprint::factory()->create(['site_id' => $site->id]);
+
+    // A brick-and-mortar Location in Downingtown, PA — it gets its own landing/hub page.
+    Location::factory()->create([
+        'site_id' => $site->id,
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Downingtown'],
+            ['types' => ['administrative_area_level_1'], 'short_name' => 'PA'],
+        ],
+    ]);
+
+    // Two selected towns: the location's own city (dropped) + a surrounding town (kept).
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Downingtown', 'state' => 'PA', 'page_selected' => true, 'population' => 8000]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Exton', 'state' => 'PA', 'page_selected' => true, 'population' => 5000]);
+    // Same name, DIFFERENT state → still gets a page (not the physical location's city).
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Downingtown', 'state' => 'MD', 'page_selected' => true, 'population' => 1000]);
+
+    app(BuildManifestAssembler::class)->assemble($site->fresh());
+
+    $locationRows = BuildPage::query()->where('site_id', $site->id)->where('source', BuildSource::Location)->get();
+
+    expect($locationRows->pluck('title')->all())
+        ->toContain('Exton, PA')
+        ->toContain('Downingtown, MD')       // different state — kept
+        ->not->toContain('Downingtown, PA');  // the physical location's own city — dropped
 });
 
 test('assemble is idempotent — re-running upserts, never duplicates', function () {

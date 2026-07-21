@@ -6,8 +6,10 @@ use App\Enums\BuildSource;
 use App\Enums\BuildStatus;
 use App\Enums\SpokeStatus;
 use App\Enums\StandardPageType;
+use App\Locations\LocationLandingSync;
 use App\Models\BuildPage;
 use App\Models\CoverageArea;
+use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -133,12 +135,18 @@ class BuildManifestAssembler
     }
 
     /**
-     * Location pages = the towns flagged into the page-drip pool (page_selected).
+     * Location pages = the towns flagged into the page-drip pool (page_selected), EXCEPT a town that
+     * is a physical location's own city. A brick-and-mortar location already gets its landing/hub page
+     * ({@see LocationLandingSync}) titled for that city — planning a separate "town" page
+     * for the same place would just duplicate it (two Downingtown pages competing for the same term).
+     * So the location's own city is dropped here; its surrounding served towns still get their pages.
      *
      * @return list<array<string, mixed>>
      */
     private function locationRows(Site $site): array
     {
+        $physicalCities = $this->physicalLocationCities($site);
+
         $towns = CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('page_selected', true)
@@ -147,7 +155,12 @@ class BuildManifestAssembler
             ->get();
 
         $rows = [];
-        foreach ($towns->values() as $i => $town) {
+        $i = 0;
+        foreach ($towns->values() as $town) {
+            if ($this->isPhysicalLocationCity((string) $town->name, $town->state, $physicalCities)) {
+                continue; // the physical location's landing page already IS this town's page
+            }
+
             $rows[] = [
                 'source' => BuildSource::Location,
                 'page_key' => $town->id,
@@ -158,8 +171,59 @@ class BuildManifestAssembler
                 'review_required' => false,
                 'spoke_id' => null,
             ];
+            $i++;
         }
 
         return $rows;
+    }
+
+    /**
+     * Each physical Location's OWN city (its GBP locality, or the location name as a fallback), keyed
+     * lowercased → the set of states that city appears in ('' when the state is unknown). Used to drop
+     * a town page that would duplicate a brick-and-mortar location's landing page.
+     *
+     * @return array<string, list<string>>
+     */
+    private function physicalLocationCities(Site $site): array
+    {
+        $keys = [];
+        $locations = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->get();
+
+        foreach ($locations as $location) {
+            ['city' => $city, 'state' => $state] = $location->cityState();
+            $city = trim($city) !== '' ? trim($city) : trim((string) $location->name);
+            if ($city === '') {
+                continue;
+            }
+            $keys[mb_strtolower($city)][] = strtoupper(trim($state));
+        }
+
+        return $keys;
+    }
+
+    /**
+     * Is this coverage town a physical location's own city? Match on the normalized name; when both
+     * sides carry a state they must agree (so a same-named town in a different state still gets a page),
+     * but an unknown state on either side is treated as a match (the common single-footprint case).
+     *
+     * @param  array<string, list<string>>  $physicalCities
+     */
+    private function isPhysicalLocationCity(string $name, ?string $state, array $physicalCities): bool
+    {
+        $key = mb_strtolower(trim($name));
+        if (! isset($physicalCities[$key])) {
+            return false;
+        }
+
+        $townState = strtoupper(trim((string) $state));
+        foreach ($physicalCities[$key] as $locationState) {
+            if ($locationState === '' || $townState === '' || $locationState === $townState) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
