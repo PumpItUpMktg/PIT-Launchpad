@@ -138,6 +138,32 @@ test('a push failure lands the content in publish_failed with the error surfaced
         ->and($content->fresh()->last_publish_error)->not->toBeNull();
 });
 
+test('a published post renders its hero and sends a featured_image (posts are not imageless)', function () {
+    PublishHarness::fakeAdapters();
+    fakeContentEndpoint(wpPostId: 210);
+    $site = PublishHarness::site();
+
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved,
+        'slug' => 'check-your-sump-pump', 'title' => 'Check your sump pump', 'body' => '<p>Real body.</p>',
+        'meta' => [
+            'seo' => ['title' => 'Check your sump pump', 'meta_description' => 'Stay ready.'],
+            'image_specs' => [[
+                'slot' => 'hero_image', 'prompt' => 'A homeowner checking a sump pump',
+                'seo_filename' => 'sump-pump-check.webp', 'alt' => 'Homeowner checking a sump pump',
+            ]],
+        ],
+    ]);
+
+    expect(app(PublishContentService::class)->publish($post)->isPublished())->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), '/launchpad/v1/content')
+            && is_string($request['featured_image'] ?? null) && $request['featured_image'] !== ''
+            && is_string($request['images']['hero_image']['url'] ?? null);
+    });
+});
+
 test('publishing content whose silo is unmapped pushes the silo (real name) to /silo first, filling wp_category_id', function () {
     PublishHarness::fakeAdapters();
     Http::fake([

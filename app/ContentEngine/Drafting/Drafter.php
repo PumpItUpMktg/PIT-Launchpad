@@ -177,7 +177,11 @@ class Drafter
         return 'POST: write the article into the `body` block as clean HTML. Begin at the first PARAGRAPH — '
             .'do NOT include the article title or any <h1>; the page renders the title separately, so a body <h1> '
             .'would duplicate it. Use <h2>/<h3> for section headings. Open by framing the reader\'s problem, then '
-            .'deliver the solution. Attribute any source material by name.';
+            .'deliver the solution. Attribute any source material by name.'."\n"
+            .'HERO IMAGE (required): emit exactly ONE image SPEC block keyed `image.hero_image` — the article\'s '
+            .'featured image. Give a photorealistic, on-topic editorial `prompt` (a real scene relevant to the '
+            .'article; NO text, watermarks, logos, or collages), a hyphenated `seo_filename` ending in `.webp`, '
+            .'and descriptive `alt`. Do NOT paste an image URL — it is a spec the renderer fulfills.';
     }
 
     private function outputContract(DraftRequest $request): string
