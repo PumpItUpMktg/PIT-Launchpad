@@ -25,6 +25,9 @@ final class SiloStore
         $silo_id = (string) ($payload['silo_id'] ?? '');
         $name = (string) ($payload['name'] ?? $silo_id);
         $parent_silo = isset($payload['parent_silo_id']) ? (string) $payload['parent_silo_id'] : null;
+        // The category archive blurb (the silo's pillar meta description). Only applied when non-empty
+        // so a silo without a pillar yet never CLEARS an existing description on re-sync.
+        $description = sanitize_textarea_field((string) ($payload['description'] ?? ''));
 
         $map = self::map();
         $parent_term = $parent_silo !== null ? (int) ($map[$parent_silo] ?? 0) : 0;
@@ -32,13 +35,18 @@ final class SiloStore
         $existing = isset($map[$silo_id]) ? (int) $map[$silo_id] : 0;
 
         if ($existing > 0 && term_exists($existing, 'category')) {
-            wp_update_term($existing, 'category', [
-                'name' => $name,
-                'parent' => $parent_term,
-            ]);
+            $args = ['name' => $name, 'parent' => $parent_term];
+            if ($description !== '') {
+                $args['description'] = $description;
+            }
+            wp_update_term($existing, 'category', $args);
             $term_id = $existing;
         } else {
-            $result = wp_insert_term($name, 'category', ['parent' => $parent_term]);
+            $insert = ['parent' => $parent_term];
+            if ($description !== '') {
+                $insert['description'] = $description;
+            }
+            $result = wp_insert_term($name, 'category', $insert);
 
             if (is_wp_error($result)) {
                 // Name collision: reuse the existing term.

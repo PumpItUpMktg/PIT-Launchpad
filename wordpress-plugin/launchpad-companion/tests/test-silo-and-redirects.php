@@ -25,6 +25,27 @@ class Test_Silo_And_Redirects extends WP_UnitTestCase
         $this->assertSame('Water Heaters (renamed)', get_term($again['wp_category_id'], 'category')->name);
     }
 
+    public function test_silo_sets_the_category_description_and_a_later_empty_push_keeps_it(): void
+    {
+        $store = new SiloStore();
+
+        $created = $store->ensure([
+            'silo_id' => '01JDESC000000000000000000', 'name' => 'Sewer & Water Lines',
+            'description' => 'Everything sewer and water-line — repairs, replacements, and leak detection.',
+        ]);
+        $this->assertSame(
+            'Everything sewer and water-line — repairs, replacements, and leak detection.',
+            get_term($created['wp_category_id'], 'category')->description
+        );
+
+        // A re-push WITHOUT a description (e.g. before the pillar page exists) must NOT clear it.
+        $store->ensure(['silo_id' => '01JDESC000000000000000000', 'name' => 'Sewer & Water Lines']);
+        $this->assertSame(
+            'Everything sewer and water-line — repairs, replacements, and leak detection.',
+            get_term($created['wp_category_id'], 'category')->description
+        );
+    }
+
     public function test_redirects_replace_the_full_set_and_drop_stale(): void
     {
         $store = new RedirectStore();

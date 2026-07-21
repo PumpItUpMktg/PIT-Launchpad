@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\ContentKind;
+use App\Enums\PageType;
+use App\Models\Content;
 use App\Models\Redirect;
 use App\Models\Silo;
 use App\Publishing\PublishRedirectsService;
@@ -22,6 +25,32 @@ test('publishing a silo pushes the structure and stores the returned wp_category
     Http::assertSent(fn ($r) => $r['silo_id'] === $silo->id
         && $r['name'] === 'Plumbing'
         && array_key_exists('parent_silo_id', $r->data()));
+});
+
+test('the silo push carries the pillar page meta description as the category description', function () {
+    $site = PublishHarness::site();
+    $pillar = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Hub, 'slug' => 'plumbing',
+        'meta' => ['seo' => ['meta_description' => 'Everything plumbing — repairs, installs, and drain work.']],
+    ]);
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Plumbing', 'pillar_content_id' => $pillar->id, 'wp_category_id' => null]);
+
+    Http::fake(['*/wp-json/launchpad/v1/silo' => Http::response(['silo_id' => $silo->id, 'wp_category_id' => 7], 200)]);
+
+    app(PublishSiloService::class)->publish($silo);
+
+    Http::assertSent(fn ($r) => $r['description'] === 'Everything plumbing — repairs, installs, and drain work.');
+});
+
+test('a silo with no pillar page sends an empty description (the plugin then leaves it untouched)', function () {
+    $site = PublishHarness::site();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Plumbing', 'pillar_content_id' => null, 'wp_category_id' => null]);
+
+    Http::fake(['*/wp-json/launchpad/v1/silo' => Http::response(['silo_id' => $silo->id, 'wp_category_id' => 8], 200)]);
+
+    app(PublishSiloService::class)->publish($silo);
+
+    Http::assertSent(fn ($r) => $r['description'] === '');
 });
 
 test('publishSite pushes the whole tree roots-first and stores every wp_category_id', function () {
