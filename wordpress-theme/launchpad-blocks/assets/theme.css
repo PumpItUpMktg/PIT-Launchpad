@@ -1855,6 +1855,130 @@
     aspect-ratio: 16 / 9;
 }
 
-body.single .wp-block-post-featured-image img {
-    max-height: 460px;
+/* ── Single blog post: an editorial article layout ───────────────────────────
+ * A centered header (category eyebrow → title → date), then the hero banner that slides up on load,
+ * then a narrow, readable content column. All values are theme.json tokens so it restyles per variation. */
+.lp-post-header {
+    text-align: center;
+    margin-bottom: var(--wp--preset--spacing--40);
+}
+
+.lp-post-eyebrow {
+    font-family: var(--wp--preset--font-family--heading);
+    font-size: var(--wp--preset--font-size--small);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--wp--preset--color--accent);
+    margin-bottom: var(--wp--preset--spacing--30);
+}
+
+.lp-post-eyebrow a {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* The article title: display-sized headlines belong on landing heroes, not articles — dial it back to
+ * a comfortable reading size, centered, tighter tracking. Overrides the global h1 for posts only. */
+.lp-post-title {
+    font-size: clamp(1.9rem, 1.5rem + 1.6vw, 2.85rem);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    max-width: 20ch;
+    margin-inline: auto;
+    margin-bottom: var(--wp--preset--spacing--30);
+}
+
+.lp-post-date {
+    font-size: var(--wp--preset--font-size--small);
+    color: var(--wp--preset--color--muted);
+    margin: 0;
+}
+
+/* The hero banner: wide, rounded, soft shadow — and it slides up + fades in on load. */
+.lp-post-hero img {
+    aspect-ratio: 16 / 9;
+    max-height: 520px;
+    box-shadow: 0 18px 40px -22px rgba(15, 23, 42, 0.45);
+}
+
+.lp-post-hero {
+    animation: lp-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes lp-rise {
+    from {
+        opacity: 0;
+        transform: translateY(28px) scale(0.985);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* Give the article body a touch more air + a readable measure (contentSize already constrains width). */
+.lp-post .wp-block-post-content {
+    font-size: 1.0625rem;
+    line-height: 1.75;
+}
+
+.lp-post .wp-block-post-content > * + * {
+    margin-top: var(--wp--preset--spacing--30);
+}
+
+/* ── Blog index: a clean editorial card list ─────────────────────────────────
+ * One card per post (thumbnail → category → title → excerpt) in the constrained column. A subtle
+ * image zoom + title-color shift on hover makes the list feel alive without heavy card chrome. */
+.lp-post-card .lp-card-thumb {
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.lp-post-card .lp-card-thumb img {
+    aspect-ratio: 16 / 9;
+    transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.lp-post-card:hover .lp-card-thumb img {
+    transform: scale(1.03);
+}
+
+.lp-card-title {
+    font-size: var(--wp--preset--font-size--large);
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 var(--wp--preset--spacing--20);
+}
+
+.lp-card-title a {
+    text-decoration: none;
+    color: var(--wp--preset--color--contrast);
+    transition: color 0.2s ease;
+}
+
+.lp-post-card:hover .lp-card-title a {
+    color: var(--wp--preset--color--accent);
+}
+
+.lp-card-excerpt {
+    color: var(--wp--preset--color--muted);
+    margin: 0;
+}
+
+.lp-post-card .lp-post-eyebrow {
+    margin-bottom: var(--wp--preset--spacing--20);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lp-post-hero {
+        animation: none;
+    }
+
+    .lp-post-card .lp-card-thumb img {
+        transition: none;
+    }
 }
