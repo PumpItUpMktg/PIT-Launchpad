@@ -13,6 +13,7 @@ use App\Integrations\Wordpress\WordpressException;
 use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
+use App\Models\Silo;
 use App\Models\Site;
 use App\PageBuilder\Validation\PublishEligibility;
 use App\PageBuilder\Validation\ValidationResult;
@@ -58,6 +59,7 @@ class PublishContentService
         private readonly WordpressClientFactory $wordpress,
         private readonly Audit $audit,
         private readonly PublishEligibility $eligibility,
+        private readonly PublishSiloService $silos,
     ) {}
 
     public static function isPublishable(ContentStatus $status): bool
@@ -119,6 +121,11 @@ class PublishContentService
 
         $content->forceFill(['status' => ContentStatus::Publishing])->save();
 
+        // Ensure this content's silo exists as a WP category — with its REAL name — before the content
+        // push. Otherwise the plugin lazily creates a "Silo {ulid}" placeholder category (a post that
+        // publishes before /silo has run). Idempotent: only fires until the silo has a wp_category_id.
+        $this->ensureSiloCategory($content);
+
         $site = Site::withoutGlobalScope(SiteScope::class)->findOrFail($content->site_id);
         $payload = $this->assembler->assemble($content, $outcome->jobs, $source);
 
@@ -173,6 +180,36 @@ class PublishContentService
      * parent hub is already published. The hub itself has its own location_id and no parent, so it
      * never re-triggers this: no loop. Idempotent by ULID (a re-push updates, never duplicates).
      */
+    /**
+     * Push the content's silo to WordPress as a category (its real name) if it hasn't been mapped yet.
+     * Runs before the content push so the plugin never has to lazily invent a "Silo {ulid}" placeholder
+     * category. Idempotent by the silo ULID; the /silo response fills wp_category_id, so this fires at
+     * most once per silo. A non-silo page (silo_id null) or an already-mapped silo is a no-op. Any WP
+     * error here is swallowed — a category-sync hiccup must never block the content publish itself
+     * (the plugin's placeholder path still keeps the post categorized).
+     */
+    private function ensureSiloCategory(Content $content): void
+    {
+        if ($content->silo_id === null) {
+            return;
+        }
+
+        $silo = Silo::withoutGlobalScope(SiteScope::class)
+            ->where('id', $content->silo_id)
+            ->whereNull('wp_category_id')
+            ->first();
+
+        if ($silo === null) {
+            return;
+        }
+
+        try {
+            $this->silos->publish($silo);
+        } catch (WordpressException) {
+            // Non-fatal: fall through to the content push; the silo can be synced later.
+        }
+    }
+
     private function republishParentHub(Content $town): void
     {
         if ($town->page_type !== PageType::Location

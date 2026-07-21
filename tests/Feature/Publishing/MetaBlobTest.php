@@ -113,7 +113,7 @@ test('a service page ships block post_content AND retains slot_payload for schem
     ])->and($payload['seo'])->toHaveKey('schema_type');
 });
 
-test('a post carries NO native body — the single-post template renders it', function () {
+test('a post ships its article body as post_content (the single-post template renders it) with no native body', function () {
     PublishHarness::fakeAdapters();
     $site = PublishHarness::site();
 
@@ -121,12 +121,15 @@ test('a post carries NO native body — the single-post template renders it', fu
         'site_id' => $site->id,
         'kind' => ContentKind::Post,
         'status' => ContentStatus::Approved,
-        'body' => 'A reactive news post body.',
+        'body' => '<p>A reactive news post body.</p>',
     ]);
 
     $payload = app(MetaBlobAssembler::class)->assemble($post->fresh(), new Collection);
 
-    expect($payload['elementor_data'])->toBe([]);              // posts → plugin no-op
+    // The article body IS the WP post_content — without this the post publishes blank (the block
+    // composers only handle pages). elementor_data stays empty; a post is a native WP post.
+    expect($payload['post_content'])->toContain('A reactive news post body.')
+        ->and($payload['elementor_data'])->toBe([]);
 });
 
 test('the pushed slug equals the assigned permalink exactly — the live URL cannot drift', function () {

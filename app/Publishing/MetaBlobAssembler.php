@@ -213,6 +213,16 @@ class MetaBlobAssembler
             ? null
             : $this->blockContent->compose($content, $slots, $images, $preview, $areaMap !== null);
 
+        // A blog POST is a native WordPress post: its article body IS the post_content, which the block
+        // theme's single template renders via <!-- wp:post-content -->. The block composers only handle
+        // pages (compose() returns null for a post), so without this a published post lands with EMPTY
+        // post_content and renders blank. The body is the drafted HTML (paragraphs + internal links),
+        // already normalized into the `body` slot; kses-safe (no iframes/scripts).
+        if ($postContent === null && $content->kind === ContentKind::Post) {
+            $body = is_string($slots['body'] ?? null) ? trim((string) $slots['body']) : '';
+            $postContent = $body !== '' ? $body : null;
+        }
+
         return [
             'content_id' => $content->id,
             'kind' => $content->kind->value,
