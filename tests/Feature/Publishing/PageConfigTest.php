@@ -23,14 +23,14 @@ test('the per-page config overrides phone, form embed, and hero image — and su
     $outcome = app(RenderCoordinator::class)->render($content);
     $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), $outcome->jobs);
 
-    expect($payload['slot_payload']['cta']['phone'])->toBe('+15559998888')        // override wins over §1 phone
+    expect($payload['slot_payload']['cta']['phone'])->toBe('+1 (555) 999-8888')        // override wins over §1 phone
         ->and($payload['slot_payload']['cta']['tel'])->toBe('tel:+15559998888')
         ->and($payload['slot_payload']['cta']['form_embed'])->toBe('<iframe src="https://ghl.example/form/abc"></iframe>')
         ->and($payload['images']['hero_image']['url'])->toBe('https://r2.example/operator-hero.jpg');
 
     // Repush proof — a fresh assembler re-reads PageConfig and re-injects verbatim.
     $repush = app()->make(MetaBlobAssembler::class)->assemble($content->fresh(), $outcome->jobs);
-    expect($repush['slot_payload']['cta']['phone'])->toBe('+15559998888')
+    expect($repush['slot_payload']['cta']['phone'])->toBe('+1 (555) 999-8888')
         ->and($repush['images']['hero_image']['url'])->toBe('https://r2.example/operator-hero.jpg');
 });
 
@@ -42,7 +42,7 @@ test('a phone override resolves the cta even when the site has no location', fun
 
     $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), app(RenderCoordinator::class)->render($content)->jobs);
 
-    expect($payload['slot_payload']['cta']['phone'])->toBe('+15551234567');
+    expect($payload['slot_payload']['cta']['phone'])->toBe('+1 (555) 123-4567');
 });
 
 test('without a page config the cta falls back to the §1 location phone (no override)', function () {
@@ -53,5 +53,5 @@ test('without a page config the cta falls back to the §1 location phone (no ove
 
     $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), app(RenderCoordinator::class)->render($content)->jobs);
 
-    expect($payload['slot_payload']['cta']['phone'])->toBe('+15550001111');
+    expect($payload['slot_payload']['cta']['phone'])->toBe('+1 (555) 000-1111');
 });

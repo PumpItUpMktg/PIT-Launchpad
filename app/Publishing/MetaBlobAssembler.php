@@ -537,9 +537,15 @@ class MetaBlobAssembler
     {
         $config = $this->pageConfig($content);
 
-        // The per-page phone override (user-owned) wins over the §1 location phone.
+        // The per-page phone override (user-owned) wins over the §1 location phone; a geo-neutral page
+        // with no pinned location falls back to the site-wide CORPORATE number (SiteContact) — so the
+        // CTA matches the chrome/schema instead of diverging (the three-phone bug).
         $override = $config?->phone_override;
         $phone = is_string($override) && trim($override) !== '' ? $override : $location?->phone;
+        if ($phone === null || trim($phone) === '') {
+            $site = Site::withoutGlobalScope(SiteScope::class)->find($content->site_id);
+            $phone = $site !== null ? app(SiteContact::class)->phone($site) : null;
+        }
 
         if ($phone === null || trim($phone) === '') {
             unset($slots['cta']); // no derivable phone → no conversion block
@@ -558,8 +564,8 @@ class MetaBlobAssembler
         $slots['cta'] = array_filter([
             'type' => 'conversion_block',
             'call_label' => 'Call Now',
-            'phone' => $phone,
-            'tel' => 'tel:'.preg_replace('/[^0-9+]/', '', $phone),
+            'phone' => PhoneNumber::display($phone),
+            'tel' => PhoneNumber::tel($phone),
             'form_embed' => is_string($formEmbed) && trim($formEmbed) !== '' ? $formEmbed : null,
         ], static fn ($v) => $v !== null);
 

@@ -28,6 +28,7 @@ use App\Models\VoiceProfile;
 use App\Publishing\Legal\LegalContext;
 use App\Publishing\Legal\LegalTemplates;
 use App\Publishing\MetaBlobAssembler;
+use App\Publishing\PhoneNumber;
 use App\Publishing\SiteContact;
 use App\Support\BusinessHours;
 
@@ -776,10 +777,10 @@ final class BlockContentAssembler
         $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
 
         return new PageContext(
-            phoneDisplay: $phone,
+            phoneDisplay: PhoneNumber::display($phone),
             phoneTel: $this->contact->tel($phone),
             emergency: $site !== null && (bool) $site->offers_emergency,
-            emergencyDisplay: $emergencyPhone,
+            emergencyDisplay: PhoneNumber::display($emergencyPhone),
             emergencyTel: $this->contact->tel($emergencyPhone),
         );
     }
@@ -1283,10 +1284,10 @@ final class BlockContentAssembler
         $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
 
         return new PageContext(
-            phoneDisplay: $phone,
+            phoneDisplay: PhoneNumber::display($phone),
             phoneTel: $this->contact->tel($phone),
             emergency: $site !== null && (bool) $site->offers_emergency,
-            emergencyDisplay: $emergencyPhone,
+            emergencyDisplay: PhoneNumber::display($emergencyPhone),
             emergencyTel: $this->contact->tel($emergencyPhone),
         );
     }

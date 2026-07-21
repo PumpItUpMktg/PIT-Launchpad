@@ -70,15 +70,15 @@ final class SiteContact
         return $emergency !== '' ? $emergency : $this->phone($site);
     }
 
-    /** A `tel:` href for a display number (digits + leading +), or null when there's no number. */
+    /** A `tel:` href for a display number, via the shared {@see PhoneNumber} formatter. */
     public function tel(?string $phone): ?string
     {
-        if ($phone === null || trim($phone) === '') {
-            return null;
-        }
+        return PhoneNumber::tel($phone);
+    }
 
-        $digits = (string) preg_replace('/[^0-9+]/', '', $phone);
-
-        return $digits !== '' ? 'tel:'.$digits : null;
+    /** The site-wide phone as human-readable display ("(877) 786-7834"). */
+    public function display(Site $site): ?string
+    {
+        return PhoneNumber::display($this->phone($site));
     }
 }

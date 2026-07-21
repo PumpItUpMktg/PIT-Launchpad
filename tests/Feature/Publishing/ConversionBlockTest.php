@@ -52,7 +52,7 @@ it('derives the dual conversion block: tel from the location phone + the embedde
     expect($slots['cta'])->toMatchArray([
         'type' => 'conversion_block',
         'call_label' => 'Call Now',
-        'phone' => '+15125550142',
+        'phone' => '+1 (512) 555-0142',
         'tel' => 'tel:+15125550142',
         'form_embed' => '<iframe src="https://ghl/form"></iframe>',
     ])
@@ -92,4 +92,15 @@ it('a v1 leftover slot (why_us) rides the blob untouched — conditional-drop ap
     $slots = serviceBlobSlots($site);
 
     expect($slots)->toHaveKey('why_us');
+});
+
+it('a geo-neutral service page CTA falls back to the corporate site phone (not a location)', function () {
+    // No pinned location, no page override → the CTA uses the site-wide corporate number, formatted,
+    // so it matches the chrome/schema instead of dropping (the three-phone consistency rule).
+    $site = Site::factory()->create(['phone' => '8622920566']);
+
+    $slots = serviceBlobSlots($site);
+
+    expect($slots['cta']['phone'])->toBe('(862) 292-0566')
+        ->and($slots['cta']['tel'])->toBe('tel:8622920566');
 });
