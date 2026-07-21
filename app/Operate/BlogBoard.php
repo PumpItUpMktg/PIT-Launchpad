@@ -69,6 +69,37 @@ class BlogBoard
     }
 
     /**
+     * Posts in flight to WordPress right now — approved (queued), rendering, or pushing. Approve
+     * dispatches a background job, so an approved post briefly leaves Review before it lands in
+     * Published; this is the "it's working, hang on" indicator that fills that gap.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function publishing(?string $siteId = null, ?string $siloId = null): array
+    {
+        return $this->posts($siteId, $siloId)
+            ->whereIn('status', [
+                ContentStatus::Approved->value,
+                ContentStatus::Rendering->value,
+                ContentStatus::Publishing->value,
+            ])
+            ->with(['site'])
+            ->latest('updated_at')
+            ->get()
+            ->map(fn (Content $c) => [
+                'id' => (string) $c->id,
+                'title' => (string) $c->title,
+                'tenant' => $c->site?->brand_name,
+                'state' => match ($c->status) {
+                    ContentStatus::Rendering => 'rendering image',
+                    ContentStatus::Publishing => 'pushing to WordPress',
+                    default => 'queued to publish',
+                },
+            ])
+            ->all();
+    }
+
+    /**
      * Drafts awaiting review (+ surfaced failures, flagged-first like the review queue).
      *
      * @return list<array<string, mixed>>

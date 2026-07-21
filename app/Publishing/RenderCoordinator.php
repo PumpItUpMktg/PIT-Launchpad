@@ -2,6 +2,7 @@
 
 namespace App\Publishing;
 
+use App\Enums\ContentKind;
 use App\Enums\RenderStatus;
 use App\Models\Content;
 use App\Models\RenderJob;
@@ -65,7 +66,13 @@ class RenderCoordinator
                 ->first();
 
             if ($job === null) {
-                $required = $kit?->slot($slot)?->isRequired() ?? true;
+                // A page's hero is required (its layout is built around it); a POST's hero is
+                // best-effort — a blog article must never be stranded in render_failed (or held back
+                // from WordPress) because image generation hiccuped. It publishes with the image when
+                // the render succeeds, without it when it doesn't.
+                $required = $content->kind === ContentKind::Page
+                    ? ($kit?->slot($slot)?->isRequired() ?? true)
+                    : false;
 
                 $job = RenderJob::create([
                     'site_id' => $content->site_id,

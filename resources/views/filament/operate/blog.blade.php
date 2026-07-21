@@ -35,6 +35,11 @@
         .ob-target:last-child { border-bottom:0; }
         .ob-reject { display:flex; gap:8px; align-items:center; }
         .ob-reject input { flex:1; font-size:12.5px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:5px 9px; background:transparent; }
+        .ob-publishing { display:flex; align-items:center; flex-wrap:wrap; gap:8px 10px; margin-bottom:12px; padding:11px 15px; border:1px solid rgba(37,99,235,.35); background:rgba(37,99,235,.07); border-radius:11px; }
+        .ob-publishing strong { font-size:13px; color:#1d4ed8; }
+        .ob-publishing-list { display:flex; flex-wrap:wrap; gap:6px; flex-basis:100%; }
+        .ob-spinner { width:13px; height:13px; border-radius:50%; border:2px solid rgba(37,99,235,.3); border-top-color:#2563eb; animation:ob-spin .7s linear infinite; }
+        @keyframes ob-spin { to { transform:rotate(360deg); } }
     </style>
 
     <div class="ob-wrap">
@@ -59,6 +64,21 @@
             <button class="ob-btn" wire:click="toggleTargets">
                 {{ $showTargets ? 'Hide' : 'Show' }} blog targets
             </button>
+        </div>
+
+        <div wire:poll.5s>
+            @if ($this->publishing !== [])
+                <div class="ob-publishing" role="status">
+                    <span class="ob-spinner" aria-hidden="true"></span>
+                    <strong>Publishing {{ count($this->publishing) }} {{ \Illuminate\Support\Str::plural('post', count($this->publishing)) }}…</strong>
+                    <span class="ob-muted">Approve queues a background job — it renders the image and pushes to WordPress, then moves to Published. This updates automatically.</span>
+                    <div class="ob-publishing-list">
+                        @foreach ($this->publishing as $p)
+                            <span class="ob-chip" wire:key="obp-{{ $p['id'] }}">{{ $p['title'] }} · {{ $p['state'] }}@if(! $siteFilter && $p['tenant']) · {{ $p['tenant'] }}@endif</span>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
         </div>
 
         @if ($showTargets)

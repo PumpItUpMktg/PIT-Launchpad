@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\RenderStatus;
 use App\Integrations\Fal\FalClient;
@@ -89,6 +90,28 @@ test('a required image that will not render blocks the publish (no partial page)
 
     // Nothing was pushed to WordPress.
     Http::assertNothingSent();
+});
+
+test('a POST whose hero will not render still publishes (blog image is best-effort, never a gate)', function () {
+    Storage::fake('r2');
+    Http::fake(['*/wp-json/launchpad/v1/content' => Http::response(['wp_post_id' => 250, 'status' => 'publish', 'skipped' => false], 200)]);
+    app()->bind(FalClient::class, ThrowingFalClient::class);
+    app()->bind(VisionClient::class, MockVisionClient::class);
+
+    $site = PublishHarness::site();
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved,
+        'slug' => 'storm-prep', 'title' => 'Storm prep', 'body' => '<p>Body.</p>',
+        'meta' => ['seo' => ['title' => 'Storm prep', 'meta_description' => 'Ready.'],
+            'image_specs' => [['slot' => 'hero_image', 'prompt' => 'A basement', 'seo_filename' => 'x.webp', 'alt' => 'x']]],
+    ]);
+
+    $result = app(PublishContentService::class)->publish($post);
+
+    // The failed hero does NOT block: the article goes live (text now, image best-effort).
+    expect($result->isPublished())->toBeTrue()
+        ->and($post->fresh()->status)->toBe(ContentStatus::Published);
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/launchpad/v1/content') && $r['content_id'] === $post->id);
 });
 
 test('the reset-render command requeues render_failed jobs', function () {

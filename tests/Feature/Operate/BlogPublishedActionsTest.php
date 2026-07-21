@@ -8,6 +8,7 @@ use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\Site;
 use App\Models\User;
+use App\Operate\BlogBoard;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Bus;
 use Livewire\Livewire;
@@ -59,4 +60,22 @@ test('Take down flips the post back to approved (leaves the Published lane)', fu
 
     expect($post->fresh()->status)->toBe(ContentStatus::Approved)
         ->and($post->fresh()->wp_post_id)->toBeNull();
+});
+
+test('the publishing indicator lists posts in flight (approved / rendering / publishing)', function () {
+    $site = Site::factory()->create();
+    foreach ([ContentStatus::Approved, ContentStatus::Rendering, ContentStatus::Publishing] as $i => $status) {
+        Content::factory()->create([
+            'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => $status, 'title' => "InFlight {$i}",
+        ]);
+    }
+    // A published + a needs_review post must NOT appear in the in-flight list.
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published, 'title' => 'Live']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview, 'title' => 'Draft']);
+
+    $rows = app(BlogBoard::class)->publishing($site->id);
+
+    expect($rows)->toHaveCount(3)
+        ->and(collect($rows)->pluck('title')->all())->not->toContain('Live', 'Draft')
+        ->and(collect($rows)->pluck('state')->all())->toContain('queued to publish', 'rendering image', 'pushing to WordPress');
 });
