@@ -4,7 +4,6 @@ namespace App\Publishing\Schema;
 
 use App\Models\Content;
 use App\Models\Location;
-use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
@@ -16,16 +15,21 @@ use App\Models\SiteBranding;
  * composed from §1 entities AT ASSEMBLE TIME, never a stored snapshot, so the
  * schema can't drift from the live data (the seoTitle lesson).
  *
- * Shape: a `Service` with an INLINE `LocalBusiness` provider carrying a stable
- * `@id` ({home}#business) so a later sitewide-node migration can switch pages to
- * an @id reference without reshaping. Every field degrades by OMISSION, never
- * fabrication — no invented radius, no arbitrary serviceType, no partial NAP.
+ * Shape: a `Service` whose `provider` is the sitewide corporate `Organization`
+ * (#org, {@see OrganizationSchemaBuilder}) inline, so the @id resolves in the page
+ *
+ * @graph. A geo-neutral service page carries NO areaServed and NO storefront NAP —
+ * coverage + store address live ONLY on a location page's LocalBusiness node. Every
+ * field degrades by OMISSION, never fabrication — no arbitrary serviceType, no
+ * partial NAP.
  *
  * Reads are SiteScope-free + keyed on site_id (publish jobs may run without a
  * resolved CurrentSite), mirroring the assembler's other cross-entity reads.
  */
 class ServiceSchemaBuilder
 {
+    public function __construct(protected readonly OrganizationSchemaBuilder $org = new OrganizationSchemaBuilder) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -43,8 +47,10 @@ class ServiceSchemaBuilder
             // the page title).
             'serviceType' => $keyword ?? $service?->name,
             'description' => $this->str($service?->description),
-            'provider' => $this->provider($site, $home),
-            'areaServed' => $this->areaServed($site),
+            // provider = the sitewide corporate Organization (#org), inline so the @id resolves in the
+            // page @graph. A geo-neutral service page carries NO areaServed and NO store address —
+            // coverage + storefront NAP live ONLY on location-page LocalBusiness nodes.
+            'provider' => $this->org->build($site, $home),
             // An honest price range on the record ⇒ a real Offer; absent ⇒ no offers at all.
             'offers' => $this->priceOffer($service),
         ], $this->present(...));
@@ -82,8 +88,7 @@ class ServiceSchemaBuilder
             '@id' => $this->absolute($canonical) ? $canonical.'#service' : null,
             'name' => $name,
             'serviceType' => $name,
-            'provider' => $this->provider($site, $home),
-            'areaServed' => $this->areaServed($site),
+            'provider' => $this->org->build($site, $home),
             'hasOfferCatalog' => $items !== [] ? array_filter([
                 '@type' => 'OfferCatalog',
                 'name' => $name,
@@ -163,74 +168,6 @@ class ServiceSchemaBuilder
     }
 
     /**
-     * The inline LocalBusiness provider with a stable @id. NAP/geo/hours come from
-     * the NAP cascade; everything is omitted when its source is absent.
-     *
-     * @return array<string, mixed>
-     */
-    private function provider(Site $site, string $home): array
-    {
-        $branding = SiteBranding::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
-        $nap = $this->nap($site, $branding);
-
-        return array_filter([
-            '@type' => $this->str($branding?->entity_type) ?? 'LocalBusiness',
-            '@id' => $this->absolute($home) ? rtrim($home, '/').'/#business' : null,
-            'name' => $this->str($site->brand_name) ?? $this->str($nap['name'] ?? null),
-            'legalName' => $this->str($site->legal_name),
-            'alternateName' => $this->str($site->dba),
-            'url' => $this->str($site->domain_url),
-            'logo' => $this->str(is_array($branding?->logo_set) ? ($branding->logo_set['primary'] ?? null) : null),
-            'telephone' => $this->str($nap['telephone'] ?? null),
-            'address' => $nap['address'] ?? null,
-            'geo' => $nap['geo'] ?? null,
-            'openingHoursSpecification' => $nap['hours'] ?? null,
-            'sameAs' => $this->sameAs($branding),
-        ], $this->present(...));
-    }
-
-    /**
-     * The NAP cascade: a storefront location with a complete address+geo →
-     * any complete location → the branding canonical_nap (address/phone, NO geo)
-     * → nothing. A partial NAP is never emitted.
-     *
-     * @return array{name?: string, telephone?: ?string, address?: mixed, geo?: array<string, mixed>, hours?: list<array<string, mixed>>}
-     */
-    private function nap(Site $site, ?SiteBranding $branding): array
-    {
-        $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
-
-        $complete = $locations->filter(fn (Location $l) => $this->hasAddress($l) && $l->lat !== null && $l->lng !== null);
-        $chosen = $complete->firstWhere('is_storefront', true) ?? $complete->first();
-
-        if ($chosen instanceof Location) {
-            return array_filter([
-                'telephone' => $this->str($chosen->phone),
-                'address' => $this->postalAddress($chosen),
-                'geo' => ['@type' => 'GeoCoordinates', 'latitude' => (float) $chosen->lat, 'longitude' => (float) $chosen->lng],
-                'hours' => $this->openingHours($chosen),
-            ], $this->present(...));
-        }
-
-        // Fallback: branding canonical_nap — address + phone, but no geo (so no
-        // GeoCoordinates is fabricated).
-        $canonicalNap = is_array($branding?->canonical_nap) ? $branding->canonical_nap : [];
-        $address = $this->str($canonicalNap['address'] ?? null);
-
-        return array_filter([
-            'name' => $this->str($canonicalNap['name'] ?? null),
-            'telephone' => $this->str($canonicalNap['phone'] ?? null),
-            'address' => $address,
-        ], $this->present(...));
-    }
-
-    protected function hasAddress(Location $location): bool
-    {
-        return (is_array($location->address_components) && $location->address_components !== [])
-            || $this->str($location->address) !== null;
-    }
-
-    /**
      * A structured PostalAddress from Google address_components when present, else
      * the flat address string (schema.org accepts address as Text).
      *
@@ -296,39 +233,6 @@ class ServiceSchemaBuilder
         }
 
         return $specs;
-    }
-
-    /**
-     * areaServed = the covered markets as named City nodes (+ containedInPlace
-     * AdministrativeArea when the market carries a region). No GeoCircle — no
-     * radius field exists, and a fabricated one would over-claim coverage.
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function areaServed(Site $site): array
-    {
-        $markets = Market::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('is_covered', true)
-            ->orderBy('name')
-            ->get();
-
-        $areas = [];
-        foreach ($markets as $market) {
-            $name = $this->str($market->name);
-            if ($name === null) {
-                continue;
-            }
-            $areas[] = array_filter([
-                '@type' => 'City',
-                'name' => $name,
-                'containedInPlace' => ($region = $this->str($market->region)) !== null
-                    ? ['@type' => 'AdministrativeArea', 'name' => $region]
-                    : null,
-            ], $this->present(...));
-        }
-
-        return $areas;
     }
 
     /**

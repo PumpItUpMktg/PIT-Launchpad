@@ -212,7 +212,7 @@ it('builds the LocalBusiness node — areaServed from served towns, storefront-g
     );
 
     expect($node['@type'])->toBe('LocalBusiness')
-        ->and($node['@id'])->toBe('https://drybasements.example/#business')
+        ->and($node['@id'])->toBe('https://drybasements.example/#location-trooper-pa')
         ->and($node['telephone'])->toBe('(610) 555-0142')
         ->and($node['url'])->toBe('https://drybasements.example/trooper-pa')
         ->and($node['geo']['latitude'])->toEqual(40.1502)

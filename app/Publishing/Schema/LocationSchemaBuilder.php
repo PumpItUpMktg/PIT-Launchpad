@@ -38,9 +38,9 @@ class LocationSchemaBuilder extends ServiceSchemaBuilder
 
         return array_filter([
             '@type' => $this->str($branding?->entity_type) ?? 'LocalBusiness',
-            // The same stable business @id every page-type node carries, so a later sitewide-node
-            // migration can flip to an @id reference without reshaping.
-            '@id' => $this->absolute($home) ? rtrim($home, '/').'/#business' : null,
+            // A PER-LOCATION @id (#location-{slug}) — this is one storefront, NOT the corporate entity.
+            // parentOrganization links it to the sitewide #org (inline so the @id resolves in-graph).
+            '@id' => $this->locationId($home, $content),
             'name' => $this->str($site->brand_name),
             'url' => $this->absolute($canonical) ? $canonical : $this->str($site->domain_url),
             'telephone' => $this->str($location->phone),
@@ -51,8 +51,20 @@ class LocationSchemaBuilder extends ServiceSchemaBuilder
             'hasMap' => $storefront ? $this->str($location->gbp_url) : null,
             'openingHoursSpecification' => $this->openingHours($location),
             'areaServed' => $this->townsServed($location),
+            'parentOrganization' => $this->org->build($site, $home),
             'sameAs' => $this->sameAs($branding),
         ], $this->present(...));
+    }
+
+    /** The per-location @id: {home}#location-{slug} (slashes in a nested slug flattened to dashes). */
+    private function locationId(string $home, Content $content): ?string
+    {
+        if (! $this->absolute($home)) {
+            return null;
+        }
+        $slug = str_replace('/', '-', trim((string) $content->slug, '/'));
+
+        return rtrim($home, '/').'/#location'.($slug !== '' ? '-'.$slug : '');
     }
 
     /**

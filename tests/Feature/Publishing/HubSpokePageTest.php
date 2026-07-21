@@ -303,7 +303,7 @@ it('builds the spoke Service node — serviceType from the primary keyword, offe
     );
 
     expect($node['serviceType'])->toBe('sump pump installation')            // the keyword, not the name
-        ->and($node['provider']['@id'])->toBe('https://sewergurus.com/#business')
+        ->and($node['provider']['@id'])->toBe('https://sewergurus.com/#org')
         ->and($node['offers']['priceSpecification']['minPrice'])->toEqual(1200.0)
         ->and($node['offers']['priceSpecification']['maxPrice'])->toEqual(3400.0);
     expect($node)->not->toHaveKeys(['review', 'aggregateRating']);
