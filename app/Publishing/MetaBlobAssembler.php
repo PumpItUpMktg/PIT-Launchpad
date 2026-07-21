@@ -165,6 +165,16 @@ class MetaBlobAssembler
             : $this->heroImageOverride($content, $this->images($renderJobs));
         $slots = $placeholder ? $this->placeholderSlots($content) : $this->slotPayload($content);
 
+        // Location hub "find us" map: a pinned Location with real coordinates rides a `location_map`
+        // slot ({lat,lng}) the composer's [lp_map] shortcode reads. Gated on coords so a location with
+        // no GBP geo simply gets no map section (never an empty box). Same key both sides.
+        if ($content->page_type === PageType::Location && $content->location_id !== null) {
+            $mapSlot = $this->locationMapSlot($content);
+            if ($mapSlot !== null) {
+                $slots['location_map'] = $mapSlot;
+            }
+        }
+
         // The "Areas we serve" interactive map's geometry — the served-county polygons + tiered town
         // points. It rides the blob (NOT post_content — kses would strip embedded geometry); the plugin
         // stores it and prints it for the theme's Leaflet init. The map surfaces on the home page's areas
@@ -368,6 +378,27 @@ class MetaBlobAssembler
         }
 
         return $slots;
+    }
+
+    /**
+     * The `location_map` slot for a location hub — {lat,lng} from the pinned Location's GBP geo, which
+     * the [lp_map] shortcode turns into a keyless Google embed. Returns null when the location isn't
+     * found or has no coordinates (then no map section renders). Only lat/lng are carried — no place_id
+     * or address, so nothing sensitive rides the slot.
+     *
+     * @return array{lat: float, lng: float}|null
+     */
+    private function locationMapSlot(Content $content): ?array
+    {
+        $location = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->find($content->location_id);
+
+        if ($location === null || $location->lat === null || $location->lng === null) {
+            return null;
+        }
+
+        return ['lat' => (float) $location->lat, 'lng' => (float) $location->lng];
     }
 
     /**

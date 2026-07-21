@@ -913,6 +913,7 @@ final class BlockPageComposer
         array $hours = [],
         array $townLinks = [],
         array $localConditions = [],
+        bool $hasMap = false,
         bool $preview = false,
     ): string {
         $place = trim($city) !== '' ? (trim($state) !== '' ? trim($city).', '.trim($state) : trim($city)) : '';
@@ -967,6 +968,18 @@ final class BlockPageComposer
             hours: $hours,
             preview: $preview,
         );
+
+        // "Find us" map — a lazy Google embed of THIS location's GBP place, rendered via the plugin's
+        // [lp_map] shortcode from the location_map slot on the blob. Emitted only when the location has
+        // mappable coordinates (the assembler injects the slot under the same condition); it sits right
+        // after the NAP so contact truths + a map read as one "visit us" block.
+        $map = $hasMap
+            ? $this->sections->mapEmbed(
+                eyebrow: 'Find us',
+                heading: $city !== '' ? 'Find us in '.$city : 'Find us',
+                slotKey: 'location_map',
+            )
+            : '';
 
         // Local conditions — the trade-keyed local FACTS we already fetch (climate normals, elevation,
         // census) surfaced as a scannable section, not only woven into the drafted prose. Each fact is
@@ -1031,7 +1044,7 @@ final class BlockPageComposer
         // Rhythm: hero + closing CTA are the colored bands; the NAP leads the body (contact truths
         // first), the areas-served link grid follows the coverage prose (prose intro → the real
         // linked towns). Gated reviews/jobs dropping out never puts two colored bands adjacent.
-        return $this->join([$hero, $nap, $introBlock, $conditions, $services, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $faq, $cta]);
+        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $faq, $cta]);
     }
 
     /** @param list<string> $blocks */

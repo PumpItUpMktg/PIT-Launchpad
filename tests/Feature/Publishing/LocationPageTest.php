@@ -18,6 +18,7 @@ use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\WireframeKit;
 use App\Publishing\Blocks\BlockContentAssembler;
+use App\Publishing\MetaBlobAssembler;
 use App\Publishing\RenderCoordinator;
 use App\Publishing\RenderOutcome;
 use App\Publishing\Schema\LocationSchemaBuilder;
@@ -362,4 +363,30 @@ it('the location hub drops the address for a non-storefront (mobile base stays p
 
     expect($markup)->not->toContain('Private Garage')   // mobile base address never ships
         ->toContain('8am');                          // hours still render
+});
+
+it('emits a Find-us map for a location with GBP coordinates (lp_map shortcode + location_map slot)', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, ['lat' => 40.1345, 'lng' => -75.3401]);
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+    $page = locRelayPage($site, $location);
+
+    $blob = app(MetaBlobAssembler::class)->assemble($page->fresh(), collect());
+
+    // The coords ride the blob as the location_map slot, and the block body carries the shortcode the
+    // plugin renders into a keyless Google embed (a raw iframe would be kses-stripped).
+    expect($blob['slot_payload']['location_map'])->toBe(['lat' => 40.1345, 'lng' => -75.3401])
+        ->and($blob['post_content'])->toContain('[lp_map key="location_map"]');
+});
+
+it('renders NO map section when the location has no coordinates (never an empty embed)', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site); // no lat/lng
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+    $page = locRelayPage($site, $location);
+
+    $blob = app(MetaBlobAssembler::class)->assemble($page->fresh(), collect());
+
+    expect($blob['slot_payload'])->not->toHaveKey('location_map')
+        ->and($blob['post_content'])->not->toContain('[lp_map');
 });

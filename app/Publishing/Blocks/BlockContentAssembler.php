@@ -713,6 +713,7 @@ final class BlockContentAssembler
             hours: $this->businessHours($location),
             townLinks: $this->locationTownLinks($content, $location),
             localConditions: $this->locationGroundingFacts($location),
+            hasMap: is_array($slots['location_map'] ?? null),
             preview: $preview,
         );
     }
