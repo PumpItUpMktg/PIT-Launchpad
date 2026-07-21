@@ -196,6 +196,10 @@
                                     <span>{{ $a['title'] }}</span>
                                     <span class="ob-muted" style="margin-left:auto">{{ $a['published_at'] }}</span>
                                     @if ($a['url'])<a class="ob-btn" href="{{ $a['url'] }}" target="_blank" rel="noopener">View live ↗</a>@endif
+                                    <button class="ob-btn" wire:click="repushPost('{{ $a['id'] }}')"
+                                        title="Re-publish this post to WordPress on the same URL (re-syncs the body + silo category)">Re-push</button>
+                                    <button class="ob-btn danger" wire:click="takeDownPost('{{ $a['id'] }}')"
+                                        wire:confirm="Take this post off WordPress? Re-push recreates it on the same URL.">Take down</button>
                                 </div>
                             @endforeach
                         </div>
