@@ -26,3 +26,21 @@ it('leaves the scoring client on Haiku with no thinking', function () {
     expect($s['thinking'])->toBeNull()
         ->and($s['thinking_budget'])->toBeNull();
 });
+
+it('bounds every client so timeout × (1 + retries) stays under the drafting job budget (no MaxAttemptsExceeded)', function () {
+    // The GeneratePost/GeneratePage job $timeout is 600s and the queue retry_after is 630s; a Claude
+    // call must not be able to outrun them (the SDK's own default is 600×2 ≈ 1800s).
+    foreach (['drafting', 'scoring', 'default', 'expander'] as $seam) {
+        $d = app(ClaudeClientFactory::class)->{$seam}()->describe();
+        expect($d['timeout'] * (1 + $d['max_retries']))->toBeLessThan(600);
+    }
+});
+
+it('reads the Claude timeout and retry bound from config', function () {
+    config()->set('services.anthropic.timeout', 123);
+    config()->set('services.anthropic.max_retries', 0);
+
+    $d = app(ClaudeClientFactory::class)->drafting()->describe();
+
+    expect($d['timeout'])->toBe(123)->and($d['max_retries'])->toBe(0);
+});

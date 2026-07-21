@@ -70,6 +70,8 @@ class ClaudeClientFactory
             $maxTokens ?? (int) config('services.anthropic.max_tokens', 4096),
             thinking: $thinking,
             thinkingBudget: $thinkingBudget,
+            timeout: (int) config('services.anthropic.timeout', 240),
+            maxRetries: (int) config('services.anthropic.max_retries', 1),
         );
     }
 }

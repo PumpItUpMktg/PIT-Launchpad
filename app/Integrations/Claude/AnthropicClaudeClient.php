@@ -5,6 +5,7 @@ namespace App\Integrations\Claude;
 use Anthropic\Client;
 use Anthropic\Messages\TextBlock;
 use Anthropic\Messages\Usage;
+use Anthropic\RequestOptions;
 
 /**
  * Anthropic-backed ClaudeClient using the official PHP SDK. The model and the
@@ -30,13 +31,18 @@ class AnthropicClaudeClient implements ClaudeClient
         private readonly int $maxTokens = 4096,
         private readonly ?string $thinking = 'adaptive',
         private readonly ?int $thinkingBudget = null,
+        // Per-request HTTP timeout (seconds) and SDK retry count. The SDK defaults (600×2 ≈ 1800s)
+        // let a slow call outrun the queue's retry_after and die with MaxAttemptsExceeded; these keep
+        // timeout×(1+retries) well under the drafting job's 600s budget.
+        private readonly int $timeout = 240,
+        private readonly int $maxRetries = 1,
     ) {}
 
     /**
      * The resolved call-site config (model, token budget, thinking mode) — for
      * diagnostics that need to report what client a path actually runs with.
      *
-     * @return array{model: string, max_tokens: int, thinking: string|null, thinking_budget: int|null}
+     * @return array{model: string, max_tokens: int, thinking: string|null, thinking_budget: int|null, timeout: int, max_retries: int}
      */
     public function describe(): array
     {
@@ -45,6 +51,8 @@ class AnthropicClaudeClient implements ClaudeClient
             'max_tokens' => $this->maxTokens,
             'thinking' => $this->thinking,
             'thinking_budget' => $this->thinkingBudget,
+            'timeout' => $this->timeout,
+            'max_retries' => $this->maxRetries,
         ];
     }
 
@@ -55,7 +63,10 @@ class AnthropicClaudeClient implements ClaudeClient
 
     public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
     {
-        $client = new Client(apiKey: $this->apiKey);
+        $client = new Client(
+            apiKey: $this->apiKey,
+            requestOptions: RequestOptions::with(timeout: (float) $this->timeout, maxRetries: $this->maxRetries),
+        );
 
         $message = $client->messages->create(...$this->payload($prompt, $system));
 

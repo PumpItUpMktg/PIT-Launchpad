@@ -44,6 +44,12 @@ return [
         'drafting_model' => env('ANTHROPIC_DRAFTING_MODEL', 'claude-sonnet-4-6'),
         'vision_model' => env('ANTHROPIC_VISION_MODEL', 'claude-sonnet-4-6'),
         'max_tokens' => (int) env('ANTHROPIC_MAX_TOKENS', 4096),
+        // Bound every Claude call well below the drafting job's $timeout (600s) and the queue's
+        // retry_after (630s). The SDK defaults are timeout=600 × maxRetries=2 → up to 1800s per call,
+        // which lets a slow API response run past retry_after: the worker re-reserves the still-running
+        // job and it dies with MaxAttemptsExceeded. timeout×(1+retries) must stay under 600s.
+        'timeout' => (int) env('ANTHROPIC_TIMEOUT', 240),
+        'max_retries' => (int) env('ANTHROPIC_MAX_RETRIES', 1),
         // Drafting writes a full HTML post + SEO JSON and runs extended thinking,
         // which spends from the same completion budget — 4096 let a long thinking
         // roll exhaust the budget before any text (stop_reason=max_tokens, empty
