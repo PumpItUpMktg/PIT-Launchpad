@@ -10,6 +10,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Read-only publish-state doctor for a site's blog: per published post, what actually got sent to
@@ -46,6 +47,8 @@ class BlogStatusCommand extends Command
 
         $this->line("<info>{$site->brand_name}</info> ({$site->id}) — {$posts->count()} published post(s)");
 
+        $this->queueHealth($site);
+
         if ($posts->isEmpty()) {
             $this->warn('Nothing published yet.');
 
@@ -67,6 +70,93 @@ class BlogStatusCommand extends Command
             .'a "no hero spec" post: re-generate then re-push; a "render failed" hero: check the fal key/R2 then re-push.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The publish-queue doctor: is anything stuck in flight, and is the worker even running? A post
+     * moves Approved → Rendering → Publishing → Published the instant the PublishContent job runs, so
+     * a post sitting at "approved" ("queued to publish" in the UI) means the job was dispatched but
+     * never consumed — the classic stalled-worker symptom. We pair that per-site read with the raw
+     * database-queue depth so "22 approved + 22 pending jobs + 0 failed" reads unambiguously as
+     * "worker is down", vs "0 pending + 22 failed" as "worker runs but every push errors".
+     */
+    private function queueHealth(Site $site): void
+    {
+        $inflight = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Post->value)
+            ->whereIn('status', [
+                ContentStatus::Approved->value,
+                ContentStatus::Rendering->value,
+                ContentStatus::Publishing->value,
+            ]);
+
+        $approved = (clone $inflight)->where('status', ContentStatus::Approved->value);
+        $approvedCount = (clone $approved)->count();
+        $inflightCount = (clone $inflight)->count();
+        $renderFailed = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
+            ->where('kind', ContentKind::Post->value)->where('status', ContentStatus::RenderFailed->value)->count();
+        $publishFailed = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
+            ->where('kind', ContentKind::Post->value)->where('status', ContentStatus::PublishFailed->value)->count();
+
+        [$pending, $failed, $queueNote] = $this->queueDepth();
+
+        $this->newLine();
+        $this->line('<info>Publish queue</info>');
+        $this->line('  in flight (approved/rendering/pushing): '.$inflightCount
+            .($approvedCount > 0 ? "  ·  {$approvedCount} stuck at \"queued to publish\"" : ''));
+
+        if ($approvedCount > 0) {
+            $oldest = (clone $approved)->min('updated_at');
+            $this->line('  oldest \"queued to publish\": '.($oldest ?? '—').' (has not started rendering)');
+        }
+        if ($renderFailed > 0 || $publishFailed > 0) {
+            $this->line("  surfaced failures: {$renderFailed} render_failed, {$publishFailed} publish_failed (re-push after fixing the cause)");
+        }
+        $this->line('  database queue: '.($queueNote ?? "{$pending} pending job(s), {$failed} failed job(s)"));
+
+        // The verdict — the one line that says what to do.
+        if ($approvedCount > 0 && $pending > 0) {
+            $this->warn('  ⇒ Jobs are queued but not being processed — the queue worker is not running. '
+                .'Start it (php artisan queue:work / Horizon) or drain now: launchpad:drain-publish '.$site->id);
+        } elseif ($approvedCount > 0) {
+            $this->warn('  ⇒ Posts are stuck at "queued to publish" with no pending job — re-dispatch with '
+                .'launchpad:drain-publish '.$site->id.' (runs the publish inline, no worker needed).');
+        } elseif ($failed > 0) {
+            $this->warn('  ⇒ There are failed jobs — inspect with: php artisan queue:failed, then queue:retry all.');
+        }
+    }
+
+    /**
+     * Raw database-queue depth — pending rows on the queue + failed rows. Returns a note instead of
+     * counts when the queue isn't database-backed (sync/redis/sqs), since then there's no table to read.
+     *
+     * @return array{0: int, 1: int, 2: string|null} [pending, failed, note-or-null]
+     */
+    private function queueDepth(): array
+    {
+        $default = (string) config('queue.default');
+        $driver = (string) config("queue.connections.{$default}.driver");
+        $failedTable = (string) config('queue.failed.table', 'failed_jobs');
+        $failed = $this->tableExists($failedTable) ? (int) DB::table($failedTable)->count() : 0;
+
+        if ($driver !== 'database') {
+            return [0, $failed, "driver is \"{$driver}\" (not database) — {$failed} failed job(s); pending depth not readable here"];
+        }
+
+        $jobsTable = (string) config("queue.connections.{$default}.table", 'jobs');
+        $pending = $this->tableExists($jobsTable) ? (int) DB::table($jobsTable)->count() : 0;
+
+        return [$pending, $failed, null];
+    }
+
+    private function tableExists(string $table): bool
+    {
+        try {
+            return DB::getSchemaBuilder()->hasTable($table);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**
