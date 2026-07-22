@@ -56,13 +56,15 @@ final class ContentStore
             'post_title' => (string) ($seo['title'] ?? $payload['title'] ?? 'Untitled'),
             'post_content' => $block_content,
         ];
+        $desired_slug = '';
         if (! empty($payload['slug'])) {
             // The control plane sends the FULL path as the slug (e.g. `montclair-nj/springfield` for a
             // nested town page). WordPress builds the hierarchical URL from post_parent + each post's
             // own post_name, so post_name is only the LAST segment — the parent segments come from the
             // post_parent chain (set in apply_parent below). A flat slug has one segment (itself).
             $slug_parts = explode('/', trim((string) $payload['slug'], '/'));
-            $postarr['post_name'] = sanitize_title((string) end($slug_parts));
+            $desired_slug = sanitize_title((string) end($slug_parts));
+            $postarr['post_name'] = $desired_slug;
         }
         if ($existing_id > 0) {
             $postarr['ID'] = $existing_id;
@@ -94,6 +96,11 @@ final class ContentStore
             return ['content_id' => $content_id, 'wp_post_id' => $existing_id, 'status' => 'error', 'skipped' => false];
         }
 
+        // Keep exactly ONE post per ULID: force-delete any stray duplicate carrying this content_id (from
+        // an incomplete delete or a double-insert). Each stray squats the canonical slug (and its -2),
+        // which is what pushes a fresh publish onto -3. Do this BEFORE reclaiming the slug below.
+        $this->collapse_duplicates($content_id, $post_id);
+
         $images = is_array($payload['images'] ?? null)
             ? ImageImporter::import_all($payload['images'], $post_id)
             : [];
@@ -110,6 +117,12 @@ final class ContentStore
         // children that were pushed before this hub existed). Order-independent by design.
         $this->apply_parent($post_id, $content_id, $payload);
 
+        // Reclaim the canonical permalink. wp_insert_post()/wp_update_post() run wp_unique_post_slug(),
+        // which silently appended -2/-3 if a stray held the slug — drifting the LIVE url away from the
+        // permalink the control plane sent. The ULID owns this URL, so force it back to the exact slug
+        // (in the final post_parent scope set just above).
+        $this->enforce_canonical_slug($post_id, $desired_slug, $kind, (int) wp_get_post_parent_id($post_id));
+
         // The home page becomes WordPress' static front page — but only once it's actually published
         // (a preview-push is a draft and must never repoint the site's front page).
         if (($payload['page_type'] ?? '') === 'home' && get_post_status($post_id) === 'publish') {
@@ -122,7 +135,81 @@ final class ContentStore
             'wp_post_id' => $post_id,
             'status' => $status,
             'skipped' => false,
+            'slug' => (string) get_post_field('post_name', $post_id),
         ];
+    }
+
+    /**
+     * Force-delete any OTHER post carrying this same control-plane ULID, keeping only $keep_id.
+     * Duplicates arise when a prior delete removed one of several strays, or a re-insert raced the
+     * meta index — and each keeps squatting the canonical slug (and its -2), which is exactly what
+     * pushes a fresh publish onto -3. One post per ULID is the invariant that keeps the permalink
+     * stable across take-down / re-push. Idempotent (no duplicates → no-op).
+     */
+    private function collapse_duplicates(string $content_id, int $keep_id): void
+    {
+        if ($content_id === '') {
+            return;
+        }
+
+        $ids = get_posts([
+            'post_type'        => ['page', 'post'],
+            'post_status'      => 'any',
+            'numberposts'      => -1,
+            'fields'           => 'ids',
+            'meta_key'         => Meta::CONTENT_ID,
+            'meta_value'       => $content_id,
+            'suppress_filters' => false,
+        ]);
+
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id !== $keep_id) {
+                wp_delete_post($id, true); // force = true → skip trash, free the slug
+            }
+        }
+    }
+
+    /**
+     * Force the post's slug to the control-plane canonical value, reclaiming it from any stray that
+     * squats it. WordPress' wp_unique_post_slug() appends -2/-3 when another post in the same
+     * (post_type, post_parent) scope already holds the desired post_name — the live-URL drift the
+     * operator sees after a take-down / re-push. Because the ULID owns this URL, we take the slug
+     * back: rename any control-plane-owned / draft / trashed squatter out of the way, then set the
+     * exact slug. A human-authored page we don't manage is left alone (its suffix is correct).
+     */
+    private function enforce_canonical_slug(int $post_id, string $desired, string $post_type, int $parent_id): void
+    {
+        if ($desired === '' || get_post_field('post_name', $post_id) === $desired) {
+            return; // no desired slug, or already canonical — nothing to reclaim
+        }
+
+        $squatters = get_posts([
+            'post_type'        => $post_type,
+            'post_status'      => 'any',
+            'post_parent'      => $parent_id,
+            'name'             => $desired,
+            'numberposts'      => -1,
+            'fields'           => 'ids',
+            'suppress_filters' => false,
+        ]);
+
+        foreach ($squatters as $sid) {
+            $sid = (int) $sid;
+            if ($sid === $post_id) {
+                continue;
+            }
+            $owned = (string) get_post_meta($sid, Meta::CONTENT_ID, true) !== '';
+            if ($owned || in_array(get_post_status($sid), ['draft', 'auto-draft', 'trash'], true)) {
+                EditGuard::during_write(static function () use ($sid, $desired): void {
+                    wp_update_post(['ID' => $sid, 'post_name' => $desired . '-stale-' . $sid]);
+                });
+            }
+        }
+
+        EditGuard::during_write(static function () use ($post_id, $desired): void {
+            wp_update_post(['ID' => $post_id, 'post_name' => $desired]);
+        });
     }
 
     /**
@@ -465,18 +552,30 @@ final class ContentStore
             return ['content_id' => '', 'deleted' => false, 'error' => 'content_id required'];
         }
 
-        $post_id = $this->find($content_id);
-        if ($post_id === 0) {
+        // Remove EVERY post carrying this ULID, not just the first — a prior double-insert can leave
+        // strays that would keep squatting the slug after a "successful" single delete.
+        $ids = get_posts([
+            'post_type'        => ['page', 'post'],
+            'post_status'      => 'any',
+            'numberposts'      => -1,
+            'fields'           => 'ids',
+            'meta_key'         => Meta::CONTENT_ID,
+            'meta_value'       => $content_id,
+            'suppress_filters' => false,
+        ]);
+        if ($ids === []) {
             // Never published here, or already removed — nothing to do.
             return ['content_id' => $content_id, 'deleted' => true, 'already_absent' => true];
         }
 
-        $result = wp_delete_post($post_id, true); // force = true → skip trash, free the slug
-        if (! $result) {
-            return ['content_id' => $content_id, 'wp_post_id' => $post_id, 'deleted' => false, 'error' => 'wp_delete_post failed'];
+        $first_id = (int) $ids[0];
+        foreach ($ids as $id) {
+            if (! wp_delete_post((int) $id, true)) { // force = true → skip trash, free the slug
+                return ['content_id' => $content_id, 'wp_post_id' => (int) $id, 'deleted' => false, 'error' => 'wp_delete_post failed'];
+            }
         }
 
-        return ['content_id' => $content_id, 'wp_post_id' => $post_id, 'deleted' => true];
+        return ['content_id' => $content_id, 'wp_post_id' => $first_id, 'deleted' => true];
     }
 
     /**
