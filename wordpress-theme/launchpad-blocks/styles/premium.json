@@ -1,60 +1,60 @@
 {
     "$schema": "https://schemas.wp.org/trunk/theme.json",
     "version": 3,
-    "title": "Clean & Trustworthy",
-    "description": "Calm, precise and premium — the trustworthy default for careful, credentialed brands. Manrope headings, 12px corners.",
+    "title": "Deep & Premium",
+    "description": "A dark ground with brushed gold — upscale and quiet, for a high-end operator. Archivo headings, 6px corners.",
     "settings": {
         "color": {
             "palette": [
                 {
                     "slug": "base",
                     "name": "Base",
-                    "color": "#ffffff"
+                    "color": "#0f1620"
                 },
                 {
                     "slug": "surface",
                     "name": "Surface",
-                    "color": "#f1f5f9"
+                    "color": "#17202e"
                 },
                 {
                     "slug": "contrast",
                     "name": "Contrast",
-                    "color": "#0f172a"
+                    "color": "#e8edf4"
                 },
                 {
                     "slug": "muted",
                     "name": "Muted",
-                    "color": "#475569"
+                    "color": "#9aa7bc"
                 },
                 {
                     "slug": "border",
                     "name": "Border",
-                    "color": "#e2e8f0"
+                    "color": "#263241"
                 },
                 {
                     "slug": "primary",
                     "name": "Primary",
-                    "color": "#123B6B"
+                    "color": "#D4AF37"
                 },
                 {
                     "slug": "accent",
                     "name": "Accent",
-                    "color": "#1D6FD6"
+                    "color": "#E7C55A"
                 },
                 {
                     "slug": "on-accent",
                     "name": "On accent",
-                    "color": "#ffffff"
+                    "color": "#1a1206"
                 },
                 {
                     "slug": "button",
                     "name": "Button",
-                    "color": "#1D6FD6"
+                    "color": "#C9A227"
                 },
                 {
                     "slug": "on-button",
                     "name": "On button",
-                    "color": "#ffffff"
+                    "color": "#14100a"
                 }
             ]
         },
@@ -62,16 +62,16 @@
             "fontFamilies": [
                 {
                     "slug": "heading",
-                    "name": "Manrope",
-                    "fontFamily": "Manrope, system-ui, sans-serif",
+                    "name": "Archivo",
+                    "fontFamily": "Archivo, system-ui, sans-serif",
                     "fontFace": [
                         {
-                            "fontFamily": "Manrope",
-                            "fontWeight": "700",
+                            "fontFamily": "Archivo",
+                            "fontWeight": "800",
                             "fontStyle": "normal",
                             "fontDisplay": "swap",
                             "src": [
-                                "file:./assets/fonts/manrope-700.woff2"
+                                "file:./assets/fonts/archivo-800.woff2"
                             ]
                         }
                     ]
@@ -104,9 +104,9 @@
             ]
         },
         "custom": {
-            "radius": "12px",
-            "headingLetterSpacing": "0em",
-            "headingWeight": "700"
+            "radius": "6px",
+            "headingLetterSpacing": "-0.01em",
+            "headingWeight": "800"
         }
     }
 }

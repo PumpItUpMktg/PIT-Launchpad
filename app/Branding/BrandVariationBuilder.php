@@ -2,6 +2,8 @@
 
 namespace App\Branding;
 
+use App\Styling\StyleVariation;
+
 /**
  * Builds the per-tenant "Your brand colors" theme.json style variation from the logo's colors.
  *
@@ -13,7 +15,8 @@ namespace App\Branding;
  *
  * A monochrome logo (no usable accent) borrows the accent too. The output matches the theme's static
  * `styles/{slug}.json` shape exactly, so the companion plugin writes it to global styles the same way
- * it activates a curated variation.
+ * it activates a curated variation. Neutrals + type are read from {@see StyleVariation} (the single
+ * source of truth) so they can never drift from the theme files.
  */
 final class BrandVariationBuilder
 {
@@ -21,26 +24,11 @@ final class BrandVariationBuilder
 
     public const TITLE = 'Your brand colors';
 
-    /** The curated bases the logo colors graft onto — neutrals + type, mirrored from the theme. */
-    private const BASE = [
-        'bold' => [
-            'neutrals' => ['base' => '#ffffff', 'surface' => '#f2f5f8', 'contrast' => '#0B1F33', 'muted' => '#475569', 'border' => '#dbe3ea'],
-            'accent' => '#EA580C',
-            'heading' => ['name' => 'Archivo', 'family' => 'Archivo, system-ui, sans-serif', 'file' => 'archivo-800.woff2', 'weight' => '800'],
-            'custom' => ['radius' => '3px', 'headingLetterSpacing' => '-0.02em', 'headingWeight' => '800'],
-        ],
-        'clean' => [
-            'neutrals' => ['base' => '#ffffff', 'surface' => '#f1f5f9', 'contrast' => '#0f172a', 'muted' => '#475569', 'border' => '#e2e8f0'],
-            'accent' => '#1D6FD6',
-            'heading' => ['name' => 'Manrope', 'family' => 'Manrope, system-ui, sans-serif', 'file' => 'manrope-700.woff2', 'weight' => '700'],
-            'custom' => ['radius' => '12px', 'headingLetterSpacing' => '0em', 'headingWeight' => '700'],
-        ],
-        'warm' => [
-            'neutrals' => ['base' => '#ffffff', 'surface' => '#f4f1ea', 'contrast' => '#14261e', 'muted' => '#4b5a52', 'border' => '#e4ded1'],
-            'accent' => '#DD8A2B',
-            'heading' => ['name' => 'Bricolage Grotesque', 'family' => '"Bricolage Grotesque", system-ui, sans-serif', 'file' => 'bricolage-grotesque-700.woff2', 'weight' => '700'],
-            'custom' => ['radius' => '18px', 'headingLetterSpacing' => '0em', 'headingWeight' => '700'],
-        ],
+    /** The bundled heading fonts, keyed by name — the file + weight the variation file references. */
+    private const FONTS = [
+        'Archivo' => ['family' => 'Archivo, system-ui, sans-serif', 'file' => 'archivo-800.woff2', 'weight' => '800'],
+        'Manrope' => ['family' => 'Manrope, system-ui, sans-serif', 'file' => 'manrope-700.woff2', 'weight' => '700'],
+        'Bricolage Grotesque' => ['family' => '"Bricolage Grotesque", system-ui, sans-serif', 'file' => 'bricolage-grotesque-700.woff2', 'weight' => '700'],
     ];
 
     private const BODY_FAMILY = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
@@ -54,7 +42,7 @@ final class BrandVariationBuilder
     public function resolve(BrandColors $colors): array
     {
         $base = $this->nearestForColor($colors->primary);
-        $accent = $this->normalize($colors->accent ?? self::BASE[$base]['accent']);
+        $accent = $this->normalize($colors->accent ?? StyleVariation::from($base)->palette()['highlight']);
 
         return [
             'primary' => $this->normalize($colors->primary),
@@ -65,25 +53,31 @@ final class BrandVariationBuilder
     }
 
     /**
-     * The full theme.json style-variation array (same shape as the theme's styles/{slug}.json).
+     * The full theme.json style-variation array (same shape as the theme's styles/{slug}.json). Neutrals
+     * + typography come from the nearest curated {@see StyleVariation}; the logo supplies primary/accent.
+     * The CTA button uses the logo accent (an on-brand button), so `button` = the resolved accent.
      *
      * @return array<string, mixed>
      */
     public function build(BrandColors $colors): array
     {
         $resolved = $this->resolve($colors);
-        $spec = self::BASE[$resolved['base']];
-        $n = $spec['neutrals'];
+        $variation = StyleVariation::from($resolved['base']);
+        $n = $variation->palette();
+        $t = $variation->typography();
+        $font = self::FONTS[$t['heading_font']];
 
         $palette = [
             ['slug' => 'base', 'name' => 'Base', 'color' => $n['base']],
             ['slug' => 'surface', 'name' => 'Surface', 'color' => $n['surface']],
-            ['slug' => 'contrast', 'name' => 'Contrast', 'color' => $n['contrast']],
+            ['slug' => 'contrast', 'name' => 'Contrast', 'color' => $n['text']],
             ['slug' => 'muted', 'name' => 'Muted', 'color' => $n['muted']],
             ['slug' => 'border', 'name' => 'Border', 'color' => $n['border']],
             ['slug' => 'primary', 'name' => 'Primary', 'color' => $resolved['primary']],
             ['slug' => 'accent', 'name' => 'Accent', 'color' => $resolved['accent']],
             ['slug' => 'on-accent', 'name' => 'On accent', 'color' => $resolved['on_accent']],
+            ['slug' => 'button', 'name' => 'Button', 'color' => $resolved['accent']],
+            ['slug' => 'on-button', 'name' => 'On button', 'color' => $resolved['on_accent']],
         ];
 
         return [
@@ -95,14 +89,14 @@ final class BrandVariationBuilder
                 'typography' => ['fontFamilies' => [
                     [
                         'slug' => 'heading',
-                        'name' => $spec['heading']['name'],
-                        'fontFamily' => $spec['heading']['family'],
+                        'name' => $t['heading_font'],
+                        'fontFamily' => $font['family'],
                         'fontFace' => [[
-                            'fontFamily' => $spec['heading']['name'],
-                            'fontWeight' => $spec['heading']['weight'],
+                            'fontFamily' => $t['heading_font'],
+                            'fontWeight' => $font['weight'],
                             'fontStyle' => 'normal',
                             'fontDisplay' => 'swap',
-                            'src' => ['file:./assets/fonts/'.$spec['heading']['file']],
+                            'src' => ['file:./assets/fonts/'.$font['file']],
                         ]],
                     ],
                     [
@@ -115,12 +109,19 @@ final class BrandVariationBuilder
                         ],
                     ],
                 ]],
-                'custom' => $spec['custom'],
+                'custom' => [
+                    'radius' => $t['radius'],
+                    'headingLetterSpacing' => $t['heading_letter_spacing'],
+                    'headingWeight' => (string) $t['heading_weight'],
+                ],
             ],
         ];
     }
 
-    /** Nearest curated base by the logo primary's tone: warm hue → Warm; cool → Bold (dark) / Clean. */
+    /**
+     * Nearest curated base by the logo primary's tone: warm hue → Warm; cool → Bold (dark) / Clean.
+     * Returns a {@see StyleVariation} slug (the three graft bases the neutrals are borrowed from).
+     */
     public function nearestForColor(string $hex): string
     {
         [$h, , $l] = $this->hsl($hex);

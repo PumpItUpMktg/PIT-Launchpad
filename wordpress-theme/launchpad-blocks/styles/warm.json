@@ -2,18 +2,60 @@
     "$schema": "https://schemas.wp.org/trunk/theme.json",
     "version": 3,
     "title": "Warm & Local",
-    "description": "Approachable and rooted — for local, relationship-led brands close to their community. Pine + amber, Bricolage Grotesque 700, rounded 18px corners.",
+    "description": "Earthy amber and clay — for local, relationship-led brands close to their community. Bricolage Grotesque headings, 18px corners.",
     "settings": {
         "color": {
             "palette": [
-                { "slug": "base", "name": "Base", "color": "#ffffff" },
-                { "slug": "surface", "name": "Surface", "color": "#f4f1ea" },
-                { "slug": "contrast", "name": "Contrast", "color": "#14261e" },
-                { "slug": "muted", "name": "Muted", "color": "#4b5a52" },
-                { "slug": "border", "name": "Border", "color": "#e4ded1" },
-                { "slug": "primary", "name": "Primary", "color": "#14513F" },
-                { "slug": "accent", "name": "Accent", "color": "#DD8A2B" },
-                { "slug": "on-accent", "name": "On accent", "color": "#1f2937" }
+                {
+                    "slug": "base",
+                    "name": "Base",
+                    "color": "#fffdf8"
+                },
+                {
+                    "slug": "surface",
+                    "name": "Surface",
+                    "color": "#f6efe3"
+                },
+                {
+                    "slug": "contrast",
+                    "name": "Contrast",
+                    "color": "#2b2620"
+                },
+                {
+                    "slug": "muted",
+                    "name": "Muted",
+                    "color": "#6b5d4f"
+                },
+                {
+                    "slug": "border",
+                    "name": "Border",
+                    "color": "#e7dcc9"
+                },
+                {
+                    "slug": "primary",
+                    "name": "Primary",
+                    "color": "#7C4A24"
+                },
+                {
+                    "slug": "accent",
+                    "name": "Accent",
+                    "color": "#E08D3C"
+                },
+                {
+                    "slug": "on-accent",
+                    "name": "On accent",
+                    "color": "#ffffff"
+                },
+                {
+                    "slug": "button",
+                    "name": "Button",
+                    "color": "#C9702A"
+                },
+                {
+                    "slug": "on-button",
+                    "name": "On button",
+                    "color": "#ffffff"
+                }
             ]
         },
         "typography": {
@@ -23,7 +65,15 @@
                     "name": "Bricolage Grotesque",
                     "fontFamily": "\"Bricolage Grotesque\", system-ui, sans-serif",
                     "fontFace": [
-                        { "fontFamily": "Bricolage Grotesque", "fontWeight": "700", "fontStyle": "normal", "fontDisplay": "swap", "src": ["file:./assets/fonts/bricolage-grotesque-700.woff2"] }
+                        {
+                            "fontFamily": "Bricolage Grotesque",
+                            "fontWeight": "700",
+                            "fontStyle": "normal",
+                            "fontDisplay": "swap",
+                            "src": [
+                                "file:./assets/fonts/bricolage-grotesque-700.woff2"
+                            ]
+                        }
                     ]
                 },
                 {
@@ -31,8 +81,24 @@
                     "name": "Inter",
                     "fontFamily": "Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
                     "fontFace": [
-                        { "fontFamily": "Inter", "fontWeight": "400", "fontStyle": "normal", "fontDisplay": "swap", "src": ["file:./assets/fonts/inter-400.woff2"] },
-                        { "fontFamily": "Inter", "fontWeight": "600", "fontStyle": "normal", "fontDisplay": "swap", "src": ["file:./assets/fonts/inter-600.woff2"] }
+                        {
+                            "fontFamily": "Inter",
+                            "fontWeight": "400",
+                            "fontStyle": "normal",
+                            "fontDisplay": "swap",
+                            "src": [
+                                "file:./assets/fonts/inter-400.woff2"
+                            ]
+                        },
+                        {
+                            "fontFamily": "Inter",
+                            "fontWeight": "600",
+                            "fontStyle": "normal",
+                            "fontDisplay": "swap",
+                            "src": [
+                                "file:./assets/fonts/inter-600.woff2"
+                            ]
+                        }
                     ]
                 }
             ]

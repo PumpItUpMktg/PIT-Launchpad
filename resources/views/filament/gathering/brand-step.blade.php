@@ -40,27 +40,38 @@
             <h3>Look
                 @if ($this->pushed)<span class="g-seed confirmed" style="margin-left:6px">applied</span>@endif
             </h3>
-            <p class="g-hint">One of three theme.json style variations — recommended from the brand voice; picking one overrides. Applying activates it as the site's global styles.</p>
-            <div class="g-row">
-                <button type="button" class="g-btn {{ $chosen === null && ! $usesLogo ? 'primary' : '' }}" wire:click="chooseStyle('auto')">
-                    Auto{{ $chosen === null && ! $usesLogo && $resolved !== null ? ' — '.$resolved->label() : '' }}
-                </button>
-                @foreach (\App\Styling\StyleVariation::cases() as $v)
-                    @php $t = $v->tokens(); @endphp
-                    <button type="button" class="g-btn {{ $chosen === $v && ! $usesLogo ? 'primary' : '' }}" wire:click="chooseStyle('{{ $v->value }}')" title="{{ $v->blurb() }}">
-                        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:{{ $t['primary'] }}"></span>
-                        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:{{ $t['accent'] }}"></span>
-                        {{ $v->label() }}
+            <p class="g-hint">Ten theme variations, each a full six-color palette (base · surface · text · primary · highlight · button). Your logo palette comes first, then the voice-recommended pick, then the rest — choosing one overrides; Applying activates it as the site's global styles.</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;margin-top:6px">
+                @foreach ($this->styleOptions as $opt)
+                    <button type="button"
+                        wire:click="chooseStyle('{{ $opt['key'] }}')"
+                        title="{{ $opt['blurb'] }}"
+                        style="text-align:left;padding:0;border-radius:11px;overflow:hidden;cursor:pointer;background:transparent;
+                               border:2px solid {{ $opt['chosen'] ? '#2563eb' : 'rgba(148,163,184,.4)' }};
+                               box-shadow:{{ $opt['chosen'] ? '0 0 0 3px rgba(37,99,235,.18)' : 'none' }}">
+                        {{-- palette preview strip --}}
+                        <span style="display:flex;height:44px">
+                            @foreach ($opt['swatches'] as $hex)
+                                <span style="flex:1;background:{{ $hex }}"></span>
+                            @endforeach
+                        </span>
+                        <span style="display:block;padding:8px 10px 10px;background:#fff">
+                            <span style="display:flex;align-items:center;gap:6px">
+                                <strong style="font-size:12.5px;color:#0f172a">{{ $opt['label'] }}</strong>
+                                @if ($opt['badge'])
+                                    <span style="font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:999px;
+                                                 background:{{ $opt['badge'] === 'From your logo' ? '#ecfdf5' : '#eef2ff' }};
+                                                 color:{{ $opt['badge'] === 'From your logo' ? '#047857' : '#4338ca' }}">{{ $opt['badge'] }}</span>
+                                @endif
+                                @if ($opt['chosen'])<span style="margin-left:auto;font-size:10px;font-weight:700;color:#2563eb">✓ Selected</span>@endif
+                            </span>
+                        </span>
                     </button>
                 @endforeach
-                @if ($logo !== null)
-                    <button type="button" class="g-btn {{ $usesLogo ? 'primary' : '' }}" wire:click="chooseStyle('brand_colors')" title="Derived from your logo">
-                        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:{{ $logo['primary'] }}"></span>
-                        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:{{ $logo['accent'] }}"></span>
-                        Your brand colors
-                    </button>
-                @endif
             </div>
+            <button type="button" class="g-btn" style="margin-top:8px" wire:click="chooseStyle('auto')">
+                Follow the voice recommendation (Auto{{ $chosen === null && ! $usesLogo && $resolved !== null ? ' — '.$resolved->label() : '' }})
+            </button>
             <button type="button" class="g-btn primary" wire:click="pushBrand" wire:loading.attr="disabled" wire:target="pushBrand">
                 <span wire:loading.remove wire:target="pushBrand">Apply {{ $usesLogo ? 'your brand colors' : ($resolved?->label() ?? 'your look') }} to the site</span>
                 <span wire:loading wire:target="pushBrand">Applying…</span>

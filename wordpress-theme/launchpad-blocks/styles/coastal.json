@@ -1,55 +1,55 @@
 {
     "$schema": "https://schemas.wp.org/trunk/theme.json",
     "version": 3,
-    "title": "Clean & Trustworthy",
-    "description": "Calm, precise and premium — the trustworthy default for careful, credentialed brands. Manrope headings, 12px corners.",
+    "title": "Coastal & Calm",
+    "description": "Soft teal-blue and warm sand — easygoing and friendly. Bricolage Grotesque headings, 16px corners.",
     "settings": {
         "color": {
             "palette": [
                 {
                     "slug": "base",
                     "name": "Base",
-                    "color": "#ffffff"
+                    "color": "#fbfeff"
                 },
                 {
                     "slug": "surface",
                     "name": "Surface",
-                    "color": "#f1f5f9"
+                    "color": "#eaf4f7"
                 },
                 {
                     "slug": "contrast",
                     "name": "Contrast",
-                    "color": "#0f172a"
+                    "color": "#14343d"
                 },
                 {
                     "slug": "muted",
                     "name": "Muted",
-                    "color": "#475569"
+                    "color": "#4e6c74"
                 },
                 {
                     "slug": "border",
                     "name": "Border",
-                    "color": "#e2e8f0"
+                    "color": "#d3e6ea"
                 },
                 {
                     "slug": "primary",
                     "name": "Primary",
-                    "color": "#123B6B"
+                    "color": "#226C82"
                 },
                 {
                     "slug": "accent",
                     "name": "Accent",
-                    "color": "#1D6FD6"
+                    "color": "#E0A458"
                 },
                 {
                     "slug": "on-accent",
                     "name": "On accent",
-                    "color": "#ffffff"
+                    "color": "#14343d"
                 },
                 {
                     "slug": "button",
                     "name": "Button",
-                    "color": "#1D6FD6"
+                    "color": "#226C82"
                 },
                 {
                     "slug": "on-button",
@@ -62,16 +62,16 @@
             "fontFamilies": [
                 {
                     "slug": "heading",
-                    "name": "Manrope",
-                    "fontFamily": "Manrope, system-ui, sans-serif",
+                    "name": "Bricolage Grotesque",
+                    "fontFamily": "\"Bricolage Grotesque\", system-ui, sans-serif",
                     "fontFace": [
                         {
-                            "fontFamily": "Manrope",
+                            "fontFamily": "Bricolage Grotesque",
                             "fontWeight": "700",
                             "fontStyle": "normal",
                             "fontDisplay": "swap",
                             "src": [
-                                "file:./assets/fonts/manrope-700.woff2"
+                                "file:./assets/fonts/bricolage-grotesque-700.woff2"
                             ]
                         }
                     ]
@@ -104,7 +104,7 @@
             ]
         },
         "custom": {
-            "radius": "12px",
+            "radius": "16px",
             "headingLetterSpacing": "0em",
             "headingWeight": "700"
         }

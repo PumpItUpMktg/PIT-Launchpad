@@ -222,6 +222,73 @@ trait ManagesBrandKit
     }
 
     /**
+     * The full brand-picker option list, in choose order: the logo-derived palette FIRST (when a usable
+     * logo palette exists), then the voice/AI recommendation, then the remaining curated variations in
+     * declaration order. Each option carries its six-role palette swatches (base / surface / text /
+     * primary / highlight / button) so the picker previews the whole look, not two colors.
+     *
+     * @return list<array{
+     *     key: string, label: string, blurb: string, swatches: list<string>,
+     *     recommended: bool, chosen: bool, dark: bool, badge: string|null
+     * }>
+     */
+    public function getStyleOptionsProperty(): array
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return [];
+        }
+
+        $activator = app(StyleActivator::class);
+        $recommended = $activator->recommended($site);
+        $chosen = $site->style_variation;
+        $usesLogo = (bool) $site->use_logo_colors;
+
+        $options = [];
+
+        // Slot 1 — the logo-derived variation ("Your brand colors"), when the logo yields a palette.
+        $logoColors = $activator->logoColors($site);
+        if ($logoColors !== null) {
+            $built = app(BrandVariationBuilder::class)->build($logoColors);
+            $pal = [];
+            foreach ($built['settings']['color']['palette'] as $c) {
+                $pal[$c['slug']] = $c['color'];
+            }
+            $options[] = [
+                'key' => 'brand_colors',
+                'label' => 'Your brand colors',
+                'blurb' => 'Pulled straight from your logo — your exact colors on a complete, coherent palette.',
+                'swatches' => [$pal['base'], $pal['surface'], $pal['contrast'], $pal['primary'], $pal['accent'], $pal['button']],
+                'recommended' => false,
+                'chosen' => $usesLogo,
+                'dark' => false,
+                'badge' => 'From your logo',
+            ];
+        }
+
+        // Slots 2..N — the curated variations, the AI/voice recommendation first, then declaration order.
+        $ordered = array_merge(
+            [$recommended],
+            array_values(array_filter(StyleVariation::cases(), fn (StyleVariation $v): bool => $v !== $recommended)),
+        );
+        foreach ($ordered as $variation) {
+            $p = $variation->palette();
+            $options[] = [
+                'key' => $variation->value,
+                'label' => $variation->label(),
+                'blurb' => $variation->blurb(),
+                'swatches' => [$p['base'], $p['surface'], $p['text'], $p['primary'], $p['highlight'], $p['button']],
+                'recommended' => $variation === $recommended,
+                'chosen' => ! $usesLogo && $chosen === $variation,
+                'dark' => $variation->isDark(),
+                'badge' => $variation === $recommended ? 'AI pick' : null,
+            ];
+        }
+
+        return $options;
+    }
+
+    /**
      * Operator override of the recommended style. `auto` clears the override (follow the voice
      * recommendation). The Gutenberg pivot's recommend-with-override: the system suggests, the human
      * confirms/overrides — brand styling is one of the three theme.json variations.

@@ -1,8 +1,8 @@
 {
     "$schema": "https://schemas.wp.org/trunk/theme.json",
     "version": 3,
-    "title": "Clean & Trustworthy",
-    "description": "Calm, precise and premium — the trustworthy default for careful, credentialed brands. Manrope headings, 12px corners.",
+    "title": "Crimson & Confident",
+    "description": "Deep professional red — assertive and memorable. Archivo headings, 4px corners.",
     "settings": {
         "color": {
             "palette": [
@@ -14,32 +14,32 @@
                 {
                     "slug": "surface",
                     "name": "Surface",
-                    "color": "#f1f5f9"
+                    "color": "#f7f2f2"
                 },
                 {
                     "slug": "contrast",
                     "name": "Contrast",
-                    "color": "#0f172a"
+                    "color": "#1a1414"
                 },
                 {
                     "slug": "muted",
                     "name": "Muted",
-                    "color": "#475569"
+                    "color": "#6b5555"
                 },
                 {
                     "slug": "border",
                     "name": "Border",
-                    "color": "#e2e8f0"
+                    "color": "#ecdcdc"
                 },
                 {
                     "slug": "primary",
                     "name": "Primary",
-                    "color": "#123B6B"
+                    "color": "#8C1D2C"
                 },
                 {
                     "slug": "accent",
                     "name": "Accent",
-                    "color": "#1D6FD6"
+                    "color": "#C8102E"
                 },
                 {
                     "slug": "on-accent",
@@ -49,7 +49,7 @@
                 {
                     "slug": "button",
                     "name": "Button",
-                    "color": "#1D6FD6"
+                    "color": "#C8102E"
                 },
                 {
                     "slug": "on-button",
@@ -62,16 +62,16 @@
             "fontFamilies": [
                 {
                     "slug": "heading",
-                    "name": "Manrope",
-                    "fontFamily": "Manrope, system-ui, sans-serif",
+                    "name": "Archivo",
+                    "fontFamily": "Archivo, system-ui, sans-serif",
                     "fontFace": [
                         {
-                            "fontFamily": "Manrope",
-                            "fontWeight": "700",
+                            "fontFamily": "Archivo",
+                            "fontWeight": "800",
                             "fontStyle": "normal",
                             "fontDisplay": "swap",
                             "src": [
-                                "file:./assets/fonts/manrope-700.woff2"
+                                "file:./assets/fonts/archivo-800.woff2"
                             ]
                         }
                     ]
@@ -104,9 +104,9 @@
             ]
         },
         "custom": {
-            "radius": "12px",
-            "headingLetterSpacing": "0em",
-            "headingWeight": "700"
+            "radius": "4px",
+            "headingLetterSpacing": "-0.01em",
+            "headingWeight": "800"
         }
     }
 }

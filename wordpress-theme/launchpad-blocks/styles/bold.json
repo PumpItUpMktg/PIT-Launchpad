@@ -2,18 +2,60 @@
     "$schema": "https://schemas.wp.org/trunk/theme.json",
     "version": 3,
     "title": "Bold & Direct",
-    "description": "High-contrast and confident — for direct, results-first and commercial brands. Navy + orange, Archivo 800, tight tracking, sharp 3px corners.",
+    "description": "High-contrast charcoal with a decisive orange-red — for direct, results-first brands. Archivo headings, 3px corners.",
     "settings": {
         "color": {
             "palette": [
-                { "slug": "base", "name": "Base", "color": "#ffffff" },
-                { "slug": "surface", "name": "Surface", "color": "#f2f5f8" },
-                { "slug": "contrast", "name": "Contrast", "color": "#0B1F33" },
-                { "slug": "muted", "name": "Muted", "color": "#475569" },
-                { "slug": "border", "name": "Border", "color": "#dbe3ea" },
-                { "slug": "primary", "name": "Primary", "color": "#0B1F33" },
-                { "slug": "accent", "name": "Accent", "color": "#EA580C" },
-                { "slug": "on-accent", "name": "On accent", "color": "#ffffff" }
+                {
+                    "slug": "base",
+                    "name": "Base",
+                    "color": "#ffffff"
+                },
+                {
+                    "slug": "surface",
+                    "name": "Surface",
+                    "color": "#f5f3f2"
+                },
+                {
+                    "slug": "contrast",
+                    "name": "Contrast",
+                    "color": "#1a1a1a"
+                },
+                {
+                    "slug": "muted",
+                    "name": "Muted",
+                    "color": "#57534e"
+                },
+                {
+                    "slug": "border",
+                    "name": "Border",
+                    "color": "#e7e5e4"
+                },
+                {
+                    "slug": "primary",
+                    "name": "Primary",
+                    "color": "#111827"
+                },
+                {
+                    "slug": "accent",
+                    "name": "Accent",
+                    "color": "#E4572E"
+                },
+                {
+                    "slug": "on-accent",
+                    "name": "On accent",
+                    "color": "#ffffff"
+                },
+                {
+                    "slug": "button",
+                    "name": "Button",
+                    "color": "#E4572E"
+                },
+                {
+                    "slug": "on-button",
+                    "name": "On button",
+                    "color": "#ffffff"
+                }
             ]
         },
         "typography": {
@@ -23,7 +65,15 @@
                     "name": "Archivo",
                     "fontFamily": "Archivo, system-ui, sans-serif",
                     "fontFace": [
-                        { "fontFamily": "Archivo", "fontWeight": "800", "fontStyle": "normal", "fontDisplay": "swap", "src": ["file:./assets/fonts/archivo-800.woff2"] }
+                        {
+                            "fontFamily": "Archivo",
+                            "fontWeight": "800",
+                            "fontStyle": "normal",
+                            "fontDisplay": "swap",
+                            "src": [
+                                "file:./assets/fonts/archivo-800.woff2"
+                            ]
+                        }
                     ]
                 },
                 {
@@ -31,8 +81,24 @@
                     "name": "Inter",
                     "fontFamily": "Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
                     "fontFace": [
-                        { "fontFamily": "Inter", "fontWeight": "400", "fontStyle": "normal", "fontDisplay": "swap", "src": ["file:./assets/fonts/inter-400.woff2"] },
-                        { "fontFamily": "Inter", "fontWeight": "600", "fontStyle": "normal", "fontDisplay": "swap", "src": ["file:./assets/fonts/inter-600.woff2"] }
+                        {
+                            "fontFamily": "Inter",
+                            "fontWeight": "400",
+                            "fontStyle": "normal",
+                            "fontDisplay": "swap",
+                            "src": [
+                                "file:./assets/fonts/inter-400.woff2"
+                            ]
+                        },
+                        {
+                            "fontFamily": "Inter",
+                            "fontWeight": "600",
+                            "fontStyle": "normal",
+                            "fontDisplay": "swap",
+                            "src": [
+                                "file:./assets/fonts/inter-600.woff2"
+                            ]
+                        }
                     ]
                 }
             ]

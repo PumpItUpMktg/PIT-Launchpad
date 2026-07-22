@@ -1,8 +1,8 @@
 {
     "$schema": "https://schemas.wp.org/trunk/theme.json",
     "version": 3,
-    "title": "Clean & Trustworthy",
-    "description": "Calm, precise and premium — the trustworthy default for careful, credentialed brands. Manrope headings, 12px corners.",
+    "title": "Slate & Signal",
+    "description": "Cool grey with a vivid safety-orange signal — utilitarian and dependable. Manrope headings, 8px corners.",
     "settings": {
         "color": {
             "palette": [
@@ -14,17 +14,17 @@
                 {
                     "slug": "surface",
                     "name": "Surface",
-                    "color": "#f1f5f9"
+                    "color": "#f2f4f7"
                 },
                 {
                     "slug": "contrast",
                     "name": "Contrast",
-                    "color": "#0f172a"
+                    "color": "#1f2937"
                 },
                 {
                     "slug": "muted",
                     "name": "Muted",
-                    "color": "#475569"
+                    "color": "#64748b"
                 },
                 {
                     "slug": "border",
@@ -34,12 +34,12 @@
                 {
                     "slug": "primary",
                     "name": "Primary",
-                    "color": "#123B6B"
+                    "color": "#334155"
                 },
                 {
                     "slug": "accent",
                     "name": "Accent",
-                    "color": "#1D6FD6"
+                    "color": "#F97316"
                 },
                 {
                     "slug": "on-accent",
@@ -49,7 +49,7 @@
                 {
                     "slug": "button",
                     "name": "Button",
-                    "color": "#1D6FD6"
+                    "color": "#F97316"
                 },
                 {
                     "slug": "on-button",
@@ -104,8 +104,8 @@
             ]
         },
         "custom": {
-            "radius": "12px",
-            "headingLetterSpacing": "0em",
+            "radius": "8px",
+            "headingLetterSpacing": "-0.01em",
             "headingWeight": "700"
         }
     }

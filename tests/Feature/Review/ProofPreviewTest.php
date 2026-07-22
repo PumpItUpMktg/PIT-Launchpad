@@ -48,7 +48,7 @@ it('styles the proof in the site ACTIVE theme.json variation, not the raw Accoun
     $brand = (new ProofPreview)->for($page->fresh())['brand'];
 
     // Bold variation — the look the page actually ships in.
-    expect($brand['primary'])->toBe('#0B1F33')
-        ->and($brand['accent'])->toBe('#EA580C')
+    expect($brand['primary'])->toBe('#111827')
+        ->and($brand['accent'])->toBe('#E4572E')
         ->and($brand['heading_font'])->toBe('Archivo');
 });
