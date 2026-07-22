@@ -20,6 +20,16 @@ class Test_Status extends WP_UnitTestCase
         $this->assertArrayHasKey('version', $p['active_theme']);
     }
 
+    public function test_payload_reports_block_theme_and_active_colors(): void
+    {
+        $p = Status::payload();
+
+        $this->assertArrayHasKey('is_block_theme', $p);
+        $this->assertIsBool($p['is_block_theme']);
+        $this->assertArrayHasKey('active_colors', $p);
+        $this->assertIsArray($p['active_colors']);
+    }
+
     public function test_elementor_pro_version_is_null_when_absent(): void
     {
         if (defined('ELEMENTOR_PRO_VERSION')) {

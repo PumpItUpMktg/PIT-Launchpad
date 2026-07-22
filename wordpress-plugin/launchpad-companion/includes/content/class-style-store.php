@@ -72,12 +72,70 @@ final class StyleStore
             return ['updated' => false, 'error' => $result->get_error_code() . ': ' . $result->get_error_message()];
         }
 
-        // Drop the cached, merged theme.json so the new variation renders immediately.
+        self::flush_global_styles_cache();
+
+        // Read back what WordPress will ACTUALLY paint now (the live preset variables), so a "colors
+        // still didn't change" report is decidable at the source: if this reflects the variation but the
+        // browser shows the old hue, it's a page/CDN cache; if it does NOT, the write didn't take. And
+        // if the site isn't running a block theme, theme.json global styles are inert — flag that too.
+        return [
+            'updated' => true,
+            'variation' => $variation,
+            'is_block_theme' => function_exists('wp_is_block_theme') ? wp_is_block_theme() : false,
+            'active_colors' => self::live_preset_colors(),
+        ];
+    }
+
+    /**
+     * Thoroughly drop every cached copy of the merged theme.json so the new variation renders on the
+     * next front-end request — the partial clear (static caches only) was the classic cause of a push
+     * that "succeeded" while the site kept serving the old global styles from a persistent object cache.
+     */
+    private static function flush_global_styles_cache(): void
+    {
+        // The canonical core invalidation (clears the static resolver caches, the `theme_json` object
+        // cache group, and the theme-JSON transients) — present since WP 6.2.
+        if (function_exists('wp_clean_theme_json_cache')) {
+            wp_clean_theme_json_cache();
+        }
         if (method_exists('WP_Theme_JSON_Resolver', 'clean_cached_data')) {
             \WP_Theme_JSON_Resolver::clean_cached_data();
         }
-        delete_transient('global_styles_' . get_stylesheet());
 
-        return ['updated' => true, 'variation' => $variation];
+        // Belt and suspenders for older cores / stray transients.
+        delete_transient('global_styles_' . get_stylesheet());
+        delete_transient('gutenberg_global_styles_' . get_stylesheet());
+        if (function_exists('wp_cache_delete')) {
+            wp_cache_delete('wp_get_global_stylesheet', 'theme_json');
+        }
+    }
+
+    /**
+     * The colors WordPress will actually render right now, read from the generated global-styles
+     * variables (`--wp--preset--color--{slug}`) — version-stable and origin-merged, so it reflects the
+     * user global styles we just wrote. Returns a slug => hex map for the brand-carrying roles; empty
+     * when global styles are unavailable (e.g. a classic theme).
+     *
+     * @return array<string, string>
+     */
+    private static function live_preset_colors(): array
+    {
+        if (! function_exists('wp_get_global_stylesheet')) {
+            return [];
+        }
+
+        $css = (string) wp_get_global_stylesheet(['variables']);
+        if ($css === '') {
+            return [];
+        }
+
+        $colors = [];
+        foreach (['primary', 'accent', 'button', 'contrast', 'base'] as $slug) {
+            if (preg_match('/--wp--preset--color--' . $slug . ':\s*([^;]+);/', $css, $m)) {
+                $colors[$slug] = trim($m[1]);
+            }
+        }
+
+        return $colors;
     }
 }

@@ -94,6 +94,29 @@ class ActivateStyleCommand extends Command
 
         $this->info("  Applied \"{$label}\" to WordPress global styles.");
 
+        // Read back what WordPress ACTUALLY paints now, so a "colors still didn't change" report is
+        // decidable at the source rather than a guessing game.
+        if (array_key_exists('is_block_theme', $result) && ! $result['is_block_theme']) {
+            $this->warn('  ⚠  This site is NOT running a block theme — theme.json global styles are inert here.');
+            $this->line('     The brand push had no visible effect: activate the launchpad-blocks block theme, then re-run.');
+
+            return self::SUCCESS;
+        }
+
+        $colors = is_array($result['active_colors'] ?? null) ? $result['active_colors'] : [];
+        if ($colors !== []) {
+            $shown = [];
+            foreach (['primary', 'accent', 'button'] as $slug) {
+                if (isset($colors[$slug]) && $colors[$slug] !== '') {
+                    $shown[] = $slug.' '.$colors[$slug];
+                }
+            }
+            if ($shown !== []) {
+                $this->line('  WordPress now paints: '.implode('   ', $shown));
+                $this->line('  (If your browser still shows the old colors, that\'s a page/CDN cache — hard-refresh or purge it.)');
+            }
+        }
+
         return self::SUCCESS;
     }
 }

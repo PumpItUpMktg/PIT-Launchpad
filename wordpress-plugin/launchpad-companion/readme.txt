@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.15
+Stable tag: 0.9.16
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,17 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.16 =
+* Style-variation push now self-verifies. After writing the theme.json global styles, /style thoroughly
+  invalidates the merged-theme.json caches via the canonical wp_clean_theme_json_cache() (the previous
+  partial clear left a persistent object cache serving the OLD global styles — a push that "succeeded"
+  while the site kept its old colors), then reads back the live preset colors WordPress will actually
+  paint and returns them plus an `is_block_theme` flag. /status reports the same two fields. This makes
+  a "colors didn't change" report decidable at the source: the readback either reflects the new
+  variation (so any remaining old hue is a page/CDN cache) or it doesn't (the write didn't take), and a
+  non-block theme — where theme.json global styles are inert — is flagged instead of reported as a
+  phantom success.
 
 = 0.9.15 =
 * Canonical permalink is now enforced on every /content upsert. WordPress' wp_unique_post_slug()
