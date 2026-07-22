@@ -222,6 +222,38 @@ trait ManagesBrandKit
     }
 
     /**
+     * The pre-push resolution — the dashboard twin of the `launchpad:activate-style` diagnostic: what
+     * "Apply" will ACTUALLY push and why. The recurring "reverts to logo blue when re-pushed" trap is a
+     * sticky `use_logo_colors` flag: while it's on, the logo-derived "Your brand colors" is pushed and
+     * any curated pick is ignored, so every Apply re-implements the logo palette. This surfaces that
+     * state plainly (and flags when a curated pick is being shadowed) so the operator can see it and
+     * switch, instead of being surprised by the front end.
+     *
+     * @return array{label: string, is_logo: bool, shadows_curated: bool, curated_label: ?string}
+     */
+    public function getStyleResolutionProperty(): array
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return ['label' => '', 'is_logo' => false, 'shadows_curated' => false, 'curated_label' => null];
+        }
+
+        $activator = app(StyleActivator::class);
+        // The logo-derived path is taken only when the flag is on AND a usable logo palette exists —
+        // exactly the activator's own resolution, so this never over-promises the logo look.
+        $isLogo = (bool) $site->use_logo_colors && $activator->logoColorsAvailable($site);
+        $curated = $site->style_variation instanceof StyleVariation ? $site->style_variation : null;
+
+        return [
+            'label' => $isLogo ? 'Your brand colors (from your logo)' : $activator->resolve($site)->label(),
+            'is_logo' => $isLogo,
+            // A curated pick exists but is being shadowed by the logo flag — the classic drift.
+            'shadows_curated' => $isLogo && $curated !== null,
+            'curated_label' => $curated?->label(),
+        ];
+    }
+
+    /**
      * The full brand-picker option list, in choose order: the logo-derived palette FIRST (when a usable
      * logo palette exists), then the voice/AI recommendation, then the remaining curated variations in
      * declaration order. Each option carries its six-role palette swatches (base / surface / text /
