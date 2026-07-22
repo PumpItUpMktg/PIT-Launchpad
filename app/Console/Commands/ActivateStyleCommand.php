@@ -1,0 +1,80 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Branding\BrandVariationBuilder;
+use App\Models\Scopes\SiteScope;
+use App\Models\Site;
+use App\Styling\StyleActivator;
+use App\Styling\StyleVariation;
+use Illuminate\Console\Command;
+
+/**
+ * Apply a site's resolved block-theme style variation to its WordPress — the Gutenberg-pivot brand
+ * push from the console (the Filament "Push brand" button's CLI twin, and the escape hatch when a
+ * selection didn't take). Also a diagnostic: it prints WHY the site resolves to the variation it
+ * does (the logo-colors override vs the curated `style_variation` vs the recommendation), so a
+ * "still showing Your brand colors" mismatch is legible before and after the push.
+ *
+ *   launchpad:activate-style {site} [--dry-run]
+ *
+ * A common cause of drift: the operator picked a curated variation (e.g. Slate & Signal) in the
+ * brand picker, which stores it — but the style is applied to WordPress only on a push. Until then
+ * the site keeps whatever was last activated (often the logo-derived "Your brand colors").
+ */
+class ActivateStyleCommand extends Command
+{
+    protected $signature = 'launchpad:activate-style {site : a Site id} {--dry-run : show what WOULD be pushed, without touching WordPress}';
+
+    protected $description = 'Apply a site\'s resolved theme.json style variation to its WordPress (Gutenberg brand push) — with a why-it-resolves diagnostic.';
+
+    public function handle(StyleActivator $activator): int
+    {
+        $site = Site::query()->withoutGlobalScope(SiteScope::class)->find($this->argument('site'));
+        if ($site === null) {
+            $this->error('Site not found.');
+
+            return self::FAILURE;
+        }
+
+        $this->line('Site: '.($site->brand_name ?? $site->id).'  ('.$site->id.')');
+
+        // The resolution the push will follow: logo-colors override first, else the curated variation
+        // (explicit style_variation → voice recommendation → Clean default).
+        $usesLogo = (bool) $site->use_logo_colors && $activator->logoColorsAvailable($site);
+        $curated = $activator->resolve($site);
+
+        $this->line('  use_logo_colors : '.($site->use_logo_colors ? 'true' : 'false')
+            .($site->use_logo_colors && ! $activator->logoColorsAvailable($site) ? ' (but no usable logo palette — falls back to curated)' : ''));
+        $this->line('  style_variation : '.($site->style_variation instanceof StyleVariation ? $site->style_variation->value : '(none — using recommendation)'));
+
+        if ($usesLogo) {
+            $this->warn('  → Resolves to: '.BrandVariationBuilder::TITLE.' (logo-derived). The curated pick is IGNORED while use_logo_colors is on.');
+        } else {
+            $this->info('  → Resolves to: '.$curated->label().' ('.$curated->value.')');
+        }
+
+        if ($this->option('dry-run')) {
+            $this->comment('  Dry run — nothing pushed.');
+
+            return self::SUCCESS;
+        }
+
+        $result = $activator->activate($site);
+        $variationValue = (string) ($result['variation'] ?? '');
+        $label = $variationValue === BrandVariationBuilder::SLUG
+            ? BrandVariationBuilder::TITLE
+            : (StyleVariation::tryFrom($variationValue)?->label() ?? $variationValue);
+
+        if (empty($result['updated'])) {
+            $this->error('  Not applied — '.(string) ($result['error'] ?? 'unknown error.'));
+            $this->line('  (If this says the variation is not in the active theme, the site\'s launchpad-blocks theme is older than the one carrying that style — update the theme, then re-run.)');
+
+            return self::FAILURE;
+        }
+
+        $this->info("  Applied \"{$label}\" to WordPress global styles.");
+
+        return self::SUCCESS;
+    }
+}

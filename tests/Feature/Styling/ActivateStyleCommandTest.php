@@ -1,0 +1,51 @@
+<?php
+
+use App\Integrations\Wordpress\WordpressClient;
+use App\Integrations\Wordpress\WordpressClientFactory;
+use App\Models\Site;
+use App\Models\SiteBranding;
+use App\Styling\StyleVariation;
+
+it('pushes the curated variation and reports what it applied', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
+
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn(['updated' => true, 'variation' => 'slate']);
+    $client->shouldReceive('pushSiteProfile')->once()->andReturn(['updated' => true]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $this->artisan('launchpad:activate-style', ['site' => $site->id])
+        ->expectsOutputToContain('Resolves to: Slate & Signal')
+        ->expectsOutputToContain('Applied "Slate & Signal" to WordPress global styles.')
+        ->assertSuccessful();
+});
+
+it('the diagnostic explains when use_logo_colors overrides the curated pick', function () {
+    // Slate is chosen, but use_logo_colors is still on with a usable palette — the classic drift.
+    $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => true]);
+    SiteBranding::factory()->create(['site_id' => $site->id, 'logo_set' => ['primary' => '#334155', 'accent' => '#F97316']]);
+
+    $this->artisan('launchpad:activate-style', ['site' => $site->id, '--dry-run' => true])
+        ->expectsOutputToContain('use_logo_colors : true')
+        ->expectsOutputToContain('curated pick is IGNORED')
+        ->expectsOutputToContain('Dry run')
+        ->assertSuccessful();
+});
+
+it('surfaces the theme-missing error verbatim and fails', function () {
+    $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
+
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('activateStyle')->once()->with('slate')
+        ->andReturn(['updated' => false, 'error' => "Style variation 'slate' is not in the active theme."]);
+    $client->shouldReceive('pushSiteProfile')->andReturn(['updated' => true]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $this->artisan('launchpad:activate-style', ['site' => $site->id])
+        ->expectsOutputToContain('is not in the active theme')
+        ->assertFailed();
+});
