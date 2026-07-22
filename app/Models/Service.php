@@ -25,6 +25,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ServiceSiloRole $silo_role pillar (core) vs supporting — drives silo + nav ranking
  * @property string|null $structure_home_cluster_id demand-derived home cluster (keyword-first)
  * @property bool $structure_home_flagged mapped to nearest cluster with no true match — needs review
+ * @property bool $force_page owner guarantee: always build a page for this service (wins over demand)
+ * @property string|null $forced_silo the topic (silo name) a force_page service's page lives under
  */
 class Service extends Model
 {
@@ -90,6 +92,7 @@ class Service extends Model
             'is_most_profitable' => 'boolean',
             'is_growth_priority' => 'boolean',
             'structure_home_flagged' => 'boolean',
+            'force_page' => 'boolean',
             'symptoms' => 'array',
             'scope_items' => 'array',
             'process_steps' => 'array',

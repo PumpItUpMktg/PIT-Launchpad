@@ -2,9 +2,12 @@
 
 namespace App\Filament\Concerns;
 
+use App\Build\GuidedEntityProjector;
 use App\Enums\ArrangeFlagType;
 use App\Enums\PruneOutcome;
+use App\Enums\ServiceSiloRole;
 use App\Enums\SpokeGranularity;
+use App\Enums\SpokeStatus;
 use App\Enums\SpokeTag;
 use App\Filament\Pages\SiloPrune;
 use App\Interview\Arrange\AutoArrangeRunner;
@@ -14,6 +17,7 @@ use App\Interview\Prune\PrunePlan;
 use App\Interview\Prune\PruneRow;
 use App\Models\ArrangementFlag;
 use App\Models\Scopes\SiteScope;
+use App\Models\Service;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -347,6 +351,72 @@ trait ManagesPruneSurface
         $site = $this->pruneSite();
 
         return $site === null ? [] : $this->engine()->plan($site)->bySilo();
+    }
+
+    /** Per-fringe target-topic pick for "Build a page for this" (spokeId → silo name). */
+    public array $fringeSilo = [];
+
+    /**
+     * The real topics a fringe handoff can be promoted INTO — the plan's silos minus the Out-of-Lane
+     * bucket. The operator files a fringe service the business actually performs (e.g. Radon Mitigation
+     * → Foundation Water Problems) into one of these.
+     *
+     * @return list<string>
+     */
+    public function getFringeSiloChoicesProperty(): array
+    {
+        return array_values(array_filter(
+            array_keys($this->getBySiloProperty()),
+            fn (string $name): bool => $name !== '' && $name !== 'Out of Lane',
+        ));
+    }
+
+    /**
+     * Promote a fringe handoff into a REAL page: the business actually performs it, so make it a
+     * force_page service filed under the chosen topic and turn its spoke into an own-page core spoke.
+     * The coverage guarantee then keeps the page on every rebuild. Re-projects the §4 board.
+     */
+    public function buildPageFromFringe(string $spokeId): void
+    {
+        $site = $this->pruneSite();
+        if ($site === null) {
+            return;
+        }
+
+        $spoke = Spoke::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($spokeId)
+            ->where('tag', SpokeTag::Fringe->value)->first();
+        if ($spoke === null) {
+            return;
+        }
+
+        $silo = trim((string) ($this->fringeSilo[$spokeId] ?? ''));
+        if ($silo === '') {
+            Notification::make()->warning()->title('Pick a topic first.')
+                ->body("Choose which topic “{$spoke->name}” belongs to, then build its page.")->send();
+
+            return;
+        }
+
+        Service::withoutGlobalScope(SiteScope::class)->firstOrCreate(
+            ['site_id' => $site->id, 'name' => $spoke->name],
+            ['silo_role' => ServiceSiloRole::Supporting, 'force_page' => true, 'forced_silo' => $silo],
+        );
+
+        $spoke->forceFill([
+            'silo' => $silo,
+            'is_pillar' => false,
+            'tag' => SpokeTag::Core,
+            'granularity' => SpokeGranularity::OwnPage,
+            'status' => SpokeStatus::Offered,
+        ])->save();
+
+        app(GuidedEntityProjector::class)->project($site);
+        unset($this->fringeSilo[$spokeId]);
+
+        Notification::make()->success()
+            ->title("Building a page for “{$spoke->name}”")
+            ->body("Filed under {$silo} — it’s a real service now, not a handoff.")->send();
     }
 
     /**

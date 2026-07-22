@@ -311,10 +311,20 @@
                 @foreach ($this->fringe as $row)
                     <div class="lp-fringe-row">
                         <span>{{ $row->name }}@if ($row->connectionNote)<span class="lp-muted"> — {{ $row->connectionNote }}</span>@endif</span>
-                        <select wire:model="spokeDecisions.{{ $row->id }}.outcome" class="lp-select" style="width:230px">
-                            <option value="">— handoff —</option>
-                            <option value="skipped">Refer out / sibling brand</option>
-                        </select>
+                        <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                            <select wire:model="spokeDecisions.{{ $row->id }}.outcome" class="lp-select" style="width:180px">
+                                <option value="">— handoff —</option>
+                                <option value="skipped">Refer out / sibling brand</option>
+                            </select>
+                            <span class="lp-muted" style="font-size:12px">or, if you do offer it:</span>
+                            <select wire:model="fringeSilo.{{ $row->id }}" class="lp-select" style="width:190px" aria-label="Topic for {{ $row->name }}">
+                                <option value="">Build a page under…</option>
+                                @foreach ($this->fringeSiloChoices as $siloName)
+                                    <option value="{{ $siloName }}">{{ $siloName }}</option>
+                                @endforeach
+                            </select>
+                            <button type="button" class="lp-btn" title="Make this a real service with its own page" wire:click="buildPageFromFringe('{{ $row->id }}')">+ Build page</button>
+                        </span>
                     </div>
                 @endforeach
             </div>
