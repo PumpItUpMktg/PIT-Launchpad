@@ -95,7 +95,15 @@ class ActivateStyleCommand extends Command
         $this->info("  Applied \"{$label}\" to WordPress global styles.");
 
         // Read back what WordPress ACTUALLY paints now, so a "colors still didn't change" report is
-        // decidable at the source rather than a guessing game.
+        // decidable at the source rather than a guessing game. A pre-0.9.16 companion returns neither
+        // key — say so plainly instead of falling back to a silent, unverifiable "applied".
+        if (! array_key_exists('is_block_theme', $result) && ! array_key_exists('active_colors', $result)) {
+            $this->warn('  ⚠  The companion plugin on this site is older than 0.9.16 — it can\'t report what it painted.');
+            $this->line('     Install launchpad-companion 0.9.16 to verify the push (and to fix the stale-cache cause of colors not changing).');
+
+            return self::SUCCESS;
+        }
+
         if (array_key_exists('is_block_theme', $result) && ! $result['is_block_theme']) {
             $this->warn('  ⚠  This site is NOT running a block theme — theme.json global styles are inert here.');
             $this->line('     The brand push had no visible effect: activate the launchpad-blocks block theme, then re-run.');
