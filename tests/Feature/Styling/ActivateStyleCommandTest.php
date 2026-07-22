@@ -34,6 +34,28 @@ it('the diagnostic explains when use_logo_colors overrides the curated pick', fu
         ->assertSuccessful();
 });
 
+it('--variation force-clears the sticky logo override and pushes the curated variation', function () {
+    // The stuck state: use_logo_colors on (with a palette), so activate() would push the logo colors.
+    $site = Site::factory()->create(['use_logo_colors' => true]);
+    SiteBranding::factory()->create(['site_id' => $site->id, 'logo_set' => ['primary' => '#123B6B', 'accent' => '#1D6FD6']]);
+
+    $client = Mockery::mock(WordpressClient::class);
+    // Must push the CURATED slate, never the logo variation, once the flag is cleared.
+    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn(['updated' => true, 'variation' => 'slate']);
+    $client->shouldReceive('pushSiteProfile')->andReturn(['updated' => true]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $this->artisan('launchpad:activate-style', ['site' => $site->id, '--variation' => 'slate'])
+        ->expectsOutputToContain('Forced: style_variation = slate')
+        ->expectsOutputToContain('Applied "Slate & Signal"')
+        ->assertSuccessful();
+
+    expect($site->fresh()->use_logo_colors)->toBeFalse()
+        ->and($site->fresh()->style_variation)->toBe(StyleVariation::Slate);
+});
+
 it('surfaces the theme-missing error verbatim and fails', function () {
     $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
 

@@ -24,7 +24,7 @@ use Illuminate\Console\Command;
  */
 class ActivateStyleCommand extends Command
 {
-    protected $signature = 'launchpad:activate-style {site : a Site id} {--dry-run : show what WOULD be pushed, without touching WordPress}';
+    protected $signature = 'launchpad:activate-style {site : a Site id} {--variation= : force a curated variation (e.g. slate) — clears the sticky use_logo_colors override} {--logo : force the logo-derived "Your brand colors"} {--dry-run : show what WOULD be pushed, without touching WordPress}';
 
     protected $description = 'Apply a site\'s resolved theme.json style variation to its WordPress (Gutenberg brand push) — with a why-it-resolves diagnostic.';
 
@@ -36,6 +36,25 @@ class ActivateStyleCommand extends Command
 
             return self::FAILURE;
         }
+
+        // Force the selection when asked — the escape hatch for a site stuck on the logo-derived
+        // "Your brand colors" because use_logo_colors is on and overrides the curated pick. Writing it
+        // here is exactly what the brand picker's chooseStyle() does; this just does it from the console.
+        $forceVariation = trim((string) $this->option('variation'));
+        if ($this->option('logo')) {
+            $site->forceFill(['use_logo_colors' => true])->save();
+            $this->comment('  Forced: use_logo_colors = true (logo-derived).');
+        } elseif ($forceVariation !== '') {
+            $picked = StyleVariation::tryFrom($forceVariation);
+            if ($picked === null) {
+                $this->error("Unknown variation '{$forceVariation}'. One of: ".implode(', ', array_map(fn (StyleVariation $v): string => $v->value, StyleVariation::cases())));
+
+                return self::FAILURE;
+            }
+            $site->forceFill(['style_variation' => $picked->value, 'use_logo_colors' => false])->save();
+            $this->comment("  Forced: style_variation = {$picked->value}, use_logo_colors = false.");
+        }
+        $site->refresh();
 
         $this->line('Site: '.($site->brand_name ?? $site->id).'  ('.$site->id.')');
 
