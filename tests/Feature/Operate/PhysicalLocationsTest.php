@@ -122,9 +122,9 @@ it('surfaces each location card page state — none, drafted, published', functi
 
     $cards = collect(app(PhysicalLocations::class)->build($site)['cards'])->keyBy('name');
 
-    expect($cards['No Page Yet']['page'])->toMatchArray(['state' => 'none', 'can_generate' => true, 'can_publish' => false, 'can_repush' => false]);
-    expect($cards['Drafted']['page'])->toMatchArray(['drafted' => true, 'published' => false, 'can_publish' => true, 'can_repush' => false]);
-    expect($cards['Live']['page'])->toMatchArray(['published' => true, 'can_publish' => false, 'can_repush' => true]);
+    expect($cards['No Page Yet']['page'])->toMatchArray(['state' => 'none', 'can_generate' => true, 'can_review' => false, 'can_publish' => false, 'can_repush' => false, 'can_takedown' => false]);
+    expect($cards['Drafted']['page'])->toMatchArray(['drafted' => true, 'published' => false, 'can_review' => true, 'can_publish' => true, 'can_repush' => false, 'can_takedown' => false]);
+    expect($cards['Live']['page'])->toMatchArray(['published' => true, 'can_review' => true, 'can_publish' => false, 'can_repush' => true, 'can_takedown' => true]);
 });
 
 it('Generate creates the location landing page and queues the drafter', function () {
@@ -163,6 +163,41 @@ it('Publish approves + pushes a drafted location page; Repush re-pushes a live o
     Queue::fake();
     Livewire::test(OperatePhysicalLocations::class)->call('repushPage', $loc->id);
     Queue::assertPushed(PublishContent::class);
+});
+
+it('Take down removes a live location page from WordPress and flips it back to republishable', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper']);
+    $landing = Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'title' => 'Trooper, PA', 'slug' => 'trooper-pa', 'version' => 1,
+        'location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'We serve Trooper'],
+    ]);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('takeDown', $loc->id);
+
+    // Back in the work lane on the same URL — Approved (republishable), no WP post id.
+    expect($landing->refresh()->status)->toBe(ContentStatus::Approved)
+        ->and($landing->wp_post_id)->toBeNull();
+});
+
+it('the card footer offers Review and Take down alongside Repush on a live page', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'lat' => 40.1, 'lng' => -75.4, 'home_county_geoid' => '42091', 'county_geoids' => ['42091']]);
+    plArea($site, '4209153000', 'Norristown', [$loc->id]);
+    Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'title' => 'Trooper, PA', 'slug' => 'trooper-pa', 'version' => 1,
+        'location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'We serve Trooper'],
+    ]);
+
+    Livewire::test(OperatePhysicalLocations::class)
+        ->assertSee('Review')
+        ->assertSee('Repush')
+        ->assertSee('Regenerate')
+        ->assertSee('Take down');
 });
 
 it('Publish is a no-op with a helpful notice when the location has no page yet', function () {

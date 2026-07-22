@@ -14,6 +14,7 @@ use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PhysicalLocations;
+use App\Publishing\DeleteFromWordpress;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 
@@ -158,6 +159,29 @@ class OperatePhysicalLocations extends OperatePage
         }
 
         Notification::make()->success()->title('Re-pushing to WordPress')->send();
+    }
+
+    /**
+     * Take the location's landing page down from WordPress — force-deletes the WP post (freeing the
+     * slug) and flips the page back to republishable, so Repush recreates it on the SAME URL. The
+     * plan row stays; only the live page is removed. Mirrors the core pages board's Take down.
+     */
+    public function takeDown(string $locationId): void
+    {
+        $content = $this->landingFor($locationId);
+        if ($content === null) {
+            return;
+        }
+
+        $result = app(DeleteFromWordpress::class)->delete($content);
+        if (! $result['deleted'] && $result['on_wp']) {
+            Notification::make()->danger()->title('Could not take it down')->body((string) $result['message'])->send();
+
+            return;
+        }
+
+        Notification::make()->success()->title('Taken down — back in the work lane')
+            ->body("'{$content->title}' was removed from WordPress; Repush recreates it on the same URL.")->send();
     }
 
     /** A base Location owned by the working site, or null. */
