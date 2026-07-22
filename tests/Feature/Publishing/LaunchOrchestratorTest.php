@@ -3,6 +3,7 @@
 use App\Enums\ConnectionProvider;
 use App\Enums\ContentStatus;
 use App\Enums\LaunchRunStatus;
+use App\Enums\PageType;
 use App\Models\Connection;
 use App\Models\Content;
 use App\Models\LaunchRun;
@@ -93,6 +94,32 @@ it('isolates a single page failure — records it and continues the launch', fun
         ->and($run->failed)->toBe(1)
         ->and($run->pushed)->toBe(2)                        // Post B + redirects
         ->and(collect($run->items)->firstWhere('kind', 'redirects')['state'])->toBe('pushed');
+});
+
+it('publishes leaves-first: service spokes before Home, even though Home was materialized first', function () {
+    $site = apexSite();
+    // Home is materialized FIRST (its manifest priority is 0), so its created_at is earliest — the
+    // exact condition that used to publish Home before the services its grid links to.
+    Content::factory()->page()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::Approved,
+        'page_type' => PageType::Home, 'title' => 'Home', 'slug' => 'home',
+    ]);
+    Content::factory()->page()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::Approved,
+        'page_type' => PageType::Hub, 'title' => 'Plumbing Services', 'slug' => 'plumbing',
+    ]);
+    Content::factory()->page()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::Approved,
+        'page_type' => PageType::Service, 'title' => 'Water Heater Repair', 'slug' => 'water-heater-repair',
+    ]);
+    fakePluginOk();
+
+    $run = app(LaunchOrchestrator::class)->launch($site);
+
+    $order = collect($run->items)->where('kind', 'content')->pluck('label')->values()->all();
+    // Leaves-first: the service spoke, then its hub, then Home last — despite Home's earlier created_at.
+    expect(array_search('Water Heater Repair', $order))->toBeLessThan(array_search('Plumbing Services', $order))
+        ->and(array_search('Plumbing Services', $order))->toBeLessThan(array_search('Home', $order));
 });
 
 it('refuses to launch without a present, non-compromised WordPress connection', function () {

@@ -4,6 +4,7 @@ namespace App\Publishing;
 
 use App\Enums\ContentStatus;
 use App\Enums\LaunchRunStatus;
+use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\LaunchRun;
 use App\Models\Scopes\SiteScope;
@@ -103,9 +104,14 @@ class LaunchOrchestrator
         $contents = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->whereIn('status', array_map(fn (ContentStatus $s) => $s->value, PublishContentService::PUBLISHABLE))
-            ->orderByRaw('kind = ?', ['post']) // pages (pillars) before posts
-            ->orderBy('created_at')
-            ->get();
+            ->get()
+            // DEPENDENCY-SAFE ORDER (leaves-first): a page that links to other pages must go live AFTER
+            // them, because the "Our services" grid + internal links only resolve to pages already on
+            // WordPress. So: all pages before posts, then by PageType::publishRank (service → hub →
+            // location → home), then created_at. This is why a fresh launch's Home ships with a full
+            // services grid instead of an empty one. Publishing runs synchronously here, so the order holds.
+            ->sortBy(fn (Content $content): string => $this->publishSortKey($content))
+            ->values();
 
         foreach ($contents as $content) {
             $label = $content->title !== '' ? $content->title : $content->slug;
@@ -123,6 +129,19 @@ class LaunchOrchestrator
             }
             $run->save();
         }
+    }
+
+    /**
+     * A sortable key encoding the dependency-safe publish order: pages before posts, then the
+     * {@see PageType::publishRank} (leaves-first), then created_at, then id for a stable tiebreak.
+     */
+    private function publishSortKey(Content $content): string
+    {
+        $kindRank = $content->kind->value === 'post' ? 1 : 0;
+        $typeRank = $content->page_type?->publishRank() ?? 99;
+        $created = $content->created_at?->getTimestamp() ?? 0;
+
+        return sprintf('%d_%02d_%012d_%s', $kindRank, $typeRank, $created, $content->id);
     }
 
     private function pushRedirects(Site $site, LaunchRun $run): void
