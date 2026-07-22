@@ -103,4 +103,12 @@ final class Meta
     /** The pushed per-tenant site profile (brand/NAP/nav) rendered by the universal
      * header/footer chrome — see SiteProfileStore + SiteChrome. */
     public const OPTION_SITE_PROFILE = 'lp_site_profile';
+
+    /** The active brand style's resolved tokens — { colors: {slug=>hex}, custom: {radius,
+     * heading_weight, heading_letter_spacing} }, written by StyleStore on every /style push.
+     * BrandPaint prints them as a LATE :root override of the block theme's --wp--preset--color--*
+     * and --wp--custom--* variables, so the chosen palette paints even when WordPress's
+     * global-styles merge does not reflect the user global-styles write (the "green flag, still
+     * base blue" failure). The theme's blocks already consume these variables. */
+    public const OPTION_BRAND_PAINT = 'lp_brand_paint';
 }

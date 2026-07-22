@@ -12,6 +12,7 @@ use Launchpad\Companion\Admin\SlotsScreen;
 use Launchpad\Companion\Content\EditGuard;
 use Launchpad\Companion\Content\KitTaxonomy;
 use Launchpad\Companion\Render\Assets;
+use Launchpad\Companion\Render\BrandPaint;
 use Launchpad\Companion\Render\WeatherAlert;
 use Launchpad\Companion\Render\Shortcodes;
 use Launchpad\Companion\Render\SiteChrome;
@@ -70,6 +71,10 @@ final class Plugin
         // Baseline design layer — styles the lp-* blocks (keyed to the Global Kit
         // CSS variables) so a generated page is presentable without a designer.
         ( new Assets() )->register();
+        // Brand paint: on a block theme, re-declare the chosen palette's --wp--preset--color--* (and
+        // shape tokens) as a late :root override, so the pushed colors paint deterministically even
+        // when WordPress's global-styles merge doesn't reflect the user global-styles write.
+        ( new BrandPaint() )->register();
         ( new WeatherAlert() )->register();
 
         // SEO (native; suppress competing SEO plugins on managed posts).
