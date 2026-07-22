@@ -4,11 +4,16 @@ namespace App\Filament\Pages\Gathering;
 
 use App\Gathering\Provenance;
 use App\Integrations\Places\PlacesProvider;
+use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Interview\SiloSeed;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
+use App\Models\Site;
+use App\Publishing\Chrome\SiteProfileAssembler;
+use App\Publishing\ConnectionGate;
 use Filament\Notifications\Notification;
+use Throwable;
 
 /**
  * New Setup · Step 1 — Business: GBP import + identity + trust facts.
@@ -132,7 +137,38 @@ class BusinessStep extends GatheringPage
         // A review-surface save confirms interview-seeded fields; manual fields stay rowless.
         $this->confirmSeeded($site, ['license_number', 'insured', 'years_in_business', 'warranty_program', 'guarantees']);
 
-        Notification::make()->success()->title('Business saved')->send();
+        // The corporate NAP is what the header/footer chrome renders. That chrome is pushed to WordPress
+        // as a one-time profile — so editing the phone/address here without a re-push leaves the LIVE
+        // header/footer showing whatever was pushed before (a physical location's NAP, if corporate was
+        // captured later). Re-push now, for a connected site, so the chrome tracks the corporate NAP.
+        $synced = $this->resyncChrome($site->fresh());
+
+        Notification::make()->success()->title('Business saved')
+            ->body($synced ? 'Header & footer chrome refreshed with the corporate NAP.' : null)
+            ->send();
+    }
+
+    /**
+     * Best-effort: re-push the site-wide header/footer chrome so it reflects the just-saved corporate
+     * NAP. Only for a site with a present, non-compromised WordPress connection (a not-yet-connected
+     * site gets its chrome at launch/style activation). Never blocks the save — a push failure is logged.
+     */
+    private function resyncChrome(?Site $site): bool
+    {
+        if ($site === null || ! app(ConnectionGate::class)->hasVerifiedWordpress($site->id)) {
+            return false;
+        }
+
+        try {
+            $profile = app(SiteProfileAssembler::class)->assemble($site);
+            $result = app(WordpressClientFactory::class)->forSite($site)->pushSiteProfile($profile);
+
+            return ! empty($result['updated']);
+        } catch (Throwable $e) {
+            report($e);
+
+            return false;
+        }
     }
 
     /** The trade field's provenance chip state ('seeded'|'confirmed'|null), from the blueprint. */
@@ -269,7 +305,7 @@ class BusinessStep extends GatheringPage
     {
         try {
             $candidates = app(PlacesProvider::class)->search($line);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return ['query' => $line, 'status' => 'failed', 'name' => '', 'address' => '', 'place_id' => null, 'message' => $e->getMessage()];
         }
 
