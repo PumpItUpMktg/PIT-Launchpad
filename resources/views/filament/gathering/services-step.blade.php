@@ -31,7 +31,17 @@
         </div>
 
         <div class="g-card">
-            <h3>Stated services</h3>
+            @php $thinCount = $this->services->filter(fn ($s) => $s->isThin())->count(); @endphp
+            <div class="g-row" style="justify-content:space-between;align-items:center">
+                <h3 style="margin:0">Stated services</h3>
+                @if ($thinCount > 0)
+                    <button class="g-btn" wire:click="aiEnrichAll" wire:loading.attr="disabled" wire:target="aiEnrichAll"
+                        title="Draft the empty fields (symptoms, what's included, process, cost) for every thin service with generic trade knowledge — no prices or guarantees. You review each before it counts.">
+                        <span wire:loading.remove wire:target="aiEnrichAll">✨ Enrich all thin ({{ $thinCount }})</span>
+                        <span wire:loading wire:target="aiEnrichAll">Queuing…</span>
+                    </button>
+                @endif
+            </div>
             <div class="g-list">
                 @forelse ($this->services as $service)
                     @php
