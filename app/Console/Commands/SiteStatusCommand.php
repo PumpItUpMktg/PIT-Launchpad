@@ -48,6 +48,23 @@ class SiteStatusCommand extends Command
         $this->line('Active theme  : '.$this->v($theme['name'] ?? null).' '.($theme['version'] ?? ''));
         $this->line('Companion     : '.$this->v($status['companion_version'] ?? null));
 
+        // Block-theme + live brand colors (companion ≥ 0.9.16). Absent keys mean the site is on an
+        // older plugin — the brand push can't be verified until it's updated.
+        if (array_key_exists('is_block_theme', $status)) {
+            $this->line('Block theme   : '.($status['is_block_theme'] ? 'yes' : 'NO — theme.json global styles are inert; brand push has no effect'));
+
+            $colors = is_array($status['active_colors'] ?? null) ? $status['active_colors'] : [];
+            $shown = [];
+            foreach (['primary', 'accent', 'button'] as $slug) {
+                if (isset($colors[$slug]) && is_string($colors[$slug]) && $colors[$slug] !== '') {
+                    $shown[] = $slug.' '.$colors[$slug];
+                }
+            }
+            $this->line('Live colors   : '.($shown === [] ? '—' : implode('   ', $shown)));
+        } else {
+            $this->comment('Block theme / live colors : (companion < 0.9.16 — update the plugin to verify the brand push)');
+        }
+
         return self::SUCCESS;
     }
 
