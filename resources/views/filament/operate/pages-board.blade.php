@@ -11,6 +11,7 @@
             .pb-row { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid rgba(148,163,184,.15); flex-wrap:wrap; }
             .pb-row:last-child { border-bottom:0; }
             .pb-title { font-weight:600; font-size:13.5px; }
+            .pb-bm { font-weight:600; font-size:10.5px; color:#2563eb; background:rgba(37,99,235,.1); border:1px solid rgba(37,99,235,.22); padding:1px 7px; border-radius:99px; margin-left:6px; white-space:nowrap; vertical-align:middle; }
             .pb-perma { font-size:11.5px; color:#94a3b8; font-family:ui-monospace, monospace; }
             .pb-move { font-size:12px; color:#64748b; }
             .pb-tail { font-size:11.5px; color:#64748b; margin-top:3px; line-height:1.4; }
@@ -48,7 +49,14 @@
                 @foreach ($work as $row)
                     <div class="pb-row" wire:key="pbw-{{ $row['id'] }}">
                         <div>
-                            <div class="pb-title">{{ $row['title'] }}</div>
+                            <div class="pb-title">
+                                {{ $row['title'] }}
+                                @if (! empty($row['brick_mortar']))
+                                    <span class="pb-bm" title="Brick-and-mortar location this page belongs to">
+                                        📍 {{ $row['is_brick_mortar'] ?? false ? 'This location' : $row['brick_mortar'] }}
+                                    </span>
+                                @endif
+                            </div>
                             <div class="pb-perma">{{ $row['permalink'] }}</div>
                             {{-- The real operator diagnostic (draft/publish error, queued state, …). For a
                                  failed page this is WHY it failed — otherwise the card only says "something went wrong". --}}
