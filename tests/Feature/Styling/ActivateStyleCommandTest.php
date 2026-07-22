@@ -40,7 +40,28 @@ it('reads back the colors WordPress actually paints after the push', function ()
     $this->artisan('launchpad:activate-style', ['site' => $site->id])
         ->expectsOutputToContain('Applied "Slate & Signal"')
         ->expectsOutputToContain('WordPress now paints: primary #334155')
-        ->expectsOutputToContain('page/CDN cache')
+        ->expectsOutputToContain('external CDN or browser cache')
+        ->assertSuccessful();
+});
+
+it('names the page caches the companion purged on the push', function () {
+    $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
+
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn([
+        'updated' => true,
+        'variation' => 'slate',
+        'is_block_theme' => true,
+        'active_colors' => ['primary' => '#334155'],
+        'page_caches_purged' => ['litespeed', 'wp-rocket'],
+    ]);
+    $client->shouldReceive('pushSiteProfile')->andReturn(['updated' => true]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $this->artisan('launchpad:activate-style', ['site' => $site->id])
+        ->expectsOutputToContain('Purged page cache: litespeed, wp-rocket')
         ->assertSuccessful();
 });
 

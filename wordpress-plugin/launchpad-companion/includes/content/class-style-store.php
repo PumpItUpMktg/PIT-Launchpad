@@ -74,15 +74,23 @@ final class StyleStore
 
         self::flush_global_styles_cache();
 
+        // A block theme INLINES the global-styles CSS into every page's <head>, so a full-page cache
+        // (a caching plugin, or host/CDN cache) keeps serving the OLD colors even though the write took
+        // and the theme.json caches are clear — the classic "colors didn't change from the dashboard,
+        // but editing in wp-admin works" report (saving in the editor purges the page cache; our REST
+        // write did not). Purge the well-known page caches so the next front-end request re-renders.
+        $purged = self::purge_page_caches();
+
         // Read back what WordPress will ACTUALLY paint now (the live preset variables), so a "colors
         // still didn't change" report is decidable at the source: if this reflects the variation but the
-        // browser shows the old hue, it's a page/CDN cache; if it does NOT, the write didn't take. And
-        // if the site isn't running a block theme, theme.json global styles are inert — flag that too.
+        // browser shows the old hue, it's a remaining page/CDN cache; if it does NOT, the write didn't
+        // take. And if the site isn't running a block theme, theme.json global styles are inert — flag it.
         return [
             'updated' => true,
             'variation' => $variation,
             'is_block_theme' => function_exists('wp_is_block_theme') ? wp_is_block_theme() : false,
             'active_colors' => self::live_preset_colors(),
+            'page_caches_purged' => $purged,
         ];
     }
 
@@ -108,6 +116,85 @@ final class StyleStore
         if (function_exists('wp_cache_delete')) {
             wp_cache_delete('wp_get_global_stylesheet', 'theme_json');
         }
+    }
+
+    /**
+     * Purge the common full-page caches so a brand push actually re-renders on the front end. A block
+     * theme inlines its global-styles CSS per page, so a cached page keeps the old colors until its
+     * cache is cleared — and unlike a wp-admin save, our REST write doesn't run the editor's purge path.
+     * Every purger is fired defensively (a `do_action` with no listener is a harmless no-op; function
+     * calls are `function_exists`-guarded), so this is safe on a site with no cache plugin at all.
+     *
+     * Returns the names of the cache layers we asked to purge — surfaced in the readback so a lingering
+     * stale page can be pinned on a cache we DIDN'T cover (e.g. an external CDN) rather than the write.
+     *
+     * @return list<string>
+     */
+    private static function purge_page_caches(): array
+    {
+        $purged = [];
+
+        // LiteSpeed Cache.
+        if (has_action('litespeed_purge_all') || defined('LSCWP_V')) {
+            do_action('litespeed_purge_all');
+            $purged[] = 'litespeed';
+        }
+        // WP Rocket.
+        if (function_exists('rocket_clean_domain')) {
+            rocket_clean_domain();
+            $purged[] = 'wp-rocket';
+        }
+        // W3 Total Cache.
+        if (function_exists('w3tc_flush_all')) {
+            w3tc_flush_all();
+            $purged[] = 'w3-total-cache';
+        }
+        // WP Super Cache.
+        if (function_exists('wp_cache_clear_cache')) {
+            wp_cache_clear_cache();
+            $purged[] = 'wp-super-cache';
+        }
+        // WP Fastest Cache.
+        if (function_exists('wpfc_clear_all_cache')) {
+            wpfc_clear_all_cache(true);
+            $purged[] = 'wp-fastest-cache';
+        } elseif (has_action('wpfc_clear_all_cache')) {
+            do_action('wpfc_clear_all_cache', true);
+            $purged[] = 'wp-fastest-cache';
+        }
+        // Cache Enabler.
+        if (has_action('cache_enabler_clear_complete_cache')) {
+            do_action('cache_enabler_clear_complete_cache');
+            $purged[] = 'cache-enabler';
+        }
+        // SiteGround SG Optimizer.
+        if (function_exists('sg_cachepress_purge_cache')) {
+            sg_cachepress_purge_cache();
+            $purged[] = 'sg-optimizer';
+        } elseif (has_action('siteground_optimizer_flush_cache')) {
+            do_action('siteground_optimizer_flush_cache');
+            $purged[] = 'sg-optimizer';
+        }
+        // Breeze (Cloudways).
+        if (has_action('breeze_clear_all_cache')) {
+            do_action('breeze_clear_all_cache');
+            $purged[] = 'breeze';
+        }
+        // Autoptimize (CSS/page cache).
+        if (has_action('autoptimize_flush_pagecache')) {
+            do_action('autoptimize_flush_pagecache', '');
+            $purged[] = 'autoptimize';
+        } elseif (class_exists('autoptimizeCache') && method_exists('autoptimizeCache', 'clearall')) {
+            \autoptimizeCache::clearall();
+            $purged[] = 'autoptimize';
+        }
+        // Kinsta / other hosts commonly listen on this generic signal.
+        if (has_action('kinsta_cache_purge_all')) {
+            do_action('kinsta_cache_purge_all');
+            $purged[] = 'kinsta';
+        }
+
+        return $purged;
     }
 
     /**

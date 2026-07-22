@@ -121,9 +121,17 @@ class ActivateStyleCommand extends Command
             }
             if ($shown !== []) {
                 $this->line('  WordPress now paints: '.implode('   ', $shown));
-                $this->line('  (If your browser still shows the old colors, that\'s a page/CDN cache — hard-refresh or purge it.)');
             }
         }
+
+        // Companion ≥ 0.9.17 also purges the known full-page caches so the push re-renders. Name what it
+        // cleared — a still-stale page then points at a cache we DON'T control (an external CDN / the
+        // browser), not the write.
+        $caches = is_array($result['page_caches_purged'] ?? null) ? $result['page_caches_purged'] : [];
+        if ($caches !== []) {
+            $this->line('  Purged page cache: '.implode(', ', array_map('strval', $caches)));
+        }
+        $this->line('  (If the old colors persist, it\'s an external CDN or browser cache — hard-refresh or purge that.)');
 
         return self::SUCCESS;
     }

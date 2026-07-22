@@ -411,9 +411,17 @@ trait ManagesBrandKit
             }
         }
 
+        // Companion ≥ 0.9.17 purges the known full-page caches on the write, so a block theme's inlined
+        // global-styles CSS actually re-renders. If any old color lingers after that, it's an external
+        // CDN or the browser — the one cache we can't reach from here.
+        $purged = is_array($result['page_caches_purged'] ?? null) && $result['page_caches_purged'] !== [];
+        $cacheHint = $purged
+            ? ' Page cache purged — if the old colors linger, hard-refresh (it\'s a CDN/browser cache).'
+            : ' If your browser still shows the old colors, hard-refresh or purge your page/CDN cache.';
+
         Notification::make()
             ->title("Applied {$label} to your site.")
-            ->body($painted === [] ? null : 'Now painting: '.implode(' · ', $painted).'. If your browser still shows the old colors, hard-refresh or purge your page/CDN cache.')
+            ->body($painted === [] ? null : 'Now painting: '.implode(' · ', $painted).'.'.$cacheHint)
             ->success()->send();
     }
 
