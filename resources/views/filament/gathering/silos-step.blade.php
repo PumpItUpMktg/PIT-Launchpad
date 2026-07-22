@@ -277,6 +277,34 @@
                 </div>
             @endif
 
+            @if ($this->uncoveredServices !== [])
+                <div class="tg-card" style="border-color:rgba(37,99,235,.4)">
+                    <div class="tg-cardhead" style="background:rgba(37,99,235,.08)">
+                        <h3>Your services with no page yet</h3>
+                        <span class="tg-badge thin">{{ count($this->uncoveredServices) }}</span>
+                        <span class="tg-split">these have little search demand, so the plan skipped them — file each into a topic</span>
+                    </div>
+                    <div class="tg-rows">
+                        @foreach ($this->uncoveredServices as $svc)
+                            <div class="tg-row" wire:key="unsvc-{{ $svc['id'] }}" style="flex-wrap:wrap;gap:6px 8px">
+                                <span class="tg-q" title="{{ $svc['description'] }}">{{ $svc['name'] }}</span>
+                                <select wire:model="uncoveredSilo.{{ $svc['id'] }}" class="tg-sel" aria-label="Topic for {{ $svc['name'] }}">
+                                    <option value="">Add to topic…</option>
+                                    @foreach ($this->siloOptions as $sid => $sname)
+                                        <option value="{{ $sid }}">{{ $sname }}</option>
+                                    @endforeach
+                                </select>
+                                <select wire:model="uncoveredKind.{{ $svc['id'] }}" class="tg-sel" aria-label="Page or mention for {{ $svc['name'] }}">
+                                    <option value="own_page">Its own page</option>
+                                    <option value="folded">A mention</option>
+                                </select>
+                                <button type="button" class="tg-btn" title="Add this service to the chosen topic" wire:click="addServiceAsSpoke('{{ $svc['id'] }}')">+ Add</button>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             @if ($board['unassigned_total'] > 0)
                 <div class="tg-card">
                     <div class="tg-cardhead" style="display:flex;align-items:center;gap:8px">

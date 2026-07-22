@@ -5,6 +5,9 @@ namespace App\Filament\Pages\Gathering;
 use App\Build\GuidedEntityProjector;
 use App\Build\StructureResetter;
 use App\Enums\ServiceSiloRole;
+use App\Enums\SpokeGranularity;
+use App\Enums\SpokeStatus;
+use App\Enums\SpokeTag;
 use App\Filament\Concerns\ManagesPruneSurface;
 use App\Guided\StepGate;
 use App\Interview\Prune\PruneEngine;
@@ -12,6 +15,7 @@ use App\Interview\Prune\PruneRow;
 use App\Jobs\BuildStructure;
 use App\Jobs\DiscoverKeywords;
 use App\KeywordGenerator\Derive\DemandWithoutServiceReport;
+use App\KeywordGenerator\Derive\UncoveredServicesReport;
 use App\KeywordGenerator\KeywordRebucketer;
 use App\Models\BlogTarget;
 use App\Models\Keyword;
@@ -497,6 +501,97 @@ class SilosStep extends GatheringPage
         KeywordCluster::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->whereKey($clusterId)
             ->update(['demand_dismissed' => true]);
+    }
+
+    /** Per-service picks for the "services without a page" card: serviceId → silo id / kind. */
+    public array $uncoveredSilo = [];
+
+    public array $uncoveredKind = []; // serviceId → 'own_page' | 'folded'
+
+    /**
+     * Stated services that got NO page — the demand-first structure couldn't home them (see
+     * {@see UncoveredServicesReport}). The mirror of the demand-without-service report: nothing the
+     * owner sells drops silently. Empty outside keyword-first (where the flag isn't set).
+     *
+     * @return list<array{id: string, name: string, description: string}>
+     */
+    public function getUncoveredServicesProperty(): array
+    {
+        $site = $this->getSite();
+        if ($site === null || ! config('launchpad.keyword_first.enabled')) {
+            return [];
+        }
+
+        return app(UncoveredServicesReport::class)->for($site);
+    }
+
+    /**
+     * File an uncovered stated service into a topic as its OWN PAGE or a MENTION (a folded section on
+     * the topic's page). Creates the spoke in the chosen silo and clears the service's review flag so it
+     * counts as covered; re-syncs the §4 board so the new page shows up ready for keyword targets.
+     */
+    public function addServiceAsSpoke(string $serviceId): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $service = Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($serviceId)->first();
+        if ($service === null) {
+            return;
+        }
+
+        $siloId = (string) ($this->uncoveredSilo[$serviceId] ?? '');
+        if ($siloId === '') {
+            Notification::make()->warning()->title('Pick a topic first.')
+                ->body("Choose which topic “{$service->name}” belongs to, then add it.")->send();
+
+            return;
+        }
+
+        $silo = Silo::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($siloId)->first();
+        $blueprint = SiloBlueprint::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+        if ($silo === null || $blueprint === null) {
+            return;
+        }
+
+        $folded = ($this->uncoveredKind[$serviceId] ?? 'own_page') === 'folded';
+        $granularity = $folded ? SpokeGranularity::Folded : SpokeGranularity::OwnPage;
+
+        // Idempotent: don't add a second spoke for the same service in the same topic.
+        $exists = Spoke::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('silo', $silo->name)
+            ->whereRaw('lower(name) = ?', [mb_strtolower(trim((string) $service->name))])
+            ->exists();
+
+        if (! $exists) {
+            Spoke::create([
+                'silo_blueprint_id' => $blueprint->id,
+                'site_id' => $site->id,
+                'name' => $service->name,
+                'silo' => $silo->name,
+                'is_pillar' => false,
+                'status' => SpokeStatus::Offered,
+                'granularity' => $granularity,
+                'tag' => SpokeTag::Core,
+                'volume' => null,
+            ]);
+        }
+
+        // Now covered — the operator homed it by hand, so clear the needs-review flag.
+        $service->forceFill(['structure_home_flagged' => false])->save();
+
+        $this->syncBoardToTree($site);
+        unset($this->uncoveredSilo[$serviceId], $this->uncoveredKind[$serviceId]);
+
+        Notification::make()->success()
+            ->title("Added “{$service->name}” to {$silo->name}")
+            ->body($folded ? 'It’ll appear as a mention on that topic’s page.' : 'It’ll get its own page — click “Find search terms” to target it.')
+            ->send();
     }
 
     public function promote(string $keywordId): void
