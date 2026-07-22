@@ -4,6 +4,9 @@ namespace App\Operate;
 
 use App\Guided\GrowDashboard;
 use App\Guided\LiveBoards;
+use App\Models\Content;
+use App\Models\Location;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 
 /**
@@ -45,7 +48,61 @@ class PagesBoard
      */
     public function locations(Site $site): array
     {
-        return ['work' => $this->workLane($site, 'town'), 'live' => $this->live->locations($site)];
+        // The live side is already grouped under its location; the work lane is a flat list, so tag each
+        // work card with the brick-and-mortar location it belongs to — a visual link for the operator.
+        return ['work' => $this->tagBrickMortar($site, $this->workLane($site, 'town')), 'live' => $this->live->locations($site)];
+    }
+
+    /**
+     * Decorate each location work-card with the physical location it's tied to (`brick_mortar` label),
+     * and flag whether the row IS that brick-and-mortar page itself (`is_brick_mortar`). A town is tied
+     * via `parent_location_id`; a location's own landing page via `location_id`. Unassigned → null.
+     *
+     * @param  list<array<string, mixed>>  $cards
+     * @return list<array<string, mixed>>
+     */
+    private function tagBrickMortar(Site $site, array $cards): array
+    {
+        if ($cards === []) {
+            return $cards;
+        }
+
+        $ids = array_values(array_filter(array_map(fn (array $c): string => (string) ($c['id'] ?? ''), $cards)));
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($ids)
+            ->get(['id', 'location_id', 'parent_location_id'])
+            ->keyBy(fn (Content $c): string => (string) $c->id);
+
+        $locationIds = $pages->flatMap(fn (Content $c): array => [$c->location_id, $c->parent_location_id])
+            ->filter()->unique()->values()->all();
+        $locations = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($locationIds)
+            ->get()->keyBy(fn (Location $l): string => (string) $l->id);
+
+        foreach ($cards as $i => $card) {
+            $page = $pages->get((string) ($card['id'] ?? ''));
+            if ($page === null) {
+                $cards[$i]['brick_mortar'] = null;
+                $cards[$i]['is_brick_mortar'] = false;
+
+                continue;
+            }
+            $homeId = $page->location_id ?? $page->parent_location_id;
+            $location = $homeId !== null ? $locations->get((string) $homeId) : null;
+            $cards[$i]['brick_mortar'] = $location !== null ? $this->locationLabel($location) : null;
+            $cards[$i]['is_brick_mortar'] = $page->location_id !== null;
+        }
+
+        return $cards;
+    }
+
+    private function locationLabel(Location $location): string
+    {
+        ['city' => $city, 'state' => $state] = $location->cityState();
+        $city = trim($city) !== '' ? trim($city) : trim((string) $location->name);
+        $state = trim($state);
+
+        return $city !== '' && $state !== '' ? "{$city}, {$state}" : ($city !== '' ? $city : 'Location');
     }
 
     /** The site-level data-source chips for the live cards. */
