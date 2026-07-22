@@ -63,7 +63,48 @@ class PageGroundingAssembler
             narrative: $this->narrative($page),
             facts: $this->facts($page),
             location: $this->location($page),
+            siblingHeadings: $this->siblingHeadings($page),
         );
+    }
+
+    /**
+     * The section H2s already drafted on OTHER service/hub pages of this site — fed to the drafter as
+     * "do not duplicate," so no two pages share an identical drafted heading (the site-wide uniqueness
+     * acceptance for drafted H2s). Only heading slots (keys ending in `_heading`) from real slot
+     * payloads count; capped to keep the prompt bounded. Empty for the first page drafted on a site.
+     *
+     * @return list<string>
+     */
+    private function siblingHeadings(Content $page): array
+    {
+        $siblings = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $page->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->whereIn('page_type', [PageType::Service->value, PageType::Hub->value])
+            ->where('id', '!=', $page->id)
+            ->orderByDesc('updated_at')
+            ->limit(50)
+            ->get(['id', 'slot_payload']);
+
+        $headings = [];
+        foreach ($siblings as $sibling) {
+            $payload = is_array($sibling->slot_payload) ? $sibling->slot_payload : [];
+            foreach ($payload as $key => $value) {
+                if (! str_ends_with((string) $key, '_heading')) {
+                    continue;
+                }
+                $text = trim(is_array($value) ? (string) ($value[0] ?? '') : (string) $value);
+                if ($text !== '') {
+                    // De-dupe case-insensitively, keep first casing; cap the total for prompt bounds.
+                    $headings[mb_strtolower($text)] ??= $text;
+                }
+            }
+            if (count($headings) >= 40) {
+                break;
+            }
+        }
+
+        return array_values($headings);
     }
 
     /**

@@ -223,16 +223,17 @@ final class BlockPageComposer
 
         // With a lead form configured, the description row becomes a 60/40 two-column (copy + form);
         // otherwise the plain full-width prose. Same copy either way — only the layout differs.
+        $overviewHeading = $this->heading($slots, 'overview_heading', 'What this service covers');
         $introBlock = $hasForm
             ? $this->sections->proseWithForm(
                 eyebrow: 'Overview',
-                heading: 'What this service covers',
+                heading: $overviewHeading,
                 paragraphs: $intro,
                 preview: $preview,
             )
             : $this->sections->prose(
                 eyebrow: 'Overview',
-                heading: 'What this service covers',
+                heading: $overviewHeading,
                 paragraphs: $intro,
                 surface: false,
                 preview: $preview,
@@ -241,7 +242,7 @@ final class BlockPageComposer
 
         $symptomsBlock = $this->sections->symptomsList(
             eyebrow: 'Warning signs',
-            heading: 'Signs you need this',
+            heading: $this->heading($slots, 'symptoms_heading', 'Signs you need this'),
             intro: $symptomsIntro,
             symptoms: $symptoms,
             preview: $preview,
@@ -249,7 +250,7 @@ final class BlockPageComposer
 
         $scope = $this->sections->featuresList(
             eyebrow: 'What we do',
-            heading: 'What’s included',
+            heading: $this->heading($slots, 'scope_heading', 'What’s included'),
             features: $scopeItems,
             preview: $preview,
         );
@@ -263,13 +264,13 @@ final class BlockPageComposer
 
         $process = $this->sections->howItWorks(
             eyebrow: 'How it works',
-            heading: 'What to expect',
+            heading: $this->heading($slots, 'process_heading', 'What to expect'),
             steps: $processSteps,
         );
 
         $cost = $this->sections->costSection(
             eyebrow: 'Cost',
-            heading: 'What it costs',
+            heading: $this->heading($slots, 'cost_heading', 'What it costs'),
             copy: $costCopy,
             factors: $costFactors,
             rangeLine: $costRange,
@@ -313,13 +314,13 @@ final class BlockPageComposer
 
         $relatedBlock = $this->sections->relatedServices(
             eyebrow: 'Related services',
-            heading: 'You may also need',
+            heading: $this->heading($slots, 'related_heading', 'You may also need'),
             links: $related,
         );
 
         $faq = $this->sections->faqAccordion(
             eyebrow: 'Answers',
-            heading: 'Common questions',
+            heading: $this->heading($slots, 'faq_heading', 'Common questions'),
             intro: '',
             items: $faqs,
             preview: $preview,
@@ -388,7 +389,7 @@ final class BlockPageComposer
 
         $introBlock = $this->sections->prose(
             eyebrow: 'Overview',
-            heading: 'What this covers',
+            heading: $this->heading($slots, 'overview_heading', 'What this covers'),
             paragraphs: $intro,
             surface: false,
             preview: $preview,
@@ -398,13 +399,13 @@ final class BlockPageComposer
         // The internal-link spine: one card per child spoke, resolved fresh at compose time.
         $grid = $this->sections->servicesGrid(
             eyebrow: 'The services',
-            heading: 'Choose the service you need',
+            heading: $this->heading($slots, 'services_heading', 'Choose the service you need'),
             cards: $spokeCards,
         );
 
         $whyBlock = $this->sections->prose(
             eyebrow: 'Why it matters',
-            heading: 'The cost of waiting',
+            heading: $this->heading($slots, 'why_heading', 'The cost of waiting'),
             paragraphs: $why,
             surface: true,
             preview: $preview,
@@ -413,7 +414,7 @@ final class BlockPageComposer
 
         $process = $this->sections->howItWorks(
             eyebrow: 'How it works',
-            heading: 'Getting started is simple',
+            heading: $this->heading($slots, 'process_heading', 'Getting started is simple'),
             steps: $processSteps,
         );
 
@@ -429,7 +430,7 @@ final class BlockPageComposer
 
         $faq = $this->sections->faqAccordion(
             eyebrow: 'Answers',
-            heading: 'Common questions',
+            heading: $this->heading($slots, 'faq_heading', 'Common questions'),
             intro: '',
             items: $faqs,
             preview: $preview,
@@ -1095,6 +1096,18 @@ final class BlockPageComposer
     private function str(mixed $value): string
     {
         return trim(is_array($value) ? (string) ($value[0] ?? '') : (string) $value);
+    }
+
+    /**
+     * A section H2: the drafted heading slot when the drafter produced it (service-specific,
+     * keyword-varied), else the static label. The literal is the ERROR fallback only — a drafted
+     * page fills every heading slot; PageDraftingEngine flags any that fell back to a label here.
+     *
+     * @param  array<string, mixed>  $slots
+     */
+    private function heading(array $slots, string $key, string $fallback): string
+    {
+        return $this->str($slots[$key] ?? '') ?: $fallback;
     }
 
     /**

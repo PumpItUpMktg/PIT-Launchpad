@@ -21,7 +21,7 @@ test('both kits round-trip losslessly through the value objects', function (stri
 
     expect($reparsed->toArray())->toBe($schema->toArray());
 })->with([
-    ['service-page', PageType::Service, 10], // block-era drafted slots + the two platform conversion slots (cta / contact_block)
+    ['service-page', PageType::Service, 17], // drafted body slots + 7 drafted section-heading H2s + the two platform conversion slots (cta / contact_block)
     ['location-page', PageType::Location, 7], // block-era: drafted slots only (sections/NAP/schema live in the composer + blob)
 ]);
 
@@ -61,6 +61,6 @@ test('the seeder persists the library kits idempotently (keyed by name, not page
     $service = WireframeKit::where('page_type', 'service')->sole();
 
     expect($service->version)->toBe(1)
-        ->and($service->schema()->slots)->toHaveCount(10)
+        ->and($service->schema()->slots)->toHaveCount(17)
         ->and($service->slot_schema)->toBe($service->schema()->toArray());
 });

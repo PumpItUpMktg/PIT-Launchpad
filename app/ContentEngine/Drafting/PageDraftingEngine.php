@@ -4,6 +4,8 @@ namespace App\ContentEngine\Drafting;
 
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\SlotContentType;
+use App\Enums\SlotRole;
 use App\Models\Content;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\KitValidator;
@@ -11,6 +13,7 @@ use App\PageBuilder\Validation\ValidationCode;
 use App\PageBuilder\Validation\ValidationContext;
 use App\PageBuilder\Validation\ValidationFailure;
 use App\PageBuilder\Validation\ValidationResult;
+use Illuminate\Support\Facades\Log;
 
 /**
  * The PAGE middle of the §6 pipeline (sibling of the post DraftingEngine): it
@@ -99,9 +102,45 @@ class PageDraftingEngine
             );
         }
 
-        $this->persist($page, $grounding, $attempt->payload, $slots);
+        // Section headings are drafted slots; a section that came back empty renders the static label.
+        // That is the ERROR fallback — flag it in the generation log so it's never a silent default.
+        $headingFallbacks = $this->headingFallbacks($kit, $slots);
+        if ($headingFallbacks !== []) {
+            Log::warning('Page draft fell back to static section headings', [
+                'content_id' => $page->id,
+                'site_id' => (string) $page->site_id,
+                'slots' => $headingFallbacks,
+            ]);
+        }
+
+        $this->persist($page, $grounding, $attempt->payload, $slots, $headingFallbacks);
 
         return $page;
+    }
+
+    /**
+     * The section-heading slots (content_type=heading, role=body_explainer) the drafter left empty, so
+     * the composer will render the static label instead of a drafted, service-specific H2. The label is
+     * the error fallback, never the intended path — this list is logged and stamped into meta.
+     *
+     * @param  array<string, mixed>  $slots
+     * @return list<string>
+     */
+    private function headingFallbacks(KitSchema $kit, array $slots): array
+    {
+        $fallbacks = [];
+        foreach ($kit->slots as $slot) {
+            if ($slot->contentType !== SlotContentType::Heading || $slot->role !== SlotRole::BodyExplainer) {
+                continue;
+            }
+            $value = $slots[$slot->key] ?? null;
+            $text = trim(is_array($value) ? (string) ($value[0] ?? '') : (string) ($value ?? ''));
+            if ($text === '') {
+                $fallbacks[] = $slot->key;
+            }
+        }
+
+        return $fallbacks;
     }
 
     /**
@@ -183,19 +222,27 @@ class PageDraftingEngine
 
     /**
      * @param  array<string, mixed>  $slots
+     * @param  list<string>  $headingFallbacks  section-heading slots that fell back to the static label
      */
-    private function persist(Content $page, PageGrounding $grounding, DraftPayload $payload, array $slots): void
+    private function persist(Content $page, PageGrounding $grounding, DraftPayload $payload, array $slots, array $headingFallbacks = []): void
     {
+        $meta = [
+            'seo' => $payload->seo->toArray(),
+            'image_specs' => $payload->imageSpecsArray(),
+        ];
+        // The generation-log flag: which section H2s rendered a static label because the drafter left
+        // the slot empty. Present only when there was a fallback, so its absence means every H2 drafted.
+        if ($headingFallbacks !== []) {
+            $meta['heading_fallbacks'] = $headingFallbacks;
+        }
+
         $page->fill([
             'status' => ContentStatus::NeedsReview,
             'slot_payload' => $slots,
             'body' => null,
             'voice_profile_version' => $grounding->voiceProfileVersion,
             'wireframe_kit_version' => $grounding->kit->version,
-            'meta' => [
-                'seo' => $payload->seo->toArray(),
-                'image_specs' => $payload->imageSpecsArray(),
-            ],
+            'meta' => $meta,
         ])->save();
     }
 }

@@ -71,6 +71,7 @@ class PageDrafter
         $parts[] = $this->factsBlock($grounding);
         $parts[] = $this->proofBlock($grounding);
         $parts[] = $this->internalLinksBlock($grounding);
+        $parts[] = $this->siblingHeadingsBlock($grounding);
         $parts[] = $this->kitBlock($grounding);
         $parts[] = $this->outputContract();
 
@@ -213,10 +214,31 @@ class PageDrafter
             .'CHARACTER BUDGETS are hard limits: a slot line\'s "N–M chars — write to ~T" means the '
             .'validator REJECTS the whole draft if that slot exceeds M. Write to the ~T target; never run '
             .'past M. '
+            .'SECTION HEADINGS — the content_type=heading, role=body_explainer slots are the page\'s mid-page '
+            .'H2s: write each one specific to THIS service/category. Work the primary keyword or a natural '
+            .'or semantic variant into SOME of them where it reads naturally — never force the keyword into '
+            .'every heading, and prefer varied/secondary phrasings across sections so no two H2s share a '
+            .'pattern (the scope heading must not echo the symptoms heading). Geo-neutral, plain text, no markup. '
             .'For image/gallery slots: do NOT render. Emit an image SPEC block instead (image.<slot>) and leave the slot out. '
             .'Entity-sourced slots (the platform fills them) you may omit. '
-            .'Inside a body/rich-text slot, do NOT use an H1 or H2 heading — the page section already supplies its '
-            .'heading; use H3 or lower for any sub-heading within the copy.';
+            .'Inside a body/rich-text slot, do NOT use an H1 or H2 heading — the section H2 is its own slot; '
+            .'use H3 or lower for any sub-heading within the copy.';
+    }
+
+    /**
+     * The H2s already drafted on other pages of this site — the drafter must not repeat any of them, so
+     * no two pages share an identical section heading. Empty (omitted) when nothing else is drafted yet.
+     */
+    private function siblingHeadingsBlock(PageGrounding $grounding): string
+    {
+        if ($grounding->siblingHeadings === []) {
+            return '';
+        }
+
+        $lines = array_map(fn (string $h): string => "- {$h}", $grounding->siblingHeadings);
+
+        return 'HEADINGS ALREADY USED ON OTHER PAGES OF THIS SITE — every section H2 you write must be '
+            ."DISTINCT from all of these (no exact repeats):\n".implode("\n", $lines);
     }
 
     private function slotLine(SlotDefinition $slot): string

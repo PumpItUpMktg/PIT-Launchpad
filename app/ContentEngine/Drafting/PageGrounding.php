@@ -63,5 +63,13 @@ final class PageGrounding
          * @var array<string, mixed>
          */
         public readonly array $location = [],
+        /**
+         * The section H2s already used by OTHER service/hub pages on this site — so the drafter makes
+         * this page's headings distinct (no two pages share an identical drafted H2). The drafter lists
+         * them as "do not duplicate." Empty when nothing else is drafted yet.
+         *
+         * @var list<string>
+         */
+        public readonly array $siblingHeadings = [],
     ) {}
 }
