@@ -49,9 +49,31 @@ function blockServicePage(Site $site, string $title, string $slug, string $blurb
         'page_type' => PageType::Service,
         'slug' => $slug,
         'title' => $title,
+        // A LIVE page (on WordPress) — the home "Our services" grid only advertises live services.
+        'wp_post_id' => abs(crc32($slug)),
         'meta' => ['seo' => ['meta_description' => $blurb]],
     ]);
 }
+
+it('the home services grid lists only LIVE services — a drafted/orphaned page never appears', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    // Live service page — appears.
+    blockServicePage($site, 'Drain Cleaning', 'drain-cleaning', 'Snaking and hydro-jetting.');
+    // A page that exists but is NOT on WordPress (drafted / orphaned / taken down) — must NOT appear.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'foundation-water-problems', 'title' => 'Foundation Water Problems',
+        'wp_post_id' => null, 'meta' => ['seo' => ['meta_description' => 'Not offered yet.']],
+    ]);
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)->toContain('Drain Cleaning')
+        ->toContain('href="https://sewergurus.com/drain-cleaning"')
+        ->not->toContain('Foundation Water Problems')
+        ->not->toContain('foundation-water-problems');
+});
 
 it('composes Home post_content from real inputs — cards link to real pages, phone + emergency resolved', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com', 'offers_emergency' => true]);
@@ -180,6 +202,7 @@ it('service cards carry a real description even without SEO meta — from the pa
         'slug' => 'drain-cleaning', 'title' => 'Drain Cleaning',
         'slot_payload' => ['hero_subhead' => 'Snaking and hydro-jetting that clears the whole pipe wall.'],
         'meta' => [], // no SEO meta_description
+        'wp_post_id' => 5001, // live on WordPress — the home grid only shows live services
     ]);
 
     $home = blockHomePage($site);
@@ -199,6 +222,7 @@ it('an ungenerated service page gets a generated, keyword-grounded card blurb (c
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
         'slug' => 'sump-pump-maintenance', 'title' => 'Sump Pump Maintenance',
         'slot_payload' => [], 'meta' => [], 'target_keyword_id' => $keyword->id,
+        'wp_post_id' => 5002, // live on WordPress (the card-blurb fallback is independent of drafting)
     ]);
 
     $fake = new FakeClaudeClient('Routine upkeep that keeps your sump pump ready before the next big storm.');
@@ -224,6 +248,7 @@ it('a card blurb is never null even when the model is unreachable — determinis
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
         'slug' => 'hydro-jetting', 'title' => 'Hydro Jetting',
         'slot_payload' => [], 'meta' => [], 'target_keyword_id' => $keyword->id,
+        'wp_post_id' => 5003, // live on WordPress
     ]);
 
     // A model that throws → the resolver must still return a non-empty, keyword-anchored line.
