@@ -1,8 +1,8 @@
 {
     "$schema": "https://schemas.wp.org/trunk/theme.json",
     "version": 3,
-    "title": "Clean & Trustworthy",
-    "description": "Calm, precise and premium — the trustworthy default for careful, credentialed brands. Manrope headings, 12px corners.",
+    "title": "Fresh & Modern",
+    "description": "Clean teal and mint — current and approachable, for a modern, upfront brand. Manrope headings, 14px corners.",
     "settings": {
         "color": {
             "palette": [
@@ -14,32 +14,32 @@
                 {
                     "slug": "surface",
                     "name": "Surface",
-                    "color": "#f1f5f9"
+                    "color": "#eefaf6"
                 },
                 {
                     "slug": "contrast",
                     "name": "Contrast",
-                    "color": "#0f172a"
+                    "color": "#0f2a26"
                 },
                 {
                     "slug": "muted",
                     "name": "Muted",
-                    "color": "#475569"
+                    "color": "#4b6b64"
                 },
                 {
                     "slug": "border",
                     "name": "Border",
-                    "color": "#e2e8f0"
+                    "color": "#d5eae4"
                 },
                 {
                     "slug": "primary",
                     "name": "Primary",
-                    "color": "#123B6B"
+                    "color": "#0B5D52"
                 },
                 {
                     "slug": "accent",
                     "name": "Accent",
-                    "color": "#1D6FD6"
+                    "color": "#14B8A6"
                 },
                 {
                     "slug": "on-accent",
@@ -49,7 +49,7 @@
                 {
                     "slug": "button",
                     "name": "Button",
-                    "color": "#1D6FD6"
+                    "color": "#0EA5A0"
                 },
                 {
                     "slug": "on-button",
@@ -104,8 +104,8 @@
             ]
         },
         "custom": {
-            "radius": "12px",
-            "headingLetterSpacing": "0em",
+            "radius": "14px",
+            "headingLetterSpacing": "-0.01em",
             "headingWeight": "700"
         }
     }

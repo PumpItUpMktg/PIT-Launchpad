@@ -62,15 +62,17 @@ it('each style variation matches its control-plane StyleVariation tokens exactly
         ->and($json['settings']['custom']['headingLetterSpacing'])->toBe($tokens['heading_letter_spacing'])
         ->and($json['settings']['custom']['headingWeight'])->toBe((string) $tokens['heading_weight']);
 
+    // The full six-role palette is written: the button token too, matching the enum palette.
+    expect(paletteColor($json, 'button'))->toBe($variation->palette()['button'])
+        ->and(paletteColor($json, 'on-button'))->toBe($variation->palette()['on_button'])
+        ->and(paletteColor($json, 'base'))->toBe($variation->palette()['base'])
+        ->and(paletteColor($json, 'surface'))->toBe($variation->palette()['surface']);
+
     // The heading font family declares the variation's typeface.
     $headingFamily = collect($json['settings']['typography']['fontFamilies'])
         ->firstWhere('slug', 'heading')['fontFamily'] ?? '';
     expect($headingFamily)->toContain($tokens['heading_font']);
-})->with([
-    'bold' => StyleVariation::Bold,
-    'clean' => StyleVariation::Clean,
-    'warm' => StyleVariation::Warm,
-]);
+})->with(collect(StyleVariation::cases())->mapWithKeys(fn (StyleVariation $v): array => [$v->value => $v])->all());
 
 it('bundles the heading webfont locally for each variation (fontFace → an existing woff2)', function (StyleVariation $variation) {
     $json = variationJson($variation);
@@ -84,11 +86,7 @@ it('bundles the heading webfont locally for each variation (fontFace → an exis
     // The referenced file is actually bundled (self-hosted, not a CDN link).
     $path = base_path('wordpress-theme/launchpad-blocks/'.substr($src, strlen('file:./')));
     expect(file_exists($path))->toBeTrue();
-})->with([
-    'bold' => StyleVariation::Bold,
-    'clean' => StyleVariation::Clean,
-    'warm' => StyleVariation::Warm,
-]);
+})->with(collect(StyleVariation::cases())->mapWithKeys(fn (StyleVariation $v): array => [$v->value => $v])->all());
 
 it('bundles the Inter body font in the base theme', function () {
     $theme = json_decode((string) file_get_contents(base_path('wordpress-theme/launchpad-blocks/theme.json')), true, 512, JSON_THROW_ON_ERROR);

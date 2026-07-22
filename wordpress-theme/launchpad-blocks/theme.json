@@ -19,7 +19,9 @@
                 { "slug": "border", "name": "Border", "color": "#e2e8f0" },
                 { "slug": "primary", "name": "Primary", "color": "#123B6B" },
                 { "slug": "accent", "name": "Accent", "color": "#1D6FD6" },
-                { "slug": "on-accent", "name": "On accent", "color": "#ffffff" }
+                { "slug": "on-accent", "name": "On accent", "color": "#ffffff" },
+                { "slug": "button", "name": "Button", "color": "#1D6FD6" },
+                { "slug": "on-button", "name": "On button", "color": "#ffffff" }
             ]
         },
         "typography": {
@@ -103,8 +105,8 @@
             },
             "button": {
                 "color": {
-                    "background": "var(--wp--preset--color--accent)",
-                    "text": "var(--wp--preset--color--on-accent)"
+                    "background": "var(--wp--preset--color--button)",
+                    "text": "var(--wp--preset--color--on-button)"
                 },
                 "border": { "radius": "var(--wp--custom--radius)" },
                 "spacing": {

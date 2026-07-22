@@ -389,7 +389,7 @@ final class BlockSections
         // On the accent (bold) band the accent-filled button would vanish — use a base/contrast button instead.
         $buttonAttrs = $bold
             ? ['backgroundColor' => 'base', 'textColor' => 'contrast']
-            : ['backgroundColor' => 'accent', 'textColor' => 'on-accent'];
+            : ['backgroundColor' => 'button', 'textColor' => 'on-button'];
         $children[] = $this->b->buttons([
             ['text' => $actionText, 'url' => $actionUrl !== '' ? $actionUrl : '#contact', 'attrs' => $buttonAttrs],
         ]);
@@ -1385,7 +1385,7 @@ final class BlockSections
             : null;
         $assessment = ['text' => $assessmentText !== '' ? $assessmentText : 'Get a free assessment', 'url' => $assessmentUrl];
 
-        $primary = ['backgroundColor' => 'accent', 'textColor' => 'on-accent'];
+        $primary = ['backgroundColor' => 'button', 'textColor' => 'on-button'];
         $secondary = ['className' => 'is-style-outline', 'textColor' => 'base'];
 
         // Emergency ON → the call leads (primary); OFF → the assessment leads.

@@ -48,19 +48,26 @@ it('derives signals from an active VoiceProfile', function () {
         ->and((new StyleRecommender)->recommend($signals))->toBe(StyleVariation::Bold);
 });
 
-it('exposes the exact mockup token set and the two alternates per variation', function () {
+it('exposes the six-role palette + typography tokens and the alternates per variation', function () {
     $bold = StyleVariation::Bold->tokens();
-    expect($bold['primary'])->toBe('#0B1F33')
-        ->and($bold['accent'])->toBe('#EA580C')
+    expect($bold['primary'])->toBe('#111827')
+        ->and($bold['accent'])->toBe('#E4572E')          // tokens.accent === palette.highlight
         ->and($bold['heading_font'])->toBe('Archivo')
         ->and($bold['heading_weight'])->toBe(800)
         ->and($bold['radius'])->toBe('3px');
+
+    // The full six-role palette is the picker contract.
+    $p = StyleVariation::Bold->palette();
+    expect($p)->toHaveKeys(['base', 'surface', 'text', 'primary', 'highlight', 'button', 'muted', 'border', 'on_accent', 'on_button'])
+        ->and($p['button'])->toBe('#E4572E');
 
     expect(StyleVariation::Clean->tokens()['primary'])->toBe('#123B6B')
         ->and(StyleVariation::Warm->tokens()['heading_font'])->toBe('Bricolage Grotesque')
         ->and(StyleVariation::Warm->tokens()['radius'])->toBe('18px');
 
-    // Alternates are the other two, stable order, never including self.
-    expect(StyleVariation::Bold->alternates())->toBe([StyleVariation::Clean, StyleVariation::Warm])
-        ->and(StyleVariation::Clean->alternates())->toBe([StyleVariation::Bold, StyleVariation::Warm]);
+    // Ten variations now; alternates are the other nine, stable order, never including self.
+    expect(StyleVariation::cases())->toHaveCount(10)
+        ->and(StyleVariation::Clean->alternates())->toHaveCount(9)
+        ->and(StyleVariation::Clean->alternates())->not->toContain(StyleVariation::Clean)
+        ->and(StyleVariation::Clean->alternates()[0])->toBe(StyleVariation::Bold); // declaration order, self removed
 });
