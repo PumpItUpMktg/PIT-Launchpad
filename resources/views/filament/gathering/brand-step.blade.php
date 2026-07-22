@@ -72,6 +72,23 @@
             <button type="button" class="g-btn" style="margin-top:8px" wire:click="chooseStyle('auto')">
                 Follow the voice recommendation (Auto{{ $chosen === null && ! $usesLogo && $resolved !== null ? ' — '.$resolved->label() : '' }})
             </button>
+
+            @php $res = $this->styleResolution; @endphp
+            @if ($res['label'] !== '')
+                <div style="margin-top:10px;padding:9px 12px;border-radius:9px;font-size:12.5px;
+                            background:{{ $res['shadows_curated'] ? '#fffbeb' : '#f8fafc' }};
+                            border:1px solid {{ $res['shadows_curated'] ? '#fcd34d' : 'rgba(148,163,184,.4)' }};
+                            color:{{ $res['shadows_curated'] ? '#92400e' : '#334155' }}">
+                    Applying will push <strong>{{ $res['label'] }}</strong>.
+                    @if ($res['shadows_curated'])
+                        <br>Your curated pick (<strong>{{ $res['curated_label'] }}</strong>) is being ignored while
+                        "Your brand colors" is selected — pick {{ $res['curated_label'] }} above to switch off the logo colors.
+                    @elseif ($res['is_logo'])
+                        <br>These come from your logo. Pick any curated style above to use it instead.
+                    @endif
+                </div>
+            @endif
+
             <button type="button" class="g-btn primary" wire:click="pushBrand" wire:loading.attr="disabled" wire:target="pushBrand">
                 <span wire:loading.remove wire:target="pushBrand">Apply {{ $usesLogo ? 'your brand colors' : ($resolved?->label() ?? 'your look') }} to the site</span>
                 <span wire:loading wire:target="pushBrand">Applying…</span>

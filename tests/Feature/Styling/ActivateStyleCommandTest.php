@@ -22,6 +22,70 @@ it('pushes the curated variation and reports what it applied', function () {
         ->assertSuccessful();
 });
 
+it('reads back the colors WordPress actually paints after the push', function () {
+    $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
+
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn([
+        'updated' => true,
+        'variation' => 'slate',
+        'is_block_theme' => true,
+        'active_colors' => ['primary' => '#334155', 'accent' => '#F97316', 'button' => '#F97316'],
+    ]);
+    $client->shouldReceive('pushSiteProfile')->andReturn(['updated' => true]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $this->artisan('launchpad:activate-style', ['site' => $site->id])
+        ->expectsOutputToContain('Applied "Slate & Signal"')
+        ->expectsOutputToContain('WordPress now paints: primary #334155')
+        ->expectsOutputToContain('external CDN or browser cache')
+        ->assertSuccessful();
+});
+
+it('names the page caches the companion purged on the push', function () {
+    $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
+
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn([
+        'updated' => true,
+        'variation' => 'slate',
+        'is_block_theme' => true,
+        'active_colors' => ['primary' => '#334155'],
+        'page_caches_purged' => ['litespeed', 'wp-rocket'],
+    ]);
+    $client->shouldReceive('pushSiteProfile')->andReturn(['updated' => true]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $this->artisan('launchpad:activate-style', ['site' => $site->id])
+        ->expectsOutputToContain('Purged page cache: litespeed, wp-rocket')
+        ->assertSuccessful();
+});
+
+it('warns loudly when the site is not on a block theme (the push is inert)', function () {
+    $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
+
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn([
+        'updated' => true,
+        'variation' => 'slate',
+        'is_block_theme' => false,
+        'active_colors' => [],
+    ]);
+    $client->shouldReceive('pushSiteProfile')->andReturn(['updated' => true]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $this->artisan('launchpad:activate-style', ['site' => $site->id])
+        ->expectsOutputToContain('NOT running a block theme')
+        ->expectsOutputToContain('activate the launchpad-blocks block theme')
+        ->assertSuccessful();
+});
+
 it('the diagnostic explains when use_logo_colors overrides the curated pick', function () {
     // Slate is chosen, but use_logo_colors is still on with a usable palette — the classic drift.
     $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => true]);

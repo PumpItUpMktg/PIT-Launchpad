@@ -222,6 +222,38 @@ trait ManagesBrandKit
     }
 
     /**
+     * The pre-push resolution — the dashboard twin of the `launchpad:activate-style` diagnostic: what
+     * "Apply" will ACTUALLY push and why. The recurring "reverts to logo blue when re-pushed" trap is a
+     * sticky `use_logo_colors` flag: while it's on, the logo-derived "Your brand colors" is pushed and
+     * any curated pick is ignored, so every Apply re-implements the logo palette. This surfaces that
+     * state plainly (and flags when a curated pick is being shadowed) so the operator can see it and
+     * switch, instead of being surprised by the front end.
+     *
+     * @return array{label: string, is_logo: bool, shadows_curated: bool, curated_label: ?string}
+     */
+    public function getStyleResolutionProperty(): array
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return ['label' => '', 'is_logo' => false, 'shadows_curated' => false, 'curated_label' => null];
+        }
+
+        $activator = app(StyleActivator::class);
+        // The logo-derived path is taken only when the flag is on AND a usable logo palette exists —
+        // exactly the activator's own resolution, so this never over-promises the logo look.
+        $isLogo = (bool) $site->use_logo_colors && $activator->logoColorsAvailable($site);
+        $curated = $site->style_variation instanceof StyleVariation ? $site->style_variation : null;
+
+        return [
+            'label' => $isLogo ? 'Your brand colors (from your logo)' : $activator->resolve($site)->label(),
+            'is_logo' => $isLogo,
+            // A curated pick exists but is being shadowed by the logo flag — the classic drift.
+            'shadows_curated' => $isLogo && $curated !== null,
+            'curated_label' => $curated?->label(),
+        ];
+    }
+
+    /**
      * The full brand-picker option list, in choose order: the logo-derived palette FIRST (when a usable
      * logo palette exists), then the voice/AI recommendation, then the remaining curated variations in
      * declaration order. Each option carries its six-role palette swatches (base / surface / text /
@@ -344,12 +376,53 @@ trait ManagesBrandKit
 
         if ($result['updated'] ?? false) {
             app(StepGate::class)->state($site)->update(['brand_pushed' => true]);
-            Notification::make()->title("Applied {$label} to your site.")->success()->send();
+            $this->notifyPushed($label, $result);
 
             return;
         }
 
         Notification::make()->title('Could not apply your style')->body((string) ($result['error'] ?? 'Try again.'))->danger()->send();
+    }
+
+    /**
+     * Report what WordPress ACTUALLY painted, so "applied" can't mask a change that didn't render. A
+     * non-block theme makes theme.json global styles inert (flagged as a warning); otherwise the live
+     * preset colors are echoed back with a cache hint. Older companions (< 0.9.16) return neither key —
+     * the plain success is kept for them.
+     *
+     * @param  array<string, mixed>  $result
+     */
+    private function notifyPushed(string $label, array $result): void
+    {
+        if (array_key_exists('is_block_theme', $result) && ! $result['is_block_theme']) {
+            Notification::make()
+                ->title("Applied {$label} — but this site isn't on a block theme")
+                ->body('theme.json global styles are inert here, so the colors won\'t change. Activate the Launchpad Blocks theme, then push again.')
+                ->warning()->send();
+
+            return;
+        }
+
+        $colors = is_array($result['active_colors'] ?? null) ? $result['active_colors'] : [];
+        $painted = [];
+        foreach (['primary', 'accent', 'button'] as $slug) {
+            if (isset($colors[$slug]) && is_string($colors[$slug]) && $colors[$slug] !== '') {
+                $painted[] = ucfirst($slug).' '.$colors[$slug];
+            }
+        }
+
+        // Companion ≥ 0.9.17 purges the known full-page caches on the write, so a block theme's inlined
+        // global-styles CSS actually re-renders. If any old color lingers after that, it's an external
+        // CDN or the browser — the one cache we can't reach from here.
+        $purged = is_array($result['page_caches_purged'] ?? null) && $result['page_caches_purged'] !== [];
+        $cacheHint = $purged
+            ? ' Page cache purged — if the old colors linger, hard-refresh (it\'s a CDN/browser cache).'
+            : ' If your browser still shows the old colors, hard-refresh or purge your page/CDN cache.';
+
+        Notification::make()
+            ->title("Applied {$label} to your site.")
+            ->body($painted === [] ? null : 'Now painting: '.implode(' · ', $painted).'.'.$cacheHint)
+            ->success()->send();
     }
 
     /**

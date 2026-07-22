@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.15
+Stable tag: 0.9.17
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,28 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.17 =
+* Brand push now purges the full-page caches so the new colors actually re-render. A block theme inlines
+  its global-styles CSS into every page's <head>, so a caching plugin (or host/CDN page cache) kept
+  serving the OLD colors after a /style write even though the write took and the theme.json caches were
+  clear — the "colors didn't change from the dashboard, but editing in wp-admin works" report (a wp-admin
+  save runs the editor's purge path; our REST write did not). After writing the global styles, /style now
+  fires the well-known page-cache purges (LiteSpeed, WP Rocket, W3 Total Cache, WP Super Cache, WP Fastest
+  Cache, Cache Enabler, SG Optimizer, Breeze, Autoptimize, Kinsta) defensively — a no-op on a site with no
+  cache plugin — and returns `page_caches_purged` (the layers it cleared) in the readback, so a still-stale
+  page pins on a cache we don't control (an external CDN / the browser) rather than on the write.
+
+= 0.9.16 =
+* Style-variation push now self-verifies. After writing the theme.json global styles, /style thoroughly
+  invalidates the merged-theme.json caches via the canonical wp_clean_theme_json_cache() (the previous
+  partial clear left a persistent object cache serving the OLD global styles — a push that "succeeded"
+  while the site kept its old colors), then reads back the live preset colors WordPress will actually
+  paint and returns them plus an `is_block_theme` flag. /status reports the same two fields. This makes
+  a "colors didn't change" report decidable at the source: the readback either reflects the new
+  variation (so any remaining old hue is a page/CDN cache) or it doesn't (the write didn't take), and a
+  non-block theme — where theme.json global styles are inert — is flagged instead of reported as a
+  phantom success.
 
 = 0.9.15 =
 * Canonical permalink is now enforced on every /content upsert. WordPress' wp_unique_post_slug()

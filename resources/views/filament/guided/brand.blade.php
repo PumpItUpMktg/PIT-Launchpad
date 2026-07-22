@@ -63,6 +63,21 @@
                 @endif
             </div>
 
+            @php $res = $this->styleResolution; @endphp
+            @if ($res['label'] !== '')
+                <div style="margin:8px 0;padding:8px 11px;border-radius:8px;font-size:12px;
+                            background:{{ $res['shadows_curated'] ? '#fffbeb' : '#f8fafc' }};
+                            border:1px solid {{ $res['shadows_curated'] ? '#fcd34d' : 'rgba(148,163,184,.4)' }};
+                            color:{{ $res['shadows_curated'] ? '#92400e' : '#334155' }}">
+                    Applying will push <strong>{{ $res['label'] }}</strong>.
+                    @if ($res['shadows_curated'])
+                        Your curated pick (<strong>{{ $res['curated_label'] }}</strong>) is ignored while "Your brand colors" is selected — pick {{ $res['curated_label'] }} above to switch off the logo colors.
+                    @elseif ($res['is_logo'])
+                        These come from your logo. Pick any curated style above to use it instead.
+                    @endif
+                </div>
+            @endif
+
             <div style="display:flex;gap:8px;align-items:center">
                 <button class="lp-mini primary" wire:click="pushBrand">Apply {{ $usesLogo ? 'your brand colors' : ($resolved?->label() ?? 'your look') }} to your site</button>
                 @if ($chosen !== null || $usesLogo)

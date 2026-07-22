@@ -94,6 +94,45 @@ class ActivateStyleCommand extends Command
 
         $this->info("  Applied \"{$label}\" to WordPress global styles.");
 
+        // Read back what WordPress ACTUALLY paints now, so a "colors still didn't change" report is
+        // decidable at the source rather than a guessing game. A pre-0.9.16 companion returns neither
+        // key — say so plainly instead of falling back to a silent, unverifiable "applied".
+        if (! array_key_exists('is_block_theme', $result) && ! array_key_exists('active_colors', $result)) {
+            $this->warn('  ⚠  The companion plugin on this site is older than 0.9.16 — it can\'t report what it painted.');
+            $this->line('     Install launchpad-companion 0.9.16 to verify the push (and to fix the stale-cache cause of colors not changing).');
+
+            return self::SUCCESS;
+        }
+
+        if (array_key_exists('is_block_theme', $result) && ! $result['is_block_theme']) {
+            $this->warn('  ⚠  This site is NOT running a block theme — theme.json global styles are inert here.');
+            $this->line('     The brand push had no visible effect: activate the launchpad-blocks block theme, then re-run.');
+
+            return self::SUCCESS;
+        }
+
+        $colors = is_array($result['active_colors'] ?? null) ? $result['active_colors'] : [];
+        if ($colors !== []) {
+            $shown = [];
+            foreach (['primary', 'accent', 'button'] as $slug) {
+                if (isset($colors[$slug]) && $colors[$slug] !== '') {
+                    $shown[] = $slug.' '.$colors[$slug];
+                }
+            }
+            if ($shown !== []) {
+                $this->line('  WordPress now paints: '.implode('   ', $shown));
+            }
+        }
+
+        // Companion ≥ 0.9.17 also purges the known full-page caches so the push re-renders. Name what it
+        // cleared — a still-stale page then points at a cache we DON'T control (an external CDN / the
+        // browser), not the write.
+        $caches = is_array($result['page_caches_purged'] ?? null) ? $result['page_caches_purged'] : [];
+        if ($caches !== []) {
+            $this->line('  Purged page cache: '.implode(', ', array_map('strval', $caches)));
+        }
+        $this->line('  (If the old colors persist, it\'s an external CDN or browser cache — hard-refresh or purge that.)');
+
         return self::SUCCESS;
     }
 }
