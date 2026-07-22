@@ -7,6 +7,7 @@ use App\KeywordGenerator\Cluster\ClusteringPipeline;
 use App\KeywordGenerator\Corpus\CorpusAccumulator;
 use App\KeywordGenerator\Derive\DerivationPipeline;
 use App\KeywordGenerator\Derive\DerivationResult;
+use App\KeywordGenerator\Derive\ServicePageGuarantee;
 use App\Models\KeywordCorpus;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -26,6 +27,7 @@ final class KeywordFirstBuilder
         private readonly ClusteringPipeline $clusterer,
         private readonly DerivationPipeline $deriver,
         private readonly AutoArrangeRunner $arranger,
+        private readonly ServicePageGuarantee $guarantee,
     ) {}
 
     public function build(Site $site): DerivationResult
@@ -36,6 +38,10 @@ final class KeywordFirstBuilder
 
         $this->clusterer->cluster($site);
         $result = $this->deriver->derive($site);
+
+        // Coverage guarantee: re-materialize an own-page spoke for every force_page service BEFORE
+        // arranging, so a rebuild-from-scratch never drops a page the owner explicitly guaranteed.
+        $this->guarantee->ensure($site);
 
         // Re-arrange the derived tree (dedup / sub-hub / keyword collisions) — Prune reads the result.
         $this->arranger->run($site);

@@ -12,6 +12,7 @@ use App\KeywordGenerator\Cluster\ClusteringPipeline;
 use App\KeywordGenerator\Cluster\ClusterLabeler;
 use App\KeywordGenerator\Corpus\CorpusAccumulator;
 use App\KeywordGenerator\Derive\DerivationPipeline;
+use App\KeywordGenerator\Derive\ServicePageGuarantee;
 use App\KeywordGenerator\KeywordFirstBuilder;
 use App\Models\KeywordCluster;
 use App\Models\KeywordCorpus;
@@ -62,6 +63,7 @@ it('the keyword-first builder runs accumulate → cluster → derive → arrange
         app(ClusteringPipeline::class),
         app(DerivationPipeline::class),
         app(AutoArrangeRunner::class),
+        app(ServicePageGuarantee::class),
     );
 
     $result = $builder->build($site);
@@ -101,6 +103,7 @@ it('skips re-accumulation when the corpus is fresh (only clusters + derives)', f
         app(ClusteringPipeline::class),
         app(DerivationPipeline::class),
         app(AutoArrangeRunner::class),
+        app(ServicePageGuarantee::class),
     );
 
     $builder->build($site); // no throw = accumulation skipped

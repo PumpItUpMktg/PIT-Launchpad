@@ -582,8 +582,14 @@ class SilosStep extends GatheringPage
             ]);
         }
 
-        // Now covered — the operator homed it by hand, so clear the needs-review flag.
-        $service->forceFill(['structure_home_flagged' => false])->save();
+        // Now covered — the operator homed it by hand. Clear the needs-review flag AND guarantee the
+        // page: force_page + forced_silo mean ServicePageGuarantee re-creates this page on every rebuild,
+        // so a full regenerate can never silently drop a service the owner said to build.
+        $service->forceFill([
+            'structure_home_flagged' => false,
+            'force_page' => ! $folded, // a mention isn't a guaranteed page; an own page is
+            'forced_silo' => $folded ? $service->forced_silo : $silo->name,
+        ])->save();
 
         $this->syncBoardToTree($site);
         unset($this->uncoveredSilo[$serviceId], $this->uncoveredKind[$serviceId]);

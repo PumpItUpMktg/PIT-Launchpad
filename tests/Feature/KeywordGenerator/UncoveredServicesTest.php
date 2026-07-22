@@ -61,7 +61,10 @@ it('files an uncovered service into the chosen topic as its own page and clears 
         ->and($spoke->granularity)->toBe(SpokeGranularity::OwnPage)
         ->and($spoke->status)->toBe(SpokeStatus::Offered)
         ->and($spoke->is_pillar)->toBeFalse()
-        ->and($service->fresh()->structure_home_flagged)->toBeFalse();
+        ->and($service->fresh()->structure_home_flagged)->toBeFalse()
+        // Filing an own page guarantees it survives a rebuild.
+        ->and($service->fresh()->force_page)->toBeTrue()
+        ->and($service->fresh()->forced_silo)->toBe('Foundation Water Problems');
 
     // Covered now → drops off the report.
     expect(Livewire::test(SilosStep::class)->instance()->uncoveredServices)->toBe([]);
