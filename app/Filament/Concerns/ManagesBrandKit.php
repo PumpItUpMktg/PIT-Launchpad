@@ -344,12 +344,45 @@ trait ManagesBrandKit
 
         if ($result['updated'] ?? false) {
             app(StepGate::class)->state($site)->update(['brand_pushed' => true]);
-            Notification::make()->title("Applied {$label} to your site.")->success()->send();
+            $this->notifyPushed($label, $result);
 
             return;
         }
 
         Notification::make()->title('Could not apply your style')->body((string) ($result['error'] ?? 'Try again.'))->danger()->send();
+    }
+
+    /**
+     * Report what WordPress ACTUALLY painted, so "applied" can't mask a change that didn't render. A
+     * non-block theme makes theme.json global styles inert (flagged as a warning); otherwise the live
+     * preset colors are echoed back with a cache hint. Older companions (< 0.9.16) return neither key —
+     * the plain success is kept for them.
+     *
+     * @param  array<string, mixed>  $result
+     */
+    private function notifyPushed(string $label, array $result): void
+    {
+        if (array_key_exists('is_block_theme', $result) && ! $result['is_block_theme']) {
+            Notification::make()
+                ->title("Applied {$label} — but this site isn't on a block theme")
+                ->body('theme.json global styles are inert here, so the colors won\'t change. Activate the Launchpad Blocks theme, then push again.')
+                ->warning()->send();
+
+            return;
+        }
+
+        $colors = is_array($result['active_colors'] ?? null) ? $result['active_colors'] : [];
+        $painted = [];
+        foreach (['primary', 'accent', 'button'] as $slug) {
+            if (isset($colors[$slug]) && is_string($colors[$slug]) && $colors[$slug] !== '') {
+                $painted[] = ucfirst($slug).' '.$colors[$slug];
+            }
+        }
+
+        Notification::make()
+            ->title("Applied {$label} to your site.")
+            ->body($painted === [] ? null : 'Now painting: '.implode(' · ', $painted).'. If your browser still shows the old colors, hard-refresh or purge your page/CDN cache.')
+            ->success()->send();
     }
 
     /**

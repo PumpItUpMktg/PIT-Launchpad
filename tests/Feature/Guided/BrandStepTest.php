@@ -101,6 +101,24 @@ test('Applying the look activates the style variation, sets brand_pushed, and Co
     Livewire::test(Brand::class)->call('proceed')->assertRedirect(WhereYouWork::getUrl());
 });
 
+test('pushBrand warns when the site is not on a block theme (the push is inert)', function () {
+    SetupState::query()->create([
+        'site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true,
+    ]);
+
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('activateStyle')->once()->with('clean')->andReturn([
+        'updated' => true, 'variation' => 'clean', 'is_block_theme' => false, 'active_colors' => [],
+    ]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    Livewire::test(Brand::class)
+        ->call('pushBrand')
+        ->assertNotified("Applied Clean & Trustworthy — but this site isn't on a block theme");
+});
+
 test('Choosing a style sets the operator override on the site', function () {
     SetupState::query()->create(['site_id' => $this->site->id, 'current_step' => 3, 'services_done' => true, 'deps_ready' => true]);
 
