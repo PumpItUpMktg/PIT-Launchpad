@@ -48,9 +48,11 @@ beforeEach(function () {
 
 test('re-pushing with a curated override honours it — never reverts to the logo palette', function () {
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('activateStyle')->once()->with('slate')
+    // The curated push sends the variation's palette inline under its own slug ('slate'), never the
+    // logo-derived 'brand' slug — that's the "never reverts to logo" guarantee.
+    $client->shouldReceive('activateStyleVariation')->once()->with('slate', Mockery::type('array'))
         ->andReturn(['updated' => true, 'variation' => 'slate', 'is_block_theme' => true, 'active_colors' => ['primary' => '#0f172a']]);
-    $client->shouldReceive('activateStyleVariation')->never(); // the logo-derived path must NOT fire
+    $client->shouldReceive('activateStyleVariation')->with('brand', Mockery::any())->never(); // the logo-derived path must NOT fire
     $client->shouldReceive('pushSiteProfile')->andReturn([]);
     $factory = Mockery::mock(WordpressClientFactory::class);
     $factory->shouldReceive('forSite')->andReturn($client);

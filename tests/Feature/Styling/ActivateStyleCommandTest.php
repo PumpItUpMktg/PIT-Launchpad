@@ -10,7 +10,7 @@ it('pushes the curated variation and reports what it applied', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG', 'style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
 
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn(['updated' => true, 'variation' => 'slate']);
+    $client->shouldReceive('activateStyleVariation')->once()->with('slate', Mockery::type('array'))->andReturn(['updated' => true, 'variation' => 'slate']);
     $client->shouldReceive('pushSiteProfile')->once()->andReturn(['updated' => true]);
     $factory = Mockery::mock(WordpressClientFactory::class);
     $factory->shouldReceive('forSite')->andReturn($client);
@@ -26,7 +26,7 @@ it('reads back the colors WordPress actually paints after the push', function ()
     $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
 
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn([
+    $client->shouldReceive('activateStyleVariation')->once()->with('slate', Mockery::type('array'))->andReturn([
         'updated' => true,
         'variation' => 'slate',
         'is_block_theme' => true,
@@ -48,7 +48,7 @@ it('names the page caches the companion purged on the push', function () {
     $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
 
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn([
+    $client->shouldReceive('activateStyleVariation')->once()->with('slate', Mockery::type('array'))->andReturn([
         'updated' => true,
         'variation' => 'slate',
         'is_block_theme' => true,
@@ -69,7 +69,7 @@ it('warns loudly when the site is not on a block theme (the push is inert)', fun
     $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
 
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn([
+    $client->shouldReceive('activateStyleVariation')->once()->with('slate', Mockery::type('array'))->andReturn([
         'updated' => true,
         'variation' => 'slate',
         'is_block_theme' => false,
@@ -105,7 +105,7 @@ it('--variation force-clears the sticky logo override and pushes the curated var
 
     $client = Mockery::mock(WordpressClient::class);
     // Must push the CURATED slate, never the logo variation, once the flag is cleared.
-    $client->shouldReceive('activateStyle')->once()->with('slate')->andReturn(['updated' => true, 'variation' => 'slate']);
+    $client->shouldReceive('activateStyleVariation')->once()->with('slate', Mockery::type('array'))->andReturn(['updated' => true, 'variation' => 'slate']);
     $client->shouldReceive('pushSiteProfile')->andReturn(['updated' => true]);
     $factory = Mockery::mock(WordpressClientFactory::class);
     $factory->shouldReceive('forSite')->andReturn($client);
@@ -124,7 +124,7 @@ it('surfaces the theme-missing error verbatim and fails', function () {
     $site = Site::factory()->create(['style_variation' => StyleVariation::Slate->value, 'use_logo_colors' => false]);
 
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('activateStyle')->once()->with('slate')
+    $client->shouldReceive('activateStyleVariation')->once()->with('slate', Mockery::type('array'))
         ->andReturn(['updated' => false, 'error' => "Style variation 'slate' is not in the active theme."]);
     $client->shouldReceive('pushSiteProfile')->andReturn(['updated' => true]);
     $factory = Mockery::mock(WordpressClientFactory::class);

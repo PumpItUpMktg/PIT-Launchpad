@@ -2,12 +2,14 @@
 
 namespace App\Styling;
 
+use App\Console\Commands\BuildThemeVariationsCommand;
+
 /**
  * Builds a curated {@see StyleVariation}'s full theme.json style-variation document from the enum —
  * the SINGLE place the variation's palette + typography + shape tokens are assembled into the
  * WordPress theme.json shape. Two consumers share it so they can never drift:
  *
- *  - {@see \App\Console\Commands\BuildThemeVariationsCommand} writes each doc to the block theme's
+ *  - {@see BuildThemeVariationsCommand} writes each doc to the block theme's
  *    `styles/{slug}.json` (what the editor's style picker offers).
  *  - {@see StyleActivator} sends the doc INLINE on the brand push (`activateStyleVariation`), so the
  *    push carries its own palette and does NOT depend on the deployed theme's `styles/{slug}.json`
