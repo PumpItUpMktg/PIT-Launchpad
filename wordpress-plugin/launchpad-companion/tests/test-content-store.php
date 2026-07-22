@@ -308,15 +308,18 @@ class Test_Content_Store extends WP_UnitTestCase
     public function test_upsert_collapses_duplicate_posts_sharing_the_content_id(): void
     {
         // A prior double-insert left TWO posts with the same ULID, squatting the slug and its -2.
-        $dupe = self::factory()->post->create(['post_type' => 'page', 'post_name' => 'water-heater-repair-2', 'post_status' => 'publish']);
-        update_post_meta($dupe, Meta::CONTENT_ID, '01JCONTENTSERVICE000000000');
+        // upsert() adopts one (find() returns it) and must force-delete the other — one post per ULID.
+        $a = self::factory()->post->create(['post_type' => 'page', 'post_name' => 'water-heater-repair', 'post_status' => 'publish']);
+        update_post_meta($a, Meta::CONTENT_ID, '01JCONTENTSERVICE000000000');
+        $b = self::factory()->post->create(['post_type' => 'page', 'post_name' => 'water-heater-repair-2', 'post_status' => 'publish']);
+        update_post_meta($b, Meta::CONTENT_ID, '01JCONTENTSERVICE000000000');
 
         $result = (new ContentStore())->upsert($this->payload());
 
-        // Exactly one post carries the ULID now, and it holds the clean canonical slug.
+        // Exactly one post carries the ULID now, it IS the one upsert returned, and it holds the clean slug.
         $found = get_posts(['post_type' => ['page', 'post'], 'post_status' => 'any', 'meta_key' => Meta::CONTENT_ID, 'meta_value' => '01JCONTENTSERVICE000000000', 'fields' => 'ids']);
-        $this->assertCount(1, $found);
-        $this->assertNull(get_post($dupe), 'The duplicate stray must be force-deleted.');
+        $this->assertCount(1, $found, 'Duplicate strays sharing the ULID must be collapsed to one.');
+        $this->assertSame((int) $found[0], $result['wp_post_id']);
         $this->assertSame('water-heater-repair', $result['slug']);
     }
 
