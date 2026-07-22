@@ -221,9 +221,15 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
+        // Section-heading fallbacks are SERVICE-SPECIFIC (keyed on the page keyword), not a single
+        // static label — so even an un-regenerated page (whose drafted heading slots are empty, e.g.
+        // a plain repush) shows distinct H2s per service instead of "What this service covers" on
+        // every page. A drafted heading slot still wins; this is the honest fallback beneath it.
+        $kw = trim($keyword);
+
         // With a lead form configured, the description row becomes a 60/40 two-column (copy + form);
         // otherwise the plain full-width prose. Same copy either way — only the layout differs.
-        $overviewHeading = $this->heading($slots, 'overview_heading', 'What this service covers');
+        $overviewHeading = $this->heading($slots, 'overview_heading', $kw !== '' ? "What {$kw} covers" : 'What this service covers');
         $introBlock = $hasForm
             ? $this->sections->proseWithForm(
                 eyebrow: 'Overview',
@@ -242,7 +248,7 @@ final class BlockPageComposer
 
         $symptomsBlock = $this->sections->symptomsList(
             eyebrow: 'Warning signs',
-            heading: $this->heading($slots, 'symptoms_heading', 'Signs you need this'),
+            heading: $this->heading($slots, 'symptoms_heading', $kw !== '' ? "Signs you need {$kw}" : 'Signs you need this'),
             intro: $symptomsIntro,
             symptoms: $symptoms,
             preview: $preview,
@@ -250,7 +256,7 @@ final class BlockPageComposer
 
         $scope = $this->sections->featuresList(
             eyebrow: 'What we do',
-            heading: $this->heading($slots, 'scope_heading', 'What’s included'),
+            heading: $this->heading($slots, 'scope_heading', $kw !== '' ? "What {$kw} includes" : 'What’s included'),
             features: $scopeItems,
             preview: $preview,
         );
@@ -270,7 +276,7 @@ final class BlockPageComposer
 
         $cost = $this->sections->costSection(
             eyebrow: 'Cost',
-            heading: $this->heading($slots, 'cost_heading', 'What it costs'),
+            heading: $this->heading($slots, 'cost_heading', $kw !== '' ? "What {$kw} costs" : 'What it costs'),
             copy: $costCopy,
             factors: $costFactors,
             rangeLine: $costRange,
@@ -389,7 +395,7 @@ final class BlockPageComposer
 
         $introBlock = $this->sections->prose(
             eyebrow: 'Overview',
-            heading: $this->heading($slots, 'overview_heading', 'What this covers'),
+            heading: $this->heading($slots, 'overview_heading', trim($keyword) !== '' ? 'What '.trim($keyword).' covers' : 'What this covers'),
             paragraphs: $intro,
             surface: false,
             preview: $preview,

@@ -162,7 +162,8 @@ it('a configured site lead form makes the service-description row a 60/40 two-co
         ->toContain('[lp_form]')
         ->toContain('flex-basis:60%')
         ->toContain('flex-basis:40%')
-        ->toContain('What this service covers');
+        // Overview heading fallback is now service-specific (keyed on the page keyword).
+        ->toContain('What sump pump installation covers');
 
     // The [lp_form] shortcode renders the blob's form_embed — which falls back to the site embed,
     // so the shortcode isn't empty. The iframe never rides post_content (kses strips it).
@@ -179,7 +180,7 @@ it('with NO lead form the description row stays single-column prose (no [lp_form
 
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
-    expect($markup)->toContain('What this service covers')
+    expect($markup)->toContain('What sump pump installation covers')
         ->not->toContain('lp-prose-form')
         ->not->toContain('[lp_form]');
 });
@@ -389,11 +390,37 @@ it('renders the drafted section H2 when present, and the static label only as fa
         ->not->toContain('Signs you need this')     // the static label is not used when drafted
         ->not->toContain('Common questions');
 
-    // Undrafted: the static label is the honest fallback.
+    // Undrafted: the fallback is the honest default — service-specific (keyed on the keyword), so it's
+    // still distinct per page, not "Signs you need this" on every service.
     $bare = hsSpokePage($site, $silo, $service, ['slug' => 'sump-pump-repair', 'slot_payload' => $faq]);
     $bareMarkup = app(BlockContentAssembler::class)->compose($bare->fresh(), $bare->slot_payload, []);
-    expect($bareMarkup)->toContain('Signs you need this')
+    expect($bareMarkup)->toContain('Signs you need sump pump installation')
         ->toContain('Common questions');
+});
+
+it('undrafted section headings are still unique per service — the fallback is keyword-specific, not one label everywhere', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $svcA = hsService($site, $silo, ['name' => 'Sump Pump Installation']);
+    $svcB = hsService($site, $silo, ['name' => 'Basement Waterproofing']);
+
+    // Two UNDRAFTED spokes (no heading slots) with different keywords.
+    $pageA = hsSpokePage($site, $silo, $svcA, ['slug' => 'sump-pump-installation', 'slot_payload' => [],
+        'target_keyword_id' => hsKeyword($site, 'sump pump installation')->id]);
+    $pageB = hsSpokePage($site, $silo, $svcB, ['slug' => 'basement-waterproofing', 'slot_payload' => [],
+        'target_keyword_id' => hsKeyword($site, 'basement waterproofing')->id]);
+
+    $a = app(BlockContentAssembler::class)->compose($pageA->fresh(), $pageA->slot_payload, []);
+    $b = app(BlockContentAssembler::class)->compose($pageB->fresh(), $pageB->slot_payload, []);
+
+    // Each section H2 names its own service — no single "Signs you need this" / "What it costs"
+    // repeated on both. (Asserted on the record-driven sections, which render on a bare page.)
+    expect($a)->toContain('Signs you need sump pump installation')
+        ->toContain('What sump pump installation costs')
+        ->not->toContain('Signs you need basement waterproofing');
+    expect($b)->toContain('Signs you need basement waterproofing')
+        ->toContain('What basement waterproofing costs')
+        ->not->toContain('Signs you need sump pump installation');
 });
 
 it('drafted section H2s are unique across sibling spokes on a site', function () {
