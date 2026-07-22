@@ -84,6 +84,15 @@ final class StyleActivator
             return $site->style_variation;
         }
 
+        return $this->recommended($site);
+    }
+
+    /**
+     * The voice/AI recommendation for a site — the "AI pick" slot in the brand picker — independent of
+     * any operator override. Voice recommendation when an active voice exists, else the Clean default.
+     */
+    public function recommended(Site $site): StyleVariation
+    {
         $voice = VoiceProfile::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('status', VoiceStatus::Active->value)

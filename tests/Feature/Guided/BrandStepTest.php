@@ -77,8 +77,8 @@ test('a monochrome logo still offers the option — accent borrowed from the nea
         'logo_set' => ['url' => 'https://cdn.example/logo.png', 'primary' => '#0B1F33'], // no accent
     ]);
 
-    // Nearest base for cool-dark navy is Bold → its accent (#ea580c) is borrowed for the swatch.
-    Livewire::test(Brand::class)->assertSee('Your brand colors')->assertSee('#ea580c');
+    // Nearest base for cool-dark navy is Bold → its highlight (#e4572e) is borrowed for the swatch.
+    Livewire::test(Brand::class)->assertSee('Your brand colors')->assertSee('#e4572e');
 });
 
 test('Applying the look activates the style variation, sets brand_pushed, and Continue advances', function () {

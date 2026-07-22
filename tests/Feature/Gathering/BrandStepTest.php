@@ -34,6 +34,36 @@ beforeEach(function () {
     session(['guided_site_id' => $this->site->id]);
 });
 
+it('the style picker offers all 10 variations — logo palette first, the AI pick second, six-color previews', function () {
+    // A logo palette so the logo-derived option (slot 1) exists.
+    SiteBranding::withoutGlobalScope(SiteScope::class)->create([
+        'site_id' => $this->site->id,
+        'logo_set' => ['url' => 'https://cdn.example/logo.png', 'primary' => '#123B6B', 'accent' => '#1D6FD6'],
+    ]);
+
+    $options = Livewire::test(BrandStep::class)->instance()->styleOptions;
+
+    // Slot 1 = the logo-derived palette; slot 2 = the AI/voice recommendation; then the rest → 11 total.
+    expect($options)->toHaveCount(11)
+        ->and($options[0]['key'])->toBe('brand_colors')
+        ->and($options[0]['badge'])->toBe('From your logo')
+        ->and($options[1]['badge'])->toBe('AI pick')             // the recommendation is second
+        ->and($options[0]['swatches'])->toHaveCount(6);          // six-role preview, not two
+
+    // Every curated variation is present and each carries a 6-swatch palette.
+    $keys = array_column($options, 'key');
+    foreach (StyleVariation::cases() as $v) {
+        expect($keys)->toContain($v->value);
+    }
+});
+
+it('choosing one of the new variations records the override', function () {
+    Livewire::test(BrandStep::class)->call('chooseStyle', 'midnight');
+
+    expect($this->site->fresh()->style_variation)->toBe(StyleVariation::Midnight)
+        ->and($this->site->fresh()->use_logo_colors)->toBeFalse();
+});
+
 it('is Setup step 7 (rail order 7·8·9 kept); nav-final keeps it out of the sidebar; guided Brand superseded', function () {
     // Nav-final: the single "Setup" entry registers, not the steps — but the rail order is metadata
     // that survives (Brand 7, Silos 8, Launch 9).
