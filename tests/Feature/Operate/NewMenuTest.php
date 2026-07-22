@@ -33,9 +33,9 @@ it('the final menu carries ONLY the newly designed surfaces, in cutover order', 
     expect(collect($groups['Top level']['items'])->pluck('label')->all())
         ->toBe(['Dashboard', 'Portfolio', 'Setup']);
 
-    // Operate: the five pages boards (Portfolio + Dashboard moved up to Top level).
+    // Operate: the pages boards + the internal-link audit surface (Portfolio + Dashboard are Top level).
     expect(collect($groups['Operate']['items'])->pluck('label')->all())
-        ->toBe(['Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations']);
+        ->toBe(['Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations', 'Internal Links']);
 
     // No legacy label — nor any off-menu step/tool — leaks into the final sidebar.
     $menuLabels = collect($m['menu'])->flatMap(fn ($g) => collect($g['items'])->pluck('label'));
