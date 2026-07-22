@@ -142,7 +142,7 @@ class GrowDashboard
     }
 
     /**
-     * @return array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, menu: list<string>, live_url: ?string, bulk: ?string, rank: int, section: string}
+     * @return array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, menu: list<string>, live_url: ?string, bulk: ?string, needs_enrichment: bool, rank: int, section: string}
      */
     private function row(Content $c): array
     {
@@ -209,6 +209,9 @@ class GrowDashboard
             'menu' => $menu,
             'live_url' => $state === PageState::Live ? $this->liveUrl($c) : null,
             'bulk' => $bulk,
+            // A spoke whose §1 Service has no enrichment (symptoms/scope/process/cost) renders thin —
+            // its mid-page sections omit. Flag it so the operator enriches the service before it ships.
+            'needs_enrichment' => $c->page_type === PageType::Service && ($c->primaryService?->isThin() ?? false),
             'rank' => $rank,
             'section' => $this->section($c->page_type),
         ];
@@ -230,7 +233,7 @@ class GrowDashboard
         return Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
-            ->with('site')
+            ->with(['site', 'primaryService'])
             ->get();
     }
 

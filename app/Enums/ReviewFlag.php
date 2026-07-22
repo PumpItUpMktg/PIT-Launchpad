@@ -21,6 +21,9 @@ enum ReviewFlag: string
     case OnDemand = 'on_demand';
     /** §6a — borderline relevance promoted for an operator decision. */
     case RelevanceBand = 'relevance_band';
+    /** §1 — a service spoke whose Service record has no enrichment (symptoms/scope/process/cost), so
+     * its mid-page sections omit and the page reads thin. Enrich the service, then regenerate. */
+    case NeedsEnrichment = 'needs_enrichment';
 
     public function label(): string
     {
@@ -31,6 +34,7 @@ enum ReviewFlag: string
             self::BrandSafety => 'Brand safety',
             self::OnDemand => 'On-demand',
             self::RelevanceBand => 'Borderline relevance',
+            self::NeedsEnrichment => 'Needs enrichment',
         };
     }
 

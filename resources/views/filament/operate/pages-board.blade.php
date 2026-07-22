@@ -12,6 +12,8 @@
             .pb-row:last-child { border-bottom:0; }
             .pb-title { font-weight:600; font-size:13.5px; }
             .pb-bm { font-weight:600; font-size:10.5px; color:#2563eb; background:rgba(37,99,235,.1); border:1px solid rgba(37,99,235,.22); padding:1px 7px; border-radius:99px; margin-left:6px; white-space:nowrap; vertical-align:middle; }
+            a.pb-enrich { font-weight:600; font-size:10.5px; color:#b45309; background:rgba(217,119,6,.12); border:1px solid rgba(217,119,6,.3); padding:1px 7px; border-radius:99px; margin-left:6px; white-space:nowrap; vertical-align:middle; text-decoration:none; }
+            a.pb-enrich:hover { background:rgba(217,119,6,.2); }
             .pb-perma { font-size:11.5px; color:#94a3b8; font-family:ui-monospace, monospace; }
             .pb-move { font-size:12px; color:#64748b; }
             .pb-tail { font-size:11.5px; color:#64748b; margin-top:3px; line-height:1.4; }
@@ -62,6 +64,12 @@
                                     <span class="pb-bm" title="Brick-and-mortar location this page belongs to">
                                         📍 {{ $row['is_brick_mortar'] ?? false ? 'This location' : $row['brick_mortar'] }}
                                     </span>
+                                @endif
+                                @if (! empty($row['needs_enrichment']))
+                                    <a class="pb-enrich" href="{{ \App\Filament\Pages\Gathering\ServicesStep::getUrl() }}" wire:navigate
+                                       title="This service has no symptoms / what's-included / process / cost — its page will render thin. Enrich it, then regenerate.">
+                                        ⚠ Needs enrichment
+                                    </a>
                                 @endif
                             </div>
                             <div class="pb-perma">{{ $row['permalink'] }}</div>
