@@ -69,7 +69,8 @@ final class InternalLinkGraph
 
         foreach ($this->pages as $page) {
             $this->nestingEdges($page);
-            $this->siblingEdges($page, $site);
+            $this->siloEdges($page, $site);
+            $this->locationGridEdges($page, $site);
             $this->postEdges($page, $site);
             $this->inlineEdges($page, $site);
         }
@@ -119,23 +120,61 @@ final class InternalLinkGraph
         }
     }
 
-    private function siblingEdges(Content $page, Site $site): void
+    /**
+     * The silo spine — the links the hub/spoke composer actually emits, keyed on SILO MEMBERSHIP (not
+     * URL nesting): a hub grids down to its spokes; a spoke's "related services" links up to the hub
+     * (always) + up to 3 same-silo siblings.
+     */
+    private function siloEdges(Content $page, Site $site): void
     {
-        if ($page->page_type !== PageType::Service || $page->silo_id === null) {
+        if ($page->silo_id === null || $page->kind !== ContentKind::Page) {
             return;
         }
-        $siblings = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('status', ContentStatus::Published->value)
-            ->where('kind', ContentKind::Page->value)
-            ->where('page_type', PageType::Service->value)
-            ->where('silo_id', $page->silo_id)
-            ->whereKeyNot($page->id)
-            ->orderBy('title')
-            ->limit(3)
+
+        if ($page->page_type === PageType::Hub) {
+            $spokes = Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->where('status', ContentStatus::Published->value)
+                ->where('kind', ContentKind::Page->value)->where('page_type', PageType::Service->value)
+                ->where('silo_id', $page->silo_id)->orderBy('title')->limit(12)->pluck('id');
+            foreach ($spokes as $spokeId) {
+                $this->edge((string) $page->id, (string) $spokeId); // hub → spoke (the grid)
+            }
+
+            return;
+        }
+
+        if ($page->page_type === PageType::Service) {
+            $hubId = Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->where('status', ContentStatus::Published->value)
+                ->where('kind', ContentKind::Page->value)->where('page_type', PageType::Hub->value)
+                ->where('silo_id', $page->silo_id)->value('id');
+            if ($hubId !== null) {
+                $this->edge((string) $page->id, (string) $hubId); // spoke → hub ("All X")
+            }
+            $siblings = Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->where('status', ContentStatus::Published->value)
+                ->where('kind', ContentKind::Page->value)->where('page_type', PageType::Service->value)
+                ->where('silo_id', $page->silo_id)->whereKeyNot($page->id)->orderBy('title')->limit(3)->pluck('id');
+            foreach ($siblings as $siblingId) {
+                $this->edge((string) $page->id, (string) $siblingId); // spoke → sibling
+            }
+        }
+    }
+
+    /** A location hub grids down to the town pages it parents (the "areas we serve" list). */
+    private function locationGridEdges(Content $page, Site $site): void
+    {
+        if ($page->page_type !== PageType::Location || $page->location_id === null) {
+            return;
+        }
+        $towns = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('status', ContentStatus::Published->value)
+            ->where('page_type', PageType::Location->value)
+            ->whereNull('location_id')
+            ->where('parent_location_id', $page->location_id)
             ->pluck('id');
-        foreach ($siblings as $siblingId) {
-            $this->edge((string) $page->id, (string) $siblingId);
+        foreach ($towns as $townId) {
+            $this->edge((string) $page->id, (string) $townId);
         }
     }
 
