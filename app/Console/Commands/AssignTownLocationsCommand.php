@@ -15,7 +15,7 @@ class AssignTownLocationsCommand extends Command
 {
     protected $signature = 'launchpad:assign-town-locations {--site= : limit to one site id}';
 
-    protected $description = 'Assign town pages to the physical Location that serves them (from served_towns; single-location sites assign everything).';
+    protected $description = 'Assign town pages to the physical Location that serves them (from the intake-computed coverage areas, served_towns as fallback; single-location sites assign everything).';
 
     public function handle(TownLocationAssigner $assigner): int
     {

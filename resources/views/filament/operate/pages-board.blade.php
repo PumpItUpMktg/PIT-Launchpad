@@ -41,6 +41,13 @@
                 <span wire:loading.remove wire:target="syncPlan">↻ Sync plan</span>
                 <span wire:loading wire:target="syncPlan">Syncing…</span>
             </button>
+            @if ($isLocations)
+                <button type="button" class="lv-btn" style="margin-left:6px" wire:click="reassign" wire:loading.attr="disabled" wire:target="reassign"
+                    title="Tag each town page with the GBP location that serves it (from the intake coverage areas).">
+                    <span wire:loading.remove wire:target="reassign">📍 Assign GBP</span>
+                    <span wire:loading wire:target="reassign">Assigning…</span>
+                </button>
+            @endif
         </div>
         @if ($work === [])
             <div class="lv-empty">Nothing in progress — everything in this family is live (or not planned yet).</div>
