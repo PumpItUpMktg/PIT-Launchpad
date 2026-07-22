@@ -179,10 +179,16 @@ final class WeatherAlert
             ? '<a class="lp-wx-cta" href="' . esc_url($ctaUrl) . '">' . esc_html($ctaLabel) . '</a>'
             : '';
 
+        // Paint the bar in the brand's ACCENT (highlight) role so it stands out and tracks the active
+        // variation — the orange in Bold & Direct (#E4572E), the safety-orange in Slate, etc. These are
+        // the same --wp--preset--color--* variables BrandPaint emits; the fallbacks keep a strong orange
+        // on a classic theme that doesn't define them. Text uses on-accent (built to contrast the accent).
         $style = '.lp-wx{display:flex;align-items:center;gap:12px;justify-content:center;flex-wrap:wrap;'
-            . 'background:#0b3b5a;color:#fff;font:600 14px/1.4 system-ui,sans-serif;padding:10px 16px;text-align:center}'
-            . '.lp-wx a.lp-wx-cta{color:#0b3b5a;background:#fff;border-radius:6px;padding:5px 12px;text-decoration:none;white-space:nowrap}'
-            . '.lp-wx button.lp-wx-x{background:none;border:0;color:#fff;font-size:18px;line-height:1;cursor:pointer;padding:0 4px}';
+            . 'background:var(--wp--preset--color--accent,#E4572E);color:var(--wp--preset--color--on-accent,#fff);'
+            . 'font:700 14px/1.4 system-ui,sans-serif;padding:11px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.22)}'
+            . '.lp-wx a.lp-wx-cta{color:var(--wp--preset--color--accent,#E4572E);background:var(--wp--preset--color--on-accent,#fff);'
+            . 'border-radius:6px;padding:5px 12px;text-decoration:none;white-space:nowrap;font-weight:700}'
+            . '.lp-wx button.lp-wx-x{background:none;border:0;color:var(--wp--preset--color--on-accent,#fff);font-size:18px;line-height:1;cursor:pointer;padding:0 4px}';
 
         // Hide if this exact storm date was already dismissed; the × stores it and removes the bar.
         $script = '(function(){var b=document.getElementById("lp-wx");if(!b)return;var d=b.getAttribute("data-date");'
