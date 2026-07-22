@@ -289,4 +289,51 @@ class Test_Content_Store extends WP_UnitTestCase
         $this->assertFalse($result['deleted']);
         $this->assertSame('content_id required', $result['error']);
     }
+
+    public function test_upsert_reclaims_the_canonical_slug_from_a_stray_squatter(): void
+    {
+        // A stray control-plane-owned page squats the desired slug (e.g. left over from an incomplete
+        // delete under a DIFFERENT ULID). WordPress would suffix our post -2; the store must reclaim it.
+        $stray = self::factory()->post->create(['post_type' => 'page', 'post_name' => 'water-heater-repair', 'post_status' => 'publish']);
+        update_post_meta($stray, Meta::CONTENT_ID, '01JOLDSTRAY0000000000000000');
+
+        $result = (new ContentStore())->upsert($this->payload());
+
+        $this->assertSame('water-heater-repair', $result['slug'], 'Our post must own the exact canonical slug.');
+        $this->assertSame('water-heater-repair', get_post_field('post_name', $result['wp_post_id']));
+        // The squatter was renamed out of the way, not left holding the slug.
+        $this->assertNotSame('water-heater-repair', get_post_field('post_name', $stray));
+    }
+
+    public function test_upsert_collapses_duplicate_posts_sharing_the_content_id(): void
+    {
+        // A prior double-insert left TWO posts with the same ULID, squatting the slug and its -2.
+        $dupe = self::factory()->post->create(['post_type' => 'page', 'post_name' => 'water-heater-repair-2', 'post_status' => 'publish']);
+        update_post_meta($dupe, Meta::CONTENT_ID, '01JCONTENTSERVICE000000000');
+
+        $result = (new ContentStore())->upsert($this->payload());
+
+        // Exactly one post carries the ULID now, and it holds the clean canonical slug.
+        $found = get_posts(['post_type' => ['page', 'post'], 'post_status' => 'any', 'meta_key' => Meta::CONTENT_ID, 'meta_value' => '01JCONTENTSERVICE000000000', 'fields' => 'ids']);
+        $this->assertCount(1, $found);
+        $this->assertNull(get_post($dupe), 'The duplicate stray must be force-deleted.');
+        $this->assertSame('water-heater-repair', $result['slug']);
+    }
+
+    public function test_takedown_then_republish_keeps_the_same_permalink(): void
+    {
+        $store = new ContentStore();
+        $first = $store->upsert($this->payload());
+        $this->assertSame('water-heater-repair', $first['slug']);
+
+        // Simulate an imperfect take-down that leaves the old post squatting the slug, then re-push.
+        // (The control plane clears wp_post_id, so the re-push arrives as a fresh insert.)
+        $store->delete('01JCONTENTSERVICE000000000');
+        $squatter = self::factory()->post->create(['post_type' => 'page', 'post_name' => 'water-heater-repair', 'post_status' => 'draft']);
+
+        $republish = $store->upsert($this->payload());
+
+        $this->assertSame('water-heater-repair', $republish['slug'], 'The re-push must land on the SAME url, never -2/-3.');
+        $this->assertNotSame('water-heater-repair', get_post_field('post_name', $squatter));
+    }
 }

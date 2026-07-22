@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.14
+Stable tag: 0.9.15
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,16 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.15 =
+* Canonical permalink is now enforced on every /content upsert. WordPress' wp_unique_post_slug()
+  silently appended -2/-3 to post_name whenever a stray post still held the desired slug, drifting the
+  live URL away from the control-plane permalink after a take-down / re-push (e.g. `doylestown-pa-3`
+  with nothing in Trash). Fix: (1) keep exactly one post per control-plane ULID — force-delete any
+  duplicate strays on upsert; (2) reclaim the exact slug from any remaining squatter (control-plane-
+  owned / draft / trashed) and set post_name back to the canonical value in the final post_parent
+  scope; (3) /content/delete now removes EVERY post carrying the ULID, not just the first. A re-push of
+  an already-drifted page corrects its URL. The upsert response now echoes the final `slug`.
 
 = 0.9.12 =
 * URL nesting for location pages. /content now accepts `parent_content_id` (the parent hub's
