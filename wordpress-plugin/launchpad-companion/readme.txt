@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.19
+Stable tag: 0.9.20
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,17 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.20 =
+* Page diagnostics — an answer to "I pushed it but the live page is wrong / the URL has a -2/-3 suffix."
+  New read-only endpoint GET launchpad/v1/content/diagnose (by control-plane ULID + expected slug)
+  reports the actual post state: id / status / slug / permalink, whether a push would be SKIPPED
+  (locked or locally-edited — the #1 cause of "content never updates AND the slug never gets reclaimed",
+  because the upsert bails before writing the body or reclaiming the slug when a page is protected),
+  slug DRIFT and which post is squatting the clean slug (and whether the reclaim can take it back), and
+  the duplicate-by-ULID count. Nothing is mutated.
+* The /content upsert now returns `skip_reason` (`locked` | `locally_edited`) whenever it skips a
+  protected page, so a repush that no-ops explains itself instead of silently doing nothing.
 
 = 0.9.19 =
 * Severe-weather alert bar now paints in the brand's ACCENT (highlight) role instead of a fixed dark
