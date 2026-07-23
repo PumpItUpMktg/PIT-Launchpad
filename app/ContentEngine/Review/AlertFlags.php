@@ -90,9 +90,10 @@ class AlertFlags
                 }),
             ReviewFlag::NeedsGeneration => $query->where('page_type', PageType::Hub->value)
                 ->where(function (Builder $q) {
-                    // Ungenerated body (empty slot payload) …
+                    // Ungenerated body — a materialized-but-undrafted page has a NULL slot_payload
+                    // (PageMaterializer never sets it; drafting is what fills it). (whereJsonLength
+                    // is unusable here — slot_payload is a JSON object, not an array.) …
                     $q->whereNull('slot_payload')
-                        ->orWhereJsonLength('slot_payload', 0)
                         // … or no materialized spoke to link (empty services grid). Correlated
                         // subquery over the same table; excludes soft-deleted spokes since the
                         // aliased join bypasses the model's global scope.

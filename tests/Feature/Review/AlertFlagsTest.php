@@ -9,6 +9,7 @@ use App\Enums\ReviewFlag;
 use App\Models\Content;
 use App\Models\RenderJob;
 use App\Models\Service;
+use App\Models\Silo;
 use App\Models\Site;
 
 function flagValues(Content $content): array
@@ -111,4 +112,53 @@ test('needs_enrichment is flagged for a service page whose §1 service has no en
 
     // Informational only — never blocks approval.
     expect(ReviewFlag::NeedsEnrichment->blocksApproval())->toBeFalse();
+});
+
+test('needs_generation is flagged for an undrafted hub, a drafted hub with no spokes, but not one with spokes', function () {
+    $site = Site::factory()->create();
+    $siloA = Silo::factory()->create(['site_id' => $site->id]);
+    $siloB = Silo::factory()->create(['site_id' => $site->id]);
+    $siloC = Silo::factory()->create(['site_id' => $site->id]);
+    $siloD = Silo::factory()->create(['site_id' => $site->id]);
+
+    // 1) Undrafted hub (empty slot payload) → flagged.
+    $undrafted = Content::factory()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::NeedsReview,
+        'page_type' => PageType::Hub, 'silo_id' => $siloA->id, 'slot_payload' => [],
+    ]);
+
+    // 2) Drafted hub with NO materialized spoke in its silo → flagged (empty services grid).
+    $orphanHub = Content::factory()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::NeedsReview,
+        'page_type' => PageType::Hub, 'silo_id' => $siloB->id,
+        'slot_payload' => ['hub_intro' => 'x'],
+    ]);
+
+    // 3) Drafted hub WITH a spoke page in its silo → not flagged.
+    $fullHub = Content::factory()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::NeedsReview,
+        'page_type' => PageType::Hub, 'silo_id' => $siloC->id, 'slot_payload' => ['hub_intro' => 'x'],
+    ]);
+    Content::factory()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::Published,
+        'page_type' => PageType::Service, 'silo_id' => $siloC->id, 'slug' => 'sump-pump-repair',
+    ]);
+
+    // A non-hub page is never flagged for generation.
+    $service = Content::factory()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::NeedsReview,
+        'page_type' => PageType::Service, 'silo_id' => $siloD->id, 'slot_payload' => [],
+    ]);
+
+    expect(flagValues($undrafted))->toContain(ReviewFlag::NeedsGeneration->value)
+        ->and(flagValues($orphanHub))->toContain(ReviewFlag::NeedsGeneration->value)
+        ->and(flagValues($fullHub))->not->toContain(ReviewFlag::NeedsGeneration->value)
+        ->and(flagValues($service))->not->toContain(ReviewFlag::NeedsGeneration->value);
+
+    $ids = AlertFlags::filter(ReviewQueue::query(), ReviewFlag::NeedsGeneration)->pluck('id');
+    expect($ids)->toContain($undrafted->id)->toContain($orphanHub->id)
+        ->not->toContain($fullHub->id)->not->toContain($service->id);
+
+    // Informational only — never blocks approval.
+    expect(ReviewFlag::NeedsGeneration->blocksApproval())->toBeFalse();
 });

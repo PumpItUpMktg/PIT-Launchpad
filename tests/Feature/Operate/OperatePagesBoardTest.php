@@ -17,6 +17,7 @@ use App\Models\Content;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\Silo;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -242,4 +243,22 @@ it('flags a service-page row as needs-enrichment when its §1 service is thin', 
 
     expect($work['Basement Waterproofing']['needs_enrichment'])->toBeTrue()
         ->and($work['Sump Pump Installation']['needs_enrichment'])->toBeFalse();
+});
+
+it('flags a hub-page row as needs-generation when undrafted or spoke-less, but not once it has a spoke', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $siloWithSpoke = Silo::factory()->create(['site_id' => $site->id]);
+    $emptySilo = Silo::factory()->create(['site_id' => $site->id]);
+
+    // Undrafted hub (Candidate ⇒ empty slot payload) → flagged.
+    pbPage($site, PageType::Hub, ContentStatus::Candidate, 'Water Detection & Leaks', ['silo_id' => $emptySilo->id]);
+    // Drafted hub whose silo has a materialized spoke → not flagged.
+    pbPage($site, PageType::Hub, ContentStatus::NeedsReview, 'Foundation Repair', ['silo_id' => $siloWithSpoke->id]);
+    pbPage($site, PageType::Service, ContentStatus::Published, 'Wall Crack Repair', ['silo_id' => $siloWithSpoke->id]);
+
+    $work = collect(app(PagesBoard::class)->services($site)['work'])->keyBy('title');
+
+    expect($work['Water Detection & Leaks']['needs_generation'])->toBeTrue()
+        ->and($work['Foundation Repair']['needs_generation'])->toBeFalse();
 });
