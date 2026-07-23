@@ -158,6 +158,29 @@ class WordpressClient
     }
 
     /**
+     * Diagnose a page on the live site by its control-plane ULID: the actual post state (slug / status /
+     * permalink), whether a push would be skipped (locked / locally-edited), slug drift + the squatter
+     * holding the clean slug, and the duplicate count. Read-only — the answer to "-3 URL / stale content".
+     *
+     * @return array<string, mixed>
+     */
+    public function diagnoseContent(string $contentId, string $expectedSlug = ''): array
+    {
+        $response = $this->request()->get(
+            rtrim($this->baseUrl, '/').self::NAMESPACE.'/content/diagnose',
+            ['content_id' => $contentId, 'slug' => $expectedSlug],
+        );
+
+        if (! $response->successful()) {
+            throw new WordpressException('WordPress /content/diagnose returned HTTP '.$response->status());
+        }
+
+        $json = $response->json();
+
+        return is_array($json) ? $json : [];
+    }
+
+    /**
      * Read the site's Elementor saved-template inventory (id/title/slug/type/
      * modified/preview/thumbnail) through the same authed channel — the live list
      * the operator maps each kit against.

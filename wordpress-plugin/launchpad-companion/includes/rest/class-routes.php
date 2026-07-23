@@ -10,6 +10,7 @@
 namespace Launchpad\Companion\Rest;
 
 use Launchpad\Companion\Content\BrandKitStore;
+use Launchpad\Companion\Content\ContentDiagnostics;
 use Launchpad\Companion\Content\StyleStore;
 use Launchpad\Companion\Content\ContentStore;
 use Launchpad\Companion\Content\KitTemplateStore;
@@ -52,6 +53,16 @@ final class Routes
         register_rest_route(self::NS, '/content/delete', [
             'methods' => 'POST',
             'callback' => [$this, 'delete_content'],
+            'permission_callback' => $auth,
+        ]);
+
+        // Read-only diagnostics for one page by control-plane ULID — reports the live post state (slug,
+        // status, locked / locally-edited → whether a push would skip, slug drift + the squatter holding
+        // the clean slug, duplicate count). The control plane surfaces it so "-3 URL / stale content"
+        // has a decidable cause instead of a guess. Mutates nothing.
+        register_rest_route(self::NS, '/content/diagnose', [
+            'methods' => 'GET',
+            'callback' => [$this, 'diagnose_content'],
             'permission_callback' => $auth,
         ]);
 
@@ -178,5 +189,15 @@ final class Routes
         $result = ( new SiteProfileStore() )->save((array) $request->get_json_params());
 
         return new WP_REST_Response($result, empty($result['updated']) ? 422 : 200);
+    }
+
+    public function diagnose_content(WP_REST_Request $request): WP_REST_Response
+    {
+        $result = ( new ContentDiagnostics() )->diagnose(
+            (string) $request->get_param('content_id'),
+            (string) $request->get_param('slug'),
+        );
+
+        return new WP_REST_Response($result, empty($result['content_id']) ? 422 : 200);
     }
 }

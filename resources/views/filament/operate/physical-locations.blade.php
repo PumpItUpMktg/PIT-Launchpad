@@ -136,6 +136,16 @@
                                 <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $pg['content_id']]) }}" wire:navigate>Review</a>
                             @endif
 
+                            {{-- Diagnose — asks the live site WHY a URL drifted / content is stale (skipped push, slug squatter, dupes). --}}
+                            @if ($pg['content_id'] ?? null)
+                                <button class="pl-btn" wire:click="diagnose('{{ $card['id'] }}')"
+                                    wire:loading.attr="disabled" wire:target="diagnose('{{ $card['id'] }}')"
+                                    title="Ask the live WordPress site why this page's URL or content looks wrong.">
+                                    <span wire:loading.remove wire:target="diagnose('{{ $card['id'] }}')">Diagnose</span>
+                                    <span class="sp" wire:loading wire:target="diagnose('{{ $card['id'] }}')">Checking…</span>
+                                </button>
+                            @endif
+
                             <button class="pl-btn" wire:click="generatePage('{{ $card['id'] }}')"
                                 @disabled(! $pg['can_generate'])
                                 wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">

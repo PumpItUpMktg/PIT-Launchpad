@@ -32,13 +32,19 @@ final class ContentStore
         $existing_id = $this->find($content_id);
 
         // Locked protocol: never overwrite an operator-locked or locally-edited
-        // page. Echo the post id and report the skip; the engine records it.
+        // page. Echo the post id and report the skip WITH its reason — a skipped push is the #1 cause of
+        // "content never updates AND the -2/-3 slug never gets reclaimed" (both happen below this early
+        // return), so the control plane needs to know WHY to tell the operator what to do (unlock / take
+        // down + repush).
         if ($existing_id > 0 && $this->is_protected($existing_id, $payload)) {
+            $locked = ! empty($payload['locked']) || get_post_meta($existing_id, Meta::LOCKED, true) === '1';
+
             return [
                 'content_id' => $content_id,
                 'wp_post_id' => $existing_id,
                 'status' => (string) get_post_status($existing_id),
                 'skipped' => true,
+                'skip_reason' => $locked ? 'locked' : 'locally_edited',
             ];
         }
 

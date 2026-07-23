@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ConnectionProvider;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
@@ -7,6 +8,7 @@ use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperatePhysicalLocations;
 use App\Jobs\GeneratePage;
 use App\Jobs\PublishContent;
+use App\Models\Connection;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -15,6 +17,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Operate\PhysicalLocations;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
@@ -209,4 +212,30 @@ it('Publish is a no-op with a helpful notice when the location has no page yet',
     Livewire::test(OperatePhysicalLocations::class)->call('publishPage', $loc->id);
 
     Queue::assertNothingPushed();
+});
+
+it('Diagnose reports the live-site cause of a drifted URL / stale content (skipped push + slug drift)', function () {
+    $site = Site::factory()->create();
+    Connection::factory()->rotated()->create([
+        'site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword->value,
+        'credentials' => ['base_url' => 'https://spg.test', 'username' => 'u', 'app_password' => 'p'],
+    ]);
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'New Brunswick']);
+    Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'title' => 'New Brunswick, NJ', 'slug' => 'new-brunswick-nj', 'version' => 1,
+        'location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'x'],
+    ]);
+
+    Http::fake(['*/launchpad/v1/content/diagnose*' => Http::response([
+        'content_id' => 'x', 'found' => true, 'wp_post_id' => 42, 'status' => 'publish',
+        'post_name' => 'new-brunswick-nj-3', 'permalink' => 'https://spg.test/new-brunswick-nj-3/',
+        'locked' => false, 'locally_edited' => true, 'push_would_skip' => true,
+        'expected_slug' => 'new-brunswick-nj', 'slug_drifted' => true, 'slug_holder' => null, 'duplicate_count' => 1,
+    ])]);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('diagnose', $loc->id)->assertNotified();
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/launchpad/v1/content/diagnose'));
 });

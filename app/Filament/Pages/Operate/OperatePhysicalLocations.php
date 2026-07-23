@@ -7,6 +7,7 @@ use App\ContentEngine\Review\ReviewActions;
 use App\Enums\PageType;
 use App\Filament\Pages\Gathering\BusinessStep;
 use App\Filament\Pages\Gathering\LocationsStep;
+use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Jobs\GeneratePage;
 use App\Locations\LocationLandingFactory;
 use App\Models\Content;
@@ -17,6 +18,7 @@ use App\Operate\PhysicalLocations;
 use App\Publishing\DeleteFromWordpress;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
+use Throwable;
 
 /**
  * Operate · Physical locations — one card per base location with the areas it serves. Surfaces
@@ -182,6 +184,67 @@ class OperatePhysicalLocations extends OperatePage
 
         Notification::make()->success()->title('Taken down — back in the work lane')
             ->body("'{$content->title}' was removed from WordPress; Repush recreates it on the same URL.")->send();
+    }
+
+    /**
+     * Diagnose the location page against the LIVE site — the answer to "the URL has a -3 / the content
+     * is wrong". Reads the real post state via §9-authed WordPress and reports WHY: pushes skipped
+     * (locked / locally-edited), slug drift + who holds the clean slug, duplicate posts. Read-only.
+     */
+    public function diagnose(string $locationId): void
+    {
+        $content = $this->landingFor($locationId);
+        if ($content === null) {
+            Notification::make()->warning()->title('No page to diagnose')
+                ->body('Generate the page first, then diagnose it.')->send();
+
+            return;
+        }
+
+        try {
+            $d = app(WordpressClientFactory::class)->forSite($content->site)->diagnoseContent((string) $content->id, (string) $content->slug);
+        } catch (Throwable $e) {
+            Notification::make()->danger()->title('Could not reach WordPress')->body($e->getMessage())->send();
+
+            return;
+        }
+
+        if (empty($d['found'])) {
+            $holder = is_array($d['slug_holder'] ?? null) ? $d['slug_holder'] : null;
+            $body = 'No launchpad post exists on WordPress for this page yet — Generate + Publish it.'
+                .($holder !== null ? " (Note: /{$content->slug}/ is already held by post #{$holder['wp_post_id']}.)" : '');
+            Notification::make()->warning()->title('Not on WordPress')->body($body)->send();
+
+            return;
+        }
+
+        $issues = [];
+        if (! empty($d['push_would_skip'])) {
+            $why = ($d['locked'] ?? false) ? 'LOCKED' : 'edited in WordPress (locally-edited)';
+            $fix = ($d['locked'] ?? false) ? 'unlock it, then Repush' : 'Take down + Repush to overwrite';
+            $issues[] = "⚠ Pushes are SKIPPED — the page is {$why}, so content + slug never update. Fix: {$fix}.";
+        }
+        if (! empty($d['slug_drifted'])) {
+            $holder = is_array($d['slug_holder'] ?? null) ? $d['slug_holder'] : null;
+            $who = $holder === null
+                ? 'nothing else holds the clean slug — a Repush reclaims it (once it is not skipped above).'
+                : ($holder['reclaimable'] ?? false
+                    ? "post #{$holder['wp_post_id']} (launchpad) holds it — a Repush renames it aside and reclaims the slug."
+                    : "post #{$holder['wp_post_id']} (UNMANAGED — a human/imported page) holds it — delete it in wp-admin, then Repush.");
+            $issues[] = "⚠ URL drifted to /{$d['post_name']}/ (expected /{$d['expected_slug']}/): {$who}";
+        }
+        if ((int) ($d['duplicate_count'] ?? 1) > 1) {
+            $issues[] = "⚠ {$d['duplicate_count']} posts carry this page's ID — Take down collapses them to one.";
+        }
+
+        $title = 'Live: '.($d['permalink'] ?? '').' ('.($d['status'] ?? '').')';
+        if ($issues === []) {
+            Notification::make()->success()->title($title)->body('✓ Clean — correct slug, not locked or locally-edited.')->send();
+
+            return;
+        }
+
+        Notification::make()->warning()->title($title)->body(implode(' ', $issues))->persistent()->send();
     }
 
     /** A base Location owned by the working site, or null. */
