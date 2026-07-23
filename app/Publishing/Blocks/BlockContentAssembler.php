@@ -1550,12 +1550,17 @@ final class BlockContentAssembler
     {
         $home = is_string($site?->domain_url) ? rtrim((string) $site->domain_url, '/').'/' : '/';
 
+        // THE LINK RULE (same as the location grid): the home "Our services" block advertises a
+        // service ONLY when a LIVE page exists for it — materialized AND actually on WordPress
+        // (`wp_post_id` set). A drafted/orphaned/taken-down page (no live URL) is not a service the
+        // site offers, so it never appears here — the home page must never link a visitor to a 404.
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
             ->where('kind', ContentKind::Page->value)
             ->whereIn('page_type', ['service', 'hub'])
             ->whereKeyNot($content->id)
             ->whereNotNull('slug')
+            ->whereNotNull('wp_post_id')
             ->orderBy('created_at')
             ->limit(6)
             ->get();

@@ -29,6 +29,7 @@ final class StyleActivator
         private readonly StyleRecommender $recommender,
         private readonly SiteProfileAssembler $profile,
         private readonly BrandVariationBuilder $brandVariation,
+        private readonly VariationThemeJson $variationThemeJson,
     ) {}
 
     /** The logo-derived brand colors for a site, or null when no usable logo palette was extracted. */
@@ -133,11 +134,17 @@ final class StyleActivator
             return ['variation' => BrandVariationBuilder::SLUG] + $result;
         }
 
-        // Curated variation: explicit override → voice recommendation → Clean default.
+        // Curated variation: explicit override → voice recommendation → Clean default. The full
+        // theme.json variation (palette + typography) is sent INLINE — not as a bare slug the plugin
+        // loads from the deployed theme's styles/{slug}.json. A stale deployed theme was the cause of
+        // "I picked Forest but the site stays blue": the file the bare-slug push relied on carried no
+        // palette, so WordPress fell back to the base theme.json colors. The inline doc, built from the
+        // enum (the single source of truth that also generates those theme files), is authoritative and
+        // paints the chosen palette regardless of the deployed theme's age.
         $variation = $this->resolve($site);
 
         try {
-            $result = $client->activateStyle($variation->value);
+            $result = $client->activateStyleVariation($variation->value, $this->variationThemeJson->build($variation));
         } catch (WordpressException $e) {
             return ['updated' => false, 'error' => $e->getMessage(), 'variation' => $variation->value];
         }

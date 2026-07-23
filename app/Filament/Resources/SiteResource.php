@@ -30,6 +30,7 @@ use App\Operator\Handover\SiteHandover;
 use App\Operator\SiteDeleter;
 use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Publishing\LaunchOrchestrator;
+use App\Publishing\LinkRepublisher;
 use App\Publishing\OrphanScanner;
 use App\Publishing\SitePreviewService;
 use App\Security\GateCheck;
@@ -144,6 +145,7 @@ class SiteResource extends Resource
                     self::brandAction(),
                     self::narrativeAction(),
                     self::launchAction(),
+                    self::fixLinksAction(),
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
                     self::syncChromeAction(),
@@ -842,6 +844,41 @@ class SiteResource extends Resource
 
                 $notification = Notification::make()->title('Launch complete — '.$run->summary());
                 ($run->failed > 0 ? $notification->warning() : $notification->success())->send();
+            });
+    }
+
+    /**
+     * "Fix links" — recompose + repush every LIVE page so its internal-link surfaces re-resolve against
+     * the current live set: the Home "Our services" grid, a hub's spoke grid, a location page's service
+     * cards + town links. Use it after publishing pages one-at-a-time (or when a linked page went live
+     * later) so an index page no longer shows an empty/partial grid. Idempotent by ULID; a page edited
+     * in WordPress is skipped, never overwritten. Runs leaves-first ({@see LinkRepublisher}).
+     */
+    private static function fixLinksAction(): Action
+    {
+        return Action::make('fixLinks')
+            ->label('Fix links')
+            ->icon('heroicon-o-link')
+            ->requiresConfirmation()
+            ->modalHeading('Fix internal links')
+            ->modalDescription('Repushes every live page so its links re-resolve — the Home services grid, hub spoke grids, and location service cards pick up any page that has since gone live. Safe to re-run; pages edited in WordPress are skipped, never overwritten.')
+            ->modalSubmitActionLabel('Fix links')
+            ->action(function (Site $record): void {
+                $result = app(LinkRepublisher::class)->republish($record);
+
+                if ($result['total'] === 0) {
+                    Notification::make()->warning()->title('No live pages to fix')
+                        ->body('Nothing is published yet — launch the site first, then fix links.')->send();
+
+                    return;
+                }
+
+                $body = "{$result['repushed']} repushed"
+                    .($result['skipped'] > 0 ? ", {$result['skipped']} skipped (edited in WordPress)" : '')
+                    .($result['failed'] > 0 ? ", {$result['failed']} failed" : '').'.';
+
+                $notification = Notification::make()->title('Links fixed — '.$result['total'].' live page(s)')->body($body);
+                ($result['failed'] > 0 ? $notification->warning() : $notification->success())->send();
             });
     }
 

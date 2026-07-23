@@ -89,7 +89,7 @@ test('Applying the look activates the style variation, sets brand_pushed, and Co
     // The pivot's brand push = activate a theme.json style variation (no Elementor Global Kit).
     // Mock the WP transport so the real StyleActivator runs (no override / no voice → Clean).
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('activateStyle')->once()->with('clean')->andReturn(['updated' => true, 'variation' => 'clean']);
+    $client->shouldReceive('activateStyleVariation')->once()->with('clean', Mockery::type('array'))->andReturn(['updated' => true, 'variation' => 'clean']);
     $factory = Mockery::mock(WordpressClientFactory::class);
     $factory->shouldReceive('forSite')->andReturn($client);
     app()->instance(WordpressClientFactory::class, $factory);
@@ -107,7 +107,7 @@ test('pushBrand warns when the site is not on a block theme (the push is inert)'
     ]);
 
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('activateStyle')->once()->with('clean')->andReturn([
+    $client->shouldReceive('activateStyleVariation')->once()->with('clean', Mockery::type('array'))->andReturn([
         'updated' => true, 'variation' => 'clean', 'is_block_theme' => false, 'active_colors' => [],
     ]);
     $factory = Mockery::mock(WordpressClientFactory::class);

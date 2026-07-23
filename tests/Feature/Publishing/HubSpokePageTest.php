@@ -162,7 +162,8 @@ it('a configured site lead form makes the service-description row a 60/40 two-co
         ->toContain('[lp_form]')
         ->toContain('flex-basis:60%')
         ->toContain('flex-basis:40%')
-        ->toContain('What this service covers');
+        // Overview heading fallback is now service-specific (keyed on the page keyword).
+        ->toContain('What sump pump installation covers');
 
     // The [lp_form] shortcode renders the blob's form_embed — which falls back to the site embed,
     // so the shortcode isn't empty. The iframe never rides post_content (kses strips it).
@@ -179,7 +180,7 @@ it('with NO lead form the description row stays single-column prose (no [lp_form
 
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
-    expect($markup)->toContain('What this service covers')
+    expect($markup)->toContain('What sump pump installation covers')
         ->not->toContain('lp-prose-form')
         ->not->toContain('[lp_form]');
 });
@@ -369,4 +370,102 @@ it('the enrichment record round-trips: repeaters, price range, and the compariso
         ->and($fresh->price_range['high'])->toEqual(2500)
         ->and($fresh->comparison['option_b']['points'])->toBe(['b1'])
         ->and($fresh->warranty_applicable)->toBeTrue();
+});
+
+it('renders the drafted section H2 when present, and the static label only as fallback', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $service = hsService($site, $silo);
+
+    $faq = ['faq' => [['question' => 'How long does install take?', 'answer' => 'Usually one visit.']]];
+
+    // Drafted: the composer renders the drafted H2, never the static label.
+    $drafted = hsSpokePage($site, $silo, $service, ['slot_payload' => $faq + [
+        'symptoms_heading' => 'Telltale signs your sump pump is failing',
+        'faq_heading' => 'Sump pump questions, answered honestly',
+    ]]);
+    $markup = app(BlockContentAssembler::class)->compose($drafted->fresh(), $drafted->slot_payload, []);
+    expect($markup)->toContain('Telltale signs your sump pump is failing')
+        ->toContain('Sump pump questions, answered honestly')
+        ->not->toContain('Signs you need this')     // the static label is not used when drafted
+        ->not->toContain('Common questions');
+
+    // Undrafted: the fallback is the honest default — service-specific (keyed on the keyword), so it's
+    // still distinct per page, not "Signs you need this" on every service.
+    $bare = hsSpokePage($site, $silo, $service, ['slug' => 'sump-pump-repair', 'slot_payload' => $faq]);
+    $bareMarkup = app(BlockContentAssembler::class)->compose($bare->fresh(), $bare->slot_payload, []);
+    expect($bareMarkup)->toContain('Signs you need sump pump installation')
+        ->toContain('Common questions');
+});
+
+it('undrafted section headings are still unique per service — the fallback is keyword-specific, not one label everywhere', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $svcA = hsService($site, $silo, ['name' => 'Sump Pump Installation']);
+    $svcB = hsService($site, $silo, ['name' => 'Basement Waterproofing']);
+
+    // Two UNDRAFTED spokes (no heading slots) with different keywords.
+    $pageA = hsSpokePage($site, $silo, $svcA, ['slug' => 'sump-pump-installation', 'slot_payload' => [],
+        'target_keyword_id' => hsKeyword($site, 'sump pump installation')->id]);
+    $pageB = hsSpokePage($site, $silo, $svcB, ['slug' => 'basement-waterproofing', 'slot_payload' => [],
+        'target_keyword_id' => hsKeyword($site, 'basement waterproofing')->id]);
+
+    $a = app(BlockContentAssembler::class)->compose($pageA->fresh(), $pageA->slot_payload, []);
+    $b = app(BlockContentAssembler::class)->compose($pageB->fresh(), $pageB->slot_payload, []);
+
+    // Each section H2 names its own service — no single "Signs you need this" / "What it costs"
+    // repeated on both. (Asserted on the record-driven sections, which render on a bare page.)
+    expect($a)->toContain('Signs you need sump pump installation')
+        ->toContain('What sump pump installation costs')
+        ->not->toContain('Signs you need basement waterproofing');
+    expect($b)->toContain('Signs you need basement waterproofing')
+        ->toContain('What basement waterproofing costs')
+        ->not->toContain('Signs you need sump pump installation');
+});
+
+it('drafted section H2s are unique across sibling spokes on a site', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $svcA = hsService($site, $silo, ['name' => 'Sump Pump Installation']);
+    $svcB = hsService($site, $silo, ['name' => 'Battery Backup Installation']);
+
+    $pageA = hsSpokePage($site, $silo, $svcA, ['slug' => 'sump-pump-installation', 'slot_payload' => [
+        'symptoms_heading' => 'Signs your sump pump is on its way out',
+        'scope_heading' => 'What a full sump pump install includes',
+    ]]);
+    $pageB = hsSpokePage($site, $silo, $svcB, ['slug' => 'battery-backup-installation', 'slot_payload' => [
+        'symptoms_heading' => 'When your backup battery can no longer keep up',
+        'scope_heading' => 'Everything a battery backup install covers',
+    ]]);
+
+    $markupA = app(BlockContentAssembler::class)->compose($pageA->fresh(), $pageA->slot_payload, []);
+    $markupB = app(BlockContentAssembler::class)->compose($pageB->fresh(), $pageB->slot_payload, []);
+
+    // Each page carries ITS drafted H2s and none of its sibling's — no two spokes share a drafted heading.
+    expect($markupA)->toContain('Signs your sump pump is on its way out')
+        ->not->toContain('When your backup battery can no longer keep up');
+    expect($markupB)->toContain('When your backup battery can no longer keep up')
+        ->not->toContain('Signs your sump pump is on its way out');
+});
+
+it('feeds sibling section H2s to the drafter so a new page keeps its headings distinct', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+
+    // An already-drafted sibling spoke in the same silo carries a distinctive H2.
+    Content::factory()->create([
+        'site_id' => $site->id, 'silo_id' => $silo->id, 'kind' => ContentKind::Page,
+        'page_type' => PageType::Service, 'title' => 'Battery Backup Installation', 'slug' => 'battery-backup-installation',
+        'slot_payload' => ['symptoms_heading' => 'When your backup battery can no longer keep up'],
+    ]);
+
+    $service = hsService($site, $silo);
+    $page = hsSpokePage($site, $silo, $service, ['slot_payload' => []]);
+
+    $grounding = app(PageGroundingAssembler::class)->assemble($page->fresh());
+    $prompt = (new PageDrafter(new DraftCall(new FakeClaudeClient(''))))->preview($grounding)['prompt'];
+
+    expect($grounding->siblingHeadings)->toContain('When your backup battery can no longer keep up')
+        ->and($prompt)->toContain('HEADINGS ALREADY USED ON OTHER PAGES OF THIS SITE')
+        ->and($prompt)->toContain('When your backup battery can no longer keep up');
 });

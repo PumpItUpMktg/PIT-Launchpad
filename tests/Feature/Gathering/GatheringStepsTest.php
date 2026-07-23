@@ -18,11 +18,13 @@ use App\Filament\Pages\SetupHome;
 use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
 use App\Gathering\Provenance;
+use App\Gathering\ServiceEnricher;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Places\PlaceCandidate;
 use App\Integrations\Places\PlaceDetails;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\Places\PlacesStatus;
+use App\Jobs\EnrichThinServices;
 use App\Locations\ServedTowns;
 use App\Models\CoverageArea;
 use App\Models\Interview;
@@ -33,6 +35,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\VoiceProfile;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\Support\FakeClaudeClient;
 use Tests\Support\SequencedClaudeClient;
@@ -501,4 +504,46 @@ it('a failed Voice AI enhance leaves the operator notes untouched', function () 
         ->call('aiEnhance')
         ->assertNotified()
         ->assertSet('persona', 'my rough note');
+});
+
+it('Enrich all thin queues the bulk enricher when a service is thin, and is a no-op otherwise', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Thin', 'symptoms' => [], 'scope_items' => [], 'process_steps' => [], 'cost_factors' => []]);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Rich', 'symptoms' => ['x'], 'scope_items' => ['y']]);
+
+    Livewire::test(ServicesStep::class)->assertSee('Enrich all thin')->call('aiEnrichAll')->assertNotified();
+    Queue::assertPushed(EnrichThinServices::class);
+});
+
+it('Enrich all thin is a polite no-op when nothing is thin', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Rich', 'symptoms' => ['x'], 'scope_items' => ['y']]);
+
+    Livewire::test(ServicesStep::class)->call('aiEnrichAll')->assertNotified();
+    Queue::assertNothingPushed();
+});
+
+it('the bulk enricher fills thin services and leaves enriched ones untouched', function () {
+    $site = Site::factory()->create();
+    SiloBlueprint::factory()->create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+    $thin = Service::factory()->create(['site_id' => $site->id, 'name' => 'French Drains', 'symptoms' => [], 'scope_items' => [], 'process_steps' => [], 'cost_factors' => []]);
+    $rich = Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pumps', 'symptoms' => ['Existing symptom'], 'scope_items' => ['Existing scope']]);
+
+    app()->instance(ClaudeClient::class, new FakeClaudeClient((string) json_encode([
+        'short_description' => 'Trade-standard description.',
+        'symptoms' => ['Water at base of walls'],
+        'scope_items' => ['Perimeter trenching'],
+        'process_steps' => ['Inspect', 'Trench'],
+        'cost_factors' => ['Linear footage'],
+    ])));
+
+    (new EnrichThinServices($site->id))->handle(app(ServiceEnricher::class));
+
+    expect($thin->fresh()->symptoms)->toBe(['Water at base of walls'])
+        ->and($thin->fresh()->cost_factors)->toBe(['Linear footage'])
+        ->and($rich->fresh()->symptoms)->toBe(['Existing symptom']); // wasn't thin → untouched
 });

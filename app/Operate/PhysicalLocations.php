@@ -155,8 +155,10 @@ class PhysicalLocations
                 'drafted' => false,
                 'published' => false,
                 'can_generate' => true,   // "Generate" find-or-creates the landing page, then drafts it
+                'can_review' => false,    // no page yet — nothing to open in the proof editor
                 'can_publish' => false,
                 'can_repush' => false,
+                'can_takedown' => false,
             ];
         }
 
@@ -171,8 +173,12 @@ class PhysicalLocations
             'drafted' => $drafted,
             'published' => $published,
             'can_generate' => $state !== 'generating',
+            // Review opens the proof editor for any drafted page (the same target as the core board).
+            'can_review' => $drafted,
             'can_publish' => $drafted && ! $published && $state !== 'generating',
             'can_repush' => $published,
+            // Take down only makes sense once the page is live on WordPress.
+            'can_takedown' => $published,
         ];
     }
 

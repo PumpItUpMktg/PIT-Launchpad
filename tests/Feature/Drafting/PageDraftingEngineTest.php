@@ -106,6 +106,45 @@ it('clamps over-length text to the kit max instead of failing the page (the 221>
         ->and(mb_strlen(trim($drafted->slot_payload['svc_intro'])))->toBeGreaterThanOrEqual(120); // still ≥ min
 });
 
+it('flags section headings that fell back to the static label — drafted ones are not flagged', function () {
+    $page = PageFixture::intakePage();
+    // The drafter fills two section H2s and leaves the rest empty (they render the static label).
+    $claude = new FakeClaudeClient(PageFixture::validResponse(proofIdFor($page->site_id), [
+        'symptoms_heading' => 'Warning signs your tank is failing',
+        'scope_heading' => 'Everything a tankless install includes',
+    ]));
+
+    $drafted = pageEngine($claude)->draftPage($page->fresh());
+
+    expect($drafted->slot_payload['symptoms_heading'])->toBe('Warning signs your tank is failing')
+        // The empty section headings are flagged in the generation log (meta) …
+        ->and($drafted->meta['heading_fallbacks'])->toContain('overview_heading')
+        ->and($drafted->meta['heading_fallbacks'])->toContain('process_heading')
+        ->and($drafted->meta['heading_fallbacks'])->toContain('faq_heading')
+        // … the drafted ones are NOT.
+        ->and($drafted->meta['heading_fallbacks'])->not->toContain('symptoms_heading')
+        ->and($drafted->meta['heading_fallbacks'])->not->toContain('scope_heading');
+});
+
+it('stamps no heading_fallbacks when every section heading drafted', function () {
+    $page = PageFixture::intakePage();
+    $claude = new FakeClaudeClient(PageFixture::validResponse(proofIdFor($page->site_id), [
+        'overview_heading' => 'What tankless installation covers',
+        'symptoms_heading' => 'Signs your old tank is done',
+        'scope_heading' => 'What a full install includes',
+        'process_heading' => 'How the install day runs',
+        'cost_heading' => 'What a tankless install costs',
+        'related_heading' => 'Other work you may need',
+        'faq_heading' => 'Tankless questions, answered',
+    ]));
+
+    $drafted = pageEngine($claude)->draftPage($page->fresh());
+
+    // Absent key ⇒ every H2 was drafted; the static label was never the default path.
+    expect($drafted->meta)->not->toHaveKey('heading_fallbacks')
+        ->and($drafted->slot_payload['process_heading'])->toBe('How the install day runs');
+});
+
 it('surfaces budget exhaustion (empty page draft) through the shared guard', function () {
     $page = PageFixture::intakePage(['status' => ContentStatus::Scored]);
     $claude = new FakeClaudeClient('', stopReason: 'max_tokens', outputTokens: 12000, thinkingTokens: 8000);

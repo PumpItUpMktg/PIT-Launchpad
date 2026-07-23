@@ -91,8 +91,17 @@ class ReviewActions
      */
     public function bulkPublish(iterable $contents, ?string $actorId = null): array
     {
+        // Publish in the dependency-safe order (leaves-first: service → hub → location → home, posts
+        // last) so a bulk publish never pushes an index page — Home, a hub — before the pages its grid
+        // links to. Same PageType::publishRank the launch orchestrator uses. (These enqueue jobs, so
+        // execution order isn't guaranteed by dispatch order, but a repush reconciles; ordering here
+        // makes the common case correct.)
+        $ordered = collect($contents)->sortBy(
+            fn (Content $content): int => $content->page_type?->publishRank() ?? 99
+        );
+
         $results = [];
-        foreach ($contents as $content) {
+        foreach ($ordered as $content) {
             $results[$content->id] = $this->publish($content, $actorId);
         }
 

@@ -222,3 +222,24 @@ it('navState exposes each page\'s header-menu flags for the cards to render', fu
     expect($state[$a->id])->toBe(['featured' => true, 'order' => 3])
         ->and($state[$b->id])->toBe(['featured' => false, 'order' => null]);
 });
+
+it('flags a service-page row as needs-enrichment when its §1 service is thin', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+
+    $thin = Service::factory()->create([
+        'site_id' => $site->id, 'name' => 'Basement Waterproofing',
+        'symptoms' => [], 'scope_items' => [], 'process_steps' => [], 'cost_factors' => [],
+    ]);
+    $rich = Service::factory()->create([
+        'site_id' => $site->id, 'name' => 'Sump Pump Installation',
+        'symptoms' => ['Water pooling'], 'scope_items' => ['New basin'],
+    ]);
+    pbPage($site, PageType::Service, ContentStatus::NeedsReview, 'Basement Waterproofing', ['primary_service_id' => $thin->id]);
+    pbPage($site, PageType::Service, ContentStatus::NeedsReview, 'Sump Pump Installation', ['primary_service_id' => $rich->id]);
+
+    $work = collect(app(PagesBoard::class)->services($site)['work'])->keyBy('title');
+
+    expect($work['Basement Waterproofing']['needs_enrichment'])->toBeTrue()
+        ->and($work['Sump Pump Installation']['needs_enrichment'])->toBeFalse();
+});

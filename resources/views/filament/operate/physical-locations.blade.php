@@ -39,6 +39,9 @@
         .pl-btn:hover { border-color:rgba(100,116,139,.8); }
         .pl-btn.primary { background:#2563eb; border-color:#2563eb; color:#fff; }
         .pl-btn.primary:hover { background:#1d4ed8; }
+        .pl-btn.danger { border-color:rgba(220,38,38,.5); color:#b91c1c; }
+        .pl-btn.danger:hover { border-color:#dc2626; background:rgba(220,38,38,.06); }
+        a.pl-btn { text-decoration:none; display:inline-flex; align-items:center; }
         .pl-btn[disabled] { opacity:.5; cursor:not-allowed; }
         .pl-btn .sp { display:inline-block; }
     </style>
@@ -128,6 +131,11 @@
                         <div class="pl-foot">
                             <span class="pl-state">Page: <b>{{ $pg['label'] }}</b></span>
 
+                            {{-- Review — open the drafted page in the proof editor (same target as the core pages board). --}}
+                            @if ($pg['can_review'])
+                                <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $pg['content_id']]) }}" wire:navigate>Review</a>
+                            @endif
+
                             <button class="pl-btn" wire:click="generatePage('{{ $card['id'] }}')"
                                 @disabled(! $pg['can_generate'])
                                 wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">
@@ -144,10 +152,20 @@
                             @endif
 
                             @if ($pg['can_repush'])
-                                <button class="pl-btn" wire:click="repushPage('{{ $card['id'] }}')"
+                                <button class="pl-btn primary" wire:click="repushPage('{{ $card['id'] }}')"
                                     wire:loading.attr="disabled" wire:target="repushPage('{{ $card['id'] }}')">
                                     <span wire:loading.remove wire:target="repushPage('{{ $card['id'] }}')">Repush</span>
                                     <span class="sp" wire:loading wire:target="repushPage('{{ $card['id'] }}')">Pushing…</span>
+                                </button>
+                            @endif
+
+                            {{-- Take down — remove the live page from WordPress; the plan row stays, Repush recreates on the same URL. --}}
+                            @if ($pg['can_takedown'])
+                                <button class="pl-btn danger" wire:click="takeDown('{{ $card['id'] }}')"
+                                    wire:confirm="Remove this location page from WordPress? It stays in your plan and can be republished on the same URL."
+                                    wire:loading.attr="disabled" wire:target="takeDown('{{ $card['id'] }}')">
+                                    <span wire:loading.remove wire:target="takeDown('{{ $card['id'] }}')">Take down</span>
+                                    <span class="sp" wire:loading wire:target="takeDown('{{ $card['id'] }}')">Removing…</span>
                                 </button>
                             @endif
                         </div>

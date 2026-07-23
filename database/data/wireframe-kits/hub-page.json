@@ -139,6 +139,91 @@
             "elementor_binding": "lp/repeater"
         },
         {
+            "key": "overview_heading",
+            "label": "Overview Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for the category overview — what this family of services covers and who needs it.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "services_heading",
+            "label": "Services Grid Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for the services grid — choosing the right service within this category.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "why_heading",
+            "label": "Why-It-Matters Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for why-it-matters — the stakes / cost-of-waiting angle. Do NOT echo the overview heading's pattern.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "process_heading",
+            "label": "Process Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for how getting started works — the process angle for this category.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "faq_heading",
+            "label": "FAQ Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for the category FAQ — the common-questions angle for this service family.",
+            "elementor_binding": "lp/text"
+        },
+        {
             "key": "cta",
             "label": "Primary CTA",
             "content_type": "cta",

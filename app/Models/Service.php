@@ -102,4 +102,22 @@ class Service extends Model
             'warranty_applicable' => 'boolean',
         ];
     }
+
+    /**
+     * A "thin" service has no page-body enrichment: none of the four record fields that drive a spoke
+     * page's mid-page sections — symptoms (Signs you need this), scope_items (What's included),
+     * process_steps (What to expect), cost_factors (What it costs). A spoke page for a thin service
+     * renders only its hero + intro + FAQ, so those sections omit and the page reads sparse. The single
+     * source of truth for the "needs enrichment" flag (pages board + review queue) and the readiness chip.
+     */
+    public function isThin(): bool
+    {
+        foreach (['symptoms', 'scope_items', 'process_steps', 'cost_factors'] as $field) {
+            if (is_array($this->{$field}) && $this->{$field} !== []) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

@@ -4,9 +4,12 @@ use App\ContentEngine\Review\AlertFlags;
 use App\ContentEngine\Review\ReviewQueue;
 use App\Enums\ContentStatus;
 use App\Enums\DraftTrigger;
+use App\Enums\PageType;
 use App\Enums\ReviewFlag;
 use App\Models\Content;
 use App\Models\RenderJob;
+use App\Models\Service;
+use App\Models\Site;
 
 function flagValues(Content $content): array
 {
@@ -75,4 +78,37 @@ test('brand-safety is flagged from the meta flag and filters', function () {
 
     expect(flagValues($unsafe))->toContain(ReviewFlag::BrandSafety->value);
     expect(AlertFlags::filter(ReviewQueue::query(), ReviewFlag::BrandSafety)->pluck('id'))->toContain($unsafe->id);
+});
+
+test('needs_enrichment is flagged for a service page whose §1 service has no enrichment, and filters', function () {
+    $site = Site::factory()->create();
+
+    // A thin service (no symptoms/scope/process/cost) → its spoke page is flagged.
+    $thin = Service::factory()->create([
+        'site_id' => $site->id, 'name' => 'Basement Waterproofing',
+        'symptoms' => [], 'scope_items' => [], 'process_steps' => [], 'cost_factors' => [],
+    ]);
+    $thinPage = Content::factory()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::NeedsReview,
+        'page_type' => PageType::Service, 'primary_service_id' => $thin->id,
+    ]);
+
+    // An enriched service → not flagged.
+    $rich = Service::factory()->create([
+        'site_id' => $site->id, 'name' => 'Sump Pump Installation',
+        'symptoms' => ['Water pooling'], 'scope_items' => ['New basin'],
+    ]);
+    $richPage = Content::factory()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::NeedsReview,
+        'page_type' => PageType::Service, 'primary_service_id' => $rich->id,
+    ]);
+
+    expect(flagValues($thinPage))->toContain(ReviewFlag::NeedsEnrichment->value)
+        ->and(flagValues($richPage))->not->toContain(ReviewFlag::NeedsEnrichment->value);
+
+    $ids = AlertFlags::filter(ReviewQueue::query(), ReviewFlag::NeedsEnrichment)->pluck('id');
+    expect($ids)->toContain($thinPage->id)->not->toContain($richPage->id);
+
+    // Informational only — never blocks approval.
+    expect(ReviewFlag::NeedsEnrichment->blocksApproval())->toBeFalse();
 });

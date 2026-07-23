@@ -4,6 +4,7 @@ namespace App\ContentEngine\Review;
 
 use App\Enums\ContentStatus;
 use App\Enums\DraftTrigger;
+use App\Enums\PageType;
 use App\Enums\RenderStatus;
 use App\Enums\ReviewFlag;
 use App\Models\Content;
@@ -49,6 +50,10 @@ class AlertFlags
             $flags[] = ReviewFlag::RelevanceBand;
         }
 
+        if (self::needsEnrichment($content)) {
+            $flags[] = ReviewFlag::NeedsEnrichment;
+        }
+
         return $flags;
     }
 
@@ -72,6 +77,12 @@ class AlertFlags
             ReviewFlag::BrandSafety => $query->where('meta->flags->brand_safety', true),
             ReviewFlag::OnDemand => $query->whereIn('draft_trigger', self::ON_DEMAND_TRIGGERS),
             ReviewFlag::RelevanceBand => $query->where('status', ContentStatus::InReview->value),
+            ReviewFlag::NeedsEnrichment => $query->where('page_type', PageType::Service->value)
+                ->whereHas('primaryService', function (Builder $s) {
+                    foreach (['symptoms', 'scope_items', 'process_steps', 'cost_factors'] as $field) {
+                        $s->where(fn (Builder $w) => $w->whereNull($field)->orWhereJsonLength($field, 0));
+                    }
+                }),
         };
     }
 
@@ -110,5 +121,12 @@ class AlertFlags
     {
         return $content->draft_trigger !== null
             && in_array($content->draft_trigger->value, self::ON_DEMAND_TRIGGERS, true);
+    }
+
+    /** A service spoke whose §1 Service has no enrichment — its page renders thin (sections omit). */
+    private static function needsEnrichment(Content $content): bool
+    {
+        return $content->page_type === PageType::Service
+            && ($content->primaryService?->isThin() ?? false);
     }
 }

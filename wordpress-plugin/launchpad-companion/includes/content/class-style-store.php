@@ -11,6 +11,9 @@
 
 namespace Launchpad\Companion\Content;
 
+use Launchpad\Companion\Meta;
+use Launchpad\Companion\Render\BrandPaint;
+
 if (! defined('ABSPATH')) {
     exit;
 }
@@ -72,6 +75,14 @@ final class StyleStore
             return ['updated' => false, 'error' => $result->get_error_code() . ': ' . $result->get_error_message()];
         }
 
+        // Persist the resolved palette + shape tokens so BrandPaint can re-declare them as a late
+        // :root override on the front end. This is what makes the push actually paint on installs
+        // where the user global-styles write above doesn't surface in WordPress's computed
+        // stylesheet (the "green flag, colors stay on the base theme" failure) — the theme's blocks
+        // read --wp--preset--color--* / --wp--custom--*, and BrandPaint re-declares them last.
+        $paint = self::brand_paint_from($data, $variation);
+        update_option(Meta::OPTION_BRAND_PAINT, $paint);
+
         self::flush_global_styles_cache();
 
         // A block theme INLINES the global-styles CSS into every page's <head>, so a full-page cache
@@ -81,18 +92,92 @@ final class StyleStore
         // write did not). Purge the well-known page caches so the next front-end request re-renders.
         $purged = self::purge_page_caches();
 
-        // Read back what WordPress will ACTUALLY paint now (the live preset variables), so a "colors
-        // still didn't change" report is decidable at the source: if this reflects the variation but the
-        // browser shows the old hue, it's a remaining page/CDN cache; if it does NOT, the write didn't
-        // take. And if the site isn't running a block theme, theme.json global styles are inert — flag it.
+        // `active_colors` is what the front end will ACTUALLY paint now: BrandPaint re-declares this
+        // exact palette as a late :root override, so it renders regardless of whether the user
+        // global-styles write surfaced in WordPress's merged stylesheet. `merged_colors` is the raw
+        // computed global stylesheet (the value the base theme.json alone would paint) — kept as a
+        // diagnostic: when it differs from active_colors, this install is exactly the case where the
+        // global-styles merge doesn't reflect the write and the override is doing the work. If the
+        // site isn't a block theme, theme.json global styles are inert — flagged so the push isn't
+        // reported as a silent success.
         return [
             'updated' => true,
             'variation' => $variation,
             'is_block_theme' => function_exists('wp_is_block_theme') ? wp_is_block_theme() : false,
-            'active_colors' => self::live_preset_colors(),
+            'active_colors' => $paint['colors'],
+            'merged_colors' => self::live_preset_colors(),
             'page_caches_purged' => $purged,
         ];
     }
+
+    /**
+     * Extract the brand paint (color roles + shape/heading tokens) from a resolved theme.json
+     * variation document — the palette's slug=>hex map plus the custom radius/heading tokens. This is
+     * what {@see BrandPaint} re-declares on the front end. Sourced from the same $data the user
+     * global-styles write uses, so the override always matches the intended variation.
+     *
+     * @param  array<string, mixed>  $data       a theme.json variation (settings.color.palette + settings.custom)
+     * @param  string                $variation  the curated slug, used to fall back to a bundled palette
+     * @return array{colors: array<string, string>, custom: array<string, string>}
+     */
+    private static function brand_paint_from(array $data, string $variation): array
+    {
+        $settings = isset($data['settings']) && is_array($data['settings']) ? $data['settings'] : [];
+
+        $colors = [];
+        $palette = isset($settings['color']['palette']) && is_array($settings['color']['palette'])
+            ? $settings['color']['palette'] : [];
+        foreach ($palette as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+            $slug = isset($entry['slug']) && is_string($entry['slug']) ? $entry['slug'] : '';
+            $color = isset($entry['color']) && is_string($entry['color']) ? trim($entry['color']) : '';
+            if ($slug !== '' && $color !== '') {
+                $colors[$slug] = $color;
+            }
+        }
+
+        // Resilience: a bare-slug push against a STALE deployed theme (its styles/{slug}.json carries
+        // no palette) yields an empty $palette — the very case that made the push paint nothing. Fall
+        // back to the bundled palette for the known curated slugs so the colors land regardless of the
+        // deployed theme's age or whether the control plane sent the palette inline.
+        if ($colors === [] && isset(self::CURATED_PALETTES[$variation])) {
+            $colors = self::CURATED_PALETTES[$variation];
+        }
+
+        $customIn = isset($settings['custom']) && is_array($settings['custom']) ? $settings['custom'] : [];
+        $custom = [];
+        foreach (['radius' => 'radius', 'headingWeight' => 'heading_weight', 'headingLetterSpacing' => 'heading_letter_spacing'] as $src => $dst) {
+            if (isset($customIn[$src]) && (is_string($customIn[$src]) || is_numeric($customIn[$src]))) {
+                $custom[$dst] = (string) $customIn[$src];
+            }
+        }
+
+        return ['colors' => $colors, 'custom' => $custom];
+    }
+
+    /**
+     * A bundled MIRROR of the control plane's locked StyleVariation palettes (App\Styling\
+     * StyleVariation::palette(), mapped to the theme.json role slugs). Used ONLY as a fallback when a
+     * push arrives as a bare slug and the deployed theme's variation file has no palette to read — so
+     * the brand still paints without a control-plane or theme redeploy. The variations are locked; if
+     * they ever change, update this map in lockstep with the enum.
+     *
+     * @var array<string, array<string, string>>
+     */
+    private const CURATED_PALETTES = [
+        'clean' => ['base' => '#ffffff', 'surface' => '#f1f5f9', 'contrast' => '#0f172a', 'muted' => '#475569', 'border' => '#e2e8f0', 'primary' => '#123B6B', 'accent' => '#1D6FD6', 'on-accent' => '#ffffff', 'button' => '#1D6FD6', 'on-button' => '#ffffff'],
+        'bold' => ['base' => '#ffffff', 'surface' => '#f5f3f2', 'contrast' => '#1a1a1a', 'muted' => '#57534e', 'border' => '#e7e5e4', 'primary' => '#111827', 'accent' => '#E4572E', 'on-accent' => '#ffffff', 'button' => '#E4572E', 'on-button' => '#ffffff'],
+        'warm' => ['base' => '#fffdf8', 'surface' => '#f6efe3', 'contrast' => '#2b2620', 'muted' => '#6b5d4f', 'border' => '#e7dcc9', 'primary' => '#7C4A24', 'accent' => '#E08D3C', 'on-accent' => '#ffffff', 'button' => '#C9702A', 'on-button' => '#ffffff'],
+        'fresh' => ['base' => '#ffffff', 'surface' => '#eefaf6', 'contrast' => '#0f2a26', 'muted' => '#4b6b64', 'border' => '#d5eae4', 'primary' => '#0B5D52', 'accent' => '#14B8A6', 'on-accent' => '#ffffff', 'button' => '#0EA5A0', 'on-button' => '#ffffff'],
+        'premium' => ['base' => '#0f1620', 'surface' => '#17202e', 'contrast' => '#e8edf4', 'muted' => '#9aa7bc', 'border' => '#263241', 'primary' => '#D4AF37', 'accent' => '#E7C55A', 'on-accent' => '#1a1206', 'button' => '#C9A227', 'on-button' => '#14100a'],
+        'forest' => ['base' => '#ffffff', 'surface' => '#f0f4ef', 'contrast' => '#1c2b22', 'muted' => '#52645a', 'border' => '#dce6da', 'primary' => '#1E5233', 'accent' => '#4C9A2A', 'on-accent' => '#ffffff', 'button' => '#3E7D2B', 'on-button' => '#ffffff'],
+        'slate' => ['base' => '#ffffff', 'surface' => '#f2f4f7', 'contrast' => '#1f2937', 'muted' => '#64748b', 'border' => '#e2e8f0', 'primary' => '#334155', 'accent' => '#F97316', 'on-accent' => '#ffffff', 'button' => '#F97316', 'on-button' => '#ffffff'],
+        'coastal' => ['base' => '#fbfeff', 'surface' => '#eaf4f7', 'contrast' => '#14343d', 'muted' => '#4e6c74', 'border' => '#d3e6ea', 'primary' => '#226C82', 'accent' => '#E0A458', 'on-accent' => '#14343d', 'button' => '#226C82', 'on-button' => '#ffffff'],
+        'crimson' => ['base' => '#ffffff', 'surface' => '#f7f2f2', 'contrast' => '#1a1414', 'muted' => '#6b5555', 'border' => '#ecdcdc', 'primary' => '#8C1D2C', 'accent' => '#C8102E', 'on-accent' => '#ffffff', 'button' => '#C8102E', 'on-button' => '#ffffff'],
+        'midnight' => ['base' => '#0b1220', 'surface' => '#131c2e', 'contrast' => '#eaf1fb', 'muted' => '#93a4be', 'border' => '#22304a', 'primary' => '#4D97E8', 'accent' => '#38BDF8', 'on-accent' => '#06131f', 'button' => '#2F86E0', 'on-button' => '#ffffff'],
+    ];
 
     /**
      * Thoroughly drop every cached copy of the merged theme.json so the new variation renders on the

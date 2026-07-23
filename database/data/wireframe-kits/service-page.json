@@ -154,6 +154,125 @@
             "elementor_binding": "lp/repeater"
         },
         {
+            "key": "overview_heading",
+            "label": "Overview Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for the overview section — what this service is and who it's for. Service-specific, not a generic label.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "symptoms_heading",
+            "label": "Symptoms Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 introducing the warning-signs list — the \"how you know you need this\" angle. Must read differently from the scope heading.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "scope_heading",
+            "label": "Scope Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for what's included / what we do — the scope angle. Do NOT echo the symptoms heading's pattern.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "process_heading",
+            "label": "Process Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for how it works / what to expect — the process angle.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "cost_heading",
+            "label": "Cost Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for the cost section — the pricing / what-it-costs angle.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "related_heading",
+            "label": "Related Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for related / other services the reader may also need.",
+            "elementor_binding": "lp/text"
+        },
+        {
+            "key": "faq_heading",
+            "label": "FAQ Heading",
+            "content_type": "heading",
+            "role": "body_explainer",
+            "source": "generated",
+            "cardinality": {
+                "type": "single"
+            },
+            "constraints": {
+                "required": false,
+                "max_length": 70
+            },
+            "client_override": true,
+            "generation_hint": "H2 for the FAQ — the common-questions angle for this specific service.",
+            "elementor_binding": "lp/text"
+        },
+        {
             "key": "cta",
             "label": "Primary CTA",
             "content_type": "cta",

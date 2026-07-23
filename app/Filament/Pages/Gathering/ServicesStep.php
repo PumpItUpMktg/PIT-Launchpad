@@ -5,6 +5,7 @@ namespace App\Filament\Pages\Gathering;
 use App\Filament\Resources\ServiceResource;
 use App\Gathering\ServiceEnricher;
 use App\Guided\ServiceSuggester;
+use App\Jobs\EnrichThinServices;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SiloBlueprint;
@@ -174,6 +175,38 @@ class ServicesStep extends GatheringPage
         Notification::make()->success()
             ->title("'{$service->name}' drafted — ".count($filled).' field(s) filled')
             ->body('Generic trade knowledge only (no prices or guarantees). Review in Enrich and save to confirm.')
+            ->send();
+    }
+
+    /**
+     * Bulk enrich every THIN service (no symptoms/scope/process/cost) in one action — the
+     * page-board "Needs enrichment" badges in bulk. One Claude call per service, so it runs on the
+     * worker ({@see EnrichThinServices}); this counts what's queued and returns immediately.
+     */
+    public function aiEnrichAll(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $thin = Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->get()
+            ->filter(fn (Service $service): bool => $service->isThin())
+            ->count();
+
+        if ($thin === 0) {
+            Notification::make()->info()->title('Nothing to enrich — every service already has its details.')->send();
+
+            return;
+        }
+
+        EnrichThinServices::dispatch($site->id);
+
+        Notification::make()->success()
+            ->title("Enriching {$thin} thin service(s) in the background")
+            ->body('Generic trade knowledge only (no prices or guarantees). Refresh in a minute — the "needs enrichment" flags clear as each fills; review each in Enrich, then regenerate its page.')
             ->send();
     }
 

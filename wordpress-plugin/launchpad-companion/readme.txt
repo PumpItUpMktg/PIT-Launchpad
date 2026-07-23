@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.17
+Stable tag: 0.9.19
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,28 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.19 =
+* Severe-weather alert bar now paints in the brand's ACCENT (highlight) role instead of a fixed dark
+  blue, so it stands out and tracks the active variation — the orange in Bold & Direct (#E4572E), the
+  safety-orange in Slate, etc. It uses the same --wp--preset--color--accent / --on-accent variables
+  BrandPaint emits (with a strong-orange fallback for classic themes), plus a heavier weight and a drop
+  shadow to make it pop. The CTA chip inverts to accent-on-white for contrast.
+
+= 0.9.18 =
+* Brand push now paints deterministically. On some installs the /style write into WordPress's USER
+  global-styles post never surfaced in the computed global stylesheet — the front end (and the
+  server-side readback) kept emitting the theme's BASE theme.json palette, so an operator picked a
+  variation (e.g. Forest) and the site stayed on the base blue while every push flag read green (the
+  write genuinely succeeded; the merge just didn't reflect it). /style now also stores the resolved
+  palette + shape tokens (lp_brand_paint), and a new front-end layer (BrandPaint) re-declares them as a
+  late :root override of the block theme's --wp--preset--color--* / --wp--custom--* variables — which the
+  theme's blocks already consume — so the chosen colors render regardless of the global-styles merge.
+* The /style response now reports active_colors as what the front end will actually paint (the stored
+  palette), with the raw computed stylesheet kept alongside as merged_colors for diagnostics.
+* Resilience: when a push arrives as a bare slug and the deployed theme's styles/{slug}.json carries no
+  palette to read, the paint falls back to a bundled mirror of the locked curated palettes, so colors
+  land without a control-plane or theme redeploy.
 
 = 0.9.17 =
 * Brand push now purges the full-page caches so the new colors actually re-render. A block theme inlines

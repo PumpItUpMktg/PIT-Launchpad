@@ -109,7 +109,7 @@ it('picks a style and gates the push on a WordPress connection (step 6), then ap
     // Connected → the activator pushes the chosen variation and the flag stamps.
     Connection::factory()->create(['site_id' => $this->site->id, 'provider' => 'wp_app_password']);
     $client = Mockery::mock(WordpressClient::class);
-    $client->shouldReceive('activateStyle')->once()->with('warm')->andReturn(['updated' => true, 'variation' => 'warm']);
+    $client->shouldReceive('activateStyleVariation')->once()->with('warm', Mockery::type('array'))->andReturn(['updated' => true, 'variation' => 'warm']);
     $client->shouldIgnoreMissing();
     $factory = Mockery::mock(WordpressClientFactory::class);
     $factory->shouldReceive('forSite')->andReturn($client);
