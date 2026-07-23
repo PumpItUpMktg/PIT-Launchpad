@@ -80,7 +80,7 @@ class StateChip
     {
         return match ($flag) {
             ReviewFlag::RenderFailed, ReviewFlag::BrandSafety => ChipTone::Bad,
-            ReviewFlag::UnsupportedClaim, ReviewFlag::NearDuplicate, ReviewFlag::NeedsEnrichment => ChipTone::Warn,
+            ReviewFlag::UnsupportedClaim, ReviewFlag::NearDuplicate, ReviewFlag::NeedsEnrichment, ReviewFlag::NeedsGeneration => ChipTone::Warn,
             ReviewFlag::OnDemand => ChipTone::Info,
             ReviewFlag::RelevanceBand => ChipTone::Neutral,
         };

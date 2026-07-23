@@ -2,6 +2,7 @@
 
 namespace App\ContentEngine\Review;
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\DraftTrigger;
 use App\Enums\PageType;
@@ -54,6 +55,10 @@ class AlertFlags
             $flags[] = ReviewFlag::NeedsEnrichment;
         }
 
+        if ($content->needsGeneration()) {
+            $flags[] = ReviewFlag::NeedsGeneration;
+        }
+
         return $flags;
     }
 
@@ -82,6 +87,23 @@ class AlertFlags
                     foreach (['symptoms', 'scope_items', 'process_steps', 'cost_factors'] as $field) {
                         $s->where(fn (Builder $w) => $w->whereNull($field)->orWhereJsonLength($field, 0));
                     }
+                }),
+            ReviewFlag::NeedsGeneration => $query->where('page_type', PageType::Hub->value)
+                ->where(function (Builder $q) {
+                    // Ungenerated body (empty slot payload) …
+                    $q->whereNull('slot_payload')
+                        ->orWhereJsonLength('slot_payload', 0)
+                        // … or no materialized spoke to link (empty services grid). Correlated
+                        // subquery over the same table; excludes soft-deleted spokes since the
+                        // aliased join bypasses the model's global scope.
+                        ->orWhereNotExists(fn ($sub) => $sub->from('contents as spokes')
+                            ->whereColumn('spokes.site_id', 'contents.site_id')
+                            ->whereColumn('spokes.silo_id', 'contents.silo_id')
+                            ->where('spokes.kind', ContentKind::Page->value)
+                            ->where('spokes.page_type', PageType::Service->value)
+                            ->whereNotNull('spokes.slug')
+                            ->whereNull('spokes.deleted_at')
+                            ->selectRaw('1'));
                 }),
         };
     }

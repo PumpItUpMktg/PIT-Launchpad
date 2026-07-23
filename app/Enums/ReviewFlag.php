@@ -24,6 +24,9 @@ enum ReviewFlag: string
     /** §1 — a service spoke whose Service record has no enrichment (symptoms/scope/process/cost), so
      * its mid-page sections omit and the page reads thin. Enrich the service, then regenerate. */
     case NeedsEnrichment = 'needs_enrichment';
+    /** §2/§4 — a hub page that is ungenerated (empty drafted body) or has no materialized spokes in its
+     * silo (empty services grid), so it renders thin and can't route to its children. Generate it. */
+    case NeedsGeneration = 'needs_generation';
 
     public function label(): string
     {
@@ -35,6 +38,7 @@ enum ReviewFlag: string
             self::OnDemand => 'On-demand',
             self::RelevanceBand => 'Borderline relevance',
             self::NeedsEnrichment => 'Needs enrichment',
+            self::NeedsGeneration => 'Needs generation',
         };
     }
 

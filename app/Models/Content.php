@@ -10,6 +10,7 @@ use App\Enums\IntakeType;
 use App\Enums\PageType;
 use App\Enums\StandardPageType;
 use App\Models\Concerns\BelongsToSite;
+use App\Models\Scopes\SiteScope;
 use Database\Factories\ContentFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -73,6 +74,49 @@ class Content extends Model
         }
 
         return is_string($this->body) && trim($this->body) !== '';
+    }
+
+    /**
+     * A HUB page that will render thin/empty until it (or its silo) is generated. Two independent
+     * causes, both surfaced under one "needs generation" signal:
+     *   1. the hub's own body was never drafted (`!hasDraft()`) — its intro/why/FAQ slots are empty,
+     *      so the page is a bare shell. Enriching a §1 Service does NOT fix this — a hub's body is
+     *      drafted, not derived from Service enrichment; only generating the hub fills it.
+     *   2. the hub has zero materialized spoke pages in its silo — the "The services" internal-link
+     *      grid resolves to nothing and drops entirely, so the hub can't route to its children.
+     * Only hubs qualify; every other page type returns false (spokes have their own build-state).
+     */
+    public function needsGeneration(): bool
+    {
+        if ($this->page_type !== PageType::Hub) {
+            return false;
+        }
+
+        if (! $this->hasDraft()) {
+            return true;
+        }
+
+        return $this->siloSpokeCount() === 0;
+    }
+
+    /**
+     * The count of materialized spoke pages this hub could link to — the same shape the assembler's
+     * services grid resolves from (same silo, service page-type, slug assigned). Drops the SiteScope
+     * so it is correct in any operator/cross-tenant context.
+     */
+    public function siloSpokeCount(): int
+    {
+        if ($this->silo_id === null) {
+            return 0;
+        }
+
+        return static::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->site_id)
+            ->where('silo_id', $this->silo_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Service->value)
+            ->whereNotNull('slug')
+            ->count();
     }
 
     /** The persisted last-draft failure reason (the silent-failure marker), if any. */
