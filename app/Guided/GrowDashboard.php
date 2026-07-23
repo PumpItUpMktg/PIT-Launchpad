@@ -142,7 +142,7 @@ class GrowDashboard
     }
 
     /**
-     * @return array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, menu: list<string>, live_url: ?string, bulk: ?string, needs_enrichment: bool, rank: int, section: string}
+     * @return array{id: string, title: string, permalink: string, client_line: string, whose_move: string, operator_tail: ?string, tone: string, actions: list<string>, menu: list<string>, live_url: ?string, bulk: ?string, needs_enrichment: bool, needs_generation: bool, rank: int, section: string}
      */
     private function row(Content $c): array
     {
@@ -212,6 +212,9 @@ class GrowDashboard
             // A spoke whose §1 Service has no enrichment (symptoms/scope/process/cost) renders thin —
             // its mid-page sections omit. Flag it so the operator enriches the service before it ships.
             'needs_enrichment' => $c->page_type === PageType::Service && ($c->primaryService?->isThin() ?? false),
+            // A hub that is ungenerated (empty body) or has no materialized spokes to link — it renders
+            // thin and can't route to its children. Flag it so the operator generates it (and its spokes).
+            'needs_generation' => $c->needsGeneration(),
             'rank' => $rank,
             'section' => $this->section($c->page_type),
         ];
