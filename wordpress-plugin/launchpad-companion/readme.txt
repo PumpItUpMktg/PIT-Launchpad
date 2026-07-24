@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.20
+Stable tag: 0.9.21
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,13 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.21 =
+* Grouped services menu — the header services bar now renders a hub's child service pages (its spokes)
+  as a hover/focus dropdown beneath it, reflecting the operator's service grouping. Driven by a nested
+  `services` payload from the control plane (each item may carry a `children` list); the footer and main
+  nav stay flat. On touch/mobile the spokes fold inline after their hub instead of a dropdown. Pairs
+  with the control-plane author-declared grouping (block-theme CSS bump to 0.37.0).
 
 = 0.9.20 =
 * Page diagnostics — an answer to "I pushed it but the live page is wrong / the URL has a -2/-3 suffix."

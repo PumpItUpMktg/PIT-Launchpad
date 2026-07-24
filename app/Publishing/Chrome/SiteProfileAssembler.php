@@ -232,9 +232,11 @@ final class SiteProfileAssembler
      *    Uncapped — the operator decides how many top-level items there are.
      *  - AUTOMATIC (no page featured): the service/hub pages ranked by IMPORTANCE (category hub first,
      *    then core/pillar, then supporting, then longtail guides), capped at {@see HEADER_SERVICE_LIMIT}.
-     *    Every service still stays reachable from the hub ("Our services") page + the footer.
+     *    A hub's child service pages NEST under it (a dropdown), reflecting the operator's service
+     *    grouping; the cap applies to top-level items only. Every service still stays reachable from
+     *    the hub ("Our services") page + the footer.
      *
-     * @return list<array{label: string, url: string}>
+     * @return list<array{label: string, url: string, children?: list<array{label: string, url: string}>}>
      */
     private function services(Site $site, string $home): array
     {
@@ -248,6 +250,7 @@ final class SiteProfileAssembler
 
         if ($featured->isNotEmpty()) {
             // Operator order first (nulls last), then importance, then age — a stable composite key.
+            // Curated selection stays FLAT: the operator picked exactly these top-level items.
             $pages = $featured
                 ->sortBy(fn (Content $p): string => sprintf(
                     '%010d-%d-%015d',
@@ -260,19 +263,56 @@ final class SiteProfileAssembler
             return $this->links($pages, $home);
         }
 
-        $pages = Content::withoutGlobalScope(SiteScope::class)
+        $all = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
             ->whereIn('page_type', [PageType::Service->value, PageType::Hub->value])
             ->whereNotNull('slug')
             ->with('primaryService:id,silo_role')
-            ->get()
-            // rank ASC, then oldest-first — a stable composite key ("rank-timestamp").
+            ->get();
+
+        // A page NESTED under another (SiloNesting's parent_content_id) becomes a dropdown child, not a
+        // top-level item — so a hub shows its spokes beneath it instead of alongside.
+        $ids = $all->pluck('id');
+        $childrenByParent = $all
+            ->filter(fn (Content $p): bool => $p->parent_content_id !== null && $ids->contains($p->parent_content_id))
+            ->groupBy('parent_content_id');
+
+        $top = $all
+            ->filter(fn (Content $p): bool => $p->parent_content_id === null || ! $ids->contains($p->parent_content_id))
             ->sortBy(fn (Content $p): string => sprintf('%d-%015d', $this->serviceNavRank($p), $p->created_at->getTimestamp()))
             ->take(self::HEADER_SERVICE_LIMIT)
             ->values();
 
-        return $this->links($pages, $home);
+        $out = [];
+        foreach ($top as $page) {
+            $item = $this->link($page, $home);
+            if ($item === null) {
+                continue;
+            }
+            $children = ($childrenByParent->get($page->id) ?? collect())
+                ->sortBy(fn (Content $c): string => sprintf('%d-%015d', $this->serviceNavRank($c), $c->created_at->getTimestamp()));
+            $kids = $this->links($children->values(), $home);
+            if ($kids !== []) {
+                $item['children'] = $kids;
+            }
+            $out[] = $item;
+        }
+
+        return $out;
+    }
+
+    /**
+     * One internal link (label + url), or null when the page has no usable title/slug.
+     *
+     * @return array{label: string, url: string}|null
+     */
+    private function link(Content $page, string $home): ?array
+    {
+        $label = trim((string) $page->title);
+        $slug = trim((string) $page->slug);
+
+        return $label === '' || $slug === '' ? null : ['label' => $label, 'url' => $home.ltrim($slug, '/')];
     }
 
     /** Header nav priority: category hub → core (pillar) service → supporting service → guide/other. */

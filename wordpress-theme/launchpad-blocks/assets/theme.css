@@ -1512,12 +1512,86 @@
     color: var(--wp--preset--color--contrast, #0f172a);
 }
 
+/* Grouped services: a hub renders its child service pages (spokes) as a hover/focus dropdown. */
+.lp-services-nav .lp-has-sub {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.lp-services-nav .lp-has-sub > a::after {
+    content: "\25BE"; /* ▾ */
+    font-size: 0.7em;
+    margin-left: 0.3em;
+    opacity: 0.7;
+}
+
+.lp-services-nav .lp-subnav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 40;
+    display: none;
+    flex-direction: column;
+    min-width: 12rem;
+    padding: 0.4rem 0;
+    margin-top: 0.35rem;
+    background: var(--wp--preset--color--base, #fff);
+    border: 1px solid var(--wp--preset--color--border, #e2e8f0);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.lp-services-nav .lp-has-sub:hover .lp-subnav,
+.lp-services-nav .lp-has-sub:focus-within .lp-subnav {
+    display: flex;
+}
+
+.lp-services-nav .lp-subnav a {
+    padding: 0.4rem 0.9rem;
+    white-space: nowrap;
+    color: var(--wp--preset--color--contrast, #0f172a);
+}
+
+.lp-services-nav .lp-subnav a:hover {
+    background: color-mix(in srgb, var(--wp--preset--color--contrast, #0f172a) 6%, transparent);
+    color: var(--wp--preset--color--contrast, #0f172a);
+}
+
 /* Mobile: keep services reachable — scroll the row instead of wrapping. */
 @media (max-width: 860px) {
     .lp-services-nav {
         flex-wrap: nowrap;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+    }
+
+    /* No hover on touch: fold the spokes inline after their hub instead of a dropdown. */
+    .lp-services-nav .lp-has-sub {
+        gap: clamp(0.85rem, 2vw, 1.5rem);
+    }
+
+    .lp-services-nav .lp-subnav {
+        position: static;
+        display: flex;
+        flex-direction: row;
+        min-width: 0;
+        gap: clamp(0.85rem, 2vw, 1.5rem);
+        padding: 0;
+        margin: 0;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+    }
+
+    .lp-services-nav .lp-has-sub > a::after {
+        content: "";
+        margin: 0;
+    }
+
+    .lp-services-nav .lp-subnav a {
+        padding: 0;
+        color: inherit;
     }
 }
 
