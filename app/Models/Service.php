@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\GeoApplicability;
+use App\Enums\ServicePageTreatment;
 use App\Enums\ServiceSiloRole;
 use App\Models\Concerns\BelongsToSite;
 use Database\Factories\ServiceFactory;
@@ -27,6 +28,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property bool $structure_home_flagged mapped to nearest cluster with no true match — needs review
  * @property bool $force_page owner guarantee: always build a page for this service (wins over demand)
  * @property string|null $forced_silo the topic (silo name) a force_page service's page lives under
+ * @property string|null $parent_service_id the parent service this is grouped under (null = top-level; deferred-FK, self-ref)
+ * @property ServicePageTreatment $page_treatment child treatment: its own page vs a section on the parent (default section)
+ * @property int|null $group_order manual order within a group / among top-level services
  */
 class Service extends Model
 {
@@ -39,6 +43,50 @@ class Service extends Model
     public function problems(): HasMany
     {
         return $this->hasMany(ServiceProblem::class);
+    }
+
+    /**
+     * The parent service this is grouped under (null = top-level). Deferred-FK / self-ref: resolved at
+     * the model level, not a DB constraint (§1 convention).
+     *
+     * @return BelongsTo<Service, $this>
+     */
+    public function parentService(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_service_id');
+    }
+
+    /**
+     * The sub-services grouped under this one, ordered by the manual group order then name.
+     *
+     * @return HasMany<Service, $this>
+     */
+    public function childServices(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_service_id')->orderBy('group_order')->orderBy('name');
+    }
+
+    /**
+     * Whether this service renders as a HUB (category) page rather than a standalone service page — the
+     * derived structural rule that replaces AI guessing: a service is a hub IFF it has ≥1 child treated
+     * as its own PAGE. A service with no children, or only SECTION children, is a single service page
+     * (its sections fold in) — so a service can never become a spoke-less "thin hub". Never stored; this
+     * is the authority the structure writer and the build key on.
+     */
+    public function isHub(): bool
+    {
+        return $this->childServices()
+            ->where('page_treatment', ServicePageTreatment::Page->value)
+            ->exists();
+    }
+
+    /**
+     * Whether this service may take sub-services — enforcing the 2-level cap: a service that is itself a
+     * child (has a parent) can never be a parent. Guards the UI ("add sub-service") and the writer.
+     */
+    public function canHaveChildren(): bool
+    {
+        return $this->parent_service_id === null;
     }
 
     /** @return BelongsToMany<Silo, $this> */
@@ -87,6 +135,8 @@ class Service extends Model
     {
         return [
             'silo_role' => ServiceSiloRole::class,
+            'page_treatment' => ServicePageTreatment::class,
+            'group_order' => 'integer',
             'geo_applicability' => GeoApplicability::class,
             'peak_months' => 'array',
             'is_most_profitable' => 'boolean',
