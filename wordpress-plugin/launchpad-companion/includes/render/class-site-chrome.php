@@ -58,7 +58,7 @@ final class SiteChrome
         // A slim secondary bar of the site's service pages, below the main menu — direct navigation to
         // services without cluttering the primary nav. Only when there are service pages. Inherits the
         // header tone so it reads on both a dark and a light bar.
-        $services = $this->navList($p['services'] ?? [], 'lp-services-nav');
+        $services = $this->navList($p['services'] ?? [], 'lp-services-nav', true);
         if ($services !== '') {
             $out .= '<div class="lp-header-services lp-tone-' . $tone . '"><div class="lp-header-services-inner">'
                 . '<span class="lp-services-label">Services</span>' . $services
@@ -150,11 +150,14 @@ final class SiteChrome
     }
 
     /**
-     * A list of links (linked when a URL is present, plain text otherwise).
+     * A list of links (linked when a URL is present, plain text otherwise). When $nested is true, an
+     * item carrying a `children` array renders as a dropdown: the parent link with a `.lp-subnav` of its
+     * child links beneath it (the operator's service grouping — a hub with its spokes). $nested false
+     * (footer, legal, main nav) ignores children and renders a flat list.
      *
-     * @param  list<array{label: string, url: string}>|mixed  $links
+     * @param  list<array{label: string, url: string, children?: array}>|mixed  $links
      */
-    private function navList(mixed $links, string $class): string
+    private function navList(mixed $links, string $class, bool $nested = false): string
     {
         if (! is_array($links) || $links === []) {
             return '';
@@ -165,12 +168,38 @@ final class SiteChrome
             if (! is_array($link) || empty($link['label'])) {
                 continue;
             }
-            $label = esc_html((string) $link['label']);
-            $url = ! empty($link['url']) ? esc_url((string) $link['url']) : '';
-            $out .= $url !== '' ? '<a href="' . $url . '">' . $label . '</a>' : '<span>' . $label . '</span>';
+            $children = ( $nested && ! empty($link['children']) && is_array($link['children']) ) ? $link['children'] : array();
+
+            if ($children !== array()) {
+                $out .= '<span class="lp-nav-item lp-has-sub">' . $this->navLink($link)
+                    . '<span class="lp-subnav">';
+                foreach ($children as $child) {
+                    if (is_array($child) && ! empty($child['label'])) {
+                        $out .= $this->navLink($child);
+                    }
+                }
+                $out .= '</span></span>';
+
+                continue;
+            }
+
+            $out .= $this->navLink($link);
         }
 
         return $out . '</nav>';
+    }
+
+    /**
+     * One nav link — an anchor when a URL is present, plain text otherwise.
+     *
+     * @param  array{label?: mixed, url?: mixed}  $link
+     */
+    private function navLink(array $link): string
+    {
+        $label = esc_html((string) $link['label']);
+        $url = ! empty($link['url']) ? esc_url((string) $link['url']) : '';
+
+        return $url !== '' ? '<a href="' . $url . '">' . $label . '</a>' : '<span>' . $label . '</span>';
     }
 
     /**

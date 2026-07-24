@@ -68,7 +68,7 @@ final class SiteProfileStore
             'hours' => sanitize_text_field((string) ($p['hours'] ?? '')),
             'legal' => sanitize_text_field((string) ($p['legal'] ?? '')),
             'nav' => self::links($p['nav'] ?? []),
-            'services' => self::links($p['services'] ?? []),
+            'services' => self::links($p['services'] ?? [], true),
             'areas' => self::links($p['areas'] ?? []),
             'company' => self::links($p['company'] ?? []),
             'legal_links' => self::links($p['legal_links'] ?? []),
@@ -103,12 +103,15 @@ final class SiteProfileStore
 
     /**
      * Normalize a list of { label|name, url } links, dropping empties. URLs are kept only when they
-     * pass esc_url_raw; a null/blank URL yields a plain (unlinked) label.
+     * pass esc_url_raw; a null/blank URL yields a plain (unlinked) label. An item may carry a `children`
+     * list (the service-grouping dropdown: a hub with its spokes) — preserved ONE level deep, each child
+     * sanitized the same way (a child's own children are ignored; the menu is capped at two levels).
      *
      * @param  mixed  $raw
-     * @return list<array{label: string, url: string}>
+     * @param  bool  $allowChildren  keep a one-level `children` list on each item (services menu only)
+     * @return list<array{label: string, url: string, children?: list<array{label: string, url: string}>}>
      */
-    private static function links(mixed $raw): array
+    private static function links(mixed $raw, bool $allowChildren = false): array
     {
         if (! is_array($raw)) {
             return [];
@@ -124,7 +127,16 @@ final class SiteProfileStore
                 continue;
             }
             $url = isset($item['url']) ? esc_url_raw((string) $item['url']) : '';
-            $out[] = ['label' => $label, 'url' => is_string($url) ? $url : ''];
+            $link = ['label' => $label, 'url' => is_string($url) ? $url : ''];
+
+            if ($allowChildren && isset($item['children']) && is_array($item['children'])) {
+                $children = self::links($item['children']); // one level only — never recurse children-of-children
+                if ($children !== []) {
+                    $link['children'] = $children;
+                }
+            }
+
+            $out[] = $link;
         }
 
         return $out;

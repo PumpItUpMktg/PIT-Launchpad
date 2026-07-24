@@ -39,4 +39,47 @@ class Test_Site_Chrome extends WP_UnitTestCase
 
         $this->assertStringContainsString('lp-tone-dark', (new SiteChrome())->header());
     }
+
+    public function test_header_services_render_a_hub_with_its_spokes_as_a_dropdown(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'Sewer Gurus',
+            'services' => [
+                [
+                    'label' => 'Basement Waterproofing',
+                    'url' => 'https://sewergurus.com/basement-waterproofing',
+                    'children' => [
+                        ['label' => 'Sump Pump', 'url' => 'https://sewergurus.com/basement-waterproofing/sump-pump'],
+                        ['label' => 'French Drains', 'url' => 'https://sewergurus.com/basement-waterproofing/french-drains'],
+                    ],
+                ],
+                ['label' => 'Radon Mitigation', 'url' => 'https://sewergurus.com/radon-mitigation'],
+            ],
+        ]);
+
+        $header = (new SiteChrome())->header();
+
+        // The hub is a dropdown parent; its spokes render inside the sub-nav.
+        $this->assertStringContainsString('lp-has-sub', $header);
+        $this->assertStringContainsString('lp-subnav', $header);
+        $this->assertStringContainsString('href="https://sewergurus.com/basement-waterproofing/sump-pump"', $header);
+        $this->assertStringContainsString('href="https://sewergurus.com/basement-waterproofing/french-drains"', $header);
+        // The standalone service has no dropdown of its own.
+        $this->assertStringContainsString('href="https://sewergurus.com/radon-mitigation"', $header);
+    }
+
+    public function test_footer_services_stay_flat_ignoring_children(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'Sewer Gurus',
+            'services' => [[
+                'label' => 'Basement Waterproofing',
+                'url' => 'https://sewergurus.com/basement-waterproofing',
+                'children' => [['label' => 'Sump Pump', 'url' => 'https://sewergurus.com/basement-waterproofing/sump-pump']],
+            ]],
+        ]);
+
+        // The footer renders services flat — no dropdown markup.
+        $this->assertStringNotContainsString('lp-subnav', (new SiteChrome())->footer());
+    }
 }

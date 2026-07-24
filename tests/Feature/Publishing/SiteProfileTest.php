@@ -125,6 +125,40 @@ it('uses the automatic top-8 service ranking when no page is featured', function
         ->and($services[0]['label'])->toBe('Our Services'); // hub ranks first
 });
 
+it('nests a hub\'s child service pages as menu children (the service grouping), spokes off the top level', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    $hub = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Hub,
+        'slug' => 'basement-waterproofing', 'title' => 'Basement Waterproofing',
+    ]);
+    // Two child service pages nested under the hub (SiloNesting's parent_content_id).
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'basement-waterproofing/sump-pump', 'title' => 'Sump Pump', 'parent_content_id' => $hub->id,
+    ]);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'basement-waterproofing/french-drains', 'title' => 'French Drains', 'parent_content_id' => $hub->id,
+    ]);
+    // A standalone (unnested) service stays a flat top-level item.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'radon-mitigation', 'title' => 'Radon Mitigation',
+    ]);
+
+    $services = app(SiteProfileAssembler::class)->assemble($site->fresh())['services'];
+
+    // Two top-level items (the hub + the standalone) — the spokes are NOT top-level.
+    expect(array_column($services, 'label'))->toBe(['Basement Waterproofing', 'Radon Mitigation']);
+
+    $hubItem = collect($services)->firstWhere('label', 'Basement Waterproofing');
+    expect(collect($hubItem['children'])->pluck('label')->sort()->values()->all())->toBe(['French Drains', 'Sump Pump']);
+
+    // The standalone service carries no children key.
+    $standalone = collect($services)->firstWhere('label', 'Radon Mitigation');
+    expect($standalone)->not->toHaveKey('children');
+});
+
 it('shows exactly the operator-featured pages, in manual order, uncapped', function () {
     $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
     // 10 service pages exist, but the operator features 3 (a subset) in an explicit order.
