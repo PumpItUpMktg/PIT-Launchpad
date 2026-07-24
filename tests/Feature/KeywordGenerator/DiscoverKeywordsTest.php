@@ -11,6 +11,7 @@ use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
 use App\Models\User;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 it('the command forces a discovery run that GENERATES, and reports both counts', function () {
@@ -40,24 +41,21 @@ it('the job runs a forced, GENERATING discovery refresh for its site', function 
     (new DiscoverKeywords($site->id))->handle($refresher);
 });
 
-it('the Silos step action runs discovery synchronously (in-request, not a queued no-op)', function () {
+it('the Silos step action QUEUES discovery off the web request (never runs the provider storm in-request)', function () {
+    Queue::fake();
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
     Spoke::factory()->create(['site_id' => $site->id, 'silo_blueprint_id' => $bp->id]);
     session(['guided_site_id' => $site->id]);
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
 
-    // dispatchSync runs the job inline → the refresher is invoked in-request (generate:true).
-    $refresher = Mockery::mock(SitePipelineRefresher::class);
-    $refresher->shouldReceive('refresh')
-        ->once()
-        ->withArgs(fn (Site $s, PipelineTrigger $t, bool $force, bool $generate) => $s->id === $site->id && $generate === true)
-        ->andReturn(new SitePipelineRefreshResult(true, 5, false, 0, 5));
-    $this->app->instance(SitePipelineRefresher::class, $refresher);
-
+    // The pull is a storm of real DataForSEO + Claude calls; running it in-request 500s the page
+    // (FPM timeout). The action must DISPATCH the job to the worker, not run it inline.
     Livewire::test(SilosStep::class)
         ->call('discoverKeywords')
         ->assertNotified();
+
+    Queue::assertPushed(DiscoverKeywords::class, fn (DiscoverKeywords $job) => $job->siteId === $site->id);
 });
 
 it('the discover button shows once structure exists', function () {
