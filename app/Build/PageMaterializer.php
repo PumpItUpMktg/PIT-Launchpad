@@ -7,6 +7,7 @@ use App\Enums\BuildSource;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Enums\SpokeGranularity;
 use App\Enums\StandardPageType;
 use App\Locations\LocationLandingSync;
 use App\Locations\LocationNesting;
@@ -177,17 +178,36 @@ final class PageMaterializer
     {
         return match ($entry->source) {
             BuildSource::Standard => $entry->page_key === 'home' ? PageType::Home : PageType::Utility,
-            BuildSource::Service => $this->isPillar($entry) ? PageType::Hub : PageType::Service,
+            BuildSource::Service => $this->rendersAsHub($entry) ? PageType::Hub : PageType::Service,
             BuildSource::Location => PageType::Location,
         };
     }
 
-    private function isPillar(BuildPage $entry): bool
+    /**
+     * Whether this Service page renders as a HUB (category, services grid) rather than a standalone
+     * SERVICE page. The render-type is DECOUPLED from `is_pillar` (the silo-structural role): a spoke is
+     * a hub IFF it heads a silo that actually has ≥1 own-page child to link — i.e. a pillar with
+     * own_page siblings in its silo. A pillar with no own-page children (its own_page children were all
+     * folded to sections, or it's a single-service silo) renders as a service page, not a spoke-less
+     * "thin hub". This is the structural rule the author-declared grouping produces.
+     */
+    private function rendersAsHub(BuildPage $entry): bool
     {
         if ($entry->spoke_id === null) {
             return false;
         }
 
-        return (bool) (Spoke::withoutGlobalScope(SiteScope::class)->find($entry->spoke_id)?->is_pillar);
+        $spoke = Spoke::withoutGlobalScope(SiteScope::class)->find($entry->spoke_id);
+        if ($spoke === null || ! $spoke->is_pillar) {
+            return false;
+        }
+
+        // A hub needs a real child to route to: another own_page spoke in the same silo.
+        return Spoke::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $spoke->site_id)
+            ->where('silo', $spoke->silo)
+            ->where('is_pillar', false)
+            ->where('granularity', SpokeGranularity::OwnPage->value)
+            ->exists();
     }
 }
