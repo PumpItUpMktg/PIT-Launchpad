@@ -77,6 +77,7 @@ use App\KeywordGenerator\Discovery\SiloKeywordGenerator;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
+use App\Listeners\SyncWireframeKitsOnMigrate;
 use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReviewProvider;
 use App\Local\Proof\NullLocalJobs;
@@ -93,9 +94,12 @@ use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
 use App\Support\CurrentSite;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Database\Events\MigrationsEnded;
+use Illuminate\Database\Events\NoPendingMigrations;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -511,6 +515,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Keep the library wireframe kits in step with their JSON on every deploy: a deploy runs
+        // `migrate --force`, which fires MigrationsEnded (had work) or NoPendingMigrations (none) —
+        // binding both re-seeds the kits regardless. NOT bound under tests: the suite runs migrations
+        // constantly, and its fixtures seed kits themselves; the handler is unit-tested directly.
+        if (! $this->app->runningUnitTests()) {
+            Event::listen(
+                [MigrationsEnded::class, NoPendingMigrations::class],
+                SyncWireframeKitsOnMigrate::class,
+            );
+        }
+
         // §9 audit: record RBAC role changes. (Publish — ContentPublished — is
         // emitted by the §2 publish pipeline; that call site attaches there.)
         User::updated(function (User $user): void {
