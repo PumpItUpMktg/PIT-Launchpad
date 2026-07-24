@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Gathering;
 
+use App\Enums\ServicePageTreatment;
 use App\Filament\Resources\ServiceResource;
 use App\Gathering\ServiceEnricher;
 use App\Guided\ServiceSuggester;
@@ -41,6 +42,10 @@ class ServicesStep extends GatheringPage
     protected string $view = 'filament.gathering.services-step';
 
     public string $newService = '';
+
+    /** Per-parent "add sub-service" inputs, keyed by parent service id. */
+    /** @var array<string, string> */
+    public array $newChild = [];
 
     /** @var list<array{name: string, why: string}> */
     public array $suggestions = [];
@@ -217,8 +222,123 @@ class ServicesStep extends GatheringPage
             return;
         }
 
+        // Removing a parent frees its children back to top-level (never orphaned). Per the spec, a
+        // detached child becomes its own page.
+        Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $service->site_id)
+            ->where('parent_service_id', $service->id)
+            ->update(['parent_service_id' => null]);
+
         $service->delete();
         Notification::make()->success()->title("'{$service->name}' removed.")->send();
+    }
+
+    /**
+     * The authored service tree: top-level services (each a page), each with its grouped sub-services
+     * ordered by the manual group order. This is what the writer turns into the hub/spoke structure.
+     *
+     * @return Collection<int, Service>
+     */
+    public function getServiceTreeProperty(): Collection
+    {
+        if ($this->siteId === null) {
+            return new Collection;
+        }
+
+        return Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->siteId)
+            ->whereNull('parent_service_id')
+            ->with(['childServices' => fn ($q) => $q->withoutGlobalScope(SiteScope::class)])
+            ->orderBy('group_order')->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * The top-level services an ungrouped service can be nested under (every top-level service except
+     * itself) — the "group under" dropdown options.
+     *
+     * @return Collection<int, Service>
+     */
+    public function getGroupTargetsProperty(): Collection
+    {
+        return $this->getServiceTreeProperty();
+    }
+
+    /** Add a sub-service under a top-level parent (defaults to a Section — the spec default). */
+    public function addSubService(string $parentId): void
+    {
+        $site = $this->getSite();
+        $parent = $this->owned($parentId);
+        $name = trim($this->newChild[$parentId] ?? '');
+        if ($site === null || $parent === null || $name === '' || ! $parent->canHaveChildren()) {
+            return;
+        }
+
+        $service = new Service;
+        $service->forceFill([
+            'site_id' => $site->id,
+            'name' => $name,
+            'parent_service_id' => $parent->id,
+            'page_treatment' => ServicePageTreatment::Section, // default: fold in unless promoted
+        ])->save();
+
+        unset($this->newChild[$parentId]);
+        Notification::make()->success()->title("'{$name}' added under '{$parent->name}' as a section.")->send();
+    }
+
+    /**
+     * Nest an existing top-level service under a parent. Enforces the 2-level cap: the service being
+     * grouped must not itself have children (grouping it would create a 3rd level), and the target must
+     * be a top-level service. A newly-grouped service defaults to a Section.
+     */
+    public function groupUnder(string $serviceId, string $parentId): void
+    {
+        $service = $this->owned($serviceId);
+        $parent = $this->owned($parentId);
+        if ($service === null || $parent === null || $service->id === $parent->id) {
+            return;
+        }
+
+        // 2-level guard: can't nest a parent-of-children, and can't nest under a child.
+        if (! $parent->canHaveChildren() || $service->childServices()->exists()) {
+            Notification::make()->warning()
+                ->title('Only two levels')
+                ->body('Ungroup the sub-services first — grouping is capped at service → sub-service.')
+                ->send();
+
+            return;
+        }
+
+        $service->forceFill([
+            'parent_service_id' => $parent->id,
+            'page_treatment' => ServicePageTreatment::Section,
+        ])->save();
+
+        Notification::make()->success()->title("'{$service->name}' grouped under '{$parent->name}'.")->send();
+    }
+
+    /** Detach a sub-service back to top-level — it becomes its own page. */
+    public function promoteToTop(string $serviceId): void
+    {
+        $service = $this->owned($serviceId);
+        if ($service === null) {
+            return;
+        }
+
+        $service->forceFill(['parent_service_id' => null])->save();
+        Notification::make()->success()->title("'{$service->name}' is now a top-level service (its own page).")->send();
+    }
+
+    /** Set a sub-service's treatment: its own page (a spoke) or a section on the parent page. */
+    public function setTreatment(string $serviceId, string $treatment): void
+    {
+        $service = $this->owned($serviceId);
+        $value = ServicePageTreatment::tryFrom($treatment);
+        if ($service === null || $value === null || $service->parent_service_id === null) {
+            return;
+        }
+
+        $service->forceFill(['page_treatment' => $value])->save();
     }
 
     /** The per-service enrichment modal — the ServiceResource form, reused wholesale. */

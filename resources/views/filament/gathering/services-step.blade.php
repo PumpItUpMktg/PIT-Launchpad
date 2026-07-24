@@ -42,35 +42,63 @@
                     </button>
                 @endif
             </div>
+            <p class="g-muted" style="font-size:12px;margin:2px 0 10px">
+                Group sub-services under a parent to shape the site. Each top-level service gets its own page;
+                a sub-service is a <strong>section</strong> on the parent page by default, or promote it to its
+                <strong>own page</strong>. A parent with at least one own-page sub-service becomes a category hub.
+            </p>
             <div class="g-list">
-                @forelse ($this->services as $service)
+                @forelse ($this->serviceTree as $service)
                     @php
-                        $prov = $this->provenanceFor($service);
-                        $seeded = collect($prov)->contains(fn ($state) => $state === \App\Enums\ProvenanceState::Seeded);
-                        $confirmed = $prov !== [] && ! $seeded;
-                        $enriched = collect($service->symptoms ?? [])->isNotEmpty() || collect($service->scope_items ?? [])->isNotEmpty() || trim((string) $service->short_description) !== '';
-                        $hasBlanks = collect(\App\Gathering\ServiceEnricher::FIELDS)->contains(function (string $f) use ($service) {
-                            $v = $service->{$f};
-
-                            return $v === null || $v === [] || (is_string($v) && trim($v) === '');
-                        });
+                        $pageKids = $service->childServices->where('page_treatment', \App\Enums\ServicePageTreatment::Page);
+                        $sectionKids = $service->childServices->where('page_treatment', \App\Enums\ServicePageTreatment::Section);
+                        $becomes = $pageKids->isNotEmpty()
+                            ? 'Hub · '.$pageKids->count().' service page'.($pageKids->count() === 1 ? '' : 's').($sectionKids->isNotEmpty() ? ' + '.$sectionKids->count().' section'.($sectionKids->count() === 1 ? '' : 's') : '')
+                            : ($sectionKids->isNotEmpty() ? 'Service page + '.$sectionKids->count().' section'.($sectionKids->count() === 1 ? '' : 's') : 'Service page');
+                        $canGroup = $service->childServices->isEmpty();
                     @endphp
-                    <div class="g-item" wire:key="svc-{{ $service->id }}">
-                        <strong>{{ $service->name }}</strong>
-                        {{-- Seeded = machine-filled (interview extraction OR the AI fill) awaiting review; saving Enrich confirms. --}}
-                        @if ($seeded)<span class="g-seed">seeded — review</span>@elseif ($confirmed)<span class="g-seed confirmed">confirmed</span>@endif
-                        <span class="g-muted">{{ $enriched ? ($service->short_description ?: 'enriched') : 'not enriched yet' }}</span>
-                        <span class="g-row" style="margin-left:auto">
-                            @if ($hasBlanks)
-                                <button class="g-btn" wire:click="aiEnrich('{{ $service->id }}')" wire:loading.attr="disabled" wire:target="aiEnrich"
-                                    title="Draft the empty fields with generic trade knowledge (no prices or guarantees) — you review and edit before it counts.">
-                                    <span wire:loading.remove wire:target="aiEnrich('{{ $service->id }}')">✨ AI fill</span>
-                                    <span wire:loading wire:target="aiEnrich('{{ $service->id }}')">Drafting…</span>
-                                </button>
-                            @endif
-                            {{ ($this->enrich)(['service' => $service->id]) }}
-                            <button class="g-btn danger" wire:click="removeService('{{ $service->id }}')" wire:confirm="Remove '{{ $service->name }}'?">Remove</button>
-                        </span>
+                    <div class="g-item" wire:key="svc-{{ $service->id }}" style="flex-wrap:wrap">
+                        @include('filament.gathering._service-row', ['service' => $service])
+                        <span class="g-seed" style="background:rgba(37,99,235,.1);color:#2563eb;border-color:rgba(37,99,235,.22)">becomes: {{ $becomes }}</span>
+                        {{-- Group this (childless) top-level service under another. --}}
+                        @if ($canGroup && $this->groupTargets->count() > 1)
+                            <select class="g-input" style="max-width:200px;font-size:12px" wire:key="grp-{{ $service->id }}"
+                                onchange="if(this.value){ @this.call('groupUnder', '{{ $service->id }}', this.value); this.value=''; }">
+                                <option value="">Group under…</option>
+                                @foreach ($this->groupTargets as $target)
+                                    @if ($target->id !== $service->id)
+                                        <option value="{{ $target->id }}">{{ $target->name }}</option>
+                                    @endif
+                                @endforeach
+                            </select>
+                        @endif
+
+                        {{-- Sub-services (indented). --}}
+                        <div style="flex-basis:100%;padding-left:22px;margin-top:6px;display:flex;flex-direction:column;gap:6px">
+                            @foreach ($service->childServices as $child)
+                                <div class="g-item" wire:key="svc-{{ $child->id }}" style="background:rgba(0,0,0,.02)">
+                                    <span class="g-muted" style="font-size:11px">└─</span>
+                                    @include('filament.gathering._service-row', ['service' => $child])
+                                    <span class="g-row" style="flex-basis:100%;padding-left:18px;margin-top:4px;gap:6px;align-items:center">
+                                        <div class="g-toggle" role="group" style="display:inline-flex;border:1px solid rgba(0,0,0,.15);border-radius:6px;overflow:hidden">
+                                            <button class="g-btn {{ $child->page_treatment === \App\Enums\ServicePageTreatment::Section ? 'primary' : '' }}" style="border:0;border-radius:0;font-size:11px"
+                                                wire:click="setTreatment('{{ $child->id }}', 'section')">Section</button>
+                                            <button class="g-btn {{ $child->page_treatment === \App\Enums\ServicePageTreatment::Page ? 'primary' : '' }}" style="border:0;border-radius:0;font-size:11px"
+                                                wire:click="setTreatment('{{ $child->id }}', 'page')">Its own page</button>
+                                        </div>
+                                        <button class="g-btn" style="font-size:11px" wire:click="promoteToTop('{{ $child->id }}')"
+                                            title="Detach — make this its own top-level service page.">↥ Ungroup</button>
+                                    </span>
+                                </div>
+                            @endforeach
+
+                            {{-- Add a sub-service under this parent. --}}
+                            <div class="g-row" style="gap:6px">
+                                <input class="g-input" style="max-width:280px;font-size:12px" type="text" placeholder="Add a sub-service…"
+                                    wire:model="newChild.{{ $service->id }}" wire:keydown.enter="addSubService('{{ $service->id }}')">
+                                <button class="g-btn" style="font-size:12px" wire:click="addSubService('{{ $service->id }}')">+ Sub-service</button>
+                            </div>
+                        </div>
                     </div>
                 @empty
                     <div class="g-empty">No services yet — add them above, or let the interview seed the stated list.</div>
