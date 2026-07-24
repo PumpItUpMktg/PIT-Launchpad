@@ -1,5 +1,6 @@
 <?php
 
+use App\Build\ServiceStructureWriter;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Grow;
 use App\Filament\Pages\Guided\Plan;
@@ -77,6 +78,7 @@ test('BuildStructure fails cleanly when there is no seed', function () {
         app(VolumeGrounder::class),
         app(AutoArrangeRunner::class),
         app(KeywordFirstBuilder::class),
+        app(ServiceStructureWriter::class),
     );
 
     expect(SetupState::query()->where('site_id', $this->site->id)->value('structure_status'))->toBe('failed');

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Build\ServiceStructureWriter;
 use App\Interview\Arrange\AutoArrangeRunner;
 use App\Interview\Expansion\ExpansionPersister;
 use App\Interview\Expansion\SiloExpander;
@@ -34,7 +35,7 @@ class BuildStructure implements ShouldQueue
 
     public function __construct(public string $siteId) {}
 
-    public function handle(SiloExpander $expander, ExpansionPersister $persister, VolumeGrounder $grounder, AutoArrangeRunner $arranger, KeywordFirstBuilder $keywordFirst): void
+    public function handle(SiloExpander $expander, ExpansionPersister $persister, VolumeGrounder $grounder, AutoArrangeRunner $arranger, KeywordFirstBuilder $keywordFirst, ServiceStructureWriter $structureWriter): void
     {
         $site = Site::query()->find($this->siteId);
         if ($site === null) {
@@ -51,7 +52,14 @@ class BuildStructure implements ShouldQueue
         }
 
         try {
-            if (config('launchpad.keyword_first.enabled')) {
+            if ($this->hasAuthoredGrouping($site)) {
+                // Author-declared structure: the operator grouped their services (services-entry), so the
+                // tree is DECLARED, not guessed. The deterministic writer replaces the AI expander; the
+                // arranger is skipped (nothing to auto-arrange — the routing is explicit), volume still
+                // grounds for scoring. Idempotent: re-run replaces the spoke set from the current tree.
+                $structureWriter->write($site);
+                $grounder->ground($site);
+            } elseif (config('launchpad.keyword_first.enabled')) {
                 // Keyword-first: accumulate demand → cluster → derive the tree → arrange. Structure is
                 // shaped by measured demand, not the catalog. Regeneration replaces the candidate tree.
                 $keywordFirst->build($site);
@@ -75,6 +83,20 @@ class BuildStructure implements ShouldQueue
             report($e);
             $state->update(['structure_status' => 'failed']);
         }
+    }
+
+    /**
+     * Whether the operator has authored a grouping in the services entry — i.e. any service is nested
+     * under a parent. When true the structure is DECLARED and the deterministic
+     * {@see ServiceStructureWriter} drives the build (the AI expander is demoted to the "Suggest
+     * grouping" helper). A flat, ungrouped service list keeps the AI-expansion path unchanged.
+     */
+    private function hasAuthoredGrouping(Site $site): bool
+    {
+        return Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereNotNull('parent_service_id')
+            ->exists();
     }
 
     /**

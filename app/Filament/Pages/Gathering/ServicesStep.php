@@ -2,15 +2,20 @@
 
 namespace App\Filament\Pages\Gathering;
 
+use App\Enums\ContentKind;
+use App\Enums\RedirectSource;
 use App\Enums\ServicePageTreatment;
 use App\Filament\Resources\ServiceResource;
 use App\Gathering\ServiceEnricher;
 use App\Guided\GroupingSuggester;
 use App\Guided\ServiceSuggester;
 use App\Jobs\EnrichThinServices;
+use App\Models\Content;
+use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SiloBlueprint;
+use App\Publishing\DeleteFromWordpress;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
@@ -368,7 +373,69 @@ class ServicesStep extends GatheringPage
             return;
         }
 
+        // Demoting a service that already has a LIVE page to a section would strand its URL. Take the
+        // page down and 301-redirect it to the parent (the blade confirms first when a live page exists).
+        if ($value === ServicePageTreatment::Section) {
+            $this->retireLivePage($service);
+        }
+
         $service->forceFill(['page_treatment' => $value])->save();
+    }
+
+    /** Whether a service currently has a page published to WordPress (drives the demote confirm). */
+    public function hasLivePage(string $serviceId): bool
+    {
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->siteId)
+            ->where('primary_service_id', $serviceId)
+            ->where('kind', ContentKind::Page->value)
+            ->whereNotNull('wp_post_id')
+            ->exists();
+    }
+
+    /**
+     * Demote-to-section safety: if the child has a page live on WordPress, take it down, 301-redirect its
+     * URL to the parent's page, and soft-delete the stray Content — so a demoted service's old URL never
+     * 404s. No live page ⇒ nothing to do (the common setup-time case).
+     */
+    private function retireLivePage(Service $child): void
+    {
+        $childPage = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $child->site_id)
+            ->where('primary_service_id', $child->id)
+            ->where('kind', ContentKind::Page->value)
+            ->whereNotNull('wp_post_id')
+            ->first();
+        if ($childPage === null) {
+            return;
+        }
+
+        // The parent is guaranteed set here (setTreatment only reaches this for a child with a parent,
+        // and removeService re-parents orphans), so resolve it directly.
+        $parent = Service::withoutGlobalScope(SiteScope::class)->findOrFail($child->parent_service_id);
+        $parentPage = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $child->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where(fn ($q) => $q->where('primary_service_id', $parent->id)->orWhere('title', $parent->name))
+            ->first();
+
+        app(DeleteFromWordpress::class)->delete($childPage);
+
+        Redirect::withoutGlobalScope(SiteScope::class)->create([
+            'site_id' => $child->site_id,
+            'from_url' => '/'.ltrim((string) $childPage->slug, '/'),
+            'to_url' => $parentPage !== null ? '/'.ltrim((string) $parentPage->slug, '/') : '/',
+            'code' => 301,
+            'source' => RedirectSource::SlugChange->value,
+            'status' => 'active',
+        ]);
+
+        $childPage->delete();
+
+        Notification::make()->warning()
+            ->title("Took down '{$child->name}'s page")
+            ->body("It becomes a section on '{$parent->name}' — its old URL now 301-redirects there.")
+            ->send();
     }
 
     /** The per-service enrichment modal — the ServiceResource form, reused wholesale. */

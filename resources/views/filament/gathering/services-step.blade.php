@@ -89,9 +89,11 @@
                                     <span class="g-muted" style="font-size:11px">└─</span>
                                     @include('filament.gathering._service-row', ['service' => $child])
                                     <span class="g-row" style="flex-basis:100%;padding-left:18px;margin-top:4px;gap:6px;align-items:center">
+                                        @php $childLive = $child->page_treatment === \App\Enums\ServicePageTreatment::Page && $this->hasLivePage($child->id); @endphp
                                         <div class="g-toggle" role="group" style="display:inline-flex;border:1px solid rgba(0,0,0,.15);border-radius:6px;overflow:hidden">
                                             <button class="g-btn {{ $child->page_treatment === \App\Enums\ServicePageTreatment::Section ? 'primary' : '' }}" style="border:0;border-radius:0;font-size:11px"
-                                                wire:click="setTreatment('{{ $child->id }}', 'section')">Section</button>
+                                                wire:click="setTreatment('{{ $child->id }}', 'section')"
+                                                @if ($childLive) wire:confirm="'{{ $child->name }}' has a published page. Making it a section will take that page down and 301-redirect its URL to the parent. Continue?" @endif>Section</button>
                                             <button class="g-btn {{ $child->page_treatment === \App\Enums\ServicePageTreatment::Page ? 'primary' : '' }}" style="border:0;border-radius:0;font-size:11px"
                                                 wire:click="setTreatment('{{ $child->id }}', 'page')">Its own page</button>
                                         </div>
