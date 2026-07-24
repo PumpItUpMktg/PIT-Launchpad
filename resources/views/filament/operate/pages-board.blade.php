@@ -35,6 +35,7 @@
             $work = $board['work'];
             $live = $board['live'];
             $isLocations = array_key_exists('groups', is_array($live) ? $live : []);
+            $readyCount = collect($work)->filter(fn ($r) => in_array('generate', $r['actions'] ?? [], true))->count();
         @endphp
 
         {{-- ─── Work lane ─── --}}
@@ -44,6 +45,14 @@
                 <span wire:loading.remove wire:target="syncPlan">↻ Sync plan</span>
                 <span wire:loading wire:target="syncPlan">Syncing…</span>
             </button>
+            @if ($readyCount > 0)
+                <button type="button" class="lv-btn primary" style="margin-left:6px" wire:click="generateAllReady" wire:loading.attr="disabled" wire:target="generateAllReady"
+                    wire:confirm="Generate all {{ $readyCount }} ready page(s)? Each drafts on the worker (AI copy + images). Pages that aren't ready yet are skipped."
+                    title="Draft every page that's ready to write — the one-click fill after Sync plan.">
+                    <span wire:loading.remove wire:target="generateAllReady">✨ Generate all ready ({{ $readyCount }})</span>
+                    <span wire:loading wire:target="generateAllReady">Queuing…</span>
+                </button>
+            @endif
             @if ($isLocations)
                 <button type="button" class="lv-btn" style="margin-left:6px" wire:click="reassign" wire:loading.attr="disabled" wire:target="reassign"
                     title="Tag each town page with the GBP location that serves it (from the intake coverage areas).">
