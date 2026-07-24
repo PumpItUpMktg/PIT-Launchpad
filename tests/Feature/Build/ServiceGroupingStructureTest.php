@@ -8,9 +8,11 @@ use App\Enums\PageType;
 use App\Enums\ServicePageTreatment;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokeStatus;
+use App\Jobs\BuildStructure;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
 
@@ -104,4 +106,26 @@ it('materializes a service-with-a-page-child as a HUB, a section-only/childless 
         ->and($pages['Sump Pump']->page_type)->toBe(PageType::Service)             // the spoke
         ->and($pages['Crawl Space']->page_type)->toBe(PageType::Service)           // section-only ⇒ service, not hub
         ->and($pages->has('Vapor Barrier'))->toBeFalse();                          // folded section ⇒ no page
+});
+
+// ---- Build default: authored grouping drives the structure build ----------
+
+it('BuildStructure uses the deterministic writer when the operator has grouped services', function () {
+    $site = Site::factory()->create();
+    SiloBlueprint::withoutGlobalScope(SiteScope::class)->create([
+        'site_id' => $site->id, 'seed' => ['trade' => 'Waterproofing'],
+    ]);
+    $hub = sgsvc($site, 'Basement Waterproofing');
+    sgsvc($site, 'Sump Pump', ['parent_service_id' => $hub->id, 'page_treatment' => ServicePageTreatment::Page]);
+    sgsvc($site, 'Vapor Barrier', ['parent_service_id' => $hub->id, 'page_treatment' => ServicePageTreatment::Section]);
+
+    BuildStructure::dispatchSync($site->id);
+
+    // The exact author-declared spoke set — Offered (not AI Candidate), the writer's fingerprint.
+    $spokes = Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('name');
+    expect($spokes)->toHaveCount(3)
+        ->and($spokes['Basement Waterproofing']->is_pillar)->toBeTrue()
+        ->and($spokes['Sump Pump']->granularity)->toBe(SpokeGranularity::OwnPage)
+        ->and($spokes['Vapor Barrier']->granularity)->toBe(SpokeGranularity::Folded)
+        ->and($spokes->every(fn ($s) => $s->status === SpokeStatus::Offered))->toBeTrue();
 });
