@@ -111,6 +111,10 @@
                             @if (in_array('reject', $row['menu'], true))
                                 <button class="lv-btn danger" wire:click="startReject('{{ $row['id'] }}')">Reject</button>
                             @endif
+                            @if (in_array('remove', $row['menu'], true))
+                                <button class="lv-btn danger" wire:click="removePage('{{ $row['id'] }}')"
+                                    wire:confirm="Remove '{{ $row['title'] }}' completely? It'll be deleted from the plan{{ $row['live_url'] ? ' and taken down from WordPress' : '' }} — not just parked. Rebuilding the structure can bring it back.">Remove</button>
+                            @endif
                         </div>
                         @if ($rejecting === $row['id'])
                             <div class="pb-reject">

@@ -7,6 +7,7 @@ use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
 use App\Jobs\GeneratePage;
+use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -302,6 +303,40 @@ abstract class OperatePagesBoard extends OperatePage
 
         Notification::make()->success()->title('Taken down — back in the work lane')
             ->body("'{$content->title}' was removed from WordPress; republish it from this board on the same URL.")->send();
+    }
+
+    /**
+     * Remove a page COMPLETELY — the opposite of Take down (which parks it as republishable). Deletes it
+     * from WordPress if it's live, drops its plan entry so a later materialize doesn't recreate it, then
+     * soft-deletes the Content so it leaves every board. Rebuilding the structure can bring it back.
+     */
+    public function removePage(string $contentId): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        $wasLive = (int) ($content->wp_post_id ?? 0) > 0;
+        if ($wasLive) {
+            $result = app(DeleteFromWordpress::class)->delete($content);
+            if (! $result['deleted'] && $result['on_wp']) {
+                Notification::make()->danger()->title('Could not remove it')->body($result['message'])->send();
+
+                return;
+            }
+        }
+
+        BuildPage::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('content_id', $content->id)
+            ->delete();
+
+        $title = (string) $content->title;
+        $content->delete();
+
+        Notification::make()->success()->title('Removed')
+            ->body("'{$title}' was deleted from the plan".($wasLive ? ' and WordPress' : '').'. Rebuilding the structure can bring it back.')->send();
     }
 
     protected function ownedPage(string $contentId): ?Content

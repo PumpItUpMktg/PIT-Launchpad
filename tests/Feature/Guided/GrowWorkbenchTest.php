@@ -93,12 +93,12 @@ it('offers the right secondary (overflow-menu) controls per state', function () 
 
     $rows = collect(app(GrowDashboard::class)->pages($ctx['site']))->keyBy('id');
 
-    // a planned page has nothing to re-draft/protect/take-down yet — no secondary menu
-    expect($rows[$planned->id]['menu'])->toBe([])
-        // a review draft: regenerate a fresh one or reject it (nothing on WordPress to take down)
-        ->and($rows[$review->id]['menu'])->toBe(['regenerate', 'reject'])
-        // approved page: regenerate or lock; not on WordPress → no take-down
-        ->and($rows[$approved->id]['menu'])->toBe(['regenerate', 'lock'])
+    // a planned page has nothing to re-draft/protect/take-down yet — only Remove-completely
+    expect($rows[$planned->id]['menu'])->toBe(['remove'])
+        // a review draft: regenerate a fresh one, reject it, or remove it (nothing on WordPress to take down)
+        ->and($rows[$review->id]['menu'])->toBe(['regenerate', 'reject', 'remove'])
+        // approved page: regenerate or lock; not on WordPress → no take-down; Remove available
+        ->and($rows[$approved->id]['menu'])->toBe(['regenerate', 'lock', 'remove'])
         // a LIVE page is no longer on the work board — its repush/regenerate/take-down controls
         // moved to the Live boards; it flows back here the moment those actions change its state
         ->and($rows->has($live->id))->toBeFalse()

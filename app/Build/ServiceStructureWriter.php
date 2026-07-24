@@ -91,6 +91,7 @@ final class ServiceStructureWriter
             'page_type' => SpokePageType::Service,
             'tag' => SpokeTag::Core,
             'status' => SpokeStatus::Offered, // author-declared = owner-confirmed; no AI prune
+            'head_keyword' => $attributes['name'], // the service name is its primary query — lets §5 volume ground it
             'volume' => null,
             ...$attributes,
         ]);

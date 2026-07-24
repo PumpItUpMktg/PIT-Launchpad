@@ -261,10 +261,13 @@ class SilosStep extends GatheringPage
             $this->syncBoardToTree($site); // §4 silos follow the rebuilt tree so the board isn't stale
         }
         $status = $this->getStructureStatusProperty();
-        Notification::make()
-            ->{$status === 'ready' ? 'success' : 'warning'}()
-            ->title($status === 'ready' ? 'Structure rebuilt from scratch' : 'Rebuild failed — check the logs and retry.')
-            ->send();
+        $note = Notification::make()->{$status === 'ready' ? 'success' : 'warning'}()
+            ->title($status === 'ready' ? 'Structure rebuilt from scratch' : 'Rebuild failed');
+        if ($status !== 'ready') {
+            $reason = (string) (app(StepGate::class)->state($site)->structure_error ?? '');
+            $note->body($reason !== '' ? $reason : 'The structure build did not finish — retry, and if it persists check the logs.');
+        }
+        $note->send();
 
         $this->reset(['pruneMode', 'started', 'finalized', 'spokeDecisions', 'siloDecisions', 'regenArmed']);
     }

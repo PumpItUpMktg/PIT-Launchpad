@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $structure_finalized
  * @property bool $inventory_reviewed step 6 reviewed (Continue) — pass-through completion gate
  * @property string|null $structure_status null|building|ready|failed (Step 3 engine-on-entry)
+ * @property string|null $structure_error the reason the last structure build failed (surfaced on Start over); null on success
  * @property bool $approved
  * @property bool $launched
  * @property bool $localize

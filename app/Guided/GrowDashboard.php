@@ -182,6 +182,13 @@ class GrowDashboard
             $menu[] = 'takedown';
         }
 
+        // Remove completely — drop the page from the plan (and WordPress if live), for good. Unlike
+        // Take down (which parks it as republishable and back in the work lane), this deletes the row.
+        // Not for the home page (structural) and never mid-job.
+        if ($c->page_type !== PageType::Home && $state !== PageState::Writing && $state !== PageState::Publishing) {
+            $menu[] = 'remove';
+        }
+
         // Most-actionable first within a lane: review → approved → (ready / held / failed) → in-flight → live.
         $rank = match ($state) {
             PageState::ReadyToReview => 0,
