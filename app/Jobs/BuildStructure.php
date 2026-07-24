@@ -20,6 +20,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -58,7 +59,7 @@ class BuildStructure implements ShouldQueue
                 // arranger is skipped (nothing to auto-arrange — the routing is explicit), volume still
                 // grounds for scoring. Idempotent: re-run replaces the spoke set from the current tree.
                 $structureWriter->write($site);
-                $grounder->ground($site);
+                $this->enrich($site, $grounder, null);
             } elseif (config('launchpad.keyword_first.enabled')) {
                 // Keyword-first: accumulate demand → cluster → derive the tree → arrange. Structure is
                 // shaped by measured demand, not the catalog. Regeneration replaces the candidate tree.
@@ -74,14 +75,30 @@ class BuildStructure implements ShouldQueue
                     $persister->persist($site, $expander->expand($seed));
                 }
 
-                $grounder->ground($site);
-                $arranger->run($site);
+                $this->enrich($site, $grounder, $arranger);
             }
 
-            $state->update(['structure_status' => 'ready']);
+            $state->update(['structure_status' => 'ready', 'structure_error' => null]);
+        } catch (Throwable $e) {
+            // A failure to PRODUCE the tree (expand/write threw) — surface the reason, not a bare "failed".
+            report($e);
+            $state->update(['structure_status' => 'failed', 'structure_error' => Str::limit($e->getMessage(), 480)]);
+        }
+    }
+
+    /**
+     * Best-effort scoring enrichment AFTER the tree is written: refresh search volume (and, on the AI
+     * path, auto-arrange). The structure itself is already persisted, so a provider hiccup here — e.g. a
+     * slow/failing DataForSEO volume pull on the synchronous rebuild — must NOT discard a good tree. The
+     * failure is logged; volume/arrangement simply stays un-refreshed until the next run.
+     */
+    private function enrich(Site $site, VolumeGrounder $grounder, ?AutoArrangeRunner $arranger): void
+    {
+        try {
+            $grounder->ground($site);
+            $arranger?->run($site);
         } catch (Throwable $e) {
             report($e);
-            $state->update(['structure_status' => 'failed']);
         }
     }
 

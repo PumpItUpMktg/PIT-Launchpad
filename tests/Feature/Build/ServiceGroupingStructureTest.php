@@ -12,6 +12,7 @@ use App\Jobs\BuildStructure;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\SetupState;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -128,4 +129,22 @@ it('BuildStructure uses the deterministic writer when the operator has grouped s
         ->and($spokes['Sump Pump']->granularity)->toBe(SpokeGranularity::OwnPage)
         ->and($spokes['Vapor Barrier']->granularity)->toBe(SpokeGranularity::Folded)
         ->and($spokes->every(fn ($s) => $s->status === SpokeStatus::Offered))->toBeTrue();
+});
+
+it('keeps a written tree and marks READY when volume grounding throws (grounding is best-effort)', function () {
+    // The exact "Rebuild failed" repro: an authored-grouping site with no coverage metros. The real
+    // VolumeGrounder throws (no metros / keywords) — which used to fail the whole rebuild even though
+    // the tree wrote fine. No mock: VolumeGrounder is final; the real one throws on this fixture.
+    $site = Site::factory()->create();
+    SiloBlueprint::withoutGlobalScope(SiteScope::class)->create([
+        'site_id' => $site->id, 'seed' => ['trade' => 'Waterproofing'],
+    ]);
+    $hub = sgsvc($site, 'Basement Waterproofing');
+    sgsvc($site, 'Sump Pump', ['parent_service_id' => $hub->id, 'page_treatment' => ServicePageTreatment::Page]);
+
+    BuildStructure::dispatchSync($site->id);
+
+    // The tree is still written, and the build is READY — a grounding hiccup no longer fails the rebuild.
+    expect(Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(2)
+        ->and(SetupState::query()->where('site_id', $site->id)->value('structure_status'))->toBe('ready');
 });

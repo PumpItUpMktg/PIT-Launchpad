@@ -111,6 +111,24 @@ it('a live card takes down back to the work lane of the SAME board (state-driven
         ->and($board['live'])->toBe([]);
 });
 
+it('Remove completely deletes a taken-down page from the plan and every board (not just parks it)', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    // A service page sitting in the work lane after a take-down (Approved, not on WP).
+    $page = pbPage($site, PageType::Service, ContentStatus::Approved, 'Sump Pump Installation', ['wp_post_id' => null]);
+
+    // The row offers Remove (not mid-job, not the home page).
+    $work = collect(app(PagesBoard::class)->services($site)['work'])->firstWhere('title', 'Sump Pump Installation');
+    expect($work['menu'])->toContain('remove');
+
+    Livewire::test(OperateServicePages::class)->call('removePage', $page->id);
+
+    // Gone for good — soft-deleted, off the board (unlike Take down, which leaves it in the work lane).
+    expect(Content::withoutGlobalScope(SiteScope::class)->find($page->id))->toBeNull()
+        ->and(collect(app(PagesBoard::class)->services($site->fresh())['work'])->pluck('title')->all())
+        ->not->toContain('Sump Pump Installation');
+});
+
 it('Sync plan picks up a month-3 source record as a new not-generated row with a Generate action', function () {
     $site = pbSite();
     session(['guided_site_id' => $site->id]);
