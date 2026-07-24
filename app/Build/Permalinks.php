@@ -44,11 +44,14 @@ final class Permalinks
         return $candidate;
     }
 
-    /** Every slug already in use for the site (incl. soft-deleted — the unique index covers them). */
+    /**
+     * Every slug in use by a LIVE page for the site. Soft-deleted (Removed) pages are excluded — the
+     * unique index is now partial (`deleted_at IS NULL`), so a removed page frees its slug and the next
+     * build reuses the clean permalink instead of appending "-2".
+     */
     public function takenSlugs(Site $site): array
     {
         return Content::withoutGlobalScope(SiteScope::class)
-            ->withTrashed()
             ->where('site_id', $site->id)
             ->pluck('slug')
             ->all();
