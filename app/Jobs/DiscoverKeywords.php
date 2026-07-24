@@ -20,6 +20,12 @@ class DiscoverKeywords implements ShouldQueue
 {
     use Queueable;
 
+    /** Discovery is a long real-provider pull (DataForSEO + Claude across every silo) — give it room. */
+    public int $timeout = 600;
+
+    /** No auto-retry: a mid-flight failure shouldn't restart the whole multi-silo external pull. */
+    public int $tries = 1;
+
     public function __construct(public readonly string $siteId) {}
 
     public function handle(SitePipelineRefresher $refresher): void
