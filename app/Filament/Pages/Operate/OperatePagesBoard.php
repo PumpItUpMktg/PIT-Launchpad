@@ -139,6 +139,54 @@ abstract class OperatePagesBoard extends OperatePage
             ->send();
     }
 
+    /**
+     * Bulk-generate every page in this family's work lane that is ready to write — the one-click
+     * repopulate after a Sync plan (or a cleared/rebuilt site). Only rows whose primary action is
+     * Generate are eligible (already-drafted / in-flight pages are left alone), and each still passes
+     * the same honest grounding gate as the single Generate; the not-yet-ready are skipped, not queued.
+     */
+    public function generateAllReady(): void
+    {
+        if ($this->getSite() === null) {
+            return;
+        }
+
+        $queued = 0;
+        $skipped = 0;
+        foreach ($this->getBoardProperty()['work'] ?? [] as $row) {
+            if (! in_array('generate', $row['actions'] ?? [], true)) {
+                continue;
+            }
+            $content = $this->ownedPage((string) $row['id']);
+            if ($content === null) {
+                continue;
+            }
+            if (! app(GroundingReadiness::class)->ready($content)) {
+                $skipped++;
+
+                continue;
+            }
+            GeneratePage::enqueue($content, actorId: Auth::id());
+            $queued++;
+        }
+
+        if ($queued === 0) {
+            Notification::make()->info()
+                ->title($skipped > 0 ? 'Nothing generated' : 'Nothing to generate')
+                ->body($skipped > 0
+                    ? "{$skipped} page(s) aren't ready to write yet — their details are still coming together."
+                    : 'Every page here is already drafted or in flight.')
+                ->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title("Generating {$queued} page(s) on the worker")
+            ->body(($skipped > 0 ? "{$skipped} not ready yet were skipped. " : '').'They\'ll appear ready for review as each finishes.')
+            ->send();
+    }
+
     public function approve(string $contentId): void
     {
         $content = $this->ownedPage($contentId);

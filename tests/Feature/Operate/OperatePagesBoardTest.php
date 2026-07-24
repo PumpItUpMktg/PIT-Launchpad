@@ -12,6 +12,7 @@ use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperateCorePages;
 use App\Filament\Pages\Operate\OperateLocationPages;
 use App\Filament\Pages\Operate\OperateServicePages;
+use App\Jobs\GeneratePage;
 use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\Location;
@@ -22,6 +23,7 @@ use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
 use App\Models\User;
+use App\Models\WireframeKit;
 use App\Operate\PagesBoard;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
@@ -109,6 +111,26 @@ it('a live card takes down back to the work lane of the SAME board (state-driven
     expect($live->fresh()->status)->toBe(ContentStatus::Approved)
         ->and(collect($board['work'])->pluck('title')->all())->toContain('Sump Pump Installation')
         ->and($board['live'])->toBe([]);
+});
+
+it('Generate all ready queues every ready-to-generate page in the family and leaves the rest', function () {
+    Queue::fake();
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    Service::factory()->create(['site_id' => $site->id]); // a service exists → service pages are grounding-ready
+    $kit = WireframeKit::query()->where('name', 'service-page')->whereNull('site_id')->firstOrFail();
+
+    // Two ready-to-generate service pages (Candidate ⇒ empty slot_payload; kit pinned ⇒ not held).
+    $kitCols = ['wireframe_kit_id' => $kit->id, 'wireframe_kit_version' => $kit->version];
+    pbPage($site, PageType::Service, ContentStatus::Candidate, 'French Drains', $kitCols);
+    pbPage($site, PageType::Service, ContentStatus::Candidate, 'Sump Pump', $kitCols);
+    // An already-drafted page (NeedsReview) — not a generate row, so it's left alone.
+    pbPage($site, PageType::Service, ContentStatus::NeedsReview, 'Basement Waterproofing');
+
+    Livewire::test(OperateServicePages::class)->call('generateAllReady');
+
+    // Exactly the two ready pages queued — the drafted one is untouched.
+    Queue::assertPushed(GeneratePage::class, 2);
 });
 
 it('Remove completely deletes a taken-down page from the plan and every board (not just parks it)', function () {
