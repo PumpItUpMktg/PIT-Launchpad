@@ -5,6 +5,7 @@ namespace App\Filament\Pages\Gathering;
 use App\Enums\ServicePageTreatment;
 use App\Filament\Resources\ServiceResource;
 use App\Gathering\ServiceEnricher;
+use App\Guided\GroupingSuggester;
 use App\Guided\ServiceSuggester;
 use App\Jobs\EnrichThinServices;
 use App\Models\Scopes\SiteScope;
@@ -262,6 +263,35 @@ class ServicesStep extends GatheringPage
     public function getGroupTargetsProperty(): Collection
     {
         return $this->getServiceTreeProperty();
+    }
+
+    /**
+     * AI "Suggest grouping" — proposes a 2-level grouping over the flat service list (nest related
+     * sub-services, each page or section) and writes it onto the Service rows as an EDITABLE
+     * suggestion. Rebuilds no structure and touches no live page; the operator adjusts, then applies.
+     */
+    public function suggestGrouping(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $grouped = app(GroupingSuggester::class)->suggest($site);
+
+        if ($grouped === 0) {
+            Notification::make()->info()
+                ->title('No grouping to suggest')
+                ->body('The services look independent, or there aren\'t enough to group — nest them by hand with “+ Sub-service”.')
+                ->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title("Suggested a grouping — {$grouped} sub-service(s) nested")
+            ->body('A starting point only: adjust page vs section, ungroup, or regroup, then it builds from what you confirm.')
+            ->send();
     }
 
     /** Add a sub-service under a top-level parent (defaults to a Section — the spec default). */

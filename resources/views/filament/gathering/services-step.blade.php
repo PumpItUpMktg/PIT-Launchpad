@@ -34,6 +34,14 @@
             @php $thinCount = $this->services->filter(fn ($s) => $s->isThin())->count(); @endphp
             <div class="g-row" style="justify-content:space-between;align-items:center">
                 <h3 style="margin:0">Stated services</h3>
+                <span class="g-row" style="gap:8px">
+                @if ($this->serviceTree->count() > 1)
+                    <button class="g-btn" wire:click="suggestGrouping" wire:loading.attr="disabled" wire:target="suggestGrouping"
+                        title="Let AI propose which services group under which (each sub-service a page or a section). A starting point you then edit — nothing is built or changed until you apply.">
+                        <span wire:loading.remove wire:target="suggestGrouping">✨ Suggest grouping</span>
+                        <span wire:loading wire:target="suggestGrouping">Grouping…</span>
+                    </button>
+                @endif
                 @if ($thinCount > 0)
                     <button class="g-btn" wire:click="aiEnrichAll" wire:loading.attr="disabled" wire:target="aiEnrichAll"
                         title="Draft the empty fields (symptoms, what's included, process, cost) for every thin service with generic trade knowledge — no prices or guarantees. You review each before it counts.">
@@ -41,6 +49,7 @@
                         <span wire:loading wire:target="aiEnrichAll">Queuing…</span>
                     </button>
                 @endif
+                </span>
             </div>
             <p class="g-muted" style="font-size:12px;margin:2px 0 10px">
                 Group sub-services under a parent to shape the site. Each top-level service gets its own page;
