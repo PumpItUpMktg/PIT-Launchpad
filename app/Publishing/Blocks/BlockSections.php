@@ -305,7 +305,7 @@ final class BlockSections
      *
      * @param  list<array{label: string, url: string, tier?: string|null}>  $links
      */
-    public function areasServed(string $eyebrow, string $heading, array $links, ?array $map = null): string
+    public function areasServed(string $eyebrow, string $heading, array $links, bool $hasMap = false): string
     {
         $links = array_values(array_filter($links, fn (array $l): bool => trim($l['label']) !== '' && trim($l['url']) !== ''));
         if ($links === []) {
@@ -322,14 +322,14 @@ final class BlockSections
 
         // The interactive county map rides the meta-blob (not post_content); the block carries only the
         // mount + this list as its fallback. The map is populated by the theme's Leaflet init.
-        $mount = $map !== null ? '<div class="lp-areas-map" role="img" aria-label="Map of the towns we serve"></div>' : '';
+        $mount = $hasMap ? '<div class="lp-areas-map" role="img" aria-label="Map of the towns we serve"></div>' : '';
 
         $block = "<!-- wp:html -->\n".'<div class="lp-areas-townblock">'.$mount.$list.'</div>'."\n<!-- /wp:html -->";
 
         return $this->b->group([
             $this->sectionHead($eyebrow, $heading),
             $block,
-        ], ['align' => 'full', 'className' => 'lp-areas lp-areas--towns'.($map !== null ? ' lp-areas--map' : '')]);
+        ], ['align' => 'full', 'className' => 'lp-areas lp-areas--towns'.($hasMap ? ' lp-areas--map' : '')]);
     }
 
     /**

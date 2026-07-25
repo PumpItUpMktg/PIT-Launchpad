@@ -2,7 +2,11 @@
 
 namespace App\Publishing\Blocks;
 
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -59,6 +63,122 @@ final class ServiceAreaMap
     }
 
     /**
+     * A LOCATION-scoped map for a location hub: that location's own served county polygons + the towns
+     * IT serves (as clickable points — each carries the URL of its published town page), plus a pin for
+     * the location itself. Same shape as {@see for()} with a `url` on each city so the theme's Leaflet
+     * init can link the markers. Null when there's no geometry at all (the section then stays text-only).
+     *
+     * @return array{
+     *     counties: list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>,
+     *     cities: list<array{name: string, lat: float, lng: float, tier: string, url: string}>,
+     *     center: array{lat: float, lng: float}|null,
+     *     pin?: array{lat: float, lng: float, label: string}
+     * }|null
+     */
+    public function forLocation(Location $location): ?array
+    {
+        $geoIds = collect(is_array($location->county_geoids) ? $location->county_geoids : [])
+            ->map(fn ($g): string => (string) $g)
+            ->filter(fn (string $g): bool => strlen($g) >= 5)
+            ->unique()->values()->all();
+
+        $polygons = $this->polygonsFor($geoIds);
+        $cities = $this->locationCities($location);
+        $pin = ($location->lat !== null && $location->lng !== null)
+            ? ['lat' => (float) $location->lat, 'lng' => (float) $location->lng, 'label' => $this->locationLabel($location)]
+            : null;
+
+        if ($polygons === [] && $cities === [] && $pin === null) {
+            return null;
+        }
+
+        $out = ['counties' => $polygons, 'cities' => $cities, 'center' => $this->center($polygons, $cities)];
+        if ($pin !== null) {
+            $out['pin'] = $pin;
+            $out['center'] ??= ['lat' => $pin['lat'], 'lng' => $pin['lng']];
+        }
+
+        return $out;
+    }
+
+    /**
+     * The location's served towns as tiered, LINKED map points — only towns that have a live (published)
+     * town page under this location AND a geocoded coverage row, matched by name. Largest-first, capped.
+     *
+     * @return list<array{name: string, lat: float, lng: float, tier: string, url: string}>
+     */
+    private function locationCities(Location $location): array
+    {
+        // town name (normalized) => the published town page URL under this location.
+        $urls = [];
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $location->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->where('status', ContentStatus::Published->value)
+            ->where('parent_location_id', $location->id)
+            ->whereNull('location_id')
+            ->whereNull('primary_service_id')
+            ->whereNotNull('slug')
+            ->get(['title', 'slug']);
+        foreach ($pages as $page) {
+            $key = $this->townKey((string) $page->title);
+            if ($key !== '' && ! isset($urls[$key])) {
+                $urls[$key] = '/'.ltrim((string) $page->slug, '/');
+            }
+        }
+        if ($urls === []) {
+            return [];
+        }
+
+        $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $location->site_id)
+            ->whereNotNull('lat')->whereNotNull('lng')
+            ->get(['name', 'lat', 'lng', 'size_tier', 'population']);
+
+        $items = [];
+        $seen = [];
+        foreach ($areas as $area) {
+            $key = $this->townKey((string) $area->name);
+            if ($key === '' || ! isset($urls[$key]) || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $tier = (string) ($area->size_tier ?? '');
+            $items[] = [
+                'point' => [
+                    'name' => (string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim((string) $area->name)),
+                    'lat' => (float) $area->lat,
+                    'lng' => (float) $area->lng,
+                    'tier' => $tier !== '' ? $tier : 'small',
+                    'url' => $urls[$key],
+                ],
+                'key' => [self::TIER_RANK[$tier] ?? 4, -1 * (int) ($area->population ?? 0), $key],
+            ];
+        }
+
+        usort($items, fn (array $a, array $b): int => $a['key'] <=> $b['key']);
+
+        return array_map(fn (array $i): array => $i['point'], array_slice($items, 0, self::MAX_CITIES));
+    }
+
+    /** "{City}, {ST}" (or the location name) for the pin tooltip. */
+    private function locationLabel(Location $location): string
+    {
+        ['city' => $city, 'state' => $state] = $location->cityState();
+        $city = trim($city) !== '' ? trim($city) : trim((string) $location->name);
+        $state = trim($state);
+
+        return $city !== '' && $state !== '' ? "{$city}, {$state}" : ($city !== '' ? $city : 'Our location');
+    }
+
+    /** Normalize a town name for matching (drop a trailing ", ST", lower-case). */
+    private function townKey(string $name): string
+    {
+        return mb_strtolower(trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($name))));
+    }
+
+    /**
      * The served counties as boundary polygons, from the selected `county_geoids` (the same selection
      * the onboarding map outlines). Best-effort: any gazetteer failure yields [].
      *
@@ -76,6 +196,19 @@ final class ServiceAreaMap
             ->values()
             ->all();
 
+        return $this->polygonsFor($geoIds);
+    }
+
+    /**
+     * County polygons for a specific set of GEOIDs (cached, best-effort). Shared by the site-wide map
+     * and the per-location map.
+     *
+     * @param  list<string>  $geoIds
+     * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
+     */
+    private function polygonsFor(array $geoIds): array
+    {
+        $geoIds = array_values(array_filter(array_map('strval', $geoIds), fn (string $g): bool => strlen($g) >= 5));
         if ($geoIds === []) {
             return [];
         }

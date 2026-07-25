@@ -19,6 +19,7 @@ use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\WireframeKit;
 use App\Publishing\Blocks\BlockContentAssembler;
+use App\Publishing\Blocks\ServiceAreaMap;
 use App\Publishing\MetaBlobAssembler;
 use App\Publishing\RenderCoordinator;
 use App\Publishing\RenderOutcome;
@@ -382,6 +383,40 @@ it('the areas list is a de-duped, published-only, comma-flowing line ordered lar
     expect(substr_count($markup, '>Norristown</a>'))->toBe(1)
         // Largest-first: Norristown (large) precedes Audubon (small).
         ->and(strpos($markup, '>Norristown</a>'))->toBeLessThan(strpos($markup, '>Audubon</a>'));
+});
+
+it('forLocation builds a scoped areas map — its served towns as LINKED points + a location pin', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, ['lat' => 40.12, 'lng' => -75.34, 'county_geoids' => ['42091']]);
+
+    // A geocoded coverage town + its published town page under this location → a clickable point.
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209153000', 'name' => 'Norristown', 'type' => 'county_subdivision', 'state' => 'PA', 'lat' => 40.12, 'lng' => -75.34, 'size_tier' => 'large', 'population' => 35000, 'source' => 'county']);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Norristown, PA', 'slug' => 'norristown']);
+    // A geocoded town with NO page → not a point (every pin must link).
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209199999', 'name' => 'Audubon', 'type' => 'county_subdivision', 'state' => 'PA', 'lat' => 40.13, 'lng' => -75.44, 'size_tier' => 'small', 'population' => 3000, 'source' => 'county']);
+
+    $map = app(ServiceAreaMap::class)->forLocation($location->fresh());
+
+    expect($map)->not->toBeNull()
+        ->and($map['cities'])->toHaveCount(1)                       // only the town with a page
+        ->and($map['cities'][0]['name'])->toBe('Norristown')        // ", PA" stripped
+        ->and($map['cities'][0]['url'])->toBe('/norristown')        // links its town page
+        ->and($map['pin']['lat'])->toBe(40.12);                     // the location pin
+});
+
+it('the location hub renders the interactive map mount above the town list when a map is available', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, ['is_storefront' => true, 'address' => '10 Trooper Rd, Trooper, PA 19403']);
+    $page = locRelayPage($site, $location);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Norristown, PA', 'slug' => 'norristown']);
+
+    // mapAvailable: true → the section carries the Leaflet mount (fed by the meta-blob) AND the list.
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], mapAvailable: true);
+
+    expect($markup)
+        ->toContain('lp-areas--map')
+        ->toContain('lp-areas-map')                    // the Leaflet mount
+        ->toContain('<a href="/norristown">Norristown</a>'); // the crawlable fallback list stays
 });
 
 it('the location hub drops the address for a non-storefront (mobile base stays private) but keeps hours', function () {

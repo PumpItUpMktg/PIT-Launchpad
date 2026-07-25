@@ -90,7 +90,7 @@ final class BlockContentAssembler
         // A location page pinned to its GBP Location record composes the block pattern; market-era
         // location pages WITHOUT a pin (no location_id) keep the null fallback → the Elementor path.
         if ($content->page_type === PageType::Location && $content->location_id !== null) {
-            return $this->composeLocation($content, $slots, $images, $preview);
+            return $this->composeLocation($content, $slots, $images, $preview, $mapAvailable);
         }
 
         if ($content->standard_type === StandardPageType::WhyChooseUs) {
@@ -665,7 +665,7 @@ final class BlockContentAssembler
      * @param  array<string, mixed>  $slots
      * @param  array<string, array<string, mixed>>  $images
      */
-    private function composeLocation(Content $content, array $slots, array $images, bool $preview): ?string
+    private function composeLocation(Content $content, array $slots, array $images, bool $preview, bool $areasMapAvailable = false): ?string
     {
         $location = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
@@ -717,6 +717,7 @@ final class BlockContentAssembler
             townLinks: $this->locationTownLinks($content, $location),
             localConditions: $this->locationGroundingFacts($location),
             hasMap: is_array($slots['location_map'] ?? null),
+            areasMapAvailable: $areasMapAvailable,
             preview: $preview,
         );
     }
