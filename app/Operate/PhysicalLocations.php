@@ -172,6 +172,12 @@ class PhysicalLocations
             'state' => $state,
             'drafted' => $drafted,
             'published' => $published,
+            'permalink' => '/'.ltrim((string) $landing->slug, '/'),
+            // A landing page's slug is minted once and reused forever (the factory is idempotent per
+            // location), so a "-2/-3" it picked up during an earlier collision is stuck. Offer "Fix
+            // permalink" whenever the final path segment carries a numeric suffix — the action verifies a
+            // cleaner slug is actually free before renaming.
+            'slug_suffixed' => (bool) preg_match('/-\d+$/', (string) $landing->slug),
             'can_generate' => $state !== 'generating',
             // Review opens the proof editor for any drafted page (the same target as the core board).
             'can_review' => $drafted,

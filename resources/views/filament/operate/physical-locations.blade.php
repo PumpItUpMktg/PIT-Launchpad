@@ -146,6 +146,17 @@
                                 </button>
                             @endif
 
+                            {{-- Fix permalink — recompute a stuck "-2/-3" landing slug to the clean URL (301s the old one). --}}
+                            @if (($pg['content_id'] ?? null) && ($pg['slug_suffixed'] ?? false))
+                                <button class="pl-btn" wire:click="fixPermalink('{{ $card['id'] }}')"
+                                    wire:confirm="Rename {{ $pg['permalink'] }} to the clean URL and 301-redirect the old one? It re-pushes to WordPress."
+                                    wire:loading.attr="disabled" wire:target="fixPermalink('{{ $card['id'] }}')"
+                                    title="This page's URL has a -2/-3 suffix left over from an earlier rebuild. Reclaim the clean permalink.">
+                                    <span wire:loading.remove wire:target="fixPermalink('{{ $card['id'] }}')">Fix permalink</span>
+                                    <span class="sp" wire:loading wire:target="fixPermalink('{{ $card['id'] }}')">Fixing…</span>
+                                </button>
+                            @endif
+
                             <button class="pl-btn" wire:click="generatePage('{{ $card['id'] }}')"
                                 @disabled(! $pg['can_generate'])
                                 wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">
