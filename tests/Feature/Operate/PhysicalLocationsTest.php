@@ -13,6 +13,8 @@ use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Market;
+use App\Models\Redirect;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
 use App\Operate\PhysicalLocations;
@@ -183,6 +185,49 @@ it('Take down removes a live location page from WordPress and flips it back to r
     // Back in the work lane on the same URL — Approved (republishable), no WP post id.
     expect($landing->refresh()->status)->toBe(ContentStatus::Approved)
         ->and($landing->wp_post_id)->toBeNull();
+});
+
+it('Fix permalink reclaims a stuck "-3" landing slug, 301s the old URL, and re-pushes', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'New Brunswick']);
+    // A live landing page stuck at "-3" from earlier rebuild collisions (its clean base is now free).
+    $landing = Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'title' => 'New Brunswick, NJ', 'slug' => 'new-brunswick-nj-3',
+        'version' => 1, 'wp_post_id' => 55, 'location_id' => $loc->id,
+        'slot_payload' => ['hero_headline' => 'We serve New Brunswick'],
+    ]);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('fixPermalink', $loc->id)->assertNotified();
+
+    expect($landing->refresh()->slug)->toBe('new-brunswick-nj');
+    // The old URL now 301s to the clean one, and the rename re-pushes to WordPress.
+    expect(Redirect::withoutGlobalScope(SiteScope::class)
+        ->where('site_id', $site->id)->where('from_url', '/new-brunswick-nj-3')->where('to_url', '/new-brunswick-nj')->where('code', 301)->exists())->toBeTrue();
+    Queue::assertPushed(PublishContent::class);
+});
+
+it('Fix permalink is a no-op notice when the clean base is still held by another live page', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'New Brunswick']);
+    // Another LIVE page already holds the clean base slug — so the suffixed one can't shorten.
+    Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'status' => ContentStatus::Published, 'title' => 'New Brunswick', 'slug' => 'new-brunswick-nj', 'version' => 1,
+    ]);
+    $landing = Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'title' => 'New Brunswick, NJ', 'slug' => 'new-brunswick-nj-2',
+        'version' => 1, 'wp_post_id' => 56, 'location_id' => $loc->id,
+    ]);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('fixPermalink', $loc->id)->assertNotified();
+
+    // Unchanged — nothing shorter is free.
+    expect($landing->refresh()->slug)->toBe('new-brunswick-nj-2');
 });
 
 it('the card footer offers Review and Take down alongside Repush on a live page', function () {

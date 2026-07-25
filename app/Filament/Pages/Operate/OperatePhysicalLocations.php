@@ -2,9 +2,11 @@
 
 namespace App\Filament\Pages\Operate;
 
+use App\Build\Permalinks;
 use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\PageType;
+use App\Enums\RedirectSource;
 use App\Filament\Pages\Gathering\BusinessStep;
 use App\Filament\Pages\Gathering\LocationsStep;
 use App\Integrations\Wordpress\WordpressClientFactory;
@@ -12,6 +14,7 @@ use App\Jobs\GeneratePage;
 use App\Locations\LocationLandingFactory;
 use App\Models\Content;
 use App\Models\Location;
+use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PhysicalLocations;
@@ -184,6 +187,78 @@ class OperatePhysicalLocations extends OperatePage
 
         Notification::make()->success()->title('Taken down — back in the work lane')
             ->body("'{$content->title}' was removed from WordPress; Repush recreates it on the same URL.")->send();
+    }
+
+    /**
+     * Fix a stuck "-2/-3" permalink on the location's landing page. The landing slug is minted once by
+     * {@see LocationLandingFactory} and reused forever, so a suffix it picked up during an earlier
+     * collision never clears on its own (Take down + Repush just re-push the same slug). This recomputes
+     * the clean slug from the page's title against the LIVE-only taken set (§417's partial index means a
+     * removed page no longer reserves it), and — if a cleaner slug is now free — renames the row, drops a
+     * 301 from the old URL, and republishes so WordPress renames the post on the same ID.
+     */
+    public function fixPermalink(string $locationId): void
+    {
+        $content = $this->landingFor($locationId);
+        $site = $this->getSite();
+        if ($content === null || $site === null) {
+            return;
+        }
+
+        $current = ltrim((string) $content->slug, '/');
+        // The clean slug the title wants — disambiguated against every OTHER live page (self excluded so
+        // it can reclaim its own base). A removed/soft-deleted collider no longer counts (§417).
+        $taken = array_values(array_filter(
+            app(Permalinks::class)->takenSlugs($site),
+            fn (string $s): bool => $s !== $current,
+        ));
+        $clean = app(Permalinks::class)->uniqueSlug((string) $content->title, $taken);
+
+        if ($clean === $current) {
+            Notification::make()->warning()->title('Already the cleanest available')
+                ->body("/{$current}/ can't shorten — another LIVE page still holds the base URL. Use Diagnose to see which, remove it, then Fix again.")
+                ->send();
+
+            return;
+        }
+
+        $wasLive = (int) ($content->wp_post_id ?? 0) > 0;
+        $oldPath = '/'.$current;
+        $newPath = '/'.$clean;
+
+        // 301 the old live URL to the new one (only if it was ever live, and not already redirected).
+        if ($wasLive) {
+            $exists = Redirect::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->where('from_url', $oldPath)->exists();
+            if (! $exists) {
+                Redirect::withoutGlobalScope(SiteScope::class)->create([
+                    'site_id' => $site->id,
+                    'from_url' => $oldPath,
+                    'to_url' => $newPath,
+                    'code' => 301,
+                    'source' => RedirectSource::SlugChange->value,
+                ]);
+            }
+        }
+
+        $content->forceFill(['slug' => $clean])->save();
+
+        // Push the rename to WordPress (idempotent by ULID — the post keeps its ID, gets the new slug).
+        if ($wasLive) {
+            $result = app(ReviewActions::class)->publish($content->refresh(), Auth::id());
+            if ($result->isBlocked()) {
+                Notification::make()->warning()->title("Renamed to /{$clean}/ — but the re-push was blocked")
+                    ->body((string) $result->blockedReason.' Repush once resolved.')->send();
+
+                return;
+            }
+        }
+
+        Notification::make()->success()->title("Permalink fixed → /{$clean}/")
+            ->body($wasLive
+                ? "Re-pushing to WordPress; the old /{$current}/ now 301-redirects here."
+                : "The page will publish at /{$clean}/.")
+            ->send();
     }
 
     /**
