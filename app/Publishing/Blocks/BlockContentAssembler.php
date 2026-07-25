@@ -16,6 +16,7 @@ use App\Local\Proof\ServiceJobProvider;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Models\Content;
 use App\Models\ConversionConfig;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\ProofItem;
@@ -741,13 +742,18 @@ final class BlockContentAssembler
     /**
      * The town pages parented to this location, as internal links for the hub's "areas we serve"
      * grid — real town pages only (pure town pages, not city-service pages), each pointing at its
-     * permalink. Empty when no towns are materialized yet (the section then drops).
+     * permalink. Each link carries its census SIZE TIER (major/large/medium/small, matched from
+     * `CoverageArea` by name) so the section can group towns Larger → Mid-size → Smaller instead of
+     * one long alphabetical column; the tier is null when no coverage row matches (the section then
+     * renders a single flat line). Ordered largest-first. Empty when no towns are materialized yet.
      *
-     * @return list<array{label: string, url: string}>
+     * @return list<array{label: string, url: string, tier: string|null}>
      */
     private function locationTownLinks(Content $content, Location $location): array
     {
-        return Content::withoutGlobalScope(SiteScope::class)
+        $tiers = $this->coverageTierMap((string) $content->site_id); // normalized name => [tier, population]
+
+        $links = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Location->value)
@@ -755,10 +761,50 @@ final class BlockContentAssembler
             ->whereNull('location_id')
             ->whereNull('primary_service_id')
             ->whereNotNull('slug')
-            ->orderBy('title')
             ->get()
-            ->map(fn (Content $c): array => ['label' => (string) $c->title, 'url' => (new Permalinks)->path($c)])
+            ->map(function (Content $c) use ($tiers): array {
+                $meta = $tiers[$this->townKey((string) $c->title)] ?? null;
+
+                return [
+                    'label' => (string) $c->title,
+                    'url' => (new Permalinks)->path($c),
+                    'tier' => $meta['tier'] ?? null,
+                    'population' => $meta['population'] ?? 0,
+                ];
+            })
             ->all();
+
+        // Largest-first: tier rank (major=0 … small=3, untiered last), then population DESC, then name.
+        $rank = ['major' => 0, 'large' => 1, 'medium' => 2, 'small' => 3];
+        usort($links, fn (array $a, array $b): int => [$rank[(string) $a['tier']] ?? 4, -1 * (int) $a['population'], $a['label']]
+            <=> [$rank[(string) $b['tier']] ?? 4, -1 * (int) $b['population'], $b['label']]);
+
+        return array_map(fn (array $l): array => ['label' => $l['label'], 'url' => $l['url'], 'tier' => $l['tier']], $links);
+    }
+
+    /**
+     * A site's coverage towns keyed by normalized name → its census size_tier + population, for tagging
+     * the location hub's town links with a size band. Site-scoped, computed once per hub compose.
+     *
+     * @return array<string, array{tier: string|null, population: int}>
+     */
+    private function coverageTierMap(string $siteId): array
+    {
+        $map = [];
+        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->get(['name', 'size_tier', 'population']) as $area) {
+            $key = $this->townKey((string) $area->name);
+            if ($key !== '') {
+                $map[$key] = ['tier' => $area->size_tier === null ? null : (string) $area->size_tier, 'population' => (int) ($area->population ?? 0)];
+            }
+        }
+
+        return $map;
+    }
+
+    /** Normalize a town label for matching a coverage row: drop a trailing ", ST", lower-case. */
+    private function townKey(string $name): string
+    {
+        return mb_strtolower(trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($name))));
     }
 
     /**

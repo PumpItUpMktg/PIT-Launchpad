@@ -297,10 +297,13 @@ final class BlockSections
 
     /**
      * The "areas we serve" grid on a location hub — internal LINKS to each town page under it (the
-     * hub → town spine). A semantic list the theme grids (.lp-areas) so a location serving many
-     * towns stays scannable. Empty → '' (the section drops).
+     * hub → town spine). Rendered as a COMPACT, size-banded block: towns grouped Larger cities →
+     * Mid-size towns → Smaller communities (from each town's census `tier`), each band a single
+     * pipe-separated line that wraps — so a location serving many towns stays a tight block instead of
+     * one long column. When no town carries tier data, it falls back to a single unlabeled line.
+     * Empty → '' (the section drops).
      *
-     * @param  list<array{label: string, url: string}>  $links
+     * @param  list<array{label: string, url: string, tier?: string|null}>  $links
      */
     public function areasServed(string $eyebrow, string $heading, array $links): string
     {
@@ -309,16 +312,46 @@ final class BlockSections
             return '';
         }
 
-        $items = array_map(
-            fn (array $l): string => '<li><a href="'.$this->attr($l['url']).'">'.$this->text($l['label']).'</a></li>',
-            $links,
-        );
-        $list = "<!-- wp:html -->\n".'<ul class="lp-areas-list">'.implode('', $items).'</ul>'."\n<!-- /wp:html -->";
+        // Fold the census tiers (major/large/medium/small) into three display bands. A town with no
+        // tier lands in "smaller" — but if NOTHING is tiered we drop the labels entirely (flat line).
+        $bands = ['large' => [], 'medium' => [], 'small' => []];
+        $labels = ['large' => 'Larger cities', 'medium' => 'Mid-size towns', 'small' => 'Smaller communities'];
+        $anyTier = false;
+        foreach ($links as $l) {
+            $tier = $l['tier'] ?? null;
+            $anyTier = $anyTier || in_array($tier, ['major', 'large', 'medium', 'small'], true);
+            $band = match ($tier) {
+                'major', 'large' => 'large',
+                'medium' => 'medium',
+                default => 'small',
+            };
+            $bands[$band][] = $l;
+        }
+
+        $pill = fn (array $l): string => '<span class="lp-areas-town"><a href="'.$this->attr($l['url']).'">'.$this->text($l['label']).'</a></span>';
+
+        $rows = [];
+        if ($anyTier) {
+            foreach ($bands as $band => $items) {
+                if ($items === []) {
+                    continue;
+                }
+                $rows[] = '<div class="lp-areas-band">'
+                    .'<span class="lp-areas-bandlabel">'.$this->text($labels[$band]).'</span>'
+                    .'<span class="lp-areas-townlist">'.implode('', array_map($pill, $items)).'</span>'
+                    .'</div>';
+            }
+        } else {
+            $rows[] = '<div class="lp-areas-band"><span class="lp-areas-townlist">'
+                .implode('', array_map($pill, $links)).'</span></div>';
+        }
+
+        $block = "<!-- wp:html -->\n".'<div class="lp-areas-bands">'.implode('', $rows).'</div>'."\n<!-- /wp:html -->";
 
         return $this->b->group([
             $this->sectionHead($eyebrow, $heading),
-            $list,
-        ], ['align' => 'full', 'className' => 'lp-areas']);
+            $block,
+        ], ['align' => 'full', 'className' => 'lp-areas lp-areas--towns']);
     }
 
     /**
