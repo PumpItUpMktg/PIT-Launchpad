@@ -296,62 +296,40 @@ final class BlockSections
     }
 
     /**
-     * The "areas we serve" grid on a location hub — internal LINKS to each town page under it (the
-     * hub → town spine). Rendered as a COMPACT, size-banded block: towns grouped Larger cities →
-     * Mid-size towns → Smaller communities (from each town's census `tier`), each band a single
-     * pipe-separated line that wraps — so a location serving many towns stays a tight block instead of
-     * one long column. When no town carries tier data, it falls back to a single unlabeled line.
-     * Empty → '' (the section drops).
+     * The "areas we serve" list on a location hub — internal LINKS to each town page under it (the
+     * hub → town spine). One clean, comma-flowing line of town links, largest town first (the caller
+     * sorts by census size tier), the ", ST" suffix dropped for readability — a scannable sentence, not
+     * a crowded tag cloud or a long column. No size labels; the ordering carries the hierarchy. When a
+     * location-scoped coverage MAP is available it is rendered above this list (which then serves as the
+     * crawlable, no-JS fallback). Empty → '' (the section drops).
      *
      * @param  list<array{label: string, url: string, tier?: string|null}>  $links
      */
-    public function areasServed(string $eyebrow, string $heading, array $links): string
+    public function areasServed(string $eyebrow, string $heading, array $links, ?array $map = null): string
     {
         $links = array_values(array_filter($links, fn (array $l): bool => trim($l['label']) !== '' && trim($l['url']) !== ''));
         if ($links === []) {
             return '';
         }
 
-        // Fold the census tiers (major/large/medium/small) into three display bands. A town with no
-        // tier lands in "smaller" — but if NOTHING is tiered we drop the labels entirely (flat line).
-        $bands = ['large' => [], 'medium' => [], 'small' => []];
-        $labels = ['large' => 'Larger cities', 'medium' => 'Mid-size towns', 'small' => 'Smaller communities'];
-        $anyTier = false;
-        foreach ($links as $l) {
-            $tier = $l['tier'] ?? null;
-            $anyTier = $anyTier || in_array($tier, ['major', 'large', 'medium', 'small'], true);
-            $band = match ($tier) {
-                'major', 'large' => 'large',
-                'medium' => 'medium',
-                default => 'small',
-            };
-            $bands[$band][] = $l;
-        }
+        $towns = array_map(function (array $l): string {
+            $label = trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($l['label'])));
 
-        $pill = fn (array $l): string => '<span class="lp-areas-town"><a href="'.$this->attr($l['url']).'">'.$this->text($l['label']).'</a></span>';
+            return '<span class="lp-areas-town"><a href="'.$this->attr($l['url']).'">'.$this->text($label !== '' ? $label : $l['label']).'</a></span>';
+        }, $links);
 
-        $rows = [];
-        if ($anyTier) {
-            foreach ($bands as $band => $items) {
-                if ($items === []) {
-                    continue;
-                }
-                $rows[] = '<div class="lp-areas-band">'
-                    .'<span class="lp-areas-bandlabel">'.$this->text($labels[$band]).'</span>'
-                    .'<span class="lp-areas-townlist">'.implode('', array_map($pill, $items)).'</span>'
-                    .'</div>';
-            }
-        } else {
-            $rows[] = '<div class="lp-areas-band"><span class="lp-areas-townlist">'
-                .implode('', array_map($pill, $links)).'</span></div>';
-        }
+        $list = '<p class="lp-areas-townlist">'.implode('', $towns).'</p>';
 
-        $block = "<!-- wp:html -->\n".'<div class="lp-areas-bands">'.implode('', $rows).'</div>'."\n<!-- /wp:html -->";
+        // The interactive county map rides the meta-blob (not post_content); the block carries only the
+        // mount + this list as its fallback. The map is populated by the theme's Leaflet init.
+        $mount = $map !== null ? '<div class="lp-areas-map" role="img" aria-label="Map of the towns we serve"></div>' : '';
+
+        $block = "<!-- wp:html -->\n".'<div class="lp-areas-townblock">'.$mount.$list.'</div>'."\n<!-- /wp:html -->";
 
         return $this->b->group([
             $this->sectionHead($eyebrow, $heading),
             $block,
-        ], ['align' => 'full', 'className' => 'lp-areas lp-areas--towns']);
+        ], ['align' => 'full', 'className' => 'lp-areas lp-areas--towns'.($map !== null ? ' lp-areas--map' : '')]);
     }
 
     /**

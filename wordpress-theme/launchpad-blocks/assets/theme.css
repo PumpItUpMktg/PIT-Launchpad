@@ -1354,36 +1354,30 @@
     }
 }
 
-/* Location hub "Areas we serve" — a compact, size-banded block (Larger cities / Mid-size / Smaller),
-   each band one pipe-separated line that wraps, so a location with many towns stays a tight block
-   instead of one long column. Replaces the old .lp-areas-list <ul>. */
-.lp-areas-bands {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    max-width: 60rem;
+/* Location hub "Areas we serve" — a legible, comma-flowing line of town links (largest town first),
+   optionally sitting beneath the interactive county map (.lp-areas-map, which the Leaflet init fills;
+   the list is the crawlable, no-JS fallback). Replaces the old size-banded block. */
+.lp-areas-townblock {
+    max-width: 62rem;
     margin-inline: auto;
-}
-
-.lp-areas-band {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 1.25rem;
 }
 
-.lp-areas-bandlabel {
-    font-family: var(--wp--preset--font-family--heading);
-    font-size: 0.8rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--wp--preset--color--muted, #64748b);
-}
-
-/* The towns line: inline links separated by a thin pipe that never orphans onto its own row. */
+/* The towns read as a sentence: inline links separated by a comma, wrapping naturally. */
 .lp-areas-townlist {
-    font-size: 0.95rem;
-    line-height: 1.7;
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.9;
+    text-align: center;
+}
+
+.lp-areas--map .lp-areas-townlist {
+    /* Beneath a map, the list is a quieter supporting index. */
+    font-size: 0.9rem;
+    line-height: 1.8;
+    color: var(--wp--preset--color--muted, #64748b);
 }
 
 .lp-areas-town {
@@ -1391,10 +1385,9 @@
 }
 
 .lp-areas-town:not(:last-child)::after {
-    content: "|";
-    margin-inline: 0.5rem;
-    color: var(--wp--preset--color--border, #cbd5e1);
-    font-weight: 400;
+    content: ",";
+    margin-right: 0.4rem;
+    color: inherit;
 }
 
 .lp-areas-town a {

@@ -329,9 +329,9 @@ it('the location hub renders its NAP (address + hours + phone) and LINKS to its 
     ]);
     $page = locRelayPage($site, $location);
 
-    // Two materialized town pages under this location → the hub links down to them.
+    // Two PUBLISHED town pages under this location → the hub links down to them (only live towns link).
     foreach (['Norristown' => 'norristown', 'Audubon' => 'audubon'] as $title => $slug) {
-        Content::factory()->create([
+        Content::factory()->published()->create([
             'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
             'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null,
             'title' => $title, 'slug' => $slug,
@@ -345,42 +345,43 @@ it('the location hub renders its NAP (address + hours + phone) and LINKS to its 
         ->toContain('10 Trooper Rd')
         ->toContain('(610) 555-0142')
         ->toContain('9am')
-        // areas-served grid: REAL internal links to the town pages (not just coverage prose).
+        // areas-served list: REAL internal links to the town pages (not just coverage prose).
         ->toContain('lp-areas')
         ->toContain('<a href="/norristown">Norristown</a>')
         ->toContain('<a href="/audubon">Audubon</a>');
 });
 
-it('the location hub groups its town links into size bands (Larger cities → Smaller communities), compact + pipe-separated', function () {
+it('the areas list is a de-duped, published-only, comma-flowing line ordered largest-first, no ", ST", no size labels', function () {
     $site = locRelaySite();
     $location = locRelayLocation($site, ['is_storefront' => true, 'address' => '10 Trooper Rd, Trooper, PA 19403']);
     $page = locRelayPage($site, $location);
 
-    // Coverage rows carry the census size tier that bands the town links.
+    // Census size tiers order the list largest-first (Norristown large → Audubon small).
     CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209111111', 'name' => 'Norristown', 'type' => 'county_subdivision', 'state' => 'PA', 'size_tier' => 'large', 'population' => 35000, 'source' => 'county']);
     CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209122222', 'name' => 'Audubon', 'type' => 'county_subdivision', 'state' => 'PA', 'size_tier' => 'small', 'population' => 3000, 'source' => 'county']);
 
-    foreach (['Norristown' => 'norristown', 'Audubon' => 'audubon'] as $title => $slug) {
-        Content::factory()->create([
-            'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
-            'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null,
-            'title' => $title, 'slug' => $slug,
-        ]);
-    }
+    // Titles carry ", PA" (dropped in the display); a DUPLICATE Norristown row + a DRAFT row must both
+    // be collapsed away (one live link per town).
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Norristown, PA', 'slug' => 'norristown']);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Norristown, PA', 'slug' => 'norristown-dup']); // duplicate
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Audubon, PA', 'slug' => 'audubon-draft']); // draft → excluded
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Audubon, PA', 'slug' => 'audubon']);
 
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
     expect($markup)
         ->toContain('lp-areas--towns')
-        ->toContain('lp-areas-bands')
-        ->toContain('lp-areas-town')
-        ->toContain('Larger cities')          // the band label for the large town
-        ->toContain('Smaller communities')    // and for the small one
-        ->toContain('<a href="/norristown">Norristown</a>')
-        ->toContain('<a href="/audubon">Audubon</a>');
+        ->toContain('lp-areas-townlist')
+        ->not->toContain('lp-areas-bandlabel')         // no size labels
+        ->not->toContain('Larger cities')
+        ->toContain('>Norristown</a>')                 // ", PA" dropped in display
+        ->toContain('>Audubon</a>')
+        ->not->toContain('Norristown, PA</a>');        // state suffix not shown
 
-    // Bands are ordered largest-first: the "Larger cities" line precedes "Smaller communities".
-    expect(strpos($markup, 'Larger cities'))->toBeLessThan(strpos($markup, 'Smaller communities'));
+    // De-duped: exactly ONE Norristown link (the duplicate + draft rows collapsed).
+    expect(substr_count($markup, '>Norristown</a>'))->toBe(1)
+        // Largest-first: Norristown (large) precedes Audubon (small).
+        ->and(strpos($markup, '>Norristown</a>'))->toBeLessThan(strpos($markup, '>Audubon</a>'));
 });
 
 it('the location hub drops the address for a non-storefront (mobile base stays private) but keeps hours', function () {
