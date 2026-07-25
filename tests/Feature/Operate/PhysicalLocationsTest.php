@@ -209,6 +209,61 @@ it('each location card shows the standard Position / GSC / GA4 tracking block wi
         ->assertSee('GA4 sessions');
 });
 
+it('bands a location\'s towns Larger/Mid/Smaller with page status + a selectable count', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'New Brunswick']);
+
+    // Three towns across the bands, all page_selected. One already has a published page (not selectable).
+    $big = CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '34023a', 'name' => 'Edison', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'large', 'population' => 100000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '34023b', 'name' => 'Metuchen', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'medium', 'population' => 15000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '34023c', 'name' => 'Milltown', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'small', 'population' => 7000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
+    // Edison already published → excluded from the selectable batch.
+    Content::withoutGlobalScopes()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Published, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1, 'parent_location_id' => $loc->id]);
+
+    $card = collect(app(PhysicalLocations::class)->build($site)['cards'])->firstWhere('id', $loc->id);
+
+    expect(collect($card['town_bands']['larger'])->pluck('name'))->toContain('Edison')
+        ->and(collect($card['town_bands']['mid'])->pluck('name'))->toContain('Metuchen')
+        ->and(collect($card['town_bands']['smaller'])->pluck('name'))->toContain('Milltown')
+        ->and(collect($card['town_bands']['larger'])->firstWhere('name', 'Edison')['status'])->toBe('published')
+        // Selectable = page_selected & not published/generating → Metuchen + Milltown (Edison is live).
+        ->and($card['selectable'])->toBe(2);
+});
+
+it('toggleTown and selectBand write the page_selected flag', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
+    $a = CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '1', 'name' => 'Edison', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'large', 'population' => 100000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => false]);
+    $b = CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '2', 'name' => 'Metuchen', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'large', 'population' => 90000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => false]);
+
+    $page = Livewire::test(OperatePhysicalLocations::class);
+    $page->call('toggleTown', $a->id);
+    expect($a->fresh()->page_selected)->toBeTrue();
+
+    $page->call('selectBand', $loc->id, 'larger', true);
+    expect($a->fresh()->page_selected)->toBeTrue()->and($b->fresh()->page_selected)->toBeTrue();
+
+    $page->call('selectBand', $loc->id, 'larger', false);
+    expect($a->fresh()->page_selected)->toBeFalse()->and($b->fresh()->page_selected)->toBeFalse();
+});
+
+it('Generate + publish selected queues a GeneratePage(autoPublish) for each ready selected town', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    Market::factory()->create(['site_id' => $site->id]); // grounding: makes location pages ready
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '1', 'name' => 'Edison', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'large', 'population' => 100000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
+    // A materialized (candidate) town page for Edison → the batch generates + publishes it.
+    Content::withoutGlobalScopes()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Candidate, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1, 'parent_location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'x']]);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('generateAndPublishSelected', $loc->id);
+
+    Queue::assertPushed(GeneratePage::class, fn (GeneratePage $job) => $job->autoPublish === true);
+});
+
 it('surfaces a stalled-worker banner with the drain hint when the publish queue is backed up', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     session(['guided_site_id' => $site->id]);

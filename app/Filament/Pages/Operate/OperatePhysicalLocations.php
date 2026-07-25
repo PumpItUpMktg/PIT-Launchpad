@@ -2,21 +2,25 @@
 
 namespace App\Filament\Pages\Operate;
 
+use App\Build\PlanSync;
 use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Filament\Pages\Gathering\BusinessStep;
 use App\Filament\Pages\Gathering\LocationsStep;
 use App\Jobs\GeneratePage;
 use App\Locations\LocationLandingFactory;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PhysicalLocations;
 use App\Operate\QueueHealth;
 use App\Publishing\DeleteFromWordpress;
+use App\Publishing\PostPublisher;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 
@@ -101,6 +105,134 @@ class OperatePhysicalLocations extends OperatePage
         return $site === null
             ? ['summary' => ['locations' => 0, 'towns_covered' => 0, 'towns_selected' => 0, 'overlaps' => 0], 'cards' => []]
             : app(PhysicalLocations::class)->build($site);
+    }
+
+    // ── Town-page selection + bulk generate/publish (per GBP location) ──────
+
+    /** The most towns one "Generate + publish" click will queue before it asks the operator to confirm. */
+    private const BATCH_CONFIRM_AT = 25;
+
+    /** Toggle one town's page_selected flag (the plan + the card's checkbox are the same source). */
+    public function toggleTown(string $coverageAreaId): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $area = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($coverageAreaId)->first();
+        $area?->forceFill(['page_selected' => ! $area->page_selected])->save();
+    }
+
+    /** Select (or clear) every town in a display band for a location — the bulk-select control. */
+    public function selectBand(string $locationId, string $band, bool $select): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $card = collect(app(PhysicalLocations::class)->build($site)['cards'])->firstWhere('id', $locationId);
+        $ids = collect($card['town_bands'][$band] ?? [])->pluck('coverage_area_id')->all();
+        if ($ids !== []) {
+            CoverageArea::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->whereIn('id', $ids)->update(['page_selected' => $select]);
+        }
+    }
+
+    /**
+     * Generate + publish this location's selected town pages, as a queued batch scoped to the location.
+     * Materializes any newly-selected town into a page first (idempotent Sync plan), then enqueues one
+     * GeneratePage(autoPublish) per selected town that isn't already live or in flight — the worker
+     * drafts (Sonnet + fal) and, on a clean draft, publishes; a thin draft parks in review, never live.
+     */
+    public function generateAndPublishSelected(string $locationId): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        // Bring newly-selected towns into being as pages (candidate rows) before we can generate them.
+        app(PlanSync::class)->sync($site);
+
+        $card = collect(app(PhysicalLocations::class)->build($site)['cards'])->firstWhere('id', $locationId);
+        if ($card === null) {
+            return;
+        }
+
+        $queued = 0;
+        $notReady = 0;
+        foreach (['larger', 'mid', 'smaller'] as $band) {
+            foreach ($card['town_bands'][$band] ?? [] as $town) {
+                if (! $town['page_selected'] || in_array($town['status'], ['published', 'generating'], true) || $town['content_id'] === null) {
+                    continue;
+                }
+                $content = $this->ownedContent((string) $town['content_id']);
+                if ($content === null) {
+                    continue;
+                }
+                if (! app(GroundingReadiness::class)->ready($content)) {
+                    $notReady++;
+
+                    continue;
+                }
+                GeneratePage::enqueue($content, actorId: Auth::id(), autoPublish: true);
+                $queued++;
+            }
+        }
+
+        if ($queued === 0) {
+            Notification::make()->info()->title('Nothing to generate')
+                ->body($notReady > 0 ? "{$notReady} selected town(s) aren't ready to write yet." : 'Every selected town here is already live or in flight.')->send();
+
+            return;
+        }
+
+        Notification::make()->success()->title("Generating + publishing {$queued} town page(s)")
+            ->body(($notReady > 0 ? "{$notReady} not ready were skipped. " : '').'Watch the progress monitor up top; each publishes as its draft lands.')->send();
+    }
+
+    /**
+     * Escape hatch when the worker is down: publish this location's in-flight town pages SYNCHRONOUSLY,
+     * right now, via the same PostPublisher the drain command uses. Bounded per click so a huge backlog
+     * can't time out the request — for more, click again or run launchpad:drain-publish.
+     */
+    public function drainNow(string $locationId): void
+    {
+        $site = $this->getSite();
+        $location = $this->ownedLocation($locationId);
+        if ($site === null || $location === null) {
+            return;
+        }
+
+        $inflight = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->where('parent_location_id', $location->id)
+            ->whereIn('status', [ContentStatus::Approved->value, ContentStatus::Rendering->value, ContentStatus::Publishing->value])
+            ->orderBy('updated_at')
+            ->limit(self::BATCH_CONFIRM_AT)
+            ->get();
+
+        if ($inflight->isEmpty()) {
+            Notification::make()->info()->title('Nothing to drain')->body('No town pages are stuck waiting to publish for this location.')->send();
+
+            return;
+        }
+
+        $publisher = app(PostPublisher::class);
+        $published = 0;
+        foreach ($inflight as $page) {
+            if ($publisher->publish($page, Auth::id())->isPublished()) {
+                $published++;
+            }
+        }
+
+        Notification::make()->success()->title("Published {$published} of {$inflight->count()} stuck page(s)")
+            ->body($inflight->count() === self::BATCH_CONFIRM_AT ? 'More may remain — click again to continue.' : 'Fix the worker (Horizon / queue:work) so this is automatic.')->send();
     }
 
     // ── Per-location page lifecycle (targets the location's landing/hub page) ──
