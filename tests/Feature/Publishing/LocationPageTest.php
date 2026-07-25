@@ -11,6 +11,7 @@ use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReview;
 use App\Local\Proof\LocalReviewProvider;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
@@ -348,6 +349,38 @@ it('the location hub renders its NAP (address + hours + phone) and LINKS to its 
         ->toContain('lp-areas')
         ->toContain('<a href="/norristown">Norristown</a>')
         ->toContain('<a href="/audubon">Audubon</a>');
+});
+
+it('the location hub groups its town links into size bands (Larger cities → Smaller communities), compact + pipe-separated', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, ['is_storefront' => true, 'address' => '10 Trooper Rd, Trooper, PA 19403']);
+    $page = locRelayPage($site, $location);
+
+    // Coverage rows carry the census size tier that bands the town links.
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209111111', 'name' => 'Norristown', 'type' => 'county_subdivision', 'state' => 'PA', 'size_tier' => 'large', 'population' => 35000, 'source' => 'county']);
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209122222', 'name' => 'Audubon', 'type' => 'county_subdivision', 'state' => 'PA', 'size_tier' => 'small', 'population' => 3000, 'source' => 'county']);
+
+    foreach (['Norristown' => 'norristown', 'Audubon' => 'audubon'] as $title => $slug) {
+        Content::factory()->create([
+            'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+            'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null,
+            'title' => $title, 'slug' => $slug,
+        ]);
+    }
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('lp-areas--towns')
+        ->toContain('lp-areas-bands')
+        ->toContain('lp-areas-town')
+        ->toContain('Larger cities')          // the band label for the large town
+        ->toContain('Smaller communities')    // and for the small one
+        ->toContain('<a href="/norristown">Norristown</a>')
+        ->toContain('<a href="/audubon">Audubon</a>');
+
+    // Bands are ordered largest-first: the "Larger cities" line precedes "Smaller communities".
+    expect(strpos($markup, 'Larger cities'))->toBeLessThan(strpos($markup, 'Smaller communities'));
 });
 
 it('the location hub drops the address for a non-storefront (mobile base stays private) but keeps hours', function () {
