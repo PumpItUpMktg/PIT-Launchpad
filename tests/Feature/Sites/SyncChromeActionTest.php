@@ -33,8 +33,8 @@ it('pushes the site profile (brand + nav) to the companion plugin', function () 
         'credentials' => ['base_url' => 'https://apex.example', 'username' => 'u', 'app_password' => 'pw'],
     ]);
     Location::factory()->create(['site_id' => $site->id, 'phone' => '(973) 555-0100']);
-    // A real service page → the header nav link the chrome carries.
-    Content::factory()->create([
+    // A real, PUBLISHED service page → the header nav link the chrome carries (only live pages appear).
+    Content::factory()->published()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
         'slug' => 'sump-pump-repair', 'title' => 'Sump Pump Repair',
     ]);
