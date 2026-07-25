@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\ConnectionProvider;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
@@ -13,13 +12,10 @@ use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Market;
-use App\Models\Redirect;
-use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
 use App\Operate\PhysicalLocations;
 use Filament\Facades\Filament;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
@@ -127,9 +123,13 @@ it('surfaces each location card page state — none, drafted, published', functi
 
     $cards = collect(app(PhysicalLocations::class)->build($site)['cards'])->keyBy('name');
 
-    expect($cards['No Page Yet']['page'])->toMatchArray(['state' => 'none', 'can_generate' => true, 'can_review' => false, 'can_publish' => false, 'can_repush' => false, 'can_takedown' => false]);
-    expect($cards['Drafted']['page'])->toMatchArray(['drafted' => true, 'published' => false, 'can_review' => true, 'can_publish' => true, 'can_repush' => false, 'can_takedown' => false]);
-    expect($cards['Live']['page'])->toMatchArray(['published' => true, 'can_review' => true, 'can_publish' => false, 'can_repush' => true, 'can_takedown' => true]);
+    // No page → Generate only (no content id, no metrics). Drafted/Live → a content id + the tracking block.
+    expect($cards['No Page Yet']['page'])->toMatchArray(['state' => 'none', 'content_id' => null, 'metrics' => null, 'can_generate' => true, 'can_review' => false]);
+    expect($cards['Drafted']['page'])->toMatchArray(['drafted' => true, 'published' => false, 'can_review' => true])
+        ->and($cards['Drafted']['page']['content_id'])->not->toBeNull()
+        ->and($cards['Drafted']['page']['metrics'])->not->toBeNull();
+    expect($cards['Live']['page'])->toMatchArray(['published' => true, 'can_review' => true])
+        ->and($cards['Live']['page']['metrics'])->not->toBeNull();
 });
 
 it('Generate creates the location landing page and queues the drafter', function () {
@@ -148,7 +148,7 @@ it('Generate creates the location landing page and queues the drafter', function
     Queue::assertPushed(GeneratePage::class);
 });
 
-it('Publish approves + pushes a drafted location page; Repush re-pushes a live one', function () {
+it('Repush approves + pushes a drafted location page; a second Repush re-pushes the live one', function () {
     Queue::fake();
     $site = Site::factory()->create();
     session(['guided_site_id' => $site->id]);
@@ -159,14 +159,15 @@ it('Publish approves + pushes a drafted location page; Repush re-pushes a live o
         'location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'We serve Trooper'],
     ]);
 
-    Livewire::test(OperatePhysicalLocations::class)->call('publishPage', $loc->id);
+    // Content-keyed Repush doubles as the first publish (approve → publish) before the page is live.
+    Livewire::test(OperatePhysicalLocations::class)->call('repush', $landing->id);
     expect($landing->refresh()->status)->toBe(ContentStatus::Approved);
     Queue::assertPushed(PublishContent::class);
 
     // Repush on the now-published page dispatches another idempotent push.
     $landing->forceFill(['status' => ContentStatus::Published])->save();
     Queue::fake();
-    Livewire::test(OperatePhysicalLocations::class)->call('repushPage', $loc->id);
+    Livewire::test(OperatePhysicalLocations::class)->call('repush', $landing->id);
     Queue::assertPushed(PublishContent::class);
 });
 
@@ -180,54 +181,31 @@ it('Take down removes a live location page from WordPress and flips it back to r
         'location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'We serve Trooper'],
     ]);
 
-    Livewire::test(OperatePhysicalLocations::class)->call('takeDown', $loc->id);
+    // Content-keyed Take down (matches the shared card action).
+    Livewire::test(OperatePhysicalLocations::class)->call('takeDown', $landing->id);
 
     // Back in the work lane on the same URL — Approved (republishable), no WP post id.
     expect($landing->refresh()->status)->toBe(ContentStatus::Approved)
         ->and($landing->wp_post_id)->toBeNull();
 });
 
-it('Fix permalink reclaims a stuck "-3" landing slug, 301s the old URL, and re-pushes', function () {
-    Queue::fake();
+it('each location card shows the standard Position / GSC / GA4 tracking block with honest pending reasons', function () {
     $site = Site::factory()->create();
     session(['guided_site_id' => $site->id]);
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'New Brunswick']);
-    // A live landing page stuck at "-3" from earlier rebuild collisions (its clean base is now free).
-    $landing = Content::withoutGlobalScopes()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
-        'status' => ContentStatus::Published, 'title' => 'New Brunswick, NJ', 'slug' => 'new-brunswick-nj-3',
-        'version' => 1, 'wp_post_id' => 55, 'location_id' => $loc->id,
-        'slot_payload' => ['hero_headline' => 'We serve New Brunswick'],
-    ]);
-
-    Livewire::test(OperatePhysicalLocations::class)->call('fixPermalink', $loc->id)->assertNotified();
-
-    expect($landing->refresh()->slug)->toBe('new-brunswick-nj');
-    // The old URL now 301s to the clean one, and the rename re-pushes to WordPress.
-    expect(Redirect::withoutGlobalScope(SiteScope::class)
-        ->where('site_id', $site->id)->where('from_url', '/new-brunswick-nj-3')->where('to_url', '/new-brunswick-nj')->where('code', 301)->exists())->toBeTrue();
-    Queue::assertPushed(PublishContent::class);
-});
-
-it('Fix permalink is a no-op notice when the clean base is still held by another live page', function () {
-    $site = Site::factory()->create();
-    session(['guided_site_id' => $site->id]);
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'New Brunswick']);
-    // Another LIVE page already holds the clean base slug — so the suffixed one can't shorten.
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'lat' => 40.1, 'lng' => -75.4, 'home_county_geoid' => '42091', 'county_geoids' => ['42091']]);
+    plArea($site, '4209153000', 'Norristown', [$loc->id]);
+    // A landing page with no target keyword → the brand-page pending reason; no GSC/GA connection → connect prompts.
     Content::withoutGlobalScopes()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
-        'status' => ContentStatus::Published, 'title' => 'New Brunswick', 'slug' => 'new-brunswick-nj', 'version' => 1,
-    ]);
-    $landing = Content::withoutGlobalScopes()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
-        'status' => ContentStatus::Published, 'title' => 'New Brunswick, NJ', 'slug' => 'new-brunswick-nj-2',
-        'version' => 1, 'wp_post_id' => 56, 'location_id' => $loc->id,
+        'status' => ContentStatus::Published, 'title' => 'Trooper, PA', 'slug' => 'trooper-pa', 'version' => 1,
+        'location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'We serve Trooper'],
     ]);
 
-    Livewire::test(OperatePhysicalLocations::class)->call('fixPermalink', $loc->id)->assertNotified();
-
-    // Unchanged — nothing shorter is free.
-    expect($landing->refresh()->slug)->toBe('new-brunswick-nj-2');
+    Livewire::test(OperatePhysicalLocations::class)
+        ->assertSee('Position')
+        ->assertSee('No target keyword — brand page')
+        ->assertSee('GSC · 28d')
+        ->assertSee('GA4 sessions');
 });
 
 it('the card footer offers Review and Take down alongside Repush on a live page', function () {
@@ -248,39 +226,14 @@ it('the card footer offers Review and Take down alongside Repush on a live page'
         ->assertSee('Take down');
 });
 
-it('Publish is a no-op with a helpful notice when the location has no page yet', function () {
+it('generating a page for a location with no landing page yet queues the drafter', function () {
     Queue::fake();
     $site = Site::factory()->create();
     session(['guided_site_id' => $site->id]);
+    Market::factory()->create(['site_id' => $site->id]); // grounding: a §1 Market makes the location page ready
     $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper']);
 
-    Livewire::test(OperatePhysicalLocations::class)->call('publishPage', $loc->id);
+    Livewire::test(OperatePhysicalLocations::class)->call('generatePage', $loc->id);
 
-    Queue::assertNothingPushed();
-});
-
-it('Diagnose reports the live-site cause of a drifted URL / stale content (skipped push + slug drift)', function () {
-    $site = Site::factory()->create();
-    Connection::factory()->rotated()->create([
-        'site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword->value,
-        'credentials' => ['base_url' => 'https://spg.test', 'username' => 'u', 'app_password' => 'p'],
-    ]);
-    session(['guided_site_id' => $site->id]);
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'New Brunswick']);
-    Content::withoutGlobalScopes()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
-        'status' => ContentStatus::Published, 'title' => 'New Brunswick, NJ', 'slug' => 'new-brunswick-nj', 'version' => 1,
-        'location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'x'],
-    ]);
-
-    Http::fake(['*/launchpad/v1/content/diagnose*' => Http::response([
-        'content_id' => 'x', 'found' => true, 'wp_post_id' => 42, 'status' => 'publish',
-        'post_name' => 'new-brunswick-nj-3', 'permalink' => 'https://spg.test/new-brunswick-nj-3/',
-        'locked' => false, 'locally_edited' => true, 'push_would_skip' => true,
-        'expected_slug' => 'new-brunswick-nj', 'slug_drifted' => true, 'slug_holder' => null, 'duplicate_count' => 1,
-    ])]);
-
-    Livewire::test(OperatePhysicalLocations::class)->call('diagnose', $loc->id)->assertNotified();
-
-    Http::assertSent(fn ($r) => str_contains($r->url(), '/launchpad/v1/content/diagnose'));
+    Queue::assertPushed(GeneratePage::class);
 });

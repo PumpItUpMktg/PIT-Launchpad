@@ -205,6 +205,28 @@ it('the locations board keeps the orphan-assignment controls (parent pin only)',
         ->and($orphan->fresh()->location_id)->toBeNull(); // the composeLocation pin is never touched
 });
 
+it('the locations board groups the in-progress lane into a card per physical location (landing first, then towns)', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'served_towns' => []]);
+
+    // Two in-progress (Approved, unpublished) location pages under Trooper: its own landing + a town.
+    pbPage($site, PageType::Location, ContentStatus::Approved, 'Trooper, PA', ['location_id' => $trooper->id]);
+    pbPage($site, PageType::Location, ContentStatus::Approved, 'Norristown', ['parent_location_id' => $trooper->id]);
+
+    // The read model tags each work row with its physical-location grouping key + label.
+    $work = collect(app(PagesBoard::class)->locations($site)['work']);
+    expect($work->pluck('brick_mortar_id')->unique()->all())->toBe([$trooper->id])
+        ->and($work->firstWhere('is_brick_mortar', true)['title'])->toBe('Trooper, PA');
+
+    // The board renders the location card header + both pages beneath it.
+    Livewire::test(OperateLocationPages::class)
+        ->assertOk()
+        ->assertSee('Trooper, PA')       // the group header (location label) + the landing row
+        ->assertSee('Norristown')        // the town row, grouped under the same location
+        ->assertSee('This location');    // the landing page's own-location marker
+});
+
 it('surfaces the real failure reason on a failed row (not just the generic client line)', function () {
     $site = pbSite();
     session(['guided_site_id' => $site->id]);
