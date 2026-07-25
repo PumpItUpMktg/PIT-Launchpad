@@ -160,23 +160,19 @@ never publishes Uncategorized.
 
 ---
 
-## 7. Open decisions (need your call before build)
+## 7. Decisions (RESOLVED)
 
-- **D1 — Post↔town storage:** `content_towns` join table (many-to-many, clean) vs.
-  `Content.town_ids` JSON (simpler, no migration join). *Lean: join table.*
-- **D2 — WP taxonomy for towns:** dedicated `lp_area` taxonomy vs. reuse WP
-  categories. *Lean: dedicated taxonomy, rendered wherever you want categories shown.*
-- **D3 — Town extraction scope:** title-only (conservative, precise) vs. title+body
-  (more coverage, more false positives). *Lean: title + body, but only towns in the
-  site's own coverage set (no stray matches).*
-- **D4 — Cascade trigger:** fully automatic on every §4 rebuild vs. an explicit
-  **"Rebuild & reconcile"** button (operator-driven, with the report). *Lean:
-  explicit button + the readiness surface, so a rebuild never surprise-republishes.*
-- **D5 — Republish policy:** auto-queue affected live content vs. list it for operator
-  approval. *Lean: queue it (idempotent by ULID; rides the worker + the monitor we
-  just built), with the count shown first.*
-- **D6 — Location feed size/order:** how many posts per location page, ordering
-  (recency vs. relevance), and the min-count gate.
+- **D1 — Post↔town storage:** ✅ **`content_towns` join table** (many-to-many).
+- **D2 — WP taxonomy for towns:** ✅ **dedicated `lp_area` taxonomy** — must be
+  queryable so location pages can list their town's posts (that's the whole point).
+- **D3 — Town extraction scope:** ✅ **title + body, restricted to towns in the site's
+  own coverage set** (no stray matches).
+- **D4 — Cascade trigger:** ✅ **explicit "Rebuild & reconcile" button + readiness
+  surface** (never surprise-republishes).
+- **D5 — Republish policy:** ✅ **auto-queue** affected live content (idempotent by
+  ULID; rides the worker + the pipeline monitor), count shown first.
+- **D6 — Location feed:** recency-ordered, capped (default ~6), section gated on ≥1
+  post for the town.
 
 ---
 

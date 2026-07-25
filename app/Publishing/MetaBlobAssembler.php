@@ -244,7 +244,9 @@ class MetaBlobAssembler
             'page_type' => $content->standard_type->value ?? $content->page_type?->value,
             'kit' => $this->kitName($content),
             'kit_version' => (string) ($content->wireframe_kit_version ?? ''),
-            'silo_id' => $content->silo_id,
+            // Fall back to the routed silo when a post never had its silo_id promoted — the plugin
+            // categorizes off this, so an empty silo publishes Uncategorized (§B post→silo edge).
+            'silo_id' => $content->silo_id ?? $content->matched_silo_id,
             'slug' => $content->slug,
             // URL nesting: the parent hub's control-plane ULID. The plugin sets WP post_parent from it
             // (resolving the parent post by content_id) and derives post_name from the slug's LAST
