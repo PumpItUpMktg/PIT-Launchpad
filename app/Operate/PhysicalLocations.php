@@ -5,6 +5,7 @@ namespace App\Operate;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Guided\LiveMetrics;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -25,6 +26,8 @@ use Illuminate\Support\Collection;
  */
 class PhysicalLocations
 {
+    public function __construct(private readonly LiveMetrics $metrics) {}
+
     /**
      * @return array{summary: array<string, int>, cards: list<array<string, mixed>>}
      */
@@ -154,11 +157,9 @@ class PhysicalLocations
                 'state' => 'none',
                 'drafted' => false,
                 'published' => false,
+                'metrics' => null,
                 'can_generate' => true,   // "Generate" find-or-creates the landing page, then drafts it
                 'can_review' => false,    // no page yet — nothing to open in the proof editor
-                'can_publish' => false,
-                'can_repush' => false,
-                'can_takedown' => false,
             ];
         }
 
@@ -172,19 +173,12 @@ class PhysicalLocations
             'state' => $state,
             'drafted' => $drafted,
             'published' => $published,
-            'permalink' => '/'.ltrim((string) $landing->slug, '/'),
-            // A landing page's slug is minted once and reused forever (the factory is idempotent per
-            // location), so a "-2/-3" it picked up during an earlier collision is stuck. Offer "Fix
-            // permalink" whenever the final path segment carries a numeric suffix — the action verifies a
-            // cleaner slug is actually free before renaming.
-            'slug_suffixed' => (bool) preg_match('/-\d+$/', (string) $landing->slug),
+            // The same Position / GSC / GA4 tracking block every other page card shows (pending reasons
+            // when a source or datum is absent — e.g. "No target keyword — brand page" for a hub).
+            'metrics' => $this->metrics->for($landing),
             'can_generate' => $state !== 'generating',
             // Review opens the proof editor for any drafted page (the same target as the core board).
             'can_review' => $drafted,
-            'can_publish' => $drafted && ! $published && $state !== 'generating',
-            'can_repush' => $published,
-            // Take down only makes sense once the page is live on WordPress.
-            'can_takedown' => $published,
         ];
     }
 

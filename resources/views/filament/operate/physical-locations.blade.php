@@ -24,6 +24,12 @@
         .pl-body { padding:12px 15px; display:flex; flex-direction:column; gap:10px; }
         .pl-stats { display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:#64748b; }
         .pl-stats b { font-variant-numeric:tabular-nums; }
+        .pl-metrics { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; padding:11px 15px; border-top:1px solid rgba(148,163,184,.15); }
+        .pl-m .k { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; }
+        .pl-m .v { font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; margin-top:1px; }
+        .pl-m .v .up { color:#16a34a; } .pl-m .v .down { color:#dc2626; }
+        .pl-m .sub { font-size:10.5px; color:#94a3b8; }
+        .pl-m .pend { font-size:11.5px; color:#94a3b8; margin-top:3px; }
         .pl-towns { display:flex; gap:6px; flex-wrap:wrap; }
         .pl-town { font-size:11.5px; padding:2px 9px; border-radius:99px; border:1px solid rgba(148,163,184,.35); color:#64748b; }
         .pl-band { border-radius:9px; padding:9px 12px; font-size:12.5px; line-height:1.5; }
@@ -128,65 +134,73 @@
                         </div>
 
                         @php $pg = $card['page']; @endphp
+
+                        {{-- Tracking block — the SAME Position / GSC / GA4 metrics every page card shows,
+                             with honest pending reasons ("No target keyword — brand page", "Connect …"). --}}
+                        @if ($pg['metrics'])
+                            @php $m = $pg['metrics']; @endphp
+                            <div class="pl-metrics">
+                                <div class="pl-m">
+                                    <div class="k">Position</div>
+                                    @if ($m['position']['rank'] !== null)
+                                        <div class="v">#{{ $m['position']['rank'] }}
+                                            @if (($m['position']['delta'] ?? null) > 0)<span class="up">▲{{ $m['position']['delta'] }}</span>
+                                            @elseif (($m['position']['delta'] ?? null) < 0)<span class="down">▼{{ abs($m['position']['delta']) }}</span>@endif
+                                        </div>
+                                    @else
+                                        <div class="pend">{{ $m['position']['pending'] ?? 'Pending' }}</div>
+                                    @endif
+                                </div>
+                                <div class="pl-m">
+                                    <div class="k">GSC · 28d</div>
+                                    @if ($m['gsc']['impressions'] !== null)
+                                        <div class="v">{{ number_format($m['gsc']['impressions']) }}</div>
+                                        <div class="sub">impr · {{ number_format((int) $m['gsc']['clicks']) }} clicks</div>
+                                    @else
+                                        <div class="pend">{{ $m['gsc']['pending'] }}</div>
+                                    @endif
+                                </div>
+                                <div class="pl-m">
+                                    <div class="k">GA4 sessions</div>
+                                    @if ($m['traffic']['sessions'] !== null)
+                                        <div class="v">{{ number_format($m['traffic']['sessions']) }}</div>
+                                        <div class="sub">28d</div>
+                                    @else
+                                        <div class="pend">{{ $m['traffic']['pending'] }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
+
                         <div class="pl-foot">
                             <span class="pl-state">Page: <b>{{ $pg['label'] }}</b></span>
 
-                            {{-- Review — open the drafted page in the proof editor (same target as the core pages board). --}}
-                            @if ($pg['can_review'])
-                                <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $pg['content_id']]) }}" wire:navigate>Review</a>
-                            @endif
-
-                            {{-- Diagnose — asks the live site WHY a URL drifted / content is stale (skipped push, slug squatter, dupes). --}}
                             @if ($pg['content_id'] ?? null)
-                                <button class="pl-btn" wire:click="diagnose('{{ $card['id'] }}')"
-                                    wire:loading.attr="disabled" wire:target="diagnose('{{ $card['id'] }}')"
-                                    title="Ask the live WordPress site why this page's URL or content looks wrong.">
-                                    <span wire:loading.remove wire:target="diagnose('{{ $card['id'] }}')">Diagnose</span>
-                                    <span class="sp" wire:loading wire:target="diagnose('{{ $card['id'] }}')">Checking…</span>
+                                {{-- The standard page actions — the same set as every other board. --}}
+                                <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $pg['content_id']]) }}" wire:navigate>Review</a>
+                                <button class="pl-btn primary" wire:click="repush('{{ $pg['content_id'] }}')"
+                                    wire:loading.attr="disabled" wire:target="repush('{{ $pg['content_id'] }}')">
+                                    <span wire:loading.remove wire:target="repush('{{ $pg['content_id'] }}')">Repush</span>
+                                    <span class="sp" wire:loading wire:target="repush('{{ $pg['content_id'] }}')">Pushing…</span>
                                 </button>
-                            @endif
-
-                            {{-- Fix permalink — recompute a stuck "-2/-3" landing slug to the clean URL (301s the old one). --}}
-                            @if (($pg['content_id'] ?? null) && ($pg['slug_suffixed'] ?? false))
-                                <button class="pl-btn" wire:click="fixPermalink('{{ $card['id'] }}')"
-                                    wire:confirm="Rename {{ $pg['permalink'] }} to the clean URL and 301-redirect the old one? It re-pushes to WordPress."
-                                    wire:loading.attr="disabled" wire:target="fixPermalink('{{ $card['id'] }}')"
-                                    title="This page's URL has a -2/-3 suffix left over from an earlier rebuild. Reclaim the clean permalink.">
-                                    <span wire:loading.remove wire:target="fixPermalink('{{ $card['id'] }}')">Fix permalink</span>
-                                    <span class="sp" wire:loading wire:target="fixPermalink('{{ $card['id'] }}')">Fixing…</span>
+                                <button class="pl-btn" wire:click="regenerate('{{ $pg['content_id'] }}')"
+                                    wire:loading.attr="disabled" wire:target="regenerate('{{ $pg['content_id'] }}')">
+                                    <span wire:loading.remove wire:target="regenerate('{{ $pg['content_id'] }}')">Regenerate</span>
+                                    <span class="sp" wire:loading wire:target="regenerate('{{ $pg['content_id'] }}')">Queuing…</span>
                                 </button>
-                            @endif
-
-                            <button class="pl-btn" wire:click="generatePage('{{ $card['id'] }}')"
-                                @disabled(! $pg['can_generate'])
-                                wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">
-                                <span wire:loading.remove wire:target="generatePage('{{ $card['id'] }}')">{{ $pg['drafted'] ? 'Regenerate' : 'Generate' }}</span>
-                                <span class="sp" wire:loading wire:target="generatePage('{{ $card['id'] }}')">Queuing…</span>
-                            </button>
-
-                            @if ($pg['can_publish'])
-                                <button class="pl-btn primary" wire:click="publishPage('{{ $card['id'] }}')"
-                                    wire:loading.attr="disabled" wire:target="publishPage('{{ $card['id'] }}')">
-                                    <span wire:loading.remove wire:target="publishPage('{{ $card['id'] }}')">Publish</span>
-                                    <span class="sp" wire:loading wire:target="publishPage('{{ $card['id'] }}')">Publishing…</span>
-                                </button>
-                            @endif
-
-                            @if ($pg['can_repush'])
-                                <button class="pl-btn primary" wire:click="repushPage('{{ $card['id'] }}')"
-                                    wire:loading.attr="disabled" wire:target="repushPage('{{ $card['id'] }}')">
-                                    <span wire:loading.remove wire:target="repushPage('{{ $card['id'] }}')">Repush</span>
-                                    <span class="sp" wire:loading wire:target="repushPage('{{ $card['id'] }}')">Pushing…</span>
-                                </button>
-                            @endif
-
-                            {{-- Take down — remove the live page from WordPress; the plan row stays, Repush recreates on the same URL. --}}
-                            @if ($pg['can_takedown'])
-                                <button class="pl-btn danger" wire:click="takeDown('{{ $card['id'] }}')"
+                                <button class="pl-btn danger" wire:click="takeDown('{{ $pg['content_id'] }}')"
                                     wire:confirm="Remove this location page from WordPress? It stays in your plan and can be republished on the same URL."
-                                    wire:loading.attr="disabled" wire:target="takeDown('{{ $card['id'] }}')">
-                                    <span wire:loading.remove wire:target="takeDown('{{ $card['id'] }}')">Take down</span>
-                                    <span class="sp" wire:loading wire:target="takeDown('{{ $card['id'] }}')">Removing…</span>
+                                    wire:loading.attr="disabled" wire:target="takeDown('{{ $pg['content_id'] }}')">
+                                    <span wire:loading.remove wire:target="takeDown('{{ $pg['content_id'] }}')">Take down</span>
+                                    <span class="sp" wire:loading wire:target="takeDown('{{ $pg['content_id'] }}')">Removing…</span>
+                                </button>
+                            @else
+                                {{-- No landing page yet — generate it (find-or-creates the page, then drafts). --}}
+                                <button class="pl-btn primary" wire:click="generatePage('{{ $card['id'] }}')"
+                                    @disabled(! $pg['can_generate'])
+                                    wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">
+                                    <span wire:loading.remove wire:target="generatePage('{{ $card['id'] }}')">Generate</span>
+                                    <span class="sp" wire:loading wire:target="generatePage('{{ $card['id'] }}')">Queuing…</span>
                                 </button>
                             @endif
                         </div>
