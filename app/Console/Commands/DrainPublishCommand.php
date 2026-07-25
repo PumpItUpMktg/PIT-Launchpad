@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -11,20 +10,21 @@ use App\Publishing\PostPublisher;
 use Illuminate\Console\Command;
 
 /**
- * The stalled-worker escape hatch: publish every in-flight post (approved / rendering / pushing) for
- * a site SYNCHRONOUSLY, right here on the console — no queue worker required. When the background
- * worker is down, approved posts pile up at "queued to publish" forever; this drains that backlog by
- * running the same proven PublishContentService inline (via PostPublisher, so the WP-connection gate
- * and idempotent-by-ULID re-push still apply). Safe to re-run: a post already published is left alone.
+ * The stalled-worker escape hatch: publish every in-flight item — PAGES (location hubs / service /
+ * core) AND posts (approved / rendering / pushing) — for a site SYNCHRONOUSLY, right here on the
+ * console, no queue worker required. When the background worker is down, approved pages/posts pile up
+ * at "queued to publish" forever; this drains that backlog by running the same proven
+ * PublishContentService inline (via PostPublisher, so the WP-connection gate and idempotent-by-ULID
+ * re-push still apply). Safe to re-run: an item already published is left alone.
  *
  * This is a manual recovery tool, not a substitute for a running worker — fix the worker (Horizon /
  * queue:work) so publishing is automatic again.
  */
 class DrainPublishCommand extends Command
 {
-    protected $signature = 'launchpad:drain-publish {site : Site id or brand name} {--dry-run : List the stuck posts without publishing}';
+    protected $signature = 'launchpad:drain-publish {site : Site id or brand name} {--dry-run : List the stuck items without publishing}';
 
-    protected $description = 'Publish a site\'s in-flight (stuck "queued to publish") posts synchronously — the stalled-worker escape hatch.';
+    protected $description = 'Publish a site\'s in-flight (stuck "queued to publish") pages + posts synchronously — the stalled-worker escape hatch.';
 
     public function handle(PostPublisher $publisher): int
     {
@@ -39,9 +39,11 @@ class DrainPublishCommand extends Command
             return self::FAILURE;
         }
 
+        // Every in-flight item — pages (location hubs / service / core) AND posts. PostPublisher is
+        // kind-agnostic (hasDraft + verified WP connection, then the idempotent PublishContentService),
+        // so the same drain recovers a stuck location page as a stuck blog post.
         $inflight = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
-            ->where('kind', ContentKind::Post->value)
             ->whereIn('status', [
                 ContentStatus::Approved->value,
                 ContentStatus::Rendering->value,
@@ -51,12 +53,12 @@ class DrainPublishCommand extends Command
             ->get();
 
         if ($inflight->isEmpty()) {
-            $this->info("{$site->brand_name}: nothing in flight — no stuck posts to publish.");
+            $this->info("{$site->brand_name}: nothing in flight — no stuck pages or posts to publish.");
 
             return self::SUCCESS;
         }
 
-        $this->line("<info>{$site->brand_name}</info> — {$inflight->count()} post(s) in flight.");
+        $this->line("<info>{$site->brand_name}</info> — {$inflight->count()} item(s) in flight.");
 
         if ($this->option('dry-run')) {
             foreach ($inflight as $post) {

@@ -32,6 +32,25 @@
         .pl-m .pend { font-size:11.5px; color:#94a3b8; margin-top:3px; }
         .pl-towns { display:flex; gap:6px; flex-wrap:wrap; }
         .pl-town { font-size:11.5px; padding:2px 9px; border-radius:99px; border:1px solid rgba(148,163,184,.35); color:#64748b; }
+        .pl-monitor { border:1px solid rgba(37,99,235,.3); background:rgba(37,99,235,.04); border-radius:11px; padding:12px 16px; display:flex; flex-direction:column; gap:8px; }
+        .pl-mon-head { font-size:12.5px; font-weight:700; color:#334155; display:flex; align-items:center; gap:8px; }
+        .pl-mon-sub { font-weight:600; font-size:11.5px; color:#64748b; }
+        .pl-mon-bar { height:8px; border-radius:99px; background:rgba(148,163,184,.2); overflow:hidden; }
+        .pl-mon-fill { height:100%; background:#16a34a; border-radius:99px; transition:width .4s; }
+        .pl-mon-stats { display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:#64748b; }
+        .pl-mon-stats .bad { color:#dc2626; font-weight:600; }
+        .pl-townpanel { border-top:1px solid rgba(148,163,184,.15); padding-top:10px; display:flex; flex-direction:column; gap:9px; }
+        .pl-band-hd { display:flex; align-items:center; gap:8px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#94a3b8; margin-bottom:5px; }
+        .pl-band-sel { font-weight:600; text-transform:none; letter-spacing:0; font-size:10.5px; color:#2563eb; cursor:pointer; background:none; border:0; padding:0; }
+        .pl-townlist { display:flex; flex-wrap:wrap; gap:5px; }
+        .pl-townrow { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; padding:2px 8px; border-radius:99px; border:1px solid rgba(148,163,184,.35); color:#475569; cursor:pointer; }
+        .pl-townrow input { margin:0; cursor:pointer; }
+        .pl-townrow.on { border-color:rgba(37,99,235,.5); background:rgba(37,99,235,.06); }
+        .pl-townrow.pub { color:#16a34a; border-color:rgba(22,163,74,.4); }
+        .pl-townrow.gen { color:#b45309; border-color:rgba(217,119,6,.4); }
+        .pl-townrow.fail { color:#dc2626; border-color:rgba(220,38,38,.4); }
+        .pl-townrow .st { font-size:9.5px; }
+        .pl-genrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:2px; }
         .pl-band { border-radius:9px; padding:9px 12px; font-size:12.5px; line-height:1.5; }
         .pl-band.overlap { border:1px solid rgba(220,38,38,.4); color:#dc2626; }
         .pl-band.advisory { border:1px solid rgba(217,119,6,.4); color:#b45309; }
@@ -49,7 +68,8 @@
         .pl-btn.danger:hover { border-color:#dc2626; background:rgba(220,38,38,.06); }
         a.pl-btn { text-decoration:none; display:inline-flex; align-items:center; }
         .pl-btn[disabled] { opacity:.5; cursor:not-allowed; }
-        .pl-btn .sp { display:inline-block; }
+        .pl-queuewarn { border:1px solid rgba(217,119,6,.5); background:rgba(217,119,6,.08); color:#b45309; border-radius:10px; padding:11px 15px; font-size:12.5px; line-height:1.55; }
+        .pl-queuewarn code { background:rgba(217,119,6,.14); padding:1px 7px; border-radius:5px; font-size:11.5px; }
     </style>
 
     <div class="pl-wrap">
@@ -72,6 +92,38 @@
             <div class="pl-tile"><div class="n">{{ $s['towns_selected'] }}</div><div class="l">selected for pages</div></div>
             <div class="pl-tile {{ $s['overlaps'] > 0 ? 'bad' : 'good' }}"><div class="n">{{ $s['overlaps'] }}</div><div class="l">overlapping towns</div></div>
         </div>
+
+        {{-- Stalled-worker banner: publishing is async (Repush queues a job the worker runs). If the
+             worker is down, approved pages sit forever — so surface it here, with the drain escape hatch,
+             instead of it looking like a broken button. --}}
+        @php $q = $this->queueHealth; @endphp
+        @if ($q['stalled'])
+            <div class="pl-queuewarn">
+                ⚠ The background worker looks stalled — <b>{{ $q['pending'] }}</b> job(s) queued{{ $q['oldest_minutes'] > 0 ? ' (oldest '.$q['oldest_minutes'].'m)' : '' }}{{ $q['failed'] > 0 ? ', '.$q['failed'].' failed' : '' }}.
+                Approved pages won't publish until it drains. Fix the worker (Horizon / <code>queue:work</code>), or push this tenant's stuck pages now on the console:
+                <code>php artisan launchpad:drain-publish "{{ $q['brand'] }}"</code>
+            </div>
+        @endif
+
+        {{-- Town-page pipeline monitor — live progress as the batches generate + publish (polls every
+             15s). Publishing is async, so this is where the operator watches selected towns land. --}}
+        @if ($board['pipeline']['selected'] > 0)
+            @php $pl = $board['pipeline']; @endphp
+            <div class="pl-monitor" wire:poll.15s>
+                <div class="pl-mon-head">Town-page pipeline
+                    <span class="pl-mon-sub">{{ $pl['published'] }} / {{ $pl['selected'] }} selected towns published</span>
+                </div>
+                <div class="pl-mon-bar"><div class="pl-mon-fill" style="width:{{ $pl['selected'] > 0 ? min(100, round($pl['published'] / $pl['selected'] * 100)) : 0 }}%"></div></div>
+                <div class="pl-mon-stats">
+                    <span>✅ {{ $pl['published'] }} published</span>
+                    <span>⏳ {{ $pl['generating'] }} generating</span>
+                    <span>📝 {{ $pl['drafted'] }} drafted</span>
+                    <span>▫ {{ $pl['not_built'] }} to do</span>
+                    @if ($pl['failed'] > 0)<span class="bad">✗ {{ $pl['failed'] }} failed</span>@endif
+                    @if ($pl['queue_pending'] > 0)<span>· {{ $pl['queue_pending'] }} job(s) in queue</span>@endif
+                </div>
+            </div>
+        @endif
 
         @if ($board['cards'] === [])
             <div class="pl-empty">No physical locations yet — import them on Setup → Business (bulk GBP) or add them in Settings → Locations.</div>
@@ -107,16 +159,49 @@
                                 @endif
                             </div>
 
-                            @if ($card['town_sample'] !== [])
-                                <div class="pl-towns">
-                                    @foreach ($card['town_sample'] as $town)
-                                        <span class="pl-town">{{ $town }}</span>
-                                    @endforeach
-                                    @if ($card['towns_covered'] > count($card['town_sample']))
-                                        <span class="pl-town" style="border-style:dashed">+ {{ $card['towns_covered'] - count($card['town_sample']) }} more</span>
+                            {{-- Town pages: ordered by population into Larger / Mid-size / Smaller bands.
+                                 Check the towns to publish, then "Generate + publish selected" fires that
+                                 batch (queued, scoped to THIS location — never all 700 at once). --}}
+                            @php $bandLabels = ['larger' => 'Larger cities', 'mid' => 'Mid-size towns', 'smaller' => 'Smaller communities']; @endphp
+                            <div class="pl-townpanel">
+                                @foreach ($bandLabels as $bk => $blabel)
+                                    @if (($card['town_bands'][$bk] ?? []) !== [])
+                                        <div>
+                                            <div class="pl-band-hd">
+                                                {{ $blabel }} · {{ count($card['town_bands'][$bk]) }}
+                                                <button type="button" class="pl-band-sel" wire:click="selectBand('{{ $card['id'] }}', '{{ $bk }}', true)">select all</button>
+                                                <button type="button" class="pl-band-sel" style="color:#94a3b8" wire:click="selectBand('{{ $card['id'] }}', '{{ $bk }}', false)">clear</button>
+                                            </div>
+                                            <div class="pl-townlist">
+                                                @foreach ($card['town_bands'][$bk] as $town)
+                                                    @php
+                                                        $cls = match ($town['status']) { 'published' => 'pub', 'generating' => 'gen', 'failed' => 'fail', default => $town['page_selected'] ? 'on' : '' };
+                                                        $icon = ['published' => '✅', 'generating' => '⏳', 'failed' => '✗', 'drafted' => '📝'][$town['status']] ?? '';
+                                                    @endphp
+                                                    <label class="pl-townrow {{ $cls }}" title="{{ ucfirst($town['status']) }}{{ $town['population'] ? ' · pop '.number_format($town['population']) : '' }}">
+                                                        <input type="checkbox" @checked($town['page_selected']) wire:click="toggleTown('{{ $town['coverage_area_id'] }}')">
+                                                        {{ $town['name'] }}@if ($icon)<span class="st">{{ $icon }}</span>@endif
+                                                    </label>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
+                                @endforeach
+
+                                <div class="pl-genrow">
+                                    <button type="button" class="pl-btn primary" wire:click="generateAndPublishSelected('{{ $card['id'] }}')"
+                                        @disabled($card['selectable'] === 0)
+                                        @if ($card['selectable'] >= 25) wire:confirm="Generate + publish {{ $card['selectable'] }} town pages? That's a lot of AI drafting + images — they run on the worker." @endif
+                                        wire:loading.attr="disabled" wire:target="generateAndPublishSelected('{{ $card['id'] }}')">
+                                        ✨ Generate + publish selected ({{ $card['selectable'] }})
+                                    </button>
+                                    @if ($this->queueHealth['stalled'])
+                                        <button type="button" class="pl-btn" wire:click="drainNow('{{ $card['id'] }}')"
+                                            wire:confirm="Publish this location's stuck town pages right now, synchronously (no worker)?"
+                                            wire:loading.attr="disabled" wire:target="drainNow('{{ $card['id'] }}')">Drain now</button>
                                     @endif
                                 </div>
-                            @endif
+                            </div>
 
                             @if ($card['overlaps'] !== [])
                                 <div class="pl-band overlap">
@@ -176,32 +261,18 @@
                             <span class="pl-state">Page: <b>{{ $pg['label'] }}</b></span>
 
                             @if ($pg['content_id'] ?? null)
-                                {{-- The standard page actions — the same set as every other board. --}}
+                                {{-- The standard page actions — the same set as every other board. Plain
+                                     single-label buttons (Livewire disables them mid-flight); no loading
+                                     span, which is what left "Repush Pushing…" showing at rest before. --}}
                                 <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $pg['content_id']]) }}" wire:navigate>Review</a>
-                                <button class="pl-btn primary" wire:click="repush('{{ $pg['content_id'] }}')"
-                                    wire:loading.attr="disabled" wire:target="repush('{{ $pg['content_id'] }}')">
-                                    <span wire:loading.remove wire:target="repush('{{ $pg['content_id'] }}')">Repush</span>
-                                    <span class="sp" wire:loading wire:target="repush('{{ $pg['content_id'] }}')">Pushing…</span>
-                                </button>
-                                <button class="pl-btn" wire:click="regenerate('{{ $pg['content_id'] }}')"
-                                    wire:loading.attr="disabled" wire:target="regenerate('{{ $pg['content_id'] }}')">
-                                    <span wire:loading.remove wire:target="regenerate('{{ $pg['content_id'] }}')">Regenerate</span>
-                                    <span class="sp" wire:loading wire:target="regenerate('{{ $pg['content_id'] }}')">Queuing…</span>
-                                </button>
+                                <button class="pl-btn primary" wire:click="repush('{{ $pg['content_id'] }}')" wire:loading.attr="disabled" wire:target="repush('{{ $pg['content_id'] }}')">Repush</button>
+                                <button class="pl-btn" wire:click="regenerate('{{ $pg['content_id'] }}')" wire:loading.attr="disabled" wire:target="regenerate('{{ $pg['content_id'] }}')">Regenerate</button>
                                 <button class="pl-btn danger" wire:click="takeDown('{{ $pg['content_id'] }}')"
                                     wire:confirm="Remove this location page from WordPress? It stays in your plan and can be republished on the same URL."
-                                    wire:loading.attr="disabled" wire:target="takeDown('{{ $pg['content_id'] }}')">
-                                    <span wire:loading.remove wire:target="takeDown('{{ $pg['content_id'] }}')">Take down</span>
-                                    <span class="sp" wire:loading wire:target="takeDown('{{ $pg['content_id'] }}')">Removing…</span>
-                                </button>
+                                    wire:loading.attr="disabled" wire:target="takeDown('{{ $pg['content_id'] }}')">Take down</button>
                             @else
                                 {{-- No landing page yet — generate it (find-or-creates the page, then drafts). --}}
-                                <button class="pl-btn primary" wire:click="generatePage('{{ $card['id'] }}')"
-                                    @disabled(! $pg['can_generate'])
-                                    wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">
-                                    <span wire:loading.remove wire:target="generatePage('{{ $card['id'] }}')">Generate</span>
-                                    <span class="sp" wire:loading wire:target="generatePage('{{ $card['id'] }}')">Queuing…</span>
-                                </button>
+                                <button class="pl-btn primary" wire:click="generatePage('{{ $card['id'] }}')" @disabled(! $pg['can_generate']) wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">Generate</button>
                             @endif
                         </div>
                     </div>

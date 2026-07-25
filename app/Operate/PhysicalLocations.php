@@ -26,7 +26,13 @@ use Illuminate\Support\Collection;
  */
 class PhysicalLocations
 {
-    public function __construct(private readonly LiveMetrics $metrics) {}
+    /** Census tiers folded into the three display bands the town panel shows. */
+    private const BANDS = ['larger' => ['major', 'large'], 'mid' => ['medium'], 'smaller' => ['small', 'ungrouped']];
+
+    public function __construct(
+        private readonly LiveMetrics $metrics,
+        private readonly QueueHealth $queueHealth,
+    ) {}
 
     /**
      * @return array{summary: array<string, int>, cards: list<array<string, mixed>>}
@@ -54,8 +60,20 @@ class PhysicalLocations
             ->get()
             ->keyBy(fn (Content $c): string => (string) $c->location_id);
 
+        // TOWN pages (nested under a location, not the hub) keyed "{parent_location_id}|{townKey}" so
+        // each card's town panel can show each town's page status, and the pipeline monitor can total them.
+        $townPages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->whereNull('location_id')
+            ->whereNull('primary_service_id')
+            ->whereNotNull('parent_location_id')
+            ->get();
+        $townPagesByKey = $townPages->keyBy(fn (Content $c): string => $c->parent_location_id.'|'.$this->townKey((string) $c->title));
+
         $cards = $locations
-            ->map(fn (Location $location) => $this->card($location, $areas, $names, $landings->get((string) $location->id)))
+            ->map(fn (Location $location) => $this->card($location, $areas, $names, $landings->get((string) $location->id), $townPagesByKey))
             ->values()
             ->all();
 
@@ -66,18 +84,125 @@ class PhysicalLocations
                 'towns_selected' => $areas->where('page_selected', true)->count(),
                 'overlaps' => $areas->filter(fn (CoverageArea $a) => count($this->sources($a)) > 1)->count(),
             ],
+            'pipeline' => $this->townPipeline($areas, $townPages),
             'cards' => $cards,
         ];
     }
 
     /**
+     * The town-page pipeline progress for the monitor at the top of the page — how the selected town
+     * pages are moving through generate → publish, plus the live queue backlog (so a stalled worker is
+     * obvious). Counts are over the whole site's town pages.
+     *
+     * @param  Collection<int, CoverageArea>  $areas
+     * @param  Collection<int, Content>  $townPages
+     * @return array{selected: int, published: int, generating: int, drafted: int, not_built: int, failed: int, queue_pending: int, stalled: bool}
+     */
+    private function townPipeline(Collection $areas, Collection $townPages): array
+    {
+        $selected = $areas->where('page_selected', true)->count();
+        $published = $townPages->filter(fn (Content $c) => $c->status === ContentStatus::Published)->count();
+        $generating = $townPages->filter(fn (Content $c) => $c->generationState() === 'generating')->count();
+        $failed = $townPages->filter(fn (Content $c) => $c->generationState() === 'failed')->count();
+        $drafted = $townPages->filter(fn (Content $c) => $c->status !== ContentStatus::Published && $c->generationState() === 'drafted')->count();
+        $queue = $this->queueHealth->snapshot();
+
+        return [
+            'selected' => $selected,
+            'published' => $published,
+            'generating' => $generating,
+            'drafted' => $drafted,
+            // Selected towns with no live/drafted page yet (materialized-candidate or not built).
+            'not_built' => max(0, $selected - $published - $generating - $drafted - $failed),
+            'failed' => $failed,
+            'queue_pending' => $queue['pending'],
+            'stalled' => $queue['stalled'],
+        ];
+    }
+
+    /** Normalize a town name for matching a coverage row to its page (drop a trailing ", ST", lower). */
+    private function townKey(string $name): string
+    {
+        return mb_strtolower(trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($name))));
+    }
+
+    /**
+     * The location's towns as three display bands (Larger / Mid-size / Smaller), population-ordered
+     * within each — each town carrying its page STATUS + content id + page_selected, so the card's bulk
+     * generate/publish panel is status-aware. Also returns the SELECTABLE count: page-selected towns not
+     * yet published or generating (the size of the next "Generate + publish selected" batch).
+     *
+     * @param  Collection<int, CoverageArea>  $own
+     * @param  Collection<string, Content>  $townPagesByKey
+     * @return array{0: array<string, list<array<string, mixed>>>, 1: int}
+     */
+    private function townBands(Location $location, Collection $own, Collection $townPagesByKey): array
+    {
+        $sorted = $own->sort(function (CoverageArea $a, CoverageArea $b): int {
+            $pop = ($b->population ?? -1) <=> ($a->population ?? -1);
+
+            return $pop !== 0 ? $pop : strcmp((string) $a->name, (string) $b->name);
+        })->values();
+
+        $bands = ['larger' => [], 'mid' => [], 'smaller' => []];
+        $selectable = 0;
+        foreach ($sorted as $area) {
+            $page = $townPagesByKey->get($location->id.'|'.$this->townKey((string) $area->name));
+            $status = $this->townStatus($page);
+            if ((bool) $area->page_selected && ! in_array($status, ['published', 'generating'], true)) {
+                $selectable++;
+            }
+            $bands[$this->bandFor((string) ($area->size_tier ?? ''))][] = [
+                'coverage_area_id' => (string) $area->id,
+                'name' => trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', (string) $area->name)),
+                'population' => $area->population,
+                'page_selected' => (bool) $area->page_selected,
+                'status' => $status,
+                'content_id' => $page?->id,
+            ];
+        }
+
+        return [$bands, $selectable];
+    }
+
+    private function bandFor(string $tier): string
+    {
+        foreach (self::BANDS as $band => $tiers) {
+            if (in_array($tier !== '' ? $tier : 'ungrouped', $tiers, true)) {
+                return $band;
+            }
+        }
+
+        return 'smaller';
+    }
+
+    private function townStatus(?Content $page): string
+    {
+        if ($page === null) {
+            return 'none';
+        }
+        if ($page->status === ContentStatus::Published) {
+            return 'published';
+        }
+
+        return match ($page->generationState()) {
+            'generating' => 'generating',
+            'failed' => 'failed',
+            'drafted' => 'drafted',
+            default => 'built',
+        };
+    }
+
+    /**
      * @param  Collection<int, CoverageArea>  $areas
      * @param  Collection<int|string, string>  $names
+     * @param  Collection<string, Content>  $townPagesByKey
      * @return array<string, mixed>
      */
-    private function card(Location $location, Collection $areas, Collection $names, ?Content $landing): array
+    private function card(Location $location, Collection $areas, Collection $names, ?Content $landing, Collection $townPagesByKey): array
     {
         $own = $areas->filter(fn (CoverageArea $a) => in_array($location->id, $this->sources($a), true))->values();
+        [$townBands, $selectable] = $this->townBands($location, $own, $townPagesByKey);
 
         // Overlap: every town this location shares with another, naming the other location(s).
         $overlaps = $own
@@ -131,11 +256,8 @@ class PhysicalLocations
             'home_county_towns' => $homeCountyTowns,
             'towns_covered' => $own->count(),
             'towns_selected' => $own->where('page_selected', true)->count(),
-            'town_sample' => $own->sortByDesc('population')
-                ->take(12)
-                ->map(fn (CoverageArea $a) => trim((string) $a->name))
-                ->values()
-                ->all(),
+            'town_bands' => $townBands,
+            'selectable' => $selectable, // selected towns not yet published/generating — the batch size
             'overlaps' => $overlaps,
             'advisories' => $advisories,
             'page' => $this->pageState($landing),
