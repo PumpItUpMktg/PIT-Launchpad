@@ -921,6 +921,7 @@ final class BlockPageComposer
         array $townLinks = [],
         array $localConditions = [],
         bool $hasMap = false,
+        bool $areasMapAvailable = false,
         bool $preview = false,
     ): string {
         $place = trim($city) !== '' ? (trim($state) !== '' ? trim($city).', '.trim($state) : trim($city)) : '';
@@ -1014,6 +1015,7 @@ final class BlockPageComposer
             eyebrow: 'Areas we serve',
             heading: $city !== '' ? 'Towns we serve from '.$city : 'Towns we serve',
             links: $townLinks,
+            hasMap: $areasMapAvailable,
         );
 
         // Reviews + jobs are STRICTLY provider-gated — preview: false is deliberate (no "Example"

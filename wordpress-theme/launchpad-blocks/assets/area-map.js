@@ -87,6 +87,12 @@
             if (city.name) {
                 marker.bindTooltip(city.name, { direction: 'top', className: 'lp-map-tip' });
             }
+            // A town with a page is a clickable pin → its town page (the pin is the map's link layer;
+            // the text list beneath stays the crawlable version).
+            if (city.url) {
+                marker.on('click', function () { window.location.assign(city.url); });
+                marker.on('add', function () { if (marker._path) { marker._path.style.cursor = 'pointer'; } });
+            }
             marker._lpTier = city.tier;
             markers.push(marker);
             bounds.extend([city.lat, city.lng]);

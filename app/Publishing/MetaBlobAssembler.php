@@ -184,6 +184,16 @@ class MetaBlobAssembler
             || $content->standard_type === StandardPageType::Contact;
         $areaMap = $wantsAreaMap ? $this->serviceAreaMap->for((string) $content->site_id) : null;
 
+        // Location hub: a LOCATION-scoped areas map — this location's county + the towns it serves as
+        // clickable points (each links its town page) + a pin. Rides the same service_area_map slot, so
+        // the theme's Leaflet init draws it; the town list beneath stays the crawlable fallback.
+        if ($areaMap === null && $content->page_type === PageType::Location && $content->location_id !== null) {
+            $hubLocation = Location::withoutGlobalScope(SiteScope::class)->find($content->location_id);
+            if ($hubLocation !== null) {
+                $areaMap = $this->serviceAreaMap->forLocation($hubLocation);
+            }
+        }
+
         // Contact: a STOREFRONT gets a location pin — it joins the coverage geometry (or forms the
         // whole payload for a tenant with no coverage captured), and the pin wins the map center
         // ("find us"). A mobile-only business keeps the pure coverage footprint; its base address is

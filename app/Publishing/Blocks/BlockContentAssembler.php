@@ -4,6 +4,7 @@ namespace App\Publishing\Blocks;
 
 use App\Build\Permalinks;
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Enums\StandardPageType;
@@ -89,7 +90,7 @@ final class BlockContentAssembler
         // A location page pinned to its GBP Location record composes the block pattern; market-era
         // location pages WITHOUT a pin (no location_id) keep the null fallback → the Elementor path.
         if ($content->page_type === PageType::Location && $content->location_id !== null) {
-            return $this->composeLocation($content, $slots, $images, $preview);
+            return $this->composeLocation($content, $slots, $images, $preview, $mapAvailable);
         }
 
         if ($content->standard_type === StandardPageType::WhyChooseUs) {
@@ -664,7 +665,7 @@ final class BlockContentAssembler
      * @param  array<string, mixed>  $slots
      * @param  array<string, array<string, mixed>>  $images
      */
-    private function composeLocation(Content $content, array $slots, array $images, bool $preview): ?string
+    private function composeLocation(Content $content, array $slots, array $images, bool $preview, bool $areasMapAvailable = false): ?string
     {
         $location = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
@@ -716,6 +717,7 @@ final class BlockContentAssembler
             townLinks: $this->locationTownLinks($content, $location),
             localConditions: $this->locationGroundingFacts($location),
             hasMap: is_array($slots['location_map'] ?? null),
+            areasMapAvailable: $areasMapAvailable,
             preview: $preview,
         );
     }
@@ -741,11 +743,11 @@ final class BlockContentAssembler
 
     /**
      * The town pages parented to this location, as internal links for the hub's "areas we serve"
-     * grid — real town pages only (pure town pages, not city-service pages), each pointing at its
-     * permalink. Each link carries its census SIZE TIER (major/large/medium/small, matched from
-     * `CoverageArea` by name) so the section can group towns Larger → Mid-size → Smaller instead of
-     * one long alphabetical column; the tier is null when no coverage row matches (the section then
-     * renders a single flat line). Ordered largest-first. Empty when no towns are materialized yet.
+     * grid — real, PUBLISHED town pages only (pure town pages, not city-service pages), DE-DUPED by
+     * town (repeated rebuilds can leave several rows per town; the hub must link each town once), each
+     * pointing at its permalink. Each link carries its census SIZE TIER (major/large/medium/small,
+     * matched from `CoverageArea` by name) used only to order the list largest-first — the labels are
+     * not shown. Empty when no town page is live yet (the hub re-publishes as towns go live).
      *
      * @return list<array{label: string, url: string, tier: string|null}>
      */
@@ -757,6 +759,7 @@ final class BlockContentAssembler
             ->where('site_id', $content->site_id)
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Location->value)
+            ->where('status', ContentStatus::Published->value)   // link only live town pages (never a draft/dup URL)
             ->where('parent_location_id', $location->id)
             ->whereNull('location_id')
             ->whereNull('primary_service_id')
@@ -766,6 +769,7 @@ final class BlockContentAssembler
                 $meta = $tiers[$this->townKey((string) $c->title)] ?? null;
 
                 return [
+                    'key' => $this->townKey((string) $c->title),
                     'label' => (string) $c->title,
                     'url' => (new Permalinks)->path($c),
                     'tier' => $meta['tier'] ?? null,
@@ -779,7 +783,18 @@ final class BlockContentAssembler
         usort($links, fn (array $a, array $b): int => [$rank[(string) $a['tier']] ?? 4, -1 * (int) $a['population'], $a['label']]
             <=> [$rank[(string) $b['tier']] ?? 4, -1 * (int) $b['population'], $b['label']]);
 
-        return array_map(fn (array $l): array => ['label' => $l['label'], 'url' => $l['url'], 'tier' => $l['tier']], $links);
+        // One link per town — drop duplicate rows (kept: the first, i.e. largest/best-ranked).
+        $seen = [];
+        $out = [];
+        foreach ($links as $l) {
+            if ($l['key'] !== '' && isset($seen[$l['key']])) {
+                continue;
+            }
+            $seen[$l['key']] = true;
+            $out[] = ['label' => $l['label'], 'url' => $l['url'], 'tier' => $l['tier']];
+        }
+
+        return $out;
     }
 
     /**
