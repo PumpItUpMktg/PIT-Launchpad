@@ -28,6 +28,10 @@
             .pb-right { margin-left:auto; display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
             .pb-reject { flex-basis:100%; display:flex; gap:8px; align-items:center; padding-top:6px; }
             .pb-reject input { flex:1; font-size:12.5px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:5px 9px; background:transparent; }
+            .pb-locgroup { margin-bottom:14px; }
+            .pb-lochead { font-size:12px; font-weight:700; color:#334155; padding:2px 2px 6px; display:flex; align-items:center; gap:7px; }
+            .pb-locpin { color:#2563eb; }
+            .pb-loccount { font-weight:600; font-size:10.5px; color:#64748b; }
         </style>
 
         @php
@@ -36,6 +40,23 @@
             $live = $board['live'];
             $isLocations = array_key_exists('groups', is_array($live) ? $live : []);
             $readyCount = collect($work)->filter(fn ($r) => in_array('generate', $r['actions'] ?? [], true))->count();
+
+            // For the Location board, group the work lane into a card per physical location — the
+            // location's own landing page first, then its town / city-service pages — with anything
+            // unassigned collected last. Ordered by location label; mirrors the live side's grouping.
+            $workGroups = null;
+            if ($isLocations && $work !== []) {
+                $byLoc = collect($work)->groupBy(fn ($r) => $r['brick_mortar_id'] ?? '');
+                $named = $byLoc->except('')->sortBy(fn ($rows) => $rows->first()['brick_mortar'] ?? '~');
+                $workGroups = [];
+                foreach ($named as $rows) {
+                    $ordered = $rows->sortByDesc(fn ($r) => $r['is_brick_mortar'] ?? false)->values()->all();
+                    $workGroups[] = ['label' => $rows->first()['brick_mortar'] ?? 'Location', 'rows' => $ordered];
+                }
+                if ($byLoc->has('')) {
+                    $workGroups[] = ['label' => null, 'rows' => $byLoc->get('')->values()->all()];
+                }
+            }
         @endphp
 
         {{-- ─── Work lane ─── --}}
@@ -63,75 +84,30 @@
         </div>
         @if ($work === [])
             <div class="lv-empty">Nothing in progress — everything in this family is live (or not planned yet).</div>
+        @elseif ($workGroups !== null)
+            {{-- Location board: the in-progress pages grouped into a card per physical location (its
+                 own landing page first, then its towns), with anything unassigned collected last. --}}
+            @foreach ($workGroups as $g)
+                <div class="pb-locgroup" wire:key="pbwg-{{ $loop->index }}">
+                    <div class="pb-lochead">
+                        @if ($g['label'] !== null)
+                            <span class="pb-locpin">📍</span> {{ $g['label'] }}
+                        @else
+                            Unassigned
+                        @endif
+                        <span class="pb-loccount">· {{ count($g['rows']) }} page{{ count($g['rows']) === 1 ? '' : 's' }}</span>
+                    </div>
+                    <div class="pb-rows">
+                        @foreach ($g['rows'] as $row)
+                            @include('filament.operate.partials.pages-work-row', ['row' => $row])
+                        @endforeach
+                    </div>
+                </div>
+            @endforeach
         @else
             <div class="pb-rows">
                 @foreach ($work as $row)
-                    <div class="pb-row" wire:key="pbw-{{ $row['id'] }}">
-                        <div>
-                            <div class="pb-title">
-                                {{ $row['title'] }}
-                                @if (! empty($row['brick_mortar']))
-                                    <span class="pb-bm" title="Brick-and-mortar location this page belongs to">
-                                        📍 {{ $row['is_brick_mortar'] ?? false ? 'This location' : $row['brick_mortar'] }}
-                                    </span>
-                                @endif
-                                @if (! empty($row['needs_enrichment']))
-                                    <a class="pb-enrich" href="{{ \App\Filament\Pages\Gathering\ServicesStep::getUrl() }}" wire:navigate
-                                       title="This service has no symptoms / what's-included / process / cost — its page will render thin. Enrich it, then regenerate.">
-                                        ⚠ Needs enrichment
-                                    </a>
-                                @endif
-                                @if (! empty($row['needs_generation']))
-                                    <span class="pb-generate"
-                                          title="This hub has no drafted body and/or no service pages in its silo to link — it renders thin and can't route to its children. Generate the hub (and its silo's service pages), then repush.">
-                                        ⚠ Needs generation
-                                    </span>
-                                @endif
-                            </div>
-                            <div class="pb-perma">{{ $row['permalink'] }}</div>
-                            {{-- The real operator diagnostic (draft/publish error, queued state, …). For a
-                                 failed page this is WHY it failed — otherwise the card only says "something went wrong". --}}
-                            @if (! empty($row['operator_tail']))
-                                <div class="pb-tail {{ $row['tone'] === 'danger' ? 'err' : '' }}">{{ $row['operator_tail'] }}</div>
-                            @endif
-                        </div>
-                        <span class="pb-move">{{ $row['whose_move'] }}</span>
-                        <div class="pb-right">
-                            <span class="pb-tone {{ $row['tone'] }}">{{ $row['client_line'] }}</span>
-                            @foreach ($row['actions'] as $action)
-                                @if ($action === 'generate')
-                                    <button class="lv-btn primary" wire:click="generate('{{ $row['id'] }}')">Generate</button>
-                                @elseif ($action === 'approve')
-                                    <button class="lv-btn primary" wire:click="approve('{{ $row['id'] }}')">Approve</button>
-                                @elseif ($action === 'publish')
-                                    <button class="lv-btn primary" wire:click="publish('{{ $row['id'] }}')">Publish</button>
-                                @elseif ($action === 'review')
-                                    <a class="lv-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $row['id']]) }}" wire:navigate>Review</a>
-                                @elseif ($action === 'view' && $row['live_url'])
-                                    <a class="lv-btn" href="{{ $row['live_url'] }}" target="_blank" rel="noopener">View</a>
-                                @endif
-                            @endforeach
-                            @if (in_array('regenerate', $row['menu'], true))
-                                <button class="lv-btn" wire:click="regenerate('{{ $row['id'] }}')">Regenerate</button>
-                            @endif
-                            @if (in_array('lock', $row['menu'], true))
-                                <button class="lv-btn" wire:click="lock('{{ $row['id'] }}')">Lock</button>
-                            @endif
-                            @if (in_array('reject', $row['menu'], true))
-                                <button class="lv-btn danger" wire:click="startReject('{{ $row['id'] }}')">Reject</button>
-                            @endif
-                            @if (in_array('remove', $row['menu'], true))
-                                <button class="lv-btn danger" wire:click="removePage('{{ $row['id'] }}')"
-                                    wire:confirm="Remove '{{ $row['title'] }}' completely? It'll be deleted from the plan{{ $row['live_url'] ? ' and taken down from WordPress' : '' }} — not just parked. Rebuilding the structure can bring it back.">Remove</button>
-                            @endif
-                        </div>
-                        @if ($rejecting === $row['id'])
-                            <div class="pb-reject">
-                                <input type="text" placeholder="Reason (optional — improves the next draft)" wire:model="rejectReason" wire:keydown.enter="reject('{{ $row['id'] }}')">
-                                <button class="lv-btn danger" wire:click="reject('{{ $row['id'] }}')">Confirm reject</button>
-                            </div>
-                        @endif
-                    </div>
+                    @include('filament.operate.partials.pages-work-row', ['row' => $row])
                 @endforeach
             </div>
         @endif

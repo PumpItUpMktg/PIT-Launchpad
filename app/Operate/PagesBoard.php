@@ -54,9 +54,10 @@ class PagesBoard
     }
 
     /**
-     * Decorate each location work-card with the physical location it's tied to (`brick_mortar` label),
-     * and flag whether the row IS that brick-and-mortar page itself (`is_brick_mortar`). A town is tied
-     * via `parent_location_id`; a location's own landing page via `location_id`. Unassigned → null.
+     * Decorate each location work-card with the physical location it's tied to (`brick_mortar` label +
+     * `brick_mortar_id` grouping key), and flag whether the row IS that brick-and-mortar page itself
+     * (`is_brick_mortar`). A town is tied via `parent_location_id`; a location's own landing page via
+     * `location_id`. Unassigned → null (the board groups those under an "Unassigned" heading).
      *
      * @param  list<array<string, mixed>>  $cards
      * @return list<array<string, mixed>>
@@ -83,6 +84,7 @@ class PagesBoard
             $page = $pages->get((string) ($card['id'] ?? ''));
             if ($page === null) {
                 $cards[$i]['brick_mortar'] = null;
+                $cards[$i]['brick_mortar_id'] = null;
                 $cards[$i]['is_brick_mortar'] = false;
 
                 continue;
@@ -90,6 +92,7 @@ class PagesBoard
             $homeId = $page->location_id ?? $page->parent_location_id;
             $location = $homeId !== null ? $locations->get((string) $homeId) : null;
             $cards[$i]['brick_mortar'] = $location !== null ? $this->locationLabel($location) : null;
+            $cards[$i]['brick_mortar_id'] = $location !== null ? (string) $location->id : null;
             $cards[$i]['is_brick_mortar'] = $page->location_id !== null;
         }
 
