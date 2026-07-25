@@ -49,7 +49,8 @@
         .pl-btn.danger:hover { border-color:#dc2626; background:rgba(220,38,38,.06); }
         a.pl-btn { text-decoration:none; display:inline-flex; align-items:center; }
         .pl-btn[disabled] { opacity:.5; cursor:not-allowed; }
-        .pl-btn .sp { display:inline-block; }
+        .pl-queuewarn { border:1px solid rgba(217,119,6,.5); background:rgba(217,119,6,.08); color:#b45309; border-radius:10px; padding:11px 15px; font-size:12.5px; line-height:1.55; }
+        .pl-queuewarn code { background:rgba(217,119,6,.14); padding:1px 7px; border-radius:5px; font-size:11.5px; }
     </style>
 
     <div class="pl-wrap">
@@ -72,6 +73,18 @@
             <div class="pl-tile"><div class="n">{{ $s['towns_selected'] }}</div><div class="l">selected for pages</div></div>
             <div class="pl-tile {{ $s['overlaps'] > 0 ? 'bad' : 'good' }}"><div class="n">{{ $s['overlaps'] }}</div><div class="l">overlapping towns</div></div>
         </div>
+
+        {{-- Stalled-worker banner: publishing is async (Repush queues a job the worker runs). If the
+             worker is down, approved pages sit forever — so surface it here, with the drain escape hatch,
+             instead of it looking like a broken button. --}}
+        @php $q = $this->queueHealth; @endphp
+        @if ($q['stalled'])
+            <div class="pl-queuewarn">
+                ⚠ The background worker looks stalled — <b>{{ $q['pending'] }}</b> job(s) queued{{ $q['oldest_minutes'] > 0 ? ' (oldest '.$q['oldest_minutes'].'m)' : '' }}{{ $q['failed'] > 0 ? ', '.$q['failed'].' failed' : '' }}.
+                Approved pages won't publish until it drains. Fix the worker (Horizon / <code>queue:work</code>), or push this tenant's stuck pages now on the console:
+                <code>php artisan launchpad:drain-publish "{{ $q['brand'] }}"</code>
+            </div>
+        @endif
 
         @if ($board['cards'] === [])
             <div class="pl-empty">No physical locations yet — import them on Setup → Business (bulk GBP) or add them in Settings → Locations.</div>
@@ -176,32 +189,18 @@
                             <span class="pl-state">Page: <b>{{ $pg['label'] }}</b></span>
 
                             @if ($pg['content_id'] ?? null)
-                                {{-- The standard page actions — the same set as every other board. --}}
+                                {{-- The standard page actions — the same set as every other board. Plain
+                                     single-label buttons (Livewire disables them mid-flight); no loading
+                                     span, which is what left "Repush Pushing…" showing at rest before. --}}
                                 <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $pg['content_id']]) }}" wire:navigate>Review</a>
-                                <button class="pl-btn primary" wire:click="repush('{{ $pg['content_id'] }}')"
-                                    wire:loading.attr="disabled" wire:target="repush('{{ $pg['content_id'] }}')">
-                                    <span wire:loading.remove wire:target="repush('{{ $pg['content_id'] }}')">Repush</span>
-                                    <span class="sp" wire:loading wire:target="repush('{{ $pg['content_id'] }}')">Pushing…</span>
-                                </button>
-                                <button class="pl-btn" wire:click="regenerate('{{ $pg['content_id'] }}')"
-                                    wire:loading.attr="disabled" wire:target="regenerate('{{ $pg['content_id'] }}')">
-                                    <span wire:loading.remove wire:target="regenerate('{{ $pg['content_id'] }}')">Regenerate</span>
-                                    <span class="sp" wire:loading wire:target="regenerate('{{ $pg['content_id'] }}')">Queuing…</span>
-                                </button>
+                                <button class="pl-btn primary" wire:click="repush('{{ $pg['content_id'] }}')" wire:loading.attr="disabled" wire:target="repush('{{ $pg['content_id'] }}')">Repush</button>
+                                <button class="pl-btn" wire:click="regenerate('{{ $pg['content_id'] }}')" wire:loading.attr="disabled" wire:target="regenerate('{{ $pg['content_id'] }}')">Regenerate</button>
                                 <button class="pl-btn danger" wire:click="takeDown('{{ $pg['content_id'] }}')"
                                     wire:confirm="Remove this location page from WordPress? It stays in your plan and can be republished on the same URL."
-                                    wire:loading.attr="disabled" wire:target="takeDown('{{ $pg['content_id'] }}')">
-                                    <span wire:loading.remove wire:target="takeDown('{{ $pg['content_id'] }}')">Take down</span>
-                                    <span class="sp" wire:loading wire:target="takeDown('{{ $pg['content_id'] }}')">Removing…</span>
-                                </button>
+                                    wire:loading.attr="disabled" wire:target="takeDown('{{ $pg['content_id'] }}')">Take down</button>
                             @else
                                 {{-- No landing page yet — generate it (find-or-creates the page, then drafts). --}}
-                                <button class="pl-btn primary" wire:click="generatePage('{{ $card['id'] }}')"
-                                    @disabled(! $pg['can_generate'])
-                                    wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">
-                                    <span wire:loading.remove wire:target="generatePage('{{ $card['id'] }}')">Generate</span>
-                                    <span class="sp" wire:loading wire:target="generatePage('{{ $card['id'] }}')">Queuing…</span>
-                                </button>
+                                <button class="pl-btn primary" wire:click="generatePage('{{ $card['id'] }}')" @disabled(! $pg['can_generate']) wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">Generate</button>
                             @endif
                         </div>
                     </div>

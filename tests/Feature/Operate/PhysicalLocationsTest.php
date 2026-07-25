@@ -16,6 +16,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Operate\PhysicalLocations;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
@@ -206,6 +207,20 @@ it('each location card shows the standard Position / GSC / GA4 tracking block wi
         ->assertSee('No target keyword — brand page')
         ->assertSee('GSC · 28d')
         ->assertSee('GA4 sessions');
+});
+
+it('surfaces a stalled-worker banner with the drain hint when the publish queue is backed up', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    session(['guided_site_id' => $site->id]);
+    // A job that has sat 10 minutes → the worker looks stalled.
+    DB::table('jobs')->insert([
+        'queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null,
+        'available_at' => time() - 600, 'created_at' => time() - 600,
+    ]);
+
+    Livewire::test(OperatePhysicalLocations::class)
+        ->assertSee('worker looks stalled')
+        ->assertSee('launchpad:drain-publish');
 });
 
 it('the card footer offers Review and Take down alongside Repush on a live page', function () {

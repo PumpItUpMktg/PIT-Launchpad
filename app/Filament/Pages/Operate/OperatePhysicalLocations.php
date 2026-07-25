@@ -15,6 +15,7 @@ use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PhysicalLocations;
+use App\Operate\QueueHealth;
 use App\Publishing\DeleteFromWordpress;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
@@ -73,6 +74,21 @@ class OperatePhysicalLocations extends OperatePage
     public function getSiteOptionsProperty(): array
     {
         return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
+    }
+
+    /**
+     * Background-worker health — so a stalled queue (approved pages that won't publish) is visible here
+     * instead of looking like a broken button. Includes this tenant's brand for the drain hint.
+     *
+     * @return array{pending: int, oldest_minutes: int, failed: int, stalled: bool, brand: string}
+     */
+    public function getQueueHealthProperty(): array
+    {
+        $site = $this->getSite();
+        $snapshot = app(QueueHealth::class)->snapshot();
+        $snapshot['brand'] = $site !== null ? (string) $site->brand_name : '';
+
+        return $snapshot;
     }
 
     /**

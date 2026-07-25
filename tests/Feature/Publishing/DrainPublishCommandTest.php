@@ -50,6 +50,20 @@ test('drain-publish --dry-run lists the stuck posts without publishing', functio
         ->where('status', ContentStatus::Approved->value)->count())->toBe(1);
 });
 
+test('drain-publish now also picks up stuck PAGES, not just posts (the location-page escape hatch)', function () {
+    Http::fake();
+    $site = drainSite();
+    // A stuck location landing page (Approved, never published) — the worker never ran its job.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Approved, 'title' => 'Stuck Location Hub',
+    ]);
+
+    Artisan::call('launchpad:drain-publish', ['site' => $site->id, '--dry-run' => true]);
+
+    expect(Artisan::output())->toContain('Stuck Location Hub');
+    Http::assertNothingSent();
+});
+
 test('drain-publish reports nothing to do when no post is in flight', function () {
     $site = drainSite();
 
