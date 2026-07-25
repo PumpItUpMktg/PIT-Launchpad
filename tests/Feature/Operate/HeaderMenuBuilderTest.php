@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\HeaderMenu;
@@ -31,7 +32,7 @@ function hmPage(Site $site, string $slug, string $title, array $extra = []): Con
 {
     return Content::withoutGlobalScope(SiteScope::class)->create(array_merge([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility,
-        'title' => $title, 'slug' => $slug, 'version' => 1,
+        'title' => $title, 'slug' => $slug, 'version' => 1, 'status' => ContentStatus::Published,
     ], $extra));
 }
 

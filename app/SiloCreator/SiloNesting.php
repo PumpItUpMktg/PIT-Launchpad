@@ -49,9 +49,10 @@ final class SiloNesting
             ->whereNotNull('slug')
             ->get();
 
-        // The slugs already in use — so a rewritten nested slug stays site-wide unique.
+        // The slugs already in use by LIVE pages — so a rewritten nested slug stays unique among them.
+        // Soft-deleted (Removed) pages are excluded: the unique index is partial (`deleted_at IS NULL`),
+        // so a removed nested page frees its slug and the rebuild reuses the clean path instead of "-2".
         $taken = Content::withoutGlobalScope(SiteScope::class)
-            ->withTrashed()
             ->where('site_id', $site->id)
             ->pluck('slug')
             ->map(fn ($s): string => (string) $s)

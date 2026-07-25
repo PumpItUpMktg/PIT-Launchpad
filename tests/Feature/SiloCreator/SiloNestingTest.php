@@ -69,6 +69,23 @@ it('is idempotent and self-heals a hub rename', function () {
     expect($child->fresh()->slug)->toBe('sewer-services/line-repair');
 });
 
+it('a removed (soft-deleted) sibling frees its nested slug — no "-2"', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $hub = siloPage($site, PageType::Hub, $silo->id, 'Sump Pump Maintenance', 'sump-pump-maintenance');
+
+    // A prior build materialized this service, then the operator Removed it (soft-delete).
+    siloPage($site, PageType::Service, $silo->id, 'Sump Pump Replacement', 'sump-pump-maintenance/sump-pump-replacement')->delete();
+
+    // The rebuild materializes the replacement fresh; nesting must reuse the clean path, not "-2".
+    $fresh = siloPage($site, PageType::Service, $silo->id, 'Sump Pump Replacement', 'sump-pump-replacement');
+
+    app(SiloNesting::class)->nest($site);
+
+    expect($fresh->fresh()->slug)->toBe('sump-pump-maintenance/sump-pump-replacement')
+        ->and($fresh->fresh()->parent_content_id)->toBe($hub->id);
+});
+
 it('leaves a service flat when its silo has no hub', function () {
     $site = Site::factory()->create();
     $silo = Silo::factory()->create(['site_id' => $site->id]);

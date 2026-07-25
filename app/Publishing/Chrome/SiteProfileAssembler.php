@@ -4,6 +4,7 @@ namespace App\Publishing\Chrome;
 
 use App\Branding\LogoHeaderTone;
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\ServiceSiloRole;
 use App\Models\Content;
@@ -166,6 +167,7 @@ final class SiteProfileAssembler
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
+            ->where('status', ContentStatus::Published->value)
             ->whereIn('slug', $slugs)
             ->orderBy('created_at')
             ->get();
@@ -225,7 +227,10 @@ final class SiteProfileAssembler
     }
 
     /**
-     * The header main menu links — real internal links only. TWO modes:
+     * The header main menu links — real internal links only. Both modes link ONLY to PUBLISHED
+     * pages: a page that is merely materialized/drafted (has a slug but no live WordPress post), or
+     * one that was taken down, is excluded — so the synced menu can never point at a URL that 404s.
+     * TWO modes:
      *
      *  - OPERATOR-CURATED: if the site has any `nav_featured` page, the header shows exactly those, in
      *    the operator's manual `nav_order` (ascending, nulls last; importance then age break ties).
@@ -243,6 +248,7 @@ final class SiteProfileAssembler
         $featured = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
+            ->where('status', ContentStatus::Published->value)
             ->where('nav_featured', true)
             ->whereNotNull('slug')
             ->with('primaryService:id,silo_role')
@@ -266,6 +272,7 @@ final class SiteProfileAssembler
         $all = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
+            ->where('status', ContentStatus::Published->value)
             ->whereIn('page_type', [PageType::Service->value, PageType::Hub->value])
             ->whereNotNull('slug')
             ->with('primaryService:id,silo_role')
@@ -368,6 +375,7 @@ final class SiteProfileAssembler
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
+            ->where('status', ContentStatus::Published->value)
             ->whereIn('slug', ['about', 'about-us', 'faq', 'contact', 'why-choose-us', 'why-us'])
             ->orderBy('created_at')
             ->get();
@@ -387,6 +395,7 @@ final class SiteProfileAssembler
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
+            ->where('status', ContentStatus::Published->value)
             ->whereIn('slug', self::MAIN_NAV_SLUGS)
             ->orderByRaw('nav_order is null')
             ->orderBy('nav_order')

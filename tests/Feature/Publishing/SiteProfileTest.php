@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\MarketTier;
 use App\Enums\PageType;
 use App\Enums\ServiceSiloRole;
@@ -30,10 +31,11 @@ it('assembles the site profile from real §1 data — brand, NAP, real page link
         'slug' => 'home', 'title' => 'Home',
         'slot_payload' => ['service_area' => 'Commercial Plumbing · Northern NJ'],
     ]);
-    // Real service pages → services + are the only nav links that exist.
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'drain-cleaning', 'title' => 'Drain Cleaning']);
+    // Real service pages → services + are the only nav links that exist. Only PUBLISHED (live) pages
+    // appear in the chrome menu.
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'drain-cleaning', 'title' => 'Drain Cleaning']);
     // An informational page → company/nav link.
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'about', 'title' => 'About Us']);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'about', 'title' => 'About Us']);
     // Markets — priority first.
     Market::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'tier' => MarketTier::Coverage]);
     Market::factory()->create(['site_id' => $site->id, 'name' => 'Jersey City', 'tier' => MarketTier::Priority]);
@@ -57,6 +59,33 @@ it('assembles the site profile from real §1 data — brand, NAP, real page link
         ->and($profile['company'][0])->toBe(['label' => 'About Us', 'url' => 'https://sewergurus.com/about'])
         // priority market ordered first
         ->and(array_column($profile['areas'], 'label'))->toBe(['Jersey City', 'Newark']);
+});
+
+it('excludes non-published pages from the menu — a drafted or taken-down page never appears', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sg.test']);
+
+    // A live service page — belongs in the menu.
+    Content::factory()->published()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'sump-pump-repair', 'title' => 'Sump Pump Repair',
+    ]);
+    // A materialized-but-not-yet-published page (has a slug, no live WP post) — must NOT appear, or the
+    // synced menu would link to a page that hasn't been created.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'crawl-space-encapsulation', 'title' => 'Crawl Space Encapsulation',
+        'status' => ContentStatus::Candidate,
+    ]);
+    // A taken-down page (was live, now parked back off-published) — also excluded.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'radon-mitigation', 'title' => 'Radon Mitigation',
+        'status' => ContentStatus::InReview,
+    ]);
+
+    $labels = array_column(app(SiteProfileAssembler::class)->assemble($site->fresh())['services'], 'label');
+
+    expect($labels)->toBe(['Sump Pump Repair']);
 });
 
 it('chrome NAP is the corporate intake phone + address, not a physical location', function () {
@@ -89,7 +118,7 @@ it('caps the header services at 8 and ranks by importance (hub → pillar → su
     $supporting = Service::factory()->create(['site_id' => $site->id, 'silo_role' => ServiceSiloRole::Supporting]);
 
     $page = function (string $slug, PageType $type, ?string $serviceId, int $ageDays) use ($site): void {
-        Content::factory()->create([
+        Content::factory()->published()->create([
             'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => $type,
             'slug' => $slug, 'title' => ucwords(str_replace('-', ' ', $slug)),
             'primary_service_id' => $serviceId, 'created_at' => now()->subDays($ageDays),
@@ -115,9 +144,9 @@ it('caps the header services at 8 and ranks by importance (hub → pillar → su
 it('uses the automatic top-8 service ranking when no page is featured', function () {
     $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
     // 9 service pages, no featured → capped at 8, hub first.
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Hub, 'slug' => 'services', 'title' => 'Our Services']);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Hub, 'slug' => 'services', 'title' => 'Our Services']);
     foreach (range(1, 9) as $n) {
-        Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => "svc-{$n}", 'title' => "Service {$n}"]);
+        Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => "svc-{$n}", 'title' => "Service {$n}"]);
     }
 
     $services = app(SiteProfileAssembler::class)->assemble($site->fresh())['services'];
@@ -127,21 +156,21 @@ it('uses the automatic top-8 service ranking when no page is featured', function
 
 it('nests a hub\'s child service pages as menu children (the service grouping), spokes off the top level', function () {
     $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
-    $hub = Content::factory()->create([
+    $hub = Content::factory()->published()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Hub,
         'slug' => 'basement-waterproofing', 'title' => 'Basement Waterproofing',
     ]);
     // Two child service pages nested under the hub (SiloNesting's parent_content_id).
-    Content::factory()->create([
+    Content::factory()->published()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
         'slug' => 'basement-waterproofing/sump-pump', 'title' => 'Sump Pump', 'parent_content_id' => $hub->id,
     ]);
-    Content::factory()->create([
+    Content::factory()->published()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
         'slug' => 'basement-waterproofing/french-drains', 'title' => 'French Drains', 'parent_content_id' => $hub->id,
     ]);
     // A standalone (unnested) service stays a flat top-level item.
-    Content::factory()->create([
+    Content::factory()->published()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
         'slug' => 'radon-mitigation', 'title' => 'Radon Mitigation',
     ]);
@@ -165,9 +194,9 @@ it('shows exactly the operator-featured pages, in manual order, uncapped', funct
     foreach (range(1, 10) as $n) {
         Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => "svc-{$n}", 'title' => "Service {$n}"]);
     }
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'a', 'title' => 'Alpha', 'nav_featured' => true, 'nav_order' => 3]);
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'b', 'title' => 'Bravo', 'nav_featured' => true, 'nav_order' => 1]);
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'c', 'title' => 'Charlie', 'nav_featured' => true, 'nav_order' => 2]);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'a', 'title' => 'Alpha', 'nav_featured' => true, 'nav_order' => 3]);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'b', 'title' => 'Bravo', 'nav_featured' => true, 'nav_order' => 1]);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'c', 'title' => 'Charlie', 'nav_featured' => true, 'nav_order' => 2]);
 
     $services = app(SiteProfileAssembler::class)->assemble($site->fresh())['services'];
 
@@ -178,7 +207,7 @@ it('shows exactly the operator-featured pages, in manual order, uncapped', funct
 it('can feature MORE than the automatic cap of 8 (operator decides the count)', function () {
     $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
     foreach (range(1, 11) as $n) {
-        Content::factory()->create([
+        Content::factory()->published()->create([
             'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
             'slug' => "svc-{$n}", 'title' => "Service {$n}", 'nav_featured' => true, 'nav_order' => $n,
         ]);
@@ -190,7 +219,7 @@ it('can feature MORE than the automatic cap of 8 (operator decides the count)', 
 it('never lists a featured page in both the services and company menus', function () {
     $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
     // The About page is a company link by slug — but the operator pins it into the header.
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'about', 'title' => 'About Us', 'nav_featured' => true, 'nav_order' => 1]);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'about', 'title' => 'About Us', 'nav_featured' => true, 'nav_order' => 1]);
 
     $profile = app(SiteProfileAssembler::class)->assemble($site->fresh());
 
@@ -233,10 +262,10 @@ it('degrades cleanly for a bare site — no phone, no links, chrome falls back t
 
 it('puts Areas We Serve in the header nav and Privacy/Terms in the footer legal links — real pages only', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'about', 'title' => 'About Us']);
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'areas-we-serve', 'title' => 'Areas We Serve']);
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'privacy-policy', 'title' => 'Privacy Policy']);
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'terms-of-service', 'title' => 'Terms of Service']);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'about', 'title' => 'About Us']);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'areas-we-serve', 'title' => 'Areas We Serve']);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'privacy-policy', 'title' => 'Privacy Policy']);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'terms-of-service', 'title' => 'Terms of Service']);
 
     $profile = app(SiteProfileAssembler::class)->assemble($site->fresh());
 
@@ -262,7 +291,7 @@ it('assembles the severe-weather alert config — enabled for a rain-relevant tr
     $site = Site::factory()->create(['domain_url' => 'https://drybasements.example']);
     SiloBlueprint::factory()->create(['site_id' => $site->id, 'trade' => 'Basement Waterproofing & Sump Pumps']);
     Location::factory()->create(['site_id' => $site->id, 'lat' => 40.1215, 'lng' => -75.3399]);
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'contact', 'title' => 'Contact']);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'contact', 'title' => 'Contact']);
 
     $alert = app(SiteProfileAssembler::class)->assemble($site->fresh())['alert'];
 
