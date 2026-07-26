@@ -19,13 +19,17 @@ use App\Models\Site;
 final class PostTownTagger
 {
     /**
-     * @return array{posts_tagged: int, tags_added: int, tags_removed: int}
+     * `changed_towns` is the set of normalized town keys that gained or lost a tag this run — the
+     * orchestrated rebuild (§B slice 4) uses it to repush only the location pages whose local feed
+     * actually changed, never every page.
+     *
+     * @return array{posts_tagged: int, tags_added: int, tags_removed: int, changed_towns: list<string>}
      */
     public function tag(Site $site): array
     {
         $map = $this->coverageTownMap($site);   // normalized key => display name
         if ($map === []) {
-            return ['posts_tagged' => 0, 'tags_added' => 0, 'tags_removed' => 0];
+            return ['posts_tagged' => 0, 'tags_added' => 0, 'tags_removed' => 0, 'changed_towns' => []];
         }
 
         // Longest name first so a specific town wins an alternation over a substring town.
@@ -41,6 +45,7 @@ final class PostTownTagger
         $postsTagged = 0;
         $added = 0;
         $removed = 0;
+        $changed = [];
 
         foreach ($posts as $post) {
             $found = $this->townsIn((string) $post->title.' '.(string) $post->body, $pattern, $map);
@@ -53,12 +58,14 @@ final class PostTownTagger
                         'content_id' => $post->id, 'site_id' => $site->id, 'town' => $key, 'town_display' => $display,
                     ]);
                     $added++;
+                    $changed[$key] = true;
                 }
             }
             foreach ($existing as $key => $row) {
                 if (! isset($found[$key])) {
                     $row->delete();
                     $removed++;
+                    $changed[$key] = true;
                 }
             }
             if ($found !== []) {
@@ -66,7 +73,10 @@ final class PostTownTagger
             }
         }
 
-        return ['posts_tagged' => $postsTagged, 'tags_added' => $added, 'tags_removed' => $removed];
+        return [
+            'posts_tagged' => $postsTagged, 'tags_added' => $added, 'tags_removed' => $removed,
+            'changed_towns' => array_keys($changed),
+        ];
     }
 
     /**
