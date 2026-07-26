@@ -7,6 +7,7 @@ use App\Branding\BrandStudio;
 use App\Branding\Scheme;
 use App\Console\Commands\DeleteSiteCommand;
 use App\Console\Commands\SyncSiteProfileCommand;
+use App\ContentEngine\Reconcile\RebuildReconciler;
 use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
@@ -146,6 +147,7 @@ class SiteResource extends Resource
                     self::narrativeAction(),
                     self::launchAction(),
                     self::fixLinksAction(),
+                    self::rebuildReconcileAction(),
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
                     self::syncChromeAction(),
@@ -879,6 +881,39 @@ class SiteResource extends Resource
 
                 $notification = Notification::make()->title('Links fixed — '.$result['total'].' live page(s)')->body($body);
                 ($result['failed'] > 0 ? $notification->warning() : $notification->success())->send();
+            });
+    }
+
+    /**
+     * "Rebuild & reconcile" (§B slice 4) — the single guarded entry point that re-aligns the tenant's
+     * downstream references to its current silo tree: re-bucket orphaned keywords, ensure silo→WP
+     * categories, re-route posts (the Uncategorized fix), re-tag towns, and BOUNDED-republish only the
+     * affected live content. The "Rebuild structure" toggle first rewrites the §4 structure from services
+     * and re-materializes pages — the deliberate, heavier path. Idempotent; safe to re-run.
+     */
+    private static function rebuildReconcileAction(): Action
+    {
+        return Action::make('rebuildReconcile')
+            ->label('Rebuild & reconcile')
+            ->icon('heroicon-o-arrow-path-rounded-square')
+            ->requiresConfirmation()
+            ->modalHeading('Rebuild & reconcile')
+            ->modalDescription('Re-aligns this tenant to its current silo tree — re-buckets orphaned keywords, ensures every silo has its WordPress category, re-routes blog posts off deleted silos (fixing Uncategorized), re-tags posts with their towns, and queues a republish of only the affected live content. Idempotent and safe to re-run.')
+            ->modalSubmitActionLabel('Run reconcile')
+            ->schema([
+                Toggle::make('structure')
+                    ->label('Also rebuild the silo structure from services first')
+                    ->helperText('Rewrites the §4 structure from the authored service catalog and re-materializes pages (re-pins each page to its silo). Use only when the structure itself changed — the reconcile above runs either way.')
+                    ->default(false),
+            ])
+            ->action(function (Site $record, array $data): void {
+                $report = app(RebuildReconciler::class)->reconcile($record, (bool) ($data['structure'] ?? false));
+
+                $notification = Notification::make()
+                    ->title('Rebuild & reconcile complete')
+                    ->body($report->summary());
+
+                ($report->ok() ? $notification->success() : $notification->warning())->send();
             });
     }
 
