@@ -71,3 +71,18 @@ it('reports nothing to do on a clean tenant', function () {
 
     expect(Artisan::output())->toContain('nothing stuck');
 });
+
+it('--reject pulls stuck items out of the pipeline with a reason (never publishes them)', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $failed = rpPage($site, ContentStatus::PublishFailed, 'Sump Pump Repair');
+    $publishing = rpPage($site, ContentStatus::Publishing, 'Battery Backup');
+    $live = rpPage($site, ContentStatus::Published, 'Homepage');
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'SPG', '--reject' => true, '--reason' => 'Not launching these yet']);
+
+    expect($failed->fresh()->status)->toBe(ContentStatus::Rejected)
+        ->and($failed->fresh()->reject_reason)->toBe('Not launching these yet')
+        ->and($failed->fresh()->last_publish_error)->toBeNull()
+        ->and($publishing->fresh()->status)->toBe(ContentStatus::Rejected)
+        ->and($live->fresh()->status)->toBe(ContentStatus::Published); // live page untouched
+});
