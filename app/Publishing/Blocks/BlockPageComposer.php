@@ -913,6 +913,7 @@ final class BlockPageComposer
         array $coverage = [],
         array $reviews = [],
         array $jobs = [],
+        array $localPosts = [],
         array $faqs = [],
         array $trustStats = [],
         ?string $address = null,
@@ -1033,6 +1034,15 @@ final class BlockPageComposer
             jobs: $jobs,
         );
 
+        // Local blog feed (§B slice 3) — the recent posts tagged with this town, linked. Gated ≥1
+        // (an empty feed drops the section entirely), so it appears only once real local editorial
+        // exists for the town, next to the reviews/jobs it complements.
+        $localBlock = $this->sections->localPosts(
+            eyebrow: 'From the blog',
+            heading: $city !== '' ? 'Latest from '.$city : 'Latest local stories',
+            posts: $localPosts,
+        );
+
         $faq = $this->sections->faqAccordion(
             eyebrow: 'Local answers',
             heading: 'Common questions',
@@ -1053,7 +1063,7 @@ final class BlockPageComposer
         // Rhythm: hero + closing CTA are the colored bands; the NAP leads the body (contact truths
         // first), the areas-served link grid follows the coverage prose (prose intro → the real
         // linked towns). Gated reviews/jobs dropping out never puts two colored bands adjacent.
-        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $faq, $cta]);
+        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $localBlock, $faq, $cta]);
     }
 
     /** @param list<string> $blocks */

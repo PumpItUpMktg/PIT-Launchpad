@@ -9,6 +9,7 @@
 namespace Launchpad\Companion;
 
 use Launchpad\Companion\Admin\SlotsScreen;
+use Launchpad\Companion\Content\AreaTaxonomy;
 use Launchpad\Companion\Content\EditGuard;
 use Launchpad\Companion\Content\KitTaxonomy;
 use Launchpad\Companion\Render\Assets;
@@ -50,6 +51,10 @@ final class Plugin
         // The lp_kit per-page marker — the Theme Builder display-condition target
         // that renders each kit's mapped template.
         add_action('init', [KitTaxonomy::class, 'register']);
+
+        // The lp_area town taxonomy (§B) — the towns a post references, queryable so a
+        // location page can list its town's posts.
+        add_action('init', [AreaTaxonomy::class, 'register']);
 
         // Receiver.
         add_action('rest_api_init', [new Routes(), 'register']);
@@ -114,6 +119,7 @@ final class Plugin
         ServiceUser::install();
         self::register_page_categories();
         KitTaxonomy::register();
+        AreaTaxonomy::register();
         ( new Sitemap() )->add_rewrite_rules();
         flush_rewrite_rules();
     }

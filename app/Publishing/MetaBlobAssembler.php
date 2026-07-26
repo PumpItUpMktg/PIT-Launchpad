@@ -2,12 +2,14 @@
 
 namespace App\Publishing;
 
+use App\ContentEngine\Reconcile\PostTownTagger;
 use App\Enums\ContentKind;
 use App\Enums\ContentSource;
 use App\Enums\PageType;
 use App\Enums\SlotContentType;
 use App\Enums\StandardPageType;
 use App\Models\Content;
+use App\Models\ContentTown;
 use App\Models\ConversionConfig;
 use App\Models\Location;
 use App\Models\PageConfig;
@@ -28,6 +30,7 @@ use App\Publishing\Schema\LocationSchemaBuilder;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use App\Support\SeoTitle;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Assembles a Content (its §3a kit slots, rendered images, and engine-owned SEO)
@@ -244,7 +247,12 @@ class MetaBlobAssembler
             'page_type' => $content->standard_type->value ?? $content->page_type?->value,
             'kit' => $this->kitName($content),
             'kit_version' => (string) ($content->wireframe_kit_version ?? ''),
-            'silo_id' => $content->silo_id,
+            // Fall back to the routed silo when a post never had its silo_id promoted — the plugin
+            // categorizes off this, so an empty silo publishes Uncategorized (§B post→silo edge).
+            'silo_id' => $content->silo_id ?? $content->matched_silo_id,
+            // §B — the towns this post references, assigned as the WP `lp_area` taxonomy (so location
+            // pages can list their town's posts). Empty for content with no town tags.
+            'towns' => $this->townTerms($content),
             'slug' => $content->slug,
             // URL nesting: the parent hub's control-plane ULID. The plugin sets WP post_parent from it
             // (resolving the parent post by content_id) and derives post_name from the slug's LAST
@@ -279,6 +287,26 @@ class MetaBlobAssembler
             // [lp_form] shortcode renders it server-side at the form section's position.
             'form_embed' => $this->formEmbed($content),
         ];
+    }
+
+    /**
+     * The towns this content references (§B slice 2), assigned as the WordPress `lp_area` taxonomy so a
+     * location page can query the posts that mention its town. Sourced from the {@see ContentTown} rows
+     * {@see PostTownTagger} writes; empty for content with no town tags.
+     *
+     * @return list<array{slug: string, name: string}>
+     */
+    private function townTerms(Content $content): array
+    {
+        return ContentTown::query()
+            ->where('content_id', $content->id)
+            ->orderBy('town_display')
+            ->get()
+            ->map(fn (ContentTown $t): array => [
+                'slug' => Str::slug((string) $t->town_display),
+                'name' => (string) $t->town_display,
+            ])
+            ->all();
     }
 
     /**

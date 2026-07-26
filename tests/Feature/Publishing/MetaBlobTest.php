@@ -3,6 +3,7 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
+use App\Models\ContentTown;
 use App\Models\Silo;
 use App\Operator\Controls\TemplateMapping;
 use App\Publishing\MetaBlobAssembler;
@@ -221,4 +222,36 @@ test('a pillar page collapses its own silo crumb (no self-referential crumb)', f
         ->and($crumbs[0]['name'])->toBe('Home')
         ->and($crumbs[1])->toBe(['name' => 'Water Heater Repair in Austin', 'url' => ''])
         ->and(collect($crumbs)->pluck('name'))->not->toContain('Sump Pump Installation');
+});
+
+test('the meta-blob carries the content towns as the lp_area taxonomy payload', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+
+    // §B — the post is tagged with the towns it references; the blob carries them for lp_area.
+    ContentTown::query()->create([
+        'content_id' => $content->id, 'site_id' => $site->id, 'town' => 'new brunswick', 'town_display' => 'New Brunswick',
+    ]);
+    ContentTown::query()->create([
+        'content_id' => $content->id, 'site_id' => $site->id, 'town' => 'edison', 'town_display' => 'Edison',
+    ]);
+
+    $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection);
+
+    expect($payload)->toHaveKey('towns')
+        ->and($payload['towns'])->toEqual([
+            ['slug' => 'edison', 'name' => 'Edison'],
+            ['slug' => 'new-brunswick', 'name' => 'New Brunswick'],
+        ]);
+});
+
+test('the meta-blob towns key is an empty array when the content has no town tags', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+
+    $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection);
+
+    expect($payload['towns'])->toBe([]);
 });
