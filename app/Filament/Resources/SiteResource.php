@@ -14,6 +14,7 @@ use App\Enums\SiteStatus;
 use App\Filament\Pages\Operate\HeaderMenu;
 use App\Filament\Pages\Operate\OperateDashboard;
 use App\Filament\Pages\Operate\OrphanScan;
+use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\SiteCockpit;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
@@ -148,6 +149,7 @@ class SiteResource extends Resource
                     self::launchAction(),
                     self::fixLinksAction(),
                     self::rebuildReconcileAction(),
+                    self::readinessAction(),
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
                     self::syncChromeAction(),
@@ -699,6 +701,23 @@ class SiteResource extends Resource
                 app(ActiveTenant::class)->set($record->id);
 
                 return redirect(OrphanScan::getUrl());
+            });
+    }
+
+    /**
+     * "Readiness" — sets this card's tenant as the working tenant and lands on the Operate → Readiness
+     * page (§B slice 5): the build-stage checklist showing what's aligned to the current silo tree and
+     * what has drifted, with the "Rebuild & reconcile" cascade to fix it.
+     */
+    private static function readinessAction(): Action
+    {
+        return Action::make('readiness')
+            ->label('Readiness')
+            ->icon('heroicon-o-clipboard-document-check')
+            ->action(function (Site $record) {
+                app(ActiveTenant::class)->set($record->id);
+
+                return redirect(RebuildReadiness::getUrl(['site' => $record->id]));
             });
     }
 
