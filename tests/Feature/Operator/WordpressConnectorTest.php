@@ -15,7 +15,7 @@ function connections()
 }
 
 it('verifies against live WordPress, then stores a clean wp_app_password connection', function () {
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1, 'name' => 'Launchpad Sync'], 200)]);
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['id' => 1, 'name' => 'Launchpad Sync'], 200)]);
     $site = Site::factory()->create();
 
     $connection = app(WordpressConnector::class)->connect($site->id, [
@@ -31,7 +31,7 @@ it('verifies against live WordPress, then stores a clean wp_app_password connect
         ->and($connection->compromised)->toBeFalse()
         ->and($connection->needsRotation())->toBeFalse();                            // passes the §9 launch gate
 
-    Http::assertSent(fn ($request) => str_contains($request->url(), '/wp-json/wp/v2/users/me')
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/wp-json/launchpad/v1/status')
         && str_starts_with((string) ($request->header('Authorization')[0] ?? ''), 'Basic '));
 });
 
@@ -49,7 +49,7 @@ it('refuses to store a credential that fails verification', function () {
 });
 
 it('verify() pings without persisting — true on a 2xx, no connection written', function () {
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['id' => 1], 200)]);
 
     $ok = app(WordpressConnector::class)->verify([
         'base_url' => 'https://eric-site.com/',
@@ -83,4 +83,34 @@ it('is idempotent on (site, provider) — re-connecting updates, never duplicate
     $rows = connections()->where('site_id', $site->id)->get();
     expect($rows)->toHaveCount(1)
         ->and($rows->first()->credentials['app_password'])->toBe('secondpass456');
+});
+
+it('reverify() flags a stored connection compromised when the credential is rejected (report fix 3B)', function () {
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response('', 401)]);
+    $site = Site::factory()->create();
+    $conn = Connection::factory()->create([
+        'site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword->value,
+        'credentials' => ['base_url' => 'https://x.com', 'username' => 'u', 'app_password' => 'deadpass12345'],
+        'compromised' => false, 'compromised_reason' => null, 'last_rotated_at' => now(),
+    ]);
+
+    $ok = app(WordpressConnector::class)->reverify($conn);
+
+    // The green chip flips red the moment the stored credential is revoked (it 401s the push endpoint).
+    expect($ok)->toBeFalse()
+        ->and($conn->fresh()->compromised)->toBeTrue();
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/wp-json/launchpad/v1/status'));
+});
+
+it('reverify() leaves a still-valid stored connection clean', function () {
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['ok' => true], 200)]);
+    $site = Site::factory()->create();
+    $conn = Connection::factory()->create([
+        'site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword->value,
+        'credentials' => ['base_url' => 'https://x.com', 'username' => 'u', 'app_password' => 'goodpass12345'],
+        'compromised' => false, 'compromised_reason' => null, 'last_rotated_at' => now(),
+    ]);
+
+    expect(app(WordpressConnector::class)->reverify($conn))->toBeTrue()
+        ->and($conn->fresh()->compromised)->toBeFalse();
 });

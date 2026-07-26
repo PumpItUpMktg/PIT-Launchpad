@@ -33,12 +33,16 @@ class WordpressClient
     ) {}
 
     /**
-     * Validate the credentials against live WordPress (used by §9's rotation
-     * verify-before-revoke). Returns true on an authed 2xx.
+     * Validate the credentials against live WordPress (used by §9's rotation verify-before-revoke, the
+     * connect + test-connection checks, and the pre-repush re-verify). Hits the companion plugin's authed
+     * `launchpad/v1/status` — gated on the SAME `lp_manage_content` capability the /content PUSH requires
+     * (report fix 3B). Core `wp/v2/users/me` was too weak: any authenticated user passed it, so a
+     * revoked/insufficient app password showed "verified" yet 401'd on the actual push. Returns true only
+     * on an authed 2xx from the push-capable endpoint.
      */
     public function ping(): bool
     {
-        $response = $this->request()->get(rtrim($this->baseUrl, '/').'/wp-json/wp/v2/users/me');
+        $response = $this->request()->get(rtrim($this->baseUrl, '/').self::NAMESPACE.'/status');
 
         return $response->successful();
     }

@@ -151,7 +151,7 @@ test('upsertBrandKit posts the palette + typography to /brand-kit', function () 
 });
 
 test('ping returns true on an authed 200', function () {
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['id' => 1], 200)]);
 
     expect(wpClient()->ping())->toBeTrue();
 });

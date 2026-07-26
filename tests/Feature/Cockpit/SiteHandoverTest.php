@@ -46,7 +46,7 @@ test('the gate blocks Live until credentials are clean — site stays Active', f
 });
 
 test('migrate-to-client-hosting re-points the connection, verifies, then marks Live', function () {
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['id' => 1], 200)]);
 
     $site = Site::factory()->create(['status' => SiteStatus::Active]);
     $connection = Connection::factory()->compromised()->create([
@@ -74,7 +74,7 @@ test('migrate-to-client-hosting re-points the connection, verifies, then marks L
 });
 
 test('a failed re-point verification aborts before any Live write or credential change', function () {
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response('', 401)]);
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response('', 401)]);
 
     $site = Site::factory()->create(['status' => SiteStatus::Active]);
     $connection = Connection::factory()->compromised()->create([

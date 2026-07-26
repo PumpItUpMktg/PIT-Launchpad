@@ -37,7 +37,8 @@ class WordpressConnector
 
         if (! $this->factory->usingCredentials($credentials, $site)->ping()) {
             throw new WordpressException(
-                'Credentials did not authenticate against '.$credentials['base_url'].'/wp-json/wp/v2/users/me — nothing was saved.',
+                'Credentials did not authenticate against '.$credentials['base_url'].'/wp-json/launchpad/v1/status '
+                .'(the companion plugin must be active and the app password valid) — nothing was saved.',
             );
         }
 
@@ -69,6 +70,34 @@ class WordpressConnector
         } catch (ConnectionException) {
             return false;
         }
+    }
+
+    /**
+     * Re-verify a STORED connection's live auth and reconcile the chip to reality (report fix 3B). Pings
+     * the site's saved app password against the push-capable `launchpad/v1/status`; on failure the
+     * connection is marked `compromised` (so the green "verified" chip flips red the moment the credential
+     * is revoked — the §9 launch/publish gates then catch it) instead of failing silently at push time.
+     * A previously-compromised connection that now passes is left for an explicit rotation to clear.
+     * Non-WordPress providers verify permissively. Returns the live result.
+     */
+    public function reverify(Connection $connection): bool
+    {
+        if ($connection->provider !== ConnectionProvider::WpAppPassword) {
+            return true;
+        }
+
+        $site = Site::query()->find($connection->site_id);
+        try {
+            $ok = $site !== null && $this->factory->forSite($site)->ping();
+        } catch (ConnectionException|WordpressException) {
+            $ok = false;
+        }
+
+        if (! $ok && ! $connection->compromised) {
+            $connection->markCompromised('WordPress rejected the stored app password on re-verify (health check failed).')->save();
+        }
+
+        return $ok;
     }
 
     /**
