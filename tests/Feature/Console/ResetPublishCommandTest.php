@@ -1,0 +1,73 @@
+<?php
+
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Models\Content;
+use App\Models\Site;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+function rpPage(Site $site, ContentStatus $status, string $title): Content
+{
+    return Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => $status,
+        'title' => $title, 'slug' => Str::slug($title), 'last_publish_error' => $status === ContentStatus::PublishFailed ? 'HTTP 401' : null,
+    ]);
+}
+
+it('resets stuck/failed publishes to approved and leaves live pages alone', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $failed = rpPage($site, ContentStatus::PublishFailed, 'Sump Pump Repair');
+    $renderFailed = rpPage($site, ContentStatus::RenderFailed, 'Sump Pit Cleaning');
+    $publishing = rpPage($site, ContentStatus::Publishing, 'Battery Backup');
+    $live = rpPage($site, ContentStatus::Published, 'Homepage');
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'SPG']);
+
+    expect($failed->fresh()->status)->toBe(ContentStatus::Approved)
+        ->and($failed->fresh()->last_publish_error)->toBeNull()
+        ->and($renderFailed->fresh()->status)->toBe(ContentStatus::Approved)
+        ->and($publishing->fresh()->status)->toBe(ContentStatus::Approved)
+        ->and($live->fresh()->status)->toBe(ContentStatus::Published); // never touched
+});
+
+it('dry-run changes nothing', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $failed = rpPage($site, ContentStatus::PublishFailed, 'Sump Pump Repair');
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'SPG', '--dry-run' => true]);
+
+    expect($failed->fresh()->status)->toBe(ContentStatus::PublishFailed);
+    expect(Artisan::output())->toContain('Dry run');
+});
+
+it('--flush-failed clears this tenant\'s dead failed jobs', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $failed = rpPage($site, ContentStatus::PublishFailed, 'Sump Pump Repair');
+    $other = Site::factory()->create(['brand_name' => 'Other']);
+    $otherFailed = rpPage($other, ContentStatus::PublishFailed, 'Other Page');
+
+    // A dead failed_jobs row whose payload references the SPG content id, and one for the other tenant.
+    DB::table('failed_jobs')->insert([
+        ['uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
+            'payload' => '{"data":{"command":"...'.$failed->id.'..."}}', 'exception' => 'HTTP 401', 'failed_at' => now()],
+        ['uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
+            'payload' => '{"data":{"command":"...'.$otherFailed->id.'..."}}', 'exception' => 'HTTP 401', 'failed_at' => now()],
+    ]);
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'SPG', '--flush-failed' => true]);
+
+    // Only SPG's dead job is cleared; the other tenant's failed job is untouched.
+    expect(DB::table('failed_jobs')->where('payload', 'like', '%'.$failed->id.'%')->count())->toBe(0)
+        ->and(DB::table('failed_jobs')->where('payload', 'like', '%'.$otherFailed->id.'%')->count())->toBe(1);
+});
+
+it('reports nothing to do on a clean tenant', function () {
+    $site = Site::factory()->create(['brand_name' => 'Clean']);
+    rpPage($site, ContentStatus::Published, 'Live');
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'Clean']);
+
+    expect(Artisan::output())->toContain('nothing stuck');
+});
