@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.21
+Stable tag: 0.9.22
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,13 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.22 =
+* New `lp_area` town taxonomy (§B). A blog post is now tagged, at publish, with every coverage town it
+  references — the control plane extracts these and sends them in the meta-blob's `towns` array, and the
+  plugin registers the queryable `lp_area` taxonomy and assigns the town terms (find-or-create, re-push
+  authoritative). This makes the town a queryable dimension so a location / areas-served page can list the
+  posts about its town alongside its reviews and jobs. Registered on activation and `init`.
 
 = 0.9.21 =
 * Grouped services menu — the header services bar now renders a hub's child service pages (its spokes)

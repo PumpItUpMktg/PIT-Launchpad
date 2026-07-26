@@ -116,6 +116,7 @@ final class ContentStore
         $this->apply_featured_image($post_id, $payload, $images);
         TemplateRouter::assign($post_id, (string) ($payload['kit'] ?? ''), (string) ($payload['page_type'] ?? ''));
         $this->assign_category($post_id, (string) ($payload['silo_id'] ?? ''));
+        AreaTaxonomy::assign($post_id, is_array($payload['towns'] ?? null) ? $payload['towns'] : []);
 
         EditGuard::record_push($post_id, $this->fingerprint($payload));
 

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\ContentEngine\Reconcile\PostSiloReconciler;
+use App\ContentEngine\Reconcile\PostTownTagger;
 use App\Enums\ContentStatus;
 use App\Jobs\PublishContent;
 use App\Jobs\SyncSiloCategories;
@@ -24,11 +25,12 @@ class ReconcilePostSilosCommand extends Command
 {
     protected $signature = 'launchpad:reconcile-post-silos {site : Site id or brand name}
         {--repush : Re-push the reconnected LIVE posts so WordPress re-assigns their category}
-        {--sync-categories : Ensure every silo has its WordPress category term first}';
+        {--sync-categories : Ensure every silo has its WordPress category term first}
+        {--towns : Also (re)tag posts with the coverage towns they mention (§B lp_area taxonomy)}';
 
     protected $description = 'Re-point blog posts at the current silo tree (fixes Uncategorized after a §4 rebuild).';
 
-    public function handle(PostSiloReconciler $reconciler): int
+    public function handle(PostSiloReconciler $reconciler, PostTownTagger $tagger): int
     {
         $site = Site::withoutGlobalScopes()
             ->where('id', $this->argument('site'))->orWhere('brand_name', $this->argument('site'))->first();
@@ -50,6 +52,14 @@ class ReconcilePostSilosCommand extends Command
             '<info>%s</info> — %d post(s) re-routed to a current silo, %d left unrouted, %d already correct.',
             $site->brand_name, count($result['rerouted']), $result['orphaned'], $result['unchanged'],
         ));
+
+        if ($this->option('towns')) {
+            $towns = $tagger->tag($site);
+            $this->line(sprintf(
+                'Towns — %d post(s) tagged, %d tag(s) added, %d removed.',
+                $towns['posts_tagged'], $towns['tags_added'], $towns['tags_removed'],
+            ));
+        }
 
         if ($this->option('repush') && $result['rerouted'] !== []) {
             $live = Content::withoutGlobalScope(SiteScope::class)
