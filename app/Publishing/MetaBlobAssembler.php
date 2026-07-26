@@ -893,11 +893,57 @@ class MetaBlobAssembler
             $crumbs[] = ['name' => (string) $content->silo->name, 'url' => $this->siloUrl($content, $home)];
         }
 
+        // A TOWN page nests under its physical-location (GBP) hub page — insert that hub as the middle
+        // crumb: Home → {Location hub} → Town. The silo branch above never fires for a town page (its
+        // silo_id is null), which is exactly the level the breadcrumb was missing.
+        $parentCrumb = $this->parentLocationCrumb($content, $home);
+        if ($parentCrumb !== null) {
+            $crumbs[] = $parentCrumb;
+        }
+
         // Leaf = the page's SHORT name — the head of the SEO title before a subtitle separator, so the
         // breadcrumb reads "Basement Waterproofing", not the full "…: Rules, Violations & Fixes".
         $crumbs[] = ['name' => $this->breadcrumbShortName($content), 'url' => ''];
 
         return $crumbs;
+    }
+
+    /**
+     * The middle breadcrumb for a town page: its parent GBP location hub page (Home → {Location} → Town).
+     * Resolves the parent by `parent_content_id` (the URL-nesting parent), falling back to the location
+     * hub that owns `parent_location_id`. Null for any non-town page (or a town with no resolvable
+     * parent) so the crumb trail stays 2-level there.
+     *
+     * @return array{name: string, url: string}|null
+     */
+    private function parentLocationCrumb(Content $content, string $home): ?array
+    {
+        if ($content->page_type !== PageType::Location) {
+            return null;
+        }
+
+        $parent = null;
+        if ($content->parent_content_id !== null) {
+            $parent = Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $content->site_id)
+                ->whereKey($content->parent_content_id)
+                ->first(['title', 'slug']);
+        } elseif ($content->parent_location_id !== null) {
+            $parent = Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $content->site_id)
+                ->where('page_type', PageType::Location->value)
+                ->where('location_id', $content->parent_location_id)
+                ->whereNull('parent_location_id')
+                ->first(['title', 'slug']);
+        }
+
+        if ($parent === null || trim((string) $parent->slug) === '') {
+            return null;
+        }
+
+        $name = trim((string) $parent->title);
+
+        return ['name' => $name !== '' ? $name : 'Location', 'url' => $home.ltrim((string) $parent->slug, '/')];
     }
 
     /** The breadcrumb leaf's short name: the SEO title's head segment before a colon/pipe/dash subtitle. */
