@@ -54,9 +54,10 @@ class PublishEligibility
         }
 
         // Fail closed: a MARKET-ERA location page that doesn't know its market can't resolve the
-        // market-scoped reviews gate and must never publish. (A block-era page pinned to a §1
-        // Location grounds on that record instead — see evaluateForPublish.)
-        if ($this->isLocationPage($content) && $content->location_id === null && $content->market_id === null) {
+        // market-scoped reviews gate and must never publish. (A page pinned to a §1 Location via
+        // `location_id`, or a town page pinned via `parent_location_id`, grounds on that record
+        // instead — see evaluateForPublish.)
+        if ($this->isLocationPage($content) && $content->location_id === null && $content->parent_location_id === null && $content->market_id === null) {
             $result = $result->merge(ValidationResult::fail([
                 new ValidationFailure(null, ValidationCode::LocationMarketMissing, 'Location page has no market assigned; market-scoped reviews cannot be resolved.'),
             ]));
@@ -79,8 +80,13 @@ class PublishEligibility
      *    same bar the generate-location guard sets); a stale pin or an empty Location fails closed
      *    (location.ungrounded). Reviews are provider-gated page SECTIONS on these pages (empty ⇒
      *    the section omits — degrade by omission), so they are deliberately NOT a publish blocker.
-     *  - A MARKET-ERA page (no pin) keeps the original rule: it must know its market (fail closed
-     *    → location.market_missing) and have ≥1 market-scoped substantiated review.
+     *  - A TOWN page (no `location_id`, but a `parent_location_id` pinning it to the physical GBP
+     *    Location it nests under) grounds on that PARENT the same way: it publishes when the parent
+     *    Location resolves + carries a city or ≥1 served town. It is genuinely pinned to a real
+     *    location, so it follows the block-era rule — reviews are a degrade-by-omission section, not
+     *    a publish blocker (a town page is not a market-era doorway page).
+     *  - A MARKET-ERA page (no pin at all) keeps the original rule: it must know its market (fail
+     *    closed → location.market_missing) and have ≥1 market-scoped substantiated review.
      *
      * A failing page is parked in review (never live). The broader structural/media/proof checks
      * are NOT re-run here — those are the draft/render-time contract; media is
@@ -95,8 +101,14 @@ class PublishEligibility
         $failures = [];
 
         if ($content->location_id !== null) {
-            if (! $this->pinnedLocationGrounded($content)) {
+            if (! $this->locationGrounded($content->site_id, (string) $content->location_id)) {
                 $failures[] = new ValidationFailure(null, ValidationCode::LocationUngrounded, 'Location page\'s pinned Location is missing, or has no city and no served towns; it cannot publish.');
+            }
+        } elseif ($content->parent_location_id !== null) {
+            // TOWN page — pinned to the physical GBP Location it nests under; ground on that parent
+            // (reviews stay a degrade-by-omission section here, never a publish blocker).
+            if (! $this->locationGrounded($content->site_id, (string) $content->parent_location_id)) {
+                $failures[] = new ValidationFailure(null, ValidationCode::LocationUngrounded, 'Town page\'s parent Location is missing, or has no city and no served towns; it cannot publish.');
             }
         } elseif ($content->market_id === null) {
             $failures[] = new ValidationFailure(null, ValidationCode::LocationMarketMissing, 'Location page has no market assigned; it cannot publish.');
@@ -115,13 +127,14 @@ class PublishEligibility
 
     /**
      * The pinned §1 Location resolves AND carries a city (geocoded or named) or ≥1 served town —
-     * the honest minimum a local landing page needs, mirroring the generate-location guard.
+     * the honest minimum a local landing page needs, mirroring the generate-location guard. Shared by
+     * the block-era hub (pinned via `location_id`) and the town page (pinned via `parent_location_id`).
      */
-    private function pinnedLocationGrounded(Content $content): bool
+    private function locationGrounded(string $siteId, string $locationId): bool
     {
         $location = Location::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->find($content->location_id);
+            ->where('site_id', $siteId)
+            ->find($locationId);
         if ($location === null) {
             return false;
         }
