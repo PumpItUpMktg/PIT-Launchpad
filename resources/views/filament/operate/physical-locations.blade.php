@@ -51,6 +51,11 @@
         .pl-townrow.fail { color:#dc2626; border-color:rgba(220,38,38,.4); }
         .pl-townrow .st { font-size:9.5px; }
         .pl-genrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:2px; }
+        .pl-review { border:1px solid rgba(217,119,6,.35); background:rgba(217,119,6,.05); border-radius:9px; padding:9px 12px; display:flex; flex-direction:column; gap:6px; }
+        .pl-review-hd { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#b45309; }
+        .pl-review-row { display:flex; align-items:center; gap:8px; font-size:12.5px; }
+        .pl-review-name { margin-right:auto; color:#475569; }
+        .pl-review .pl-btn { padding:3px 10px; font-size:11.5px; }
         .pl-band { border-radius:9px; padding:9px 12px; font-size:12.5px; line-height:1.5; }
         .pl-band.overlap { border:1px solid rgba(220,38,38,.4); color:#dc2626; }
         .pl-band.advisory { border:1px solid rgba(217,119,6,.4); color:#b45309; }
@@ -188,12 +193,21 @@
                                     @endif
                                 @endforeach
 
+                                {{-- Gated flow: 1) generate DRAFTS for the selected towns, 2) review each
+                                     drafted town below, 3) publish the reviewed ones live. Nothing goes
+                                     straight to WordPress unless you use the "skip review" fast path. --}}
                                 <div class="pl-genrow">
-                                    <button type="button" class="pl-btn primary" wire:click="generateAndPublishSelected('{{ $card['id'] }}')"
+                                    <button type="button" class="pl-btn primary" wire:click="generateSelected('{{ $card['id'] }}')"
                                         @disabled($card['selectable'] === 0)
-                                        @if ($card['selectable'] >= 25) wire:confirm="Generate + publish {{ $card['selectable'] }} town pages? That's a lot of AI drafting + images — they run on the worker." @endif
-                                        wire:loading.attr="disabled" wire:target="generateAndPublishSelected('{{ $card['id'] }}')">
-                                        ✨ Generate + publish selected ({{ $card['selectable'] }})
+                                        @if ($card['selectable'] >= 25) wire:confirm="Generate drafts for {{ $card['selectable'] }} town pages? That's a lot of AI drafting + images — they run on the worker." @endif
+                                        wire:loading.attr="disabled" wire:target="generateSelected('{{ $card['id'] }}')">
+                                        ✨ Generate drafts ({{ $card['selectable'] }})
+                                    </button>
+                                    <button type="button" class="pl-btn primary" wire:click="publishReviewedSelected('{{ $card['id'] }}')"
+                                        @disabled($card['reviewable'] === 0)
+                                        wire:confirm="Publish {{ $card['reviewable'] }} reviewed town page(s) live now? They push to WordPress synchronously."
+                                        wire:loading.attr="disabled" wire:target="publishReviewedSelected('{{ $card['id'] }}')">
+                                        🚀 Publish reviewed ({{ $card['reviewable'] }})
                                     </button>
                                     @if ($this->queueHealth['stalled'])
                                         <button type="button" class="pl-btn" wire:click="drainNow('{{ $card['id'] }}')"
@@ -201,6 +215,28 @@
                                             wire:loading.attr="disabled" wire:target="drainNow('{{ $card['id'] }}')">Drain now</button>
                                     @endif
                                 </div>
+
+                                {{-- Per-town review gate: each drafted, selected town — eyeball it in the
+                                     proof editor, then publish just that one. --}}
+                                @php
+                                    $reviewTowns = collect(['larger', 'mid', 'smaller'])
+                                        ->flatMap(fn ($b) => $card['town_bands'][$b] ?? [])
+                                        ->filter(fn ($t) => $t['page_selected'] && $t['status'] === 'drafted' && $t['content_id'])
+                                        ->values();
+                                @endphp
+                                @if ($reviewTowns->isNotEmpty())
+                                    <div class="pl-review">
+                                        <div class="pl-review-hd">📝 Drafted — review, then publish ({{ $reviewTowns->count() }})</div>
+                                        @foreach ($reviewTowns as $t)
+                                            <div class="pl-review-row" wire:key="rev-{{ $t['content_id'] }}">
+                                                <span class="pl-review-name">{{ $t['name'] }}</span>
+                                                <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $t['content_id']]) }}" wire:navigate>Review</a>
+                                                <button type="button" class="pl-btn primary" wire:click="publishTown('{{ $t['content_id'] }}')"
+                                                    wire:loading.attr="disabled" wire:target="publishTown('{{ $t['content_id'] }}')">Publish</button>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
                             </div>
 
                             @if ($card['overlaps'] !== [])

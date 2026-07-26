@@ -264,6 +264,51 @@ it('Generate + publish selected queues a GeneratePage(autoPublish) for each read
     Queue::assertPushed(GeneratePage::class, fn (GeneratePage $job) => $job->autoPublish === true);
 });
 
+it('Generate drafts queues a GeneratePage with autoPublish OFF (the review gate)', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    Market::factory()->create(['site_id' => $site->id]); // grounding
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '1', 'name' => 'Edison', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'large', 'population' => 100000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
+    // An undrafted candidate town page → "Generate drafts" enqueues it for drafting, no publish.
+    Content::withoutGlobalScopes()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Candidate, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1, 'parent_location_id' => $loc->id, 'slot_payload' => []]);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('generateSelected', $loc->id);
+
+    Queue::assertPushed(GeneratePage::class, fn (GeneratePage $job) => $job->autoPublish === false);
+});
+
+it('the review gate surfaces drafted selected towns with a per-town Publish + a "Publish reviewed" batch', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '1', 'name' => 'Edison', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'large', 'population' => 100000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
+    // A DRAFTED town page (slot_payload present) → shows in the review list, reviewable = 1.
+    Content::withoutGlobalScopes()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::NeedsReview, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1, 'parent_location_id' => $loc->id, 'slot_payload' => ['hero' => ['heading' => 'We serve Edison']]]);
+
+    $card = collect(app(PhysicalLocations::class)->build($site)['cards'])->firstWhere('id', $loc->id);
+    expect($card['reviewable'])->toBe(1);
+
+    Livewire::test(OperatePhysicalLocations::class)
+        ->assertSee('Publish reviewed')
+        ->assertSee('review, then publish');
+});
+
+it('publishReviewedSelected approves the reviewed drafts (the approve half of the gate) synchronously', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '1', 'name' => 'Edison', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'large', 'population' => 100000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
+    $town = Content::withoutGlobalScopes()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::NeedsReview, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1, 'parent_location_id' => $loc->id, 'slot_payload' => ['hero' => ['heading' => 'We serve Edison']]]);
+
+    // No verified WP connection in the test env, so PostPublisher won't push — but approve() runs first,
+    // flipping the reviewed draft to approved. That proves the review→approve gate executed inline.
+    Livewire::test(OperatePhysicalLocations::class)->call('publishReviewedSelected', $loc->id);
+
+    expect($town->fresh()->status)->toBe(ContentStatus::Approved);
+});
+
 it('surfaces a stalled-worker banner with the drain hint when the publish queue is backed up', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     session(['guided_site_id' => $site->id]);
