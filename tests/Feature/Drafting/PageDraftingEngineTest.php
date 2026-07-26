@@ -9,13 +9,16 @@ use App\ContentEngine\Drafting\PageGroundingAssembler;
 use App\ContentEngine\Drafting\Sentinel;
 use App\ContentEngine\Drafting\SlotShaper;
 use App\Enums\ContentStatus;
+use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Claude\CompletionResult;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\PageBuilder\Validation\KitValidator;
+use Illuminate\Support\Facades\Log;
 use Tests\Support\FakeClaudeClient;
 use Tests\Support\PageFixture;
 
-function pageEngine(FakeClaudeClient $claude): PageDraftingEngine
+function pageEngine(ClaudeClient $claude): PageDraftingEngine
 {
     return new PageDraftingEngine(
         new PageGroundingAssembler,
@@ -155,4 +158,70 @@ it('surfaces budget exhaustion (empty page draft) through the shared guard', fun
     $after = $page->fresh();
     expect($after->status)->toBe(ContentStatus::Scored)
         ->and($after->meta['draft_failure']['stop_reason'])->toBe('max_tokens');
+});
+
+/**
+ * A ClaudeClient double that returns a QUEUE of responses (the last repeats) — so a test can drive the
+ * first draft and its bounded retry with different payloads. Records prompts like FakeClaudeClient.
+ */
+class SequencedClaude implements ClaudeClient
+{
+    /** @var list<string> */
+    public array $prompts = [];
+
+    /** @param list<string> $responses */
+    public function __construct(private array $responses) {}
+
+    public function complete(string $prompt, ?string $system = null): string
+    {
+        return $this->completeDetailed($prompt, $system)->text;
+    }
+
+    public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
+    {
+        $i = count($this->prompts);
+        $this->prompts[] = $prompt;
+        $text = $this->responses[$i] ?? $this->responses[array_key_last($this->responses)];
+
+        return new CompletionResult(text: $text, stopReason: 'end_turn');
+    }
+}
+
+it('retries once on a budget overshoot, then keeps the corrected in-budget draft (report fix 1)', function () {
+    $page = PageFixture::intakePage();
+    $claim = proofIdFor($page->site_id);
+    $overLong = trim(str_repeat('Endless on-demand hot water installed cleanly in one visit. ', 8)); // ~470 > 220
+    $claude = new SequencedClaude([
+        PageFixture::validResponse($claim, ['hero_subhead' => $overLong]), // overshoot
+        PageFixture::validResponse($claim),                                 // corrected (~64 chars)
+    ]);
+
+    $drafted = pageEngine($claude)->draftPage($page->fresh());
+
+    expect($drafted->status)->toBe(ContentStatus::NeedsReview)
+        ->and(mb_strlen((string) $drafted->slot_payload['hero_subhead']))->toBeLessThanOrEqual(220)
+        ->and($claude->prompts)->toHaveCount(2)                 // one bounded retry
+        ->and($claude->prompts[1])->toContain('CORRECTION')     // the retry names the overshoot
+        ->and($drafted->meta['slot_truncations'] ?? null)->toBeNull(); // retry fixed it → no truncation
+});
+
+it('truncates and publishes when the retry still overshoots — never leaves the page failed (report fix 1)', function () {
+    Log::spy();
+    $page = PageFixture::intakePage();
+    $claim = proofIdFor($page->site_id);
+    $overLong = trim(str_repeat('Endless on-demand hot water installed cleanly in one visit. ', 8));
+    $claude = new SequencedClaude([
+        PageFixture::validResponse($claim, ['hero_subhead' => $overLong]), // both attempts overshoot
+    ]);
+
+    $drafted = pageEngine($claude)->draftPage($page->fresh());
+
+    expect($drafted->status)->toBe(ContentStatus::NeedsReview)      // NOT failed — a budget problem degrades
+        ->and($drafted->hasDraft())->toBeTrue()
+        ->and(mb_strlen((string) $drafted->slot_payload['hero_subhead']))->toBeLessThanOrEqual(220)
+        ->and($drafted->meta['slot_truncations'])->toContain('hero_subhead');
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn (string $msg, array $ctx = []): bool => $msg === 'slot_truncated' && in_array('hero_subhead', $ctx['slots'] ?? [], true))
+        ->atLeast()->once();
 });

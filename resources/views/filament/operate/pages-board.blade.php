@@ -5,6 +5,26 @@
     <div class="lv-wrap">
         @include('filament.live.partials.shell-top', ['subtitle' => 'The whole '.strtolower(static::getNavigationLabel() ?? 'pages').' lifecycle on one board — work on top, live below. A page moves between the lanes by status alone.'])
 
+        {{-- Ordering-guard interstitial (report fix 2): this page links into pages that aren't live yet.
+             Push them first (so the links resolve), or publish anyway (recorded in the audit log). --}}
+        @if ($confirmingPublish !== null)
+            <div style="border:1px solid rgba(220,38,38,.4); background:rgba(220,38,38,.05); border-radius:12px; padding:14px 16px; margin-bottom:14px;">
+                <div style="font-weight:700; font-size:14px; color:#b91c1c;">Publishing this page would create dead links</div>
+                <div style="font-size:12.5px; color:#64748b; margin:5px 0 8px;">It links to {{ count($confirmBlockers) }} page(s) that aren’t published yet:</div>
+                <ul style="margin:0 0 10px 18px; font-size:12.5px; color:#475569;">
+                    @foreach ($confirmBlockers as $b)
+                        <li>{{ $b['title'] }} <span style="color:#94a3b8;">({{ $b['kind'] }})</span></li>
+                    @endforeach
+                </ul>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="lv-btn primary" wire:click="pushSpokesFirst" wire:loading.attr="disabled">Push those first, then this</button>
+                    <button class="lv-btn" wire:click="publishAnyway" wire:loading.attr="disabled"
+                            wire:confirm="Publish into dead links anyway? This is recorded in the audit log.">Publish anyway</button>
+                    <button class="lv-btn" wire:click="cancelPublish">Cancel</button>
+                </div>
+            </div>
+        @endif
+
         <style>
             .pb-band { font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:#94a3b8; }
             .pb-rows { border:1px solid rgba(148,163,184,.35); border-radius:11px; }

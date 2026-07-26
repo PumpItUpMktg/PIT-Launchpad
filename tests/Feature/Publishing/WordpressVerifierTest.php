@@ -11,7 +11,7 @@ test('the default ConnectionVerifier is now WordPress-backed', function () {
 });
 
 test('the WP verifier pings live WordPress with the candidate credential', function () {
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['id' => 1], 200)]);
 
     $site = Site::factory()->create();
     $connection = Connection::factory()->create([
@@ -32,7 +32,7 @@ test('the WP verifier pings live WordPress with the candidate credential', funct
 });
 
 test('the WP verifier rejects a candidate the ping refuses', function () {
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response('', 401)]);
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response('', 401)]);
 
     $site = Site::factory()->create();
     $connection = Connection::factory()->create([

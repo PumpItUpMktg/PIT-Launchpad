@@ -7,6 +7,7 @@ use App\Enums\SiloType;
 use App\Enums\SpokePageType;
 use App\Enums\SpokeStatus;
 use App\Enums\SpokeTag;
+use App\KeywordGenerator\Bucketer;
 use App\Models\CoverageArea;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
@@ -39,7 +40,7 @@ class GuidedEntityProjector
 {
     public function __construct(
         private readonly SiloRuleSetDeriver $ruleSets = new SiloRuleSetDeriver,
-        private readonly SiloReconciler $reconciler = new SiloReconciler,
+        private readonly SiloReconciler $reconciler = new SiloReconciler(new Bucketer),
     ) {}
 
     /**

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Http;
 
 test('rotate-connection rotates a tenant credential via the command', function () {
     // §2 backs the verifier with a live WP ping (verify-before-revoke); fake it.
-    Http::fake(['*/wp-json/wp/v2/users/me' => Http::response(['id' => 1], 200)]);
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['id' => 1], 200)]);
 
     $site = Site::factory()->create();
     $connection = Connection::factory()->compromised()->create([

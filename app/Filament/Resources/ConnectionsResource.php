@@ -82,8 +82,34 @@ class ConnectionsResource extends Resource
             ])
             ->recordActions([
                 self::revealAction(),
+                self::reverifyAction(),
                 self::rotateAction(),
             ]);
+    }
+
+    /**
+     * "Re-verify" — ping the STORED credential against the push-capable endpoint and reconcile the chip
+     * (report fix 3B). Green "verified" was pure connect-time state, never re-checked, so a revoked app
+     * password showed clean and only 401'd at push. This flips it red the moment the credential dies.
+     */
+    private static function reverifyAction(): Action
+    {
+        return Action::make('reverify')
+            ->label('Re-verify')
+            ->icon('heroicon-o-shield-check')
+            ->action(function (Connection $record): void {
+                $ok = app(WordpressConnector::class)->reverify($record);
+
+                if ($ok) {
+                    Notification::make()->success()->title('Credential still valid')
+                        ->body('The stored app password authenticated against the push endpoint.')->send();
+
+                    return;
+                }
+
+                Notification::make()->danger()->title('Credential rejected — connection flagged')
+                    ->body('WordPress refused the stored app password. The connection is now marked compromised; rotate it to restore publishing.')->send();
+            });
     }
 
     /**

@@ -24,7 +24,8 @@ class ReconcileSilosCommand extends Command
 {
     protected $signature = 'launchpad:reconcile-silos
         {--site= : limit to one site id (default: every site)}
-        {--force : actually delete (default is a dry-run listing)}';
+        {--force : actually delete (default is a dry-run listing)}
+        {--rehome-orphans : re-file blog targets already stranded on a deleted silo onto a surviving silo}';
 
     protected $description = 'Delete §4 silos not in the current spoke tree so the keyword board matches reality. Dry-run by default; --force to delete.';
 
@@ -36,9 +37,20 @@ class ReconcileSilosCommand extends Command
         }
 
         $force = (bool) $this->option('force');
+        $rehome = (bool) $this->option('rehome-orphans');
         $total = 0;
 
         foreach ($sites as $site) {
+            // Backfill: re-home blog targets already stranded by an earlier reconcile (pre-fix), even when
+            // no stale silo remains today.
+            if ($rehome) {
+                $result = $reconciler->rehomeOrphanedTargets($site);
+                if ($result['rehomed'] > 0 || $result['dropped'] > 0) {
+                    $this->newLine();
+                    $this->line("<info>{$site->brand_name}</info> — blog queue: {$result['rehomed']} target(s) re-homed to a surviving silo, {$result['dropped']} unroutable dropped.");
+                }
+            }
+
             $stale = $reconciler->stale($site);
             if ($stale === []) {
                 continue;

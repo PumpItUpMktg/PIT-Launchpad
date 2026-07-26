@@ -516,3 +516,24 @@ it('drops the local blog feed when no posts are tagged with the town (§B)', fun
         ->not->toContain('Latest from Trooper')
         ->not->toContain('Elsewhere news');
 });
+
+it('a town page breadcrumb is 3-level: Home → GBP location hub → town (§ report fix 4)', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site);
+    // The GBP location hub page (Trooper, PA) and a town page nested under it.
+    $hub = locRelayPage($site, $location);
+    $town = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'title' => 'Norristown, PA', 'slug' => 'trooper-pa/norristown',
+        'parent_content_id' => $hub->id, 'wireframe_kit_id' => $hub->wireframe_kit_id,
+    ]);
+
+    $crumbs = app(MetaBlobAssembler::class)->assemble($town->fresh(), new Collection)['seo']['breadcrumbs'];
+
+    expect($crumbs)->toHaveCount(3)
+        ->and($crumbs[0]['name'])->toBe('Home')
+        ->and($crumbs[1]['name'])->toBe('Trooper, PA')
+        ->and($crumbs[1]['url'])->toContain('/trooper-pa')
+        ->and($crumbs[2]['name'])->toContain('Norristown')
+        ->and($crumbs[2]['url'])->toBe('');
+});
