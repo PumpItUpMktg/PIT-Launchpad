@@ -20,9 +20,9 @@ class PageDrafter
         private readonly DraftCall $call,
     ) {}
 
-    public function attempt(PageGrounding $grounding): DraftAttempt
+    public function attempt(PageGrounding $grounding, ?string $corrective = null): DraftAttempt
     {
-        return $this->call->attempt($this->system(), $this->prompt($grounding));
+        return $this->call->attempt($this->system(), $this->prompt($grounding, $corrective));
     }
 
     /**
@@ -48,9 +48,15 @@ class PageDrafter
             .'no prose, no code fences. Write each value RAW between the markers: never escape quotes or newlines.';
     }
 
-    private function prompt(PageGrounding $grounding): string
+    private function prompt(PageGrounding $grounding, ?string $corrective = null): string
     {
         $parts = [];
+
+        // A retry correction rides at the very TOP so it dominates: the prior draft overshot a hard char
+        // budget on the named slots; this run must come in under the tightened target.
+        if ($corrective !== null && trim($corrective) !== '') {
+            $parts[] = $corrective;
+        }
 
         $descriptor = $grounding->pageLabel !== null
             ? "\"{$grounding->pageLabel}\" page"
