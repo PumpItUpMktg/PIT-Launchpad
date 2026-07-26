@@ -153,6 +153,60 @@ it('foregrounds a location page\'s OWN town as the subject, keeping the rest as 
         ->and(collect($grounding->markets)->pluck('name')->sort()->values()->all())->toBe(['Clifton', 'Montclair', 'Newark']);
 });
 
+it('grounds a TOWN page on its parent location and its own town — never another region\'s market', function () {
+    $site = Site::factory()->create();
+    // A multi-region tenant: a PA market that must NOT bleed onto an NJ town page.
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Allentown', 'region' => 'Lehigh Valley, PA']);
+    // The parent GBP location the NJ town nests under, with its honest served area.
+    $parent = Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'New Brunswick', 'phone' => '(732) 555-0100',
+        'served_towns' => [['name' => 'Edison'], ['name' => 'Piscataway'], ['name' => 'Highland Park']],
+    ]);
+
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('page_type', 'location')->firstOrFail();
+
+    // A town page: pinned to the parent (parent_location_id), no own location_id, no matching market row.
+    $page = Content::factory()->page()->create([
+        'site_id' => $site->id,
+        'title' => 'Edison, NJ',
+        'parent_location_id' => $parent->id,
+        'location_id' => null,
+        'market_id' => null,
+        'wireframe_kit_id' => $kit->id,
+        'page_type' => PageType::Location,
+        'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    $grounding = app(PageGroundingAssembler::class)->assemble($page);
+
+    // Subject is the TOWN (Edison, NJ), grounded on the parent's region — and NOT the PA market.
+    expect($grounding->location['city'])->toBe('Edison')
+        ->and($grounding->location['state'])->toBe('NJ')
+        ->and($grounding->location['served_towns'])->toContain('Edison')
+        ->and($grounding->markets)->toBe([]); // no site-wide market dump → Allentown can't leak in
+});
+
+it('a TOWN page with its own matching market rides only that market (not the whole site list)', function () {
+    $site = Site::factory()->create();
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Allentown', 'region' => 'Lehigh Valley, PA']);
+    $edison = Market::factory()->create(['site_id' => $site->id, 'name' => 'Edison', 'region' => 'Central NJ']);
+    $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'New Brunswick', 'served_towns' => [['name' => 'Edison']]]);
+
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('page_type', 'location')->firstOrFail();
+
+    $page = Content::factory()->page()->create([
+        'site_id' => $site->id, 'title' => 'Edison, NJ', 'parent_location_id' => $parent->id,
+        'location_id' => null, 'market_id' => $edison->id, 'wireframe_kit_id' => $kit->id,
+        'page_type' => PageType::Location, 'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    $grounding = app(PageGroundingAssembler::class)->assemble($page);
+
+    expect(collect($grounding->markets)->pluck('name')->all())->toBe(['Edison']); // only its own, no PA bleed
+});
+
 it('surfaces a page without a wireframe kit as a failure (the guard wraps it)', function () {
     $site = Site::factory()->create();
     $page = Content::factory()->page()->create(['site_id' => $site->id, 'wireframe_kit_id' => null]);
