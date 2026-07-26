@@ -5,6 +5,7 @@ namespace App\Reporting;
 use App\Build\ProjectedServiceCleaner;
 use App\ContentEngine\Review\ReviewQueue;
 use App\Enums\BlogTargetStatus;
+use App\Enums\ConnectionProvider;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\DraftTrigger;
@@ -125,7 +126,7 @@ final class TenantReport
     private function header(Site $site, array $sections, string $generatedAt): array
     {
         $wp = Connection::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
-            ->where('provider', 'wordpress')->first();
+            ->where('provider', ConnectionProvider::WpAppPassword->value)->first();
         $wpStatus = $wp === null
             ? 'no WordPress connection'
             : ($wp->compromised ? 'compromised/unrotated' : 'configured')

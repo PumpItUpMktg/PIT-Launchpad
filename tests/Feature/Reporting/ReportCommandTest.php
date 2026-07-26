@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\ConnectionProvider;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Models\Connection;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -109,4 +111,27 @@ it('the --json flag emits valid JSON with the RAG summary', function () {
         ->and($decoded['brand_name'])->toBe('Sump Pump Gurus')
         ->and($decoded['summary'])->toHaveKey('intake')
         ->and($decoded['schema_version'])->toBe('1');
+});
+
+it('the header reflects a real wp_app_password connection (not a false "no connection")', function () {
+    $site = reportSite();
+    Connection::factory()->create([
+        'site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword->value,
+        'compromised' => false, 'last_rotated_at' => now(),
+    ]);
+
+    $out = app(TenantReport::class)->render($site->fresh());
+
+    expect($out)->toContain('configured')          // the connection is seen …
+        ->not->toContain('no WordPress connection'); // … not the old provider-mismatch false alarm
+});
+
+it('the header flags a compromised connection', function () {
+    $site = reportSite();
+    Connection::factory()->create([
+        'site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword->value,
+        'compromised' => true,
+    ]);
+
+    expect(app(TenantReport::class)->render($site->fresh()))->toContain('compromised/unrotated');
 });
