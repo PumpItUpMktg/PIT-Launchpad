@@ -134,7 +134,7 @@ class DedupeTownPagesCommand extends Command
         $ordered = $group->sortByDesc(fn (Content $c): array => [
             $c->status === ContentStatus::Published ? 1 : 0,
             $c->hasDraft() ? 1 : 0,
-            -($c->created_at?->timestamp ?? 0),
+            -($c->created_at->timestamp),
         ])->values();
 
         $canonical = $ordered->first();

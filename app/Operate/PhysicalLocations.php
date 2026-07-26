@@ -134,7 +134,7 @@ class PhysicalLocations
      *
      * @param  Collection<int, CoverageArea>  $own
      * @param  Collection<string, Content>  $townPagesByKey
-     * @return array{0: array<string, list<array<string, mixed>>>, 1: int}
+     * @return array{0: array<string, list<array<string, mixed>>>, 1: int, 2: int}
      */
     private function townBands(Location $location, Collection $own, Collection $townPagesByKey): array
     {
@@ -146,23 +146,30 @@ class PhysicalLocations
 
         $bands = ['larger' => [], 'mid' => [], 'smaller' => []];
         $selectable = 0;
+        $reviewable = 0;
         foreach ($sorted as $area) {
             $page = $townPagesByKey->get($location->id.'|'.$this->townKey((string) $area->name));
             $status = $this->townStatus($page);
-            if ((bool) $area->page_selected && ! in_array($status, ['published', 'generating'], true)) {
+            $selected = (bool) $area->page_selected;
+            if ($selected && ! in_array($status, ['published', 'generating'], true)) {
                 $selectable++;
+            }
+            // A selected town that's drafted-but-not-live — ready for the operator to eyeball, approve,
+            // and publish (the review gate). 'drafted' means the writer produced a real draft.
+            if ($selected && $status === 'drafted') {
+                $reviewable++;
             }
             $bands[$this->bandFor((string) ($area->size_tier ?? ''))][] = [
                 'coverage_area_id' => (string) $area->id,
                 'name' => trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', (string) $area->name)),
                 'population' => $area->population,
-                'page_selected' => (bool) $area->page_selected,
+                'page_selected' => $selected,
                 'status' => $status,
                 'content_id' => $page?->id,
             ];
         }
 
-        return [$bands, $selectable];
+        return [$bands, $selectable, $reviewable];
     }
 
     private function bandFor(string $tier): string
@@ -202,7 +209,7 @@ class PhysicalLocations
     private function card(Location $location, Collection $areas, Collection $names, ?Content $landing, Collection $townPagesByKey): array
     {
         $own = $areas->filter(fn (CoverageArea $a) => in_array($location->id, $this->sources($a), true))->values();
-        [$townBands, $selectable] = $this->townBands($location, $own, $townPagesByKey);
+        [$townBands, $selectable, $reviewable] = $this->townBands($location, $own, $townPagesByKey);
 
         // Overlap: every town this location shares with another, naming the other location(s).
         $overlaps = $own
@@ -257,7 +264,8 @@ class PhysicalLocations
             'towns_covered' => $own->count(),
             'towns_selected' => $own->where('page_selected', true)->count(),
             'town_bands' => $townBands,
-            'selectable' => $selectable, // selected towns not yet published/generating — the batch size
+            'selectable' => $selectable, // selected towns not yet published/generating — the generate batch size
+            'reviewable' => $reviewable, // selected towns drafted-but-not-live — the review→publish batch size
             'overlaps' => $overlaps,
             'advisories' => $advisories,
             'page' => $this->pageState($landing),

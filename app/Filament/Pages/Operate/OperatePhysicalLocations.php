@@ -142,12 +142,32 @@ class OperatePhysicalLocations extends OperatePage
     }
 
     /**
-     * Generate + publish this location's selected town pages, as a queued batch scoped to the location.
-     * Materializes any newly-selected town into a page first (idempotent Sync plan), then enqueues one
-     * GeneratePage(autoPublish) per selected town that isn't already live or in flight — the worker
-     * drafts (Sonnet + fal) and, on a clean draft, publishes; a thin draft parks in review, never live.
+     * Generate this location's selected town pages as DRAFTS for review — the gated path. Queues one
+     * GeneratePage (autoPublish OFF) per selected town not already live/in flight; the worker drafts
+     * (Sonnet + fal) and parks each in review. The operator then eyeballs each town and clicks "Publish
+     * reviewed" (below) to push them live. Nothing here goes straight to WordPress.
+     */
+    public function generateSelected(string $locationId): void
+    {
+        $this->enqueueSelected($locationId, autoPublish: false);
+    }
+
+    /**
+     * Generate + publish this location's selected town pages in one shot (the fast path, no review gate).
+     * Queues one GeneratePage(autoPublish) per selected town not already live/in flight — the worker
+     * drafts and, on a CLEAN draft, publishes immediately; a thin draft still parks in review, never live.
      */
     public function generateAndPublishSelected(string $locationId): void
+    {
+        $this->enqueueSelected($locationId, autoPublish: true);
+    }
+
+    /**
+     * Materialize any newly-selected town into a page (idempotent Sync plan), then enqueue a GeneratePage
+     * per selected, not-already-live/in-flight town. autoPublish decides whether a clean draft publishes
+     * itself (fast path) or parks in review (gated path).
+     */
+    private function enqueueSelected(string $locationId, bool $autoPublish): void
     {
         $site = $this->getSite();
         if ($site === null) {
@@ -178,7 +198,7 @@ class OperatePhysicalLocations extends OperatePage
 
                     continue;
                 }
-                GeneratePage::enqueue($content, actorId: Auth::id(), autoPublish: true);
+                GeneratePage::enqueue($content, actorId: Auth::id(), autoPublish: $autoPublish);
                 $queued++;
             }
         }
@@ -190,8 +210,119 @@ class OperatePhysicalLocations extends OperatePage
             return;
         }
 
-        Notification::make()->success()->title("Generating + publishing {$queued} town page(s)")
-            ->body(($notReady > 0 ? "{$notReady} not ready were skipped. " : '').'Watch the progress monitor up top; each publishes as its draft lands.')->send();
+        $verb = $autoPublish ? 'Generating + publishing' : 'Generating drafts for';
+        $tail = $autoPublish
+            ? 'Watch the progress monitor up top; each publishes as its draft lands.'
+            : 'Watch the monitor; review each draft, then "Publish reviewed" to push them live.';
+        Notification::make()->success()->title("{$verb} {$queued} town page(s)")
+            ->body(($notReady > 0 ? "{$notReady} not ready were skipped. " : '').$tail)->send();
+    }
+
+    /**
+     * The review-gate publish: push this location's reviewed (drafted-but-not-live) selected town pages
+     * live NOW, synchronously — approve each (the same publish-validation guard), then publish inline via
+     * PostPublisher (idempotent by ULID). Runs on the console clock here, so it works even with the queue
+     * worker down; bounded per click so a huge batch can't time out the request.
+     */
+    public function publishReviewedSelected(string $locationId): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $card = collect(app(PhysicalLocations::class)->build($site)['cards'])->firstWhere('id', $locationId);
+        if ($card === null) {
+            return;
+        }
+
+        $ids = [];
+        foreach (['larger', 'mid', 'smaller'] as $band) {
+            foreach ($card['town_bands'][$band] ?? [] as $town) {
+                if ($town['page_selected'] && $town['status'] === 'drafted' && $town['content_id'] !== null) {
+                    $ids[] = (string) $town['content_id'];
+                }
+            }
+        }
+        $ids = array_slice($ids, 0, self::BATCH_CONFIRM_AT);
+
+        if ($ids === []) {
+            Notification::make()->info()->title('Nothing to publish')
+                ->body('No reviewed drafts here yet — generate drafts first, then review them.')->send();
+
+            return;
+        }
+
+        [$published, $blocked] = $this->publishInline($ids);
+
+        Notification::make()->success()->title("Published {$published} of ".count($ids).' reviewed town page(s)')
+            ->body(($blocked > 0 ? "{$blocked} were blocked (a required image failed to render). " : '')
+                .(count($ids) === self::BATCH_CONFIRM_AT ? 'More may remain — click again to continue.' : 'Done.'))->send();
+    }
+
+    /**
+     * Publish ONE reviewed town page live now, synchronously — the per-town approve→publish button. Same
+     * guard + inline PostPublisher path as the batch, keyed to the town's content id.
+     */
+    public function publishTown(string $contentId): void
+    {
+        $content = $this->ownedContent($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        [$published, $blocked] = $this->publishInline([$contentId]);
+
+        if ($blocked > 0) {
+            Notification::make()->danger()->title('Cannot publish')
+                ->body('A required image failed to render — regenerate before publishing.')->send();
+
+            return;
+        }
+
+        Notification::make()->{$published > 0 ? 'success' : 'warning'}()
+            ->title($published > 0 ? "Published '{$content->title}'" : 'Nothing published')
+            ->body($published > 0 ? 'Live on WordPress.' : 'This town has no completed draft yet — generate it first.')->send();
+    }
+
+    /**
+     * Approve + publish the given town pages inline (synchronous), honoring the review guard. A drafted
+     * page is approved (flips to approved, running the required-image gate) then pushed via PostPublisher.
+     * Returns [published, blocked].
+     *
+     * @param  list<string>  $contentIds
+     * @return array{0: int, 1: int}
+     */
+    private function publishInline(array $contentIds): array
+    {
+        $review = app(ReviewActions::class);
+        $publisher = app(PostPublisher::class);
+        $actor = Auth::id();
+        $published = 0;
+        $blocked = 0;
+
+        foreach ($contentIds as $id) {
+            $content = $this->ownedContent($id);
+            if ($content === null || ! $content->hasDraft()) {
+                continue;
+            }
+
+            if ($content->status !== ContentStatus::Published) {
+                $approve = $review->approve($content, $actor);
+                if ($approve->isBlocked()) {
+                    $blocked++;
+
+                    continue;
+                }
+                $content = $content->refresh();
+            }
+
+            if ($publisher->publish($content, $actor)->isPublished()) {
+                $published++;
+            }
+        }
+
+        return [$published, $blocked];
     }
 
     /**
