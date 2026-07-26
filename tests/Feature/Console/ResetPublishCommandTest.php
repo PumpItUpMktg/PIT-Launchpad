@@ -86,3 +86,39 @@ it('--reject pulls stuck items out of the pipeline with a reason (never publishe
         ->and($publishing->fresh()->status)->toBe(ContentStatus::Rejected)
         ->and($live->fresh()->status)->toBe(ContentStatus::Published); // live page untouched
 });
+
+it('catches an approved page whose publish job is stuck in the queue (status still approved)', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $queued = rpPage($site, ContentStatus::Approved, 'Sump Pump Repair');   // status approved, job stuck
+    $cleanApproved = rpPage($site, ContentStatus::Approved, 'Clean Approved'); // no job → not stuck
+
+    // A pending jobs row references the queued page (the "0 rendering/publishing, still approved" case).
+    DB::table('jobs')->insert([
+        'queue' => 'default', 'attempts' => 0, 'reserved_at' => null, 'available_at' => now()->timestamp,
+        'created_at' => now()->timestamp, 'payload' => '{"data":{"command":"...'.$queued->id.'..."}}',
+    ]);
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'SPG', '--reject' => true]);
+
+    expect($queued->fresh()->status)->toBe(ContentStatus::Rejected)          // pulled out of the pipeline
+        ->and($cleanApproved->fresh()->status)->toBe(ContentStatus::Approved); // untouched — no stuck job
+});
+
+it('--flush-failed clears the tenant\'s pending AND dead jobs', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $failed = rpPage($site, ContentStatus::PublishFailed, 'Sump Pump Repair');
+
+    DB::table('jobs')->insert([
+        'queue' => 'default', 'attempts' => 0, 'reserved_at' => null, 'available_at' => now()->timestamp,
+        'created_at' => now()->timestamp, 'payload' => '{"data":{"command":"...'.$failed->id.'..."}}',
+    ]);
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
+        'payload' => '{"data":{"command":"...'.$failed->id.'..."}}', 'exception' => 'HTTP 401', 'failed_at' => now(),
+    ]);
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'SPG', '--flush-failed' => true]);
+
+    expect(DB::table('jobs')->where('payload', 'like', '%'.$failed->id.'%')->count())->toBe(0)
+        ->and(DB::table('failed_jobs')->where('payload', 'like', '%'.$failed->id.'%')->count())->toBe(0);
+});
