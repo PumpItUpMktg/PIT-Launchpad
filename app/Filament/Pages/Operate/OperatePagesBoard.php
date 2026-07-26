@@ -5,6 +5,7 @@ namespace App\Filament\Pages\Operate;
 use App\Build\PlanSync;
 use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
+use App\Enums\AuditAction;
 use App\Enums\ContentKind;
 use App\Jobs\GeneratePage;
 use App\Models\BuildPage;
@@ -13,6 +14,8 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PagesBoard;
 use App\Publishing\DeleteFromWordpress;
+use App\Publishing\Links\HubSpokeGuard;
+use App\Security\Audit;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 
@@ -35,6 +38,16 @@ abstract class OperatePagesBoard extends OperatePage
     public ?string $rejecting = null;
 
     public string $rejectReason = '';
+
+    /** The content id whose ordering-guard interstitial is open (a hub/town with unpublished targets). */
+    public ?string $confirmingPublish = null;
+
+    /**
+     * The unpublished targets naming the interstitial (its dead links) — {id, title, kind}.
+     *
+     * @var list<array{id: string, title: string, kind: string}>
+     */
+    public array $confirmBlockers = [];
 
     /** Which PagesBoard family this page renders. */
     abstract protected function family(): string;
@@ -215,6 +228,74 @@ abstract class OperatePagesBoard extends OperatePage
             return;
         }
 
+        // Ordering guard (report fix 2): a hub whose spoke grid — or a town whose parent hub — points at
+        // pages not live yet would publish into dead links. Hold for an explicit choice: push the missing
+        // pages first, or override. Never publish into dead links silently.
+        $blockers = app(HubSpokeGuard::class)->unpublishedTargets($content);
+        if ($blockers !== []) {
+            $this->confirmingPublish = $contentId;
+            $this->confirmBlockers = $blockers;
+
+            return;
+        }
+
+        $this->doPublish($content);
+    }
+
+    /** Push the interstitial's unpublished targets first, then publish the held page onto live links. */
+    public function pushSpokesFirst(): void
+    {
+        $held = $this->confirmingPublish !== null ? $this->ownedPage($this->confirmingPublish) : null;
+        if ($held === null) {
+            $this->cancelPublish();
+
+            return;
+        }
+
+        $pushed = 0;
+        foreach ($this->confirmBlockers as $blocker) {
+            $target = $this->ownedPage($blocker['id']);
+            if ($target === null) {
+                continue;
+            }
+            $result = app(ReviewActions::class)->publish($target, Auth::id());
+            if (! $result->isBlocked()) {
+                $pushed++;
+            }
+        }
+
+        $this->doPublish($held);
+        $this->cancelPublish();
+        Notification::make()->success()->title("Pushing {$pushed} page(s) first, then this one")
+            ->body('The linked pages publish first so this page\'s links resolve.')->send();
+    }
+
+    /** Publish the held page anyway — the operator's explicit override, written to the audit log. */
+    public function publishAnyway(): void
+    {
+        $held = $this->confirmingPublish !== null ? $this->ownedPage($this->confirmingPublish) : null;
+        if ($held === null) {
+            $this->cancelPublish();
+
+            return;
+        }
+
+        app(Audit::class)->log(AuditAction::DeadLinkOverride, $held, Auth::id(), [
+            'unpublished_targets' => array_map(fn (array $b): string => $b['title'], $this->confirmBlockers),
+        ]);
+        $this->doPublish($held);
+        $this->cancelPublish();
+    }
+
+    public function cancelPublish(): void
+    {
+        $this->confirmingPublish = null;
+        $this->confirmBlockers = [];
+    }
+
+    /** The actual publish, past the ordering guard. */
+    private function doPublish(Content $content): void
+    {
         $result = app(ReviewActions::class)->publish($content, Auth::id());
         if ($result->isBlocked()) {
             Notification::make()->danger()->title('Cannot publish')->body($result->blockedReason)->send();

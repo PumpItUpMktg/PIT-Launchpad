@@ -1,6 +1,7 @@
 <?php
 
 use App\Build\PlanSync;
+use App\Enums\AuditAction;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
@@ -14,6 +15,7 @@ use App\Filament\Pages\Operate\OperateLocationPages;
 use App\Filament\Pages\Operate\OperateServicePages;
 use App\Jobs\GeneratePage;
 use App\Jobs\PublishContent;
+use App\Models\AuditLog;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -323,4 +325,78 @@ it('flags a hub-page row as needs-generation when undrafted or spoke-less, but n
 
     expect($work['Water Detection & Leaks']['needs_generation'])->toBeTrue()
         ->and($work['Foundation Repair']['needs_generation'])->toBeFalse();
+});
+
+it('holds a hub publish when its spokes are not live yet — names them, dispatches nothing (report fix 2)', function () {
+    Queue::fake();
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Drains']);
+    $hub = pbPage($site, PageType::Hub, ContentStatus::Approved, 'Drainage', ['silo_id' => $silo->id]);
+    // Two spokes in the silo, not published → the hub grid would link into dead ends.
+    pbPage($site, PageType::Service, ContentStatus::NeedsReview, 'French Drains', ['silo_id' => $silo->id]);
+    pbPage($site, PageType::Service, ContentStatus::Approved, 'Sump Pumps', ['silo_id' => $silo->id]);
+
+    $board = Livewire::test(OperateServicePages::class)->call('publish', $hub->id);
+
+    $board->assertSet('confirmingPublish', $hub->id);
+    expect($board->get('confirmBlockers'))->toHaveCount(2);
+    Queue::assertNotPushed(PublishContent::class);   // never published into dead links silently
+});
+
+it('does NOT hold a hub publish when every spoke is already live', function () {
+    Queue::fake();
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Drains']);
+    $hub = pbPage($site, PageType::Hub, ContentStatus::Approved, 'Drainage', ['silo_id' => $silo->id]);
+    pbPage($site, PageType::Service, ContentStatus::Published, 'French Drains', ['silo_id' => $silo->id, 'wp_post_id' => 5]);
+
+    Livewire::test(OperateServicePages::class)->call('publish', $hub->id)->assertSet('confirmingPublish', null);
+    Queue::assertPushed(PublishContent::class);
+});
+
+it('push-spokes-first publishes the spokes then the hub', function () {
+    Queue::fake();
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Drains']);
+    $hub = pbPage($site, PageType::Hub, ContentStatus::Approved, 'Drainage', ['silo_id' => $silo->id]);
+    pbPage($site, PageType::Service, ContentStatus::Approved, 'French Drains', ['silo_id' => $silo->id]);
+
+    Livewire::test(OperateServicePages::class)
+        ->call('publish', $hub->id)
+        ->call('pushSpokesFirst')
+        ->assertSet('confirmingPublish', null);
+
+    // Spoke + hub both queued (idempotent-by-ULID PublishContent).
+    Queue::assertPushed(PublishContent::class, 2);
+});
+
+it('publish-anyway overrides the guard and writes an audit row', function () {
+    Queue::fake();
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Drains']);
+    $hub = pbPage($site, PageType::Hub, ContentStatus::Approved, 'Drainage', ['silo_id' => $silo->id]);
+    pbPage($site, PageType::Service, ContentStatus::NeedsReview, 'French Drains', ['silo_id' => $silo->id]);
+
+    Livewire::test(OperateServicePages::class)
+        ->call('publish', $hub->id)
+        ->call('publishAnyway')
+        ->assertSet('confirmingPublish', null);
+
+    Queue::assertPushed(PublishContent::class, 1); // just the hub (override)
+    expect(AuditLog::query()->where('action', AuditAction::DeadLinkOverride->value)->count())->toBe(1);
+});
+
+it('holds a town publish when its parent GBP hub page is unpublished (report fix 2)', function () {
+    Queue::fake();
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $hub = pbPage($site, PageType::Location, ContentStatus::NeedsReview, 'Montclair, NJ', ['location_id' => null]);
+    $town = pbPage($site, PageType::Location, ContentStatus::Approved, 'Verona, NJ', ['parent_content_id' => $hub->id]);
+
+    Livewire::test(OperateLocationPages::class)->call('publish', $town->id)->assertSet('confirmingPublish', $town->id);
+    Queue::assertNotPushed(PublishContent::class);
 });
