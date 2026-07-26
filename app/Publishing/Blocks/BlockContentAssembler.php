@@ -3,6 +3,7 @@
 namespace App\Publishing\Blocks;
 
 use App\Build\Permalinks;
+use App\ContentEngine\Reconcile\PostTownTagger;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
@@ -16,6 +17,7 @@ use App\Local\Proof\NullLocalReviews;
 use App\Local\Proof\ServiceJobProvider;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Models\Content;
+use App\Models\ContentTown;
 use App\Models\ConversionConfig;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -709,6 +711,7 @@ final class BlockContentAssembler
             coverage: $coverage,
             reviews: $this->locationReviews($location),
             jobs: $this->locationJobs($location),
+            localPosts: $this->localPosts($content, $city),
             faqs: $this->faqItems($slots),
             trustStats: $this->trustStats($content),
             address: $address,
@@ -989,6 +992,48 @@ final class BlockContentAssembler
         }
 
         return array_slice($out, 0, 3);
+    }
+
+    /**
+     * The location's local blog feed (§B slice 3): the recent PUBLISHED posts tagged with THIS
+     * location's town (the `content_towns` rows {@see PostTownTagger}
+     * writes, matched on the normalized town name). Recency-ordered, capped at 6 (D6) — the section is
+     * gated ≥1 downstream, so a town with no posts simply drops it. Own-town only: a hub for a city
+     * shows that city's stories, adding local editorial next to the reviews and jobs.
+     *
+     * @return list<array{title: string, url: string, date: string}>
+     */
+    private function localPosts(Content $content, string $city): array
+    {
+        $townKey = $this->townKey($city);
+        if ($townKey === '') {
+            return [];
+        }
+
+        $ids = ContentTown::query()
+            ->where('site_id', $content->site_id)
+            ->where('town', $townKey)
+            ->pluck('content_id');
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        $permalinks = new Permalinks;
+
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->whereIn('id', $ids)
+            ->where('kind', ContentKind::Post->value)
+            ->where('status', ContentStatus::Published->value)
+            ->whereNotNull('slug')
+            ->orderByDesc('published_at')
+            ->limit(6)
+            ->get()
+            ->map(fn (Content $p): array => [
+                'title' => (string) $p->title,
+                'url' => $permalinks->path($p),
+                'date' => $p->published_at?->format('M j, Y') ?? '',
+            ])
+            ->all();
     }
 
     /**

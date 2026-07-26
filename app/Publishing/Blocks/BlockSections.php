@@ -136,6 +136,46 @@ final class BlockSections
     }
 
     /**
+     * The location's local blog feed (§B slice 3) — a card grid of the recent posts tagged with this
+     * town, each a real internal LINK to the post with its publish date. Data-gated: no posts → '' (the
+     * section drops), so it appears only once local editorial exists for the town. Feeds the areas-served
+     * / location hub with fresh local content beside the reviews and jobs.
+     *
+     * @param  list<array{title?: string, url?: string, date?: string}>  $posts
+     */
+    public function localPosts(string $eyebrow, string $heading, array $posts): string
+    {
+        $posts = array_values(array_filter(
+            $posts,
+            fn (array $p): bool => trim((string) ($p['title'] ?? '')) !== '' && trim((string) ($p['url'] ?? '')) !== '',
+        ));
+        if ($posts === []) {
+            return '';
+        }
+
+        $cols = array_map(function (array $p): string {
+            $title = trim((string) $p['title']);
+            $url = trim((string) $p['url']);
+            // A linked title as a bold paragraph — b->heading escapes inline HTML, so the anchor rides a
+            // paragraph (inlineHtml keeps links). Reads as the card headline via the lp-post-title class.
+            $children = [
+                $this->b->paragraph('<strong><a href="'.$this->attr($url).'">'.$this->text($title).'</a></strong>', ['className' => 'lp-post-title']),
+            ];
+            $date = trim((string) ($p['date'] ?? ''));
+            if ($date !== '') {
+                $children[] = $this->b->paragraph($this->text($date), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-post-meta']);
+            }
+
+            return $this->b->column([$this->b->group($children, ['backgroundColor' => 'surface', 'className' => 'lp-card lp-post'])]);
+        }, array_slice($posts, 0, 6));
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading, center: true),
+            $this->b->columns($cols, ['className' => 'lp-posts-grid']),
+        ], ['align' => 'full', 'className' => 'lp-posts']);
+    }
+
+    /**
      * Symptoms — "signs you need this": the spoke page's search-intent hook. Record bullets with an
      * alert marker + an optional drafted intro line. Data-gated on real symptoms (record field, else
      * the service's captured problem phrases resolved upstream); preview → a labeled example set.

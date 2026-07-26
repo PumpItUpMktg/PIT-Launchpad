@@ -482,6 +482,28 @@
     font-weight: 600;
 }
 
+/* Local blog feed (§B) — recent town posts as linked cards on the location hub. */
+.lp-post .lp-post-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.lp-post .lp-post-title a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.lp-post .lp-post-title a:hover {
+    color: var(--wp--preset--color--accent, #1d6fd6);
+    text-decoration: underline;
+}
+
+.lp-post .lp-post-meta {
+    margin-top: auto;
+    font-weight: 600;
+}
+
 .lp-icon {
     display: inline-flex;
     align-items: center;

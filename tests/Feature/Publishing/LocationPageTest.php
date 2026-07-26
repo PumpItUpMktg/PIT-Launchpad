@@ -11,6 +11,7 @@ use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReview;
 use App\Local\Proof\LocalReviewProvider;
 use App\Models\Content;
+use App\Models\ContentTown;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -458,4 +459,60 @@ it('renders NO map section when the location has no coordinates (never an empty 
 
     expect($blob['slot_payload'])->not->toHaveKey('location_map')
         ->and($blob['post_content'])->not->toContain('[lp_map');
+});
+
+it('lists the town\'s recent posts as a local blog feed on the location page (§B)', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site);
+
+    // Two published posts tagged with the location's own town (Trooper) — the feed lists them, newest first.
+    $newer = Content::factory()->post()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published,
+        'title' => 'Spring water tables in Trooper', 'slug' => 'spring-water-tables-trooper',
+        'published_at' => now()->subDays(2),
+    ]);
+    $older = Content::factory()->post()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published,
+        'title' => 'Stone foundation repair tips', 'slug' => 'stone-foundation-repair-tips',
+        'published_at' => now()->subDays(5),
+    ]);
+    foreach ([$newer, $older] as $p) {
+        ContentTown::query()->create([
+            'content_id' => $p->id, 'site_id' => $site->id, 'town' => 'trooper', 'town_display' => 'Trooper',
+        ]);
+    }
+
+    $page = locRelayPage($site, $location);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()
+        ->toContain('Latest from Trooper')
+        ->toContain('Spring water tables in Trooper')
+        ->toContain('href="/spring-water-tables-trooper"')
+        ->toContain('Stone foundation repair tips');
+
+    // Newest-first ordering.
+    expect(strpos($markup, 'Spring water tables in Trooper'))
+        ->toBeLessThan(strpos($markup, 'Stone foundation repair tips'));
+});
+
+it('drops the local blog feed when no posts are tagged with the town (§B)', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site);
+
+    // A published post exists but is tagged with a DIFFERENT town → this location's feed stays empty.
+    $other = Content::factory()->post()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published,
+        'title' => 'Elsewhere news', 'slug' => 'elsewhere-news', 'published_at' => now(),
+    ]);
+    ContentTown::query()->create([
+        'content_id' => $other->id, 'site_id' => $site->id, 'town' => 'norristown', 'town_display' => 'Norristown',
+    ]);
+
+    $page = locRelayPage($site, $location);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()
+        ->not->toContain('Latest from Trooper')
+        ->not->toContain('Elsewhere news');
 });
