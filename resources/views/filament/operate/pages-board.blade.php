@@ -59,6 +59,16 @@
             .pb-loctab.on .pb-locpin { color:#fff; }
             .pb-loctab-n { font-variant-numeric:tabular-nums; font-size:10.5px; font-weight:700; background:rgba(148,163,184,.2); color:inherit; border-radius:99px; padding:0 6px; }
             .pb-loctab.on .pb-loctab-n { background:rgba(255,255,255,.25); }
+            .pb-gbp { border:1px solid rgba(37,99,235,.25); background:rgba(37,99,235,.04); border-radius:11px; padding:12px 15px; margin:0 0 14px; }
+            .pb-gbp-name { font-weight:700; font-size:15px; color:#1e293b; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+            .pb-gbp-cat { font-weight:600; font-size:10.5px; color:#2563eb; background:rgba(37,99,235,.1); border:1px solid rgba(37,99,235,.22); padding:1px 8px; border-radius:99px; }
+            .pb-gbp-badge { font-weight:600; font-size:10.5px; color:#64748b; background:rgba(148,163,184,.18); padding:1px 8px; border-radius:99px; }
+            .pb-gbp-lines { display:flex; gap:7px 20px; flex-wrap:wrap; margin-top:6px; font-size:12.5px; color:#475569; }
+            .pb-gbp-line { display:inline-flex; align-items:center; gap:6px; }
+            .pb-gbp-line .k { color:#94a3b8; }
+            .pb-gbp-line a { color:#2563eb; text-decoration:none; }
+            .pb-gbp-line a:hover { text-decoration:underline; }
+            .pb-gbp-missing { color:#b45309; font-style:italic; }
         </style>
 
         @php
@@ -114,6 +124,37 @@
                     : ($locTabs[0] ?? null);
             }
         @endphp
+
+        {{-- GBP identity header for the active location — Name / Address / Phone up top, so the operator
+             knows exactly which business they're working on (some GBP titles omit the city). --}}
+        @if ($isLocations && $activeTab !== null && ($activeTab['live']['location'] ?? null) !== null)
+            @php $loc = $activeTab['live']['location']; @endphp
+            <div class="pb-gbp">
+                <div class="pb-gbp-name">
+                    {{ $loc['name'] !== '' ? $loc['name'] : ($loc['city'] !== '' ? $loc['city'] : 'Location') }}
+                    @if (($loc['category'] ?? '') !== '')<span class="pb-gbp-cat">{{ $loc['category'] }}</span>@endif
+                    <span class="pb-gbp-badge">{{ $loc['storefront'] ? 'storefront' : 'service area' }}</span>
+                </div>
+                <div class="pb-gbp-lines">
+                    <span class="pb-gbp-line"><span class="k">📍</span>
+                        @php $addr = trim($loc['address'] ?? ''); @endphp
+                        @if ($addr === '' && (($loc['city'] ?? '') !== '' || ($loc['state'] ?? '') !== ''))
+                            @php $addr = trim(($loc['city'] ?? '').(($loc['city'] ?? '') !== '' && ($loc['state'] ?? '') !== '' ? ', ' : '').($loc['state'] ?? '')); @endphp
+                        @endif
+                        @if ($addr !== ''){{ $addr }}@else<span class="pb-gbp-missing">No address on file</span>@endif
+                    </span>
+                    <span class="pb-gbp-line"><span class="k">📞</span>
+                        @if (($loc['phone'] ?? '') !== ''){{ $loc['phone'] }}@else<span class="pb-gbp-missing">No phone on file</span>@endif
+                    </span>
+                    @if (($loc['served'] ?? []) !== [])
+                        <span class="pb-gbp-line"><span class="k">Serves</span>{{ implode(', ', array_slice($loc['served'], 0, 6)) }}{{ count($loc['served']) > 6 ? ' +'.(count($loc['served']) - 6).' more' : '' }}</span>
+                    @endif
+                    @if (($loc['gbp_url'] ?? '') !== '')
+                        <span class="pb-gbp-line"><a href="{{ $loc['gbp_url'] }}" target="_blank" rel="noopener">View GBP ↗</a></span>
+                    @endif
+                </div>
+            </div>
+        @endif
 
         {{-- ─── Work lane ─── --}}
         <div class="pb-band">In progress · {{ count($work) }}
