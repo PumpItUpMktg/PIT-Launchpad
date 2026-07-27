@@ -108,24 +108,52 @@ class PageGroundingAssembler
     }
 
     /**
-     * A LOCATION page's subject block — the pinned §1 Location as prompt-ready local facts. The
-     * operator's market_notes ride VERBATIM (their local knowledge is trusted input); the grounded
-     * facts come from the trade-keyed {@see LocationGrounding} pipeline (cached on the record,
-     * refreshed past staleness at generation time — and NEVER a generation blocker: a total
-     * grounding failure just means fewer facts). Empty for non-location pages and unpinned
-     * (market-era) location pages.
+     * A LOCATION page's subject block — prompt-ready local facts, grounded on the physical §1 Location
+     * the page belongs to. Two shapes, both pinned to a real record so the drafter can never wander to
+     * another region:
+     *  - a HUB page pinned via `location_id` — its subject IS that Location (its own city).
+     *  - a TOWN page pinned via `parent_location_id` — its subject is the TOWN itself (parsed from the
+     *    page title, e.g. "Edison, NJ"), grounded with the PARENT location's regional facts (phone,
+     *    category, served towns, local facts). This is what stops an NJ town page from drafting off a
+     *    different region's market.
+     * The operator's market_notes ride VERBATIM; the grounded facts come from the trade-keyed
+     * {@see LocationGrounding} pipeline (never a blocker — a failure just means fewer facts). Empty for
+     * non-location pages and unpinned (market-era) location pages.
      *
      * @return array<string, mixed>
      */
     private function location(Content $page): array
     {
-        if ($page->page_type !== PageType::Location || $page->location_id === null) {
+        if ($page->page_type !== PageType::Location) {
             return [];
         }
 
+        // Hub page pinned to its own §1 Location — subject is that location.
+        if ($page->location_id !== null) {
+            return $this->locationFacts($page, (string) $page->location_id, null);
+        }
+
+        // Town page pinned to its parent GBP Location — subject is the TOWN, grounded on the parent.
+        if ($page->parent_location_id !== null) {
+            return $this->locationFacts($page, (string) $page->parent_location_id, $this->townSubject($page));
+        }
+
+        return [];
+    }
+
+    /**
+     * Resolve a physical §1 Location into the prompt's local-facts block. `$subject` (a town page's own
+     * `city`/`state`, parsed from its title) OVERRIDES the resolved location's city so the page is about
+     * the town, not the parent's city — while the parent still supplies the honest regional context.
+     *
+     * @param  array{city: string, state: string}|null  $subject
+     * @return array<string, mixed>
+     */
+    private function locationFacts(Content $page, string $locationId, ?array $subject): array
+    {
         $location = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $page->site_id)
-            ->find($page->location_id);
+            ->find($locationId);
         if ($location === null) {
             return [];
         }
@@ -151,15 +179,35 @@ class PageGroundingAssembler
             $facts = []; // grounding is color, never a blocker
         }
 
+        // A town page's subject is the town itself: its own city/state lead, the parent supplies context.
+        $subjectCity = $subject !== null && trim($subject['city']) !== '' ? trim($subject['city']) : ($city !== '' ? $city : trim((string) $location->name));
+        $subjectState = $subject !== null && trim($subject['state']) !== '' ? trim($subject['state']) : $state;
+
         return array_filter([
-            'city' => $city !== '' ? $city : trim((string) $location->name),
-            'state' => $state,
+            'city' => $subjectCity,
+            'state' => $subjectState,
             'phone' => trim((string) $location->phone),
             'primary_category' => trim((string) $location->primary_category),
             'served_towns' => $towns,
             'market_notes' => trim((string) $location->market_notes),
             'local_facts' => $facts,
         ], fn ($v) => $v !== '' && $v !== []);
+    }
+
+    /**
+     * A town page's own town, parsed from its title ("Edison, NJ" → city "Edison", state "NJ"). The
+     * title is the town's authored name; the trailing ", ST" is the state when present.
+     *
+     * @return array{city: string, state: string}
+     */
+    private function townSubject(Content $page): array
+    {
+        $title = trim((string) $page->title);
+        if (preg_match('/^(.*?),\s*([A-Za-z]{2})\.?$/', $title, $m) === 1) {
+            return ['city' => trim($m[1]), 'state' => strtoupper($m[2])];
+        }
+
+        return ['city' => $title, 'state' => ''];
     }
 
     /**
@@ -412,6 +460,19 @@ class PageGroundingAssembler
             return [];
         }
 
+        // A TOWN page (pinned to a parent GBP location, no own location_id) grounds its geography on the
+        // parent-location LOCATION block — its subject town + the parent's honest served area. Dumping
+        // the site-wide market list here is what let a multi-region tenant draft an NJ town off a PA
+        // market. So a town page rides ONLY its own market as coverage color (none if it has no matching
+        // market row — the LOCATION block still carries the town).
+        if ($page->page_type === PageType::Location && $page->location_id === null && $page->parent_location_id !== null) {
+            $own = $page->market_id !== null
+                ? Market::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->whereKey($page->market_id)->first()
+                : null;
+
+            return $own === null ? [] : [$this->marketArray($own)];
+        }
+
         $markets = Market::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
             ->get();
@@ -422,16 +483,21 @@ class PageGroundingAssembler
                 ->values();
         }
 
-        return $markets
-            ->map(fn (Market $m) => [
-                'name' => $m->name,
-                'region' => $m->region,
-                'neighborhoods' => $m->neighborhoods,
-                'local_nuances' => $m->local_nuances,
-                'is_covered' => (bool) $m->is_covered,
-            ])
-            ->values()
-            ->all();
+        return $markets->map(fn (Market $m) => $this->marketArray($m))->values()->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function marketArray(Market $m): array
+    {
+        return [
+            'name' => $m->name,
+            'region' => $m->region,
+            'neighborhoods' => $m->neighborhoods,
+            'local_nuances' => $m->local_nuances,
+            'is_covered' => (bool) $m->is_covered,
+        ];
     }
 
     /**
