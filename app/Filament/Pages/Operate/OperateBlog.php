@@ -15,6 +15,7 @@ use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\BlogBoard;
+use App\Operate\QueueHealth;
 use App\Operator\ActiveTenant;
 use App\Publishing\DeleteFromWordpress;
 use App\Publishing\PostPublisher;
@@ -226,7 +227,19 @@ class OperateBlog extends OperatePage
             return;
         }
 
-        $published = $actions->publish($content->refresh(), Auth::id());
+        $content = $content->refresh();
+
+        // When the background worker is STALLED, handing the publish to a queue that isn't draining just
+        // hangs the post at "queued to publish" forever. Publish INLINE instead (same PostPublisher path
+        // as "Publish now") so approve actually completes. A healthy worker keeps the async path — approve
+        // returns instantly and the worker renders + pushes.
+        if (app(QueueHealth::class)->snapshot()['stalled']) {
+            $this->publishInlineOnApprove($content);
+
+            return;
+        }
+
+        $published = $actions->publish($content, Auth::id());
         if ($published->isBlocked()) {
             Notification::make()->warning()->title('Approved — publish blocked')->body((string) $published->blockedReason)->send();
 
@@ -234,6 +247,27 @@ class OperateBlog extends OperatePage
         }
 
         Notification::make()->success()->title("'{$content->title}' approved — publishing now.")->send();
+    }
+
+    /** Approve fell back to an inline publish because the worker is down — render + push here and now. */
+    private function publishInlineOnApprove(Content $content): void
+    {
+        $result = app(PostPublisher::class)->publish($content, Auth::id());
+
+        if ($result->isPublished()) {
+            Notification::make()->success()->title('Approved &amp; published')
+                ->body("'{$content->title}' was published inline (the background worker is down).")->send();
+
+            return;
+        }
+
+        if ($result->wasSkipped()) {
+            Notification::make()->warning()->title('Approved — publish skipped')->body((string) $result->message)->send();
+
+            return;
+        }
+
+        Notification::make()->danger()->title('Approved — publish failed')->body((string) $result->message)->send();
     }
 
     /**
