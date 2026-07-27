@@ -22,9 +22,18 @@ class OperateLocationPages extends OperatePagesBoard
 
     protected string $view = 'filament.operate.pages-board';
 
+    /** The active per-location tab (a physical location id, or 'unassigned'); null → the first tab. */
+    public ?string $locTab = null;
+
     protected function family(): string
     {
         return 'locations';
+    }
+
+    /** Switch the active location tab — the board renders one location at a time instead of one long list. */
+    public function setLocTab(string $tab): void
+    {
+        $this->locTab = $tab;
     }
 
     /** Assign an orphan town page to the location that serves it (grouping pin only). */

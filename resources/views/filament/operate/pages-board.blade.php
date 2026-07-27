@@ -52,6 +52,13 @@
             .pb-lochead { font-size:12px; font-weight:700; color:#334155; padding:2px 2px 6px; display:flex; align-items:center; gap:7px; }
             .pb-locpin { color:#2563eb; }
             .pb-loccount { font-weight:600; font-size:10.5px; color:#64748b; }
+            .pb-loctabs { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 14px; border-bottom:1px solid rgba(148,163,184,.25); padding-bottom:10px; }
+            .pb-loctab { font-size:12.5px; font-weight:600; color:#475569; background:transparent; border:1px solid rgba(148,163,184,.4); border-radius:8px; padding:5px 11px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+            .pb-loctab:hover { border-color:rgba(100,116,139,.7); }
+            .pb-loctab.on { background:#2563eb; border-color:#2563eb; color:#fff; }
+            .pb-loctab.on .pb-locpin { color:#fff; }
+            .pb-loctab-n { font-variant-numeric:tabular-nums; font-size:10.5px; font-weight:700; background:rgba(148,163,184,.2); color:inherit; border-radius:99px; padding:0 6px; }
+            .pb-loctab.on .pb-loctab-n { background:rgba(255,255,255,.25); }
         </style>
 
         @php
@@ -69,13 +76,42 @@
                 $byLoc = collect($work)->groupBy(fn ($r) => $r['brick_mortar_id'] ?? '');
                 $named = $byLoc->except('')->sortBy(fn ($rows) => $rows->first()['brick_mortar'] ?? '~');
                 $workGroups = [];
-                foreach ($named as $rows) {
+                foreach ($named as $locId => $rows) {
                     $ordered = $rows->sortByDesc(fn ($r) => $r['is_brick_mortar'] ?? false)->values()->all();
-                    $workGroups[] = ['label' => $rows->first()['brick_mortar'] ?? 'Location', 'rows' => $ordered];
+                    $workGroups[] = ['id' => (string) $locId, 'label' => $rows->first()['brick_mortar'] ?? 'Location', 'rows' => $ordered];
                 }
                 if ($byLoc->has('')) {
-                    $workGroups[] = ['label' => null, 'rows' => $byLoc->get('')->values()->all()];
+                    $workGroups[] = ['id' => 'unassigned', 'label' => null, 'rows' => $byLoc->get('')->values()->all()];
                 }
+            }
+
+            // Location board only: fold the per-location work + live groups into TABS so the operator
+            // works one location at a time instead of scrolling one long list.
+            $locTabs = null; $activeTab = null;
+            if ($isLocations) {
+                $tabs = [];
+                foreach ($workGroups ?? [] as $g) {
+                    $id = $g['id'];
+                    $tabs[$id] ??= ['id' => $id, 'label' => $g['label'] ?? 'Unassigned', 'work' => [], 'live' => null, 'orphans' => []];
+                    $tabs[$id]['work'] = $g['rows'];
+                }
+                foreach (($live['groups'] ?? []) as $group) {
+                    $id = (string) $group['location']['id'];
+                    $label = $group['location']['name'] !== '' ? $group['location']['name'] : $group['location']['city'];
+                    $tabs[$id] ??= ['id' => $id, 'label' => $label, 'work' => [], 'live' => null, 'orphans' => []];
+                    $tabs[$id]['label'] = $label;
+                    $tabs[$id]['live'] = $group;
+                }
+                if (($live['orphans'] ?? []) !== []) {
+                    $tabs['unassigned'] ??= ['id' => 'unassigned', 'label' => 'Unassigned', 'work' => [], 'live' => null, 'orphans' => []];
+                    $tabs['unassigned']['orphans'] = $live['orphans'];
+                }
+                // Named locations A→Z, "Unassigned" always last.
+                $locTabs = collect($tabs)->sortBy(fn ($t) => $t['id'] === 'unassigned' ? '~~~~' : mb_strtolower((string) $t['label']))->values()->all();
+                $ids = array_column($locTabs, 'id');
+                $activeTab = (is_string($this->locTab) && in_array($this->locTab, $ids, true))
+                    ? collect($locTabs)->firstWhere('id', $this->locTab)
+                    : ($locTabs[0] ?? null);
             }
         @endphp
 
@@ -102,28 +138,34 @@
                 </button>
             @endif
         </div>
-        @if ($work === [])
-            <div class="lv-empty">Nothing in progress — everything in this family is live (or not planned yet).</div>
-        @elseif ($workGroups !== null)
-            {{-- Location board: the in-progress pages grouped into a card per physical location (its
-                 own landing page first, then its towns), with anything unassigned collected last. --}}
-            @foreach ($workGroups as $g)
-                <div class="pb-locgroup" wire:key="pbwg-{{ $loop->index }}">
-                    <div class="pb-lochead">
-                        @if ($g['label'] !== null)
-                            <span class="pb-locpin">📍</span> {{ $g['label'] }}
-                        @else
-                            Unassigned
-                        @endif
-                        <span class="pb-loccount">· {{ count($g['rows']) }} page{{ count($g['rows']) === 1 ? '' : 's' }}</span>
-                    </div>
-                    <div class="pb-rows">
-                        @foreach ($g['rows'] as $row)
-                            @include('filament.operate.partials.pages-work-row', ['row' => $row])
-                        @endforeach
-                    </div>
+
+        {{-- Location board: one TAB per physical location — work one location at a time. --}}
+        @if ($isLocations && $locTabs && count($locTabs) > 0)
+            <div class="pb-loctabs">
+                @foreach ($locTabs as $t)
+                    @php $tActive = $activeTab !== null && $t['id'] === $activeTab['id']; @endphp
+                    <button type="button" class="pb-loctab {{ $tActive ? 'on' : '' }}" wire:click="setLocTab('{{ $t['id'] }}')" wire:key="lt-{{ $t['id'] }}">
+                        @if ($t['id'] !== 'unassigned')<span class="pb-locpin">📍</span>@endif {{ $t['label'] }}
+                        <span class="pb-loctab-n">{{ count($t['work']) + ($t['live'] !== null ? ($t['live']['rollup']['towns_live'] ?? 0) : 0) + count($t['orphans']) }}</span>
+                    </button>
+                @endforeach
+            </div>
+        @endif
+
+        @php $tabWork = $isLocations ? ($activeTab['work'] ?? []) : $work; @endphp
+        @if ($isLocations)
+            {{-- Active location's in-progress pages. --}}
+            @if ($tabWork === [])
+                <div class="lv-empty">No in-progress pages for this location — everything here is live (or not planned yet).</div>
+            @else
+                <div class="pb-rows">
+                    @foreach ($tabWork as $row)
+                        @include('filament.operate.partials.pages-work-row', ['row' => $row])
+                    @endforeach
                 </div>
-            @endforeach
+            @endif
+        @elseif ($work === [])
+            <div class="lv-empty">Nothing in progress — everything in this family is live (or not planned yet).</div>
         @else
             <div class="pb-rows">
                 @foreach ($work as $row)
@@ -132,9 +174,10 @@
             </div>
         @endif
 
-        {{-- ─── Live lane ─── --}}
+        {{-- ─── Live lane (active location tab only) ─── --}}
         @if ($isLocations)
-            @foreach ($live['groups'] as $group)
+            @php $group = $activeTab['live'] ?? null; @endphp
+            @if ($group !== null)
                 <div class="lv-locgroup" wire:key="pbg-{{ $group['location']['id'] }}">
                     <div class="lv-loccard">
                         <div class="id">
@@ -172,18 +215,20 @@
                         </div>
                     @endif
                 </div>
-            @endforeach
-            @if ($live['orphans'] !== [])
+            @endif
+            @if (($activeTab['orphans'] ?? []) !== [])
                 <div>
                     <div class="pb-band">Unassigned live town pages
                         <button type="button" class="lv-btn" style="margin-left:10px" wire:click="reassign">Re-run auto-assign</button>
                     </div>
                     <div class="lv-grid" style="margin-top:8px">
-                        @foreach ($live['orphans'] as $card)
+                        @foreach ($activeTab['orphans'] as $card)
                             @include('filament.live.partials.card', ['card' => $card, 'locationOptions' => $live['location_options'], 'navControl' => true])
                         @endforeach
                     </div>
                 </div>
+            @elseif ($group === null)
+                <div class="lv-empty">Nothing published for this location yet.</div>
             @endif
         @else
             <div class="pb-band">Live · {{ count($live) }}</div>

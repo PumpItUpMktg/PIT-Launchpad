@@ -229,6 +229,26 @@ it('the locations board groups the in-progress lane into a card per physical loc
         ->assertSee('This location');    // the landing page's own-location marker
 });
 
+it('the locations board renders a TAB per physical location and shows one at a time', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $montclair = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'served_towns' => []]);
+    $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'served_towns' => []]);
+    pbPage($site, PageType::Location, ContentStatus::Approved, 'Verona', ['parent_location_id' => $montclair->id]);
+    pbPage($site, PageType::Location, ContentStatus::Approved, 'Norristown', ['parent_location_id' => $trooper->id]);
+
+    // Both locations are tabs; Montclair (A→Z) is active by default → only its town shows.
+    Livewire::test(OperateLocationPages::class)
+        ->assertOk()
+        ->assertSee('Montclair')         // tab
+        ->assertSee('Trooper')           // tab
+        ->assertSee('Verona')            // Montclair active → its town rendered
+        ->assertDontSee('Norristown')    // Trooper's town hidden (other tab)
+        ->call('setLocTab', $trooper->id)
+        ->assertSee('Norristown')        // now Trooper active
+        ->assertDontSee('Verona');       // Montclair hidden
+});
+
 it('surfaces the real failure reason on a failed row (not just the generic client line)', function () {
     $site = pbSite();
     session(['guided_site_id' => $site->id]);
