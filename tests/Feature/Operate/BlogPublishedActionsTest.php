@@ -14,7 +14,9 @@ use App\Models\User;
 use App\Operate\BlogBoard;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -78,6 +80,33 @@ test('the in-flight lane flags an approved post stuck past the stall threshold',
 
     expect($rows['Stuck']['stalled'])->toBeTrue()
         ->and($rows['Fresh']['stalled'])->toBeFalse();
+});
+
+test('Approve publishes INLINE when the worker is stalled (no hang at "queued to publish")', function () {
+    Http::fake(['*/launchpad/v1/content' => Http::response(['wp_post_id' => 654, 'status' => 'publish', 'skipped' => false])]);
+    $site = Site::factory()->create(['domain_url' => 'https://inline.example']);
+    session(['guided_site_id' => $site->id]);
+    Connection::factory()->rotated()->create([
+        'site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword->value,
+        'credentials' => ['base_url' => 'https://inline.example', 'username' => 'u', 'app_password' => 'pw'],
+    ]);
+    // A dead failed job → QueueHealth reports the worker stalled.
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
+        'payload' => '{}', 'exception' => 'boom', 'failed_at' => now(),
+    ]);
+    $draft = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview,
+        'title' => 'Mine Drainage and Your Home', 'slug' => 'mine-drainage', 'body' => '<p>Real drafted body.</p>',
+    ]);
+
+    Bus::fake(); // prove approve did NOT lean on the (dead) queue
+    Livewire::test(OperateBlog::class, ['tab' => 'review'])->call('approve', $draft->id);
+
+    expect($draft->fresh()->status)->toBe(ContentStatus::Published)   // published inline, not left queued
+        ->and($draft->fresh()->wp_post_id)->toBe(654);
+    Bus::assertNotDispatched(PublishContent::class);
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/launchpad/v1/content'));
 });
 
 test('Publish now runs the publish inline and pushes to WordPress without the worker', function () {
