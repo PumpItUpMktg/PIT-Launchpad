@@ -72,6 +72,24 @@ test('a town that is a physical location\'s own city is not planned as a duplica
         ->not->toContain('Downingtown, PA');  // the physical location's own city — dropped
 });
 
+test('duplicate coverage rows for the same town produce ONE location page, not one each', function () {
+    $site = Site::factory()->create();
+    // The same town selected through THREE coverage rows (reached by several locations / duplicated) —
+    // the shape that minted bridgewater-nj-3/-4. Only one page should result.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bridgewater', 'state' => 'NJ', 'page_selected' => true, 'population' => 44000]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bridgewater', 'state' => 'NJ', 'page_selected' => true, 'population' => 44000]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bridgewater', 'state' => 'NJ', 'page_selected' => true, 'population' => 44000]);
+    // A genuinely different town still gets its own page.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Hillsborough', 'state' => 'NJ', 'page_selected' => true, 'population' => 43000]);
+
+    app(BuildManifestAssembler::class)->assemble($site->fresh());
+
+    $rows = BuildPage::query()->where('site_id', $site->id)->where('source', BuildSource::Location)->get();
+
+    expect($rows->where('title', 'Bridgewater, NJ')->count())->toBe(1)   // collapsed
+        ->and($rows->where('title', 'Hillsborough, NJ')->count())->toBe(1);
+});
+
 test('assemble is idempotent — re-running upserts, never duplicates', function () {
     $site = Site::factory()->create();
     SiloBlueprint::factory()->create(['site_id' => $site->id]);

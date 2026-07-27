@@ -152,14 +152,25 @@ class BuildManifestAssembler
             ->where('page_selected', true)
             ->orderByDesc('population')
             ->orderBy('name')
+            ->orderBy('id') // stable representative when a town has duplicate coverage rows
             ->get();
 
         $rows = [];
         $i = 0;
+        $seen = [];
         foreach ($towns->values() as $town) {
             if ($this->isPhysicalLocationCity((string) $town->name, $town->state, $physicalCities)) {
                 continue; // the physical location's landing page already IS this town's page
             }
+
+            // ONE page per distinct (town, state): a town selected through duplicate CoverageArea rows
+            // (the same place reached by several locations, or a duplicated coverage row) must not each
+            // mint its own page — that is exactly what produced the bridgewater-nj-3/-4 duplicate slugs.
+            $dedupeKey = $this->townDedupeKey((string) $town->name, $town->state);
+            if (isset($seen[$dedupeKey])) {
+                continue;
+            }
+            $seen[$dedupeKey] = true;
 
             $rows[] = [
                 'source' => BuildSource::Location,
@@ -175,6 +186,14 @@ class BuildManifestAssembler
         }
 
         return $rows;
+    }
+
+    /** The one-page-per-town key: normalized town name + state, so duplicate coverage rows collapse. */
+    private function townDedupeKey(string $name, ?string $state): string
+    {
+        $town = mb_strtolower(trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($name))));
+
+        return $town.'|'.strtoupper(trim((string) $state));
     }
 
     /**
