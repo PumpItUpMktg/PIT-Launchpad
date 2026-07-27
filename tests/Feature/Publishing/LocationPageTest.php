@@ -321,6 +321,25 @@ it('a location page WITHOUT a pin keeps the null fallback and the drafter gets n
     expect(app(BlockContentAssembler::class)->compose($unpinned->fresh(), [], []))->toBeNull();
 });
 
+it('composes a TOWN page (parent_location_id, no own pin) — the town is the subject, grounded on the parent', function () {
+    $site = locRelaySite();
+    $parent = locRelayLocation($site);
+    // A town page nested under the parent GBP location — the shape that was rendering a blank <main>.
+    $town = locRelayPage($site, $parent, [
+        'location_id' => null,
+        'parent_location_id' => $parent->id,
+        'title' => 'Pequannock, NJ',
+        'slug' => 'pequannock-nj',
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+
+    // Real block post_content (not null → the Elementor fallback that renders blank), about the TOWN.
+    expect($markup)->not->toBeNull()
+        ->and($markup)->toContain('wp:')          // core Gutenberg block markup
+        ->and($markup)->toContain('Pequannock');  // the town is the subject
+});
+
 it('the location hub renders its NAP (address + hours + phone) and LINKS to its town pages', function () {
     $site = locRelaySite();
     $location = locRelayLocation($site, [
