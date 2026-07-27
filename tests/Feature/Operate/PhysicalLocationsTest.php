@@ -231,6 +231,29 @@ it('bands a location\'s towns Larger/Mid/Smaller with page status + a selectable
         ->and($card['selectable'])->toBe(2);
 });
 
+it('the pipeline counts distinct TOWNS, not pages — duplicate town rows never inflate published past selected', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Bedminster']);
+    // Two selected towns…
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => 'a', 'name' => 'Bridgewater', 'type' => 'place', 'state' => 'NJ', 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => 'b', 'name' => 'Hillsborough', 'type' => 'place', 'state' => 'NJ', 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
+    // …but THREE published town pages, because Bridgewater has a duplicate row (bridgewater-nj-4).
+    foreach (['bridgewater-nj', 'bridgewater-nj-4', 'hillsborough-nj'] as $i => $slug) {
+        Content::withoutGlobalScopes()->create([
+            'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+            'status' => ContentStatus::Published, 'title' => str_contains($slug, 'bridgewater') ? 'Bridgewater, NJ' : 'Hillsborough, NJ',
+            'slug' => $slug, 'version' => 1, 'parent_location_id' => $loc->id,
+        ]);
+    }
+
+    $pipeline = app(PhysicalLocations::class)->build($site)['pipeline'];
+
+    // 2 distinct towns published (not 3 pages) against 2 selected — no more "3 / 2".
+    expect($pipeline['selected'])->toBe(2)
+        ->and($pipeline['published'])->toBe(2);
+});
+
 it('toggleTown and selectBand write the page_selected flag', function () {
     $site = Site::factory()->create();
     session(['guided_site_id' => $site->id]);

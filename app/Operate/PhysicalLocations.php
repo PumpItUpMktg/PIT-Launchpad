@@ -101,10 +101,20 @@ class PhysicalLocations
     private function townPipeline(Collection $areas, Collection $townPages): array
     {
         $selected = $areas->where('page_selected', true)->count();
-        $published = $townPages->filter(fn (Content $c) => $c->status === ContentStatus::Published)->count();
-        $generating = $townPages->filter(fn (Content $c) => $c->generationState() === 'generating')->count();
-        $failed = $townPages->filter(fn (Content $c) => $c->generationState() === 'failed')->count();
-        $drafted = $townPages->filter(fn (Content $c) => $c->status !== ContentStatus::Published && $c->generationState() === 'drafted')->count();
+
+        // Count distinct TOWNS, not raw pages — duplicate town rows (bridgewater-nj-3/-4) would otherwise
+        // inflate the tally past the selected count ("3 / 2 published"). A town is counted in the
+        // furthest-along state it has any page in: published > generating > drafted.
+        $publishedTowns = $this->townKeys($townPages->filter(fn (Content $c) => $c->status === ContentStatus::Published));
+        $generatingTowns = $this->townKeys($townPages->filter(fn (Content $c) => $c->generationState() === 'generating'))->diff($publishedTowns);
+        $failedTowns = $this->townKeys($townPages->filter(fn (Content $c) => $c->generationState() === 'failed'))->diff($publishedTowns)->diff($generatingTowns);
+        $draftedTowns = $this->townKeys($townPages->filter(fn (Content $c) => $c->status !== ContentStatus::Published && $c->generationState() === 'drafted'))
+            ->diff($publishedTowns)->diff($generatingTowns)->diff($failedTowns);
+
+        $published = $publishedTowns->count();
+        $generating = $generatingTowns->count();
+        $failed = $failedTowns->count();
+        $drafted = $draftedTowns->count();
         $queue = $this->queueHealth->snapshot();
 
         return [
@@ -124,6 +134,19 @@ class PhysicalLocations
     private function townKey(string $name): string
     {
         return mb_strtolower(trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($name))));
+    }
+
+    /**
+     * The distinct town keys represented by a set of town pages — collapses duplicate town rows so the
+     * pipeline monitor counts TOWNS, not pages. Returns a BASE collection (of strings) so `diff()`
+     * compares values, not model keys.
+     *
+     * @param  Collection<int, Content>  $pages
+     * @return Collection<int, string>
+     */
+    private function townKeys(Collection $pages): Collection
+    {
+        return $pages->map(fn (Content $c): string => $this->townKey((string) $c->title))->unique()->values()->toBase();
     }
 
     /**
