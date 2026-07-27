@@ -23,6 +23,7 @@ use App\Publishing\DeleteFromWordpress;
 use App\Publishing\PostPublisher;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Operate · Physical locations — one card per base location with the areas it serves. Surfaces
@@ -323,6 +324,105 @@ class OperatePhysicalLocations extends OperatePage
         }
 
         return [$published, $blocked];
+    }
+
+    /**
+     * Re-draft ONE town whose draft the operator rejected on review — clears any stuck generating
+     * stamp + last draft error and drops its dead/queued job, then re-queues GeneratePage (draft-only,
+     * no auto-publish). The fresh draft lands back in the review list. Needs a running worker to draft.
+     */
+    public function regenerateTown(string $contentId): void
+    {
+        $content = $this->ownedContent($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        if (! app(GroundingReadiness::class)->ready($content)) {
+            Notification::make()->warning()->title('Not ready yet')
+                ->body('This town isn\'t ready to re-write yet — its details are still coming together.')->send();
+
+            return;
+        }
+
+        $this->clearGeneratingMark($content);   // so a town stuck ⏳ behind a dead worker can be re-kicked
+        $this->flushJobsFor($contentId);         // drop the old/dead job before re-queuing
+        GeneratePage::enqueue($content->refresh(), actorId: Auth::id(), autoPublish: false);
+
+        Notification::make()->success()->title('Regenerating')
+            ->body("'{$content->title}' is being re-drafted; review it again once the worker finishes.")->send();
+    }
+
+    /**
+     * Dump ONE town out of the review/publish set — a draft that failed the operator's review. Rejects
+     * it (so it leaves the drafted list and never publishes) and clears any queued/stuck job so it can't
+     * re-fire. It stays page-selected, so "Generate drafts" can re-draft it fresh later if wanted.
+     */
+    public function discardTown(string $contentId): void
+    {
+        $content = $this->ownedContent($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        app(ReviewActions::class)->reject($content, 'Discarded on review (Operate → Locations).');
+        $this->clearGeneratingMark($content->refresh());
+        $this->flushJobsFor($contentId);
+
+        Notification::make()->success()->title('Discarded')
+            ->body("'{$content->title}' was pulled from the review/publish set. Use \"Generate drafts\" to re-draft it fresh.")->send();
+    }
+
+    /**
+     * Clear this location's town pages stuck "generating" behind a dead worker — resets the generating
+     * stamp and kills their queued jobs so they're actionable again (regenerate / discard / re-select).
+     * The escape hatch for a backlog that piled up while the worker was down.
+     */
+    public function clearStuckGenerating(string $locationId): void
+    {
+        $site = $this->getSite();
+        $location = $this->ownedLocation($locationId);
+        if ($site === null || $location === null) {
+            return;
+        }
+
+        $stuck = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->where('parent_location_id', $location->id)
+            ->get()
+            ->filter(fn (Content $c): bool => $c->generationState() === 'generating');
+
+        if ($stuck->isEmpty()) {
+            Notification::make()->info()->title('Nothing stuck')
+                ->body('No town pages are stuck generating for this location.')->send();
+
+            return;
+        }
+
+        foreach ($stuck as $c) {
+            $this->clearGeneratingMark($c);
+            $this->flushJobsFor((string) $c->id);
+        }
+
+        Notification::make()->success()->title("Cleared {$stuck->count()} stuck-generating town page(s)")
+            ->body('They\'re actionable again — regenerate or discard them. Fix the worker (queue:work) so drafting runs automatically.')->send();
+    }
+
+    /** Reset a page's generation-state marker (generating stamp + draft-error) so it's actionable again. */
+    private function clearGeneratingMark(Content $content): void
+    {
+        $meta = is_array($content->meta) ? $content->meta : [];
+        unset($meta['generating_at'], $meta['draft_error'], $meta['draft_failure'], $meta['draft_failed_at']);
+        $content->forceFill(['meta' => $meta])->save();
+    }
+
+    /** Delete the pending + dead queue rows whose serialized payload references this content id. */
+    private function flushJobsFor(string $contentId): void
+    {
+        DB::table('jobs')->where('payload', 'like', '%'.$contentId.'%')->delete();
+        DB::table('failed_jobs')->where('payload', 'like', '%'.$contentId.'%')->delete();
     }
 
     /**
