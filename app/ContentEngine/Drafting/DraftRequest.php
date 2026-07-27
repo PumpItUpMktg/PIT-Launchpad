@@ -8,6 +8,8 @@ use App\Enums\IntakeType;
 use App\Enums\RefreshTrigger;
 use App\KeywordGenerator\Gap\GapBrief;
 use App\Models\Content;
+use App\Models\Scopes\SiteScope;
+use App\Models\Silo;
 
 /**
  * The normalized work item handed to the drafting engine. It flattens the three
@@ -91,7 +93,7 @@ final class DraftRequest
             kind: ContentKind::Post,
             intakeType: $directed ? IntakeType::Directed : IntakeType::Reactive,
             trigger: $directed ? DraftTrigger::Gap : DraftTrigger::News,
-            siloId: $candidate->matched_silo_id ?? $candidate->silo_id,
+            siloId: self::liveSiloId($candidate),
             targetKeywordId: $candidate->target_keyword_id !== null ? (string) $candidate->target_keyword_id : null,
             title: $candidate->title,
             angleHint: $candidate->angle_hint,
@@ -101,6 +103,28 @@ final class DraftRequest
             localRelevance: (bool) $candidate->local_relevance,
             marketId: $marketId,
         );
+    }
+
+    /**
+     * The candidate's routed silo — but ONLY if it still exists. A §6a candidate carries the
+     * `matched_silo_id` it was routed to at ingest; a later rebuild / reconcile / prune can delete that
+     * silo, leaving a dangling reference. Persisting it would violate the `contents_silo_id_foreign`
+     * constraint and throw, failing the whole draft. Dropping a stale reference to null (uncategorized,
+     * re-routable in review) keeps the draft alive instead.
+     */
+    private static function liveSiloId(Content $candidate): ?string
+    {
+        $siloId = $candidate->matched_silo_id ?? $candidate->silo_id;
+        if ($siloId === null) {
+            return null;
+        }
+
+        $exists = Silo::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $candidate->site_id)
+            ->whereKey($siloId)
+            ->exists();
+
+        return $exists ? (string) $siloId : null;
     }
 
     /**
