@@ -249,6 +249,28 @@ it('the locations board renders a TAB per physical location and shows one at a t
         ->assertDontSee('Verona');       // Montclair hidden
 });
 
+it('shows the active location\'s full GBP identity (name / address / phone) at the top', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    // A GBP whose title has no city — the exact case the operator needs the address/phone header for.
+    $loc = Location::factory()->create([
+        'site_id' => $site->id,
+        'name' => 'Sump Pump Gurus',
+        'address' => '123 Main St, Bridgewater, NJ 08807',
+        'phone' => '(908) 555-0142',
+        'primary_category' => 'Plumber',
+        'served_towns' => [],
+    ]);
+    pbPage($site, PageType::Location, ContentStatus::Approved, 'Somerville', ['parent_location_id' => $loc->id]);
+
+    Livewire::test(OperateLocationPages::class)
+        ->assertOk()
+        ->assertSee('Sump Pump Gurus')                    // GBP name up top
+        ->assertSee('123 Main St, Bridgewater, NJ 08807') // full address
+        ->assertSee('(908) 555-0142')                     // phone
+        ->assertSee('Plumber');                           // primary category
+});
+
 it('surfaces the real failure reason on a failed row (not just the generic client line)', function () {
     $site = pbSite();
     session(['guided_site_id' => $site->id]);

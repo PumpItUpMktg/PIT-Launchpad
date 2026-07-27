@@ -61,6 +61,11 @@ class LiveBoards
                     'id' => (string) $location->id,
                     'name' => trim((string) $location->name),
                     'city' => $location->cityState()['city'],
+                    'state' => $location->cityState()['state'],
+                    'address' => trim((string) $location->address),
+                    'phone' => trim((string) $location->phone),
+                    'category' => trim((string) $location->primary_category),
+                    'gbp_url' => trim((string) $location->gbp_url),
                     'storefront' => (bool) $location->is_storefront,
                     'served' => collect($location->served_towns ?? [])
                         ->map(fn ($t) => trim((string) ($t['name'] ?? '')))
