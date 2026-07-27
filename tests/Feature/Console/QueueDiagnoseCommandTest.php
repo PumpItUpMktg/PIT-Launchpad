@@ -49,3 +49,15 @@ it('reports a clean queue', function () {
 
     expect(Artisan::output())->toContain('Queue is clean');
 });
+
+it('--flush deletes the failed_jobs backlog after reporting', function () {
+    failedJob('App\\Jobs\\GeneratePost', "PDOException: foreign key violation contents_silo_id_foreign\n#0 ...");
+    failedJob('App\\Jobs\\PopulateBlog', "TimeoutExceededException: timed out\n#0 ...");
+
+    Artisan::call('launchpad:queue-diagnose', ['--flush' => true]);
+    $out = Artisan::output();
+
+    expect($out)->toContain('Failures by cause')      // still reports what they were
+        ->toContain('Flushed 2 failed job(s)')
+        ->and(DB::table('failed_jobs')->count())->toBe(0); // …then clears them
+});
