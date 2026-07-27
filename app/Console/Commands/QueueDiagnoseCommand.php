@@ -20,9 +20,10 @@ class QueueDiagnoseCommand extends Command
 {
     protected $signature = 'launchpad:queue-diagnose
         {--limit=15 : Max distinct failure groups to show}
-        {--recent : Also list the most recent individual failures with timestamps}';
+        {--recent : Also list the most recent individual failures with timestamps}
+        {--flush : After reporting, DELETE all failed_jobs rows (clears the dead-job backlog + the stalled banner)}';
 
-    protected $description = 'Diagnose the database queue — pending backlog + age, and failed jobs grouped by job class + exception (the WHY behind a stalled worker).';
+    protected $description = 'Diagnose the database queue — pending backlog + age, and failed jobs grouped by job class + exception (the WHY behind a stalled worker). --flush clears the dead jobs.';
 
     public function handle(): int
     {
@@ -76,7 +77,19 @@ class QueueDiagnoseCommand extends Command
         }
 
         $this->newLine();
-        $this->comment('Fix the cause above, then clear the dead jobs with: launchpad:reset-publish "<site>" --flush-failed');
+
+        // Clearing the dead-job backlog is what drops the "stalled" banner (it trips on any failed job).
+        // These are GENERIC queue rows (generate/publish/populate), NOT publish-content-linked — so
+        // reset-publish --flush-failed (content-scoped) can't touch them. Flush them here or via
+        // Laravel's built-in `php artisan queue:flush`.
+        if ($this->option('flush')) {
+            $deleted = DB::table('failed_jobs')->delete();
+            $this->info("Flushed {$deleted} failed job(s) — the dead-job backlog is cleared (the stalled banner clears with it). Fix the causes above so they don't recur.");
+
+            return self::SUCCESS;
+        }
+
+        $this->comment('Fix the cause(s) above, then clear the dead-job backlog with: launchpad:queue-diagnose --flush   (or php artisan queue:flush).');
 
         return self::SUCCESS;
     }
