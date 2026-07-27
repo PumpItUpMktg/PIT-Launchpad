@@ -359,7 +359,7 @@ class OperateBlog extends OperatePage
         }
 
         Notification::make()->success()->title('Taken down')
-            ->body("'{$content->title}' was removed from WordPress; Re-push recreates it on the same URL.")->send();
+            ->body("'{$content->title}' was removed from WordPress and moved back to Candidates — regenerate/re-review it, then publish so its silo category re-resolves.")->send();
     }
 
     private function filterSilo(): ?string

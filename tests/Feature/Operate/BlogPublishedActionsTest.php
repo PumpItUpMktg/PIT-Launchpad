@@ -54,15 +54,15 @@ test('Re-push is refused for an undrafted post (never pushes an empty body)', fu
     Bus::assertNotDispatched(PublishContent::class);
 });
 
-test('Take down flips the post back to approved (leaves the Published lane)', function () {
+test('Take down moves a blog post back to candidate (re-enters the funnel, leaves the Published lane)', function () {
     $site = Site::factory()->create();
     session(['guided_site_id' => $site->id]);
-    // wp_post_id null → not on WP, so takedown needs no HTTP call and just makes it republishable.
+    // wp_post_id null → not on WP, so takedown needs no HTTP call and just flips it out of the live lane.
     $post = publishedPost($site, ['wp_post_id' => null]);
 
     Livewire::test(OperateBlog::class, ['tab' => 'published'])->call('takeDownPost', $post->id);
 
-    expect($post->fresh()->status)->toBe(ContentStatus::Approved)
+    expect($post->fresh()->status)->toBe(ContentStatus::Candidate) // back in the funnel, not queued-for-publish
         ->and($post->fresh()->wp_post_id)->toBeNull();
 });
 

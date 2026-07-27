@@ -28,6 +28,40 @@ it('makes a page republishable with no WP call when it was never published there
         ->and($fresh->slug)->toBe('drain-cleaning'); // slug preserved for re-publish
 });
 
+it('sends a taken-down BLOG POST back to candidate (re-enters the funnel), not queued-for-publish', function () {
+    $site = Site::factory()->create();
+    $post = Content::factory()->post()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post,
+        'slug' => 'why-your-sump-pump-runs-constantly', 'wp_post_id' => 77, 'status' => ContentStatus::Published,
+    ]);
+
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('deleteContent')->once()->andReturnTrue();
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->once()->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $result = app(DeleteFromWordpress::class)->delete($post->fresh());
+
+    expect($result['deleted'])->toBeTrue();
+    $fresh = Content::withoutGlobalScope(SiteScope::class)->find($post->id);
+    expect($fresh->status)->toBe(ContentStatus::Candidate)   // back in the funnel, NOT approved/queued
+        ->and($fresh->wp_post_id)->toBeNull()
+        ->and($fresh->slug)->toBe('why-your-sump-pump-runs-constantly'); // slug preserved
+});
+
+it('a PAGE take-down still returns to approved (Repush recreates on the same URL)', function () {
+    $site = Site::factory()->create();
+    $page = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'slug' => 'edison-nj', 'wp_post_id' => null, 'status' => ContentStatus::Published,
+    ]);
+
+    app(DeleteFromWordpress::class)->delete($page->fresh());
+
+    expect(Content::withoutGlobalScope(SiteScope::class)->find($page->id)->status)->toBe(ContentStatus::Approved);
+});
+
 it('surfaces WHY a live take-down failed and leaves the page untouched (still on WP)', function () {
     $site = Site::factory()->create();
     $page = Content::factory()->create([

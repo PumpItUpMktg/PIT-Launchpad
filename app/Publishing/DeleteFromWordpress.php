@@ -2,6 +2,7 @@
 
 namespace App\Publishing;
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
@@ -17,9 +18,15 @@ use Throwable;
  * `slug-2`). Force-delete frees the slug, and because the control-plane keeps the Content row (and its
  * slug) and clears `wp_post_id`, a Repush recreates the page on the SAME permalink — no `-2`.
  *
- * The Content is flipped back to `approved` (ready to publish) and its stale WP-edit flag cleared, so
- * Repush isn't blocked by the locally-edited guard on a post that no longer exists. A failed delete
- * throws (with WordPress's reason) and leaves the page exactly as it was — never stranded republishable.
+ * After delete the stale WP-edit flag is cleared and the row is flipped out of the live state, so a
+ * follow-up publish isn't blocked by the locally-edited guard on a post that no longer exists. By kind:
+ *  - a PAGE goes back to `approved` (ready to Repush) — the location/service page's whole point is
+ *    recreating on the SAME URL, so it stays one click from re-publish.
+ *  - a POST (blog) goes back to `candidate` — it re-enters the content funnel rather than sitting
+ *    queued-for-publish, so a blog taken down (e.g. to escape a stale silo→WP category mapping) is
+ *    re-drafted / re-reviewed and its silo category re-resolves on the fresh publish, instead of
+ *    auto-republishing with the old category.
+ * A failed delete throws (with WordPress's reason) and leaves the page exactly as it was.
  */
 final class DeleteFromWordpress
 {
@@ -56,9 +63,14 @@ final class DeleteFromWordpress
 
     private function makeRepublishable(Content $content): void
     {
+        // A blog post re-enters the funnel (candidate); a page stays one Repush from live (approved).
+        $status = $content->kind === ContentKind::Post
+            ? ContentStatus::Candidate
+            : ContentStatus::Approved;
+
         $content->forceFill([
             'wp_post_id' => null,
-            'status' => ContentStatus::Approved,
+            'status' => $status,
             'locally_edited' => false,
             'last_publish_error' => null,
         ])->save();
