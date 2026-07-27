@@ -309,6 +309,62 @@ it('publishReviewedSelected approves the reviewed drafts (the approve half of th
     expect($town->fresh()->status)->toBe(ContentStatus::Approved);
 });
 
+it('regenerateTown re-queues a draft and clears a stuck generating stamp + dead job', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    Market::factory()->create(['site_id' => $site->id]); // grounding
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
+    // A town stuck "generating" (generating_at stamped, no draft) behind a dead worker.
+    $town = Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::NeedsReview, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1,
+        'parent_location_id' => $loc->id, 'slot_payload' => [], 'meta' => ['generating_at' => now()->toIso8601String()],
+    ]);
+    DB::table('jobs')->insert(['queue' => 'default', 'attempts' => 0, 'reserved_at' => null,
+        'available_at' => now()->timestamp, 'created_at' => now()->timestamp, 'payload' => '{"data":{"command":"...'.$town->id.'..."}}']);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('regenerateTown', $town->id);
+
+    // The OLD dead job is flushed and a FRESH draft-only generation is queued (enqueue re-stamps
+    // generating for the new run — the meaningful outcome is a clean re-draft, not a leftover job).
+    expect(DB::table('jobs')->where('payload', 'like', '%'.$town->id.'%')->count())->toBe(0);
+    Queue::assertPushed(GeneratePage::class, fn (GeneratePage $job) => $job->autoPublish === false);
+});
+
+it('discardTown rejects the draft and flushes its queued job', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
+    $town = Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::NeedsReview, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1,
+        'parent_location_id' => $loc->id, 'slot_payload' => ['hero' => ['heading' => 'bad draft']],
+    ]);
+    DB::table('jobs')->insert(['queue' => 'default', 'attempts' => 0, 'reserved_at' => null,
+        'available_at' => now()->timestamp, 'created_at' => now()->timestamp, 'payload' => '{"data":{"command":"...'.$town->id.'..."}}']);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('discardTown', $town->id);
+
+    expect($town->fresh()->status)->toBe(ContentStatus::Rejected)
+        ->and(DB::table('jobs')->where('payload', 'like', '%'.$town->id.'%')->count())->toBe(0);
+});
+
+it('clearStuckGenerating resets this location\'s stuck-generating towns so they are actionable again', function () {
+    $site = Site::factory()->create();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
+    $stuck = Content::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Candidate, 'title' => 'Marlboro, NJ', 'slug' => 'marlboro', 'version' => 1,
+        'parent_location_id' => $loc->id, 'slot_payload' => [], 'meta' => ['generating_at' => now()->toIso8601String()],
+    ]);
+
+    Livewire::test(OperatePhysicalLocations::class)->call('clearStuckGenerating', $loc->id);
+
+    expect($stuck->fresh()->generationState())->toBe('awaiting'); // no longer stuck generating
+});
+
 it('surfaces a stalled-worker banner with the drain hint when the publish queue is backed up', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     session(['guided_site_id' => $site->id]);

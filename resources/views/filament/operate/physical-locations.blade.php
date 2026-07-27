@@ -214,6 +214,16 @@
                                             wire:confirm="Publish this location's stuck town pages right now, synchronously (no worker)?"
                                             wire:loading.attr="disabled" wire:target="drainNow('{{ $card['id'] }}')">Drain now</button>
                                     @endif
+                                    @php
+                                        $stuckGen = collect(['larger', 'mid', 'smaller'])
+                                            ->flatMap(fn ($b) => $card['town_bands'][$b] ?? [])
+                                            ->filter(fn ($t) => $t['status'] === 'generating')->count();
+                                    @endphp
+                                    @if ($stuckGen > 0)
+                                        <button type="button" class="pl-btn" wire:click="clearStuckGenerating('{{ $card['id'] }}')"
+                                            wire:confirm="Clear {{ $stuckGen }} town page(s) stuck 'generating' behind the down worker? They become actionable again (regenerate / discard)."
+                                            wire:loading.attr="disabled" wire:target="clearStuckGenerating('{{ $card['id'] }}')">Clear stuck ({{ $stuckGen }})</button>
+                                    @endif
                                 </div>
 
                                 {{-- Per-town review gate: each drafted, selected town — eyeball it in the
@@ -231,6 +241,11 @@
                                             <div class="pl-review-row" wire:key="rev-{{ $t['content_id'] }}">
                                                 <span class="pl-review-name">{{ $t['name'] }}</span>
                                                 <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $t['content_id']]) }}" wire:navigate>Review</a>
+                                                <button type="button" class="pl-btn" wire:click="regenerateTown('{{ $t['content_id'] }}')"
+                                                    wire:loading.attr="disabled" wire:target="regenerateTown('{{ $t['content_id'] }}')">Regenerate</button>
+                                                <button type="button" class="pl-btn danger" wire:click="discardTown('{{ $t['content_id'] }}')"
+                                                    wire:confirm="Discard this draft? It's pulled from the review/publish set (not published). You can regenerate it fresh later."
+                                                    wire:loading.attr="disabled" wire:target="discardTown('{{ $t['content_id'] }}')">Discard</button>
                                                 <button type="button" class="pl-btn primary" wire:click="publishTown('{{ $t['content_id'] }}')"
                                                     wire:loading.attr="disabled" wire:target="publishTown('{{ $t['content_id'] }}')">Publish</button>
                                             </div>
