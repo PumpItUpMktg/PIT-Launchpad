@@ -62,23 +62,6 @@ class ResetPublishCommand extends Command
             return self::FAILURE;
         }
 
-        // (a) content parked in a stuck/failed status, plus (b) approved pages whose publish job is stuck
-        // in the queue (pending or failed) — the "0 queued / N failed, pages still say approved" case.
-        $stuck = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->whereIn('status', self::STUCK)
-            ->get()
-            ->concat($this->approvedWithStuckJob($site))
-            ->unique('id')
-            ->sortBy('updated_at')
-            ->values();
-
-        if ($stuck->isEmpty()) {
-            $this->info("{$site->brand_name}: nothing stuck — no failed/queued-to-publish pages to reset.");
-
-            return self::SUCCESS;
-        }
-
         $reject = (bool) $this->option('reject');
         $toCandidate = (bool) $this->option('to-candidate');
 
@@ -86,6 +69,29 @@ class ResetPublishCommand extends Command
             $this->error('Use either --reject or --to-candidate, not both.');
 
             return self::FAILURE;
+        }
+
+        // (a) content parked in a stuck/failed status, plus (b) approved pages whose publish job is stuck
+        // in the queue (pending or failed) — the "0 queued / N failed, pages still say approved" case.
+        $stuck = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereIn('status', self::STUCK)
+            ->get()
+            ->concat($this->approvedWithStuckJob($site));
+
+        // --to-candidate is an explicit RECALL of the publish queue, so it also pulls approved blog posts
+        // that have no lingering job row — the "queued to publish, worker down, job already dropped" case
+        // the job-match above can't see. (Posts only; a bare approved page isn't a recall target.)
+        if ($toCandidate) {
+            $stuck = $stuck->concat($this->approvedPosts($site));
+        }
+
+        $stuck = $stuck->unique('id')->sortBy('updated_at')->values();
+
+        if ($stuck->isEmpty()) {
+            $this->info("{$site->brand_name}: nothing stuck — no failed/queued-to-publish pages to reset.");
+
+            return self::SUCCESS;
         }
 
         $byStatus = $stuck->countBy(fn (Content $c): string => $c->status->value);
@@ -153,6 +159,23 @@ class ResetPublishCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Every approved BLOG POST — the whole publish queue for posts, whether or not a job row lingers.
+     * The `--to-candidate` recall target: a post sitting `approved` (queued to publish) with its job
+     * already consumed/dropped by a dead worker is invisible to {@see approvedWithStuckJob()}, but it's
+     * still queued from the operator's view, so a recall must catch it. Posts only.
+     *
+     * @return Collection<int, Content>
+     */
+    private function approvedPosts(Site $site): Collection
+    {
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Post->value)
+            ->where('status', ContentStatus::Approved->value)
+            ->get();
     }
 
     /**

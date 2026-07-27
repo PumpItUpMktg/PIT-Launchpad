@@ -107,6 +107,19 @@ it('--to-candidate moves stuck blog posts back to candidate (pages stay approved
         ->and(DB::table('jobs')->where('payload', 'like', '%'.$post->id.'%')->count())->toBe(0); // job flushed
 });
 
+it('--to-candidate recalls an approved post with NO lingering job row (worker already dropped it)', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    // Queued-to-publish (approved) but its job was consumed/dropped by the dead worker — no jobs row.
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved,
+        'title' => 'Sewer System Changes Homeowners Should Know', 'slug' => 'sewer-changes',
+    ]);
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'SPG', '--to-candidate' => true]);
+
+    expect($post->fresh()->status)->toBe(ContentStatus::Candidate); // recalled even without a job row
+});
+
 it('rejects using both --reject and --to-candidate together', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     rpPage($site, ContentStatus::PublishFailed, 'Sump Pump Repair');
