@@ -87,6 +87,36 @@ it('--reject pulls stuck items out of the pipeline with a reason (never publishe
         ->and($live->fresh()->status)->toBe(ContentStatus::Published); // live page untouched
 });
 
+it('--to-candidate moves stuck blog posts back to candidate (pages stay approved) and flushes their jobs', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    // A blog post queued-to-publish (approved) with a stuck job, and a stuck page.
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved,
+        'title' => 'Why Your Home Sewer Line Needs Inspection', 'slug' => 'sewer-inspection',
+    ]);
+    $page = rpPage($site, ContentStatus::PublishFailed, 'Cranford Sewer Repair');
+    DB::table('jobs')->insert([
+        'queue' => 'default', 'attempts' => 0, 'reserved_at' => null, 'available_at' => now()->timestamp,
+        'created_at' => now()->timestamp, 'payload' => '{"data":{"command":"...'.$post->id.'..."}}',
+    ]);
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'SPG', '--to-candidate' => true]);
+
+    expect($post->fresh()->status)->toBe(ContentStatus::Candidate)        // post → funnel
+        ->and($page->fresh()->status)->toBe(ContentStatus::Approved)       // page has no candidate lane
+        ->and(DB::table('jobs')->where('payload', 'like', '%'.$post->id.'%')->count())->toBe(0); // job flushed
+});
+
+it('rejects using both --reject and --to-candidate together', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    rpPage($site, ContentStatus::PublishFailed, 'Sump Pump Repair');
+
+    $code = Artisan::call('launchpad:reset-publish', ['site' => 'SPG', '--reject' => true, '--to-candidate' => true]);
+
+    expect($code)->toBe(1);
+    expect(Artisan::output())->toContain('not both');
+});
+
 it('catches an approved page whose publish job is stuck in the queue (status still approved)', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     $queued = rpPage($site, ContentStatus::Approved, 'Sump Pump Repair');   // status approved, job stuck

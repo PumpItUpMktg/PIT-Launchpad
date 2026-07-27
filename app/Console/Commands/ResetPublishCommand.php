@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -35,11 +36,12 @@ class ResetPublishCommand extends Command
 {
     protected $signature = 'launchpad:reset-publish {site : Site id or brand name}
         {--reject : Reject the stuck items (pull them out of the pipeline) instead of resetting to approved}
+        {--to-candidate : Move stuck BLOG POSTS back to candidates (re-enter the funnel) instead of resetting to approved; pages stay approved}
         {--reason= : Reject reason (with --reject; default a generic recovery note)}
         {--flush-failed : Also delete this tenant\'s stuck queued + dead failed jobs}
         {--dry-run : List what would change without touching anything}';
 
-    protected $description = 'Clear a tenant\'s stuck/failed publishes — reset to approved (default) or --reject them out of the pipeline; optionally clear their stuck/dead jobs.';
+    protected $description = 'Clear a tenant\'s stuck/failed publishes — reset to approved (default), --to-candidate (posts back to the funnel), or --reject out of the pipeline; optionally clear their stuck/dead jobs.';
 
     /** A stuck CONTENT STATUS — a publish that ran and stalled/failed (past approve, short of live). */
     private const STUCK = [
@@ -77,24 +79,62 @@ class ResetPublishCommand extends Command
             return self::SUCCESS;
         }
 
+        $reject = (bool) $this->option('reject');
+        $toCandidate = (bool) $this->option('to-candidate');
+
+        if ($reject && $toCandidate) {
+            $this->error('Use either --reject or --to-candidate, not both.');
+
+            return self::FAILURE;
+        }
+
         $byStatus = $stuck->countBy(fn (Content $c): string => $c->status->value);
         $this->line("<info>{$site->brand_name}</info> — {$stuck->count()} stuck item(s): "
             .$byStatus->map(fn (int $n, string $s): string => "{$n} {$s}")->implode(', ').'.');
-
-        $reject = (bool) $this->option('reject');
-        $target = $reject ? ContentStatus::Rejected : ContentStatus::Approved;
 
         if ($this->option('dry-run')) {
             foreach ($stuck as $c) {
                 $this->line("  • {$c->title}  ·  {$c->status->value}");
             }
-            $this->comment('Dry run — nothing changed. Re-run without --dry-run to '
-                .($reject ? 'reject these (pull them out of the pipeline).' : 'reset these to approved.'));
+            $verb = match (true) {
+                $reject => 'reject these (pull them out of the pipeline).',
+                $toCandidate => 'move blog posts back to candidates (pages stay approved).',
+                default => 'reset these to approved.',
+            };
+            $this->comment('Dry run — nothing changed. Re-run without --dry-run to '.$verb);
 
             return self::SUCCESS;
         }
 
         $ids = $stuck->pluck('id')->all();
+
+        if ($toCandidate) {
+            // Blog posts re-enter the funnel (candidate) so they can be re-drafted / re-categorized
+            // before publishing; pages have no candidate lane, so they fall back to approved. Their
+            // queued jobs are flushed either way — a leftover job on a candidate is a no-op, but
+            // clearing it drops the "queued to publish" banner.
+            $posts = $stuck->filter(fn (Content $c): bool => $c->kind === ContentKind::Post)->values();
+            $pages = $stuck->reject(fn (Content $c): bool => $c->kind === ContentKind::Post)->values();
+
+            if ($posts->isNotEmpty()) {
+                Content::withoutGlobalScope(SiteScope::class)->whereIn('id', $posts->pluck('id')->all())
+                    ->update(['status' => ContentStatus::Candidate->value, 'last_publish_error' => null]);
+            }
+            if ($pages->isNotEmpty()) {
+                Content::withoutGlobalScope(SiteScope::class)->whereIn('id', $pages->pluck('id')->all())
+                    ->update(['status' => ContentStatus::Approved->value, 'last_publish_error' => null]);
+            }
+
+            $flushed = $this->flushJobsFor($ids);
+
+            $this->line("Moved {$posts->count()} blog post(s) back to <info>candidates</info>"
+                .($pages->isNotEmpty() ? " and reset {$pages->count()} page(s) to approved (pages have no candidate lane)" : '')
+                .". Cleared {$flushed['pending']} queued + {$flushed['failed']} dead job(s) — they won't publish until re-generated/re-approved.");
+
+            return self::SUCCESS;
+        }
+
+        $target = $reject ? ContentStatus::Rejected : ContentStatus::Approved;
         $update = ['status' => $target->value, 'last_publish_error' => null];
         if ($reject) {
             $reason = trim((string) $this->option('reason'));
