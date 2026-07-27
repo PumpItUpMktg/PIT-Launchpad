@@ -89,9 +89,12 @@ final class BlockContentAssembler
             return $this->composeHub($content, $slots, $images, $ctx, $preview);
         }
 
-        // A location page pinned to its GBP Location record composes the block pattern; market-era
-        // location pages WITHOUT a pin (no location_id) keep the null fallback → the Elementor path.
-        if ($content->page_type === PageType::Location && $content->location_id !== null) {
+        // A location page composes the block pattern in two shapes: a HUB pinned to its own GBP Location
+        // (`location_id`), or a TOWN page nested under a parent GBP Location (`parent_location_id`) — the
+        // town is the subject, grounded on the parent. Only a market-era page with NEITHER pin keeps the
+        // null fallback → the (now dead) Elementor path. Without the town case, every town page shipped an
+        // empty post_content and rendered a blank <main> on the block theme.
+        if ($content->page_type === PageType::Location && ($content->location_id !== null || $content->parent_location_id !== null)) {
             return $this->composeLocation($content, $slots, $images, $preview, $mapAvailable);
         }
 
@@ -669,9 +672,13 @@ final class BlockContentAssembler
      */
     private function composeLocation(Content $content, array $slots, array $images, bool $preview, bool $areasMapAvailable = false): ?string
     {
+        // A hub grounds on its own pinned Location; a town page grounds on its PARENT GBP Location.
+        $isTown = $content->location_id === null && $content->parent_location_id !== null;
+        $locationId = $content->location_id ?? $content->parent_location_id;
+
         $location = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
-            ->find($content->location_id);
+            ->find($locationId);
         if ($location === null) {
             return null;
         }
@@ -679,6 +686,18 @@ final class BlockContentAssembler
         ['city' => $city, 'state' => $state] = $location->cityState();
         if ($city === '') {
             $city = trim((string) $location->name);
+        }
+
+        // A TOWN page's subject is the TOWN itself (parsed from its title, "Pequannock, NJ"), not the
+        // parent location's city — the parent only supplies NAP / served-area / reviews context.
+        if ($isTown) {
+            ['city' => $townCity, 'state' => $townState] = $this->townSubject($content);
+            if ($townCity !== '') {
+                $city = $townCity;
+            }
+            if ($townState !== '') {
+                $state = $townState;
+            }
         }
 
         $towns = $this->servedTownNames($location);
@@ -723,6 +742,21 @@ final class BlockContentAssembler
             areasMapAvailable: $areasMapAvailable,
             preview: $preview,
         );
+    }
+
+    /**
+     * A town page's own town parsed from its title ("Pequannock, NJ" → city "Pequannock", state "NJ").
+     *
+     * @return array{city: string, state: string}
+     */
+    private function townSubject(Content $content): array
+    {
+        $title = trim((string) $content->title);
+        if (preg_match('/^(.*?),\s*([A-Za-z]{2})\.?$/', $title, $m) === 1) {
+            return ['city' => trim($m[1]), 'state' => strtoupper($m[2])];
+        }
+
+        return ['city' => $title, 'state' => ''];
     }
 
     /**
