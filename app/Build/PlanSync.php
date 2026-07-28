@@ -21,6 +21,7 @@ class PlanSync
         private readonly LocalRelevance $relevance,
         private readonly BuildManifestAssembler $assembler,
         private readonly PageMaterializer $materializer,
+        private readonly DuplicateTownSweeper $sweeper = new DuplicateTownSweeper,
     ) {}
 
     /** @return int the number of NEW planned pages added */
@@ -32,6 +33,12 @@ class PlanSync
         $this->relevance->seedInitialSelection($site);
         $this->assembler->assemble($site);
         $this->materializer->materialize($site);
+
+        // Self-heal: collapse any leftover duplicate town pages (the pre-dedupe bristol-pa-3/-4 shape)
+        // so Sync plan cleans the backlog it never created — conservative (empty extras only, never a
+        // live or in-review page). New duplicates can't form (the assembler dedupes by town), so this
+        // only ever sweeps history.
+        $this->sweeper->sweep($site);
 
         return max(0, $this->pageCount($site) - $before);
     }

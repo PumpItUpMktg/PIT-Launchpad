@@ -187,6 +187,49 @@ it('grounds a TOWN page on its parent location and its own town — never anothe
         ->and($grounding->markets)->toBe([]); // no site-wide market dump → Allentown can't leak in
 });
 
+it('a TOWN page does NOT inherit the parent location\'s regional local_facts (no Allentown drift)', function () {
+    $site = Site::factory()->create();
+    // The parent GBP location carries REGIONAL grounded facts (its own city + nearby metros) cached on it.
+    // Those are right for the parent's own hub page, but must not bleed onto a town page under it.
+    $parent = Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'Doylestown',
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Doylestown'],
+            ['types' => ['administrative_area_level_1'], 'short_name' => 'PA'],
+        ],
+        'served_towns' => [['name' => 'Buckingham'], ['name' => 'Newtown']],
+        'grounding_cache' => [
+            'facts' => ['Serving the greater Allentown and Lehigh Valley region across PA, NJ, and MD.'],
+            'sources' => ['test'],
+            'fetched_at' => now()->toIso8601String(),
+        ],
+    ]);
+
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('page_type', 'location')->firstOrFail();
+
+    // TOWN page (parent_location_id, no own location_id) → its own town, NO parent regional facts.
+    $town = Content::factory()->page()->create([
+        'site_id' => $site->id, 'title' => 'Buckingham, PA', 'parent_location_id' => $parent->id,
+        'location_id' => null, 'market_id' => null, 'wireframe_kit_id' => $kit->id,
+        'page_type' => PageType::Location, 'slot_payload' => ['hero' => 'x'],
+    ]);
+    $townGrounding = app(PageGroundingAssembler::class)->assemble($town);
+
+    expect($townGrounding->location['city'])->toBe('Buckingham')
+        ->and($townGrounding->location)->not->toHaveKey('local_facts'); // Allentown region facts dropped
+
+    // HUB page (its subject IS the parent's own city) legitimately keeps the regional facts.
+    $hub = Content::factory()->page()->create([
+        'site_id' => $site->id, 'title' => 'Doylestown, PA', 'location_id' => $parent->id,
+        'parent_location_id' => null, 'wireframe_kit_id' => $kit->id,
+        'page_type' => PageType::Location, 'slot_payload' => ['hero' => 'x'],
+    ]);
+    $hubGrounding = app(PageGroundingAssembler::class)->assemble($hub);
+
+    expect($hubGrounding->location['local_facts'] ?? [])->not->toBe([]); // hub keeps its own city's facts
+});
+
 it('a TOWN page with its own matching market rides only that market (not the whole site list)', function () {
     $site = Site::factory()->create();
     Market::factory()->create(['site_id' => $site->id, 'name' => 'Allentown', 'region' => 'Lehigh Valley, PA']);
