@@ -346,6 +346,7 @@ final class BlockContentAssembler
             related: $this->relatedServiceLinks($content),
             trustStats: $this->trustStats($content),
             faqs: $this->faqItems($slots),
+            posts: $this->siloPosts($content),
             preview: $preview,
             hasForm: $this->hasLeadForm($content),
         );
@@ -403,6 +404,7 @@ final class BlockContentAssembler
             reviews: $this->hubReviewQuotes($content),
             trustStats: $this->trustStats($content),
             faqs: $this->faqItems($slots),
+            posts: $this->siloPosts($content),
             preview: $preview,
         );
     }
@@ -1059,6 +1061,42 @@ final class BlockContentAssembler
             ->where('kind', ContentKind::Post->value)
             ->where('status', ContentStatus::Published->value)
             ->whereNotNull('slug')
+            ->orderByDesc('published_at')
+            ->limit(6)
+            ->get()
+            ->map(fn (Content $p): array => [
+                'title' => (string) $p->title,
+                'url' => $permalinks->path($p),
+                'date' => $p->published_at?->format('M j, Y') ?? '',
+            ])
+            ->all();
+    }
+
+    /**
+     * A service page's silo blog feed: the recent PUBLISHED posts routed to THIS page's silo — the
+     * editorial body of work the blog builds up around a service. A post's silo is its routed match
+     * (`matched_silo_id`) else its own `silo_id` — the same resolution the internal-link graph uses to
+     * point a post at its silo's pillar. Recency-ordered, capped at 6, gated ≥1 downstream (a silo with
+     * no posts simply drops the section). Shown on both the spoke (service) and hub (silo pillar) pages.
+     *
+     * @return list<array{title: string, url: string, date: string}>
+     */
+    private function siloPosts(Content $content): array
+    {
+        $siloId = $content->silo_id;
+        if ($siloId === null) {
+            return [];
+        }
+
+        $permalinks = new Permalinks;
+
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('kind', ContentKind::Post->value)
+            ->where('status', ContentStatus::Published->value)
+            ->whereNotNull('slug')
+            ->where(fn ($q) => $q->where('matched_silo_id', $siloId)
+                ->orWhere(fn ($q2) => $q2->whereNull('matched_silo_id')->where('silo_id', $siloId)))
             ->orderByDesc('published_at')
             ->limit(6)
             ->get()

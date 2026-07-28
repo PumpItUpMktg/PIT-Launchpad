@@ -204,6 +204,7 @@ final class BlockPageComposer
         array $related = [],
         array $trustStats = [],
         array $faqs = [],
+        array $posts = [],
         bool $preview = false,
         bool $hasForm = false,
     ): string {
@@ -332,6 +333,15 @@ final class BlockPageComposer
             preview: $preview,
         );
 
+        // The silo's blog feed — recent posts routed to this service's silo, linked. Data-gated (≥1),
+        // so a silo with no posts drops it. Sits low (below FAQ, above the soft close) so the sales
+        // content leads and the editorial supports.
+        $postsBlock = $this->sections->localPosts(
+            eyebrow: 'From the blog',
+            heading: 'Recent articles',
+            posts: $posts,
+        );
+
         $cta = $this->sections->cta(
             heading: 'Have a question first?',
             body: 'Tell us what you need and we’ll get right back to you — no pressure.',
@@ -342,7 +352,7 @@ final class BlockPageComposer
 
         // Rhythm: the pushy CTA (accent) sits mid-page buffered by light sections on both sides;
         // hero and the soft close are the only other colored bands. D·L·L·Ls·Ls·Ls·(Ls)·C·L·Ls·L·L·D.
-        return $this->join([$hero, $introBlock, $symptomsBlock, $scope, $process, $cost, $compare, $ctaBold, $jobsBlock, $reviewsBlock, $relatedBlock, $faq, $cta]);
+        return $this->join([$hero, $introBlock, $symptomsBlock, $scope, $process, $cost, $compare, $ctaBold, $jobsBlock, $reviewsBlock, $relatedBlock, $faq, $postsBlock, $cta]);
     }
 
     /**
@@ -378,6 +388,7 @@ final class BlockPageComposer
         array $reviews = [],
         array $trustStats = [],
         array $faqs = [],
+        array $posts = [],
         bool $preview = false,
     ): string {
         $hero = $this->sections->hero(
@@ -442,6 +453,14 @@ final class BlockPageComposer
             preview: $preview,
         );
 
+        // The silo's blog feed — recent posts routed to this silo, linked. Data-gated (≥1) so a silo
+        // with no posts drops it. Below the FAQ, above the close: the pillar's editorial support.
+        $postsBlock = $this->sections->localPosts(
+            eyebrow: 'From the blog',
+            heading: 'Recent articles',
+            posts: $posts,
+        );
+
         $cta = $this->sections->cta(
             heading: 'Not sure which you need?',
             body: 'Describe the problem and we’ll point you to the right fix — no pressure.',
@@ -451,7 +470,7 @@ final class BlockPageComposer
         );
 
         // Routing page: hero and the close are the only colored bands (D·L·L·Ls·Ls·Ls·Ls·L·D).
-        return $this->join([$hero, $introBlock, $grid, $whyBlock, $process, $certs, $reviewsBlock, $faq, $cta]);
+        return $this->join([$hero, $introBlock, $grid, $whyBlock, $process, $certs, $reviewsBlock, $faq, $postsBlock, $cta]);
     }
 
     /** A muted framing paragraph (the scope-intro line) — kept tiny and local to composeSpoke. */

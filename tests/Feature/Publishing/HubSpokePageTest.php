@@ -4,6 +4,7 @@ use App\ContentEngine\Drafting\DraftCall;
 use App\ContentEngine\Drafting\PageDrafter;
 use App\ContentEngine\Drafting\PageGroundingAssembler;
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\KeywordSource;
 use App\Enums\PageType;
 use App\Local\Proof\LocalReview;
@@ -141,6 +142,68 @@ it('composes the spoke: keyword H1, symptoms, scope, record process, cost with t
         // Gated reviews/jobs stay out with the null providers.
         ->not->toContain('lp-testimonials')
         ->not->toContain('lp-jobs');
+});
+
+it('shows the silo blog feed on a service page — recent published posts routed to the silo, and drops cross-silo / draft posts', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Services']);
+    $service = hsService($site, $silo);
+    $page = hsSpokePage($site, $silo, $service);
+
+    // A published post routed to THIS silo (matched_silo_id) → appears.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published,
+        'matched_silo_id' => $silo->id, 'title' => 'How to spot a failing sump pump',
+        'slug' => 'failing-sump-pump-signs', 'published_at' => now()->subDay(),
+    ]);
+    // A published post that owns the silo via silo_id (no match) → also appears.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published,
+        'silo_id' => $silo->id, 'matched_silo_id' => null, 'title' => 'Spring storm basement prep',
+        'slug' => 'spring-storm-basement-prep', 'published_at' => now()->subDays(2),
+    ]);
+    // A DRAFT post in the silo → excluded (not published).
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview,
+        'matched_silo_id' => $silo->id, 'title' => 'Draft not yet live', 'slug' => 'draft-not-live',
+    ]);
+    // A published post in ANOTHER silo → excluded.
+    $otherSilo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Drain Cleaning']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published,
+        'matched_silo_id' => $otherSilo->id, 'title' => 'Hydro jetting explained',
+        'slug' => 'hydro-jetting-explained', 'published_at' => now(),
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('lp-posts')
+        ->toContain('From the blog')
+        ->toContain('How to spot a failing sump pump')       // matched silo
+        ->toContain('Spring storm basement prep')            // owns silo via silo_id
+        ->not->toContain('Draft not yet live')               // draft excluded
+        ->not->toContain('Hydro jetting explained');         // cross-silo excluded
+});
+
+it('the silo blog feed also shows on the hub, and drops entirely when the silo has no posts', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Services']);
+    $hub = hsHubPage($site, $silo);
+
+    // No posts yet → the section is gated out (no empty "From the blog" band).
+    $bare = app(BlockContentAssembler::class)->compose($hub->fresh(), $hub->slot_payload, []);
+    expect($bare)->not->toContain('lp-posts')->not->toContain('From the blog');
+
+    // Add a published post in the silo → the hub now carries the feed.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published,
+        'matched_silo_id' => $silo->id, 'title' => 'Battery backups that actually last',
+        'slug' => 'battery-backups-that-last', 'published_at' => now(),
+    ]);
+
+    $withPost = app(BlockContentAssembler::class)->compose($hub->fresh(), $hub->slot_payload, []);
+    expect($withPost)->toContain('lp-posts')->toContain('Battery backups that actually last');
 });
 
 it('a configured site lead form makes the service-description row a 60/40 two-column with [lp_form]', function () {
