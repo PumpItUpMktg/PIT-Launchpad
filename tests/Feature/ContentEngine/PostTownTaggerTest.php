@@ -43,6 +43,18 @@ it('tags a post with every coverage town it mentions', function () {
         ->and($result['tags_added'])->toBe(2);
 });
 
+it('tagPost tags a SINGLE post and returns the changed towns (idempotent on re-run)', function () {
+    $site = ttSite();
+    $post = ttPost($site, 'Water main break in Edison', 'Crews also helped out in New Brunswick.');
+
+    $changed = app(PostTownTagger::class)->tagPost($post);
+
+    expect(collect($changed)->sort()->values()->all())->toBe(['edison', 'new brunswick'])
+        ->and(ttTowns($post))->toBe(['Edison', 'New Brunswick'])
+        // Re-running tags nothing new — no change.
+        ->and(app(PostTownTagger::class)->tagPost($post->fresh()))->toBe([]);
+});
+
 it('prefers the longer town name over a substring town', function () {
     $site = ttSite();
     // "New Brunswick" must win the alternation over "Brunswick" — not double-tag.

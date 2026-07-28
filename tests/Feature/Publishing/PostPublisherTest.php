@@ -1,13 +1,19 @@
 <?php
 
 use App\Enums\ConnectionProvider;
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\PageType;
+use App\Jobs\PublishContent;
 use App\Models\Connection;
 use App\Models\Content;
+use App\Models\ContentTown;
+use App\Models\CoverageArea;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\PostPublisher;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 function verifiedSite(): Site
 {
@@ -41,6 +47,38 @@ it('publishes an approved post to WordPress and stores the wp id', function () {
     expect($result->isPublished())->toBeTrue()
         ->and($result->wpPostId)->toBe(108)
         ->and($post->fresh()->status)->toBe(ContentStatus::Published);
+});
+
+it('auto-tags a published post with the towns it names and repushes the matching live location page', function () {
+    Http::fake(['*/launchpad/v1/content' => Http::response(['wp_post_id' => 108, 'status' => 'publish', 'skipped' => false])]);
+    Queue::fake();
+    $site = verifiedSite();
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown']);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Exton']);
+
+    // A LIVE location page for Doylestown (its feed should refresh) + one for a town the post never names.
+    $doylestown = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'wp_post_id' => 5001, 'title' => 'Doylestown, PA', 'slug' => 'doylestown-pa',
+    ]);
+    $exton = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'wp_post_id' => 5002, 'title' => 'Exton, PA', 'slug' => 'exton-pa',
+    ]);
+
+    $post = Content::factory()->post()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::Approved,
+        'title' => 'Sump pump season in Doylestown', 'slug' => 'sump-pump-season-doylestown',
+        'body' => 'Heavy spring rain hit Doylestown hard this year.',
+    ]);
+
+    app(PostPublisher::class)->publish($post);
+
+    // The post is tagged with the town it named…
+    expect(ContentTown::query()->where('content_id', $post->id)->pluck('town')->all())->toBe(['doylestown']);
+    // …and ONLY the Doylestown location page is repushed (Exton, unnamed, is left alone).
+    Queue::assertPushed(PublishContent::class, fn (PublishContent $job) => $job->contentId === $doylestown->id);
+    Queue::assertNotPushed(PublishContent::class, fn (PublishContent $job) => $job->contentId === $exton->id);
 });
 
 it('honors a {skipped:true} response — does not clobber a WordPress edit', function () {
