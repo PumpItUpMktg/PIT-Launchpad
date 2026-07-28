@@ -482,7 +482,54 @@
     font-weight: 600;
 }
 
-/* Local blog feed (§B) — recent town posts as linked cards on the location hub. */
+/* Blog feed — recent posts as linked cards on the location hub AND on service/silo pages.
+   The columns block is laid out as a responsive grid: 1 → 2 (≥600) → 3 (≥960) per row, so a
+   full 6-post feed reads as two rows of three (mirrors the services grid). */
+.wp-block-columns.lp-posts-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--wp--preset--spacing--40, 1.5rem);
+    margin-block: 0;
+    margin-inline: auto;
+}
+
+@media (min-width: 600px) {
+    .wp-block-columns.lp-posts-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 960px) {
+    .wp-block-columns.lp-posts-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.lp-posts-grid > .wp-block-column {
+    display: flex;
+    margin: 0;
+}
+
+/* The post's featured image — a 16:9 thumbnail filling the card top. */
+.lp-post .lp-post-thumb {
+    margin: -0.35rem -0.35rem 0.25rem; /* bleed slightly to the card padding edges */
+    width: calc(100% + 0.7rem);
+    overflow: hidden;
+    border-radius: var(--wp--custom--radius, 12px);
+}
+
+.lp-post .lp-post-thumb img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    transition: transform 0.2s ease;
+}
+
+.lp-card.lp-post:hover .lp-post-thumb img {
+    transform: scale(1.04);
+}
+
 .lp-post .lp-post-title {
     font-size: 1.15rem;
     font-weight: 700;

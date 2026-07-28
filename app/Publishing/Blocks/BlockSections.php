@@ -141,7 +141,7 @@ final class BlockSections
      * section drops), so it appears only once local editorial exists for the town. Feeds the areas-served
      * / location hub with fresh local content beside the reviews and jobs.
      *
-     * @param  list<array{title?: string, url?: string, date?: string}>  $posts
+     * @param  list<array{title?: string, url?: string, date?: string, image?: string, image_alt?: string}>  $posts
      */
     public function localPosts(string $eyebrow, string $heading, array $posts): string
     {
@@ -153,14 +153,21 @@ final class BlockSections
             return '';
         }
 
+        // Up to 6 cards → the `.lp-posts-grid` CSS wraps them 3-per-row (2 rows of 3), matching the
+        // services grid. Each card leads with the post's FEATURED image (linked), then the title + date.
         $cols = array_map(function (array $p): string {
             $title = trim((string) $p['title']);
             $url = trim((string) $p['url']);
+
+            $children = [];
+            $image = trim((string) ($p['image'] ?? ''));
+            if ($image !== '') {
+                // The post's featured image as a thumbnail atop the card (the title carries the link).
+                $children[] = $this->b->image($image, trim((string) ($p['image_alt'] ?? '')) !== '' ? (string) $p['image_alt'] : $title, ['className' => 'lp-post-thumb']);
+            }
             // A linked title as a bold paragraph — b->heading escapes inline HTML, so the anchor rides a
             // paragraph (inlineHtml keeps links). Reads as the card headline via the lp-post-title class.
-            $children = [
-                $this->b->paragraph('<strong><a href="'.$this->attr($url).'">'.$this->text($title).'</a></strong>', ['className' => 'lp-post-title']),
-            ];
+            $children[] = $this->b->paragraph('<strong><a href="'.$this->attr($url).'">'.$this->text($title).'</a></strong>', ['className' => 'lp-post-title']);
             $date = trim((string) ($p['date'] ?? ''));
             if ($date !== '') {
                 $children[] = $this->b->paragraph($this->text($date), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-post-meta']);
