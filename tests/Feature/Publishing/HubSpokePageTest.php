@@ -7,12 +7,14 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\KeywordSource;
 use App\Enums\PageType;
+use App\Enums\RenderStatus;
 use App\Local\Proof\LocalReview;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Models\Content;
 use App\Models\ConversionConfig;
 use App\Models\Keyword;
 use App\Models\Market;
+use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Silo;
@@ -22,6 +24,7 @@ use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\MetaBlobAssembler;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use Database\Seeders\WireframeKitSeeder;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\FakeClaudeClient;
 
 function hsSite(): Site
@@ -184,6 +187,34 @@ it('shows the silo blog feed on a service page — recent published posts routed
         ->toContain('Spring storm basement prep')            // owns silo via silo_id
         ->not->toContain('Draft not yet live')               // draft excluded
         ->not->toContain('Hydro jetting explained');         // cross-silo excluded
+});
+
+it('the silo blog feed shows each post\'s featured image as a card thumbnail', function () {
+    Storage::fake('r2');
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Services']);
+    $service = hsService($site, $silo);
+    $page = hsSpokePage($site, $silo, $service);
+
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published,
+        'matched_silo_id' => $silo->id, 'title' => 'Signs your sump pump is failing',
+        'slug' => 'signs-sump-pump-failing', 'published_at' => now(),
+    ]);
+    // A succeeded render for the post → its featured image resolves to an R2 url.
+    RenderJob::factory()->create([
+        'site_id' => $site->id, 'content_id' => $post->id, 'slot' => 'hero', 'required' => true,
+        'status' => RenderStatus::Succeeded, 'r2_key' => "sites/{$site->id}/signs-hero.webp",
+        'alt' => 'A failing sump pump in a flooded pit',
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->toContain('lp-post-thumb')                           // the thumbnail wrapper
+        ->toContain('signs-hero.webp')                         // the rendered image src
+        ->toContain('A failing sump pump in a flooded pit')    // its alt text
+        ->toContain('Signs your sump pump is failing');        // title still present
 });
 
 it('the silo blog feed also shows on the hub, and drops entirely when the silo has no posts', function () {

@@ -8,6 +8,7 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\ProofType;
+use App\Enums\RenderStatus;
 use App\Enums\StandardPageType;
 use App\Enums\VoiceStatus;
 use App\Local\Grounding\LocationGrounding;
@@ -23,6 +24,7 @@ use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\ProofItem;
+use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SiloBlueprint;
@@ -35,6 +37,7 @@ use App\Publishing\MetaBlobAssembler;
 use App\Publishing\PhoneNumber;
 use App\Publishing\SiteContact;
 use App\Support\BusinessHours;
+use Illuminate\Support\Collection;
 
 /**
  * Resolves a page's real §1/§4 inputs and composes its `post_content` (core Gutenberg block markup) —
@@ -1054,22 +1057,16 @@ final class BlockContentAssembler
             return [];
         }
 
-        $permalinks = new Permalinks;
-
-        return Content::withoutGlobalScope(SiteScope::class)
+        $posts = Content::withoutGlobalScope(SiteScope::class)
             ->whereIn('id', $ids)
             ->where('kind', ContentKind::Post->value)
             ->where('status', ContentStatus::Published->value)
             ->whereNotNull('slug')
             ->orderByDesc('published_at')
             ->limit(6)
-            ->get()
-            ->map(fn (Content $p): array => [
-                'title' => (string) $p->title,
-                'url' => $permalinks->path($p),
-                'date' => $p->published_at?->format('M j, Y') ?? '',
-            ])
-            ->all();
+            ->get();
+
+        return $this->postFeed($posts);
     }
 
     /**
@@ -1088,9 +1085,7 @@ final class BlockContentAssembler
             return [];
         }
 
-        $permalinks = new Permalinks;
-
-        return Content::withoutGlobalScope(SiteScope::class)
+        $posts = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
             ->where('kind', ContentKind::Post->value)
             ->where('status', ContentStatus::Published->value)
@@ -1099,13 +1094,68 @@ final class BlockContentAssembler
                 ->orWhere(fn ($q2) => $q2->whereNull('matched_silo_id')->where('silo_id', $siloId)))
             ->orderByDesc('published_at')
             ->limit(6)
-            ->get()
-            ->map(fn (Content $p): array => [
-                'title' => (string) $p->title,
-                'url' => $permalinks->path($p),
-                'date' => $p->published_at?->format('M j, Y') ?? '',
-            ])
-            ->all();
+            ->get();
+
+        return $this->postFeed($posts);
+    }
+
+    /**
+     * Shape a set of posts into the blog-feed card data — title + internal link + date + FEATURED image
+     * (the post's rendered hero, resolved once for the whole set). Empty image fields when a post has no
+     * rendered image (the card degrades to text only).
+     *
+     * @param  Collection<int, Content>  $posts
+     * @return list<array{title: string, url: string, date: string, image: string, image_alt: string}>
+     */
+    private function postFeed(Collection $posts): array
+    {
+        $permalinks = new Permalinks;
+        $images = $this->postFeedImages($posts->pluck('id')->all());
+
+        return $posts->map(fn (Content $p): array => [
+            'title' => (string) $p->title,
+            'url' => $permalinks->path($p),
+            'date' => $p->published_at?->format('M j, Y') ?? '',
+            'image' => (string) ($images[(string) $p->id]['url'] ?? ''),
+            'image_alt' => (string) ($images[(string) $p->id]['alt'] ?? ''),
+        ])->all();
+    }
+
+    /**
+     * content_id => {url, alt} for each post's FEATURED image — the succeeded render (required/hero
+     * first) served from R2. One query for the whole feed, so a 6-card grid never N+1s. A post with no
+     * rendered image simply isn't in the map (its card shows text only).
+     *
+     * @param  list<string>  $ids
+     * @return array<string, array{url: string, alt: string}>
+     */
+    private function postFeedImages(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $out = [];
+        $jobs = RenderJob::withoutGlobalScope(SiteScope::class)
+            ->whereIn('content_id', $ids)
+            ->where('status', RenderStatus::Succeeded->value)
+            ->whereNotNull('r2_key')
+            ->orderByDesc('required')
+            ->orderBy('created_at')
+            ->get();
+
+        foreach ($jobs as $job) {
+            $cid = (string) $job->content_id;
+            if (isset($out[$cid])) {
+                continue; // first (required/hero) render wins
+            }
+            $image = $job->toImageObject();
+            if ($image !== null && isset($image['url'])) {
+                $out[$cid] = ['url' => (string) $image['url'], 'alt' => (string) ($image['alt'] ?? '')];
+            }
+        }
+
+        return $out;
     }
 
     /**
