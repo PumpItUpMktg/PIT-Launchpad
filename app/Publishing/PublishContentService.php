@@ -3,6 +3,7 @@
 namespace App\Publishing;
 
 use App\ContentEngine\BlogQueue\BlogTargetQueue;
+use App\ContentEngine\Reconcile\PostTownTagger;
 use App\Enums\AuditAction;
 use App\Enums\ContentKind;
 use App\Enums\ContentSource;
@@ -170,6 +171,11 @@ class PublishContentService
         // towns drip in. Re-publish the already-live parent hub so its town links stay complete.
         $this->republishParentHub($content);
 
+        // A freshly-published POST auto-tags itself with the towns it names and repushes the live
+        // location pages whose blog feed just changed — so the article lands on those pages without a
+        // manual reconcile. No-op for a page, or a post that names no coverage town.
+        $this->refreshLocationFeeds($content);
+
         return PublishResult::published($content, $wpPostId);
     }
 
@@ -230,6 +236,47 @@ class PublishContentService
         if ($hub !== null) {
             PublishContent::dispatch($hub->id);
         }
+    }
+
+    /**
+     * On a POST going live: auto-tag it with the coverage towns it names ({@see PostTownTagger}), then
+     * repush the LIVE location pages whose local blog feed just changed — so the article appears on those
+     * town/hub pages with no manual `reconcile-post-silos`. Matched on the location page's normalized town
+     * (title minus a trailing ", ST"), which is the same key the feed reads. Repushes are queued +
+     * idempotent by ULID; a page is a location page, never a post, so this never loops. No-op for a page
+     * or a post that names no coverage town.
+     */
+    private function refreshLocationFeeds(Content $content): void
+    {
+        if ($content->kind !== ContentKind::Post) {
+            return;
+        }
+
+        $changed = app(PostTownTagger::class)->tagPost($content);
+        if ($changed === []) {
+            return;
+        }
+
+        $changedSet = array_flip($changed);
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->where('status', ContentStatus::Published->value)
+            ->whereNotNull('wp_post_id')
+            ->get(['id', 'title']);
+
+        foreach ($pages as $page) {
+            if (isset($changedSet[$this->townKey((string) $page->title)])) {
+                PublishContent::dispatch($page->id);
+            }
+        }
+    }
+
+    /** Normalize a location page's town (drop a trailing ", ST", lower) — mirrors the tagger + feed key. */
+    private function townKey(string $name): string
+    {
+        return mb_strtolower(trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($name))));
     }
 
     /**

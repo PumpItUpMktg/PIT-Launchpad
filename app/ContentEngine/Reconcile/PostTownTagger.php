@@ -48,27 +48,13 @@ final class PostTownTagger
         $changed = [];
 
         foreach ($posts as $post) {
-            $found = $this->townsIn((string) $post->title.' '.(string) $post->body, $pattern, $map);
-
-            $existing = ContentTown::query()->where('content_id', $post->id)->get()->keyBy('town');
-
-            foreach ($found as $key => $display) {
-                if (! $existing->has($key)) {
-                    ContentTown::query()->create([
-                        'content_id' => $post->id, 'site_id' => $site->id, 'town' => $key, 'town_display' => $display,
-                    ]);
-                    $added++;
-                    $changed[$key] = true;
-                }
+            $result = $this->syncPostTowns($post, (string) $site->id, $map, $pattern);
+            $added += $result['added'];
+            $removed += $result['removed'];
+            foreach ($result['changed'] as $key) {
+                $changed[$key] = true;
             }
-            foreach ($existing as $key => $row) {
-                if (! isset($found[$key])) {
-                    $row->delete();
-                    $removed++;
-                    $changed[$key] = true;
-                }
-            }
-            if ($found !== []) {
+            if ($result['tagged']) {
                 $postsTagged++;
             }
         }
@@ -77,6 +63,68 @@ final class PostTownTagger
             'posts_tagged' => $postsTagged, 'tags_added' => $added, 'tags_removed' => $removed,
             'changed_towns' => array_keys($changed),
         ];
+    }
+
+    /**
+     * Tag a SINGLE post with the towns it names — the publish-time hook so a freshly-published article
+     * lands on its towns' location feeds without waiting for a full reconcile. Builds the site's coverage
+     * pattern for just this post; same restriction (coverage towns only), same idempotent add/remove.
+     *
+     * @return list<string> the normalized town keys that gained or lost a tag (empty when nothing changed)
+     */
+    public function tagPost(Content $post): array
+    {
+        $site = $post->site;
+        if ($site === null || $post->kind !== ContentKind::Post) {
+            return [];
+        }
+
+        $map = $this->coverageTownMap($site);
+        if ($map === []) {
+            return [];
+        }
+
+        $displays = array_values($map);
+        usort($displays, fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
+        $pattern = '/\b('.implode('|', array_map(fn (string $d): string => preg_quote($d, '/'), $displays)).')\b/i';
+
+        return $this->syncPostTowns($post, (string) $site->id, $map, $pattern)['changed'];
+    }
+
+    /**
+     * Reconcile one post's `content_towns` rows against the towns its text names — add the new, drop the
+     * gone. Shared by the full {@see tag()} sweep and the single-post {@see tagPost()} publish hook.
+     *
+     * @param  array<string, string>  $map  normalized key => display
+     * @return array{added: int, removed: int, tagged: bool, changed: list<string>}
+     */
+    private function syncPostTowns(Content $post, string $siteId, array $map, string $pattern): array
+    {
+        $found = $this->townsIn((string) $post->title.' '.(string) $post->body, $pattern, $map);
+        $existing = ContentTown::query()->where('content_id', $post->id)->get()->keyBy('town');
+
+        $added = 0;
+        $removed = 0;
+        $changed = [];
+
+        foreach ($found as $key => $display) {
+            if (! $existing->has($key)) {
+                ContentTown::query()->create([
+                    'content_id' => $post->id, 'site_id' => $siteId, 'town' => $key, 'town_display' => $display,
+                ]);
+                $added++;
+                $changed[$key] = true;
+            }
+        }
+        foreach ($existing as $key => $row) {
+            if (! isset($found[$key])) {
+                $row->delete();
+                $removed++;
+                $changed[$key] = true;
+            }
+        }
+
+        return ['added' => $added, 'removed' => $removed, 'tagged' => $found !== [], 'changed' => array_keys($changed)];
     }
 
     /**
