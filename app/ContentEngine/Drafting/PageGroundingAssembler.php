@@ -168,15 +168,25 @@ class PageGroundingAssembler
             }
         }
 
-        $trade = SiloBlueprint::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $page->site_id)
-            ->value('trade');
+        // The grounded local_facts are fetched for THIS physical location (its city + region) and cached
+        // on it, so they describe the PARENT's own city. That is right for a HUB page (its subject IS that
+        // city) but wrong for a TOWN page: injecting Doylestown's regional facts into a Buckingham page is
+        // exactly what drifted the copy to Allentown / generic tri-state filler. A town page therefore
+        // grounds on its OWN town only (name + honest served-area context) and skips the parent's regional
+        // facts — until per-town grounding exists, honest-by-omission beats wrong-region color.
+        $isTown = $subject !== null;
+        $facts = [];
+        if (! $isTown) {
+            $trade = SiloBlueprint::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $page->site_id)
+                ->value('trade');
 
-        try {
-            $grounded = $this->grounding->for($location, is_string($trade) ? $trade : null);
-            $facts = $grounded['facts'];
-        } catch (\Throwable) {
-            $facts = []; // grounding is color, never a blocker
+            try {
+                $grounded = $this->grounding->for($location, is_string($trade) ? $trade : null);
+                $facts = $grounded['facts'];
+            } catch (\Throwable) {
+                $facts = []; // grounding is color, never a blocker
+            }
         }
 
         // A town page's subject is the town itself: its own city/state lead, the parent supplies context.
