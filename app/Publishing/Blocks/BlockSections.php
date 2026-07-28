@@ -337,7 +337,7 @@ final class BlockSections
 
     /**
      * The "areas we serve" list on a location hub — internal LINKS to each town page under it (the
-     * hub → town spine). One clean, comma-flowing line of town links, largest town first (the caller
+     * hub → town spine). One clean line of pipe-separated town links, largest town first (the caller
      * sorts by census size tier), the ", ST" suffix dropped for readability — a scannable sentence, not
      * a crowded tag cloud or a long column. No size labels; the ordering carries the hierarchy. When a
      * location-scoped coverage MAP is available it is rendered above this list (which then serves as the
@@ -358,7 +358,12 @@ final class BlockSections
             return '<span class="lp-areas-town"><a href="'.$this->attr($l['url']).'">'.$this->text($label !== '' ? $label : $l['label']).'</a></span>';
         }, $links);
 
-        $list = '<p class="lp-areas-townlist">'.implode('', $towns).'</p>';
+        // The separator lives in the MARKUP (a spaced pipe), not only in theme CSS — so the list still
+        // reads as "Town | Town | Town" and wraps on its own even when the block theme's stylesheet is
+        // stale or absent (its ::after separator was the single point of failure that ran the towns
+        // together at full width). Largest town first — the caller sorts by census size tier.
+        $sep = '<span class="lp-areas-sep" aria-hidden="true"> | </span>';
+        $list = '<p class="lp-areas-townlist">'.implode($sep, $towns).'</p>';
 
         // The interactive county map rides the meta-blob (not post_content); the block carries only the
         // mount + this list as its fallback. The map is populated by the theme's Leaflet init.
