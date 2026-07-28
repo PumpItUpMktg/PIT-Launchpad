@@ -403,6 +403,14 @@ it('the areas list is a de-duped, published-only, comma-flowing line ordered lar
     expect(substr_count($markup, '>Norristown</a>'))->toBe(1)
         // Largest-first: Norristown (large) precedes Audubon (small).
         ->and(strpos($markup, '>Norristown</a>'))->toBeLessThan(strpos($markup, '>Audubon</a>'));
+
+    // The pipe separator is in the MARKUP (not only theme CSS) so the towns never run together when the
+    // deployed stylesheet is stale — a spaced "|" between each town, so it also wraps on its own.
+    expect($markup)
+        ->toContain('lp-areas-sep')
+        ->toContain(' | ')
+        // Exactly one separator between the two town links (N towns → N-1 separators).
+        ->and(substr_count($markup, 'lp-areas-sep'))->toBe(1);
 });
 
 it('forLocation builds a scoped areas map — its served towns as LINKED points + a location pin', function () {

@@ -1387,7 +1387,7 @@
     gap: 1.25rem;
 }
 
-/* The towns read as a sentence: inline links separated by a comma, wrapping naturally. */
+/* The towns read as a sentence: inline links separated by a pipe (in the markup), wrapping naturally. */
 .lp-areas-townlist {
     margin: 0;
     font-size: 1rem;
@@ -1406,10 +1406,11 @@
     white-space: nowrap;
 }
 
-.lp-areas-town:not(:last-child)::after {
-    content: ",";
-    margin-right: 0.4rem;
-    color: inherit;
+/* The pipe separator is emitted in the markup (theme-independent); style it as a quiet divider.
+   The old ::after comma was removed so a page carrying the markup pipe never double-separates. */
+.lp-areas-sep {
+    color: var(--wp--preset--color--muted, #94a3b8);
+    opacity: 0.6;
 }
 
 .lp-areas-town a {
