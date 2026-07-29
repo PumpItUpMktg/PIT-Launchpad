@@ -85,7 +85,7 @@ class OperatePhysicalLocations extends OperatePage
      * Background-worker health — so a stalled queue (approved pages that won't publish) is visible here
      * instead of looking like a broken button. Includes this tenant's brand for the drain hint.
      *
-     * @return array{pending: int, oldest_minutes: int, failed: int, processing: int, draining: bool, worker_down: bool, stalled: bool, brand: string, failures: list<array{job: string, reason: string, count: int, last: string}>}
+     * @return array{pending: int, oldest_minutes: int, failed: int, processing: int, draining: bool, worker_down: bool, stalled: bool, brand: string, failures: list<array{job: string, reason: string, count: int, last: string, pages: list<string>}>}
      */
     public function getQueueHealthProperty(): array
     {
