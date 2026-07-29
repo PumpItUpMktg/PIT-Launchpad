@@ -34,4 +34,51 @@ final class QueueHealth
             'stalled' => ($pending > 0 && $oldestMinutes >= $stalledAfterMinutes) || $failed > 0,
         ];
     }
+
+    /**
+     * The failed jobs grouped by their cause — job class ✕ first exception line, most-frequent first —
+     * so the banner can show WHAT failed and WHY, not just a count. Mirrors launchpad:queue-diagnose.
+     *
+     * @return list<array{job: string, reason: string, count: int, last: string}>
+     */
+    public function failures(int $limit = 8): array
+    {
+        return DB::table('failed_jobs')
+            ->orderByDesc('failed_at')
+            ->get()
+            ->groupBy(fn (object $row): string => $this->jobClass($row->payload).'  ✕  '.$this->exceptionHead($row->exception))
+            ->map(fn ($rows): array => [
+                'job' => $this->jobClass($rows->first()->payload),
+                'reason' => $this->exceptionHead($rows->first()->exception),
+                'count' => $rows->count(),
+                'last' => (string) $rows->max('failed_at'),
+            ])
+            ->sortByDesc('count')
+            ->take($limit)
+            ->values()
+            ->all();
+    }
+
+    /** Delete every failed_jobs row (the operator "Clear failed" action / queue:flush). Returns the count. */
+    public function clearFailed(): int
+    {
+        return DB::table('failed_jobs')->delete();
+    }
+
+    /** The job class from a serialized queue payload (e.g. "App\\Jobs\\PublishContent"), basename only. */
+    private function jobClass(?string $payload): string
+    {
+        $data = json_decode((string) $payload, true);
+        $name = is_array($data) && isset($data['displayName']) ? (string) $data['displayName'] : 'unknown job';
+
+        return ($pos = strrpos($name, '\\')) !== false ? substr($name, $pos + 1) : $name;
+    }
+
+    /** The first line of the recorded exception — the class + message, minus the stack trace. */
+    private function exceptionHead(?string $exception): string
+    {
+        $first = trim((string) strtok((string) $exception, "\n"));
+
+        return $first !== '' ? mb_strimwidth($first, 0, 200, '…') : 'no exception recorded';
+    }
 }

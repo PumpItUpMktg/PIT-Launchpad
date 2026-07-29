@@ -18,6 +18,7 @@ use App\Operate\PhysicalLocations;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -34,6 +35,29 @@ function plArea(Site $site, string $geoId, string $name, array $sourceIds, bool 
         'state' => 'PA', 'source_location_ids' => $sourceIds, 'page_selected' => $selected, 'source' => 'county',
     ]);
 }
+
+it('shows the failed jobs under the stalled banner and clears them from the button', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    session(['guided_site_id' => $site->id]);
+
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
+        'payload' => json_encode(['displayName' => 'App\\Jobs\\PublishContent']),
+        'exception' => "RuntimeException: WP 401 unauthorized\n#0 /app/...", 'failed_at' => now(),
+    ]);
+
+    $page = Livewire::test(OperatePhysicalLocations::class)
+        ->assertSee('background worker looks stalled')
+        ->assertSee('PublishContent')             // WHAT failed
+        ->assertSee('WP 401 unauthorized')        // WHY (first exception line)
+        ->assertSee('Clear 1 failed');            // the button
+
+    $page->call('clearFailedJobs');
+
+    expect(DB::table('failed_jobs')->count())->toBe(0);
+    // Banner is gone on the next render — nothing queued, nothing failed.
+    $page->assertDontSee('background worker looks stalled');
+});
 
 it('builds one card per location: territory counts, overlap named per town, home-county soft rule honored', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
