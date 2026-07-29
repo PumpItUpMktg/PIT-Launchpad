@@ -2,6 +2,8 @@
 
 namespace App\Operate;
 
+use App\Models\Content;
+use App\Models\Scopes\SiteScope;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -54,26 +56,71 @@ final class QueueHealth
 
     /**
      * The failed jobs grouped by their cause — job class ✕ first exception line, most-frequent first —
-     * so the banner can show WHAT failed and WHY, not just a count. Mirrors launchpad:queue-diagnose.
+     * so the banner can show WHAT failed, WHY, and WHICH page(s). Mirrors launchpad:queue-diagnose.
      *
-     * @return list<array{job: string, reason: string, count: int, last: string}>
+     * @return list<array{job: string, reason: string, count: int, last: string, pages: list<string>}>
      */
     public function failures(int $limit = 8): array
     {
-        return DB::table('failed_jobs')
-            ->orderByDesc('failed_at')
-            ->get()
+        $rows = DB::table('failed_jobs')->orderByDesc('failed_at')->get();
+
+        // Resolve every referenced content id to a page title in ONE query — most failed jobs
+        // (GeneratePage / GeneratePost / PublishContent / RenderImage) carry the content id they act on.
+        $titles = Content::withoutGlobalScope(SiteScope::class)
+            ->whereIn('id', $rows->map(fn (object $r): ?string => $this->contentIdFromPayload($r->payload))->filter()->unique()->values())
+            ->pluck('title', 'id');
+
+        return $rows
             ->groupBy(fn (object $row): string => $this->jobClass($row->payload).'  ✕  '.$this->exceptionHead($row->exception))
-            ->map(fn ($rows): array => [
-                'job' => $this->jobClass($rows->first()->payload),
-                'reason' => $this->exceptionHead($rows->first()->exception),
-                'count' => $rows->count(),
-                'last' => (string) $rows->max('failed_at'),
+            ->map(fn ($group): array => [
+                'job' => $this->jobClass($group->first()->payload),
+                'reason' => $this->friendlyReason($this->exceptionHead($group->first()->exception)),
+                'count' => $group->count(),
+                'last' => (string) $group->max('failed_at'),
+                'pages' => $group
+                    ->map(fn (object $r): ?string => $this->contentIdFromPayload($r->payload))
+                    ->filter()
+                    ->map(fn (string $id): string => trim((string) ($titles[$id] ?? '')))
+                    ->filter(fn (string $t): bool => $t !== '')
+                    ->unique()
+                    ->values()
+                    ->all(),
             ])
             ->sortByDesc('count')
             ->take($limit)
             ->values()
             ->all();
+    }
+
+    /**
+     * The content id a job acts on, pulled from its serialized command in the failed_jobs payload
+     * (jobs carry `contentId`). Null for jobs that reference no content. Read-only string extraction —
+     * never unserialize an arbitrary job object.
+     */
+    private function contentIdFromPayload(?string $payload): ?string
+    {
+        $data = json_decode((string) $payload, true);
+        $command = is_array($data) ? ($data['data']['command'] ?? null) : null;
+        if (! is_string($command)) {
+            return null;
+        }
+
+        return preg_match('/"contentId";s:\d+:"([^"]+)"/', $command, $m) === 1 ? $m[1] : null;
+    }
+
+    /**
+     * Turn a raw framework exception head into an operator-legible cause. The common one — a
+     * MaxAttemptsExceeded on a tries=1 generate/publish job — means the run was INTERRUPTED (a deploy
+     * restarted the worker mid-job, or it ran past the timeout), not that the page is broken; the fix
+     * is to clear + regenerate. Anything else passes through as the real error (WP 401, fal 402, …).
+     */
+    private function friendlyReason(string $exceptionHead): string
+    {
+        if (str_contains($exceptionHead, 'MaxAttemptsExceeded') || str_contains($exceptionHead, 'attempted too many times')) {
+            return 'Generation was interrupted (a deploy restarted the worker mid-run, or it ran past the timeout) — clear this, then regenerate the page.';
+        }
+
+        return $exceptionHead;
     }
 
     /** Delete every failed_jobs row (the operator "Clear failed" action / queue:flush). Returns the count. */

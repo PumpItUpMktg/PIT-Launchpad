@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Content;
+use App\Models\Site;
 use App\Operate\QueueHealth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -108,6 +110,36 @@ test('QueueHealth::failures groups the failed jobs by cause (job class + reason)
         ->and($failures[0]['reason'])->toContain('WP 401 unauthorized') // first exception line, no stack trace
         ->and($failures[1]['job'])->toBe('RenderImage')
         ->and($failures[1]['count'])->toBe(1);
+});
+
+function qhFailedJobFor(string $job, string $exception, string $contentId): void
+{
+    // A realistic failed_jobs payload: data.command is the serialized job carrying its contentId.
+    $command = 'O:20:"'.$job.'":1:{s:9:"contentId";s:'.strlen($contentId).':"'.$contentId.'";}';
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
+        'payload' => json_encode(['displayName' => $job, 'data' => ['commandName' => $job, 'command' => $command]]),
+        'exception' => $exception, 'failed_at' => now(),
+    ]);
+}
+
+test('failures names the affected page and de-jargons an interrupted (MaxAttempts) generate job', function () {
+    $site = Site::factory()->create();
+    $page = Content::factory()->create(['site_id' => $site->id, 'title' => 'Bristol, PA']);
+    qhFailedJobFor(
+        'App\\Jobs\\GeneratePage',
+        'Illuminate\\Queue\\MaxAttemptsExceededException: App\\Jobs\\GeneratePage has been attempted too many times.',
+        (string) $page->id,
+    );
+
+    $failures = app(QueueHealth::class)->failures();
+
+    expect($failures)->toHaveCount(1)
+        ->and($failures[0]['job'])->toBe('GeneratePage')
+        ->and($failures[0]['pages'])->toBe(['Bristol, PA'])          // WHICH page
+        ->and($failures[0]['reason'])->toContain('interrupted')      // friendly cause
+        ->and($failures[0]['reason'])->toContain('regenerate')
+        ->and($failures[0]['reason'])->not->toContain('MaxAttemptsExceeded'); // no raw framework jargon
 });
 
 test('QueueHealth::clearFailed empties the failed_jobs table and returns the count', function () {

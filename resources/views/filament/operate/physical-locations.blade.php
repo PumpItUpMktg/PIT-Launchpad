@@ -88,6 +88,7 @@
         .pl-qw-fail-n { font-weight:700; font-size:10.5px; background:rgba(217,119,6,.18); border-radius:99px; padding:0 6px; }
         .pl-qw-fail-why { color:#92400e; flex:1; min-width:200px; }
         .pl-qw-fail-when { color:#a16207; font-size:11px; white-space:nowrap; }
+        .pl-qw-fail-pages { flex-basis:100%; font-size:11.5px; color:#78350f; padding-left:2px; }
     </style>
 
     <div class="pl-wrap">
@@ -152,6 +153,9 @@
                                 @if ($f['count'] > 1)<span class="pl-qw-fail-n">×{{ $f['count'] }}</span>@endif
                                 <span class="pl-qw-fail-why">{{ $f['reason'] }}</span>
                                 <span class="pl-qw-fail-when">last {{ $f['last'] }}</span>
+                                @if (($f['pages'] ?? []) !== [])
+                                    <span class="pl-qw-fail-pages">📄 {{ implode(', ', array_slice($f['pages'], 0, 8)) }}{{ count($f['pages']) > 8 ? ' +'.(count($f['pages']) - 8).' more' : '' }}</span>
+                                @endif
                             </div>
                         @endforeach
                     </div>
