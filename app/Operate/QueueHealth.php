@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 final class QueueHealth
 {
     /**
-     * @return array{pending: int, oldest_minutes: int, failed: int, stalled: bool}
+     * @return array{pending: int, oldest_minutes: int, failed: int, processing: int, draining: bool, worker_down: bool, stalled: bool}
      */
     public function snapshot(int $stalledAfterMinutes = 5): array
     {
@@ -25,13 +25,30 @@ final class QueueHealth
             : 0;
         $failed = (int) DB::table('failed_jobs')->count();
 
+        // A job the worker is holding right now: `reserved_at` is stamped when a worker reserves a job
+        // and cleared/deleted when it finishes. A recent reservation = a LIVE worker actively draining —
+        // the difference between "clearing one page at a time" (fine) and "nobody is working" (down).
+        $processing = (int) DB::table('jobs')
+            ->whereNotNull('reserved_at')
+            ->where('reserved_at', '>=', time() - $stalledAfterMinutes * 60)
+            ->count();
+
+        // Worker DOWN = an ageing backlog that nothing is processing. An ageing backlog WITH a job in
+        // flight is just a slow drain (publish = render + WP push, one at a time), not a fault.
+        $agingBacklog = $pending > 0 && $oldestMinutes >= $stalledAfterMinutes;
+        $workerDown = $agingBacklog && $processing === 0;
+
         return [
             'pending' => $pending,
             'oldest_minutes' => $oldestMinutes,
             'failed' => $failed,
-            // Stalled = a backlog that has sat past the threshold (the worker isn't picking it up), or
-            // any failed job. A small, fresh backlog is normal (the worker is mid-drain) → not stalled.
-            'stalled' => ($pending > 0 && $oldestMinutes >= $stalledAfterMinutes) || $failed > 0,
+            'processing' => $processing,
+            // Draining = there's a backlog AND a worker is actively chewing through it → inform, don't alarm.
+            'draining' => $pending > 0 && $processing > 0,
+            'worker_down' => $workerDown,
+            // Stalled is a real fault only: the worker is down, or a job has failed. A healthy drain
+            // (backlog shrinking, a job in flight) is NOT stalled — it just needs to be shown as progress.
+            'stalled' => $workerDown || $failed > 0,
         ];
     }
 
