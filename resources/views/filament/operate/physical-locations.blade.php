@@ -11,6 +11,15 @@
         .pl-tile.bad { border-color:rgba(220,38,38,.5); } .pl-tile.bad .n { color:#dc2626; }
         .pl-tile.good { border-color:rgba(22,163,74,.5); } .pl-tile.good .n { color:#16a34a; }
         .pl-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(360px, 1fr)); gap:12px; }
+        .pl-single { display:block; }
+        .pl-loctabs { display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid rgba(148,163,184,.25); padding-bottom:10px; }
+        .pl-loctab { font-size:12.5px; font-weight:600; color:#475569; background:transparent; border:1px solid rgba(148,163,184,.4); border-radius:8px; padding:5px 11px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+        .pl-loctab:hover { border-color:rgba(100,116,139,.7); }
+        .pl-loctab.on { background:#2563eb; border-color:#2563eb; color:#fff; }
+        .pl-loctab.on .pl-locpin { color:#fff; }
+        .pl-locpin { color:#2563eb; }
+        .pl-loctab-n { font-variant-numeric:tabular-nums; font-size:10.5px; font-weight:700; background:rgba(148,163,184,.2); color:inherit; border-radius:99px; padding:0 6px; }
+        .pl-loctab.on .pl-loctab-n { background:rgba(255,255,255,.25); }
         .pl-card { border:1px solid rgba(148,163,184,.35); border-radius:11px; display:flex; flex-direction:column; overflow:hidden; }
         .pl-top { display:flex; align-items:flex-start; gap:10px; padding:13px 15px; background:rgba(148,163,184,.07); border-bottom:1px solid rgba(148,163,184,.2); flex-wrap:wrap; }
         .pl-top h3 { margin:0; font-size:15.5px; }
@@ -186,8 +195,23 @@
         @if ($board['cards'] === [])
             <div class="pl-empty">No physical locations yet — import them on Setup → Business (bulk GBP) or add them in Settings → Locations.</div>
         @else
-            <div class="pl-grid">
-                @foreach ($board['cards'] as $card)
+            @php
+                // One TAB per location — the active one renders full-width (no card grid). Each tab shows a
+                // published/selected badge so progress reads at a glance. Active tab from $this->locTab, else first.
+                $locTabs = $board['cards'];
+                $activeId = (is_string($this->locTab) && collect($locTabs)->contains('id', $this->locTab)) ? $this->locTab : ($locTabs[0]['id'] ?? null);
+                $card = collect($locTabs)->firstWhere('id', $activeId) ?? $locTabs[0];
+            @endphp
+            <div class="pl-loctabs">
+                @foreach ($locTabs as $t)
+                    <button type="button" class="pl-loctab {{ $t['id'] === $card['id'] ? 'on' : '' }}" wire:click="setLocTab('{{ $t['id'] }}')" wire:key="lt-{{ $t['id'] }}">
+                        <span class="pl-locpin">📍</span> {{ $t['name'] }}
+                        <span class="pl-loctab-n">{{ $t['towns_selected'] }}</span>
+                    </button>
+                @endforeach
+            </div>
+
+            <div class="pl-single">
                     <div class="pl-card" wire:key="pl-{{ $card['id'] }}">
                         <div class="pl-top">
                             <div>
@@ -218,8 +242,8 @@
                             </div>
 
                             {{-- Town pages: ordered by population into Larger / Mid-size / Smaller bands.
-                                 Check the towns to publish, then "Generate + publish selected" fires that
-                                 batch (queued, scoped to THIS location — never all 700 at once). --}}
+                                 Check which towns get pages (the territory choice). Draft them on Location
+                                 pages; publish the drafted ones from here. --}}
                             @php $bandLabels = ['larger' => 'Larger cities', 'mid' => 'Mid-size towns', 'smaller' => 'Smaller communities']; @endphp
                             <div class="pl-townpanel">
                                 @foreach ($bandLabels as $bk => $blabel)
@@ -246,16 +270,10 @@
                                     @endif
                                 @endforeach
 
-                                {{-- Gated flow: 1) generate DRAFTS for the selected towns, 2) review each
-                                     drafted town below, 3) publish the reviewed ones live. Nothing goes
-                                     straight to WordPress unless you use the "skip review" fast path. --}}
+                                {{-- Publish flow: DRAFTING happens on Operate · Location pages. Here you select
+                                     which towns get pages (above), push the drafted ones live, and drain a stuck
+                                     queue. Generation (the Sonnet + fal call) is not on this surface. --}}
                                 <div class="pl-genrow">
-                                    <button type="button" class="pl-btn primary" wire:click="generateSelected('{{ $card['id'] }}')"
-                                        @disabled($card['selectable'] === 0)
-                                        @if ($card['selectable'] >= 25) wire:confirm="Generate drafts for {{ $card['selectable'] }} town pages? That's a lot of AI drafting + images — they run on the worker." @endif
-                                        wire:loading.attr="disabled" wire:target="generateSelected('{{ $card['id'] }}')">
-                                        ✨ Generate drafts ({{ $card['selectable'] }})
-                                    </button>
                                     <button type="button" class="pl-btn primary" wire:click="publishReviewedSelected('{{ $card['id'] }}')"
                                         @disabled($card['reviewable'] === 0)
                                         wire:confirm="Publish {{ $card['reviewable'] }} reviewed town page(s) live now? They push to WordPress synchronously."
@@ -267,16 +285,7 @@
                                             wire:confirm="Publish this location's stuck town pages right now, synchronously (no worker)?"
                                             wire:loading.attr="disabled" wire:target="drainNow('{{ $card['id'] }}')">Drain now</button>
                                     @endif
-                                    @php
-                                        $stuckGen = collect(['larger', 'mid', 'smaller'])
-                                            ->flatMap(fn ($b) => $card['town_bands'][$b] ?? [])
-                                            ->filter(fn ($t) => $t['status'] === 'generating')->count();
-                                    @endphp
-                                    @if ($stuckGen > 0)
-                                        <button type="button" class="pl-btn" wire:click="clearStuckGenerating('{{ $card['id'] }}')"
-                                            wire:confirm="Clear {{ $stuckGen }} town page(s) stuck 'generating' behind the down worker? They become actionable again (regenerate / discard)."
-                                            wire:loading.attr="disabled" wire:target="clearStuckGenerating('{{ $card['id'] }}')">Clear stuck ({{ $stuckGen }})</button>
-                                    @endif
+                                    <a class="pl-btn" href="{{ \App\Filament\Pages\Operate\OperateLocationPages::getUrl() }}" wire:navigate>✨ Generate on Location pages →</a>
                                 </div>
 
                                 {{-- Per-town review gate: each drafted, selected town — eyeball it in the
@@ -294,11 +303,6 @@
                                             <div class="pl-review-row" wire:key="rev-{{ $t['content_id'] }}">
                                                 <span class="pl-review-name">{{ $t['name'] }}</span>
                                                 <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $t['content_id']]) }}" wire:navigate>Review</a>
-                                                <button type="button" class="pl-btn" wire:click="regenerateTown('{{ $t['content_id'] }}')"
-                                                    wire:loading.attr="disabled" wire:target="regenerateTown('{{ $t['content_id'] }}')">Regenerate</button>
-                                                <button type="button" class="pl-btn danger" wire:click="discardTown('{{ $t['content_id'] }}')"
-                                                    wire:confirm="Discard this draft? It's pulled from the review/publish set (not published). You can regenerate it fresh later."
-                                                    wire:loading.attr="disabled" wire:target="discardTown('{{ $t['content_id'] }}')">Discard</button>
                                                 <button type="button" class="pl-btn primary" wire:click="publishTown('{{ $t['content_id'] }}')"
                                                     wire:loading.attr="disabled" wire:target="publishTown('{{ $t['content_id'] }}')">Publish</button>
                                             </div>
@@ -365,22 +369,19 @@
                             <span class="pl-state">Page: <b>{{ $pg['label'] }}</b></span>
 
                             @if ($pg['content_id'] ?? null)
-                                {{-- The standard page actions — the same set as every other board. Plain
-                                     single-label buttons (Livewire disables them mid-flight); no loading
-                                     span, which is what left "Repush Pushing…" showing at rest before. --}}
+                                {{-- Live-page management (this surface publishes + tracks; it doesn't draft).
+                                     Plain single-label buttons (Livewire disables them mid-flight). --}}
                                 <a class="pl-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $pg['content_id']]) }}" wire:navigate>Review</a>
                                 <button class="pl-btn primary" wire:click="repush('{{ $pg['content_id'] }}')" wire:loading.attr="disabled" wire:target="repush('{{ $pg['content_id'] }}')">Repush</button>
-                                <button class="pl-btn" wire:click="regenerate('{{ $pg['content_id'] }}')" wire:loading.attr="disabled" wire:target="regenerate('{{ $pg['content_id'] }}')">Regenerate</button>
                                 <button class="pl-btn danger" wire:click="takeDown('{{ $pg['content_id'] }}')"
                                     wire:confirm="Remove this location page from WordPress? It stays in your plan and can be republished on the same URL."
                                     wire:loading.attr="disabled" wire:target="takeDown('{{ $pg['content_id'] }}')">Take down</button>
                             @else
-                                {{-- No landing page yet — generate it (find-or-creates the page, then drafts). --}}
-                                <button class="pl-btn primary" wire:click="generatePage('{{ $card['id'] }}')" @disabled(! $pg['can_generate']) wire:loading.attr="disabled" wire:target="generatePage('{{ $card['id'] }}')">Generate</button>
+                                {{-- No landing page yet — drafting lives on Location pages. --}}
+                                <a class="pl-btn primary" href="{{ \App\Filament\Pages\Operate\OperateLocationPages::getUrl() }}" wire:navigate>Generate on Location pages →</a>
                             @endif
                         </div>
                     </div>
-                @endforeach
             </div>
         @endif
     </div>

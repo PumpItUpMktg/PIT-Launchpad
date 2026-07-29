@@ -2,16 +2,12 @@
 
 namespace App\Filament\Pages\Operate;
 
-use App\Build\PlanSync;
-use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Filament\Pages\Gathering\BusinessStep;
 use App\Filament\Pages\Gathering\LocationsStep;
-use App\Jobs\GeneratePage;
-use App\Locations\LocationLandingFactory;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -23,14 +19,14 @@ use App\Publishing\DeleteFromWordpress;
 use App\Publishing\PostPublisher;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 
 /**
- * Operate · Physical locations — one card per base location with the areas it serves. Surfaces
- * the two territory truths at a glance: OVERLAP between locations (flagged per town, naming the
- * other location — the goal state is zero) and the home-county SOFT RULE (a location should
- * serve the county it sits in and its towns — advisory, never enforced). Territory is edited in
- * the Service area workspace; this is the operator's display + audit surface.
+ * Operate · Physical locations — a per-location TAB view of each base location and the area it
+ * serves. This is the GBP/territory + progress + PUBLISH surface: pick which coverage towns get
+ * pages, watch OVERLAP (flagged per town, goal zero) and the home-county SOFT RULE (advisory), see
+ * what's published vs still to publish, and repush / take down / publish live pages. Drafting
+ * itself lives on Operate · Location pages — this surface never GENERATES (no Sonnet/fal call); it
+ * selects, publishes, and tracks. Territory is edited in the Service area workspace.
  *
  * @property-read array{summary: array<string, int>, cards: list<array<string, mixed>>} $board
  * @property-read array<string, string> $siteOptions
@@ -46,6 +42,9 @@ class OperatePhysicalLocations extends OperatePage
     protected string $view = 'filament.operate.physical-locations';
 
     public ?string $siteId = null;
+
+    /** The active per-location tab (a physical location id); null → the first location. */
+    public ?string $locTab = null;
 
     public function mount(): void
     {
@@ -73,6 +72,12 @@ class OperatePhysicalLocations extends OperatePage
     public function getSite(): ?Site
     {
         return $this->siteId === null ? null : Site::query()->find($this->siteId);
+    }
+
+    /** Switch the active location tab — the page shows one location at a time instead of a card grid. */
+    public function setLocTab(string $tab): void
+    {
+        $this->locTab = $tab;
     }
 
     /** @return array<string, string> */
@@ -154,83 +159,6 @@ class OperatePhysicalLocations extends OperatePage
             CoverageArea::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $site->id)->whereIn('id', $ids)->update(['page_selected' => $select]);
         }
-    }
-
-    /**
-     * Generate this location's selected town pages as DRAFTS for review — the gated path. Queues one
-     * GeneratePage (autoPublish OFF) per selected town not already live/in flight; the worker drafts
-     * (Sonnet + fal) and parks each in review. The operator then eyeballs each town and clicks "Publish
-     * reviewed" (below) to push them live. Nothing here goes straight to WordPress.
-     */
-    public function generateSelected(string $locationId): void
-    {
-        $this->enqueueSelected($locationId, autoPublish: false);
-    }
-
-    /**
-     * Generate + publish this location's selected town pages in one shot (the fast path, no review gate).
-     * Queues one GeneratePage(autoPublish) per selected town not already live/in flight — the worker
-     * drafts and, on a CLEAN draft, publishes immediately; a thin draft still parks in review, never live.
-     */
-    public function generateAndPublishSelected(string $locationId): void
-    {
-        $this->enqueueSelected($locationId, autoPublish: true);
-    }
-
-    /**
-     * Materialize any newly-selected town into a page (idempotent Sync plan), then enqueue a GeneratePage
-     * per selected, not-already-live/in-flight town. autoPublish decides whether a clean draft publishes
-     * itself (fast path) or parks in review (gated path).
-     */
-    private function enqueueSelected(string $locationId, bool $autoPublish): void
-    {
-        $site = $this->getSite();
-        if ($site === null) {
-            return;
-        }
-
-        // Bring newly-selected towns into being as pages (candidate rows) before we can generate them.
-        app(PlanSync::class)->sync($site);
-
-        $card = collect(app(PhysicalLocations::class)->build($site)['cards'])->firstWhere('id', $locationId);
-        if ($card === null) {
-            return;
-        }
-
-        $queued = 0;
-        $notReady = 0;
-        foreach (['larger', 'mid', 'smaller'] as $band) {
-            foreach ($card['town_bands'][$band] ?? [] as $town) {
-                if (! $town['page_selected'] || in_array($town['status'], ['published', 'generating'], true) || $town['content_id'] === null) {
-                    continue;
-                }
-                $content = $this->ownedContent((string) $town['content_id']);
-                if ($content === null) {
-                    continue;
-                }
-                if (! app(GroundingReadiness::class)->ready($content)) {
-                    $notReady++;
-
-                    continue;
-                }
-                GeneratePage::enqueue($content, actorId: Auth::id(), autoPublish: $autoPublish);
-                $queued++;
-            }
-        }
-
-        if ($queued === 0) {
-            Notification::make()->info()->title('Nothing to generate')
-                ->body($notReady > 0 ? "{$notReady} selected town(s) aren't ready to write yet." : 'Every selected town here is already live or in flight.')->send();
-
-            return;
-        }
-
-        $verb = $autoPublish ? 'Generating + publishing' : 'Generating drafts for';
-        $tail = $autoPublish
-            ? 'Watch the progress monitor up top; each publishes as its draft lands.'
-            : 'Watch the monitor; review each draft, then "Publish reviewed" to push them live.';
-        Notification::make()->success()->title("{$verb} {$queued} town page(s)")
-            ->body(($notReady > 0 ? "{$notReady} not ready were skipped. " : '').$tail)->send();
     }
 
     /**
@@ -341,105 +269,6 @@ class OperatePhysicalLocations extends OperatePage
     }
 
     /**
-     * Re-draft ONE town whose draft the operator rejected on review — clears any stuck generating
-     * stamp + last draft error and drops its dead/queued job, then re-queues GeneratePage (draft-only,
-     * no auto-publish). The fresh draft lands back in the review list. Needs a running worker to draft.
-     */
-    public function regenerateTown(string $contentId): void
-    {
-        $content = $this->ownedContent($contentId);
-        if ($content === null) {
-            return;
-        }
-
-        if (! app(GroundingReadiness::class)->ready($content)) {
-            Notification::make()->warning()->title('Not ready yet')
-                ->body('This town isn\'t ready to re-write yet — its details are still coming together.')->send();
-
-            return;
-        }
-
-        $this->clearGeneratingMark($content);   // so a town stuck ⏳ behind a dead worker can be re-kicked
-        $this->flushJobsFor($contentId);         // drop the old/dead job before re-queuing
-        GeneratePage::enqueue($content->refresh(), actorId: Auth::id(), autoPublish: false);
-
-        Notification::make()->success()->title('Regenerating')
-            ->body("'{$content->title}' is being re-drafted; review it again once the worker finishes.")->send();
-    }
-
-    /**
-     * Dump ONE town out of the review/publish set — a draft that failed the operator's review. Rejects
-     * it (so it leaves the drafted list and never publishes) and clears any queued/stuck job so it can't
-     * re-fire. It stays page-selected, so "Generate drafts" can re-draft it fresh later if wanted.
-     */
-    public function discardTown(string $contentId): void
-    {
-        $content = $this->ownedContent($contentId);
-        if ($content === null) {
-            return;
-        }
-
-        app(ReviewActions::class)->reject($content, 'Discarded on review (Operate → Locations).');
-        $this->clearGeneratingMark($content->refresh());
-        $this->flushJobsFor($contentId);
-
-        Notification::make()->success()->title('Discarded')
-            ->body("'{$content->title}' was pulled from the review/publish set. Use \"Generate drafts\" to re-draft it fresh.")->send();
-    }
-
-    /**
-     * Clear this location's town pages stuck "generating" behind a dead worker — resets the generating
-     * stamp and kills their queued jobs so they're actionable again (regenerate / discard / re-select).
-     * The escape hatch for a backlog that piled up while the worker was down.
-     */
-    public function clearStuckGenerating(string $locationId): void
-    {
-        $site = $this->getSite();
-        $location = $this->ownedLocation($locationId);
-        if ($site === null || $location === null) {
-            return;
-        }
-
-        $stuck = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('kind', ContentKind::Page->value)
-            ->where('page_type', PageType::Location->value)
-            ->where('parent_location_id', $location->id)
-            ->get()
-            ->filter(fn (Content $c): bool => $c->generationState() === 'generating');
-
-        if ($stuck->isEmpty()) {
-            Notification::make()->info()->title('Nothing stuck')
-                ->body('No town pages are stuck generating for this location.')->send();
-
-            return;
-        }
-
-        foreach ($stuck as $c) {
-            $this->clearGeneratingMark($c);
-            $this->flushJobsFor((string) $c->id);
-        }
-
-        Notification::make()->success()->title("Cleared {$stuck->count()} stuck-generating town page(s)")
-            ->body('They\'re actionable again — regenerate or discard them. Fix the worker (queue:work) so drafting runs automatically.')->send();
-    }
-
-    /** Reset a page's generation-state marker (generating stamp + draft-error) so it's actionable again. */
-    private function clearGeneratingMark(Content $content): void
-    {
-        $meta = is_array($content->meta) ? $content->meta : [];
-        unset($meta['generating_at'], $meta['draft_error'], $meta['draft_failure'], $meta['draft_failed_at']);
-        $content->forceFill(['meta' => $meta])->save();
-    }
-
-    /** Delete the pending + dead queue rows whose serialized payload references this content id. */
-    private function flushJobsFor(string $contentId): void
-    {
-        DB::table('jobs')->where('payload', 'like', '%'.$contentId.'%')->delete();
-        DB::table('failed_jobs')->where('payload', 'like', '%'.$contentId.'%')->delete();
-    }
-
-    /**
      * Escape hatch when the worker is down: publish this location's in-flight town pages SYNCHRONOUSLY,
      * right now, via the same PostPublisher the drain command uses. Bounded per click so a huge backlog
      * can't time out the request — for more, click again or run launchpad:drain-publish.
@@ -483,32 +312,6 @@ class OperatePhysicalLocations extends OperatePage
     // ── Per-location page lifecycle (targets the location's landing/hub page) ──
 
     /**
-     * Generate the location's landing page — find-or-creates the ONE page pinned to this location
-     * (so it works even before the build materialized it), then queues the drafter on the worker.
-     * Same honest grounding gate + queued path the pages board uses.
-     */
-    public function generatePage(string $locationId): void
-    {
-        $location = $this->ownedLocation($locationId);
-        if ($location === null) {
-            return;
-        }
-
-        $content = app(LocationLandingFactory::class)->findOrCreate($location);
-
-        if (! app(GroundingReadiness::class)->ready($content)) {
-            Notification::make()->warning()->title('Not ready yet')
-                ->body('This location isn\'t ready to write yet — its details are still coming together.')->send();
-
-            return;
-        }
-
-        GeneratePage::enqueue($content, actorId: Auth::id());
-        Notification::make()->success()->title('Queued — generating on the worker')
-            ->body("'{$content->title}' is being drafted; it will be ready to publish shortly.")->send();
-    }
-
-    /**
      * Re-push the location's landing page — the standard idempotent-by-ULID publish path, content-keyed
      * to match the shared card actions. Works before the page is live too: a not-yet-published page is
      * approved first, then published (so "Repush" doubles as the first publish); an already-live page
@@ -541,26 +344,6 @@ class OperatePhysicalLocations extends OperatePage
         }
 
         Notification::make()->success()->title('Publishing — composing and pushing to WordPress')->send();
-    }
-
-    /** Re-draft the location's landing page on the worker (same honest grounding gate as the pages board). */
-    public function regenerate(string $contentId): void
-    {
-        $content = $this->ownedContent($contentId);
-        if ($content === null) {
-            return;
-        }
-
-        if (! app(GroundingReadiness::class)->ready($content)) {
-            Notification::make()->warning()->title('Not ready yet')
-                ->body('This page isn\'t ready to re-write yet — its details are still coming together.')->send();
-
-            return;
-        }
-
-        GeneratePage::enqueue($content, actorId: Auth::id());
-        Notification::make()->success()->title('Regenerating')
-            ->body("'{$content->title}' is being re-drafted; review it once it finishes.")->send();
     }
 
     /**
