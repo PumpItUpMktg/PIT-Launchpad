@@ -73,6 +73,7 @@
         .pl-btn.danger:hover { border-color:#dc2626; background:rgba(220,38,38,.06); }
         a.pl-btn { text-decoration:none; display:inline-flex; align-items:center; }
         .pl-btn[disabled] { opacity:.5; cursor:not-allowed; }
+        .pl-queueinfo { border:1px solid rgba(37,99,235,.35); background:rgba(37,99,235,.06); color:#1e40af; border-radius:10px; padding:10px 15px; font-size:12.5px; line-height:1.5; }
         .pl-queuewarn { border:1px solid rgba(217,119,6,.5); background:rgba(217,119,6,.08); color:#b45309; border-radius:10px; padding:11px 15px; font-size:12.5px; line-height:1.55; }
         .pl-queuewarn code { background:rgba(217,119,6,.14); padding:1px 7px; border-radius:5px; font-size:11.5px; }
         .pl-qw-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
@@ -114,10 +115,18 @@
              worker is down, approved pages sit forever — so surface it here, with the drain escape hatch,
              instead of it looking like a broken button. --}}
         @php $q = $this->queueHealth; @endphp
+        @if (! $q['stalled'] && $q['draining'])
+            {{-- Healthy drain: a worker is publishing the backlog one page at a time. Informational, not an
+                 alarm (a publish is render + WP push, so a queue of 9 legitimately takes minutes). Polls so
+                 the count ticks down live. --}}
+            <div class="pl-queueinfo" wire:poll.10s>
+                ⏳ Publishing — <b>{{ $q['pending'] }}</b> page(s) queued, clearing one at a time. This is normal; each publish renders images then pushes to WordPress.
+            </div>
+        @endif
         @if ($q['stalled'])
             <div class="pl-queuewarn">
                 <div class="pl-qw-head">
-                    <span>⚠ The background worker looks stalled — <b>{{ $q['pending'] }}</b> job(s) queued{{ $q['oldest_minutes'] > 0 ? ' (oldest '.$q['oldest_minutes'].'m)' : '' }}{{ $q['failed'] > 0 ? ', '.$q['failed'].' failed' : '' }}.</span>
+                    <span>@if ($q['worker_down'])⚠ The background worker looks down — <b>{{ $q['pending'] }}</b> job(s) queued{{ $q['oldest_minutes'] > 0 ? ' (oldest '.$q['oldest_minutes'].'m)' : '' }} and nothing is processing.@else⚠ <b>{{ $q['failed'] }}</b> job(s) failed{{ $q['pending'] > 0 ? ' — '.$q['pending'].' still queued' : '' }}.@endif</span>
                     @if ($q['failed'] > 0)
                         <button type="button" class="pl-qw-clear" wire:click="clearFailedJobs" wire:loading.attr="disabled" wire:target="clearFailedJobs"
                             wire:confirm="Clear {{ $q['failed'] }} failed job(s)? This removes the dead-job records (same as queue:flush) and clears this banner. Fix the cause first so they don't recur.">
@@ -127,8 +136,12 @@
                     @endif
                 </div>
                 <div class="pl-qw-body">
-                    Approved pages won't publish until it drains. Fix the worker (Horizon / <code>queue:work</code>), or push this tenant's stuck pages now on the console:
-                    <code>php artisan launchpad:drain-publish "{{ $q['brand'] }}"</code>
+                    @if ($q['worker_down'])
+                        Approved pages won't publish until it drains. Fix the worker (Horizon / <code>queue:work</code>), or push this tenant's stuck pages now on the console:
+                        <code>php artisan launchpad:drain-publish "{{ $q['brand'] }}"</code>
+                    @else
+                        The worker is running{{ $q['pending'] > 0 ? ' and draining the queue' : '' }} — these are past failures. Clear them below (fix the cause first so they don't recur){{ $q['pending'] > 0 ? ', or drain the rest inline: ' : '.' }}@if ($q['pending'] > 0)<code>php artisan launchpad:drain-publish "{{ $q['brand'] }}"</code>@endif
+                    @endif
                 </div>
                 @if (($q['failures'] ?? []) !== [])
                     <div class="pl-qw-fails">

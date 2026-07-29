@@ -36,6 +36,24 @@ function plArea(Site $site, string $geoId, string $name, array $sourceIds, bool 
     ]);
 }
 
+it('shows a calm "publishing" banner while the queue is draining — not the stalled alarm', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    session(['guided_site_id' => $site->id]);
+
+    // An ageing backlog, but a worker is actively holding a job (reserved just now) → draining, not down.
+    DB::table('jobs')->insert([
+        ['queue' => 'default', 'payload' => '{}', 'attempts' => 1, 'reserved_at' => time() - 5, 'available_at' => time() - 600, 'created_at' => time() - 600],
+        ['queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null, 'available_at' => time() - 300, 'created_at' => time() - 300],
+    ]);
+
+    Livewire::test(OperatePhysicalLocations::class)
+        ->assertOk()
+        ->assertSee('Publishing')                          // the calm progress line
+        ->assertSee('clearing one at a time')
+        ->assertDontSee('background worker looks down')     // no false alarm
+        ->assertDontSee('looks stalled');
+});
+
 it('shows the failed jobs under the stalled banner and clears them from the button', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     session(['guided_site_id' => $site->id]);
@@ -47,7 +65,7 @@ it('shows the failed jobs under the stalled banner and clears them from the butt
     ]);
 
     $page = Livewire::test(OperatePhysicalLocations::class)
-        ->assertSee('background worker looks stalled')
+        ->assertSee('job(s) failed')              // failed-only (worker not necessarily down)
         ->assertSee('PublishContent')             // WHAT failed
         ->assertSee('WP 401 unauthorized')        // WHY (first exception line)
         ->assertSee('Clear 1 failed');            // the button
@@ -56,7 +74,7 @@ it('shows the failed jobs under the stalled banner and clears them from the butt
 
     expect(DB::table('failed_jobs')->count())->toBe(0);
     // Banner is gone on the next render — nothing queued, nothing failed.
-    $page->assertDontSee('background worker looks stalled');
+    $page->assertDontSee('job(s) failed');
 });
 
 it('builds one card per location: territory counts, overlap named per town, home-county soft rule honored', function () {
@@ -412,17 +430,17 @@ it('clearStuckGenerating resets this location\'s stuck-generating towns so they 
     expect($stuck->fresh()->generationState())->toBe('awaiting'); // no longer stuck generating
 });
 
-it('surfaces a stalled-worker banner with the drain hint when the publish queue is backed up', function () {
+it('surfaces a worker-down banner with the drain hint when the queue is backed up and nothing is processing', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     session(['guided_site_id' => $site->id]);
-    // A job that has sat 10 minutes → the worker looks stalled.
+    // A job that has sat 10 minutes with NO worker holding it → the worker looks down.
     DB::table('jobs')->insert([
         'queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null,
         'available_at' => time() - 600, 'created_at' => time() - 600,
     ]);
 
     Livewire::test(OperatePhysicalLocations::class)
-        ->assertSee('worker looks stalled')
+        ->assertSee('worker looks down')
         ->assertSee('launchpad:drain-publish');
 });
 

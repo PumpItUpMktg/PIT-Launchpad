@@ -30,6 +30,51 @@ test('QueueHealth is not stalled with an empty queue, and a fresh backlog is not
     expect(app(QueueHealth::class)->snapshot(5)['stalled'])->toBeFalse();
 });
 
+test('an ageing backlog with a job IN FLIGHT is draining, not stalled (no false alarm)', function () {
+    // 3 queued, the oldest available 10m ago — but a worker is holding one right now (reserved just now).
+    DB::table('jobs')->insert([
+        ['queue' => 'default', 'payload' => '{}', 'attempts' => 1, 'reserved_at' => time() - 5, 'available_at' => time() - 600, 'created_at' => time() - 600],
+        ['queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null, 'available_at' => time() - 400, 'created_at' => time() - 400],
+        ['queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null, 'available_at' => time() - 200, 'created_at' => time() - 200],
+    ]);
+
+    $snap = app(QueueHealth::class)->snapshot(5);
+
+    expect($snap['pending'])->toBe(3)
+        ->and($snap['processing'])->toBe(1)     // a worker is actively chewing
+        ->and($snap['draining'])->toBeTrue()
+        ->and($snap['worker_down'])->toBeFalse()
+        ->and($snap['stalled'])->toBeFalse();   // NOT an alarm — it's just clearing one at a time
+});
+
+test('an ageing backlog with NOTHING in flight is worker-down (a real stall)', function () {
+    // Same-age backlog, but no job is reserved — nobody is working it.
+    DB::table('jobs')->insert([
+        ['queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null, 'available_at' => time() - 600, 'created_at' => time() - 600],
+        ['queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null, 'available_at' => time() - 400, 'created_at' => time() - 400],
+    ]);
+
+    $snap = app(QueueHealth::class)->snapshot(5);
+
+    expect($snap['processing'])->toBe(0)
+        ->and($snap['draining'])->toBeFalse()
+        ->and($snap['worker_down'])->toBeTrue()
+        ->and($snap['stalled'])->toBeTrue();
+});
+
+test('a STALE reservation (worker died mid-job) counts as down, not draining', function () {
+    // reserved_at set but 10m old — past the window → the holding worker is gone, backlog is ageing.
+    DB::table('jobs')->insert([
+        'queue' => 'default', 'payload' => '{}', 'attempts' => 1, 'reserved_at' => time() - 600, 'available_at' => time() - 600, 'created_at' => time() - 600,
+    ]);
+
+    $snap = app(QueueHealth::class)->snapshot(5);
+
+    expect($snap['processing'])->toBe(0)        // the stale reservation is not "recent"
+        ->and($snap['worker_down'])->toBeTrue()
+        ->and($snap['stalled'])->toBeTrue();
+});
+
 test('QueueHealth flags any failed job as stalled', function () {
     DB::table('failed_jobs')->insert([
         'uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
