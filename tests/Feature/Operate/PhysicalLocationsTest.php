@@ -5,13 +5,11 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperatePhysicalLocations;
-use App\Jobs\GeneratePage;
 use App\Jobs\PublishContent;
 use App\Models\Connection;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
-use App\Models\Market;
 use App\Models\Site;
 use App\Models\User;
 use App\Operate\PhysicalLocations;
@@ -175,22 +173,6 @@ it('surfaces each location card page state — none, drafted, published', functi
         ->and($cards['Live']['page']['metrics'])->not->toBeNull();
 });
 
-it('Generate creates the location landing page and queues the drafter', function () {
-    Queue::fake();
-    $site = Site::factory()->create();
-    session(['guided_site_id' => $site->id]);
-    Market::factory()->create(['site_id' => $site->id]); // grounding: a §1 Market makes a location page ready
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper']);
-
-    Livewire::test(OperatePhysicalLocations::class)->call('generatePage', $loc->id);
-
-    $landing = Content::withoutGlobalScopes()
-        ->where('page_type', PageType::Location->value)->where('location_id', $loc->id)->first();
-    expect($landing)->not->toBeNull()
-        ->and($landing->meta['generating_at'] ?? null)->not->toBeNull();
-    Queue::assertPushed(GeneratePage::class);
-});
-
 it('Repush approves + pushes a drafted location page; a second Repush re-pushes the live one', function () {
     Queue::fake();
     $site = Site::factory()->create();
@@ -314,36 +296,6 @@ it('toggleTown and selectBand write the page_selected flag', function () {
     expect($a->fresh()->page_selected)->toBeFalse()->and($b->fresh()->page_selected)->toBeFalse();
 });
 
-it('Generate + publish selected queues a GeneratePage(autoPublish) for each ready selected town', function () {
-    Queue::fake();
-    $site = Site::factory()->create();
-    session(['guided_site_id' => $site->id]);
-    Market::factory()->create(['site_id' => $site->id]); // grounding: makes location pages ready
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
-    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '1', 'name' => 'Edison', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'large', 'population' => 100000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
-    // A materialized (candidate) town page for Edison → the batch generates + publishes it.
-    Content::withoutGlobalScopes()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Candidate, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1, 'parent_location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'x']]);
-
-    Livewire::test(OperatePhysicalLocations::class)->call('generateAndPublishSelected', $loc->id);
-
-    Queue::assertPushed(GeneratePage::class, fn (GeneratePage $job) => $job->autoPublish === true);
-});
-
-it('Generate drafts queues a GeneratePage with autoPublish OFF (the review gate)', function () {
-    Queue::fake();
-    $site = Site::factory()->create();
-    session(['guided_site_id' => $site->id]);
-    Market::factory()->create(['site_id' => $site->id]); // grounding
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
-    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '1', 'name' => 'Edison', 'type' => 'place', 'state' => 'NJ', 'size_tier' => 'large', 'population' => 100000, 'source' => 'county', 'source_location_ids' => [$loc->id], 'page_selected' => true]);
-    // An undrafted candidate town page → "Generate drafts" enqueues it for drafting, no publish.
-    Content::withoutGlobalScopes()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Candidate, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1, 'parent_location_id' => $loc->id, 'slot_payload' => []]);
-
-    Livewire::test(OperatePhysicalLocations::class)->call('generateSelected', $loc->id);
-
-    Queue::assertPushed(GeneratePage::class, fn (GeneratePage $job) => $job->autoPublish === false);
-});
-
 it('the review gate surfaces drafted selected towns with a per-town Publish + a "Publish reviewed" batch', function () {
     $site = Site::factory()->create();
     session(['guided_site_id' => $site->id]);
@@ -374,62 +326,6 @@ it('publishReviewedSelected approves the reviewed drafts (the approve half of th
     expect($town->fresh()->status)->toBe(ContentStatus::Approved);
 });
 
-it('regenerateTown re-queues a draft and clears a stuck generating stamp + dead job', function () {
-    Queue::fake();
-    $site = Site::factory()->create();
-    session(['guided_site_id' => $site->id]);
-    Market::factory()->create(['site_id' => $site->id]); // grounding
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
-    // A town stuck "generating" (generating_at stamped, no draft) behind a dead worker.
-    $town = Content::withoutGlobalScopes()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
-        'status' => ContentStatus::NeedsReview, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1,
-        'parent_location_id' => $loc->id, 'slot_payload' => [], 'meta' => ['generating_at' => now()->toIso8601String()],
-    ]);
-    DB::table('jobs')->insert(['queue' => 'default', 'attempts' => 0, 'reserved_at' => null,
-        'available_at' => now()->timestamp, 'created_at' => now()->timestamp, 'payload' => '{"data":{"command":"...'.$town->id.'..."}}']);
-
-    Livewire::test(OperatePhysicalLocations::class)->call('regenerateTown', $town->id);
-
-    // The OLD dead job is flushed and a FRESH draft-only generation is queued (enqueue re-stamps
-    // generating for the new run — the meaningful outcome is a clean re-draft, not a leftover job).
-    expect(DB::table('jobs')->where('payload', 'like', '%'.$town->id.'%')->count())->toBe(0);
-    Queue::assertPushed(GeneratePage::class, fn (GeneratePage $job) => $job->autoPublish === false);
-});
-
-it('discardTown rejects the draft and flushes its queued job', function () {
-    $site = Site::factory()->create();
-    session(['guided_site_id' => $site->id]);
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
-    $town = Content::withoutGlobalScopes()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
-        'status' => ContentStatus::NeedsReview, 'title' => 'Edison, NJ', 'slug' => 'edison', 'version' => 1,
-        'parent_location_id' => $loc->id, 'slot_payload' => ['hero' => ['heading' => 'bad draft']],
-    ]);
-    DB::table('jobs')->insert(['queue' => 'default', 'attempts' => 0, 'reserved_at' => null,
-        'available_at' => now()->timestamp, 'created_at' => now()->timestamp, 'payload' => '{"data":{"command":"...'.$town->id.'..."}}']);
-
-    Livewire::test(OperatePhysicalLocations::class)->call('discardTown', $town->id);
-
-    expect($town->fresh()->status)->toBe(ContentStatus::Rejected)
-        ->and(DB::table('jobs')->where('payload', 'like', '%'.$town->id.'%')->count())->toBe(0);
-});
-
-it('clearStuckGenerating resets this location\'s stuck-generating towns so they are actionable again', function () {
-    $site = Site::factory()->create();
-    session(['guided_site_id' => $site->id]);
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'NB']);
-    $stuck = Content::withoutGlobalScopes()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
-        'status' => ContentStatus::Candidate, 'title' => 'Marlboro, NJ', 'slug' => 'marlboro', 'version' => 1,
-        'parent_location_id' => $loc->id, 'slot_payload' => [], 'meta' => ['generating_at' => now()->toIso8601String()],
-    ]);
-
-    Livewire::test(OperatePhysicalLocations::class)->call('clearStuckGenerating', $loc->id);
-
-    expect($stuck->fresh()->generationState())->toBe('awaiting'); // no longer stuck generating
-});
-
 it('surfaces a worker-down banner with the drain hint when the queue is backed up and nothing is processing', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     session(['guided_site_id' => $site->id]);
@@ -455,21 +351,33 @@ it('the card footer offers Review and Take down alongside Repush on a live page'
         'location_id' => $loc->id, 'slot_payload' => ['hero_headline' => 'We serve Trooper'],
     ]);
 
+    // Repush + Take down (this surface publishes + tracks; drafting/regeneration moved to Location pages).
     Livewire::test(OperatePhysicalLocations::class)
         ->assertSee('Review')
         ->assertSee('Repush')
-        ->assertSee('Regenerate')
-        ->assertSee('Take down');
+        ->assertSee('Take down')
+        ->assertDontSee('Regenerate');            // generation is not on this surface anymore
 });
 
-it('generating a page for a location with no landing page yet queues the drafter', function () {
-    Queue::fake();
+it('renders a TAB per physical location and shows one at a time', function () {
     $site = Site::factory()->create();
     session(['guided_site_id' => $site->id]);
-    Market::factory()->create(['site_id' => $site->id]); // grounding: a §1 Market makes the location page ready
-    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper']);
+    $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'lat' => 40.1, 'lng' => -75.4, 'home_county_geoid' => '42091', 'county_geoids' => ['42091']]);
+    $montclair = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'lat' => 40.8, 'lng' => -74.2, 'home_county_geoid' => '34013', 'county_geoids' => ['34013']]);
+    plArea($site, '4209153000', 'Norristown', [$trooper->id]);   // Trooper's town
+    plArea($site, '3401355000', 'Verona', [$montclair->id]);     // Montclair's town
 
-    Livewire::test(OperatePhysicalLocations::class)->call('generatePage', $loc->id);
+    // Both locations are tabs; the active one renders full-width, one at a time (order-agnostic).
+    $page = Livewire::test(OperatePhysicalLocations::class)
+        ->assertOk()
+        ->assertSee('Trooper')        // tab
+        ->assertSee('Montclair');     // tab
 
-    Queue::assertPushed(GeneratePage::class);
+    $page->call('setLocTab', $trooper->id)
+        ->assertSee('Norristown')     // Trooper active → its town shows
+        ->assertDontSee('Verona');    // Montclair's town hidden
+
+    $page->call('setLocTab', $montclair->id)
+        ->assertSee('Verona')         // now Montclair active
+        ->assertDontSee('Norristown');
 });
