@@ -75,6 +75,18 @@
         .pl-btn[disabled] { opacity:.5; cursor:not-allowed; }
         .pl-queuewarn { border:1px solid rgba(217,119,6,.5); background:rgba(217,119,6,.08); color:#b45309; border-radius:10px; padding:11px 15px; font-size:12.5px; line-height:1.55; }
         .pl-queuewarn code { background:rgba(217,119,6,.14); padding:1px 7px; border-radius:5px; font-size:11.5px; }
+        .pl-qw-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+        .pl-qw-clear { flex-shrink:0; font-weight:700; font-size:11.5px; color:#fff; background:#d97706; border:1px solid #d97706; border-radius:7px; padding:4px 11px; cursor:pointer; white-space:nowrap; }
+        .pl-qw-clear:hover { background:#b45309; border-color:#b45309; }
+        .pl-qw-clear:disabled { opacity:.6; cursor:default; }
+        .pl-qw-body { margin-top:4px; }
+        .pl-qw-fails { margin-top:9px; border-top:1px solid rgba(217,119,6,.25); padding-top:8px; }
+        .pl-qw-fails-h { font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; opacity:.8; margin-bottom:5px; }
+        .pl-qw-fail { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; padding:3px 0; font-size:12px; }
+        .pl-qw-fail-job { font-weight:700; font-family:ui-monospace, monospace; }
+        .pl-qw-fail-n { font-weight:700; font-size:10.5px; background:rgba(217,119,6,.18); border-radius:99px; padding:0 6px; }
+        .pl-qw-fail-why { color:#92400e; flex:1; min-width:200px; }
+        .pl-qw-fail-when { color:#a16207; font-size:11px; white-space:nowrap; }
     </style>
 
     <div class="pl-wrap">
@@ -104,9 +116,33 @@
         @php $q = $this->queueHealth; @endphp
         @if ($q['stalled'])
             <div class="pl-queuewarn">
-                ⚠ The background worker looks stalled — <b>{{ $q['pending'] }}</b> job(s) queued{{ $q['oldest_minutes'] > 0 ? ' (oldest '.$q['oldest_minutes'].'m)' : '' }}{{ $q['failed'] > 0 ? ', '.$q['failed'].' failed' : '' }}.
-                Approved pages won't publish until it drains. Fix the worker (Horizon / <code>queue:work</code>), or push this tenant's stuck pages now on the console:
-                <code>php artisan launchpad:drain-publish "{{ $q['brand'] }}"</code>
+                <div class="pl-qw-head">
+                    <span>⚠ The background worker looks stalled — <b>{{ $q['pending'] }}</b> job(s) queued{{ $q['oldest_minutes'] > 0 ? ' (oldest '.$q['oldest_minutes'].'m)' : '' }}{{ $q['failed'] > 0 ? ', '.$q['failed'].' failed' : '' }}.</span>
+                    @if ($q['failed'] > 0)
+                        <button type="button" class="pl-qw-clear" wire:click="clearFailedJobs" wire:loading.attr="disabled" wire:target="clearFailedJobs"
+                            wire:confirm="Clear {{ $q['failed'] }} failed job(s)? This removes the dead-job records (same as queue:flush) and clears this banner. Fix the cause first so they don't recur.">
+                            <span wire:loading.remove wire:target="clearFailedJobs">Clear {{ $q['failed'] }} failed</span>
+                            <span wire:loading wire:target="clearFailedJobs">Clearing…</span>
+                        </button>
+                    @endif
+                </div>
+                <div class="pl-qw-body">
+                    Approved pages won't publish until it drains. Fix the worker (Horizon / <code>queue:work</code>), or push this tenant's stuck pages now on the console:
+                    <code>php artisan launchpad:drain-publish "{{ $q['brand'] }}"</code>
+                </div>
+                @if (($q['failures'] ?? []) !== [])
+                    <div class="pl-qw-fails">
+                        <div class="pl-qw-fails-h">What failed &amp; why</div>
+                        @foreach ($q['failures'] as $f)
+                            <div class="pl-qw-fail">
+                                <span class="pl-qw-fail-job">{{ $f['job'] }}</span>
+                                @if ($f['count'] > 1)<span class="pl-qw-fail-n">×{{ $f['count'] }}</span>@endif
+                                <span class="pl-qw-fail-why">{{ $f['reason'] }}</span>
+                                <span class="pl-qw-fail-when">last {{ $f['last'] }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
             </div>
         @endif
 

@@ -39,3 +39,37 @@ test('QueueHealth flags any failed job as stalled', function () {
     expect(app(QueueHealth::class)->snapshot()['failed'])->toBe(1)
         ->and(app(QueueHealth::class)->snapshot()['stalled'])->toBeTrue();
 });
+
+function qhFailedJob(string $job, string $exception): void
+{
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
+        'payload' => json_encode(['displayName' => $job]),
+        'exception' => $exception, 'failed_at' => now(),
+    ]);
+}
+
+test('QueueHealth::failures groups the failed jobs by cause (job class + reason), most frequent first', function () {
+    qhFailedJob('App\\Jobs\\PublishContent', "RuntimeException: WP 401 unauthorized\n#0 /app/...");
+    qhFailedJob('App\\Jobs\\PublishContent', "RuntimeException: WP 401 unauthorized\n#0 /app/...");
+    qhFailedJob('App\\Jobs\\RenderImage', "Fal\\FalException: 402 out of credits\n#0 /app/...");
+
+    $failures = app(QueueHealth::class)->failures();
+
+    expect($failures)->toHaveCount(2)
+        // Most frequent first: the 2× PublishContent 401 group leads.
+        ->and($failures[0]['job'])->toBe('PublishContent')            // basename only, not the FQCN
+        ->and($failures[0]['count'])->toBe(2)
+        ->and($failures[0]['reason'])->toContain('WP 401 unauthorized') // first exception line, no stack trace
+        ->and($failures[1]['job'])->toBe('RenderImage')
+        ->and($failures[1]['count'])->toBe(1);
+});
+
+test('QueueHealth::clearFailed empties the failed_jobs table and returns the count', function () {
+    qhFailedJob('App\\Jobs\\PublishContent', 'boom');
+    qhFailedJob('App\\Jobs\\RenderImage', 'boom');
+
+    expect(app(QueueHealth::class)->clearFailed())->toBe(2)
+        ->and(DB::table('failed_jobs')->count())->toBe(0)
+        ->and(app(QueueHealth::class)->snapshot()['stalled'])->toBeFalse(); // banner clears with them
+});

@@ -85,15 +85,29 @@ class OperatePhysicalLocations extends OperatePage
      * Background-worker health — so a stalled queue (approved pages that won't publish) is visible here
      * instead of looking like a broken button. Includes this tenant's brand for the drain hint.
      *
-     * @return array{pending: int, oldest_minutes: int, failed: int, stalled: bool, brand: string}
+     * @return array{pending: int, oldest_minutes: int, failed: int, stalled: bool, brand: string, failures: list<array{job: string, reason: string, count: int, last: string}>}
      */
     public function getQueueHealthProperty(): array
     {
         $site = $this->getSite();
-        $snapshot = app(QueueHealth::class)->snapshot();
+        $health = app(QueueHealth::class);
+        $snapshot = $health->snapshot();
         $snapshot['brand'] = $site !== null ? (string) $site->brand_name : '';
+        $snapshot['failures'] = $snapshot['failed'] > 0 ? $health->failures() : [];
 
         return $snapshot;
+    }
+
+    /** Clear the failed-jobs backlog — the banner's "Clear failed" button (Laravel's queue:flush). */
+    public function clearFailedJobs(): void
+    {
+        $cleared = app(QueueHealth::class)->clearFailed();
+
+        Notification::make()
+            ->{$cleared > 0 ? 'success' : 'info'}()
+            ->title($cleared > 0 ? "Cleared {$cleared} failed job(s)" : 'No failed jobs to clear')
+            ->body($cleared > 0 ? 'The stalled-worker banner clears with them. Fix the underlying cause so they don\'t recur.' : '')
+            ->send();
     }
 
     /**
