@@ -65,21 +65,6 @@ class WordpressClient
     }
 
     /**
-     * Does the SAME credential authenticate against CORE WordPress (wp/v2/users/me)? Splits a failed
-     * plugin-status ping into "app password rejected" (core also fails → bad password, or the host
-     * stripped the Authorization header) vs "authenticated but missing the Launchpad capability" (core
-     * succeeds, only the plugin route is forbidden).
-     */
-    public function coreAuthWorks(): bool
-    {
-        try {
-            return $this->request()->get(rtrim($this->baseUrl, '/').'/wp-json/wp/v2/users/me')->successful();
-        } catch (ConnectionException) {
-            return false;
-        }
-    }
-
-    /**
      * Upsert a content page/post. Keyed on `content_id` (ULID); idempotent.
      *
      * @param  array<string, mixed>  $payload
