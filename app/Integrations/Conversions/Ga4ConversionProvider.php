@@ -2,7 +2,6 @@
 
 namespace App\Integrations\Conversions;
 
-use App\Enums\ConnectionStatus;
 use App\Enums\ConversionSource;
 use App\Enums\ConversionType;
 use App\Integrations\Google\GoogleConnectionService;
@@ -13,10 +12,11 @@ use DateTimeZone;
 
 /**
  * Live GA4 conversion adapter behind the §7c ConversionProvider seam. Runs a GA4
- * Data API report (the `conversions` metric by date) against the site's stored
- * GA4 property using the per-tenant token. A site with no Google connection, no
- * selected GA4 property, or one needing reconnect yields no records rather than
- * crashing the dashboard. Totals only — no attribution to an engine action.
+ * Data API report (the `conversions` metric by date) against the site's selected
+ * GA4 property using the SHARED platform grant (one token). A site with no
+ * connected grant, no selected GA4 property, or a grant needing reconnect yields
+ * no records rather than crashing the dashboard. Totals only — no attribution to
+ * an engine action.
  *
  * (Note: the `conversions` metric name is retained by the Data API despite the
  * GA4 UI's "key events" rename; the keyEvents *endpoint* is Admin-side config,
@@ -39,12 +39,12 @@ class Ga4ConversionProvider implements ConversionProvider
      */
     public function pull(Site $site, DateTimeInterface $since): array
     {
-        $connection = $this->connections->connectionFor($site);
-        if ($connection === null || $connection->status === ConnectionStatus::NeedsReconnect->value) {
+        $account = $this->connections->account();
+        if ($account === null || $account->needsReconnect()) {
             return [];
         }
 
-        $propertyId = $connection->credentials['ga4_property'] ?? null;
+        $propertyId = $site->ga4_property;
         if (! is_string($propertyId) || $propertyId === '') {
             return [];
         }
@@ -53,7 +53,7 @@ class Ga4ConversionProvider implements ConversionProvider
         $propertyId = str_starts_with($propertyId, 'properties/') ? substr($propertyId, 11) : $propertyId;
 
         $json = $this->connections->request(
-            $connection,
+            $account,
             'post',
             rtrim($this->baseUrl, '/')."/properties/{$propertyId}:runReport",
             ['json' => [

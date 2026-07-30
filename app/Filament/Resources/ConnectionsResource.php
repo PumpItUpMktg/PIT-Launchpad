@@ -3,7 +3,10 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ConnectionsResource\Pages\ListConnections;
+use App\Integrations\Google\GoogleConnectionService;
+use App\Integrations\Google\GoogleException;
 use App\Models\Connection;
+use App\Models\GoogleAccount;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\Controls\WordpressConnector;
@@ -168,6 +171,136 @@ class ConnectionsResource extends Resource
                     ->body('Provider wp_app_password stored for '.($connection->credentials['base_url'] ?? '').'.')
                     ->send();
             });
+    }
+
+    /**
+     * Connect the ONE shared platform Google account (GSC + GA4) — the "one email" the operator signs
+     * in with once; every client then adds that email as a user on their property. Not per-tenant:
+     * redirects to the platform OAuth consent. The label + color reflect the shared grant's state
+     * (connect / connected / reconnect-needed).
+     */
+    public static function connectGoogleAction(): Action
+    {
+        $account = GoogleAccount::current();
+        $needsReconnect = $account !== null && $account->needsReconnect();
+        $connected = $account !== null && ! $needsReconnect;
+        $label = $account?->label;
+
+        return Action::make('connectGoogle')
+            ->label($needsReconnect ? 'Reconnect Google — action needed' : ($connected ? 'Reconnect Google' : 'Connect Google (GSC + GA4)'))
+            ->icon('heroicon-o-chart-bar-square')
+            ->color($needsReconnect ? 'warning' : ($connected ? 'success' : 'primary'))
+            ->url(route('google.authorize'))
+            ->tooltip($connected && $label !== null && $label !== ''
+                ? 'Shared platform account: '.$label.'. Clients add this email as a user on their GSC + GA4 property.'
+                : 'One Google sign-in for the whole platform; each client adds it as a user on their property, then pick the property per tenant.');
+    }
+
+    /**
+     * Point a tenant at WHICH GSC + GA4 property it reads from the shared account. The property
+     * options are the full set the shared grant can see across ALL clients; the operator picks this
+     * tenant's. Disabled until Google is connected. Selecting a tenant prefills its current pick.
+     */
+    public static function googlePropertiesAction(): Action
+    {
+        return Action::make('googleProperties')
+            ->label('Set tenant Google properties')
+            ->icon('heroicon-o-adjustments-horizontal')
+            ->modalSubmitActionLabel('Save properties')
+            ->disabled(fn (): bool => GoogleAccount::current() === null)
+            ->modalDescription('Choose which Search Console + GA4 property this tenant reads from the shared Google account. The account must already be added as a user on each property in Google.')
+            ->schema([
+                Select::make('site_id')
+                    ->label('Tenant')
+                    ->options(fn (): array => Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all())
+                    ->searchable()
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(function ($state, callable $set): void {
+                        $site = is_string($state) ? Site::query()->find($state) : null;
+                        $set('gsc_property', $site?->gsc_property);
+                        $set('ga4_property', $site?->ga4_property);
+                    }),
+                Select::make('gsc_property')
+                    ->label('Search Console property')
+                    ->options(fn (): array => self::gscPropertyOptions())
+                    ->searchable()
+                    ->placeholder('— not connected —')
+                    ->helperText('The GSC property the shared account can see for this client.'),
+                Select::make('ga4_property')
+                    ->label('GA4 property')
+                    ->options(fn (): array => self::ga4PropertyOptions())
+                    ->searchable()
+                    ->placeholder('— not connected —')
+                    ->helperText('The GA4 property the shared account can see for this client.'),
+            ])
+            ->action(function (array $data): void {
+                $site = Site::query()->find((string) $data['site_id']);
+                if ($site === null) {
+                    return;
+                }
+
+                app(GoogleConnectionService::class)->setSiteProperties(
+                    $site,
+                    isset($data['gsc_property']) ? (string) $data['gsc_property'] : null,
+                    isset($data['ga4_property']) ? (string) $data['ga4_property'] : null,
+                );
+
+                Notification::make()->success()
+                    ->title('Google properties saved')
+                    ->body($site->brand_name.' now reads GSC '.($data['gsc_property'] ?: '—').' / GA4 '.($data['ga4_property'] ?: '—').'.')
+                    ->send();
+            });
+    }
+
+    /**
+     * GSC properties visible to the shared grant, as select options. A failed/absent grant yields an
+     * empty list (the picker shows the placeholder) rather than crashing the modal.
+     *
+     * @return array<string, string>
+     */
+    private static function gscPropertyOptions(): array
+    {
+        $account = GoogleAccount::current();
+        if ($account === null) {
+            return [];
+        }
+
+        try {
+            $sites = app(GoogleConnectionService::class)->listGscSites($account);
+        } catch (GoogleException) {
+            return [];
+        }
+
+        return array_combine($sites, $sites) ?: [];
+    }
+
+    /**
+     * GA4 properties visible to the shared grant, as select options (label → "Name (properties/123)").
+     *
+     * @return array<string, string>
+     */
+    private static function ga4PropertyOptions(): array
+    {
+        $account = GoogleAccount::current();
+        if ($account === null) {
+            return [];
+        }
+
+        try {
+            $properties = app(GoogleConnectionService::class)->listGa4Properties($account);
+        } catch (GoogleException) {
+            return [];
+        }
+
+        $options = [];
+        foreach ($properties as $property) {
+            $options[$property['property']] = $property['displayName'] !== ''
+                ? $property['displayName'].' ('.$property['property'].')'
+                : $property['property'];
+        }
+
+        return $options;
     }
 
     private static function maskedSummary(Connection $connection): string

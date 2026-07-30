@@ -1,23 +1,18 @@
 <?php
 
-use App\Enums\ConnectionProvider;
 use App\Enums\ConversionSource;
 use App\Enums\ConversionType;
 use App\Integrations\Conversions\ConversionProvider;
 use App\Integrations\Conversions\Ga4ConversionProvider;
-use App\Models\Connection;
+use App\Models\GoogleAccount;
 use App\Models\Site;
 use Illuminate\Support\Facades\Http as HttpFacade;
 
-/**
- * @param  array<string, mixed>  $credentials
- */
-function ga4Connection(Site $site, array $credentials, string $status = 'connected'): Connection
+/** A connected shared grant with a live token — the platform "one email". */
+function ga4Grant(string $status = 'connected'): void
 {
-    return Connection::create([
-        'site_id' => $site->id,
-        'provider' => ConnectionProvider::Google,
-        'credentials' => $credentials + [
+    GoogleAccount::create([
+        'credentials' => [
             'access_token' => 'tok',
             'refresh_token' => 'refresh-1',
             'expires_at' => (new DateTimeImmutable('+1 hour'))->format(DATE_ATOM),
@@ -31,8 +26,8 @@ it('is the bound ConversionProvider', function () {
 });
 
 it('pulls GA4 conversions by date into normalized records', function () {
-    $site = Site::factory()->create();
-    ga4Connection($site, ['ga4_property' => 'properties/123']);
+    ga4Grant();
+    $site = Site::factory()->create(['ga4_property' => 'properties/123']);
 
     HttpFacade::fake([
         '*/properties/123:runReport' => HttpFacade::response(['rows' => [
@@ -54,18 +49,27 @@ it('pulls GA4 conversions by date into normalized records', function () {
         && $request['dimensions'][0]['name'] === 'date');
 });
 
-it('returns no records when the site has no Google connection', function () {
+it('returns no records when Google has never been connected', function () {
     HttpFacade::fake();
-    $site = Site::factory()->create();
+    $site = Site::factory()->create(['ga4_property' => 'properties/123']);
 
     expect(app(ConversionProvider::class)->pull($site, new DateTimeImmutable('-7 days')))->toBe([]);
     HttpFacade::assertNothingSent();
 });
 
-it('returns no records when the connection needs reconnect', function () {
+it('returns no records when the site has no GA4 property selected', function () {
     HttpFacade::fake();
-    $site = Site::factory()->create();
-    ga4Connection($site, ['ga4_property' => 'properties/123'], status: 'needs_reconnect');
+    ga4Grant();
+    $site = Site::factory()->create(['ga4_property' => null]);
+
+    expect(app(ConversionProvider::class)->pull($site, new DateTimeImmutable('-7 days')))->toBe([]);
+    HttpFacade::assertNothingSent();
+});
+
+it('returns no records when the shared grant needs reconnect', function () {
+    HttpFacade::fake();
+    ga4Grant(status: 'needs_reconnect');
+    $site = Site::factory()->create(['ga4_property' => 'properties/123']);
 
     expect(app(ConversionProvider::class)->pull($site, new DateTimeImmutable('-7 days')))->toBe([]);
     HttpFacade::assertNothingSent();

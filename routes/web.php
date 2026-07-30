@@ -7,10 +7,12 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-// §2-step-2 — per-tenant Google (GSC + GA4) OAuth connect backend. The callback
-// path must match GOOGLE_REDIRECT_URI. A polished connect button / property
-// picker is a thin §7 follow-up; these routes make the full flow exercisable.
-Route::get('/connections/google/{site}/authorize', [GoogleConnectController::class, 'authorize'])
+// Platform-wide Google (GSC + GA4) OAuth connect backend — the "one email" the
+// operator connects ONCE and every client adds as a user on their property. Not
+// per-tenant: the shared grant lives on the GoogleAccount singleton; each site
+// picks WHICH property to read in the property picker. The callback path must
+// match GOOGLE_REDIRECT_URI.
+Route::get('/connections/google/authorize', [GoogleConnectController::class, 'authorize'])
     ->name('google.authorize');
 Route::get('/oauth/google/callback', [GoogleConnectController::class, 'callback'])
     ->name('google.callback');

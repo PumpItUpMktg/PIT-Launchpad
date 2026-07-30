@@ -1,32 +1,27 @@
 <?php
 
-use App\Enums\ConnectionProvider;
 use App\Integrations\Google\GoogleException;
 use App\Integrations\Google\SearchConsoleProvider;
-use App\Models\Connection;
+use App\Models\GoogleAccount;
 use App\Models\Site;
 use Illuminate\Support\Facades\Http as HttpFacade;
 
-/**
- * @param  array<string, mixed>  $credentials
- */
-function gscConnection(Site $site, array $credentials, string $status = 'connected'): Connection
+/** A connected shared grant with a live token — the platform "one email". */
+function gscGrant(): void
 {
-    return Connection::create([
-        'site_id' => $site->id,
-        'provider' => ConnectionProvider::Google,
-        'credentials' => $credentials + [
+    GoogleAccount::create([
+        'credentials' => [
             'access_token' => 'tok',
             'refresh_token' => 'refresh-1',
             'expires_at' => (new DateTimeImmutable('+1 hour'))->format(DATE_ATOM),
         ],
-        'status' => $status,
+        'status' => 'connected',
     ]);
 }
 
 it('queries search analytics and parses first-party metric rows', function () {
-    $site = Site::factory()->create();
-    gscConnection($site, ['gsc_property' => 'sc-domain:example.com']);
+    gscGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:example.com']);
 
     HttpFacade::fake([
         '*/searchAnalytics/query' => HttpFacade::response(['rows' => [
@@ -51,10 +46,19 @@ it('queries search analytics and parses first-party metric rows', function () {
         && $request['dimensions'] === ['query']);
 });
 
-it('returns no rows when no GSC property is selected', function () {
+it('returns no rows when the site has no GSC property selected', function () {
     HttpFacade::fake();
-    $site = Site::factory()->create();
-    gscConnection($site, []); // no gsc_property
+    gscGrant();
+    $site = Site::factory()->create(['gsc_property' => null]);
+
+    expect(app(SearchConsoleProvider::class)->searchAnalytics($site, new DateTimeImmutable('-7 days'), new DateTimeImmutable))
+        ->toBe([]);
+    HttpFacade::assertNothingSent();
+});
+
+it('returns no rows when Google has never been connected', function () {
+    HttpFacade::fake();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:example.com']);
 
     expect(app(SearchConsoleProvider::class)->searchAnalytics($site, new DateTimeImmutable('-7 days'), new DateTimeImmutable))
         ->toBe([]);
@@ -62,8 +66,8 @@ it('returns no rows when no GSC property is selected', function () {
 });
 
 it('surfaces a 403 scope error loudly', function () {
-    $site = Site::factory()->create();
-    gscConnection($site, ['gsc_property' => 'sc-domain:example.com']);
+    gscGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:example.com']);
 
     HttpFacade::fake([
         '*/searchAnalytics/query' => HttpFacade::response(['error' => ['message' => 'Insufficient Permission']], 403),

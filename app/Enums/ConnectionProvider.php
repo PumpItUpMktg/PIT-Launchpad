@@ -5,8 +5,9 @@ namespace App\Enums;
 enum ConnectionProvider: string
 {
     case Gbp = 'gbp';
-    // One Google OAuth grant covers both GSC (§5) and GA4 (§7c); a single
-    // per-site `google` connection holds the shared tokens + both property IDs.
+    // Google (GSC + GA4) is now a PLATFORM-shared grant, not a per-tenant credential: the one token
+    // lives on the GoogleAccount singleton and each Site stores only which property to read. This enum
+    // case is retained for back-compat / any legacy rows; the shared grant is not a `connections` row.
     case Google = 'google';
     case Ga4 = 'ga4';
     case Gtm = 'gtm';
