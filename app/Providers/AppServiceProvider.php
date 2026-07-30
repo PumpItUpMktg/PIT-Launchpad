@@ -72,6 +72,8 @@ use App\Interview\Arrange\KeywordAssigner;
 use App\Interview\Arrange\SubClusterDetector;
 use App\Interview\Expansion\SiloExpander;
 use App\Interview\Volume\VolumeGrounder;
+use App\KeywordGenerator\Cadence\CadenceScheduler;
+use App\KeywordGenerator\Cadence\Tiering;
 use App\KeywordGenerator\Cluster\ClusterLabeler;
 use App\KeywordGenerator\Discovery\SiloKeywordGenerator;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
@@ -89,6 +91,7 @@ use App\Local\Proof\ServiceReviewProvider;
 use App\Locations\Dma\MetroResolver;
 use App\Models\User;
 use App\Onboarding\MissionPolisher;
+use App\Operator\Controls\BudgetControl;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
@@ -395,6 +398,9 @@ class AppServiceProvider extends ServiceProvider
             $app->make(SerpProvider::class),
             $app->make(LocalGridProvider::class),
             $app->make(SiloKeywordGenerator::class),
+            $app->make(Tiering::class),
+            $app->make(CadenceScheduler::class),
+            $app->make(BudgetControl::class),
             (int) config('content_engine.pipeline.tracking_cadence_days', 1),
             (int) config('content_engine.pipeline.discovery_cadence_days', 7),
         ));
