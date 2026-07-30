@@ -59,11 +59,8 @@ it('explains a 404 as the plugin not answering at that URL', function () {
     expect(connections()->count())->toBe(0);
 });
 
-it('explains a 401 where core auth ALSO fails as a rejected password / stripped auth header', function () {
-    Http::fake([
-        '*/wp-json/launchpad/v1/status' => Http::response('', 401),
-        '*/wp-json/wp/v2/users/me' => Http::response('', 401),
-    ]);
+it('explains a 401 (not authenticated) as a rejected password / stripped auth header', function () {
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['code' => 'rest_forbidden', 'data' => ['status' => 401]], 401)]);
     $site = Site::factory()->create();
 
     expect(fn () => app(WordpressConnector::class)->connect($site->id, [
@@ -71,16 +68,13 @@ it('explains a 401 where core auth ALSO fails as a rejected password / stripped 
     ]))->toThrow(WordpressException::class, 'rejected the app password');
 });
 
-it('explains a 401 where core auth SUCCEEDS as a missing Launchpad capability', function () {
-    Http::fake([
-        '*/wp-json/launchpad/v1/status' => Http::response(['code' => 'rest_forbidden'], 401),
-        '*/wp-json/wp/v2/users/me' => Http::response(['id' => 5, 'name' => 'sync'], 200),
-    ]);
+it('explains a 403 (authenticated, forbidden) as a missing Launchpad capability', function () {
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['code' => 'rest_forbidden', 'data' => ['status' => 403]], 403)]);
     $site = Site::factory()->create();
 
     expect(fn () => app(WordpressConnector::class)->connect($site->id, [
         'base_url' => 'https://sumppumpgurus.com', 'username' => 'launchpad-sync', 'app_password' => 'goodpass12345',
-    ]))->toThrow(WordpressException::class, 'lacks the Launchpad capability');
+    ]))->toThrow(WordpressException::class, 'lp_manage_content capability');
 });
 
 it('verify() pings without persisting — true on a 2xx, no connection written', function () {
