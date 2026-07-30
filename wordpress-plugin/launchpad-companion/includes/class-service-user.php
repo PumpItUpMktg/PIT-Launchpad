@@ -50,6 +50,18 @@ final class ServiceUser
                 'display_name' => 'Launchpad Sync',
             ]);
         }
+
+        // Belt-and-suspenders for a MIGRATED site: the service user already exists (so it was NOT
+        // recreated above with the role), and its role/caps may have drifted in the move. Re-assert the
+        // capability directly on the user (usermeta) — independent of the role and immune to role-cache
+        // staleness — and make sure it still carries the service role (additive; never removes another).
+        $user = get_user_by('login', self::LOGIN);
+        if ($user) {
+            if (! in_array(self::ROLE, (array) $user->roles, true)) {
+                $user->add_role(self::ROLE);
+            }
+            $user->add_cap(self::CAP);
+        }
     }
 
     public static function uninstall(): void
