@@ -2,10 +2,8 @@
 
 namespace App\Integrations\Google;
 
-use App\Enums\ConnectionProvider;
 use App\Enums\ConnectionStatus;
-use App\Models\Connection;
-use App\Models\Scopes\SiteScope;
+use App\Models\GoogleAccount;
 use App\Models\Site;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as Http;
@@ -13,15 +11,15 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 
 /**
- * Per-tenant Google connection vault + lifecycle. Owns the §9 two-tier split:
- * platform OAuth creds stay in env (the GoogleOAuthClient), while each client's
- * access/refresh tokens, granted scopes, selected GSC/GA4 property IDs and
- * connection status live encrypted on the per-site `google` Connection.
+ * The shared platform Google grant + its token lifecycle. Owns the "one email" model: the operator
+ * connects Google ONCE (a §9 platform secret, {@see GoogleAccount}), each client adds that email as a
+ * user on their GSC + GA4 property, and every site queries through the single refreshing token.
  *
- * Lifecycle: connected → token valid → expired→refreshed (persisted) →
- * revoked→needs-reconnect. Authorized requests refresh on expiry and retry once
- * on a 401; a dead refresh token marks the connection needs-reconnect and is
- * surfaced loudly — never a swallowed failure or a crashed pipeline.
+ * Token state (access/refresh/expiry, granted scopes, status) lives on the one {@see GoogleAccount};
+ * WHICH property a given tenant reads is a non-secret pointer on the {@see Site} (gsc_property /
+ * ga4_property), NOT on the shared grant. Lifecycle: connected → token valid → expired→refreshed
+ * (persisted) → revoked→needs-reconnect. Authorized requests refresh on expiry and retry once on a
+ * 401; a dead refresh token marks the grant needs-reconnect and surfaces loudly.
  */
 class GoogleConnectionService
 {
@@ -34,90 +32,84 @@ class GoogleConnectionService
         private readonly int $timeout = 30,
     ) {}
 
-    public function connectionFor(Site $site): ?Connection
+    /** The single shared grant, or null when Google has never been connected. */
+    public function account(): ?GoogleAccount
     {
-        return Connection::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('provider', ConnectionProvider::Google->value)
-            ->first();
+        return GoogleAccount::current();
     }
 
     /**
-     * Persist a freshly granted token set, creating or updating the site's Google
-     * connection. Tokens go in the encrypted credentials blob; granted scopes in
-     * the (non-secret) scopes column; status → connected.
+     * Persist a freshly granted token set onto the shared platform grant (create-or-update the
+     * singleton). Tokens go in the encrypted credentials blob; granted scopes in the (non-secret)
+     * scopes column; status → connected.
      */
-    public function store(Site $site, GoogleToken $token): Connection
+    public function store(GoogleToken $token, ?string $label = null): GoogleAccount
     {
-        $connection = $this->connectionFor($site) ?? new Connection([
-            'site_id' => $site->id,
-            'provider' => ConnectionProvider::Google,
-        ]);
+        $account = $this->account() ?? new GoogleAccount;
 
-        $credentials = $connection->credentials ?? [];
+        $credentials = $account->credentials ?? [];
         $credentials['access_token'] = $token->accessToken;
         if ($token->refreshToken !== null && $token->refreshToken !== '') {
             $credentials['refresh_token'] = $token->refreshToken;
         }
         $credentials['expires_at'] = $token->expiresAt->format(DATE_ATOM);
 
-        $connection->credentials = $credentials;
-        $connection->scopes = $token->scopes !== [] ? $token->scopes : $connection->scopes;
-        $connection->status = ConnectionStatus::Connected->value;
-        $connection->save();
+        $account->credentials = $credentials;
+        $account->scopes = $token->scopes !== [] ? $token->scopes : $account->scopes;
+        if ($label !== null && $label !== '') {
+            $account->label = $label;
+        }
+        $account->status = ConnectionStatus::Connected->value;
+        $account->save();
 
-        return $connection;
+        return $account;
     }
 
     /**
-     * Record the selected GSC site URL and/or GA4 property id for this connection.
+     * Record WHICH GSC site URL and/or GA4 property id this tenant reads — a non-secret pointer on
+     * the Site, picked by the operator from the shared grant's visible set. Passing null clears the
+     * pointer (the picker's "not connected" choice).
      */
-    public function selectProperties(Connection $connection, ?string $gscProperty, ?string $ga4Property): Connection
+    public function setSiteProperties(Site $site, ?string $gscProperty, ?string $ga4Property): Site
     {
-        $credentials = $connection->credentials ?? [];
-        if ($gscProperty !== null) {
-            $credentials['gsc_property'] = $gscProperty;
-        }
-        if ($ga4Property !== null) {
-            $credentials['ga4_property'] = $ga4Property;
-        }
-        $connection->credentials = $credentials;
-        $connection->save();
+        $site->gsc_property = $gscProperty !== '' ? $gscProperty : null;
+        $site->ga4_property = $ga4Property !== '' ? $ga4Property : null;
+        $site->save();
 
-        return $connection;
+        return $site;
     }
 
     /**
-     * A valid access token for the connection, refreshing + persisting if the
-     * stored one is expired (or about to).
+     * A valid access token for the shared grant, refreshing + persisting if the stored one is expired
+     * (or about to).
      */
-    public function accessToken(Connection $connection): string
+    public function accessToken(GoogleAccount $account): string
     {
-        $credentials = $connection->credentials ?? [];
+        $credentials = $account->credentials ?? [];
         $expiresAt = isset($credentials['expires_at']) ? strtotime((string) $credentials['expires_at']) : 0;
 
         if ($expiresAt - self::EXPIRY_SKEW <= time()) {
-            return $this->refreshAccessToken($connection);
+            return $this->refreshAccessToken($account);
         }
 
         return (string) ($credentials['access_token'] ?? '');
     }
 
     /**
-     * Authorized JSON request against a Google API. Refreshes on expiry up front,
-     * retries once on a 401 (token rejected mid-flight), and surfaces 403 (scope /
-     * API-not-enabled) and 429 (quota) loudly.
+     * Authorized JSON request against a Google API. Refreshes on expiry up front, retries once on a
+     * 401 (token rejected mid-flight), and surfaces 403 (scope / API-not-enabled) and 429 (quota)
+     * loudly.
      *
      * @param  array<string, mixed>  $options  ['query' => [...]] or ['json' => [...]]
      * @return array<string, mixed>
      */
-    public function request(Connection $connection, string $method, string $url, array $options = []): array
+    public function request(GoogleAccount $account, string $method, string $url, array $options = []): array
     {
-        $response = $this->send($this->accessToken($connection), $method, $url, $options);
+        $response = $this->send($this->accessToken($account), $method, $url, $options);
 
         if ($response->status() === 401) {
             // Fresh-looking token still rejected — force one refresh and retry.
-            $response = $this->send($this->refreshAccessToken($connection), $method, $url, $options);
+            $response = $this->send($this->refreshAccessToken($account), $method, $url, $options);
         }
 
         if (! $response->successful()) {
@@ -137,13 +129,13 @@ class GoogleConnectionService
     }
 
     /**
-     * GSC properties available to this grant (for property selection).
+     * GSC properties available to the shared grant (for property selection).
      *
      * @return list<string>
      */
-    public function listGscSites(Connection $connection): array
+    public function listGscSites(GoogleAccount $account): array
     {
-        $json = $this->request($connection, 'get', config('services.google.gsc_base_url').'/sites');
+        $json = $this->request($account, 'get', config('services.google.gsc_base_url').'/sites');
 
         $sites = [];
         foreach ((array) ($json['siteEntry'] ?? []) as $entry) {
@@ -156,17 +148,17 @@ class GoogleConnectionService
     }
 
     /**
-     * GA4 properties available to this grant, via the Admin accountSummaries.
+     * GA4 properties available to the shared grant, via the Admin accountSummaries.
      *
      * @return list<array{property: string, displayName: string}>
      */
-    public function listGa4Properties(Connection $connection): array
+    public function listGa4Properties(GoogleAccount $account): array
     {
-        $json = $this->request($connection, 'get', config('services.google.ga4_admin_base_url').'/accountSummaries');
+        $json = $this->request($account, 'get', config('services.google.ga4_admin_base_url').'/accountSummaries');
 
         $properties = [];
-        foreach ((array) ($json['accountSummaries'] ?? []) as $account) {
-            foreach ((array) ($account['propertySummaries'] ?? []) as $summary) {
+        foreach ((array) ($json['accountSummaries'] ?? []) as $summaryAccount) {
+            foreach ((array) ($summaryAccount['propertySummaries'] ?? []) as $summary) {
                 if (! is_array($summary) || ! isset($summary['property'])) {
                     continue;
                 }
@@ -180,19 +172,19 @@ class GoogleConnectionService
         return $properties;
     }
 
-    public function markNeedsReconnect(Connection $connection, string $reason = ''): void
+    public function markNeedsReconnect(GoogleAccount $account, string $reason = ''): void
     {
-        $connection->status = ConnectionStatus::NeedsReconnect->value;
-        $connection->save();
+        $account->status = ConnectionStatus::NeedsReconnect->value;
+        $account->save();
     }
 
-    private function refreshAccessToken(Connection $connection): string
+    private function refreshAccessToken(GoogleAccount $account): string
     {
-        $credentials = $connection->credentials ?? [];
+        $credentials = $account->credentials ?? [];
         $refreshToken = (string) ($credentials['refresh_token'] ?? '');
 
         if ($refreshToken === '') {
-            $this->markNeedsReconnect($connection, 'no refresh token');
+            $this->markNeedsReconnect($account, 'no refresh token');
             throw new GoogleException('Google connection has no refresh token — reconnect required.', needsReconnect: true);
         }
 
@@ -200,7 +192,7 @@ class GoogleConnectionService
             $token = $this->oauth->refresh($refreshToken);
         } catch (GoogleException $e) {
             if ($e->needsReconnect) {
-                $this->markNeedsReconnect($connection, $e->getMessage());
+                $this->markNeedsReconnect($account, $e->getMessage());
             }
             throw $e;
         }
@@ -210,11 +202,11 @@ class GoogleConnectionService
         if ($token->refreshToken !== null && $token->refreshToken !== '') {
             $credentials['refresh_token'] = $token->refreshToken;
         }
-        $connection->credentials = $credentials;
-        if ($connection->status !== ConnectionStatus::Connected->value) {
-            $connection->status = ConnectionStatus::Connected->value;
+        $account->credentials = $credentials;
+        if ($account->status !== ConnectionStatus::Connected->value) {
+            $account->status = ConnectionStatus::Connected->value;
         }
-        $connection->save();
+        $account->save();
 
         return $token->accessToken;
     }

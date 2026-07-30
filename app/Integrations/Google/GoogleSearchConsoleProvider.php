@@ -2,15 +2,14 @@
 
 namespace App\Integrations\Google;
 
-use App\Enums\ConnectionStatus;
 use App\Models\Site;
 use DateTimeInterface;
 
 /**
- * Live GSC adapter. Queries searchAnalytics on the site's stored GSC property
- * using the per-tenant token (refreshed by the connection service). A site with
- * no Google connection, no selected property, or one needing reconnect yields an
- * empty set rather than crashing the caller.
+ * Live GSC adapter. Queries searchAnalytics on the site's selected GSC property using the SHARED
+ * platform grant (one token, refreshed by the connection service — the "one email" every client adds
+ * as a user). A site with no connected grant, no selected property, or a grant needing reconnect
+ * yields an empty set rather than crashing the caller.
  *
  * GSC data lags ~2-3 days — this is calibration input, not real-time.
  */
@@ -32,18 +31,18 @@ class GoogleSearchConsoleProvider implements SearchConsoleProvider
         array $dimensions = ['query'],
         int $rowLimit = 1000,
     ): array {
-        $connection = $this->connections->connectionFor($site);
-        if ($connection === null || $connection->status === ConnectionStatus::NeedsReconnect->value) {
+        $account = $this->connections->account();
+        if ($account === null || $account->needsReconnect()) {
             return [];
         }
 
-        $siteUrl = $connection->credentials['gsc_property'] ?? null;
+        $siteUrl = $site->gsc_property;
         if (! is_string($siteUrl) || $siteUrl === '') {
             return [];
         }
 
         $json = $this->connections->request(
-            $connection,
+            $account,
             'post',
             rtrim($this->baseUrl, '/').'/sites/'.rawurlencode($siteUrl).'/searchAnalytics/query',
             ['json' => [
