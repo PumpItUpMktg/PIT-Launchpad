@@ -42,9 +42,41 @@ class WordpressClient
      */
     public function ping(): bool
     {
-        $response = $this->request()->get(rtrim($this->baseUrl, '/').self::NAMESPACE.'/status');
+        return $this->pingResult()['ok'];
+    }
 
-        return $response->successful();
+    /**
+     * Ping the push-capable status endpoint and return the outcome WITH the HTTP status + reason, so a
+     * failed connect can say WHY — wrong URL / plugin-not-active (404) vs app-password rejected (401)
+     * vs missing capability (403) — instead of one opaque "did not authenticate". Status 0 means the
+     * host was unreachable (DNS / timeout).
+     *
+     * @return array{ok: bool, status: int, error: ?string}
+     */
+    public function pingResult(): array
+    {
+        try {
+            $response = $this->request()->get(rtrim($this->baseUrl, '/').self::NAMESPACE.'/status');
+        } catch (ConnectionException $e) {
+            return ['ok' => false, 'status' => 0, 'error' => $e->getMessage()];
+        }
+
+        return ['ok' => $response->successful(), 'status' => $response->status(), 'error' => $this->reason($response)];
+    }
+
+    /**
+     * Does the SAME credential authenticate against CORE WordPress (wp/v2/users/me)? Splits a failed
+     * plugin-status ping into "app password rejected" (core also fails → bad password, or the host
+     * stripped the Authorization header) vs "authenticated but missing the Launchpad capability" (core
+     * succeeds, only the plugin route is forbidden).
+     */
+    public function coreAuthWorks(): bool
+    {
+        try {
+            return $this->request()->get(rtrim($this->baseUrl, '/').'/wp-json/wp/v2/users/me')->successful();
+        } catch (ConnectionException) {
+            return false;
+        }
     }
 
     /**
@@ -272,10 +304,18 @@ class WordpressClient
      */
     private function errorDetail(Response $response): string
     {
-        $body = $response->json();
-        $detail = is_array($body) ? ($body['error'] ?? $body['message'] ?? null) : null;
+        $reason = $this->reason($response);
 
-        return is_string($detail) && trim($detail) !== '' ? ' — '.trim($detail) : '';
+        return $reason !== null ? ' — '.$reason : '';
+    }
+
+    /** The human-readable reason from a response body — WordPress's `message` or the plugin's `error`. */
+    private function reason(Response $response): ?string
+    {
+        $body = $response->json();
+        $detail = is_array($body) ? ($body['message'] ?? $body['error'] ?? null) : null;
+
+        return is_string($detail) && trim($detail) !== '' ? trim($detail) : null;
     }
 
     private function request(): PendingRequest
