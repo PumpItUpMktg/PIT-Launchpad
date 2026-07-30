@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use App\Enums\MunicipalityType;
+use App\Locations\CoverageName;
 use App\Models\Concerns\BelongsToSite;
 use Database\Factories\CoverageAreaFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -36,6 +38,20 @@ class CoverageArea extends Model
     use BelongsToSite, HasFactory, HasUlids;
 
     protected $guarded = [];
+
+    /**
+     * Normalize the town name on the way in — strips a leading numbered-list artifact ("6, Havre de
+     * Grace" → "Havre de Grace") so no write path (import, served-towns sync, manual add) can land the
+     * junk that leaked the "6-havre-de-grace-md" page title + slug. See {@see CoverageName}.
+     *
+     * @return Attribute<never, string>
+     */
+    protected function name(): Attribute
+    {
+        return Attribute::make(
+            set: fn (?string $value): string => CoverageName::clean((string) $value),
+        );
+    }
 
     /** @return array<string, string> */
     protected function casts(): array

@@ -3,8 +3,10 @@
 namespace App\Build;
 
 use App\Enums\ContentKind;
+use App\Locations\CoverageName;
 use App\Locations\LocalRelevance;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 
@@ -29,6 +31,10 @@ class PlanSync
     {
         $before = $this->pageCount($site);
 
+        // Self-heal names BEFORE the manifest is built, so the town pages get clean titles + slugs:
+        // strip the "6, Havre de Grace" numbered-list artifact from coverage rows at the source.
+        $this->cleanCoverageNames($site);
+
         // New locations bring new served towns — seed their selection so location rows are real.
         $this->relevance->seedInitialSelection($site);
         $this->assembler->assemble($site);
@@ -41,6 +47,19 @@ class PlanSync
         $this->sweeper->sweep($site);
 
         return max(0, $this->pageCount($site) - $before);
+    }
+
+    /** Strip the numbered-list artifact from this site's coverage names (re-save triggers the model's normalizer). */
+    private function cleanCoverageNames(Site $site): void
+    {
+        CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->get()
+            ->each(function (CoverageArea $area): void {
+                if (CoverageName::isDirty((string) $area->name)) {
+                    $area->forceFill(['name' => (string) $area->name])->save(); // mutator cleans on set
+                }
+            });
     }
 
     private function pageCount(Site $site): int
