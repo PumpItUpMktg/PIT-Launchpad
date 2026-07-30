@@ -15,6 +15,10 @@ class ListConnections extends ListRecords
      */
     protected function getHeaderActions(): array
     {
-        return [ConnectionsResource::connectWordPressAction()];
+        return [
+            ConnectionsResource::connectWordPressAction(),
+            ConnectionsResource::connectGoogleAction(),
+            ConnectionsResource::googlePropertiesAction(),
+        ];
     }
 }
