@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\AuditAction;
 use App\Filament\Resources\ConnectionsResource\Pages\ListConnections;
 use App\Integrations\Google\GoogleConnectionService;
 use App\Integrations\Google\GoogleException;
@@ -10,6 +11,8 @@ use App\Models\GoogleAccount;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\Controls\WordpressConnector;
+use App\Policies\ConnectionPolicy;
+use App\Security\Audit;
 use App\Security\ConnectionRotator;
 use App\Security\CredentialMasker;
 use App\Security\CredentialRevealer;
@@ -87,6 +90,7 @@ class ConnectionsResource extends Resource
                 self::revealAction(),
                 self::reverifyAction(),
                 self::rotateAction(),
+                self::deleteAction(),
             ]);
     }
 
@@ -357,6 +361,39 @@ class ConnectionsResource extends Resource
                 }
 
                 Notification::make()->danger()->title('Rotation failed')->body($result->message)->send();
+            });
+    }
+
+    /**
+     * Remove a stored connection entirely — the escape hatch for re-pointing a site at a new URL:
+     * a WordPress connection's base URL can't be edited in place, so delete it here and re-add via
+     * "Connect WordPress site". Operator-only ({@see ConnectionPolicy}) and audited
+     * ({@see AuditAction::ConnectionRemoved}) — the append-only trail records which connection went,
+     * never a secret. Publishing to the site fails until it is reconnected, so the confirm says so.
+     */
+    private static function deleteAction(): Action
+    {
+        return Action::make('delete')
+            ->label('Delete')
+            ->icon('heroicon-o-trash')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading('Delete this connection?')
+            ->modalDescription('This removes the stored credential entirely. For a WordPress connection, publishing to this site will fail until you reconnect it — use this to re-point the site at a new URL, then re-add it with "Connect WordPress site". This is audited.')
+            ->modalSubmitActionLabel('Delete connection')
+            ->visible(fn (Connection $record): bool => Auth::user()?->can('delete', $record) ?? false)
+            ->action(function (Connection $record): void {
+                app(Audit::class)->log(
+                    AuditAction::ConnectionRemoved,
+                    $record,
+                    Auth::id(),
+                    ['provider' => $record->provider->value, 'site_id' => $record->site_id],
+                );
+
+                $record->delete();
+
+                Notification::make()->success()->title('Connection deleted')
+                    ->body('The stored credential was removed (audited). Reconnect the site to resume publishing.')->send();
             });
     }
 

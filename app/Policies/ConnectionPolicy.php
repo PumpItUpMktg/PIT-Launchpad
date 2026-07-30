@@ -28,6 +28,11 @@ class ConnectionPolicy
         return $this->isOperator($user);
     }
 
+    public function delete(User $user, Connection $connection): bool
+    {
+        return $this->isOperator($user);
+    }
+
     private function isOperator(User $user): bool
     {
         return $user->role === UserRole::Operator;
