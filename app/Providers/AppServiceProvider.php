@@ -60,7 +60,7 @@ use App\Integrations\News\NewsProvider;
 use App\Integrations\News\OnDemandSourcePull;
 use App\Integrations\Places\GooglePlacesClient;
 use App\Integrations\Places\PlacesProvider;
-use App\Integrations\SearchConsole\NullSearchConsole;
+use App\Integrations\SearchConsole\GoogleSearchConsole;
 use App\Integrations\Serp\SerpProvider;
 use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
@@ -436,7 +436,15 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(LocalJobProvider::class, NullLocalJobs::class);
         $this->app->bind(ServiceReviewProvider::class, NullServiceReviews::class);
         $this->app->bind(ServiceJobProvider::class, NullServiceJobs::class);
-        $this->app->bind(\App\Integrations\SearchConsole\SearchConsoleProvider::class, NullSearchConsole::class);
+        // Card-facing GSC: the real bridge onto the shared Google grant (PR-A). It reports "connected"
+        // only once the grant is live AND the Site has a GSC property picked; until then connected() is
+        // false and the cards show the honest connect/collecting prompt (same as the old Null default).
+        $this->app->bind(\App\Integrations\SearchConsole\SearchConsoleProvider::class, fn () => new GoogleSearchConsole(
+            $this->app->make(GoogleConnectionService::class),
+            $this->app->make(CacheRepository::class),
+            (string) config('services.google.gsc_base_url', 'https://www.googleapis.com/webmasters/v3'),
+            (int) config('services.google.gsc_cache_ttl', 21600),
+        ));
         $this->app->bind(PageTrafficProvider::class, NullPageTraffic::class);
 
         // Relevance scoring runs on the cheaper Haiku model with NO extended
