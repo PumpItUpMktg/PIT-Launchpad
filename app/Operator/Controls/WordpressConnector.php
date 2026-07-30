@@ -3,6 +3,7 @@
 namespace App\Operator\Controls;
 
 use App\Enums\ConnectionProvider;
+use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\Models\Connection;
@@ -34,12 +35,11 @@ class WordpressConnector
     {
         $credentials = $this->normalize($input);
         $site = Site::query()->find($siteId);
+        $client = $this->factory->usingCredentials($credentials, $site);
 
-        if (! $this->factory->usingCredentials($credentials, $site)->ping()) {
-            throw new WordpressException(
-                'Credentials did not authenticate against '.$credentials['base_url'].'/wp-json/launchpad/v1/status '
-                .'(the companion plugin must be active and the app password valid) — nothing was saved.',
-            );
+        $result = $client->pingResult();
+        if (! $result['ok']) {
+            throw new WordpressException($this->explainFailure($credentials['base_url'], $result, $client));
         }
 
         return Connection::withoutGlobalScope(SiteScope::class)->updateOrCreate(
@@ -98,6 +98,28 @@ class WordpressConnector
         }
 
         return $ok;
+    }
+
+    /**
+     * Turn a failed status ping into an operator-actionable reason instead of one opaque "did not
+     * authenticate". Distinguishes an unreachable host, a wrong URL / inactive plugin (404), an
+     * app-password rejection vs a missing capability (401/403 — split by whether the SAME credential
+     * authenticates against core WordPress), and anything else (carrying WP's own reason).
+     *
+     * @param  array{ok: bool, status: int, error: ?string}  $result
+     */
+    private function explainFailure(string $baseUrl, array $result, WordpressClient $client): string
+    {
+        $endpoint = $baseUrl.'/wp-json/launchpad/v1/status';
+        $tail = ' — nothing was saved.';
+
+        return match (true) {
+            $result['status'] === 0 => "Could not reach {$baseUrl} — check the URL and that the site is live (DNS / timeout)".$tail,
+            $result['status'] === 404 => "The Launchpad companion plugin isn't answering at {$endpoint} (HTTP 404) — confirm the plugin is active on THIS host and the URL matches WordPress's Site Address (Settings → General)".$tail,
+            in_array($result['status'], [401, 403], true) && $client->coreAuthWorks() => "The credential authenticates, but this WordPress user lacks the Launchpad capability (HTTP {$result['status']} on the plugin route) — give the connecting user the Launchpad role / lp_manage_content capability".$tail,
+            in_array($result['status'], [401, 403], true) => "WordPress rejected the app password (HTTP {$result['status']}) — regenerate the Application Password, confirm the username is the user it was created for, and if it still fails your host may be stripping the Authorization header (common on nginx / FastCGI / some managed hosts), which must be forwarded for Application Passwords to work".$tail,
+            default => "WordPress returned HTTP {$result['status']} at {$endpoint}".($result['error'] !== null ? ' — '.$result['error'] : '').$tail,
+        };
     }
 
     /**
