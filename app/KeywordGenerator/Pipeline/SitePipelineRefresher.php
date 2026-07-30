@@ -4,8 +4,12 @@ namespace App\KeywordGenerator\Pipeline;
 
 use App\Enums\MarketTier;
 use App\Enums\PipelineTrigger;
+use App\Enums\SampleType;
 use App\Integrations\LocalGrid\LocalGridProvider;
 use App\Integrations\Serp\SerpProvider;
+use App\KeywordGenerator\Cadence\CadenceScheduler;
+use App\KeywordGenerator\Cadence\SamplingTask;
+use App\KeywordGenerator\Cadence\Tiering;
 use App\KeywordGenerator\Discovery\SiloKeywordGenerator;
 use App\KeywordGenerator\Tracking\PositionTracker;
 use App\Models\Keyword;
@@ -13,6 +17,8 @@ use App\Models\Market;
 use App\Models\PositionSnapshot;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operator\Controls\BudgetControl;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -34,12 +40,19 @@ use Illuminate\Support\Facades\Log;
  */
 class SitePipelineRefresher
 {
+    private const LANE_ORGANIC = 'organic';
+
+    private const LANE_LOCAL = 'local';
+
     public function __construct(
         private readonly KeywordPipeline $pipeline,
         private readonly PositionTracker $tracker,
         private readonly SerpProvider $serp,
         private readonly LocalGridProvider $grid,
         private readonly SiloKeywordGenerator $generator,
+        private readonly Tiering $tiering,
+        private readonly CadenceScheduler $scheduler,
+        private readonly BudgetControl $budget,
         private readonly int $trackingCadenceDays,
         private readonly int $discoveryCadenceDays,
     ) {}
@@ -68,7 +81,7 @@ class SitePipelineRefresher
         }
 
         if ($force || $this->dueForTracking($site)) {
-            $snapshots = $this->track($site);
+            $snapshots = $this->track($site, $force);
             $trackingRan = true;
         }
 
@@ -107,12 +120,20 @@ class SitePipelineRefresher
     }
 
     /**
-     * Two-lane sweep over the site's tracked (scored) keywords: organic rank for
-     * the site's own domain, plus the priority-market local grid. Records only
-     * real signal — a query the site doesn't rank for, or a not-yet-collected
-     * standard-mode grid, writes no snapshot.
+     * Two-lane sweep over the site's tracked (scored) keywords: organic rank for the site's own
+     * domain, plus the priority-market local grid. Records only real signal — a query the site
+     * doesn't rank for, or a not-yet-collected standard-mode grid, writes no snapshot.
+     *
+     * The SCHEDULED path is tiered + budget-capped: each keyword is sampled at its tier's cadence
+     * (money/high-opportunity + operator-priority targets frequently, low-value ones rarely) and the
+     * run is trimmed to the tenant's REMAINING monthly budget — dropping low tiers / coverage first,
+     * never an operator-priority target ({@see Tiering}, {@see CadenceScheduler}, {@see BudgetControl}).
+     * A tenant with no `budget_ceiling` set is uncapped (still tiered). The operator FORCE path (the
+     * on-demand command) bypasses both — it re-samples every scored keyword now.
+     *
+     * @return int snapshots written
      */
-    private function track(Site $site): int
+    private function track(Site $site, bool $force): int
     {
         $host = $this->host($site->domain_url);
 
@@ -126,20 +147,20 @@ class SitePipelineRefresher
             ->where('tier', MarketTier::Priority->value)
             ->first();
 
-        $snapshots = 0;
+        $sample = $force
+            ? $this->allTasks($keywords, $host, $priorityMarket)
+            : $this->scheduledTasks($site, $keywords, $host, $priorityMarket);
 
-        foreach ($keywords as $keyword) {
-            if ($host !== null) {
+        $snapshots = 0;
+        foreach ($sample as [$keyword, $lane]) {
+            if ($lane === self::LANE_ORGANIC && $host !== null) {
                 $owned = $this->serp->results($keyword->query)->ownedBy($host);
                 if ($owned !== []) {
                     usort($owned, fn ($a, $b) => $a->position <=> $b->position);
-                    $best = $owned[0];
-                    $this->tracker->recordOrganic($keyword, $best->position, $best->url);
+                    $this->tracker->recordOrganic($keyword, $owned[0]->position, $owned[0]->url);
                     $snapshots++;
                 }
-            }
-
-            if ($priorityMarket !== null) {
+            } elseif ($lane === self::LANE_LOCAL && $priorityMarket !== null) {
                 $grid = $this->grid->grid($keyword->query, $priorityMarket->id);
                 if ($grid->coverage > 0.0 || $grid->packCompetitors !== []) {
                     $this->tracker->recordLocalGrid($keyword, $priorityMarket, $grid);
@@ -149,6 +170,88 @@ class SitePipelineRefresher
         }
 
         return $snapshots;
+    }
+
+    /**
+     * Force path: every scored keyword, both lanes — today's exhaustive behavior, unchanged.
+     *
+     * @param  Collection<int, Keyword>  $keywords
+     * @return list<array{0: Keyword, 1: string}>
+     */
+    private function allTasks(Collection $keywords, ?string $host, ?Market $priorityMarket): array
+    {
+        $out = [];
+        foreach ($keywords as $keyword) {
+            if ($host !== null) {
+                $out[] = [$keyword, self::LANE_ORGANIC];
+            }
+            if ($priorityMarket !== null) {
+                $out[] = [$keyword, self::LANE_LOCAL];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Scheduled path: tier each keyword by its opportunity rank within the site (scale-independent —
+     * top → A … bottom → C; operator-priority targets forced to the top), keep only the ones DUE for
+     * their tier's cadence, then trim to the tenant's remaining monthly budget.
+     *
+     * @param  Collection<int, Keyword>  $keywords
+     * @return list<array{0: Keyword, 1: string}>
+     */
+    private function scheduledTasks(Site $site, Collection $keywords, ?string $host, ?Market $priorityMarket): array
+    {
+        $ranked = $keywords->sortByDesc(fn (Keyword $k): float => (float) ($k->opportunity_score ?? 0.0))->values();
+        $count = $ranked->count();
+
+        /** @var list<SamplingTask> $tasks */
+        $tasks = [];
+        /** @var array<string, array{0: Keyword, 1: string}> $byRef */
+        $byRef = [];
+
+        foreach ($ranked as $i => $keyword) {
+            $forced = (int) ($keyword->priority ?? 0) > 0;
+            // Opportunity percentile in [0,1] (best = 1); operator-priority pins it to the top.
+            $value = $forced ? 1.0 : ($count <= 1 ? 1.0 : 1.0 - ($i / ($count - 1)));
+
+            if ($host !== null) {
+                $tier = $this->tiering->tierFor($value);
+                $cadence = $this->tiering->cadenceDays($tier, SampleType::Positions);
+                if ($this->dueForKeyword($keyword, null, $cadence)) {
+                    $ref = 'org:'.$keyword->id;
+                    $tasks[] = new SamplingTask($ref, SampleType::Positions, $tier, $cadence, 1.0, forced: $forced);
+                    $byRef[$ref] = [$keyword, self::LANE_ORGANIC];
+                }
+            }
+
+            if ($priorityMarket !== null) {
+                $tier = $this->tiering->tierFor($value, MarketTier::Priority);
+                $cadence = $this->tiering->cadenceDays($tier, SampleType::Positions);
+                if ($this->dueForKeyword($keyword, $priorityMarket->id, $cadence)) {
+                    $ref = 'loc:'.$keyword->id;
+                    $tasks[] = new SamplingTask($ref, SampleType::Positions, $tier, $cadence, 1.0, marketId: $priorityMarket->id, forced: $forced);
+                    $byRef[$ref] = [$keyword, self::LANE_LOCAL];
+                }
+            }
+        }
+
+        // Trim to the remaining monthly budget (null ceiling → uncapped). Forced targets always kept.
+        $remaining = $this->budget->remaining($site);
+        $included = $remaining === null ? $tasks : $this->scheduler->fit($tasks, (float) $remaining)->included;
+
+        return array_map(fn (SamplingTask $t): array => $byRef[$t->ref], $included);
+    }
+
+    /** A keyword+lane is due when it has no snapshot in that lane within its tier's cadence window. */
+    private function dueForKeyword(Keyword $keyword, ?string $marketId, int $cadenceDays): bool
+    {
+        $query = PositionSnapshot::withoutGlobalScope(SiteScope::class)->where('keyword_id', $keyword->id);
+        $query = $marketId === null ? $query->whereNull('market_id') : $query->where('market_id', $marketId);
+        $latest = $query->max('captured_at');
+
+        return $latest === null || Carbon::parse($latest)->lt(now()->subDays($cadenceDays));
     }
 
     private function host(?string $url): ?string
