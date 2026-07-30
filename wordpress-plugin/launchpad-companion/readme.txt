@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.23
+Stable tag: 0.9.24
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,15 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.24 =
+* Fix (continuation of 0.9.23): on a MIGRATED site the `launchpad-sync` service user already exists, so
+  the installer never recreated it with the service role — and its role/caps could have drifted in the
+  move, so the control plane still hit a 403 even after 0.9.23 patched the role. The installer now
+  re-asserts `lp_manage_content` directly on the service USER (usermeta — independent of the role and
+  immune to role-cache staleness) and re-adds the service role if missing. The self-heal now runs on
+  `init` (not just `admin_init`), so it fires for REST requests too — the connect attempt itself repairs
+  the user. No manual role editing, no rebuilding the user.
 
 = 0.9.23 =
 * Fix: the service capability (`lp_manage_content`) could be lost when a site is migrated to a new host
