@@ -14,7 +14,7 @@ use App\Enums\EmbeddingsProvider as EmbeddingsProviderType;
 use App\Enums\NewsProvider as NewsProviderType;
 use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
-use App\Integrations\Analytics\NullPageTraffic;
+use App\Integrations\Analytics\Ga4PageTraffic;
 use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\Census\CensusGeocoder;
 use App\Integrations\Census\CensusPopulation;
@@ -445,7 +445,15 @@ class AppServiceProvider extends ServiceProvider
             (string) config('services.google.gsc_base_url', 'https://www.googleapis.com/webmasters/v3'),
             (int) config('services.google.gsc_cache_ttl', 21600),
         ));
-        $this->app->bind(PageTrafficProvider::class, NullPageTraffic::class);
+        // Card-facing GA4: the real bridge onto the shared Google grant (PR-A), sibling of the GSC
+        // one. connected() is true only once the grant is live AND the Site has a GA4 property picked;
+        // until then the cards show the honest "Connect GA4" / collecting prompt (old Null behavior).
+        $this->app->bind(PageTrafficProvider::class, fn () => new Ga4PageTraffic(
+            $this->app->make(GoogleConnectionService::class),
+            $this->app->make(CacheRepository::class),
+            (string) config('services.google.ga4_data_base_url', 'https://analyticsdata.googleapis.com/v1beta'),
+            (int) config('services.google.ga4_cache_ttl', 21600),
+        ));
 
         // Relevance scoring runs on the cheaper Haiku model with NO extended
         // thinking; drafting is quality-sensitive and runs on Sonnet with adaptive

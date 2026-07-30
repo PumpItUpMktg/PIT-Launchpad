@@ -151,6 +151,9 @@ return [
         // board render need not re-query every card). Default 6h.
         'gsc_cache_ttl' => (int) env('GOOGLE_GSC_CACHE_TTL', 21600),
         'ga4_data_base_url' => env('GOOGLE_GA4_DATA_BASE_URL', 'https://analyticsdata.googleapis.com/v1beta'),
+        // Per-page GA4 session totals are cached this long on the Live cards (same rationale as the
+        // GSC cache — a board render need not re-query every card). Default 6h.
+        'ga4_cache_ttl' => (int) env('GOOGLE_GA4_CACHE_TTL', 21600),
         'ga4_admin_base_url' => env('GOOGLE_GA4_ADMIN_BASE_URL', 'https://analyticsadmin.googleapis.com/v1beta'),
         'timeout' => (int) env('GOOGLE_TIMEOUT', 30),
     ],
