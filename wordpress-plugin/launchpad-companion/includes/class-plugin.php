@@ -98,6 +98,21 @@ final class Plugin
         // Sitemap + redirects.
         ( new Sitemap() )->register();
         ( new Redirects() )->register();
+
+        // Self-heal on UPDATE: the activation hook only runs on a manual (de)activate, so a plugin
+        // update (or an auto-update) never re-grants the service capability. When the stored version
+        // differs from the running one, re-run install() once — repairs a role whose capability was
+        // lost in a site migration without needing the operator to deactivate/reactivate.
+        add_action('admin_init', [self::class, 'maybe_upgrade']);
+    }
+
+    /** Run install() once after a version change (see boot()). */
+    public static function maybe_upgrade(): void
+    {
+        if (get_option('lpc_version') !== LPC_VERSION) {
+            ServiceUser::install();
+            update_option('lpc_version', LPC_VERSION);
+        }
     }
 
     public static function register_page_categories(): void
@@ -117,6 +132,7 @@ final class Plugin
     public static function activate(): void
     {
         ServiceUser::install();
+        update_option('lpc_version', LPC_VERSION);
         self::register_page_categories();
         KitTaxonomy::register();
         AreaTaxonomy::register();

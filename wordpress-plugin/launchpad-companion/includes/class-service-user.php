@@ -26,6 +26,16 @@ final class ServiceUser
             self::CAP => true,
         ]);
 
+        // add_role() is a NO-OP when the role already exists — e.g. carried over by a site migration
+        // (Duplicator re-imports the DB, so the role's stored caps come along but a plugin re-activation
+        // never re-writes them). A stale role can therefore lack the capability, which fails the REST
+        // auth with a 403 even though the app password is valid. Patch the existing role explicitly —
+        // idempotent, and the actual repair on a moved site.
+        $role = get_role(self::ROLE);
+        if ($role && ! $role->has_cap(self::CAP)) {
+            $role->add_cap(self::CAP);
+        }
+
         // Administrators can also manage, for manual testing.
         $admin = get_role('administrator');
         if ($admin && ! $admin->has_cap(self::CAP)) {
