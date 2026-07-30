@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.22
+Stable tag: 0.9.23
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,15 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.23 =
+* Fix: the service capability (`lp_manage_content`) could be lost when a site is migrated to a new host
+  (Duplicator re-imports the DB, so the `launchpad_service` role's stored caps come along, but a plugin
+  re-activation never re-writes an existing role — `add_role()` is a no-op when the role exists). The
+  control plane then failed to connect with a 403 despite a valid app password. Activation now patches an
+  existing role's capability explicitly, and the plugin self-heals on update (re-runs the install routine
+  once when the stored version changes) — so a moved site is repaired by updating or reactivating the
+  plugin, no manual role editing.
 
 = 0.9.22 =
 * New `lp_area` town taxonomy (§B). A blog post is now tagged, at publish, with every coverage town it
