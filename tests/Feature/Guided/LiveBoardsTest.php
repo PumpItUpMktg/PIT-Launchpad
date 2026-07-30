@@ -7,7 +7,7 @@ use App\Enums\KeywordSource;
 use App\Enums\PageType;
 use App\Guided\GrowDashboard;
 use App\Guided\LiveBoards;
-use App\Integrations\SearchConsole\NullSearchConsole;
+use App\Integrations\SearchConsole\GoogleSearchConsole;
 use App\Integrations\SearchConsole\PageSearchStats;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
 use App\Locations\TownLocationAssigner;
@@ -172,6 +172,8 @@ it('published pages leave the Grow work board but keep counting in its stats', f
     // The header stats read the FULL set — live stays counted.
     expect($dashboard->stats($site)['live'])->toBe(1);
 
-    // The null-provider default keeps the Search Console seam honest for every other test.
-    expect(app(SearchConsoleProvider::class))->toBeInstanceOf(NullSearchConsole::class);
+    // The real GSC bridge binds by default, but reports NOT connected without a shared grant +
+    // picked property — so the seam stays honest (connect prompt, no fabricated zeros) everywhere.
+    expect(app(SearchConsoleProvider::class))->toBeInstanceOf(GoogleSearchConsole::class)
+        ->and(app(SearchConsoleProvider::class)->connected($site))->toBeFalse();
 });
