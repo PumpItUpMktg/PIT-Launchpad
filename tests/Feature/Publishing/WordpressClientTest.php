@@ -29,6 +29,18 @@ test('upsertContent posts to /content with the control-plane ULID and basic auth
     });
 });
 
+test('every request carries a named product User-Agent (not the default GuzzleHttp) so edge bot rules pass', function () {
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['ok' => true], 200)]);
+
+    wpClient()->ping();
+
+    Http::assertSent(function ($request) {
+        $ua = $request->header('User-Agent')[0] ?? '';
+
+        return str_starts_with($ua, 'LaunchpadControlPlane/') && ! str_contains($ua, 'GuzzleHttp');
+    });
+});
+
 test('activateStyleVariation posts the inline theme_json to /style', function () {
     Http::fake(['*/wp-json/launchpad/v1/style' => Http::response(['updated' => true, 'variation' => 'brand'], 200)]);
 
