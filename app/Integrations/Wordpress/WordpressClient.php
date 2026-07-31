@@ -25,6 +25,14 @@ class WordpressClient
 
     private const TIMEOUT = 20;
 
+    /**
+     * Identify the control plane with a real product User-Agent (not the default "GuzzleHttp/…").
+     * Cloudflare Bot Fight Mode + several WAF managed rules block library/bot user-agents outright —
+     * the request is refused at the edge with a 403 before it ever reaches WordPress, which looks
+     * exactly like a WP auth/capability failure. A named UA gets our sync through those defaults.
+     */
+    private const USER_AGENT = 'LaunchpadControlPlane/1.0 (+https://launchpad; companion-sync)';
+
     public function __construct(
         private readonly Http $http,
         private readonly string $baseUrl,
@@ -307,6 +315,7 @@ class WordpressClient
     {
         return $this->http
             ->withBasicAuth($this->username, $this->appPassword)
+            ->withUserAgent(self::USER_AGENT)
             ->timeout(self::TIMEOUT)
             ->acceptJson()
             ->retry(self::TRIES, self::BACKOFF_MS, function (\Throwable $e): bool {
