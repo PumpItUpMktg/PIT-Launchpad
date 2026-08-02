@@ -131,6 +131,7 @@ class ConnectionsResource extends Resource
             ->label('Connect WordPress site')
             ->icon('heroicon-o-globe-alt')
             ->modalSubmitActionLabel('Verify & connect')
+            ->modalDescription('Verifies against live WordPress before saving. If the site is behind Cloudflare, first allow /wp-json/launchpad/* (a WAF "Skip" rule, or turn off Bot Fight Mode) — otherwise the edge blocks the request before WordPress and it looks like an auth failure. Connect as the launchpad-sync user.')
             ->schema([
                 Select::make('site_id')
                     ->label('Tenant')
