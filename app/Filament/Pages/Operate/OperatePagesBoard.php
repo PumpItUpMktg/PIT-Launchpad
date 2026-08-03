@@ -7,14 +7,17 @@ use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\AuditAction;
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Jobs\GeneratePage;
 use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PagesBoard;
+use App\Operate\QueueHealth;
 use App\Publishing\DeleteFromWordpress;
 use App\Publishing\Links\HubSpokeGuard;
+use App\Publishing\PostPublisher;
 use App\Security\Audit;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
@@ -64,6 +67,91 @@ abstract class OperatePagesBoard extends OperatePage
             session(['guided_site_id' => $site->id]);
             $this->siteId = $site->id;
         }
+    }
+
+    /** Ceiling on one inline-drain click so a huge backlog can't time out the web request. */
+    private const DRAIN_BATCH = 25;
+
+    /**
+     * Background-worker health — publishing is async (Publish/Repush queue a job the worker runs). If
+     * the worker is down, approved pages sit at "publishing" forever, which looks like a broken button;
+     * surface it here with the inline-drain escape hatch instead. Carries the tenant brand for the
+     * `launchpad:drain-publish` hint.
+     *
+     * @return array{pending: int, oldest_minutes: int, failed: int, processing: int, draining: bool, worker_down: bool, stalled: bool, brand: string, failures: list<array{job: string, reason: string, count: int, last: string, pages: list<string>}>}
+     */
+    public function getQueueHealthProperty(): array
+    {
+        $site = $this->getSite();
+        $health = app(QueueHealth::class);
+        $snapshot = $health->snapshot();
+        $snapshot['brand'] = $site !== null ? (string) $site->brand_name : '';
+        $snapshot['failures'] = $snapshot['failed'] > 0 ? $health->failures() : [];
+
+        return $snapshot;
+    }
+
+    /**
+     * Escape hatch when the worker is down: publish THIS site's in-flight pages + posts SYNCHRONOUSLY,
+     * right now, via the same PostPublisher the `launchpad:drain-publish` command uses (WP-connection
+     * gate + idempotent-by-ULID re-push still apply). Bounded per click so a huge backlog can't time out
+     * the request — click again for more. A manual recovery tool, not a substitute for a running worker.
+     */
+    public function drainStuckPages(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $inflight = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereIn('status', [
+                ContentStatus::Approved->value,
+                ContentStatus::Rendering->value,
+                ContentStatus::Publishing->value,
+            ])
+            ->orderBy('updated_at')
+            ->limit(self::DRAIN_BATCH)
+            ->get();
+
+        if ($inflight->isEmpty()) {
+            Notification::make()->info()->title('Nothing to drain')
+                ->body('No pages or posts are stuck waiting to publish for this site.')->send();
+
+            return;
+        }
+
+        $publisher = app(PostPublisher::class);
+        $published = 0;
+        foreach ($inflight as $content) {
+            if ($publisher->publish($content, Auth::id())->isPublished()) {
+                $published++;
+            }
+        }
+
+        $more = $inflight->count() === self::DRAIN_BATCH;
+        Notification::make()
+            ->{$published === $inflight->count() ? 'success' : 'warning'}()
+            ->title("Published {$published} of {$inflight->count()} stuck item(s)")
+            ->body($more
+                ? 'More may remain — click again to continue draining.'
+                : ($published < $inflight->count()
+                    ? 'Some did not publish — check each item\'s status/error, and fix the worker (Horizon / queue:work) so this is automatic.'
+                    : 'Fix the worker (Horizon / queue:work) so publishing is automatic again.'))
+            ->send();
+    }
+
+    /** Clear the failed-jobs backlog — the banner's "Clear failed" button (Laravel's queue:flush). */
+    public function clearFailedJobs(): void
+    {
+        $cleared = app(QueueHealth::class)->clearFailed();
+
+        Notification::make()
+            ->{$cleared > 0 ? 'success' : 'info'}()
+            ->title($cleared > 0 ? "Cleared {$cleared} failed job(s)" : 'No failed jobs to clear')
+            ->body($cleared > 0 ? 'The stalled-worker banner clears with them. Fix the underlying cause so they don\'t recur.' : '')
+            ->send();
     }
 
     /**
