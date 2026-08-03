@@ -45,6 +45,7 @@ class OperateServicePages extends OperatePagesBoard
                 ->modalSubmitActionLabel('Yes, pull now (uses credits)')
                 ->action(fn () => $this->refreshRankings()),
             $this->submitSitemapAction(),
+            $this->pingIndexNowAction(),
         ];
     }
 

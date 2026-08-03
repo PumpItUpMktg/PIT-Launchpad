@@ -17,6 +17,7 @@ use Launchpad\Companion\Content\KitTemplateStore;
 use Launchpad\Companion\Content\RedirectStore;
 use Launchpad\Companion\Content\SiloStore;
 use Launchpad\Companion\Content\SiteProfileStore;
+use Launchpad\Companion\IndexNow;
 use Launchpad\Companion\ServiceUser;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -107,11 +108,29 @@ final class Routes
             'callback' => [$this, 'site_profile'],
             'permission_callback' => $auth,
         ]);
+
+        register_rest_route(self::NS, '/indexnow-key', [
+            'methods' => 'POST',
+            'callback' => [$this, 'indexnow_key'],
+            'permission_callback' => $auth,
+        ]);
     }
 
     public function status(): WP_REST_Response
     {
         return new WP_REST_Response(Status::payload(), 200);
+    }
+
+    /** Store the control plane's IndexNow key so it's served at /{key}.txt. */
+    public function indexnow_key(WP_REST_Request $request): WP_REST_Response
+    {
+        $key = (string) ($request->get_json_params()['key'] ?? '');
+        $stored = IndexNow::store($key);
+
+        return new WP_REST_Response([
+            'stored' => $stored,
+            'key_location' => $stored ? home_url('/' . $key . '.txt') : null,
+        ], $stored ? 200 : 422);
     }
 
     public function templates(): WP_REST_Response

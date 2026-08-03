@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.24
+Stable tag: 0.9.25
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,11 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.25 =
+* IndexNow: serve the control plane's verification key at /{key}.txt (received via the authed
+  launchpad/v1/indexnow-key endpoint) so IndexNow (Bing / Yandex / Seznam / Naver) accepts URL pings.
+  No SEO plugin required; complements the existing /sitemap.xml.
 
 = 0.9.24 =
 * Fix (continuation of 0.9.23): on a MIGRATED site the `launchpad-sync` service user already exists, so
