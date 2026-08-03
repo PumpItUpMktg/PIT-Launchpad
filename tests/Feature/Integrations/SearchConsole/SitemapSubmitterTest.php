@@ -45,10 +45,12 @@ it('submits the site sitemap to Search Console and reports the submitted count',
         ->and($result['submitted'])->toBe(142)
         ->and($result['pending'])->toBeFalse();
 
-    // The PUT targets the feedpath = the URL-encoded sitemap URL.
+    // The PUT targets the feedpath = the URL-encoded sitemap URL, with an EMPTY body — Google rejects
+    // an empty-array body ("Root element must be a message"), so it must not send `[]`.
     Http::assertSent(fn ($r) => $r->method() === 'PUT'
         && str_contains($r->url(), '/sitemaps/')
-        && str_contains($r->url(), rawurlencode('https://spg.example/sitemap.xml')));
+        && str_contains($r->url(), rawurlencode('https://spg.example/sitemap.xml'))
+        && $r->body() === '');
 });
 
 it('surfaces Google\'s reason when the grant lacks write authority (read-only scope / restricted user)', function () {

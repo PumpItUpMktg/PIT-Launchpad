@@ -222,12 +222,25 @@ class GoogleConnectionService
             ->retry(3, 400, fn ($e) => $e instanceof ConnectionException
                 || ($e instanceof RequestException && in_array($e->response->status(), [429, 500, 502, 503], true)), throw: false);
 
-        return match (strtolower($method)) {
-            'get' => $request->get($url, $options['query'] ?? []),
-            'put' => $request->put($url, $options['json'] ?? []),
-            'delete' => $request->delete($url, $options['json'] ?? []),
-            'patch' => $request->patch($url, $options['json'] ?? []),
-            default => $request->post($url, $options['json'] ?? []),
+        $method = strtolower($method);
+        if ($method === 'get') {
+            return $request->get($url, $options['query'] ?? []);
+        }
+
+        $json = $options['json'] ?? [];
+
+        // No payload → send NO body. Passing `[]` serializes to the JSON array `[]`, which some Google
+        // endpoints reject ("Root element must be a message") — e.g. the GSC Sitemaps submit is a
+        // bodyless PUT. With a payload, use the verb helper so it's sent as a JSON object.
+        if ($json === []) {
+            return $request->send(strtoupper($method), $url);
+        }
+
+        return match ($method) {
+            'put' => $request->put($url, $json),
+            'delete' => $request->delete($url, $json),
+            'patch' => $request->patch($url, $json),
+            default => $request->post($url, $json),
         };
     }
 }
