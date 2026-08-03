@@ -152,6 +152,9 @@ return [
         'auth_uri' => env('GOOGLE_AUTH_URI', 'https://accounts.google.com/o/oauth2/v2/auth'),
         'token_uri' => env('GOOGLE_TOKEN_URI', 'https://oauth2.googleapis.com/token'),
         'gsc_base_url' => env('GOOGLE_GSC_BASE_URL', 'https://www.googleapis.com/webmasters/v3'),
+        // Path (on the site's own domain) of the sitemap submitted to Search Console for indexing.
+        // The companion plugin serves the Launchpad sitemap at /sitemap.xml (no SEO plugin needed).
+        'sitemap_path' => env('GOOGLE_SITEMAP_PATH', '/sitemap.xml'),
         // Per-page GSC totals are cached this long on the Live cards (GSC data lags ~2-3 days, so a
         // board render need not re-query every card). Default 6h.
         'gsc_cache_ttl' => (int) env('GOOGLE_GSC_CACHE_TTL', 21600),

@@ -222,10 +222,12 @@ class GoogleConnectionService
             ->retry(3, 400, fn ($e) => $e instanceof ConnectionException
                 || ($e instanceof RequestException && in_array($e->response->status(), [429, 500, 502, 503], true)), throw: false);
 
-        if (strtolower($method) === 'get') {
-            return $request->get($url, $options['query'] ?? []);
-        }
-
-        return $request->post($url, $options['json'] ?? []);
+        return match (strtolower($method)) {
+            'get' => $request->get($url, $options['query'] ?? []),
+            'put' => $request->put($url, $options['json'] ?? []),
+            'delete' => $request->delete($url, $options['json'] ?? []),
+            'patch' => $request->patch($url, $options['json'] ?? []),
+            default => $request->post($url, $options['json'] ?? []),
+        };
     }
 }

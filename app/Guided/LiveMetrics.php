@@ -54,7 +54,7 @@ class LiveMetrics
      *   local: array{rank: ?int, market: ?string},
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
-     *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
+     *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
      */
@@ -144,18 +144,18 @@ class LiveMetrics
     }
 
     /**
-     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
+     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
      */
     private function gscBlock(?Site $site, Content $page): array
     {
         if ($site === null || ! $this->searchConsole->connected($site)) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'queries' => [], 'pending' => 'Connect Search Console'];
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => 'Connect Search Console'];
         }
 
         $path = '/'.ltrim((string) $page->slug, '/');
         $stats = $this->searchConsole->pageStats($site, $path);
         if ($stats === null) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'queries' => [], 'pending' => 'Collecting — first data in a few days'];
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => 'Collecting — first data in a few days'];
         }
 
         // The long tail this page is actually found for (free GSC signal — every "sump pump {city}" /
@@ -164,7 +164,10 @@ class LiveMetrics
             'query' => $q->query, 'clicks' => $q->clicks, 'impressions' => $q->impressions, 'ctr' => $q->ctr, 'position' => $q->position,
         ], $this->searchConsole->pageQueries($site, $path));
 
-        return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(), 'queries' => $queries, 'pending' => null];
+        // "In Google" = the page has earned Search impressions, so it is definitely indexed and
+        // appearing. (A page indexed with zero impressions simply won't light up yet — we never claim
+        // "not indexed", only the positive.)
+        return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(), 'in_google' => $stats->impressions > 0, 'queries' => $queries, 'pending' => null];
     }
 
     /**
