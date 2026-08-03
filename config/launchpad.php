@@ -405,4 +405,16 @@ return [
         'noun' => 'sump pump',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | City-keyword tracking (§5 Phase 2)
+    |--------------------------------------------------------------------------
+    | The patterns a priority-city location page is tracked for. `{head}` is the
+    | page's primary/pillar service term (trade-derived, never hardcoded);
+    | `{city}` is the market name. Kept deliberately small — DataForSEO local
+    | tracking costs per keyword × city — and operator-tunable. The first pattern
+    | is the page's headline target keyword (shown on the live card).
+    */
+    'city_keyword_patterns' => ['{head} {city}', '{head} service {city}'],
+
 ];
