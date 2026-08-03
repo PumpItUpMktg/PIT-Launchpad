@@ -95,9 +95,10 @@ final class Plugin
         // Admin reference (Launchpad → Slots & Shortcodes).
         ( new SlotsScreen() )->register();
 
-        // Sitemap + redirects.
+        // Sitemap + redirects + IndexNow key file.
         ( new Sitemap() )->register();
         ( new Redirects() )->register();
+        ( new IndexNow() )->register();
 
         // Self-heal on UPDATE: the activation hook only runs on a manual (de)activate, so a plugin
         // update (or an auto-update) never re-grants the service capability. When the stored version
@@ -138,6 +139,7 @@ final class Plugin
         KitTaxonomy::register();
         AreaTaxonomy::register();
         ( new Sitemap() )->add_rewrite_rules();
+        ( new IndexNow() )->add_rewrite_rules();
         flush_rewrite_rules();
     }
 

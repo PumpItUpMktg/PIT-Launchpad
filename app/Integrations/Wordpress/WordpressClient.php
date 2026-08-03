@@ -168,6 +168,17 @@ class WordpressClient
     }
 
     /**
+     * Deploy the site's IndexNow verification key to the companion plugin, which serves it at
+     * /{key}.txt so IndexNow (Bing/Yandex/…) can confirm domain ownership before accepting URL pings.
+     *
+     * @return array<string, mixed>
+     */
+    public function pushIndexNowKey(string $key): array
+    {
+        return $this->post('/indexnow-key', ['key' => $key]);
+    }
+
+    /**
      * Read the companion plugin's environment introspection (WP/PHP/Elementor/
      * theme/plugin versions) through the same authed channel.
      *

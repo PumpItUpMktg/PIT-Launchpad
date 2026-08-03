@@ -46,6 +46,7 @@ use App\Integrations\Google\GoogleConnectionService;
 use App\Integrations\Google\GoogleOAuthClient;
 use App\Integrations\Google\GoogleSearchConsoleProvider;
 use App\Integrations\Google\SearchConsoleProvider;
+use App\Integrations\IndexNow\IndexNowSubmitter;
 use App\Integrations\Keywords\DataForSeoKeywordIdeaProvider;
 use App\Integrations\Keywords\KeywordIdeaProvider;
 use App\Integrations\Local\LocalSignalProvider;
@@ -67,6 +68,7 @@ use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
 use App\Integrations\Voice\MockVoiceSynthesizer;
 use App\Integrations\Voice\VoiceSynthesizer;
+use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Interview\Arrange\CrossSiloDedup;
 use App\Interview\Arrange\FoldTargetAssigner;
 use App\Interview\Arrange\KeywordAssigner;
@@ -457,6 +459,14 @@ class AppServiceProvider extends ServiceProvider
             $this->app->make(GoogleConnectionService::class),
             (string) config('services.google.gsc_base_url', 'https://www.googleapis.com/webmasters/v3'),
             (string) config('services.google.sitemap_path', '/sitemap.xml'),
+        ));
+        // IndexNow — instant crawl ping to Bing/Yandex/Seznam/Naver; deploys its key via the plugin.
+        $this->app->bind(IndexNowSubmitter::class, fn () => new IndexNowSubmitter(
+            $this->app->make(Http::class),
+            $this->app->make(WordpressClientFactory::class),
+            (string) config('services.indexnow.endpoint', 'https://api.indexnow.org/indexnow'),
+            (bool) config('services.indexnow.enabled', true),
+            (int) config('services.indexnow.timeout', 15),
         ));
         // Card-facing GA4: the real bridge onto the shared Google grant (PR-A), sibling of the GSC
         // one. connected() is true only once the grant is live AND the Site has a GA4 property picked;

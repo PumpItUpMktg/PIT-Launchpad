@@ -9,6 +9,7 @@ use App\Enums\AuditAction;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\MarketTier;
+use App\Integrations\IndexNow\IndexNowSubmitter;
 use App\Integrations\SearchConsole\SitemapSubmitter;
 use App\Jobs\GeneratePage;
 use App\Locations\CityKeywordTracker;
@@ -566,7 +567,49 @@ abstract class OperatePagesBoard extends OperatePage
      */
     protected function getHeaderActions(): array
     {
-        return [$this->submitSitemapAction()];
+        return [$this->submitSitemapAction(), $this->pingIndexNowAction()];
+    }
+
+    /**
+     * "Ping search engines (IndexNow)" — submits the site's published URLs to IndexNow so Bing, Yandex,
+     * Seznam and Naver crawl them right away. Free, no per-request auth (Google doesn't participate —
+     * the sitemap submit covers Google). Deploys the site's key to the companion plugin on first use.
+     */
+    protected function pingIndexNowAction(): Action
+    {
+        return Action::make('pingIndexNow')
+            ->label('Ping search engines (IndexNow)')
+            ->icon('heroicon-o-signal')
+            ->color('gray')
+            ->requiresConfirmation()
+            ->modalHeading('Submit URLs to IndexNow')
+            ->modalDescription('Tells Bing, Yandex, Seznam and Naver to crawl your published pages now. Free. Google doesn\'t use IndexNow (its sitemap submit covers Google). Requires the companion plugin updated so it can serve the verification key.')
+            ->modalSubmitActionLabel('Ping now')
+            ->action(fn () => $this->pingIndexNow());
+    }
+
+    private function pingIndexNow(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $result = app(IndexNowSubmitter::class)->submitSite($site);
+
+        if (! $result['ok']) {
+            Notification::make()->warning()
+                ->title('Could not submit to IndexNow')
+                ->body((string) $result['reason'])
+                ->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title('Submitted to IndexNow')
+            ->body(sprintf('%d URL(s) sent to Bing, Yandex, Seznam and Naver — they\'ll crawl shortly.', $result['submitted']))
+            ->send();
     }
 
     /**

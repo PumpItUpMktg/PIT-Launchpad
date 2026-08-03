@@ -11,6 +11,7 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
+use App\Jobs\PingIndexNow;
 use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -175,6 +176,12 @@ class PublishContentService
         // location pages whose blog feed just changed — so the article lands on those pages without a
         // manual reconcile. No-op for a page, or a post that names no coverage town.
         $this->refreshLocationFeeds($content);
+
+        // Instant "please crawl" ping to Bing/Yandex/etc (IndexNow). Its own queued job, config-gated,
+        // swallow-all — never affects this publish. Google doesn't participate (sitemap covers it).
+        if ((bool) config('services.indexnow.enabled', true) && (bool) config('services.indexnow.ping_on_publish', true)) {
+            PingIndexNow::dispatch($content->id);
+        }
 
         return PublishResult::published($content, $wpPostId);
     }
