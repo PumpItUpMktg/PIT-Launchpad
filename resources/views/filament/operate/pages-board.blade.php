@@ -5,6 +5,54 @@
     <div class="lv-wrap">
         @include('filament.live.partials.shell-top', ['subtitle' => 'The whole '.strtolower(static::getNavigationLabel() ?? 'pages').' lifecycle on one board — work on top, live below. A page moves between the lanes by status alone.'])
 
+        {{-- Stalled-worker banner: publishing is async (Publish/Repush queue a job the worker runs). If the
+             worker is down, approved pages sit at "publishing" forever — surface it here with the inline
+             "Publish stuck pages now" drain, instead of it looking like a broken button. --}}
+        @php $q = $this->queueHealth; @endphp
+        @if (! $q['stalled'] && $q['draining'])
+            <div wire:poll.10s style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#1d4ed8; border:1px solid rgba(37,99,235,.3); background:rgba(37,99,235,.06); border-radius:11px; padding:10px 14px; margin-bottom:14px;">
+                ⏳ Publishing — <b>{{ $q['pending'] }}</b> job(s) queued, clearing one at a time. This is normal; each publish renders images then pushes to WordPress.
+            </div>
+        @endif
+        @if ($q['stalled'])
+            <div style="border:1px solid rgba(220,38,38,.4); background:rgba(220,38,38,.05); border-radius:12px; padding:14px 16px; margin-bottom:14px;">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-weight:700; font-size:13.5px; color:#b91c1c;">
+                    <span>@if ($q['worker_down'])⚠ The background worker looks down — <b>{{ $q['pending'] }}</b> job(s) queued{{ $q['oldest_minutes'] > 0 ? ' (oldest '.$q['oldest_minutes'].'m)' : '' }} and nothing is processing.@else⚠ <b>{{ $q['failed'] }}</b> job(s) failed{{ $q['pending'] > 0 ? ' — '.$q['pending'].' still queued' : '' }}.@endif</span>
+                </div>
+                <div style="font-size:12.5px; color:#64748b; margin:6px 0 10px;">
+                    @if ($q['worker_down'])
+                        Approved pages won’t publish until it drains. Publish this tenant’s stuck pages now with the button below, or fix the worker (Horizon / <code>queue:work</code>). On the console: <code>php artisan launchpad:drain-publish "{{ $q['brand'] }}"</code>
+                    @else
+                        The worker is running{{ $q['pending'] > 0 ? ' and draining the queue' : '' }} — these are past failures. Clear them below (fix the cause first so they don’t recur){{ $q['pending'] > 0 ? ', or drain the rest now.' : '.' }}
+                    @endif
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" class="lv-btn primary" wire:click="drainStuckPages" wire:loading.attr="disabled" wire:target="drainStuckPages">
+                        <span wire:loading.remove wire:target="drainStuckPages">Publish stuck pages now</span>
+                        <span wire:loading wire:target="drainStuckPages">Publishing…</span>
+                    </button>
+                    @if ($q['failed'] > 0)
+                        <button type="button" class="lv-btn" wire:click="clearFailedJobs" wire:loading.attr="disabled" wire:target="clearFailedJobs"
+                            wire:confirm="Clear {{ $q['failed'] }} failed job(s)? This removes the dead-job records (same as queue:flush). Fix the cause first so they don’t recur.">
+                            Clear {{ $q['failed'] }} failed
+                        </button>
+                    @endif
+                </div>
+                @if (($q['failures'] ?? []) !== [])
+                    <div style="margin-top:10px; font-size:12px;">
+                        <div style="font-weight:600; color:#475569; margin-bottom:4px;">What failed &amp; why</div>
+                        @foreach ($q['failures'] as $f)
+                            <div style="color:#64748b; padding:2px 0;">
+                                <span style="font-family:ui-monospace,monospace; color:#334155;">{{ $f['job'] }}</span>@if ($f['count'] > 1) <span style="color:#94a3b8;">×{{ $f['count'] }}</span>@endif
+                                — {{ $f['reason'] }} <span style="color:#94a3b8;">(last {{ $f['last'] }})</span>
+                                @if (($f['pages'] ?? []) !== [])<div style="color:#94a3b8;">📄 {{ implode(', ', array_slice($f['pages'], 0, 8)) }}{{ count($f['pages']) > 8 ? ' +'.(count($f['pages']) - 8).' more' : '' }}</div>@endif
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        @endif
+
         {{-- Ordering-guard interstitial (report fix 2): this page links into pages that aren't live yet.
              Push them first (so the links resolve), or publish anyway (recorded in the audit log). --}}
         @if ($confirmingPublish !== null)
