@@ -160,6 +160,7 @@ it('renders Search Console numbers once the provider connects (and the rollup su
 
     expect($group['towns'][0]['metrics']['gsc']['impressions'])->toBe(300)
         ->and($group['towns'][0]['metrics']['gsc']['ctr'])->toBe(4.0)
+        ->and($group['towns'][0]['metrics']['gsc']['in_google'])->toBeTrue() // impressions > 0 → indexed + appearing
         ->and($group['towns'][0]['metrics']['gsc']['queries'][0]['query'])->toBe('sump pump norristown')
         ->and($group['rollup']['impressions'])->toBe(600)
         ->and($group['rollup']['clicks'])->toBe(24);

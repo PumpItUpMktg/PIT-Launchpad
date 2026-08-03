@@ -24,10 +24,17 @@
         })->implode(' ');
     }
 @endphp
-<div class="lv-card" wire:key="lv-{{ $card['id'] }}">
+@php $inGoogle = $gsc['in_google'] ?? false; @endphp
+<div class="lv-card" wire:key="lv-{{ $card['id'] }}" @if ($inGoogle) style="box-shadow: inset 3px 0 0 #16a34a;" @endif>
     <div class="lv-top">
         <span class="lv-type">{{ ucfirst($card['type']) }}</span>
         <span class="lv-state">Live{{ $card['days_live'] !== null ? ' · '.$card['days_live'].'d' : '' }}</span>
+        {{-- Indexing state: a page with Search Console impressions is definitely in Google's index and
+             appearing. We only ever show the positive — no false "not indexed" for a young page. --}}
+        @if ($inGoogle)
+            <span title="Appearing in Google Search — this page is indexed."
+                  style="font-size:10px; font-weight:700; color:#166534; background:rgba(22,163,74,.14); border:1px solid rgba(22,163,74,.35); padding:1px 8px; border-radius:99px;">✓ In Google</span>
+        @endif
     </div>
     <div class="lv-id">
         <h3>{{ $card['title'] }}@if ($card['locked'])<span class="lv-lock" title="publishes never overwrite this page">locked</span>@endif</h3>

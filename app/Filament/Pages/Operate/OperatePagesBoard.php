@@ -9,6 +9,7 @@ use App\Enums\AuditAction;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\MarketTier;
+use App\Integrations\SearchConsole\SitemapSubmitter;
 use App\Jobs\GeneratePage;
 use App\Locations\CityKeywordTracker;
 use App\Models\BuildPage;
@@ -22,6 +23,7 @@ use App\Publishing\DeleteFromWordpress;
 use App\Publishing\Links\HubSpokeGuard;
 use App\Publishing\PostPublisher;
 use App\Security\Audit;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 
@@ -557,6 +559,63 @@ abstract class OperatePagesBoard extends OperatePage
 
         Notification::make()->success()->title('Removed')
             ->body("'{$title}' was deleted from the plan".($wasLive ? ' and WordPress' : '').'. Rebuilding the structure can bring it back.')->send();
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [$this->submitSitemapAction()];
+    }
+
+    /**
+     * "Submit sitemap to Google" — pushes the site's sitemap (/sitemap.xml, served by the companion
+     * plugin) to Search Console so Google discovers + indexes the pages. Free (no DataForSEO); uses the
+     * shared Google grant. Reports the URL count Google took.
+     */
+    protected function submitSitemapAction(): Action
+    {
+        return Action::make('submitSitemap')
+            ->label('Submit sitemap to Google')
+            ->icon('heroicon-o-globe-alt')
+            ->color('gray')
+            ->requiresConfirmation()
+            ->modalHeading('Submit sitemap to Google Search Console')
+            ->modalDescription('This tells Google to crawl and index your published pages (from /sitemap.xml). Free — no DataForSEO credits. Requires Search Console connected for this site.')
+            ->modalSubmitActionLabel('Submit to Google')
+            ->action(fn () => $this->submitSitemap());
+    }
+
+    private function submitSitemap(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $result = app(SitemapSubmitter::class)->submit($site);
+
+        if (! $result['ok']) {
+            Notification::make()->warning()
+                ->title('Could not submit sitemap')
+                ->body($result['reason'] === 'not_connected'
+                    ? 'Connect Search Console for this site first (Connections → Connect Google, then pick its GSC property).'
+                    : ($result['reason'] === 'no_domain' ? 'This site has no domain URL set.' : (string) $result['reason']))
+                ->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title('Sitemap submitted to Google')
+            ->body(sprintf(
+                'Google is crawling %s — it reports %d URL(s)%s. Indexing can take days; the "✓ In Google" badge lights a page once it appears in Search.',
+                (string) $result['sitemap'],
+                $result['submitted'],
+                $result['pending'] ? ' (still processing)' : '',
+            ))
+            ->send();
     }
 
     /**

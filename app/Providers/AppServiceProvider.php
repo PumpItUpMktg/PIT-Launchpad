@@ -61,6 +61,7 @@ use App\Integrations\News\OnDemandSourcePull;
 use App\Integrations\Places\GooglePlacesClient;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\SearchConsole\GoogleSearchConsole;
+use App\Integrations\SearchConsole\SitemapSubmitter;
 use App\Integrations\Serp\SerpProvider;
 use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
@@ -450,6 +451,12 @@ class AppServiceProvider extends ServiceProvider
             $this->app->make(CacheRepository::class),
             (string) config('services.google.gsc_base_url', 'https://www.googleapis.com/webmasters/v3'),
             (int) config('services.google.gsc_cache_ttl', 21600),
+        ));
+        // Sitemap → Search Console submission (indexing), on the same shared grant + gsc_property.
+        $this->app->bind(SitemapSubmitter::class, fn () => new SitemapSubmitter(
+            $this->app->make(GoogleConnectionService::class),
+            (string) config('services.google.gsc_base_url', 'https://www.googleapis.com/webmasters/v3'),
+            (string) config('services.google.sitemap_path', '/sitemap.xml'),
         ));
         // Card-facing GA4: the real bridge onto the shared Google grant (PR-A), sibling of the GSC
         // one. connected() is true only once the grant is live AND the Site has a GA4 property picked;

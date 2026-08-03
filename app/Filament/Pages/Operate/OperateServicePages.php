@@ -44,6 +44,7 @@ class OperateServicePages extends OperatePagesBoard
                 ->modalDescription(fn (): string => $this->pullDisclaimer())
                 ->modalSubmitActionLabel('Yes, pull now (uses credits)')
                 ->action(fn () => $this->refreshRankings()),
+            $this->submitSitemapAction(),
         ];
     }
 
