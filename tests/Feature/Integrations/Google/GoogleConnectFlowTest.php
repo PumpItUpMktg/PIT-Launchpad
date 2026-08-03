@@ -31,8 +31,8 @@ it('completes the callback: exchanges the code, vaults tokens on the shared gran
         ->withSession(['google_oauth' => ['state' => 'state-xyz']])
         ->get('/oauth/google/callback?state=state-xyz&code=auth-code');
 
-    $response->assertRedirect('/');
-    $response->assertSessionHas('google_connect_ok');
+    // Lands back on the operator Connections page (with a success notification), not the bare home.
+    $response->assertRedirectContains('connections');
 
     // One shared grant, tokens vaulted, connected. Properties are picked per-site later — NOT here.
     expect(GoogleAccount::count())->toBe(1);
@@ -50,8 +50,7 @@ it('rejects a callback whose state does not match the session', function () {
         ->withSession(['google_oauth' => ['state' => 'real-state']])
         ->get('/oauth/google/callback?state=forged&code=auth-code');
 
-    $response->assertRedirect('/');
-    $response->assertSessionHas('google_connect_error');
+    $response->assertRedirectContains('connections');
     expect(GoogleAccount::count())->toBe(0);
     HttpFacade::assertNothingSent();
 });
