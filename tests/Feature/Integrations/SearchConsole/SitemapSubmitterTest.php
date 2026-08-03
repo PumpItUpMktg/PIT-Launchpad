@@ -51,6 +51,20 @@ it('submits the site sitemap to Search Console and reports the submitted count',
         && str_contains($r->url(), rawurlencode('https://spg.example/sitemap.xml')));
 });
 
+it('surfaces Google\'s reason when the grant lacks write authority (read-only scope / restricted user)', function () {
+    ssGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+
+    Http::fake([
+        '*/sitemaps/*' => Http::response(['error' => ['message' => 'User does not have sufficient permission for site.']], 403),
+    ]);
+
+    $result = app(SitemapSubmitter::class)->submit($site);
+
+    expect($result['ok'])->toBeFalse()
+        ->and(strtolower((string) $result['reason']))->toContain('permission');
+});
+
 it('does not call Google when Search Console is not connected', function () {
     $site = Site::factory()->create(['gsc_property' => null, 'domain_url' => 'https://spg.example']);
     Http::fake();

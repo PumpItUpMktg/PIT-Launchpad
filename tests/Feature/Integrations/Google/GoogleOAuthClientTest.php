@@ -18,7 +18,7 @@ function oauthClient(): GoogleOAuthClient
     );
 }
 
-it('builds a consent URL with offline access, forced consent and read-only scopes', function () {
+it('builds a consent URL with offline access, forced consent and the GSC read+write + GA4 read scopes', function () {
     $url = oauthClient()->authorizationUrl('state-abc');
 
     expect($url)->toStartWith('https://accounts.google.com/o/oauth2/v2/auth?');
@@ -28,7 +28,9 @@ it('builds a consent URL with offline access, forced consent and read-only scope
         ->and($query)->toContain('access_type=offline')
         ->and($query)->toContain('prompt=consent')
         ->and($query)->toContain('state=state-abc')
-        ->and($query)->toContain('webmasters.readonly')
+        // Full webmasters scope (read + sitemap submit), not the read-only variant.
+        ->and($query)->toContain('auth/webmasters ')
+        ->and($query)->not->toContain('webmasters.readonly')
         ->and($query)->toContain('analytics.readonly');
 });
 

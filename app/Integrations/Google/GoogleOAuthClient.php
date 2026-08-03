@@ -8,14 +8,15 @@ use Illuminate\Http\Client\Factory as Http;
 /**
  * Platform-level Google OAuth client: builds the consent URL and exchanges /
  * refreshes tokens against the token endpoint. Uses only the platform app creds
- * (client id/secret/redirect) — never a per-tenant token. Read-only scopes:
- * GSC (webmasters.readonly) + GA4 (analytics.readonly).
+ * (client id/secret/redirect) — never a per-tenant token. Scopes: GSC read+write
+ * (search-analytics reads AND sitemap submission — the Sitemaps API is a write, so
+ * the full `webmasters` scope is required) + GA4 analytics read-only.
  */
 class GoogleOAuthClient
 {
-    /** Read-only scopes for GSC search analytics + GA4 Data/Admin reads. */
+    /** GSC full (search-analytics reads + sitemap submit) + GA4 Data/Admin read-only. */
     public const SCOPES = [
-        'https://www.googleapis.com/auth/webmasters.readonly',
+        'https://www.googleapis.com/auth/webmasters',
         'https://www.googleapis.com/auth/analytics.readonly',
     ];
 

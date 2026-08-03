@@ -597,12 +597,16 @@ abstract class OperatePagesBoard extends OperatePage
         $result = app(SitemapSubmitter::class)->submit($site);
 
         if (! $result['ok']) {
-            Notification::make()->warning()
-                ->title('Could not submit sitemap')
-                ->body($result['reason'] === 'not_connected'
-                    ? 'Connect Search Console for this site first (Connections → Connect Google, then pick its GSC property).'
-                    : ($result['reason'] === 'no_domain' ? 'This site has no domain URL set.' : (string) $result['reason']))
-                ->send();
+            $reason = (string) $result['reason'];
+            $lower = strtolower($reason);
+            $body = match (true) {
+                $result['reason'] === 'not_connected' => 'Connect Search Console for this site first (Connections → Connect Google, then pick its GSC property).',
+                $result['reason'] === 'no_domain' => 'This site has no domain URL set.',
+                str_contains($lower, 'insufficient') || str_contains($lower, 'permission') || str_contains($lower, 'scope') => 'Google refused (insufficient authority). Check two things: (1) Reconnect Google (Connections → Reconnect Google) so the grant includes sitemap-write access — the earlier grant was read-only. (2) The connected email must be an Owner or Full user on this site\'s Search Console property; a "Restricted" user cannot submit sitemaps.',
+                default => $reason,
+            };
+
+            Notification::make()->warning()->title('Could not submit sitemap')->body($body)->send();
 
             return;
         }
