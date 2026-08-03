@@ -100,6 +100,22 @@ class SitePipelineRefresher
         return new SitePipelineRefreshResult($discoveryRan, $keywordsScored, $trackingRan, $snapshots, $keywordsGenerated);
     }
 
+    /**
+     * On-demand positions-only pull: re-sample EVERY scored keyword's rankings now (organic SERP +
+     * the priority-market local grid), bypassing the cadence and budget gates — the operator's
+     * explicit "refresh rankings now" button. Unlike {@see refresh()} it does NOT discover or score
+     * new keywords, so its DataForSEO spend is bounded and estimable up front
+     * ({@see PositionPullEstimator}): one organic SERP task per keyword + grid_size² Google Maps
+     * tasks per keyword. In standard mode the tasks are posted here and the snapshot finalizes on the
+     * IngestSerpTasks sweep + a later read.
+     *
+     * @return int snapshots written this run
+     */
+    public function trackNow(Site $site): int
+    {
+        return $this->track($site, force: true);
+    }
+
     private function dueForDiscovery(Site $site): bool
     {
         $latest = Keyword::withoutGlobalScope(SiteScope::class)

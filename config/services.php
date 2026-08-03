@@ -90,6 +90,11 @@ return [
         // Local geo-grid around the market centre (NxN points at step degrees).
         'grid_size' => (int) env('DATAFORSEO_GRID_SIZE', 3),
         'grid_step' => (float) env('DATAFORSEO_GRID_STEP', 0.018),
+        // Approximate per-task USD cost, used only to ESTIMATE an on-demand pull's spend for the
+        // operator's confirmation disclaimer (not billing). Defaults track DataForSEO Standard-queue
+        // list prices: SERP Google Organic Advanced ≈ $0.0012, Google Maps ≈ $0.002 per task.
+        'serp_task_cost' => (float) env('DATAFORSEO_SERP_TASK_COST', 0.0012),
+        'maps_task_cost' => (float) env('DATAFORSEO_MAPS_TASK_COST', 0.002),
         // Cache TTL (hours) guarding against re-fetch inside the refresh cadence.
         'cache_ttl_hours' => (int) env('DATAFORSEO_CACHE_TTL_HOURS', 168),
         // Google Ads locations catalog (metro → location_code resolution): country scope + cache.
