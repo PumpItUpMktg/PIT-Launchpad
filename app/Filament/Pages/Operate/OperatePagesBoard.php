@@ -8,9 +8,12 @@ use App\ContentEngine\Review\ReviewActions;
 use App\Enums\AuditAction;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\MarketTier;
 use App\Jobs\GeneratePage;
+use App\Locations\CityKeywordTracker;
 use App\Models\BuildPage;
 use App\Models\Content;
+use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PagesBoard;
@@ -554,6 +557,41 @@ abstract class OperatePagesBoard extends OperatePage
 
         Notification::make()->success()->title('Removed')
             ->body("'{$title}' was deleted from the plan".($wasLive ? ' and WordPress' : '').'. Rebuilding the structure can bring it back.')->send();
+    }
+
+    /**
+     * Mark this city page's Market priority (or back to coverage) from the card — the operator picks
+     * which cities are worth paid §5 rank tracking. Promoting immediately assigns the city's
+     * "{service} {city}" tracking keywords; demoting prunes them. No DataForSEO credits here — the pull
+     * is the separate "Refresh rankings now". Only location pages (which carry a market) get the toggle.
+     */
+    public function toggleCityPriority(string $contentId): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null || $content->market_id === null) {
+            return;
+        }
+
+        $market = Market::withoutGlobalScope(SiteScope::class)->find($content->market_id);
+        if ($market === null) {
+            return;
+        }
+
+        $promote = $market->tier !== MarketTier::Priority;
+        $market->forceFill(['tier' => ($promote ? MarketTier::Priority : MarketTier::Coverage)->value])->save();
+
+        // Reconcile city-keyword tracking for the whole site (creates on promote, prunes on demote).
+        $site = $this->getSite();
+        if ($site !== null) {
+            app(CityKeywordTracker::class)->assign($site);
+        }
+
+        Notification::make()->success()
+            ->title($promote ? "{$market->name} marked priority" : "{$market->name} set to coverage")
+            ->body($promote
+                ? 'City keywords assigned — pull positions with "Refresh rankings now" (uses DataForSEO credits).'
+                : 'City-keyword tracking removed for this city.')
+            ->send();
     }
 
     protected function ownedPage(string $contentId): ?Content
