@@ -5,10 +5,13 @@ namespace App\Filament\Client\Pages;
 use App\Client\ClientAccess;
 use App\Client\ClientContext;
 use App\Client\MonthlyKeywordReport;
+use App\Client\MonthlyReportPdf;
 use App\Models\Site;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Illuminate\Support\Carbon;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * The §7c client monthly keyword-improvement report (in-panel face). White-labeled, read-only:
@@ -50,6 +53,39 @@ class MonthlyReport extends Page
     public function getTitle(): string
     {
         return 'Your Monthly Report';
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('downloadPdf')
+                ->label('Download PDF')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->action(fn (): ?StreamedResponse => $this->downloadPdf()),
+        ];
+    }
+
+    private function downloadPdf(): ?StreamedResponse
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return null;
+        }
+
+        $month = $this->monthKey !== null
+            ? Carbon::createFromFormat('Y-m', $this->monthKey)->startOfMonth()
+            : Carbon::now()->startOfMonth();
+
+        $pdf = app(MonthlyReportPdf::class);
+
+        return response()->streamDownload(
+            fn () => print ($pdf->for($site, $month)->output()),
+            $pdf->filename($site, $month),
+            ['Content-Type' => 'application/pdf'],
+        );
     }
 
     private function site(): ?Site

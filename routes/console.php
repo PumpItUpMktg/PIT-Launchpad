@@ -40,3 +40,8 @@ Schedule::command('launchpad:reconcile-generated-feeds')->daily()->withoutOverla
 // through the candidate funnel. Hourly; withoutOverlapping so the keyword×geo
 // fan-out can't stack runs.
 Schedule::command('launchpad:ingest-feeds')->hourly()->withoutOverlapping();
+
+// §7c client monthly report — email each client the prior month's keyword-
+// improvement report (PDF attached) on the 1st. Defaults to last month so a
+// complete month is reported; per-site opt-out is having no client users.
+Schedule::command('launchpad:send-monthly-reports')->monthlyOn(1, '08:00')->withoutOverlapping();
