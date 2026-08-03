@@ -116,6 +116,22 @@
             </select>
         @endif
     </div>
+    {{-- Priority-city toggle (opt-in via navControl, only the Operate pages boards define
+         toggleCityPriority). Only city pages carry a market, so the control shows for those alone.
+         Promoting a city assigns its "{service} {city}" tracking keywords (§5 Phase 2); the highlight
+         reflects current tier. --}}
+    @if (($navControl ?? false) && ($card['market_priority'] ?? null) !== null)
+        <div class="lv-cityctl" style="margin-top:6px;">
+            <button type="button" wire:click="toggleCityPriority('{{ $card['id'] }}')" wire:loading.attr="disabled"
+                    title="{{ $card['market_priority'] ? 'A priority city — tracked in DataForSEO. Click to set back to coverage.' : 'Mark this city priority to track its rankings (uses DataForSEO credits on the next pull).' }}"
+                    style="font-size:11px; font-weight:600; padding:3px 10px; border-radius:99px; cursor:pointer;
+                           {{ $card['market_priority']
+                               ? 'color:#92400e; background:rgba(217,119,6,.15); border:1px solid rgba(217,119,6,.4);'
+                               : 'color:#64748b; background:transparent; border:1px solid rgba(148,163,184,.4);' }}">
+                {{ $card['market_priority'] ? '★ Priority city' : '☆ Mark priority' }}
+            </button>
+        </div>
+    @endif
     {{-- Header-menu curation (opt-in: only the Operate pages boards pass navControl, and only they
          define toggleNavFeatured/setNavOrder + the navState property). Check a page to pin it into the
          site header's main menu; the order number sorts it. Changes go live on the next Sync header &

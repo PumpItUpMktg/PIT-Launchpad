@@ -4,9 +4,11 @@ namespace App\Guided;
 
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\MarketTier;
 use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Location;
+use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use Illuminate\Database\Eloquent\Collection;
@@ -147,8 +149,35 @@ class LiveBoards
             'published_at' => $content->published_at?->toDateString(),
             'days_live' => $content->published_at !== null ? (int) $content->published_at->diffInDays(now()) : null,
             'locked' => (bool) $content->locked,
+            // Priority-city state for location cards: true/false when the page has a Market, null
+            // otherwise (service/core pages) — drives the "Mark priority" toggle + highlight.
+            'market_priority' => $this->marketPriority($content, $site),
             'metrics' => $this->metrics->for($content),
         ];
+    }
+
+    /**
+     * Whether a page's Market is priority-tier (true), coverage (false), or the page has no market
+     * (null). Site market tiers are loaded once per render, so a board of 100+ town cards is one query.
+     *
+     * @var array<string, array<string, string>>
+     */
+    private array $marketTiers = [];
+
+    private function marketPriority(Content $content, Site $site): ?bool
+    {
+        if ($content->market_id === null) {
+            return null;
+        }
+
+        $this->marketTiers[$site->id] ??= Market::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->pluck('tier', 'id')
+            ->all();
+
+        $tier = $this->marketTiers[$site->id][(string) $content->market_id] ?? null;
+
+        return $tier === null ? null : $tier === MarketTier::Priority->value;
     }
 
     /**

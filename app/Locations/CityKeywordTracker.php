@@ -41,6 +41,14 @@ class CityKeywordTracker
             ->where('tier', MarketTier::Priority->value)
             ->pluck('name', 'id'); // [market_id => city name]
 
+        // Reconcile: drop city keywords whose market is no longer priority (a demoted city). The
+        // contents.target_keyword_id FK is nullOnDelete, so the page's headline pointer clears itself.
+        Keyword::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('source', KeywordSource::Local->value)
+            ->when($priorityMarkets->isNotEmpty(), fn ($q) => $q->whereNotIn('market_id', $priorityMarkets->keys()->all()))
+            ->delete();
+
         if ($priorityMarkets->isEmpty()) {
             return ['cities' => 0, 'created' => 0, 'keywords' => []];
         }
