@@ -176,11 +176,15 @@ class SitePipelineRefresher
                     $this->tracker->recordOrganic($keyword, $owned[0]->position, $owned[0]->url);
                     $snapshots++;
                 }
-            } elseif ($lane === self::LANE_LOCAL && $priorityMarket !== null) {
-                $grid = $this->grid->grid($keyword->query, $priorityMarket->id);
-                if ($grid->coverage > 0.0 || $grid->packCompetitors !== []) {
-                    $this->tracker->recordLocalGrid($keyword, $priorityMarket, $grid);
-                    $snapshots++;
+            } elseif ($lane === self::LANE_LOCAL) {
+                // City keywords pin their own market; ordinary keywords fall back to the priority market.
+                $market = $this->localMarketFor($keyword, $priorityMarket);
+                if ($market !== null) {
+                    $grid = $this->grid->grid($keyword->query, $market->id);
+                    if ($grid->coverage > 0.0 || $grid->packCompetitors !== []) {
+                        $this->tracker->recordLocalGrid($keyword, $market, $grid);
+                        $snapshots++;
+                    }
                 }
             }
         }
@@ -201,12 +205,30 @@ class SitePipelineRefresher
             if ($host !== null) {
                 $out[] = [$keyword, self::LANE_ORGANIC];
             }
-            if ($priorityMarket !== null) {
+            if ($this->localMarketFor($keyword, $priorityMarket) !== null) {
                 $out[] = [$keyword, self::LANE_LOCAL];
             }
         }
 
         return $out;
+    }
+
+    /**
+     * The Market a keyword's LOCAL-pack rank is tracked in: its own pinned market (city keywords set
+     * `market_id`) or the site's single priority market for ordinary silo keywords (null → no local
+     * lane at all). Memoized so a sweep doesn't re-query the same market per keyword.
+     *
+     * @var array<string, Market|null>
+     */
+    private array $marketCache = [];
+
+    private function localMarketFor(Keyword $keyword, ?Market $priorityMarket): ?Market
+    {
+        if ($keyword->market_id === null) {
+            return $priorityMarket;
+        }
+
+        return $this->marketCache[$keyword->market_id] ??= Market::withoutGlobalScope(SiteScope::class)->find($keyword->market_id);
     }
 
     /**
@@ -242,12 +264,13 @@ class SitePipelineRefresher
                 }
             }
 
-            if ($priorityMarket !== null) {
+            $localMarket = $this->localMarketFor($keyword, $priorityMarket);
+            if ($localMarket !== null) {
                 $tier = $this->tiering->tierFor($value, MarketTier::Priority);
                 $cadence = $this->tiering->cadenceDays($tier, SampleType::Positions);
-                if ($this->dueForKeyword($keyword, $priorityMarket->id, $cadence)) {
+                if ($this->dueForKeyword($keyword, $localMarket->id, $cadence)) {
                     $ref = 'loc:'.$keyword->id;
-                    $tasks[] = new SamplingTask($ref, SampleType::Positions, $tier, $cadence, 1.0, marketId: $priorityMarket->id, forced: $forced);
+                    $tasks[] = new SamplingTask($ref, SampleType::Positions, $tier, $cadence, 1.0, marketId: $localMarket->id, forced: $forced);
                     $byRef[$ref] = [$keyword, self::LANE_LOCAL];
                 }
             }

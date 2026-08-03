@@ -29,6 +29,17 @@ class Keyword extends Model
         return $this->belongsTo(Silo::class);
     }
 
+    /**
+     * The Market this keyword's LOCAL-pack rank is tracked in (city keywords pin their city). Null for
+     * ordinary silo keywords, which fall back to the site's priority market in the tracker.
+     *
+     * @return BelongsTo<Market, $this>
+     */
+    public function market(): BelongsTo
+    {
+        return $this->belongsTo(Market::class);
+    }
+
     /** @return HasMany<PositionSnapshot, $this> */
     public function positionSnapshots(): HasMany
     {
