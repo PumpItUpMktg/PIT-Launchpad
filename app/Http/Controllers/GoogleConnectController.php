@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Filament\Resources\ConnectionsResource;
 use App\Integrations\Google\GoogleConnectionService;
 use App\Integrations\Google\GoogleException;
 use App\Integrations\Google\GoogleOAuthClient;
 use App\Models\GoogleAccount;
+use Filament\Facades\Filament;
+use Filament\Notifications\Notification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -38,11 +41,11 @@ class GoogleConnectController extends Controller
         $stored = (array) $request->session()->pull('google_oauth', []);
 
         if (($request->query('state') ?? null) !== ($stored['state'] ?? null)) {
-            return redirect('/')->with('google_connect_error', 'Invalid OAuth state.');
+            return $this->backToConnections('Google connection failed', 'Invalid OAuth state — start the connect again.', danger: true);
         }
 
         if ($request->query('error') !== null) {
-            return redirect('/')->with('google_connect_error', 'Consent was denied: '.(string) $request->query('error'));
+            return $this->backToConnections('Google connection cancelled', 'Consent was denied: '.(string) $request->query('error'), danger: true);
         }
 
         try {
@@ -54,13 +57,27 @@ class GoogleConnectController extends Controller
             $gscSites = $this->connections->listGscSites($account);
             $ga4Properties = $this->connections->listGa4Properties($account);
 
-            return redirect('/')->with('google_connect_ok', sprintf(
-                'Google connected: %d GSC site(s), %d GA4 property(ies) visible to the shared account.',
+            return $this->backToConnections('Google connected', sprintf(
+                '%d Search Console site(s) and %d GA4 property(ies) are visible to the shared account. Use "Set tenant Google properties" to point each tenant at its own.',
                 count($gscSites),
                 count($ga4Properties),
             ));
         } catch (GoogleException $e) {
-            return redirect('/')->with('google_connect_error', $e->getMessage());
+            return $this->backToConnections('Google connection failed', $e->getMessage(), danger: true);
         }
+    }
+
+    /**
+     * Flash a Filament notification and return to the operator Connections page, so the OAuth
+     * outcome is always visible (the flow starts and ends there) rather than a bare redirect home.
+     */
+    private function backToConnections(string $title, string $body, bool $danger = false): RedirectResponse
+    {
+        $notification = Notification::make()->title($title)->body($body);
+        ($danger ? $notification->danger() : $notification->success())->send();
+
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+
+        return redirect(ConnectionsResource::getUrl('index'));
     }
 }
