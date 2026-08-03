@@ -16,4 +16,12 @@ final class NullSearchConsole implements SearchConsoleProvider
     {
         return null;
     }
+
+    /**
+     * @return list<PageQuery>
+     */
+    public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array
+    {
+        return [];
+    }
 }

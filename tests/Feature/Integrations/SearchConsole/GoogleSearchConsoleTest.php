@@ -94,6 +94,53 @@ it('returns null (the collecting cell) when GSC has no row for the page yet, and
     expect($calls)->toBe(1);
 });
 
+it('returns the page\'s top search queries (the long tail) from a page-filtered query dimension', function () {
+    gscBridgeGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+
+    HttpFacade::fake([
+        '*/searchAnalytics/query' => HttpFacade::response(['rows' => [
+            ['keys' => ['sump pump norristown'], 'clicks' => 5, 'impressions' => 120, 'ctr' => 0.0417, 'position' => 3.4],
+            ['keys' => ['sump pump repair near me'], 'clicks' => 2, 'impressions' => 60, 'ctr' => 0.0333, 'position' => 7.9],
+        ]]),
+    ]);
+
+    $queries = app(SearchConsoleProvider::class)->pageQueries($site, '/norristown-pa', 28, 8);
+
+    expect($queries)->toHaveCount(2)
+        ->and($queries[0]->query)->toBe('sump pump norristown')
+        ->and($queries[0]->impressions)->toBe(120)
+        ->and($queries[0]->clicks)->toBe(5)
+        ->and($queries[0]->ctr)->toBe(4.2)   // fraction → percent, one decimal
+        ->and($queries[0]->position)->toBe(3.4);
+
+    // Page-equals filter + the query dimension, capped to the limit.
+    HttpFacade::assertSent(function ($request) {
+        $group = $request['dimensionFilterGroups'][0]['filters'][0] ?? [];
+
+        return ($request['dimensions'][0] ?? null) === 'query'
+            && ($group['expression'] ?? null) === 'https://spg.example/norristown-pa'
+            && ($request['rowLimit'] ?? null) === 8;
+    });
+});
+
+it('returns an empty query list (and caches it) when the page has no GSC data yet', function () {
+    gscBridgeGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+
+    $calls = 0;
+    HttpFacade::fake(['*/searchAnalytics/query' => function () use (&$calls) {
+        $calls++;
+
+        return HttpFacade::response(['rows' => []]);
+    }]);
+
+    $provider = app(SearchConsoleProvider::class);
+    expect($provider->pageQueries($site, '/new-page'))->toBe([])
+        ->and($provider->pageQueries($site, '/new-page'))->toBe([]);
+    expect($calls)->toBe(1);
+});
+
 it('returns null when a page has no domain to match against', function () {
     gscBridgeGrant();
     $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => null]);

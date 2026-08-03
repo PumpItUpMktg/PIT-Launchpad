@@ -3,6 +3,7 @@
 namespace App\Guided;
 
 use App\Integrations\Analytics\PageTrafficProvider;
+use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
 use App\Models\Content;
 use App\Models\Keyword;
@@ -53,7 +54,7 @@ class LiveMetrics
      *   local: array{rank: ?int, market: ?string},
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
-     *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, pending: ?string},
+     *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
      */
@@ -143,20 +144,27 @@ class LiveMetrics
     }
 
     /**
-     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, pending: ?string}
+     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
      */
     private function gscBlock(?Site $site, Content $page): array
     {
         if ($site === null || ! $this->searchConsole->connected($site)) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'pending' => 'Connect Search Console'];
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'queries' => [], 'pending' => 'Connect Search Console'];
         }
 
-        $stats = $this->searchConsole->pageStats($site, '/'.ltrim((string) $page->slug, '/'));
+        $path = '/'.ltrim((string) $page->slug, '/');
+        $stats = $this->searchConsole->pageStats($site, $path);
         if ($stats === null) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'pending' => 'Collecting — first data in a few days'];
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'queries' => [], 'pending' => 'Collecting — first data in a few days'];
         }
 
-        return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(), 'pending' => null];
+        // The long tail this page is actually found for (free GSC signal — every "sump pump {city}" /
+        // "near me" variant). Location pages own geo, which silo keyword tracking excludes by design.
+        $queries = array_map(fn (PageQuery $q): array => [
+            'query' => $q->query, 'clicks' => $q->clicks, 'impressions' => $q->impressions, 'ctr' => $q->ctr, 'position' => $q->position,
+        ], $this->searchConsole->pageQueries($site, $path));
+
+        return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(), 'queries' => $queries, 'pending' => null];
     }
 
     /**
