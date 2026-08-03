@@ -17,4 +17,13 @@ interface SearchConsoleProvider
 
     /** Stats for one page path over the window, or null while the source has no data yet. */
     public function pageStats(Site $site, string $path, int $days = 28): ?PageSearchStats;
+
+    /**
+     * The top search queries one page was found for over the window — the free, complete long tail
+     * (every "sump pump {city}" / "near me" variant GSC recorded), most impressions first. Empty
+     * while the source is disconnected or has no data yet.
+     *
+     * @return list<PageQuery>
+     */
+    public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array;
 }

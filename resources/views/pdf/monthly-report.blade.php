@@ -18,6 +18,7 @@
         ['heading' => 'Newly ranking', 'rows' => $positions['new']],
         ['heading' => 'Reached page one', 'rows' => $positions['page1']],
     ];
+    $queries = $report['queries'] ?? [];
 @endphp
 <!DOCTYPE html>
 <html>
@@ -83,6 +84,22 @@
             </table>
         @else
             <p class="empty">Search Console data is still collecting — this section fills in once Google has reported a full month.</p>
+        @endif
+
+        @if (count($queries) > 0)
+            <h2>Top search queries ({{ count($queries) }})</h2>
+            <p class="sub" style="margin-bottom:4px;">The searches that showed your site this month (Google Search Console) — the complete long tail, including local variants.</p>
+            <table class="rows">
+                <tr><th>Query</th><th style="text-align:right;">Impr.</th><th style="text-align:right;">Clicks</th><th style="text-align:right;">Avg pos.</th></tr>
+                @foreach (array_slice($queries, 0, 25) as $qr)
+                    <tr>
+                        <td>{{ $qr['query'] }}</td>
+                        <td class="num">{{ $fmt($qr['impressions']) }}</td>
+                        <td class="num" style="color:#111827;font-weight:bold;">{{ $fmt($qr['clicks']) }}</td>
+                        <td class="num">#{{ $qr['position'] }}</td>
+                    </tr>
+                @endforeach
+            </table>
         @endif
 
         @foreach ($tables as $table)

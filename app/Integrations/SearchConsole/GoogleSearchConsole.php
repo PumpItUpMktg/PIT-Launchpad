@@ -70,6 +70,90 @@ class GoogleSearchConsole implements SearchConsoleProvider
     }
 
     /**
+     * @return list<PageQuery>
+     */
+    public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array
+    {
+        if (! $this->connected($site)) {
+            return [];
+        }
+
+        $pageUrl = $this->pageUrl($site, $path);
+        if ($pageUrl === null) {
+            return [];
+        }
+
+        $property = (string) $site->gsc_property;
+        $key = 'gsc:pagequeries:'.md5($property.'|'.$pageUrl.'|'.$days.'|'.$limit);
+
+        /** @var list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}> $rows */
+        $rows = $this->cache->remember($key, $this->cacheTtl, fn (): array => $this->fetchQueries($property, $pageUrl, $days, $limit));
+
+        return array_map(
+            fn (array $r): PageQuery => new PageQuery($r['query'], $r['clicks'], $r['impressions'], $r['ctr'], $r['position']),
+            $rows,
+        );
+    }
+
+    /**
+     * The page's top queries over the window (page-equals filter + the `query` dimension), ordered by
+     * impressions, capped to $limit. Empty list on a transient API error or a page with no data yet
+     * (cached either way, so a board render doesn't re-hit GSC).
+     *
+     * @return list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>
+     */
+    private function fetchQueries(string $property, string $pageUrl, int $days, int $limit): array
+    {
+        $account = $this->connections->account();
+        if ($account === null) {
+            return [];
+        }
+
+        try {
+            $json = $this->connections->request(
+                $account,
+                'post',
+                rtrim($this->baseUrl, '/').'/sites/'.rawurlencode($property).'/searchAnalytics/query',
+                ['json' => [
+                    'startDate' => Carbon::now()->subDays($days)->format('Y-m-d'),
+                    'endDate' => Carbon::now()->format('Y-m-d'),
+                    'dimensions' => ['query'],
+                    'dimensionFilterGroups' => [[
+                        'filters' => [[
+                            'dimension' => 'page',
+                            'operator' => 'equals',
+                            'expression' => $pageUrl,
+                        ]],
+                    ]],
+                    'rowLimit' => max(1, $limit),
+                ]],
+            );
+        } catch (GoogleException) {
+            return [];
+        }
+
+        $out = [];
+        foreach ((array) ($json['rows'] ?? []) as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $query = (string) (($row['keys'][0] ?? '') ?: '');
+            if ($query === '') {
+                continue;
+            }
+            $out[] = [
+                'query' => $query,
+                'clicks' => (int) ($row['clicks'] ?? 0),
+                'impressions' => (int) ($row['impressions'] ?? 0),
+                'ctr' => round((float) ($row['ctr'] ?? 0) * 100, 1),
+                'position' => round((float) ($row['position'] ?? 0), 1),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * One aggregated Search Console query for a single page over the window. Null on a transient API
      * error or when GSC has no row for the page yet.
      *

@@ -67,6 +67,36 @@ it('buckets month-over-month organic movement by as-of-month rank', function () 
         ->and($p['summary'])->toMatchArray(['improved' => 1, 'new' => 1, 'page1' => 2, 'declined' => 1, 'tracked' => 3]);
 });
 
+it('lists the month\'s top Search Console queries (the long tail), most impressions first', function () {
+    Carbon::setTestNow(Carbon::create(2026, 7, 15));
+    $site = Site::factory()->create();
+
+    // A range provider that answers the query-dimension pull with per-query rows.
+    app()->instance(SearchConsoleProvider::class, new class implements SearchConsoleProvider
+    {
+        public function searchAnalytics(Site $site, DateTimeInterface $start, DateTimeInterface $end, array $dimensions = ['query'], int $rowLimit = 1000): array
+        {
+            if ($dimensions !== ['query']) {
+                return [];
+            }
+
+            return [
+                new SearchAnalyticsRow(keys: ['sump pump service norristown'], clicks: 3, impressions: 90, ctr: 0.0333, position: 5.1),
+                new SearchAnalyticsRow(keys: ['sump pump repair'], clicks: 8, impressions: 240, ctr: 0.0333, position: 8.4),
+            ];
+        }
+    });
+
+    $queries = app(MonthlyKeywordReport::class)->for($site, Carbon::create(2026, 6, 1))['queries'];
+
+    // Sorted by impressions desc; ctr converted to percent.
+    expect($queries)->toHaveCount(2)
+        ->and($queries[0]['query'])->toBe('sump pump repair')
+        ->and($queries[0]['impressions'])->toBe(240)
+        ->and($queries[0]['ctr'])->toBe(3.3)
+        ->and($queries[1]['query'])->toBe('sump pump service norristown');
+});
+
 it('reports GSC reach as a month-over-month delta, and stays honest when unconnected', function () {
     Carbon::setTestNow(Carbon::create(2026, 7, 15));
     $site = Site::factory()->create();

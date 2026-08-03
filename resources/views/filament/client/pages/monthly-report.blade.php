@@ -89,6 +89,28 @@
             @endif
         </x-filament::section>
 
+        {{-- Top search queries (Search Console) — the complete long tail the site was found for this
+             month, including geo / "near me" variants that ranked keyword tracking doesn't cover. --}}
+        @php $queries = $report['queries'] ?? []; @endphp
+        @if (count($queries) > 0)
+            <x-filament::section collapsible>
+                <x-slot name="heading">Top search queries ({{ count($queries) }})</x-slot>
+                <x-slot name="description">The searches that showed your site this month, from Google Search Console — impressions, clicks, and average position.</x-slot>
+                <div class="divide-y divide-gray-100 dark:divide-white/10">
+                    @foreach (array_slice($queries, 0, 25) as $qr)
+                        <div class="flex items-center justify-between gap-4 py-2">
+                            <span class="min-w-0 truncate text-sm text-gray-950 dark:text-white">{{ $qr['query'] }}</span>
+                            <div class="flex shrink-0 items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                <span>{{ number_format($qr['impressions']) }} impr</span>
+                                <span><b class="text-gray-950 dark:text-white">{{ number_format($qr['clicks']) }}</b> clicks</span>
+                                <span>avg #{{ $qr['position'] }}</span>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </x-filament::section>
+        @endif
+
         {{-- Movement tables --}}
         @php
             $tables = [

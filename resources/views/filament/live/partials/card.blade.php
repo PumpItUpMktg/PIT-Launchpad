@@ -86,6 +86,21 @@
             <span class="cap">position{{ $m['refresh_count'] > 0 ? ' · '.$m['refresh_count'].' refresh'.($m['refresh_count'] === 1 ? '' : 'es') : '' }}</span>
         </div>
     @endif
+    {{-- The long tail this page is actually found for (Search Console — every "sump pump {city}" /
+         "near me" variant it earned an impression on). This is where a location page's geo terms show. --}}
+    @if (($gsc['queries'] ?? []) !== [])
+        <div class="lv-queries" style="margin-top:8px;">
+            <div class="k" style="font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; margin-bottom:4px;">Found in search for</div>
+            <div style="display:flex; flex-wrap:wrap; gap:5px;">
+                @foreach (array_slice($gsc['queries'], 0, 6) as $qr)
+                    <span title="{{ number_format($qr['impressions']) }} impressions · {{ number_format($qr['clicks']) }} clicks · avg #{{ $qr['position'] }}"
+                          style="font-size:11px; color:#334155; background:rgba(148,163,184,.14); border:1px solid rgba(148,163,184,.28); border-radius:99px; padding:2px 9px;">
+                        {{ $qr['query'] }} <span style="color:#94a3b8;">#{{ $qr['position'] }}</span>
+                    </span>
+                @endforeach
+            </div>
+        </div>
+    @endif
     <div class="lv-actions">
         {{-- The per-page QA drill-down: correct copy in place, replace images, WP preview. --}}
         <a class="lv-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $card['id']]) }}" wire:navigate>Review</a>

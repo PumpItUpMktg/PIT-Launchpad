@@ -42,7 +42,8 @@ class MonthlyKeywordReport
      *     lost: list<array{keyword_id: string, query: string, from: int|null, to: int|null, delta: int|null}>,
      *     summary: array{improved: int, new: int, page1: int, declined: int, lost: int, tracked: int}
      *   },
-     *   search: array{connected: bool, this: array{impressions: int, clicks: int}, prior: array{impressions: int, clicks: int}, delta: array{impressions: int, clicks: int}}
+     *   search: array{connected: bool, this: array{impressions: int, clicks: int}, prior: array{impressions: int, clicks: int}, delta: array{impressions: int, clicks: int}},
+     *   queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>
      * }
      */
     public function for(Site $site, ?Carbon $month = null): array
@@ -62,7 +63,45 @@ class MonthlyKeywordReport
             'month_label' => $month->format('F Y'),
             'positions' => $this->positions($site, $monthEnd, $priorEnd),
             'search' => $this->search($site, $monthStart, $monthEnd, $priorStart, $priorEnd),
+            'queries' => $this->topQueries($site, $monthStart, $monthEnd),
         ];
+    }
+
+    /**
+     * The month's top search queries from Search Console — the free, complete long tail the site was
+     * found for (every geo / "near me" variant), most impressions first. This is the "all the long
+     * tails in use" view that DataForSEO position tracking (geo-neutral silo keywords) doesn't cover.
+     * Cached like the totals so a page render / mail run doesn't re-query GSC.
+     *
+     * @return list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>
+     */
+    private function topQueries(Site $site, Carbon $start, Carbon $end, int $limit = 25): array
+    {
+        $key = 'gsc:queries:'.md5($site->id.'|'.$start->format('Y-m-d').'|'.$end->format('Y-m-d').'|'.$limit);
+
+        /** @var list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}> */
+        return $this->cache->remember($key, $this->gscCacheTtl, function () use ($site, $start, $end, $limit): array {
+            $rows = $this->gsc->searchAnalytics($site, $start, $end, ['query'], $limit);
+
+            $out = [];
+            foreach ($rows as $row) {
+                $query = (string) ($row->keys[0] ?? '');
+                if ($query === '') {
+                    continue;
+                }
+                $out[] = [
+                    'query' => $query,
+                    'clicks' => $row->clicks,
+                    'impressions' => $row->impressions,
+                    'ctr' => round($row->ctr * 100, 1),
+                    'position' => round($row->position, 1),
+                ];
+            }
+
+            usort($out, fn (array $a, array $b): int => $b['impressions'] <=> $a['impressions']);
+
+            return $out;
+        });
     }
 
     /**
