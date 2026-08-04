@@ -417,4 +417,18 @@ return [
     */
     'city_keyword_patterns' => ['{head} {city}', '{head} service {city}'],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Bulk re-push throttle
+    |--------------------------------------------------------------------------
+    | A "Repush published" refreshes the engine-owned meta-blob (canonical / og /
+    | schema) across a site's live content. To avoid hammering the client's
+    | WordPress with a burst, PublishContent jobs are dispatched in waves — up to
+    | `chunk` become available every `interval_seconds`. Idempotent; no fal spend.
+    */
+    'repush' => [
+        'chunk' => (int) env('REPUSH_CHUNK', 10),
+        'interval_seconds' => (int) env('REPUSH_INTERVAL_SECONDS', 15),
+    ],
+
 ];
