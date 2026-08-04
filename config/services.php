@@ -177,6 +177,17 @@ return [
         'timeout' => (int) env('INDEXNOW_TIMEOUT', 15),
     ],
 
+    // Bing Webmaster Tools — the Bing analog of Search Console (impressions/clicks/position for your
+    // pages). ONE agency-level API key (Settings → API access in BWT); each client site is verified in
+    // BWT (easiest: "import from Google Search Console"), and its verified site URL is stored per-tenant
+    // on sites.bing_site_url. Absent key → the Null adapter (cards show "Submitted to Bing" only).
+    'bing' => [
+        'api_key' => env('BING_WEBMASTER_API_KEY'),
+        'base_url' => env('BING_WEBMASTER_BASE_URL', 'https://ssl.bing.com/webmaster/api.svc/json'),
+        'timeout' => (int) env('BING_WEBMASTER_TIMEOUT', 15),
+        'cache_ttl' => (int) env('BING_WEBMASTER_CACHE_TTL', 21600),
+    ],
+
     // US Census — demographics enrichment (§7a onboarding markets) + TIGERweb
     // service-area enumeration (Locations layer). TIGERweb is a public ArcGIS REST
     // service (no key). Layer ids are resolved by NAME at runtime; the configured ids

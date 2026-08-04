@@ -7,6 +7,8 @@ use App\Enums\KeywordSource;
 use App\Enums\PageType;
 use App\Guided\GrowDashboard;
 use App\Guided\LiveBoards;
+use App\Guided\LiveMetrics;
+use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\SearchConsole\GoogleSearchConsole;
 use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\PageSearchStats;
@@ -202,4 +204,44 @@ it('leaves indexnow_at null on a page never submitted', function () {
     $cards = app(LiveBoards::class)->services($site);
 
     expect($cards[0]['indexnow_at'])->toBeNull();
+});
+
+it('lights the earned "In Bing" state on the card when Bing Webmaster reports impressions', function () {
+    // Bind a fake Bing provider that reports real impressions for any page.
+    app()->bind(BingWebmasterProvider::class, fn () => new class implements BingWebmasterProvider
+    {
+        public function connected(Site $site): bool
+        {
+            return true;
+        }
+
+        public function pageStats(Site $site, string $path, int $days = 28): ?PageSearchStats
+        {
+            return new PageSearchStats(impressions: 42, clicks: 3, days: $days);
+        }
+
+        public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array
+        {
+            return [];
+        }
+    });
+
+    $site = lbSite();
+    lbPublished($site, ['page_type' => PageType::Service, 'title' => 'Sump Pump Install', 'slug' => 'sump-pump-install']);
+
+    $card = app(LiveBoards::class)->services($site)[0];
+
+    expect($card['metrics']['bing']['in_bing'])->toBeTrue()
+        ->and($card['metrics']['bing']['impressions'])->toBe(42)
+        ->and(app(LiveMetrics::class)->sources($site)['bing'])->toBeTrue();
+});
+
+it('shows the "Connect Bing Webmaster" pending state by default (Null adapter)', function () {
+    $site = lbSite();
+    lbPublished($site, ['page_type' => PageType::Service, 'title' => 'French Drain', 'slug' => 'french-drain-bing']);
+
+    $card = app(LiveBoards::class)->services($site)[0];
+
+    expect($card['metrics']['bing']['in_bing'])->toBeFalse()
+        ->and($card['metrics']['bing']['pending'])->toBe('Connect Bing Webmaster');
 });

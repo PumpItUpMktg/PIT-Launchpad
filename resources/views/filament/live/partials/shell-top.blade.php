@@ -83,4 +83,5 @@
     <span class="lv-src {{ $sources['serp'] ? '' : 'off' }}"><span class="dot"></span>Position tracking {{ $sources['serp'] ? '· active' : '· pending first snapshots' }}</span>
     <span class="lv-src {{ $sources['gsc'] ? '' : 'off' }}"><span class="dot"></span>Search Console {{ $sources['gsc'] ? '· 28d' : '· not connected' }}</span>
     <span class="lv-src {{ $sources['ga'] ? '' : 'off' }}"><span class="dot"></span>GA4 {{ $sources['ga'] ? '· 28d' : '· not connected' }}</span>
+    <span class="lv-src {{ ($sources['bing'] ?? false) ? '' : 'off' }}"><span class="dot"></span>Bing Webmaster {{ ($sources['bing'] ?? false) ? '· 28d' : '· not connected' }}</span>
 </div>
