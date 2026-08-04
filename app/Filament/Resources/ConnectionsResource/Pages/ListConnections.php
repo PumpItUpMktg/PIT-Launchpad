@@ -19,6 +19,7 @@ class ListConnections extends ListRecords
             ConnectionsResource::connectWordPressAction(),
             ConnectionsResource::connectGoogleAction(),
             ConnectionsResource::googlePropertiesAction(),
+            ConnectionsResource::bingSiteAction(),
         ];
     }
 }
