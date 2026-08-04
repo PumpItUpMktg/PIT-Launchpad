@@ -202,6 +202,16 @@
 
         {{-- ─── Published — the relevance map ─── --}}
         @if ($tab === 'published')
+            {{-- Bulk maintenance: re-push every published post to refresh the engine-owned meta-blob
+                 (canonical / og:url / schema) — fixes values baked at an earlier publish, e.g. a
+                 canonical still on the old staging host after a domain move. Throttled into waves. --}}
+            <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+                <button class="ob-btn" wire:click="repushAllPublished" wire:loading.attr="disabled" wire:target="repushAllPublished"
+                        wire:confirm="Re-push ALL published posts for this tenant? Refreshes canonical/og/schema (no content change, no image cost), throttled in waves. The queue worker must be running.">
+                    <span wire:loading.remove wire:target="repushAllPublished">↻ Repush published (refresh SEO)</span>
+                    <span wire:loading wire:target="repushAllPublished">Queueing…</span>
+                </button>
+            </div>
             @forelse ($this->published as $i => $g)
                 <div class="ob-group" wire:key="obp-{{ $i }}">
                     <div class="ob-ghead">

@@ -107,7 +107,15 @@ final class SiteChrome
         if (! empty($p['legal_links']) && is_array($p['legal_links'])) {
             $out .= $this->navList($p['legal_links'], 'lp-flegal');
         }
-        $out .= '<span>Standard WordPress blocks — no page builder, nothing locked in.</span>';
+        // Agency credit. Filterable so a site can white-label or remove it (return '' to drop the
+        // line); wp_kses_post lets the default carry a link back to the agency.
+        $credit = apply_filters(
+            'launchpad_footer_credit',
+            'Site designed &amp; managed by Pump It Up Marketing'
+        );
+        if (! empty($credit)) {
+            $out .= '<span class="lp-credit">' . wp_kses_post((string) $credit) . '</span>';
+        }
         $out .= '</div>';
 
         return $out . '</div>';

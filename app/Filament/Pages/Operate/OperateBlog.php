@@ -19,6 +19,7 @@ use App\Operate\QueueHealth;
 use App\Operator\ActiveTenant;
 use App\Publishing\DeleteFromWordpress;
 use App\Publishing\PostPublisher;
+use App\Publishing\RepushPublished;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Url;
@@ -206,6 +207,45 @@ class OperateBlog extends OperatePage
         Notification::make()->success()
             ->title("Re-drafting '{$content->title}'")
             ->body('Fresh copy + image are being generated — the card updates itself; the URL slug is kept.')
+            ->send();
+    }
+
+    /**
+     * Bulk re-push every published post for the active tenant — refreshes the engine-owned meta-blob
+     * (canonical / og:url / schema) without editing copy, fixing stale values baked at an earlier
+     * publish (e.g. a canonical still on the old staging host after a domain move). Idempotent, no fal
+     * spend; throttled into waves so the client WordPress isn't flooded. Needs the worker running.
+     */
+    public function repushAllPublished(): void
+    {
+        $site = $this->siteFilter !== null ? Site::query()->find($this->siteFilter) : null;
+        if ($site === null) {
+            Notification::make()->warning()->title('Pick a tenant first')
+                ->body('Re-push targets one site at a time — select a tenant, then retry.')->send();
+
+            return;
+        }
+
+        $result = app(RepushPublished::class)->dispatch(
+            $site,
+            [ContentKind::Post],
+            (int) config('launchpad.repush.chunk', 10),
+            (int) config('launchpad.repush.interval_seconds', 15),
+        );
+
+        if ($result['count'] === 0) {
+            Notification::make()->info()->title('Nothing to re-push')->body('No published posts for this tenant.')->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title("Re-pushing {$result['count']} published post(s)")
+            ->body(sprintf(
+                'Refreshing canonical / og / schema in %d wave(s) (~%s min to fully queue). Watch the queue-health banner — the worker must be running to drain them.',
+                $result['waves'],
+                $result['minutes'],
+            ))
             ->send();
     }
 
