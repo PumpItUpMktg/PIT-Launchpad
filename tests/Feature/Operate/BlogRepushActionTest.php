@@ -32,6 +32,35 @@ it('bulk re-pushes the active tenant\'s published posts from the Blog board', fu
     Queue::assertPushed(PublishContent::class, 3);
 });
 
+it('bulk re-pushes the active tenant\'s published posts AND pages from the Blog board', function () {
+    Queue::fake();
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    foreach (range(1, 2) as $n) {
+        Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post->value, 'status' => 'published', 'wp_post_id' => $n, 'slug' => 'p'.$n]);
+    }
+    foreach (range(3, 4) as $n) {
+        Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page->value, 'status' => 'published', 'wp_post_id' => $n, 'slug' => 'pg'.$n]);
+    }
+
+    Livewire::test(OperateBlog::class)
+        ->set('siteFilter', $site->id)
+        ->call('repushEntireSite')
+        ->assertNotified('Re-pushing 4 published post + page(s)');
+
+    Queue::assertPushed(PublishContent::class, 4);
+});
+
+it('the site re-push warns when no tenant is selected', function () {
+    Queue::fake();
+
+    Livewire::test(OperateBlog::class)
+        ->set('siteFilter', null)
+        ->call('repushEntireSite')
+        ->assertNotified('Pick a tenant first');
+
+    Queue::assertNothingPushed();
+});
+
 it('warns when no tenant is selected', function () {
     Queue::fake();
 

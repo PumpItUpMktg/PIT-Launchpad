@@ -218,6 +218,29 @@ class OperateBlog extends OperatePage
      */
     public function repushAllPublished(): void
     {
+        $this->dispatchRepush([ContentKind::Post], 'post');
+    }
+
+    /**
+     * Re-push the ENTIRE site — every published post AND page — so the engine-owned meta-blob
+     * (canonical / og / schema), the lead-form CTAs, and the normalized NAP are rebuilt everywhere in
+     * one pass. Same guarantees as the posts-only re-push: idempotent by ULID, no image/fal cost
+     * (already-rendered images are skipped), throttled into waves. This is the button form of
+     * `launchpad:repush-published --kind=all`.
+     */
+    public function repushEntireSite(): void
+    {
+        $this->dispatchRepush([ContentKind::Post, ContentKind::Page], 'post + page');
+    }
+
+    /**
+     * Shared re-push dispatch for the active tenant. Warns when no tenant is selected, no-ops with an
+     * info notice when nothing matches, else queues the throttled waves and reports the plan.
+     *
+     * @param  list<ContentKind>  $kinds
+     */
+    private function dispatchRepush(array $kinds, string $noun): void
+    {
         $site = $this->siteFilter !== null ? Site::query()->find($this->siteFilter) : null;
         if ($site === null) {
             Notification::make()->warning()->title('Pick a tenant first')
@@ -228,19 +251,19 @@ class OperateBlog extends OperatePage
 
         $result = app(RepushPublished::class)->dispatch(
             $site,
-            [ContentKind::Post],
+            $kinds,
             (int) config('launchpad.repush.chunk', 10),
             (int) config('launchpad.repush.interval_seconds', 15),
         );
 
         if ($result['count'] === 0) {
-            Notification::make()->info()->title('Nothing to re-push')->body('No published posts for this tenant.')->send();
+            Notification::make()->info()->title('Nothing to re-push')->body("No published {$noun}(s) for this tenant.")->send();
 
             return;
         }
 
         Notification::make()->success()
-            ->title("Re-pushing {$result['count']} published post(s)")
+            ->title("Re-pushing {$result['count']} published {$noun}(s)")
             ->body(sprintf(
                 'Refreshing canonical / og / schema in %d wave(s) (~%s min to fully queue). Watch the queue-health banner — the worker must be running to drain them.',
                 $result['waves'],

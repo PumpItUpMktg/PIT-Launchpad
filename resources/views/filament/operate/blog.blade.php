@@ -205,11 +205,19 @@
             {{-- Bulk maintenance: re-push every published post to refresh the engine-owned meta-blob
                  (canonical / og:url / schema) — fixes values baked at an earlier publish, e.g. a
                  canonical still on the old staging host after a domain move. Throttled into waves. --}}
-            <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:10px;">
                 <button class="ob-btn" wire:click="repushAllPublished" wire:loading.attr="disabled" wire:target="repushAllPublished"
                         wire:confirm="Re-push ALL published posts for this tenant? Refreshes canonical/og/schema (no content change, no image cost), throttled in waves. The queue worker must be running.">
-                    <span wire:loading.remove wire:target="repushAllPublished">↻ Repush published (refresh SEO)</span>
+                    <span wire:loading.remove wire:target="repushAllPublished">↻ Repush posts (refresh SEO)</span>
                     <span wire:loading wire:target="repushAllPublished">Queueing…</span>
+                </button>
+                {{-- Whole-site re-push: posts AND pages (location / service / home) — rebuilds canonical/og/
+                     schema, the lead-form CTAs, and the normalized NAP everywhere. Button form of
+                     `launchpad:repush-published --kind=all`. --}}
+                <button class="ob-btn primary" wire:click="repushEntireSite" wire:loading.attr="disabled" wire:target="repushEntireSite"
+                        wire:confirm="Re-push the ENTIRE site — every published post AND page — for this tenant? Rebuilds canonical/og/schema, lead-form CTAs, and NAP (no content change, no image cost), throttled in waves. The queue worker must be running.">
+                    <span wire:loading.remove wire:target="repushEntireSite">↻ Repush site (posts + pages)</span>
+                    <span wire:loading wire:target="repushEntireSite">Queueing…</span>
                 </button>
             </div>
             @forelse ($this->published as $i => $g)
