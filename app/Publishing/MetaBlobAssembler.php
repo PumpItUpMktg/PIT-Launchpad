@@ -11,6 +11,7 @@ use App\Enums\StandardPageType;
 use App\Models\Content;
 use App\Models\ContentTown;
 use App\Models\ConversionConfig;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\RenderJob;
@@ -29,6 +30,7 @@ use App\Publishing\Blocks\ServiceAreaMap;
 use App\Publishing\Schema\LocationSchemaBuilder;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use App\Support\SeoTitle;
+use App\Support\ServiceAreaTitle;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -46,6 +48,9 @@ class MetaBlobAssembler
 
     /** @var array<string, PageConfig|null> memoized per content id */
     private array $pageConfigs = [];
+
+    /** @var array<string, array{0: string, 1: list<string>}> memoized service-area region per site id */
+    private array $serviceAreaRegionCache = [];
 
     public function __construct(
         private readonly PublishEligibility $eligibility,
@@ -1002,8 +1007,58 @@ class MetaBlobAssembler
     private function seoTitle(Content $content): string
     {
         $metaSeo = is_array($content->meta['seo'] ?? null) ? $content->meta['seo'] : [];
+        $title = SeoTitle::normalize((string) ($metaSeo['title'] ?? $content->title), $content->source_name);
 
-        return SeoTitle::normalize((string) ($metaSeo['title'] ?? $content->title), $content->source_name);
+        // Service + hub (commercial) titles carry the tenant's service-area REGION so they aren't
+        // geo-blind; location pages already lead with their city, so they're left as-is.
+        if (in_array($content->page_type?->value, ['service', 'hub'], true)) {
+            [$full, $abbrevs] = $this->serviceAreaRegion($content);
+            $title = ServiceAreaTitle::qualify($title, $full, $abbrevs);
+        }
+
+        return $title;
+    }
+
+    /**
+     * The tenant's service-area region for the SEO-title qualifier: the configured `service_area` phrase
+     * (home slot — the same string the header/footer use) + the tenant's state abbreviations (distinct
+     * coverage states, else the corporate state). Memoized per site — a bulk assemble hits it once.
+     *
+     * @return array{0: string, 1: list<string>}
+     */
+    private function serviceAreaRegion(Content $content): array
+    {
+        $siteId = (string) $content->site_id;
+        if (isset($this->serviceAreaRegionCache[$siteId])) {
+            return $this->serviceAreaRegionCache[$siteId];
+        }
+
+        $home = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->where('page_type', PageType::Home->value)
+            ->first(['slot_payload']);
+        $slots = is_array($home?->slot_payload) ? $home->slot_payload : [];
+        $area = $slots['service_area'] ?? '';
+        $full = trim(is_array($area) ? (string) ($area[0] ?? '') : (string) $area);
+
+        $abbrevs = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->whereNotNull('state')
+            ->distinct()
+            ->pluck('state')
+            ->map(fn ($s): string => strtoupper(trim((string) $s)))
+            ->filter(fn (string $s): bool => $s !== '')
+            ->values()
+            ->all();
+
+        if ($abbrevs === []) {
+            $corp = strtoupper(trim((string) $this->site($content)?->corporate_state));
+            if ($corp !== '') {
+                $abbrevs = [$corp];
+            }
+        }
+
+        return $this->serviceAreaRegionCache[$siteId] = [$full, $abbrevs];
     }
 
     private function kitName(Content $content): string

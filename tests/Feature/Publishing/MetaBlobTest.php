@@ -2,8 +2,10 @@
 
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\ContentTown;
+use App\Models\CoverageArea;
 use App\Models\Silo;
 use App\Operator\Controls\TemplateMapping;
 use App\Publishing\MetaBlobAssembler;
@@ -254,4 +256,43 @@ test('the meta-blob towns key is an empty array when the content has no town tag
     $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection);
 
     expect($payload['towns'])->toBe([]);
+});
+
+test('a service-page <title> carries the tenant service-area region (fork A: full region when it fits)', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    // The tenant's configured region (home service_area slot) + its coverage states.
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Home,
+        'slug' => 'home', 'slot_payload' => ['service_area' => 'New Jersey & Eastern Pennsylvania'],
+    ]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3402700001', 'name' => 'Morristown', 'state' => 'NJ']);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4209100001', 'name' => 'Reading', 'state' => 'PA']);
+
+    $content = PublishHarness::approvedPage($site); // page_type = service
+    $content->forceFill(['meta' => ['seo' => ['title' => 'Basement Waterproofing', 'meta_description' => 'x']]])->save();
+
+    $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection);
+
+    expect($payload['seo']['title'])->toBe('Basement Waterproofing in New Jersey & Eastern Pennsylvania');
+});
+
+test('a location page title is NOT region-qualified (it already leads with its city)', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Home,
+        'slug' => 'home', 'slot_payload' => ['service_area' => 'New Jersey & Eastern Pennsylvania'],
+    ]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3402700002', 'name' => 'Morristown', 'state' => 'NJ']);
+
+    $loc = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'slug' => 'bedminster-nj', 'title' => 'Bedminster, NJ',
+        'meta' => ['seo' => ['title' => 'Sump Pump Service in Bedminster', 'meta_description' => 'x']],
+    ]);
+
+    $payload = app(MetaBlobAssembler::class)->assemble($loc->fresh(), new Collection);
+
+    expect($payload['seo']['title'])->toBe('Sump Pump Service in Bedminster'); // untouched — not service/hub
 });
