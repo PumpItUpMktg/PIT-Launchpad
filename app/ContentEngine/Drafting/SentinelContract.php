@@ -26,7 +26,7 @@ final class SentinelContract
             '',
             'Then emit these metadata blocks (fields after '.$field.' are in the stated order; repeat a block to add another item):',
             '',
-            "<<<SLOT:seo.title>>>\nplain & specific, ≤60 chars — NO publication/source names, NO \"| Brand\" suffix, NO attribution (that lives in the body)\n<<<END>>>",
+            "<<<SLOT:seo.title>>>\nplain & specific, a COMPLETE phrase of 45–60 chars that reads as a finished title — do NOT end on a preposition, conjunction, article, or interrogative (\"…County: What\", \"…Before It\"); NO publication/source names, NO \"| Brand\" suffix, NO attribution (that lives in the body)\n<<<END>>>",
             "<<<SLOT:seo.meta_description>>>\n…\n<<<END>>>",
             "<<<SLOT:seo.slug>>>\n…\n<<<END>>>",
             '(optional: seo.og_title, seo.og_description, seo.twitter_title, seo.twitter_description)',

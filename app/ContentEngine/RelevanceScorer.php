@@ -50,6 +50,13 @@ class RelevanceScorer
             $matchedSilo = $silos->first(fn (Silo $s) => $s->id === $hintSiloId);
         }
 
+        // Category guard: if the item hits the matched silo's EXCLUDE patterns it doesn't belong there (a
+        // residential yard-drainage story mis-filed under "Commercial Pump Services"). Reject the routing so
+        // it drops (no_silo_match) rather than mis-categorizing — never file a post in the wrong silo.
+        if ($matchedSilo !== null && $this->hitsExcludes($item, $matchedSilo)) {
+            $matchedSilo = null;
+        }
+
         $band = match (true) {
             ! $brandSafe => RelevanceBand::Dropped,
             $matchedSilo === null => RelevanceBand::Dropped,          // silo-match gate
@@ -71,20 +78,38 @@ class RelevanceScorer
         );
     }
 
+    /** True when the item's text matches any of the silo's exclude patterns — it doesn't belong there. */
+    private function hitsExcludes(NewsItem $item, Silo $silo): bool
+    {
+        $text = mb_strtolower($item->text());
+        foreach (RuleSet::fromArray($silo->rule_set ?? [])->excludePatterns as $pattern) {
+            $pattern = mb_strtolower(trim($pattern));
+            if ($pattern !== '' && str_contains($text, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @param  Collection<int, Silo>  $silos
      */
     private function prompt(NewsItem $item, Collection $silos): string
     {
         $siloLines = $silos->map(function (Silo $silo) {
-            $terms = implode(', ', RuleSet::fromArray($silo->rule_set ?? [])->includePatterns);
+            $rules = RuleSet::fromArray($silo->rule_set ?? []);
+            $line = "- {$silo->name}: ".implode(', ', $rules->includePatterns);
+            if ($rules->excludePatterns !== []) {
+                $line .= ' [NOT: '.implode(', ', $rules->excludePatterns).']';
+            }
 
-            return "- {$silo->name}: {$terms}";
+            return $line;
         })->implode("\n");
 
         return "Score this news item for a home-services brand's advisory blog.\n\n"
             ."Title: {$item->title}\nSummary: {$item->summary}\nSource: {$item->sourceName}\n\n"
-            ."Silos (route to the best match by these include terms, or null if none fits):\n{$siloLines}\n\n"
+            ."Silos (route to the best match by its include terms; NEVER route to a silo when the item matches its [NOT: …] terms; null if none fits):\n{$siloLines}\n\n"
             .'Return ONLY JSON: {"relevance":0..1,"matched_silo":"<silo name|null>","angle":"<advisory angle>",'
             .'"advisory_value":0..1,"timeliness":0..1,"local_relevance":true|false,"brand_safe":true|false,"rationale":"..."}. '
             .'brand_safe is false for off-brand, controversial, or tragedy-exploitative items.';

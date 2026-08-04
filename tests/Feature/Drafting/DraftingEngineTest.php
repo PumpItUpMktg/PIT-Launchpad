@@ -37,7 +37,8 @@ test('a drafted SEO title carries no pipe-suffix and no source-name attribution,
         ->and(mb_strlen($content->meta['seo']['title']))->toBeLessThanOrEqual(60);
 
     expect($claude->prompts[0])->toContain('NO publication/source names')
-        ->and($claude->prompts[0])->toContain('≤60 chars');
+        ->and($claude->prompts[0])->toContain('45–60 chars') // generate to length, a complete phrase
+        ->and($claude->prompts[0])->toContain('COMPLETE phrase');
 });
 
 test('the post drafting prompt forbids placeholder/citation tokens and verbatim proof splicing', function () {

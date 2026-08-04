@@ -431,4 +431,37 @@ return [
         'interval_seconds' => (int) env('REPUSH_INTERVAL_SECONDS', 15),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Reactive news lane — topical + geography gate
+    |--------------------------------------------------------------------------
+    | Before any LLM relevance cost, the reactive (news) funnel drops items that
+    | are not buyer-intent for a water/basement/foundation brand — the Aug-4 batch
+    | leaked five municipal-utility-finance stories (sewer grants, rate hikes).
+    | An item must hit at least one `allow` topic; the finance/governance terms in
+    | `deny_context` drop an item that ONLY matches on an incidental utility word.
+    | Geography is enforced separately from the site's own footprint states.
+    */
+    'reactive' => [
+        // Master switch for the topical + geography gate. The allow-list below is tuned for a water /
+        // basement / foundation brand (Sump Pump Gurus); it is applied INSTALL-WIDE, so a future tenant in
+        // a different trade needs its own list (or this off) — move to a per-tenant setting when that lands.
+        // Pinned OFF in phpunit.xml so the generic funnel tests keep their pre-gate behavior.
+        'enabled' => (bool) env('LAUNCHPAD_REACTIVE_GATE', true),
+        'allow' => [
+            'flood', 'flooding', 'flooded', 'floodwater', 'flash flood', 'groundwater', 'ground water',
+            'storm', 'stormwater', 'hurricane', 'nor\'easter', 'heavy rain', 'rainfall', 'snowmelt',
+            'basement water', 'wet basement', 'flooded basement', 'basement flooding', 'damp basement',
+            'foundation crack', 'foundation leak', 'foundation repair', 'foundation water', 'settling',
+            'sump pump', 'sump', 'french drain', 'drainage', 'yard drainage', 'downspout', 'gutter',
+            'water table', 'seepage', 'moisture', 'mold', 'mildew', 'crawl space', 'crawlspace',
+            'waterproof', 'waterproofing', 'water damage', 'water intrusion', 'radon', 'egress window',
+        ],
+        'deny_context' => [
+            'rate hike', 'rate increase', 'fee increase', 'utility bill', 'water bill', 'sewer bill',
+            'trash', 'garbage', 'recycling', 'grant', 'grants', 'bond', 'budget', 'tax', 'ratepayer',
+            'millage', 'assessment fee', 'council approves', 'authority approves', 'ordinance',
+        ],
+    ],
+
 ];

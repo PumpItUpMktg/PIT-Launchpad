@@ -98,6 +98,39 @@ test('the funnel routes a mixed batch into candidates, parks, drops and refreshe
         ->toBe(3); // live page + draft-ready + borderline
 });
 
+test('the reactive gate drops off-topic finance and out-of-footprint items before scoring', function () {
+    config([
+        'launchpad.reactive.enabled' => true,
+        'launchpad.reactive.allow' => ['flood', 'flooding', 'sump pump', 'basement water', 'drainage'],
+        'launchpad.reactive.deny_context' => ['rate hike', 'grant', 'budget'],
+    ]);
+
+    $site = Site::factory()->create(['corporate_state' => 'NJ']);
+    Silo::factory()->create([
+        'site_id' => $site->id,
+        'name' => 'Basement Waterproofing',
+        'rule_set' => ['include_patterns' => ['flooding', 'sump pump', 'basement water'], 'exclude_patterns' => []],
+    ]);
+
+    // Only the on-topic, in-footprint item reaches the scorer.
+    $claude = (new ScriptedClaudeClient)->fallback(relevanceJson(0.82, 'Basement Waterproofing'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    $items = [
+        News::item('Sump pump demand rises after basement flooding', summary: 'Homeowners scramble as water rises.'),
+        News::item('County approves $22M in sewer grants', summary: 'Ratepayers face a utility rate hike.'),
+        News::item('Basement flooding advice', summary: 'Reported from Lansing, Michigan this week.'),
+    ];
+
+    $result = app(CandidateFunnel::class)->process($site, $items);
+
+    expect($result->created)->toHaveCount(1);
+    $reasons = array_column($result->dropped, 'reason');
+    expect($reasons)->toContain('off_topic')          // the sewer-grant / rate-hike story
+        ->and($reasons)->toContain('out_of_footprint'); // the Michigan-anchored story
+});
+
 test('first-run backfill yields a discovery corpus for old items and drafts only recent ones', function () {
     $site = Site::factory()->create();
     Silo::factory()->create([

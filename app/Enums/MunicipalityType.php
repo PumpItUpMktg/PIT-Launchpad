@@ -22,4 +22,18 @@ enum MunicipalityType: string
             self::CountySubdivision => 'Township/Borough (MCD)',
         };
     }
+
+    /**
+     * A short, honest word to distinguish two SAME-NAME municipalities in the SAME county when the county
+     * alone can't (a Census `place` and its neighboring `county_subdivision` both named "Bethlehem"). An
+     * incorporated place is the town proper; an MCD in NJ/PA is a township or borough — "Twp/Boro" keeps
+     * both truths without claiming the wrong one. Used only as a tie-breaker; the common path is county-only.
+     */
+    public function disambiguator(): string
+    {
+        return match ($this) {
+            self::Place => '',
+            self::CountySubdivision => 'Twp/Boro',
+        };
+    }
 }
