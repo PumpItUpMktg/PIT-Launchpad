@@ -564,3 +564,30 @@ it('a town page breadcrumb is 3-level: Home → GBP location hub → town (§ re
         ->and($crumbs[2]['name'])->toContain('Norristown')
         ->and($crumbs[2]['url'])->toBe('');
 });
+
+it('canonicalizes a raw phone the drafter wrote into location prose (single-source NAP in copy)', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, ['phone' => '+1 908-224-0550']);
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+
+    // The exact live-site defect: the drafter quoted the raw location number into body prose.
+    $page = locRelayPage($site, $location, [
+        'slot_payload' => [
+            'loc_intro' => 'When you call us at +1 908-224-0550, you reach a local team every day.',
+            'faq' => [
+                ['question' => 'How do I reach you?', 'answer' => 'Just call +1 908-224-0550 anytime.'],
+            ],
+        ],
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()
+        // Prose now reads the ONE canonical format — matching the CTA/contact block.
+        ->toContain('When you call us at +1 (908) 224-0550, you reach a local team every day.')
+        // FAQ answer too (its renderer entity-encodes the leading "+", so match the stable tail).
+        ->toContain('call &#43;1 (908) 224-0550 anytime.')
+        // The raw, unformatted string the drafter produced is gone from the page.
+        ->not->toContain('+1 908-224-0550')
+        ->not->toContain('908-224-0550');
+});

@@ -18,6 +18,7 @@ use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use App\Models\WireframeKit;
 use App\PageBuilder\Schema\KitSchema;
+use App\Publishing\PhoneNumber;
 use App\Standard\StandardPageIntake;
 use App\Support\BusinessHours;
 use Illuminate\Database\Eloquent\Collection;
@@ -196,7 +197,7 @@ class PageGroundingAssembler
         return array_filter([
             'city' => $subjectCity,
             'state' => $subjectState,
-            'phone' => trim((string) $location->phone),
+            'phone' => (string) PhoneNumber::display(trim((string) $location->phone)),
             'primary_category' => trim((string) $location->primary_category),
             'served_towns' => $towns,
             'market_notes' => trim((string) $location->market_notes),
