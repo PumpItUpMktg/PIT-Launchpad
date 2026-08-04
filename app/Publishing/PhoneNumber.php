@@ -42,4 +42,37 @@ final class PhoneNumber
 
         return $raw;
     }
+
+    /**
+     * Rewrite every phone number found in a run of VISIBLE PROSE into the one canonical {@see display}
+     * format, so a number the drafter quoted verbatim (e.g. "+1 908-224-0550") reads the same as the
+     * CTA/contact block ("+1 (908) 224-0550"). NAP is single-source everywhere the number appears —
+     * structured OR in copy — and a repush re-runs this at compose time, healing already-published pages
+     * with no regeneration.
+     *
+     * Deliberately conservative: it matches a US/NANP shape only (optional +1/1 country code, then a
+     * 3-3-4 grouping with the usual space/dot/dash/paren separators), anchored so it can't bite a chunk
+     * out of a longer alphanumeric run, and it only rewrites a token whose digits actually form a
+     * 10-digit (or 11-with-leading-1) number. Anything else is returned untouched. Apply it ONLY to
+     * drafted text — never to markup — so `tel:` hrefs (built separately from the resolved number) are
+     * never rewritten. Idempotent: canonical input is left as-is.
+     */
+    public static function canonicalizeInText(?string $text): string
+    {
+        if ($text === null || $text === '') {
+            return (string) $text;
+        }
+
+        $pattern = '/(?<![\w+])(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}(?!\w)/';
+
+        return (string) preg_replace_callback($pattern, static function (array $m): string {
+            $token = $m[0];
+            $digits = preg_replace('/\D/', '', $token) ?? '';
+            if (strlen($digits) === 10 || (strlen($digits) === 11 && $digits[0] === '1')) {
+                return self::display($token) ?? $token;
+            }
+
+            return $token;
+        }, $text);
+    }
 }

@@ -253,7 +253,10 @@ final class BlockContentAssembler
             $question = trim((string) ($item['question'] ?? $item['q'] ?? ''));
             $answer = trim((string) ($item['answer'] ?? $item['a'] ?? ''));
             if ($question !== '' && $answer !== '') {
-                $out[] = ['question' => $question, 'answer' => $answer];
+                $out[] = [
+                    'question' => PhoneNumber::canonicalizeInText($question),
+                    'answer' => PhoneNumber::canonicalizeInText($answer),
+                ];
             }
         }
 
@@ -1179,7 +1182,7 @@ final class BlockContentAssembler
                 ? trim((string) ($item['text'] ?? $item['label'] ?? $item['value'] ?? ''))
                 : trim((string) $item);
             if ($value !== '') {
-                $out[] = $value;
+                $out[] = PhoneNumber::canonicalizeInText($value);
             }
         }
 
@@ -1430,7 +1433,7 @@ final class BlockContentAssembler
         foreach ($chunks as $chunk) {
             $text = trim(html_entity_decode(strip_tags((string) $chunk), ENT_QUOTES, 'UTF-8'));
             if ($text !== '') {
-                $out[] = $text;
+                $out[] = PhoneNumber::canonicalizeInText($text);
             }
         }
 
@@ -1498,7 +1501,9 @@ final class BlockContentAssembler
             $value = $value[0] ?? '';
         }
 
-        return trim((string) $value);
+        // Any phone the drafter wrote into this copy is re-rendered in the one canonical format, so
+        // prose never disagrees with the CTA/contact block on the same page (single-source NAP).
+        return PhoneNumber::canonicalizeInText(trim((string) $value));
     }
 
     /**
