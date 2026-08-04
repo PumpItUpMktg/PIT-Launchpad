@@ -75,7 +75,14 @@ final class BlockContentAssembler
             return null;
         }
 
-        $ctx = $this->context($this->site($content));
+        // Home and hub pages have no mid-page form, so a configured lead form renders in their closing
+        // #contact CTA — the hero/close CTAs capture a lead in place. Service (spoke) pages already
+        // carry the form in their 60/40 description row (which owns #contact); location pages resolve
+        // their own per-location context in composeLocation; the Contact page has its own form section
+        // — all three are excluded here so no page ever renders two forms.
+        $leadForm = in_array($content->page_type, [PageType::Home, PageType::Hub], true)
+            && $this->hasLeadForm($content);
+        $ctx = $this->context($this->site($content), $leadForm);
 
         // Dispatch by the page's identity: Home by page_type, standard pages (Utility page_type) by
         // their finer standard_type. A type whose block composer hasn't shipped returns null — the blob

@@ -1663,3 +1663,24 @@ it('the proof gallery never ships add-your-own-photo cards to a visitor — publ
         ->toContain('https://cdn.example/job.webp')
         ->not->toContain('Add your own photo');            // no empty-slot cards beside it
 });
+
+it('renders the lead form at the #contact CTA on the home page when configured', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $home = blockHomePage($site);
+    PageConfig::create([
+        'site_id' => $site->id,
+        'content_id' => $home->id,
+        'form_embed' => '<iframe src="https://forms.example/home"></iframe>',
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    // The form renders once, in the single #contact band (the soft close); the pushy band keeps its button.
+    expect($markup)->toContain('[lp_form]')
+        ->and(substr_count($markup, '[lp_form]'))->toBe(1)
+        ->and(substr_count($markup, 'id="contact"'))->toBe(1);
+
+    preg_match_all('/href="#([\w-]+)"/', $markup, $hrefs);
+    preg_match_all('/\bid="([\w-]+)"/', $markup, $ids);
+    expect(array_values(array_diff(array_unique($hrefs[1]), array_unique($ids[1]))))->toBe([]);
+});
