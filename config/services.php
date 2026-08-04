@@ -155,6 +155,12 @@ return [
         // Path (on the site's own domain) of the sitemap submitted to Search Console for indexing.
         // The companion plugin serves the Launchpad sitemap at /sitemap.xml (no SEO plugin needed).
         'sitemap_path' => env('GOOGLE_SITEMAP_PATH', '/sitemap.xml'),
+        // After a bulk re-push, submit the (freshly re-lastmod'd) sitemap to Search Console ONCE per run
+        // so Google re-crawls the changed set. Debounced per-site so back-to-back re-pushes don't spam
+        // GSC — sitemaps.submit is idempotent and Google recrawls from <lastmod> on its own schedule, so
+        // more than one submit per window buys nothing and Google discourages repeated resubmits.
+        'sitemap_submit_on_repush' => (bool) env('GOOGLE_SITEMAP_SUBMIT_ON_REPUSH', true),
+        'sitemap_submit_debounce_hours' => (int) env('GOOGLE_SITEMAP_SUBMIT_DEBOUNCE_HOURS', 12),
         // Per-page GSC totals are cached this long on the Live cards (GSC data lags ~2-3 days, so a
         // board render need not re-query every card). Default 6h.
         'gsc_cache_ttl' => (int) env('GOOGLE_GSC_CACHE_TTL', 21600),

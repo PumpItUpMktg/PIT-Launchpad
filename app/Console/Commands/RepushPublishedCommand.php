@@ -64,6 +64,9 @@ class RepushPublishedCommand extends Command
 
         if (! $dryRun) {
             $this->line('Ensure the queue worker is running so the waves drain (watch the queue-health banner).');
+            if ($result['sitemap_submitted']) {
+                $this->line('Sitemap will be resubmitted to Google Search Console once the waves land.');
+            }
         }
 
         return self::SUCCESS;
