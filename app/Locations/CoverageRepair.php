@@ -19,8 +19,10 @@ use Illuminate\Support\Facades\DB;
  *  2. **Out-of-territory towns** — a row whose `state` isn't one of the site's own states (e.g. Maryland
  *     towns on a New Jersey business). The county FIPS behind each removed row is also pruned from every
  *     Location's `county_geoids` so the next census recompute ({@see CoverageWriter}) can't re-add them.
- *  3. **Intra-county duplicates** — two rows with the same cleaned name in the same county (a `place` and a
- *     `county_subdivision` both "Bethlehem"); the best row is kept, the rest removed.
+ *  3. **Exact duplicates** — the SAME census geography (identical GEOID) stored twice; the best row is kept,
+ *     the rest removed. Two DISTINCT municipalities that merely share a name (a `place` + a
+ *     `county_subdivision` both "Bethlehem", different GEOIDs) are kept and disambiguated by county at
+ *     render time — never deleted (deleting one would silently drop real coverage).
  *
  * A site's territory is the set of states from its physical Locations + its `corporate_state`. If none is
  * known the out-of-territory pass is SKIPPED (never guess a boundary and delete real coverage).
@@ -34,7 +36,7 @@ class CoverageRepair
     /**
      * @return array{
      *   territory: list<string>,
-     *   coverage: array{prefix_cleaned: list<string>, out_of_state: list<string>, deduped: list<string>},
+     *   coverage: array{prefix_cleaned: list<string>, out_of_state: list<string>, deduped: list<string>, disambiguated: list<string>},
      *   served: array{prefix_cleaned: int, out_of_state: int, deduped: int, locations_touched: int},
      *   counties_pruned: list<string>,
      * }
@@ -73,10 +75,15 @@ class CoverageRepair
             ->filter(fn (string $f): bool => strlen($f) === 5)
             ->unique()->values()->all();
 
-        // 3. Intra-county duplicates among the REMAINING rows — same county FIPS + same cleaned name.
+        // 3. EXACT duplicates among the REMAINING rows — the SAME census geography (identical GEOID) stored
+        //    twice; the loser is removed. In practice the `unique(site_id, geo_id)` index means this catches
+        //    nothing (a defensive pass). What matters is what it NO LONGER does: a `place` and a
+        //    `county_subdivision` that merely SHARE A NAME (Bethlehem city + Bethlehem township, different
+        //    GEOIDs) are genuinely distinct municipalities — both are KEPT and disambiguated by county at
+        //    render time ({@see ServiceAreaResolver::byCounty()}), never deleted (deleting drops real coverage).
         $deduped = [];
         $dupeIds = [];
-        $remaining->groupBy(fn (CoverageArea $a): string => substr((string) $a->geo_id, 0, 5).'|'.mb_strtolower(trim((string) $a->getAttribute('name'))))
+        $remaining->groupBy(fn (CoverageArea $a): string => (string) $a->geo_id)
             ->each(function ($group) use (&$deduped, &$dupeIds): void {
                 if ($group->count() < 2) {
                     return;
@@ -87,6 +94,16 @@ class CoverageRepair
                     $deduped[] = (string) $loser->getAttribute('name');
                 }
             });
+
+        // Distinct same-name municipalities that survive (different GEOIDs) — informational: these are the
+        // rows the render layer will label with their county so the areas grid never shows a bare name twice.
+        $keptDupeIds = $dupeIds;
+        $disambiguated = $remaining
+            ->reject(fn (CoverageArea $a): bool => in_array($a->id, $keptDupeIds, true))
+            ->groupBy(fn (CoverageArea $a): string => mb_strtolower(trim((string) $a->getAttribute('name'))))
+            ->filter(fn ($group): bool => $group->count() > 1)
+            ->flatMap(fn ($group) => $group->map(fn (CoverageArea $a): string => (string) $a->getAttribute('name')))
+            ->unique()->values()->all();
 
         $served = $this->planServedTowns($site, $territory);
 
@@ -115,6 +132,7 @@ class CoverageRepair
                 'prefix_cleaned' => $prefixCleaned,
                 'out_of_state' => $outOfState->map(fn (CoverageArea $a): string => $a->getAttribute('name').' ('.$a->state.')')->all(),
                 'deduped' => $deduped,
+                'disambiguated' => $disambiguated,
             ],
             'served' => [
                 'prefix_cleaned' => $served['prefix_cleaned'],

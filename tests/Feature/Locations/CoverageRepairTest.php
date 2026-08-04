@@ -53,21 +53,21 @@ it('removes out-of-territory coverage and prunes the sourcing county from locati
     expect($location->fresh()->county_geoids)->toBe(['34027']);
 });
 
-it('collapses intra-county duplicate towns, keeping the best row', function () {
+it('keeps distinct same-name municipalities and flags them for render-time disambiguation', function () {
     $site = cvSite();
-    // Two "Bethlehem" in the same county (34095): a place (kept) and a county_subdivision (dropped).
+    // A `place` and a `county_subdivision` both named "Bethlehem" (different GEOIDs) are DISTINCT
+    // municipalities — the repair must keep BOTH (deleting one silently drops real coverage). They are
+    // disambiguated by county at render time, not here.
     CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3409500010', 'name' => 'Bethlehem', 'state' => 'NJ', 'type' => MunicipalityType::Place, 'population' => 4000]);
     CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3409500011', 'name' => 'Bethlehem', 'state' => 'NJ', 'type' => MunicipalityType::CountySubdivision, 'population' => 900]);
-    // A same-named town in a DIFFERENT county must be left alone.
-    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3404100010', 'name' => 'Bethlehem', 'state' => 'NJ', 'type' => MunicipalityType::CountySubdivision]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3404100010', 'name' => 'Denville', 'state' => 'NJ', 'type' => MunicipalityType::CountySubdivision]);
 
-    app(CoverageRepair::class)->repair($site, apply: true);
+    $report = app(CoverageRepair::class)->repair($site, apply: true);
 
     $rows = CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('name', 'Bethlehem')->get();
-    expect($rows)->toHaveCount(2); // one per county
-    $inCounty = $rows->firstWhere('geo_id', '3409500010');
-    expect($inCounty)->not->toBeNull()
-        ->and($inCounty->type)->toBe(MunicipalityType::Place); // the place row survived
+    expect($rows)->toHaveCount(2)                          // BOTH Bethlehems kept — nothing deleted
+        ->and($report['coverage']['deduped'])->toBe([])   // no exact-GEOID duplicate to remove
+        ->and($report['coverage']['disambiguated'])->toBe(['Bethlehem']); // flagged for county labelling
 });
 
 it('cleans served_towns: prefix, out-of-territory, and duplicates', function () {

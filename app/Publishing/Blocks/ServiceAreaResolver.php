@@ -5,6 +5,7 @@ namespace App\Publishing\Blocks;
 use App\Enums\ContentKind;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
+use App\Enums\StandardPageType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\Content;
@@ -59,14 +60,13 @@ final class ServiceAreaResolver
 
         $polygons = $this->countyPolygons(array_keys($names)); // geoId => rings
         $urls = $this->locationUrls($siteId);
+        $fallbackUrl = $this->areasPageUrl($siteId); // "see all areas we serve" — a real page or ''
 
-        $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)
-            ->get(['name', 'geo_id', 'type', 'lat', 'lng', 'size_tier', 'population']);
-
-        /** @var array<string, list<array{name: string, url: string, key: array{0: int, 1: int, 2: string}}>> $buckets */
+        /** @var array<string, list<array{name: string, url: string, type: MunicipalityType, key: array{0: int, 1: int, 2: string}}>> $buckets */
         $buckets = [];
-        foreach ($areas as $area) {
+        foreach ($areas = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->get(['name', 'geo_id', 'type', 'lat', 'lng', 'size_tier', 'population']) as $area) {
             $name = trim((string) $area->name);
             if ($name === '') {
                 continue;
@@ -77,7 +77,10 @@ final class ServiceAreaResolver
             }
             $buckets[$geoId][] = [
                 'name' => $name,
-                'url' => $urls[$this->key($name)] ?? '',
+                // Its own town page if one exists; else the "Areas we serve" page as a fallback so a served
+                // town without a dedicated page still links somewhere real (never a plain, dead label).
+                'url' => ($urls[$this->key($name)] ?? '') !== '' ? $urls[$this->key($name)] : $fallbackUrl,
+                'type' => $area->type,
                 'key' => [self::TIER_RANK[(string) $area->size_tier] ?? 4, -1 * (int) ($area->population ?? 0), $name],
             ];
         }
@@ -86,21 +89,93 @@ final class ServiceAreaResolver
         $ordered = $names;
         asort($ordered);
 
-        $out = [];
+        /** @var list<array{county: string, towns: list<array{name: string, url: string, type: MunicipalityType, label: string}>}> $groups */
+        $groups = [];
         foreach (array_keys($ordered) as $geoId) {
             if (! isset($buckets[$geoId])) {
                 continue;
             }
             $towns = $buckets[$geoId];
             usort($towns, fn (array $a, array $b): int => $a['key'] <=> $b['key']);
-            $cities = [];
+            $kept = [];
             foreach (array_slice($towns, 0, self::PER_COUNTY) as $town) {
-                $cities[] = ['label' => $town['name'], 'url' => $town['url']];
+                $kept[] = ['name' => $town['name'], 'url' => $town['url'], 'type' => $town['type'], 'label' => $town['name']];
             }
-            $out[] = ['county' => $names[$geoId], 'cities' => $cities];
+            $groups[] = ['county' => $names[$geoId], 'towns' => $kept];
         }
 
-        return $out;
+        $groups = $this->disambiguateLabels($groups);
+
+        return array_map(fn (array $g): array => [
+            'county' => $g['county'],
+            'cities' => array_map(fn (array $t): array => ['label' => $t['label'], 'url' => $t['url']], $g['towns']),
+        ], $groups);
+    }
+
+    /**
+     * Give two SAME-NAME municipalities distinct labels so the areas grid never shows a bare "Bethlehem"
+     * twice. A name that appears more than once across the whole grid gets its county appended —
+     * "Bethlehem (Northampton)" — the operator-chosen format. If that STILL collides (a `place` and a
+     * `county_subdivision` of the same name in the same county), the municipal descriptor breaks the tie —
+     * "Bethlehem (Northampton, Twp/Boro)". A unique name is left exactly as it is.
+     *
+     * @param  list<array{county: string, towns: list<array{name: string, url: string, type: MunicipalityType, label: string}>}>  $groups
+     * @return list<array{county: string, towns: list<array{name: string, url: string, type: MunicipalityType, label: string}>}>
+     */
+    private function disambiguateLabels(array $groups): array
+    {
+        $nameCounts = [];
+        foreach ($groups as $g) {
+            foreach ($g['towns'] as $t) {
+                $nameCounts[$this->key($t['name'])] = ($nameCounts[$this->key($t['name'])] ?? 0) + 1;
+            }
+        }
+
+        // Pass 1 — county qualifier for any duplicated name.
+        foreach ($groups as $gi => $g) {
+            foreach ($g['towns'] as $ti => $t) {
+                if (($nameCounts[$this->key($t['name'])] ?? 0) > 1 && trim($g['county']) !== '') {
+                    $groups[$gi]['towns'][$ti]['label'] = $t['name'].' ('.$g['county'].')';
+                }
+            }
+        }
+
+        // Pass 2 — municipal descriptor where the county qualifier still leaves two labels identical.
+        $labelCounts = [];
+        foreach ($groups as $g) {
+            foreach ($g['towns'] as $t) {
+                $labelCounts[mb_strtolower($t['label'])] = ($labelCounts[mb_strtolower($t['label'])] ?? 0) + 1;
+            }
+        }
+        foreach ($groups as $gi => $g) {
+            foreach ($g['towns'] as $ti => $t) {
+                if (($labelCounts[mb_strtolower($t['label'])] ?? 0) > 1 && ($suffix = $t['type']->disambiguator()) !== '' && trim($g['county']) !== '') {
+                    $groups[$gi]['towns'][$ti]['label'] = $t['name'].' ('.$g['county'].', '.$suffix.')';
+                }
+            }
+        }
+
+        return $groups;
+    }
+
+    /**
+     * The site's published "Areas we serve" page URL, or '' when it has none. The fallback target for a
+     * served town that has no dedicated location page of its own.
+     */
+    private function areasPageUrl(string $siteId): string
+    {
+        $domain = Site::find($siteId)?->domain_url;
+        $home = is_string($domain) && trim($domain) !== '' ? rtrim($domain, '/').'/' : '/';
+
+        $slug = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->where('standard_type', StandardPageType::AreasWeServe->value)
+            ->whereNotNull('slug')
+            ->value('slug');
+
+        $slug = trim((string) $slug);
+
+        return $slug === '' ? '' : $home.ltrim($slug, '/');
     }
 
     /**

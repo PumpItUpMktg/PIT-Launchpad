@@ -51,7 +51,8 @@ class RepairCoverageCommand extends Command
 
             $this->reportList('coverage · name prefix', $r['coverage']['prefix_cleaned']);
             $this->reportList('coverage · out-of-territory (removed)', $r['coverage']['out_of_state']);
-            $this->reportList('coverage · intra-county duplicate (removed)', $r['coverage']['deduped']);
+            $this->reportList('coverage · exact duplicate (removed)', $r['coverage']['deduped']);
+            $this->reportList('coverage · same-name, kept & disambiguated by county at render', $r['coverage']['disambiguated']);
             if ($r['counties_pruned'] !== []) {
                 $this->line('  • pruned out-of-territory county FIPS from locations: '.implode(', ', $r['counties_pruned']));
             }
