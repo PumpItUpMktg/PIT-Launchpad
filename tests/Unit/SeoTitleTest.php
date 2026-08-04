@@ -35,3 +35,21 @@ it('is idempotent on an already-clean title', function () {
     $clean = 'Same-Day Tankless Water Heater Installation';
     expect(SeoTitle::normalize($clean, 'Local Tribune'))->toBe($clean);
 });
+
+it('cuts at a clause boundary instead of stranding a mid-phrase fragment', function () {
+    // The real defect: "…County: What Homeowners…" was being cut to "…County: What".
+    expect(SeoTitle::normalize('$22M Sewer Grants in Northern Chester County: What Homeowners Need to Know'))
+        ->toBe('$22M Sewer Grants in Northern Chester County')
+        ->and(SeoTitle::normalize('New Brunswick Water Sewer Rate Hike — What Homeowners Should Do Now'))
+        ->toBe('New Brunswick Water Sewer Rate Hike');
+});
+
+it('drops a trailing dangling word when there is no clause boundary', function () {
+    // No colon/dash — a word-boundary cut lands on "Before It"; both are stripped.
+    $result = SeoTitle::normalize('Flash Flood Home Protection Tips to Stop Water Damage Before It Starts');
+
+    expect(mb_strlen($result))->toBeLessThanOrEqual(60)
+        ->and($result)->not->toEndWith('Before')
+        ->and($result)->not->toEndWith('It')
+        ->and($result)->toBe('Flash Flood Home Protection Tips to Stop Water Damage');
+});

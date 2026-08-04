@@ -53,6 +53,25 @@ final class SeoTitle
         return trim((string) preg_replace('/\s{2,}/', ' ', $title));
     }
 
+    /**
+     * Connectives, articles, prepositions and interrogatives that must never END a title — cutting at the
+     * cap routinely lands on one ("…Chester County: What", "…before it"), leaving a dangling fragment that
+     * then becomes the slug. When truncation strands one of these, it's dropped so the title reads as a
+     * finished phrase.
+     */
+    private const DANGLING = [
+        'a', 'an', 'the', 'and', 'or', 'but', 'nor', 'of', 'to', 'for', 'in', 'on', 'at', 'by', 'with',
+        'from', 'as', 'is', 'are', 'was', 'were', 'be', 'that', 'this', 'these', 'those', 'your', 'you',
+        'how', 'what', 'why', 'when', 'where', 'who', 'which', 'stop', 'before', 'after', 'into', 'over',
+        'under', 'about', 'than', 'then', 'so', 'if', 'it', 'its', 'up', 'out', 'off', 'per', 'via', 'amid',
+    ];
+
+    /**
+     * Cap the title without stranding a mid-phrase fragment. First preference: cut at the last CLAUSE
+     * boundary (colon / dash / semicolon / comma) inside the window when it still keeps a substantial title
+     * ("…County: What Homeowners…" → "…County"). Otherwise cut at a word boundary and drop any trailing
+     * {@see self::DANGLING} words so it never ends on "What" / "before" / "to".
+     */
     private static function truncate(string $title, int $maxLength): string
     {
         if ($maxLength <= 0 || mb_strlen($title) <= $maxLength) {
@@ -60,11 +79,31 @@ final class SeoTitle
         }
 
         $cut = mb_substr($title, 0, $maxLength);
+
+        // Prefer the last clause boundary if it leaves at least half the cap — a natural, complete stop.
+        if (preg_match_all('/[:;,–—]|\s[-|]\s/u', $cut, $m, PREG_OFFSET_CAPTURE)) {
+            $last = end($m[0]);
+            $clause = rtrim(mb_strcut($cut, 0, (int) $last[1]));
+            if (mb_strlen($clause) >= (int) ceil($maxLength / 2)) {
+                return rtrim($clause, " \t-–—|:,;");
+            }
+        }
+
         $lastSpace = mb_strrpos($cut, ' ');
         if ($lastSpace !== false && $lastSpace > 0) {
             $cut = mb_substr($cut, 0, $lastSpace);
         }
 
-        return rtrim($cut, " \t-–—|:,;");
+        // Drop trailing dangling words ("…before it" → "…", "…County What" → "…County").
+        $words = preg_split('/\s+/', trim($cut)) ?: [];
+        while (count($words) > 1) {
+            $tail = mb_strtolower(rtrim((string) end($words), '.,:;!?-–—|'));
+            if (! in_array($tail, self::DANGLING, true)) {
+                break;
+            }
+            array_pop($words);
+        }
+
+        return rtrim(implode(' ', $words), " \t-–—|:,;");
     }
 }

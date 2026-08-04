@@ -11,6 +11,7 @@ use App\Enums\RelevanceBand;
 use App\Integrations\News\NewsItem;
 use App\Integrations\News\NewsProvider;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
@@ -34,6 +35,7 @@ class CandidateFunnel
         private readonly RelevanceScorer $scorer,
         private readonly NearDuplicateDetector $nearDup,
         private readonly BackfillSplitter $splitter,
+        private readonly ReactiveTopicGate $topicGate,
     ) {}
 
     /**
@@ -73,15 +75,25 @@ class CandidateFunnel
     public function process(Site $site, array $items, ?string $routingHint = null): FunnelResult
     {
         $silos = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
+        $gateOn = (bool) config('launchpad.reactive.enabled', true);
+        $footprint = $gateOn ? $this->footprintStates($site) : [];
 
         $dropped = [];
         $filtered = [];
         foreach ($items as $item) {
-            if ($this->preFilter->passes($item)) {
-                $filtered[] = $item;
-            } else {
+            if (! $this->preFilter->passes($item)) {
                 $dropped[] = ['title' => $item->title, 'reason' => 'pre_filter'];
+
+                continue;
             }
+            // Reactive topical + geography gate — drop municipal-finance / out-of-footprint noise before
+            // any LLM relevance cost (the Aug-4 sewer-grant leak). Install-gated (off in the generic tests).
+            if ($gateOn && ($reason = $this->topicGate->rejection($item, $footprint)) !== null) {
+                $dropped[] = ['title' => $item->title, 'reason' => $reason];
+
+                continue;
+            }
+            $filtered[] = $item;
         }
 
         $created = [];
@@ -193,6 +205,25 @@ class CandidateFunnel
             $relevance->matchedSiloId === null => 'no_silo_match',
             default => 'below_threshold',
         };
+    }
+
+    /**
+     * The tenant's own states (2-letter upper) — every physical Location's state + the corporate state.
+     * Empty when unknown, in which case the geography gate never guesses a boundary.
+     *
+     * @return list<string>
+     */
+    private function footprintStates(Site $site): array
+    {
+        $states = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->get()
+            ->map(fn (Location $l): string => strtoupper(trim((string) $l->cityState()['state'])))
+            ->all();
+
+        return collect($states)
+            ->push(strtoupper(trim((string) $site->corporate_state)))
+            ->filter(fn (string $s): bool => $s !== '')
+            ->unique()->values()->all();
     }
 
     private function uniqueSlug(string $siteId, string $title): string

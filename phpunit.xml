@@ -24,6 +24,9 @@
              exercise the new menu set them true explicitly. -->
         <env name="LAUNCHPAD_NEW_SETUP" value="false"/>
         <env name="LAUNCHPAD_NEW_OPERATE" value="false"/>
+        <!-- Reactive topical/geography gate off by default so the generic funnel tests keep pre-gate
+             behavior; the gate's own tests enable it explicitly via config(). -->
+        <env name="LAUNCHPAD_REACTIVE_GATE" value="false"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
