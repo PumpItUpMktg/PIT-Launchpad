@@ -14,6 +14,7 @@ use App\Models\Content;
 use App\Models\ContentTown;
 use App\Models\CoverageArea;
 use App\Models\Location;
+use App\Models\PageConfig;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SiloBlueprint;
@@ -590,4 +591,41 @@ it('canonicalizes a raw phone the drafter wrote into location prose (single-sour
         // The raw, unformatted string the drafter produced is gone from the page.
         ->not->toContain('+1 908-224-0550')
         ->not->toContain('908-224-0550');
+});
+
+it('renders the configured lead form at the #contact band on a location page (no dead CTA)', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site);
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+    $page = locRelayPage($site, $location);
+
+    // A lead-capture form configured for this page.
+    PageConfig::create([
+        'site_id' => $site->id,
+        'content_id' => $page->id,
+        'form_embed' => '<iframe src="https://forms.example/abc"></iframe>',
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()
+        // The #contact band exists (anchor) AND carries the real form embed shortcode.
+        ->toContain('id="contact"')
+        ->toContain('[lp_form]')
+        // The self-linking "Get in touch" button is replaced by the form.
+        ->not->toContain('>Get in touch</a>');
+});
+
+it('keeps the CTA button when no lead form is configured', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site);
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+    $page = locRelayPage($site, $location);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toBeString()
+        ->toContain('id="contact"')
+        ->not->toContain('[lp_form]')
+        ->toContain('>Get in touch</a>');
 });

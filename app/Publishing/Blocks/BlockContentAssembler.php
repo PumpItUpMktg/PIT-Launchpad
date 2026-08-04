@@ -875,9 +875,10 @@ final class BlockContentAssembler
     private function locationContext(Content $content, Location $location): PageContext
     {
         $site = $this->site($content);
+        $hasForm = $this->hasLeadForm($content);
         $phone = trim((string) $location->phone);
         if ($phone === '') {
-            return $this->context($site);
+            return $this->context($site, $hasForm);
         }
 
         $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
@@ -888,6 +889,7 @@ final class BlockContentAssembler
             emergency: $site !== null && (bool) $site->offers_emergency,
             emergencyDisplay: PhoneNumber::display($emergencyPhone),
             emergencyTel: $this->contact->tel($emergencyPhone),
+            hasForm: $hasForm,
         );
     }
 
@@ -1511,7 +1513,7 @@ final class BlockContentAssembler
      * site business phone), so a guided-onboarded tenant that set only the wizard phone still shows a
      * number. Emergency uses the dedicated after-hours line when set, else the main number.
      */
-    private function context(?Site $site): PageContext
+    private function context(?Site $site, bool $hasForm = false): PageContext
     {
         $phone = $site !== null ? $this->contact->phone($site) : null;
         $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
@@ -1522,6 +1524,7 @@ final class BlockContentAssembler
             emergency: $site !== null && (bool) $site->offers_emergency,
             emergencyDisplay: PhoneNumber::display($emergencyPhone),
             emergencyTel: $this->contact->tel($emergencyPhone),
+            hasForm: $hasForm,
         );
     }
 
