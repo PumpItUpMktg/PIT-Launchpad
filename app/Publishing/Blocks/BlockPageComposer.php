@@ -342,12 +342,16 @@ final class BlockPageComposer
             posts: $posts,
         );
 
+        // With a form configured, the 60/40 description row owns #contact — so the soft close drops its
+        // own anchor (it still links to #contact, which now lands on the form). Without a form, the soft
+        // close IS the #contact target.
         $cta = $this->sections->cta(
             heading: 'Have a question first?',
             body: 'Tell us what you need and we’ll get right back to you — no pressure.',
             actionText: 'Get in touch',
             actionUrl: '#contact',
             ctx: $ctx,
+            anchorContact: ! $hasForm,
         );
 
         // Rhythm: the pushy CTA (accent) sits mid-page buffered by light sections on both sides;

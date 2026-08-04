@@ -431,7 +431,7 @@ final class BlockSections
      * seeking language) as the closing section. $bold swaps the band to the brand accent + a distinct
      * button so the pushy ask stands out from the gentle close.
      */
-    public function cta(string $heading, string $body, string $actionText, string $actionUrl, PageContext $ctx, bool $bold = false): string
+    public function cta(string $heading, string $body, string $actionText, string $actionUrl, PageContext $ctx, bool $bold = false, bool $anchorContact = true): string
     {
         $onAccent = $bold; // bold band = accent background, so text/links flip to the on-accent colour
         $textColor = $onAccent ? 'on-accent' : 'base';
@@ -464,15 +464,21 @@ final class BlockSections
             ]);
         }
 
-        return $this->b->group($children, [
+        $attrs = [
             'backgroundColor' => $bold ? 'accent' : 'primary',
             'textColor' => $textColor,
             'align' => 'full',
-            // The soft-close CTA is on EVERY page and is where the site's #contact links land — give it
-            // the id so those anchors always resolve (never a dead #contact).
-            'anchor' => 'contact',
             'className' => $bold ? 'lp-cta lp-cta--bold' : 'lp-cta',
-        ]);
+        ];
+        // The SOFT close is the #contact target on pages whose form lives here (home/hub/location) or that
+        // have no form — where the hero/bold buttons land. The pushy ($bold) band never carries the id, and
+        // a page whose form owns #contact elsewhere (service's 60/40 row) passes $anchorContact = false —
+        // so exactly one #contact exists and the anchor never resolves to the wrong band.
+        if (! $bold && $anchorContact) {
+            $attrs['anchor'] = 'contact';
+        }
+
+        return $this->b->group($children, $attrs);
     }
 
     /**
@@ -759,7 +765,9 @@ final class BlockSections
             $this->b->column([$formCard], ['width' => '40%']),
         ], ['className' => 'lp-prose-form-cols']);
 
-        return $this->b->group([$columns], ['align' => 'full', 'className' => $this->sectionClass('lp-prose', false).' lp-prose-form']);
+        // This section IS the page's form, so it owns the #contact target — the hero/CTA buttons scroll
+        // here. The soft-close CTA drops its own anchor on these pages so #contact is never duplicated.
+        return $this->b->group([$columns], ['align' => 'full', 'anchor' => 'contact', 'className' => $this->sectionClass('lp-prose', false).' lp-prose-form']);
     }
 
     /**

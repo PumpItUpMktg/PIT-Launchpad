@@ -4,6 +4,7 @@ use App\Enums\ContentKind;
 use App\Enums\PageType;
 use App\Locations\ServedTowns;
 use App\Models\Content;
+use App\Models\PageConfig;
 use App\Models\Service;
 use App\Models\Silo;
 use App\Models\Site;
@@ -151,4 +152,38 @@ it('the breadcrumb leaf uses the page short name, not the SEO subtitle', functio
 
     expect($leaf['name'])->toBe('Basement Waterproofing')
         ->and($leaf['url'])->toBe('');
+});
+
+it('renders the lead form in the soft #contact band on a service page, with exactly one #contact', function () {
+    $page = rpbPage();
+    PageConfig::create([
+        'site_id' => $page->site_id,
+        'content_id' => $page->id,
+        'form_embed' => '<iframe src="https://forms.example/svc"></iframe>',
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    // The form renders (once), and only ONE #contact target exists (the soft close), so the hero and
+    // the pushy band both resolve to the band that holds the form.
+    expect($markup)->toContain('[lp_form]')
+        ->and(substr_count($markup, '[lp_form]'))->toBe(1)
+        ->and(substr_count($markup, 'id="contact"'))->toBe(1);
+
+    // The pushy (bold) band keeps its button and points at the form band.
+    expect($markup)->toContain('>Get a free quote</a>');
+
+    // No dangling in-page anchors.
+    preg_match_all('/href="#([\w-]+)"/', $markup, $hrefs);
+    preg_match_all('/\bid="([\w-]+)"/', $markup, $ids);
+    expect(array_values(array_diff(array_unique($hrefs[1]), array_unique($ids[1]))))->toBe([]);
+});
+
+it('keeps buttons (no form) on a service page when none is configured', function () {
+    $page = rpbPage();
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->not->toContain('[lp_form]')
+        ->and(substr_count($markup, 'id="contact"'))->toBe(1)
+        ->and($markup)->toContain('>Get in touch</a>');
 });
