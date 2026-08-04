@@ -17,6 +17,10 @@ final class PageContext
         public readonly bool $emergency = false,
         public readonly ?string $emergencyDisplay = null,
         public readonly ?string $emergencyTel = null,
+        // A lead-capture form is configured for this page → the closing #contact CTA renders the
+        // real form (the plugin's [lp_form] embed) instead of a button, so the page captures a lead
+        // in place rather than bouncing a CTA to a dead anchor.
+        public readonly bool $hasForm = false,
     ) {}
 
     public function hasPhone(): bool

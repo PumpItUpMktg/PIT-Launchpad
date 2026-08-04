@@ -449,13 +449,20 @@ final class BlockSections
             );
         }
 
-        // On the accent (bold) band the accent-filled button would vanish — use a base/contrast button instead.
-        $buttonAttrs = $bold
-            ? ['backgroundColor' => 'base', 'textColor' => 'contrast']
-            : ['backgroundColor' => 'button', 'textColor' => 'on-button'];
-        $children[] = $this->b->buttons([
-            ['text' => $actionText, 'url' => $actionUrl !== '' ? $actionUrl : '#contact', 'attrs' => $buttonAttrs],
-        ]);
+        if ($ctx->hasForm && ! $bold) {
+            // This IS the #contact target — with a form configured, render the real lead form here
+            // (the plugin's server-side [lp_form] embed) so the page's CTAs capture a lead in place
+            // rather than pointing a button at itself. The pushy ($bold) band keeps its button.
+            $children[] = "<!-- wp:shortcode -->\n[lp_form]\n<!-- /wp:shortcode -->";
+        } else {
+            // On the accent (bold) band the accent-filled button would vanish — use a base/contrast button instead.
+            $buttonAttrs = $bold
+                ? ['backgroundColor' => 'base', 'textColor' => 'contrast']
+                : ['backgroundColor' => 'button', 'textColor' => 'on-button'];
+            $children[] = $this->b->buttons([
+                ['text' => $actionText, 'url' => $actionUrl !== '' ? $actionUrl : '#contact', 'attrs' => $buttonAttrs],
+            ]);
+        }
 
         return $this->b->group($children, [
             'backgroundColor' => $bold ? 'accent' : 'primary',
