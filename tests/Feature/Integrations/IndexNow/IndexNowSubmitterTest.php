@@ -4,6 +4,7 @@ use App\Integrations\IndexNow\IndexNowSubmitter;
 use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
+use App\Models\Content;
 use App\Models\Site;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Http;
@@ -74,4 +75,22 @@ it('is a no-op when IndexNow is disabled', function () {
 
     expect($result['ok'])->toBeFalse()->and($result['reason'])->toBe('disabled');
     Http::assertNothingSent();
+});
+
+it('stamps indexnow_submitted_at on each published page after a successful site submit', function () {
+    Http::fake(['*api.indexnow.org*' => Http::response('', 200)]);
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example', 'indexnow_key' => 'abcdef1234567890']);
+
+    $wp = Mockery::mock(WordpressClient::class);
+    $wp->shouldReceive('pushIndexNowKey')->andReturn(['stored' => true]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($wp);
+
+    $c = Content::factory()->create(['site_id' => $site->id, 'status' => 'published', 'wp_post_id' => 5, 'slug' => 'a', 'indexnow_submitted_at' => null]);
+    Content::factory()->create(['site_id' => $site->id, 'status' => 'needs_review', 'wp_post_id' => null, 'slug' => 'draft']); // excluded
+
+    $result = inSubmitter($factory)->submitSite($site);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($c->fresh()->indexnow_submitted_at)->not->toBeNull();
 });

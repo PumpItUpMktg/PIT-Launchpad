@@ -94,18 +94,29 @@ class IndexNowSubmitter
             return $this->fail('no_domain');
         }
 
-        $urls = Content::withoutGlobalScope(SiteScope::class)
+        $published = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('status', ContentStatus::Published->value)
             ->whereNotNull('wp_post_id')
-            ->pluck('slug')
-            ->map(fn ($slug): string => $home.'/'.ltrim((string) $slug, '/'))
+            ->get(['id', 'slug']);
+
+        $urls = $published
+            ->map(fn (Content $c): string => $home.'/'.ltrim((string) $c->slug, '/'))
             ->all();
 
         // The homepage itself (empty slug maps to the root).
         array_unshift($urls, $home.'/');
 
-        return $this->submit($site, $urls, redeploy: true);
+        $result = $this->submit($site, $urls, redeploy: true);
+
+        // Stamp the submission so the live cards can show a "Submitted to Bing" pill for each page.
+        if ($result['ok'] && $published->isNotEmpty()) {
+            Content::withoutGlobalScope(SiteScope::class)
+                ->whereIn('id', $published->pluck('id')->all())
+                ->update(['indexnow_submitted_at' => now()]);
+        }
+
+        return $result;
     }
 
     /**

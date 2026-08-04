@@ -185,3 +185,21 @@ it('published pages leave the Grow work board but keep counting in its stats', f
     expect(app(SearchConsoleProvider::class))->toBeInstanceOf(GoogleSearchConsole::class)
         ->and(app(SearchConsoleProvider::class)->connected($site))->toBeFalse();
 });
+
+it('exposes the IndexNow submission date on the live card (drives the "Submitted to Bing" pill)', function () {
+    $site = lbSite();
+    lbPublished($site, ['page_type' => PageType::Service, 'title' => 'Sump Pump Repair', 'slug' => 'sump-pump-repair', 'indexnow_submitted_at' => now()->subDays(3)]);
+
+    $cards = app(LiveBoards::class)->services($site);
+
+    expect($cards[0]['indexnow_at'])->toBe(now()->subDays(3)->toDateString());
+});
+
+it('leaves indexnow_at null on a page never submitted', function () {
+    $site = lbSite();
+    lbPublished($site, ['page_type' => PageType::Service, 'title' => 'French Drains', 'slug' => 'french-drains', 'indexnow_submitted_at' => null]);
+
+    $cards = app(LiveBoards::class)->services($site);
+
+    expect($cards[0]['indexnow_at'])->toBeNull();
+});

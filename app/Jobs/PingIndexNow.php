@@ -39,7 +39,10 @@ class PingIndexNow implements ShouldQueue
         $url = $home.'/'.ltrim((string) $content->slug, '/');
         $result = $submitter->submitUrl($site, $url);
 
-        if (! $result['ok']) {
+        if ($result['ok']) {
+            // Stamp the successful submission so the live card can show a "Submitted to Bing" pill.
+            $content->forceFill(['indexnow_submitted_at' => now()])->save();
+        } else {
             Log::info('IndexNow ping skipped/failed', ['url' => $url, 'reason' => $result['reason']]);
         }
     }
