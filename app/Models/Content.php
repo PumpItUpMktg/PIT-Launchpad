@@ -40,6 +40,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $primary_service_id
  * @property string|null $last_publish_error
  * @property Carbon|null $published_at
+ * @property Carbon|null $indexnow_submitted_at
  * @property array<string, mixed>|null $meta
  * @property array<string, mixed>|null $slot_payload
  * @property array<string, mixed>|null $schema_payload
@@ -340,6 +341,7 @@ class Content extends Model
             'wp_post_id' => 'integer',
             'version' => 'integer',
             'published_at' => 'datetime',
+            'indexnow_submitted_at' => 'datetime',
             'relevance_score' => 'decimal:4',
             'local_relevance' => 'boolean',
             'draft_trigger' => DraftTrigger::class,

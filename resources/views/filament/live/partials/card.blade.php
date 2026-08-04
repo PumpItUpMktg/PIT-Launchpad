@@ -35,6 +35,13 @@
             <span title="Appearing in Google Search — this page is indexed."
                   style="font-size:10px; font-weight:700; color:#166534; background:rgba(22,163,74,.14); border:1px solid rgba(22,163,74,.35); padding:1px 8px; border-radius:99px;">✓ In Google</span>
         @endif
+        {{-- IndexNow: submitted to Bing/Yandex/Seznam/Naver to crawl. This is a SUBMISSION acknowledgment
+             (IndexNow doesn't report back whether the page was indexed), so the copy says "Submitted", not
+             "In Bing" — and it's a calmer blue than the earned green "In Google". --}}
+        @if (($card['indexnow_at'] ?? null) !== null)
+            <span title="Submitted to Bing, Yandex & other IndexNow engines to crawl (on {{ $card['indexnow_at'] }}). IndexNow confirms submission, not indexing — Google doesn't use IndexNow."
+                  style="font-size:10px; font-weight:700; color:#075985; background:rgba(2,132,199,.12); border:1px solid rgba(2,132,199,.35); padding:1px 8px; border-radius:99px;">↗ Submitted to Bing</span>
+        @endif
     </div>
     <div class="lv-id">
         <h3>{{ $card['title'] }}@if ($card['locked'])<span class="lv-lock" title="publishes never overwrite this page">locked</span>@endif</h3>

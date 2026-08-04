@@ -149,6 +149,9 @@ class LiveBoards
             'published_at' => $content->published_at?->toDateString(),
             'days_live' => $content->published_at !== null ? (int) $content->published_at->diffInDays(now()) : null,
             'locked' => (bool) $content->locked,
+            // IndexNow: the date this page's URL was accepted by Bing/Yandex/etc (a SUBMISSION
+            // acknowledgment, not a confirmed index — distinct from the earned "In Google" signal).
+            'indexnow_at' => $content->indexnow_submitted_at?->toDateString(),
             // Priority-city state for location cards: true/false when the page has a Market, null
             // otherwise (service/core pages) — drives the "Mark priority" toggle + highlight.
             'market_priority' => $this->marketPriority($content, $site),
