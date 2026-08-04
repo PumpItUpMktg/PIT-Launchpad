@@ -16,6 +16,9 @@ use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
 use App\Integrations\Analytics\Ga4PageTraffic;
 use App\Integrations\Analytics\PageTrafficProvider;
+use App\Integrations\BingWebmaster\BingWebmaster;
+use App\Integrations\BingWebmaster\BingWebmasterProvider;
+use App\Integrations\BingWebmaster\NullBingWebmaster;
 use App\Integrations\Census\CensusGeocoder;
 use App\Integrations\Census\CensusPopulation;
 use App\Integrations\Census\CensusProvider;
@@ -454,6 +457,24 @@ class AppServiceProvider extends ServiceProvider
             (string) config('services.google.gsc_base_url', 'https://www.googleapis.com/webmasters/v3'),
             (int) config('services.google.gsc_cache_ttl', 21600),
         ));
+        // Bing Webmaster Tools — the Bing analog of the GSC seam. Mock-first: the real adapter binds
+        // only when an agency API key is configured (a Site is "connected" once it ALSO has a
+        // bing_site_url); without a key it stays the Null adapter and cards show "Submitted to Bing" only.
+        $this->app->bind(BingWebmasterProvider::class, function () {
+            $key = (string) config('services.bing.api_key', '');
+            if (trim($key) === '') {
+                return new NullBingWebmaster;
+            }
+
+            return new BingWebmaster(
+                $this->app->make(Http::class),
+                $this->app->make(CacheRepository::class),
+                $key,
+                (string) config('services.bing.base_url', 'https://ssl.bing.com/webmaster/api.svc/json'),
+                (int) config('services.bing.timeout', 15),
+                (int) config('services.bing.cache_ttl', 21600),
+            );
+        });
         // Sitemap → Search Console submission (indexing), on the same shared grant + gsc_property.
         $this->app->bind(SitemapSubmitter::class, fn () => new SitemapSubmitter(
             $this->app->make(GoogleConnectionService::class),

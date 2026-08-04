@@ -3,6 +3,7 @@
 namespace App\Guided;
 
 use App\Integrations\Analytics\PageTrafficProvider;
+use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
 use App\Models\Content;
@@ -26,12 +27,13 @@ class LiveMetrics
         private readonly PositionTracking $tracking,
         private readonly SearchConsoleProvider $searchConsole,
         private readonly PageTrafficProvider $traffic,
+        private readonly BingWebmasterProvider $bing,
     ) {}
 
     /**
      * Which sources are connected for the site — drives the boards' source chips once per render.
      *
-     * @return array{serp: bool, gsc: bool, ga: bool}
+     * @return array{serp: bool, gsc: bool, ga: bool, bing: bool}
      */
     public function sources(Site $site): array
     {
@@ -42,6 +44,7 @@ class LiveMetrics
                 ->where('site_id', $site->id)->exists(),
             'gsc' => $this->searchConsole->connected($site),
             'ga' => $this->traffic->connected($site),
+            'bing' => $this->bing->connected($site),
         ];
     }
 
@@ -55,6 +58,7 @@ class LiveMetrics
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
      *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
+     *   bing: array{impressions: ?int, clicks: ?int, ctr: ?float, in_bing: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
      */
@@ -74,6 +78,7 @@ class LiveMetrics
             'series' => $series,
             'refresh_count' => $refreshCount,
             'gsc' => $this->gscBlock($site, $page),
+            'bing' => $this->bingBlock($site, $page),
             'traffic' => $this->trafficBlock($site, $page),
         ];
     }
@@ -168,6 +173,34 @@ class LiveMetrics
         // appearing. (A page indexed with zero impressions simply won't light up yet — we never claim
         // "not indexed", only the positive.)
         return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(), 'in_google' => $stats->impressions > 0, 'queries' => $queries, 'pending' => null];
+    }
+
+    /**
+     * The Bing Webmaster Tools block — the Bing twin of {@see gscBlock}. `in_bing` = earned Bing
+     * impressions (the same positive-only rule as "In Google"), which upgrades the card's blue
+     * "Submitted to Bing" pill to a green "In Bing". Disconnected or no-data-yet → the honest pending
+     * reason, never a fabricated zero. Only reached when a BWT key + bing_site_url are configured;
+     * otherwise the Null adapter reports not-connected and the pill stays "Submitted".
+     *
+     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, in_bing: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
+     */
+    private function bingBlock(?Site $site, Content $page): array
+    {
+        if ($site === null || ! $this->bing->connected($site)) {
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_bing' => false, 'queries' => [], 'pending' => 'Connect Bing Webmaster'];
+        }
+
+        $path = '/'.ltrim((string) $page->slug, '/');
+        $stats = $this->bing->pageStats($site, $path);
+        if ($stats === null) {
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_bing' => false, 'queries' => [], 'pending' => 'Collecting — first Bing data in a few days'];
+        }
+
+        $queries = array_map(fn (PageQuery $q): array => [
+            'query' => $q->query, 'clicks' => $q->clicks, 'impressions' => $q->impressions, 'ctr' => $q->ctr, 'position' => $q->position,
+        ], $this->bing->pageQueries($site, $path));
+
+        return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(), 'in_bing' => $stats->impressions > 0, 'queries' => $queries, 'pending' => null];
     }
 
     /**
