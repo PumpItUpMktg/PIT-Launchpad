@@ -265,9 +265,10 @@ class OperateBlog extends OperatePage
         Notification::make()->success()
             ->title("Re-pushing {$result['count']} published {$noun}(s)")
             ->body(sprintf(
-                'Refreshing canonical / og / schema in %d wave(s) (~%s min to fully queue). Watch the queue-health banner — the worker must be running to drain them.',
+                'Refreshing canonical / og / schema in %d wave(s) (~%s min to fully queue). Watch the queue-health banner — the worker must be running to drain them.%s',
                 $result['waves'],
                 $result['minutes'],
+                $result['sitemap_submitted'] ? ' Sitemap will be resubmitted to Google once the waves land.' : '',
             ))
             ->send();
     }
