@@ -259,6 +259,58 @@ class ConnectionsResource extends Resource
     }
 
     /**
+     * Point a tenant at its verified Bing Webmaster Tools site URL — the `siteUrl` the agency BWT API key
+     * reads for this tenant (the Bing twin of the Google-properties action). Unlike Google there's no
+     * OAuth/property list: the site is verified in BWT out-of-band (easiest via BWT's "import from Google
+     * Search Console"), so this is just the verified URL (defaults to the tenant's domain). Disabled until
+     * the agency BWT API key is configured (BING_WEBMASTER_API_KEY) — without it the seam stays mock.
+     */
+    public static function bingSiteAction(): Action
+    {
+        $keyMissing = trim((string) config('services.bing.api_key', '')) === '';
+
+        return Action::make('bingSite')
+            ->label('Set tenant Bing site')
+            ->icon('heroicon-o-globe-alt')
+            ->modalSubmitActionLabel('Save Bing site')
+            ->disabled($keyMissing)
+            ->modalDescription($keyMissing
+                ? 'Set BING_WEBMASTER_API_KEY (Settings → API access in Bing Webmaster Tools) to enable this. The seam stays mock until then.'
+                : 'Enter this tenant\'s verified Bing Webmaster Tools site URL. Verify the site in BWT first — easiest is "Import from Google Search Console". Once impressions arrive, the card\'s "Submitted to Bing" pill becomes "In Bing".')
+            ->schema([
+                Select::make('site_id')
+                    ->label('Tenant')
+                    ->options(fn (): array => Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all())
+                    ->searchable()
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(function ($state, callable $set): void {
+                        $site = is_string($state) ? Site::query()->find($state) : null;
+                        $set('bing_site_url', $site?->bing_site_url ?: ($site !== null ? rtrim((string) $site->domain_url, '/') : null));
+                    }),
+                TextInput::make('bing_site_url')
+                    ->label('Bing Webmaster site URL')
+                    ->url()
+                    ->placeholder('https://example.com')
+                    ->helperText('The verified BWT site URL — usually the tenant\'s domain. Leave blank to clear (Bing goes back to mock for this tenant).'),
+            ])
+            ->action(function (array $data): void {
+                $site = Site::query()->find((string) $data['site_id']);
+                if ($site === null) {
+                    return;
+                }
+
+                $url = trim((string) ($data['bing_site_url'] ?? ''));
+                $site->forceFill(['bing_site_url' => $url !== '' ? rtrim($url, '/') : null])->save();
+
+                Notification::make()->success()
+                    ->title('Bing site saved')
+                    ->body($site->brand_name.' now reads Bing Webmaster '.($url !== '' ? rtrim($url, '/') : '— (cleared)').'.')
+                    ->send();
+            });
+    }
+
+    /**
      * GSC properties visible to the shared grant, as select options. A failed/absent grant yields an
      * empty list (the picker shows the placeholder) rather than crashing the modal.
      *
