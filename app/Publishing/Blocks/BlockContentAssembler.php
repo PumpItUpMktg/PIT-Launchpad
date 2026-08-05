@@ -732,6 +732,18 @@ final class BlockContentAssembler
         $address = $storefront && is_string($location->address) && trim($location->address) !== '' ? trim($location->address) : null;
         $email = is_string($location->email) && trim($location->email) !== '' ? trim($location->email) : null;
 
+        // §8.1: the "areas we serve" coverage — this location's towns grouped by county, from the
+        // census CoverageArea (scoped via source_location_ids). Rendered as PLAIN names (the per-town
+        // child pages were collapsed away), so every town's url is cleared before it reaches the block.
+        $coverageByCounty = array_map(
+            fn (array $g): array => [
+                'county' => $g['county'],
+                'cities' => array_map(fn (array $c): array => ['label' => $c['label'], 'url' => ''], $g['cities']),
+            ],
+            $this->serviceAreas->byCounty((string) $content->site_id, (string) $location->id),
+        );
+        $coverageCounties = array_map(fn (array $g): string => (string) $g['county'], $coverageByCounty);
+
         return $this->composer->composeLocation(
             slots: $slots,
             images: $images,
@@ -751,7 +763,8 @@ final class BlockContentAssembler
             address: $address,
             email: $email,
             hours: $this->businessHours($location),
-            townLinks: $this->locationTownLinks($content, $location),
+            coverageCounties: $coverageCounties,
+            coverageByCounty: $coverageByCounty,
             localConditions: $this->locationGroundingFacts($location),
             hasMap: is_array($slots['location_map'] ?? null),
             areasMapAvailable: $areasMapAvailable,
@@ -791,81 +804,6 @@ final class BlockContentAssembler
             array_map(fn ($f): string => is_string($f) ? trim($f) : '', $facts),
             fn (string $f): bool => $f !== '',
         ));
-    }
-
-    /**
-     * The town pages parented to this location, as internal links for the hub's "areas we serve"
-     * grid — real, PUBLISHED town pages only (pure town pages, not city-service pages), DE-DUPED by
-     * town (repeated rebuilds can leave several rows per town; the hub must link each town once), each
-     * pointing at its permalink. Each link carries its census SIZE TIER (major/large/medium/small,
-     * matched from `CoverageArea` by name) used only to order the list largest-first — the labels are
-     * not shown. Empty when no town page is live yet (the hub re-publishes as towns go live).
-     *
-     * @return list<array{label: string, url: string, tier: string|null}>
-     */
-    private function locationTownLinks(Content $content, Location $location): array
-    {
-        $tiers = $this->coverageTierMap((string) $content->site_id); // normalized name => [tier, population]
-
-        $links = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->where('kind', ContentKind::Page->value)
-            ->where('page_type', PageType::Location->value)
-            ->where('status', ContentStatus::Published->value)   // link only live town pages (never a draft/dup URL)
-            ->where('parent_location_id', $location->id)
-            ->whereNull('location_id')
-            ->whereNull('primary_service_id')
-            ->whereNotNull('slug')
-            ->get()
-            ->map(function (Content $c) use ($tiers): array {
-                $meta = $tiers[$this->townKey((string) $c->title)] ?? null;
-
-                return [
-                    'key' => $this->townKey((string) $c->title),
-                    'label' => (string) $c->title,
-                    'url' => (new Permalinks)->path($c),
-                    'tier' => $meta['tier'] ?? null,
-                    'population' => $meta['population'] ?? 0,
-                ];
-            })
-            ->all();
-
-        // Largest-first: tier rank (major=0 … small=3, untiered last), then population DESC, then name.
-        $rank = ['major' => 0, 'large' => 1, 'medium' => 2, 'small' => 3];
-        usort($links, fn (array $a, array $b): int => [$rank[(string) $a['tier']] ?? 4, -1 * (int) $a['population'], $a['label']]
-            <=> [$rank[(string) $b['tier']] ?? 4, -1 * (int) $b['population'], $b['label']]);
-
-        // One link per town — drop duplicate rows (kept: the first, i.e. largest/best-ranked).
-        $seen = [];
-        $out = [];
-        foreach ($links as $l) {
-            if ($l['key'] !== '' && isset($seen[$l['key']])) {
-                continue;
-            }
-            $seen[$l['key']] = true;
-            $out[] = ['label' => $l['label'], 'url' => $l['url'], 'tier' => $l['tier']];
-        }
-
-        return $out;
-    }
-
-    /**
-     * A site's coverage towns keyed by normalized name → its census size_tier + population, for tagging
-     * the location hub's town links with a size band. Site-scoped, computed once per hub compose.
-     *
-     * @return array<string, array{tier: string|null, population: int}>
-     */
-    private function coverageTierMap(string $siteId): array
-    {
-        $map = [];
-        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->get(['name', 'size_tier', 'population']) as $area) {
-            $key = $this->townKey((string) $area->name);
-            if ($key !== '') {
-                $map[$key] = ['tier' => $area->size_tier === null ? null : (string) $area->size_tier, 'population' => (int) ($area->population ?? 0)];
-            }
-        }
-
-        return $map;
     }
 
     /** Normalize a town label for matching a coverage row: drop a trailing ", ST", lower-case. */
