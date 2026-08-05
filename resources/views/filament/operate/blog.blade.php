@@ -245,6 +245,11 @@
                             @foreach ($g['articles'] as $a)
                                 <div class="ob-article" wire:key="oba-{{ $a['id'] }}">
                                     <span>{{ $a['title'] }}</span>
+                                    @if (($a['index'] ?? null) !== null)
+                                        @php $ix = $a['index']; $ixc = $ix['indexed'] ? '#166534' : (in_array($ix['state'], ['excluded_redirect','excluded_canonical']) ? '#475569' : ($ix['state'] === 'excluded_blocked' ? '#9f1239' : '#92400e')); @endphp
+                                        <span title="Google URL Inspection: {{ $ix['label'] }}"
+                                              style="margin-left:8px; font-size:10px; font-weight:700; color:{{ $ixc }}; border:1px solid {{ $ixc }}33; background:{{ $ixc }}14; padding:1px 8px; border-radius:99px;">{{ $ix['indexed'] ? '✓ Indexed' : $ix['label'] }}</span>
+                                    @endif
                                     <span class="ob-muted" style="margin-left:auto">{{ $a['published_at'] }}</span>
                                     @if ($a['url'])<a class="ob-btn" href="{{ $a['url'] }}" target="_blank" rel="noopener">View live ↗</a>@endif
                                     <button class="ob-btn" wire:click="repushPost('{{ $a['id'] }}')"

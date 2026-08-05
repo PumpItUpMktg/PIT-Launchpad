@@ -6,6 +6,8 @@ use App\Enums\BlogTargetStatus;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\RenderStatus;
+use App\Integrations\UrlInspection\IndexInspector;
+use App\Integrations\UrlInspection\NullIndexInspector;
 use App\Models\BlogTarget;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -34,6 +36,8 @@ class BlogBoard
 
     /** An approved post older than this (seconds) with no rendering progress = a stalled publish job. */
     public const STALLED_AFTER_SECONDS = 300;
+
+    public function __construct(private readonly IndexInspector $inspector = new NullIndexInspector) {}
 
     /**
      * Candidates awaiting triage — directed (queued keyword targets) first, then reactive by score.
@@ -339,11 +343,18 @@ class BlogBoard
      */
     private function articleCard(Content $c): array
     {
+        $url = $this->url($c->site, $c->slug);
+        // Authoritative index coverage (cache-only — no live API call here; populated by launchpad:audit-index).
+        $status = ($c->site !== null && $url !== null) ? $this->inspector->cached($c->site, $url) : null;
+
         return [
             'id' => (string) $c->id,
             'title' => (string) $c->title,
             'published_at' => $c->published_at?->toDateString(),
-            'url' => $this->url($c->site, $c->slug),
+            'url' => $url,
+            'index' => $status !== null
+                ? ['label' => $status->state->label(), 'indexed' => $status->indexed(), 'state' => $status->state->value]
+                : null,
         ];
     }
 

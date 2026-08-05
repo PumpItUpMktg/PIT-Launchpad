@@ -67,6 +67,8 @@ use App\Integrations\Places\PlacesProvider;
 use App\Integrations\SearchConsole\GoogleSearchConsole;
 use App\Integrations\SearchConsole\SitemapSubmitter;
 use App\Integrations\Serp\SerpProvider;
+use App\Integrations\UrlInspection\GoogleIndexInspector;
+use App\Integrations\UrlInspection\IndexInspector;
 use App\Integrations\Vision\ClaudeVisionClient;
 use App\Integrations\Vision\VisionClient;
 use App\Integrations\Voice\MockVoiceSynthesizer;
@@ -457,6 +459,17 @@ class AppServiceProvider extends ServiceProvider
             (string) config('services.google.gsc_base_url', 'https://www.googleapis.com/webmasters/v3'),
             (int) config('services.google.gsc_cache_ttl', 21600),
         ));
+        // URL Inspection — the authoritative per-URL index-coverage seam (coverageState). Bound to the
+        // real Google adapter like the GSC seam; it self-gates at runtime via connected() (no grant / no
+        // property → not connected → null), so no key check is needed here.
+        $this->app->bind(IndexInspector::class, fn () => new GoogleIndexInspector(
+            $this->app->make(GoogleConnectionService::class),
+            $this->app->make(CacheRepository::class),
+            (string) config('services.google.gsc_inspection_base_url', 'https://searchconsole.googleapis.com/v1'),
+            (int) config('services.google.url_inspection_cache_ttl', 259200),
+            (int) config('services.google.url_inspection_daily_cap', 1800),
+        ));
+
         // Bing Webmaster Tools — the Bing analog of the GSC seam. Mock-first: the real adapter binds
         // only when an agency API key is configured (a Site is "connected" once it ALSO has a
         // bing_site_url); without a key it stays the Null adapter and cards show "Submitted to Bing" only.

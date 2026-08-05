@@ -6,6 +6,7 @@ use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
+use App\Integrations\UrlInspection\IndexInspector;
 use App\Models\Content;
 use App\Models\Keyword;
 use App\Models\PositionSnapshot;
@@ -28,6 +29,7 @@ class LiveMetrics
         private readonly SearchConsoleProvider $searchConsole,
         private readonly PageTrafficProvider $traffic,
         private readonly BingWebmasterProvider $bing,
+        private readonly IndexInspector $indexInspector,
     ) {}
 
     /**
@@ -58,6 +60,7 @@ class LiveMetrics
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
      *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
+     *   index: array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, pending: ?string},
      *   bing: array{impressions: ?int, clicks: ?int, ctr: ?float, in_bing: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
@@ -78,8 +81,41 @@ class LiveMetrics
             'series' => $series,
             'refresh_count' => $refreshCount,
             'gsc' => $this->gscBlock($site, $page),
+            'index' => $this->indexBlock($site, $page),
             'bing' => $this->bingBlock($site, $page),
             'traffic' => $this->trafficBlock($site, $page),
+        ];
+    }
+
+    /**
+     * The AUTHORITATIVE index-coverage block — the real Google URL Inspection `coverageState`, distinct
+     * from the impressions>0 `in_google` proxy. CACHE-ONLY on render (never a live API call — URL
+     * Inspection is quota-limited): it lights up once `launchpad:audit-index` has inspected the URL, else
+     * an honest pending. A `redirect`/`canonical` exclusion is a real, correct state, not a fabricated zero.
+     *
+     * @return array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, pending: ?string}
+     */
+    private function indexBlock(?Site $site, Content $page): array
+    {
+        $blank = ['state' => null, 'label' => null, 'indexed' => false, 'coverage_state' => null, 'canonical_mismatch' => false];
+
+        if ($site === null || ! $this->indexInspector->connected($site)) {
+            return $blank + ['pending' => 'Connect Search Console'];
+        }
+
+        $home = rtrim((string) $site->domain_url, '/');
+        $status = $home !== '' ? $this->indexInspector->cached($site, $home.'/'.ltrim((string) $page->slug, '/')) : null;
+        if ($status === null) {
+            return $blank + ['pending' => 'Run index audit'];
+        }
+
+        return [
+            'state' => $status->state->value,
+            'label' => $status->state->label(),
+            'indexed' => $status->indexed(),
+            'coverage_state' => $status->coverageState,
+            'canonical_mismatch' => $status->canonicalMismatch(),
+            'pending' => null,
         ];
     }
 
