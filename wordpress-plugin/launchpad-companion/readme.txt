@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.28
+Stable tag: 0.9.29
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,14 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.29 =
+* Accessibility (heading order): footer column headings are now `<h2>` (were `<h5>`), so the footer no
+  longer skips heading levels after the page content — a WCAG 1.3.1 / Lighthouse "headings not in
+  sequentially-descending order" fix. The visual size is unchanged (a new `.lp-fcol-title` class carries
+  the styling, independent of the heading level). Footer renders live, so this applies site-wide on
+  update with no content repush. (Page-body heading fixes — location "areas" county h5→h3 and legal
+  subheads h3→h2 — ship control-plane side and take effect on the next repush.)
 
 = 0.9.28 =
 * Accessibility (brand contrast): the palette gains an `accent-ink` role — the brand accent darkened

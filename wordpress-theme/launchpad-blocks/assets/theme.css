@@ -1805,11 +1805,12 @@
     }
 }
 
-.lp-fcol h5 {
+.lp-fcol .lp-fcol-title {
     margin: 0 0 1rem;
     font-family: var(--wp--preset--font-family--heading);
     color: var(--wp--preset--color--base, #fff);
     font-size: 0.8rem;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
 }

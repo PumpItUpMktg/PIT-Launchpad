@@ -1178,7 +1178,7 @@ final class BlockSections
         foreach ($sections as $section) {
             $heading = trim((string) ($section['heading'] ?? ''));
             if ($heading !== '') {
-                $children[] = $this->b->heading(3, $heading, ['className' => 'lp-legal-h']);
+                $children[] = $this->b->heading(2, $heading, ['className' => 'lp-legal-h']);
             }
             foreach (($section['paragraphs'] ?? []) as $paragraph) {
                 if (trim((string) $paragraph) !== '') {
@@ -1410,7 +1410,7 @@ final class BlockSections
             }
 
             $blocks[] = $this->b->group([
-                $this->b->heading(5, $county, ['className' => 'lp-areas-county']),
+                $this->b->heading(3, $county, ['className' => 'lp-areas-county']),
                 $this->b->paragraph(implode(' · ', $parts), ['className' => 'lp-areas-towns', 'textColor' => 'muted']),
             ], ['className' => 'lp-areas-countyblock']);
         }
