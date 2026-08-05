@@ -61,13 +61,18 @@ it('ingests a ready task into the cache and flips it to ingested', function () {
 
     expect($task->refresh()->state)->toBe(SerpTaskState::Ingested);
 
+    // Deploy-safe: the cache holds a PLAIN ARRAY, never a serialized value object
+    // (a cached SerpResultSet deserializes to __PHP_Incomplete_Class under stale
+    // worker code and silently breaks the read → snapshot loop).
     $cached = app(Cache::class)->get($key);
-    expect($cached)->toBeInstanceOf(SerpResultSet::class)
-        ->and($cached->results)->toHaveCount(1);
+    expect($cached)->toBeArray()
+        ->and($cached['results'])->toHaveCount(1)
+        ->and($cached['results'][0]['domain'])->toBe('a.com');
 
     // The provider read is now a cache hit — the async loop is closed.
     $set = ingestStandardProvider()->results('drain cleaning');
-    expect($set->results)->toHaveCount(1)
+    expect($set)->toBeInstanceOf(SerpResultSet::class)
+        ->and($set->results)->toHaveCount(1)
         ->and($set->results[0]->domain)->toBe('a.com');
 });
 

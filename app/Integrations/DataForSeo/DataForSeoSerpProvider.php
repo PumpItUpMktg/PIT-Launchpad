@@ -38,28 +38,35 @@ class DataForSeoSerpProvider implements SerpProvider
 
     public function metrics(string $query): KeywordMetrics
     {
-        /** @var KeywordMetrics */
-        return $this->cache->remember($this->metricsKey($query), $this->ttl(), function () use ($query): KeywordMetrics {
-            $volume = $this->client->liveSearchVolume([$query], $this->locationCode, $this->language)[$query]['volume'] ?? 0;
-            $difficulty = $this->client->bulkKeywordDifficulty([$query], $this->locationCode, $this->language)[$query] ?? 0;
-            $related = $this->client->relatedKeywords($query, $this->locationCode, $this->language, $this->relatedLimit);
+        $key = $this->metricsKey($query);
 
-            return new KeywordMetrics($query, (int) $volume, (int) $difficulty, $related);
-        });
+        $cached = $this->readArray($key);
+        if ($cached !== null) {
+            return KeywordMetrics::fromArray($cached);
+        }
+
+        $volume = $this->client->liveSearchVolume([$query], $this->locationCode, $this->language)[$query]['volume'] ?? 0;
+        $difficulty = $this->client->bulkKeywordDifficulty([$query], $this->locationCode, $this->language)[$query] ?? 0;
+        $related = $this->client->relatedKeywords($query, $this->locationCode, $this->language, $this->relatedLimit);
+
+        $metrics = new KeywordMetrics($query, (int) $volume, (int) $difficulty, $related);
+        $this->cache->put($key, $metrics->toArray(), $this->ttl());
+
+        return $metrics;
     }
 
     public function results(string $query): SerpResultSet
     {
         $key = $this->resultsKey($query);
 
-        $cached = $this->cache->get($key);
-        if ($cached instanceof SerpResultSet) {
-            return $cached;
+        $cached = $this->readArray($key);
+        if ($cached !== null) {
+            return SerpResultSet::fromArray($cached);
         }
 
         if ($this->mode === DataForSeoMode::Live) {
             $set = $this->toResultSet($query, $this->client->liveOrganic($query, $this->locationCode, $this->language, $this->serpDepth));
-            $this->cache->put($key, $set, $this->ttl());
+            $this->cache->put($key, $set->toArray(), $this->ttl());
 
             return $set;
         }
@@ -93,12 +100,12 @@ class DataForSeoSerpProvider implements SerpProvider
 
         foreach ($queries as $query) {
             $related = $this->client->relatedKeywords($query, $this->locationCode, $this->language, $this->relatedLimit);
-            $this->cache->put($this->metricsKey($query), new KeywordMetrics(
+            $this->cache->put($this->metricsKey($query), (new KeywordMetrics(
                 $query,
                 (int) ($volumes[$query]['volume'] ?? 0),
                 (int) ($difficulties[$query] ?? 0),
                 $related,
-            ), $this->ttl());
+            ))->toArray(), $this->ttl());
         }
     }
 
@@ -113,6 +120,30 @@ class DataForSeoSerpProvider implements SerpProvider
         );
 
         return new SerpResultSet($query, $results);
+    }
+
+    /**
+     * Read a deploy-safe cache entry. Returns the array payload on a hit; on a
+     * miss returns null. A hit that is NOT a plain array is a poisoned/legacy
+     * entry — a value object serialized under now-stale code that deserializes to
+     * `__PHP_Incomplete_Class` — so it is dropped and treated as a miss, letting
+     * the next write self-heal the key instead of looping forever.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function readArray(string $key): ?array
+    {
+        $cached = $this->cache->get($key);
+
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        if ($cached !== null) {
+            $this->cache->forget($key);
+        }
+
+        return null;
     }
 
     private function metricsKey(string $query): string
