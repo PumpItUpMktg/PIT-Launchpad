@@ -139,6 +139,10 @@ it('renders the services grid from real child pages only (internal-link safe)', 
         // sibling cards aren't identical context-free "Learn more" links.
         ->toContain('Learn more<span class="lp-sr-only"> about Drain Cleaning</span> →')
         ->not->toContain('>Learn more →</a>')
+        // Contrast (7.3 follow-up): the card link is accent-INK on the light surface, never the raw
+        // mid-tone accent, which failed WCAG 4.5:1 as text.
+        ->toContain('has-accent-ink-color')
+        ->not->toContain('has-accent-color')
         // no invented URLs — only the two the caller resolved
         ->and(substr_count($markup, 'sewergurus.com/'))->toBe(2);
 });

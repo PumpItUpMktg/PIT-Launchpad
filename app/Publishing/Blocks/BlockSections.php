@@ -1520,7 +1520,9 @@ final class BlockSections
             $label = $title !== ''
                 ? 'Learn more<span class="lp-sr-only"> about '.$this->text($title).'</span> →'
                 : 'Learn more →';
-            $children[] = $this->b->paragraph('<a href="'.$this->attr($url).'">'.$label.'</a>', ['textColor' => 'accent']);
+            // accent-ink, not accent: this link is TEXT on the light card surface, so the raw mid-tone
+            // accent fails WCAG 4.5:1 (the eyebrows/meta were fixed in 7.3; this card link was the miss).
+            $children[] = $this->b->paragraph('<a href="'.$this->attr($url).'">'.$label.'</a>', ['textColor' => 'accent-ink']);
         }
 
         return $this->b->group($children, ['backgroundColor' => 'surface', 'className' => 'lp-card']);
