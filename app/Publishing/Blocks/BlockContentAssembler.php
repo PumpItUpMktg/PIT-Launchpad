@@ -117,7 +117,7 @@ final class BlockContentAssembler
         }
 
         if ($content->standard_type === StandardPageType::Faq) {
-            return $this->composer->composeFaq($slots, $ctx, $this->faqItems($slots), $preview);
+            return $this->composer->composeFaq($slots, $ctx, $this->faqItems($slots, $this->offersEmergency($content)), $preview);
         }
 
         if ($content->standard_type === StandardPageType::AreasWeServe) {
@@ -245,7 +245,7 @@ final class BlockContentAssembler
      * @param  array<string, mixed>  $slots
      * @return list<array{question: string, answer: string}>
      */
-    private function faqItems(array $slots): array
+    private function faqItems(array $slots, bool $offersEmergency = false): array
     {
         $raw = $slots['faq'] ?? [];
         if (! is_array($raw)) {
@@ -259,15 +259,54 @@ final class BlockContentAssembler
             }
             $question = trim((string) ($item['question'] ?? $item['q'] ?? ''));
             $answer = trim((string) ($item['answer'] ?? $item['a'] ?? ''));
-            if ($question !== '' && $answer !== '') {
-                $out[] = [
-                    'question' => PhoneNumber::canonicalizeInText($question),
-                    'answer' => PhoneNumber::canonicalizeInText($answer),
-                ];
+            if ($question === '' || $answer === '') {
+                continue;
             }
+            // §8.3: the emergency policy has ONE source — the site's offers_emergency flag (which also drives
+            // the deterministic emergency strip / CTA / trust card). Drop any drafted FAQ answer that
+            // CONTRADICTS it, so a stale "we don't offer emergency service" can never sit beside a "24/7"
+            // strip (the Bedminster contradiction). The affirmative message lives on the flag-driven blocks.
+            if ($this->emergencyContradiction($answer, $offersEmergency)) {
+                continue;
+            }
+            $out[] = [
+                'question' => PhoneNumber::canonicalizeInText($question),
+                'answer' => PhoneNumber::canonicalizeInText($answer),
+            ];
         }
 
         return array_slice($out, 0, 12);
+    }
+
+    /** The site's single-source emergency policy (offers_emergency), for the FAQ consistency filter. */
+    private function offersEmergency(Content $content): bool
+    {
+        $site = Site::withoutGlobalScope(SiteScope::class)->find($content->site_id);
+
+        return $site !== null && (bool) $site->offers_emergency;
+    }
+
+    /**
+     * Does a FAQ answer contradict the single-source emergency flag? offers=true → a DENIAL of emergency
+     * service contradicts; offers=false → a 24/7 / round-the-clock CLAIM contradicts. Conservative — only
+     * an unambiguous emergency-topic statement is dropped, so a normal answer that merely says "call us"
+     * is untouched.
+     */
+    private function emergencyContradiction(string $answer, bool $offersEmergency): bool
+    {
+        $a = mb_strtolower($answer);
+        if (! str_contains($a, 'emergency') && ! str_contains($a, '24/7') && ! str_contains($a, '24 hour')) {
+            return false;
+        }
+
+        $denies = str_contains($a, 'emergency') && (bool) preg_match(
+            '/\b(?:do not|don\x27t|not offer|no dedicated|not available|no emergency|don\x27t offer|not currently offer|without emergency)\b/',
+            $a
+        );
+        $claims = str_contains($a, '24/7') || str_contains($a, '24 hour') || str_contains($a, 'round the clock')
+            || (str_contains($a, 'emergency') && (str_contains($a, 'any time') || str_contains($a, 'anytime')));
+
+        return $offersEmergency ? $denies : $claims;
     }
 
     /**
@@ -358,7 +397,7 @@ final class BlockContentAssembler
             reviews: $service !== null ? $this->serviceReviewQuotes($service) : [],
             related: $this->relatedServiceLinks($content),
             trustStats: $this->trustStats($content),
-            faqs: $this->faqItems($slots),
+            faqs: $this->faqItems($slots, $this->offersEmergency($content)),
             posts: $this->siloPosts($content),
             preview: $preview,
             hasForm: $this->hasLeadForm($content),
@@ -416,7 +455,7 @@ final class BlockContentAssembler
             certifications: $this->mergedCredentials($content),
             reviews: $this->hubReviewQuotes($content),
             trustStats: $this->trustStats($content),
-            faqs: $this->faqItems($slots),
+            faqs: $this->faqItems($slots, $this->offersEmergency($content)),
             posts: $this->siloPosts($content),
             preview: $preview,
         );
@@ -758,7 +797,7 @@ final class BlockContentAssembler
             reviews: $this->locationReviews($location),
             jobs: $this->locationJobs($location),
             localPosts: $this->localPosts($content, $city),
-            faqs: $this->faqItems($slots),
+            faqs: $this->faqItems($slots, $this->offersEmergency($content)),
             trustStats: $this->trustStats($content),
             address: $address,
             email: $email,
