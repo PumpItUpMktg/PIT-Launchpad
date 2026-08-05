@@ -155,7 +155,10 @@ class PublishContentService
         $content->forceFill([
             'wp_post_id' => $wpPostId,
             'status' => ContentStatus::Published,
-            'published_at' => now(),
+            // First-publish date only: a repush is a MODIFICATION, not a new publish — preserve the
+            // original so the dashboard's "Published" date / days-live / ordering don't reset to today
+            // on every re-push. The repush recency is tracked by updated_at (the "Updated" column).
+            'published_at' => $content->published_at ?? now(),
             'last_publish_error' => null,
         ])->save();
 

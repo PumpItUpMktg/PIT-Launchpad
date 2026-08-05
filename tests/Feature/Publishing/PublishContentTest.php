@@ -75,6 +75,25 @@ test('a re-publish re-sends the same ULID (idempotent) and keeps wp_post_id', fu
     Http::assertSent(fn ($request) => $request['content_id'] === $content->id);
 });
 
+test('a re-publish PRESERVES the original published_at (a repush is a modification, not a new publish)', function () {
+    PublishHarness::fakeAdapters();
+    fakeContentEndpoint(wpPostId: 55);
+
+    $site = PublishHarness::site();
+    $content = PublishHarness::approvedPage($site);
+
+    app(PublishContentService::class)->publish($content);
+
+    // Simulate a page that first went live a month ago.
+    $original = now()->subMonth()->startOfDay();
+    $content->fresh()->forceFill(['published_at' => $original])->save();
+
+    app(PublishContentService::class)->publish($content->fresh());
+
+    // published_at is unchanged (first-publish date), so the dashboard's "Published" date never resets.
+    expect($content->fresh()->published_at->eq($original))->toBeTrue();
+});
+
 test('a needs_review row is NEVER published — the desync guard no-ops without mutating status', function () {
     PublishHarness::fakeAdapters();
     fakeContentEndpoint();

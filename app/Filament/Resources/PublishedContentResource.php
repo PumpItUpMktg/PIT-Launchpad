@@ -67,6 +67,9 @@ class PublishedContentResource extends Resource
                 TextColumn::make('silo.name')->label('Silo')->placeholder('—'),
                 TextColumn::make('wp_post_id')->label('WP post')->placeholder('—')->copyable(),
                 TextColumn::make('published_at')->label('Published')->since()->sortable(),
+                // Updated = last repush/modification (published_at is the first-publish date and no longer
+                // moves on a repush). Both are shown so a refreshed page reads as "published X, updated Y".
+                TextColumn::make('updated_at')->label('Updated')->since()->sortable()->toggleable(),
                 TextColumn::make('last_publish_error')->label('Note')->placeholder('—')->limit(40)->wrap()->color('warning'),
             ])
             ->filters([
