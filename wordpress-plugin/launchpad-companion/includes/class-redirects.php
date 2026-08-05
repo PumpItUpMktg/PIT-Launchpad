@@ -41,6 +41,15 @@ final class Redirects
         $to = (string) ($target['to_url'] ?? '');
         $code = (int) ($target['code'] ?? 301);
 
+        // A 4xx code (e.g. 410 Gone) FLUSHES a legacy URL with no destination — emit the status and stop.
+        // wp_safe_redirect needs a Location and can't express "gone", so a redirect is wrong here. Used to
+        // retire out-of-footprint or dead legacy pages from the index (Stage 8.2).
+        if ($code >= 400) {
+            status_header($code);
+            nocache_headers();
+            exit;
+        }
+
         if ($to === '') {
             return;
         }

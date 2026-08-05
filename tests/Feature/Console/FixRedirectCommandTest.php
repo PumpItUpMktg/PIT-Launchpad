@@ -71,3 +71,22 @@ it('requires --site, --from, and --to', function () {
     $this->artisan('launchpad:fix-redirect', ['--site' => 'SPG', '--to' => '/y'])->assertFailed();
     $this->artisan('launchpad:fix-redirect', ['--site' => 'SPG', '--from' => '/x/'])->assertFailed();
 });
+
+it('flushes a legacy URL with --gone (410 Gone, no --to required)', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+
+    // §8.2: an out-of-footprint or dead legacy URL (e.g. /about-us/) is retired from the index.
+    $this->artisan('launchpad:fix-redirect', ['--site' => 'SPG', '--from' => '/about-us/', '--gone' => true, '--apply' => true])
+        ->assertSuccessful();
+
+    $r = Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('from_url', '/about-us/')->first();
+    expect($r)->not->toBeNull()
+        ->and($r->code)->toBe(410)
+        ->and($r->to_url)->toBe('')       // no destination — the plugin emits 410 and stops
+        ->and($r->status)->toBe('active');
+});
+
+it('the footprint config is the single territory source (six marketed + planned states)', function () {
+    // §8.2: in-footprint = PA/NJ/MD (marketed) + NY/CT/DE (planned) → parked, never 410'd.
+    expect(config('launchpad.footprint.states'))->toBe(['PA', 'NJ', 'MD', 'NY', 'CT', 'DE']);
+});
