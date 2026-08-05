@@ -25,6 +25,69 @@ final class ColorContrast
         return ($hi + 0.05) / ($lo + 0.05);
     }
 
+    /**
+     * The accessible TEXT color for a background: whichever of white / near-black has the higher WCAG
+     * contrast. This replaces a naive light/dark threshold — for a mid-tone accent (e.g. orange #ea580c)
+     * the threshold picks white (~3.5:1, fails), but near-black passes (~5.5:1). So the CTA button, band,
+     * and on-* pairs get the legible color, brand accent unchanged.
+     */
+    public static function onColor(string $background): string
+    {
+        $white = '#ffffff';
+        $ink = '#111827'; // near-black (matches the theme's contrast neutral)
+
+        return self::ratio($white, $background) >= self::ratio($ink, $background) ? $white : $ink;
+    }
+
+    /**
+     * Derive an accessible "ink" from a brand color for TEXT ON a background — darken (on a light bg) or
+     * lighten (on a dark bg) the color just until it clears $min, preserving the accent's hue. Used for
+     * accent-colored small text (eyebrows, meta) that would otherwise fail on the light page surface.
+     */
+    public static function ink(string $color, string $against = '#ffffff', float $min = 4.5): string
+    {
+        $norm = self::normalize($color);
+        $bg = self::normalize($against);
+        if ($norm === null || $bg === null) {
+            return $color;
+        }
+        if (self::ratio($norm, $bg) >= $min) {
+            return $norm; // the accent already reads fine on this background
+        }
+
+        $target = self::isLight($bg) ? '#000000' : '#ffffff';
+        for ($t = 0.1; $t <= 0.95; $t += 0.1) {
+            $candidate = self::mix($norm, $target, $t);
+            if (self::ratio($candidate, $bg) >= $min) {
+                return $candidate;
+            }
+        }
+
+        return self::isLight($bg) ? '#111827' : '#ffffff';
+    }
+
+    /** Linear blend of two hex colors, $t of the way from $a to $b (0..1). */
+    private static function mix(string $a, string $b, float $t): string
+    {
+        [$ar, $ag, $ab] = self::rgb($a);
+        [$br, $bg, $bb] = self::rgb($b);
+
+        return sprintf(
+            '#%02x%02x%02x',
+            (int) round($ar + ($br - $ar) * $t),
+            (int) round($ag + ($bg - $ag) * $t),
+            (int) round($ab + ($bb - $ab) * $t),
+        );
+    }
+
+    /** @return array{0: int, 1: int, 2: int} */
+    private static function rgb(string $hex): array
+    {
+        $hex = ltrim(self::normalize($hex) ?? '#000000', '#');
+
+        return [(int) hexdec(substr($hex, 0, 2)), (int) hexdec(substr($hex, 2, 2)), (int) hexdec(substr($hex, 4, 2))];
+    }
+
     /** Normalize a hex string to #rrggbb (lowercased), or null when not valid hex. */
     public static function normalize(string $hex): ?string
     {

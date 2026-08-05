@@ -135,7 +135,10 @@ it('renders the services grid from real child pages only (internal-link safe)', 
     expect($markup)->toContain('Drain Cleaning')
         ->toContain('href="https://sewergurus.com/drain-cleaning"')
         ->toContain('Sewer Line Services')
-        ->toContain('Learn more →')
+        // Descriptive anchor (7.6): visible "Learn more →" + a visually-hidden service name, so the
+        // sibling cards aren't identical context-free "Learn more" links.
+        ->toContain('Learn more<span class="lp-sr-only"> about Drain Cleaning</span> →')
+        ->not->toContain('>Learn more →</a>')
         // no invented URLs — only the two the caller resolved
         ->and(substr_count($markup, 'sewergurus.com/'))->toBe(2);
 });

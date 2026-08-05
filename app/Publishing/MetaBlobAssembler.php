@@ -555,8 +555,10 @@ class MetaBlobAssembler
             $metaSeo = is_array($sibling->meta['seo'] ?? null) ? $sibling->meta['seo'] : [];
             $blurb = trim((string) ($metaSeo['meta_description'] ?? ''));
             $url = $home.ltrim((string) $sibling->slug, '/');
+            // Descriptive anchor: a visually-hidden suffix names the target service so sibling cards
+            // aren't identical "Learn more" links (link-purpose a11y + SEO anchor text). Crawlers read it.
             $body = ($blurb !== '' ? '<p>'.e($blurb).'</p>' : '')
-                .'<p><a href="'.e($url).'">Learn more →</a></p>';
+                .'<p><a href="'.e($url).'">Learn more<span class="lp-sr-only"> about '.e($title).'</span> →</a></p>';
 
             $cards[] = ['title' => $title, 'body' => $body];
         }

@@ -1001,6 +1001,9 @@ it('composes the Areas We Serve page — reuses the serviceAreas block (map + co
         ->toContain('The towns and counties we cover')     // areas section heading
         ->toContain('class="lp-areas-map"')                // interactive map mount (mapAvailable)
         ->toContain('Essex County')                        // real served county
+        // Heading order (7.4): the section head is h2, so a county sub-group is h3 — never h5 (a skip).
+        ->toContain('<h3 class="lp-areas-county">Essex County</h3>')
+        ->not->toContain('<h5 class="lp-areas-county"')
         ->toContain('Newark')                              // major city grouped under it
         ->toContain('Don’t see your town?');               // closing CTA
 });
@@ -1056,6 +1059,9 @@ it('composes the Privacy Policy from a real template filled with tenant data (ne
         ->and($markup)
         ->toContain('lp-legal')
         ->toContain('Privacy Policy')
+        // Heading order (7.4): the doc title is the page h1, so its subsection heads are h2 — never h3 (a skip).
+        ->toContain('<h1 class="lp-legal-title">Privacy Policy</h1>')
+        ->toContain('<h2 class="lp-legal-h">Information we collect</h2>')
         ->toContain('Effective date:')
         ->toContain('Sewer Gurus')                                  // real business name, filled in
         ->toContain('sewergurus.com')                               // the site host, from the domain

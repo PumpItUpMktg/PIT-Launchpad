@@ -234,7 +234,7 @@ final class SlotRenderer
             'div' => ['class' => true, 'id' => true, 'style' => true],
         ];
 
-        return wp_kses($embed, $allowed);
+        return self::ensure_iframe_title(wp_kses($embed, $allowed), 'Contact form');
     }
 
     /** A lazy map embed from {embed_url} or {lat,lng}. */
@@ -252,9 +252,28 @@ final class SlotRenderer
             return '';
         }
 
+        // title is required for an accessible name (WCAG 4.1.2 / Lighthouse "iframe has no title").
         return sprintf(
-            '<iframe class="lp-map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="%s"></iframe>',
+            '<iframe class="lp-map" title="Location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="%s"></iframe>',
             esc_url($src)
+        );
+    }
+
+    /**
+     * Guarantee every <iframe> in a snippet carries a title (its accessible name). Operator-pasted form
+     * embeds often omit it, which fails WCAG 4.1.2 / the Lighthouse "frame has no accessible name" audit.
+     * Only iframes WITHOUT a title are touched — a provider that already set one is left alone.
+     */
+    public static function ensure_iframe_title(string $html, string $default_title): string
+    {
+        if ($html === '' || stripos($html, '<iframe') === false) {
+            return $html;
+        }
+
+        return (string) preg_replace_callback(
+            '/<iframe\b(?![^>]*\btitle\s*=)([^>]*)>/i',
+            static fn (array $m): string => '<iframe title="' . esc_attr($default_title) . '"' . $m[1] . '>',
+            $html
         );
     }
 

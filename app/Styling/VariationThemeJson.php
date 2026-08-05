@@ -2,6 +2,7 @@
 
 namespace App\Styling;
 
+use App\Branding\ColorContrast;
 use App\Console\Commands\BuildThemeVariationsCommand;
 
 /**
@@ -54,7 +55,11 @@ final class VariationThemeJson
                         ['slug' => 'border', 'name' => 'Border', 'color' => $p['border']],
                         ['slug' => 'primary', 'name' => 'Primary', 'color' => $p['primary']],
                         ['slug' => 'accent', 'name' => 'Accent', 'color' => $p['highlight']],
+                        // on-accent / on-button are already WCAG max-contrast (computed in StyleVariation::palette()).
                         ['slug' => 'on-accent', 'name' => 'On accent', 'color' => $p['on_accent']],
+                        // accent-ink: the accent hue darkened to read as TEXT on the light base surface
+                        // (eyebrows / meta) — the raw accent is a mid-tone that fails 4.5:1 as small text.
+                        ['slug' => 'accent-ink', 'name' => 'Accent ink', 'color' => ColorContrast::ink($p['highlight'], $p['base'])],
                         ['slug' => 'button', 'name' => 'Button', 'color' => $p['button']],
                         ['slug' => 'on-button', 'name' => 'On button', 'color' => $p['on_button']],
                     ],

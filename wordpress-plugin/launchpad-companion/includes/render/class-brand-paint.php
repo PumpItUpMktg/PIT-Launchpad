@@ -33,7 +33,7 @@ if (! defined('ABSPATH')) {
 final class BrandPaint
 {
     /** The brand-carrying color roles, in theme.json palette order. */
-    private const COLOR_SLUGS = ['base', 'surface', 'contrast', 'muted', 'border', 'primary', 'accent', 'on-accent', 'button', 'on-button'];
+    private const COLOR_SLUGS = ['base', 'surface', 'contrast', 'muted', 'border', 'primary', 'accent', 'on-accent', 'accent-ink', 'button', 'on-button'];
 
     /** custom-token key (in the stored option) => the `--wp--custom--*` variable it overrides. */
     private const CUSTOM_VARS = [

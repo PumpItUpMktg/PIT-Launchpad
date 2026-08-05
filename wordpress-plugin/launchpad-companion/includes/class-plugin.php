@@ -14,6 +14,7 @@ use Launchpad\Companion\Content\EditGuard;
 use Launchpad\Companion\Content\KitTaxonomy;
 use Launchpad\Companion\Render\Assets;
 use Launchpad\Companion\Render\BrandPaint;
+use Launchpad\Companion\Render\ScriptDelay;
 use Launchpad\Companion\Render\WeatherAlert;
 use Launchpad\Companion\Render\Shortcodes;
 use Launchpad\Companion\Render\SiteChrome;
@@ -81,6 +82,9 @@ final class Plugin
         // when WordPress's global-styles merge doesn't reflect the user global-styles write.
         ( new BrandPaint() )->register();
         ( new WeatherAlert() )->register();
+        // Performance: delay heavy third-party scripts (Maps JS / LeadConnector chat / GTM / Cloudflare
+        // Insights) until first interaction so they stop starving the critical path on throttled links.
+        ( new ScriptDelay() )->register();
 
         // SEO (native; suppress competing SEO plugins on managed posts).
         // Force core title-tag so the document <title> is emitted ONCE, through

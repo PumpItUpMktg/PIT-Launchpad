@@ -154,7 +154,10 @@ final class SiteChrome
             return '';
         }
 
-        return '<div class="lp-fcol"><h5>' . esc_html($title) . '</h5>' . $this->navList($links, 'lp-fnav') . '</div>';
+        // h2 (not h5): footer columns are the top-level sections of the site-info landmark. h5 skipped
+        // levels after the page's content headings (a WCAG heading-order flag). The .lp-fcol-title class
+        // carries the styling so the visual size is independent of the heading level.
+        return '<div class="lp-fcol"><h2 class="lp-fcol-title">' . esc_html($title) . '</h2>' . $this->navList($links, 'lp-fnav') . '</div>';
     }
 
     /**

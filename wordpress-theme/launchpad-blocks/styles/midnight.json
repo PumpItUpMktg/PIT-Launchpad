@@ -44,7 +44,12 @@
                 {
                     "slug": "on-accent",
                     "name": "On accent",
-                    "color": "#06131f"
+                    "color": "#111827"
+                },
+                {
+                    "slug": "accent-ink",
+                    "name": "Accent ink",
+                    "color": "#38bdf8"
                 },
                 {
                     "slug": "button",
@@ -54,7 +59,7 @@
                 {
                     "slug": "on-button",
                     "name": "On button",
-                    "color": "#ffffff"
+                    "color": "#111827"
                 }
             ]
         },

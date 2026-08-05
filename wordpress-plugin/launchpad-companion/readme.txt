@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.26
+Stable tag: 0.9.30
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,38 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.30 =
+* Accessibility (iframe title): every rendered `<iframe>` now carries a title (its accessible name) —
+  WCAG 4.1.2 / Lighthouse "frame has no accessible name". The Launchpad-generated map embed gets
+  `title="Location map"`, and an operator-pasted lead-form embed that omits a title has `title="Contact
+  form"` injected (a provider that already set one is left untouched). Both render live, so this applies
+  site-wide on update with no content repush.
+
+= 0.9.29 =
+* Accessibility (heading order): footer column headings are now `<h2>` (were `<h5>`), so the footer no
+  longer skips heading levels after the page content — a WCAG 1.3.1 / Lighthouse "headings not in
+  sequentially-descending order" fix. The visual size is unchanged (a new `.lp-fcol-title` class carries
+  the styling, independent of the heading level). Footer renders live, so this applies site-wide on
+  update with no content repush. (Page-body heading fixes — location "areas" county h5→h3 and legal
+  subheads h3→h2 — ship control-plane side and take effect on the next repush.)
+
+= 0.9.28 =
+* Accessibility (brand contrast): the palette gains an `accent-ink` role — the brand accent darkened
+  just enough to read as small TEXT on the light page surface — and BrandPaint now re-declares it as
+  `--wp--preset--color--accent-ink`. Eyebrows, meta lines, review stars, team roles and contact labels
+  bind to it instead of the raw accent (a mid-tone that failed WCAG 4.5:1 as text). On-accent / on-button
+  text is now the WCAG max-contrast choice, so a CTA button with a mid-tone fill (e.g. orange) gets
+  legible near-black text rather than a sub-4.5:1 white. Bundled curated-palette mirror updated in lockstep.
+
+= 0.9.27 =
+* Performance: delay heavy THIRD-PARTY scripts until first user interaction, so they stop starving the
+  critical path on throttled connections (the download — not execution — is what blocks first paint).
+  Default host allowlist: Google Maps JS API, the LeadConnector chat widget CDNs, Google Tag Manager,
+  and Cloudflare Insights. Matched `<script src>` tags become inert `type="text/plain"` placeholders and
+  a tiny loader re-runs them, in order, on the first scroll/click/key/touch (idle + 8s fallback). Only
+  full frontend HTML GET responses are touched; first-party/theme/critical scripts are never matched.
+  Filterable: `lpc_delay_script_hosts` (adjust the list) and `lpc_delay_scripts_enabled` (off to disable).
 
 = 0.9.26 =
 * Footer: replace the platform tagline in the footer bottom bar with an agency credit

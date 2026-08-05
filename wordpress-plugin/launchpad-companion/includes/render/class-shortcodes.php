@@ -139,6 +139,10 @@ final class Shortcodes
             return '';
         }
 
+        // Guarantee the embed's iframe has a title (accessible name) even when the operator's pasted
+        // snippet omits one — WCAG 4.1.2 / Lighthouse "frame has no accessible name".
+        $embed = SlotRenderer::ensure_iframe_title($embed, 'Contact form');
+
         return '<div class="lp-form-embed">' . $embed . '</div>';
     }
 
