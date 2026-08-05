@@ -5,6 +5,7 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\KeywordSource;
 use App\Enums\PageType;
+use App\Enums\SerpTaskState;
 use App\Guided\GrowDashboard;
 use App\Guided\LiveBoards;
 use App\Guided\LiveMetrics;
@@ -18,6 +19,7 @@ use App\Models\Content;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\PositionSnapshot;
+use App\Models\SerpTask;
 use App\Models\Service;
 use App\Models\Site;
 
@@ -131,6 +133,25 @@ it('resolves the position block from the snapshot series with an honest delta an
     $about = lbPublished($site, ['page_type' => PageType::Utility, 'title' => 'About', 'slug' => 'about']);
     $core = app(LiveBoards::class)->core($site);
     expect(collect($core)->firstWhere('id', $about->id)['metrics']['position']['pending'])->toBe('No target keyword — brand page');
+});
+
+it('distinguishes "Not yet ranking" (SERP pulled, site absent) from "First snapshot pending" (no pull yet)', function () {
+    $site = lbSite();
+
+    // Pulled but unranked: an organic SERP for this query has been fetched (ingested) — the site was
+    // looked up and is not in the results — yet no snapshot exists.
+    $pulled = Keyword::create(['site_id' => $site->id, 'query' => 'basement waterproofing', 'source' => KeywordSource::Seed, 'status' => 'candidate']);
+    $pulledPage = lbPublished($site, ['page_type' => PageType::Service, 'title' => 'Basement Waterproofing', 'slug' => 'basement-waterproofing', 'target_keyword_id' => $pulled->id]);
+    SerpTask::factory()->create(['function' => 'organic', 'query' => 'basement waterproofing', 'state' => SerpTaskState::Ingested]);
+
+    // Never pulled: a young target with no completed SERP and no snapshot.
+    $unpulled = Keyword::create(['site_id' => $site->id, 'query' => 'sump pump maintenance', 'source' => KeywordSource::Seed, 'status' => 'candidate']);
+    $unpulledPage = lbPublished($site, ['page_type' => PageType::Service, 'title' => 'Sump Pump Maintenance', 'slug' => 'sump-pump-maintenance', 'target_keyword_id' => $unpulled->id]);
+
+    $cards = collect(app(LiveBoards::class)->services($site))->keyBy('id');
+
+    expect($cards[$pulledPage->id]['metrics']['position']['pending'])->toBe('Not yet ranking')
+        ->and($cards[$unpulledPage->id]['metrics']['position']['pending'])->toBe('First snapshot pending');
 });
 
 it('renders Search Console numbers once the provider connects (and the rollup sums them)', function () {

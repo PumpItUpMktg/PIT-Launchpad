@@ -2,6 +2,7 @@
 
 namespace App\Guided;
 
+use App\Enums\SerpTaskState;
 use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\SearchConsole\PageQuery;
@@ -11,6 +12,7 @@ use App\Models\Content;
 use App\Models\Keyword;
 use App\Models\PositionSnapshot;
 use App\Models\Scopes\SiteScope;
+use App\Models\SerpTask;
 use App\Models\Site;
 use App\Operator\Coverage\PositionTracking;
 use Illuminate\Support\Carbon;
@@ -132,7 +134,12 @@ class LiveMetrics
         $standings = $this->tracking->forKeyword($keyword);
 
         if ($standings->organicRank === null && $standings->localByMarket === []) {
-            return [['rank' => null, 'delta' => null, 'pending' => 'First snapshot pending'], ['rank' => null, 'market' => null], [], $standings->refreshCount];
+            // Distinguish "we haven't pulled yet" from "we pulled and you're simply not in the results
+            // yet". A completed (ingested) organic SERP for this query means the site WAS checked and
+            // wasn't found — honest for a young page — vs no pull having landed at all.
+            $pending = $this->pulledUnranked($keyword) ? 'Not yet ranking' : 'First snapshot pending';
+
+            return [['rank' => null, 'delta' => null, 'pending' => $pending], ['rank' => null, 'market' => null], [], $standings->refreshCount];
         }
 
         // Best (lowest-rank) local-pack standing across markets, for the local chip.
@@ -154,6 +161,22 @@ class LiveMetrics
             $standings->organicSeries,
             $standings->refreshCount,
         ];
+    }
+
+    /**
+     * Has an organic SERP for this keyword actually been fetched (a completed, ingested standard-mode
+     * task) while no snapshot exists? Then the site was looked up and simply isn't in the tracked
+     * results yet — "Not yet ranking" — as opposed to no pull having landed at all. Matches on the
+     * shared query (the cache/task key is per query × locale, not per tenant), so any tenant's
+     * completed pull that this site was scored against counts.
+     */
+    private function pulledUnranked(Keyword $keyword): bool
+    {
+        return SerpTask::query()
+            ->where('function', 'organic')
+            ->where('query', $keyword->query)
+            ->where('state', SerpTaskState::Ingested->value)
+            ->exists();
     }
 
     /**
