@@ -26,14 +26,33 @@
 @endphp
 @php $inGoogle = $gsc['in_google'] ?? false; @endphp
 @php $inBing = ($m['bing']['in_bing'] ?? false); @endphp
-<div class="lv-card" wire:key="lv-{{ $card['id'] }}" @if ($inGoogle) style="box-shadow: inset 3px 0 0 #16a34a;" @endif>
+@php
+    // Authoritative index coverage (URL Inspection), populated once `launchpad:audit-index` has run.
+    // When present it SUPERSEDES the impressions>0 "In Google" proxy. Colour by real coverageState;
+    // a redirect/canonical exclusion is a NEUTRAL expected state (grey), not a failure.
+    $index = $m['index'] ?? null;
+    $hasIndex = ($index['state'] ?? null) !== null && ($index['pending'] ?? null) === null;
+    $indexColor = match ($index['state'] ?? null) {
+        'indexed' => ['#166534', 'rgba(22,163,74,.14)', 'rgba(22,163,74,.35)'],
+        'excluded_redirect', 'excluded_canonical' => ['#475569', 'rgba(100,116,139,.12)', 'rgba(100,116,139,.35)'],
+        'excluded_blocked' => ['#9f1239', 'rgba(190,18,60,.12)', 'rgba(190,18,60,.35)'],
+        default => ['#92400e', 'rgba(217,119,6,.12)', 'rgba(217,119,6,.35)'],
+    };
+    $indexTitle = $hasIndex
+        ? 'Google URL Inspection: '.($index['coverage_state'] ?: $index['label']).(($index['canonical_mismatch'] ?? false) ? ' — Google chose a different canonical' : '')
+        : '';
+@endphp
+<div class="lv-card" wire:key="lv-{{ $card['id'] }}" @if ($inGoogle || ($index['indexed'] ?? false)) style="box-shadow: inset 3px 0 0 #16a34a;" @endif>
     <div class="lv-top">
         <span class="lv-type">{{ ucfirst($card['type']) }}</span>
         <span class="lv-state">Live{{ $card['days_live'] !== null ? ' · '.$card['days_live'].'d' : '' }}</span>
         {{-- Indexing state: a page with Search Console impressions is definitely in Google's index and
              appearing. We only ever show the positive — no false "not indexed" for a young page. --}}
-        @if ($inGoogle)
-            <span title="Appearing in Google Search — this page is indexed."
+        @if ($hasIndex)
+            <span title="{{ $indexTitle }}"
+                  style="font-size:10px; font-weight:700; color:{{ $indexColor[0] }}; background:{{ $indexColor[1] }}; border:1px solid {{ $indexColor[2] }}; padding:1px 8px; border-radius:99px;">{{ $index['indexed'] ? '✓ Indexed' : $index['label'] }}</span>
+        @elseif ($inGoogle)
+            <span title="Appearing in Google Search — this page is indexed. (Run the index audit for the verified coverage state.)"
                   style="font-size:10px; font-weight:700; color:#166534; background:rgba(22,163,74,.14); border:1px solid rgba(22,163,74,.35); padding:1px 8px; border-radius:99px;">✓ In Google</span>
         @endif
         {{-- Bing, two honest stages. EARNED "In Bing" (green) once Bing Webmaster Tools reports real

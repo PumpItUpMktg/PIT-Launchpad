@@ -1,0 +1,89 @@
+<?php
+
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Enums\IndexCoverageState;
+use App\Integrations\UrlInspection\IndexInspector;
+use App\Integrations\UrlInspection\IndexStatus;
+use App\Models\Content;
+use App\Models\Site;
+use App\Operator\IndexCoverage;
+
+/** A deterministic IndexInspector keyed by URL — no HTTP. */
+function bindFakeInspector(array $byUrl, bool $connected = true): void
+{
+    $fake = new class($byUrl, $connected) implements IndexInspector
+    {
+        public function __construct(private array $byUrl, private bool $connected) {}
+
+        public function connected(Site $site): bool
+        {
+            return $this->connected;
+        }
+
+        public function inspect(Site $site, string $url): ?IndexStatus
+        {
+            return $this->byUrl[$url] ?? null;
+        }
+
+        public function cached(Site $site, string $url): ?IndexStatus
+        {
+            return $this->byUrl[$url] ?? null;
+        }
+    };
+    app()->instance(IndexInspector::class, $fake);
+}
+
+function status(string $url, IndexCoverageState $state, string $coverage = ''): IndexStatus
+{
+    return new IndexStatus(url: $url, state: $state, coverageState: $coverage ?: $state->label());
+}
+
+it('tallies real index coverage across published pages and posts', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $mk = fn (string $slug, ContentKind $kind) => Content::factory()->create([
+        'site_id' => $site->id, 'kind' => $kind, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => $slug, 'title' => $slug,
+    ]);
+    $mk('hoboken-nj', ContentKind::Page);
+    $mk('clifton-nj', ContentKind::Page);
+    $mk('a-blog-post', ContentKind::Post);
+
+    bindFakeInspector([
+        'https://spg.example/hoboken-nj' => status('https://spg.example/hoboken-nj', IndexCoverageState::Indexed),
+        'https://spg.example/clifton-nj' => status('https://spg.example/clifton-nj', IndexCoverageState::CrawledNotIndexed),
+        'https://spg.example/a-blog-post' => status('https://spg.example/a-blog-post', IndexCoverageState::Indexed),
+    ]);
+
+    $r = app(IndexCoverage::class)->audit($site, live: true);
+
+    expect($r['connected'])->toBeTrue()
+        ->and($r['total'])->toBe(3)
+        ->and($r['indexed'])->toBe(2)
+        ->and($r['inspected'])->toBe(3)
+        ->and($r['by_state']['indexed'])->toBe(2)
+        ->and($r['by_state']['crawled_not_indexed'])->toBe(1);
+});
+
+it('reports nothing fabricated when not connected', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'x', 'title' => 'X']);
+    bindFakeInspector([], connected: false);
+
+    $r = app(IndexCoverage::class)->audit($site, live: true);
+
+    expect($r['connected'])->toBeFalse()
+        ->and($r['indexed'])->toBe(0)
+        ->and($r['not_inspected'])->toBe(1);
+});
+
+it('the audit-index command prints the coverage summary', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'hoboken-nj', 'title' => 'Hoboken']);
+    bindFakeInspector([
+        'https://spg.example/hoboken-nj' => status('https://spg.example/hoboken-nj', IndexCoverageState::Indexed),
+    ]);
+
+    $this->artisan('launchpad:audit-index --site=SPG')
+        ->expectsOutputToContain('1 of 1 published URLs indexed')
+        ->assertSuccessful();
+});

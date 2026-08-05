@@ -161,6 +161,14 @@ return [
         // more than one submit per window buys nothing and Google discourages repeated resubmits.
         'sitemap_submit_on_repush' => (bool) env('GOOGLE_SITEMAP_SUBMIT_ON_REPUSH', true),
         'sitemap_submit_debounce_hours' => (int) env('GOOGLE_SITEMAP_SUBMIT_DEBOUNCE_HOURS', 12),
+        // URL Inspection API — the AUTHORITATIVE per-URL index-coverage signal (coverageState: indexed /
+        // crawled-not-indexed / excluded-by-redirect …), distinct from impressions>0. It lives on a
+        // different host (searchconsole.googleapis.com/v1) than the searchAnalytics base above. Quota is
+        // 2,000/day + 600/min per property, so an audit is BATCHED + CACHED (results change ~daily) and
+        // capped per day; cards read the cached result, never fire a live inspection on render.
+        'gsc_inspection_base_url' => env('GOOGLE_GSC_INSPECTION_BASE_URL', 'https://searchconsole.googleapis.com/v1'),
+        'url_inspection_cache_ttl' => (int) env('GOOGLE_URL_INSPECTION_CACHE_TTL', 259200), // 3 days
+        'url_inspection_daily_cap' => (int) env('GOOGLE_URL_INSPECTION_DAILY_CAP', 1800),    // under the 2,000/day quota
         // Per-page GSC totals are cached this long on the Live cards (GSC data lags ~2-3 days, so a
         // board render need not re-query every card). Default 6h.
         'gsc_cache_ttl' => (int) env('GOOGLE_GSC_CACHE_TTL', 21600),
