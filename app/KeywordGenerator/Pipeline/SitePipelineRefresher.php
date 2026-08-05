@@ -5,8 +5,10 @@ namespace App\KeywordGenerator\Pipeline;
 use App\Enums\MarketTier;
 use App\Enums\PipelineTrigger;
 use App\Enums\SampleType;
+use App\Integrations\DataForSeo\IngestSerpTasks;
 use App\Integrations\LocalGrid\LocalGridProvider;
 use App\Integrations\Serp\SerpProvider;
+use App\Jobs\FinalizeSitePositions;
 use App\KeywordGenerator\Cadence\CadenceScheduler;
 use App\KeywordGenerator\Cadence\SamplingTask;
 use App\KeywordGenerator\Cadence\Tiering;
@@ -43,6 +45,14 @@ class SitePipelineRefresher
     private const LANE_ORGANIC = 'organic';
 
     private const LANE_LOCAL = 'local';
+
+    /**
+     * A keyword+lane captured within this window is treated as already-finalized this on-demand cycle,
+     * so {@see finalize()}'s bounded retries stay idempotent (no duplicate snapshots). Sized to comfortably
+     * cover the finalize retry span; well under the daily tracking cadence so it never suppresses a
+     * legitimately-scheduled next-day snapshot.
+     */
+    private const FINALIZE_GUARD_MINUTES = 60;
 
     public function __construct(
         private readonly KeywordPipeline $pipeline,
@@ -116,6 +126,37 @@ class SitePipelineRefresher
         return $this->track($site, force: true);
     }
 
+    /**
+     * The BACK HALF of the on-demand pull, run by the delayed {@see FinalizeSitePositions}
+     * job after {@see trackNow()} has posted the standard-mode tasks and {@see IngestSerpTasks}
+     * has had time to collect them into cache. It re-reads every scored keyword's now-cached SERP/grid
+     * and writes the snapshot the cards display — closing the post → ingest → read loop so "Refresh
+     * rankings now" self-completes in minutes instead of waiting for the daily driver.
+     *
+     * Safe to call repeatedly: a cache MISS (task not ingested yet) re-reads via the deduped dispatcher,
+     * so it never re-posts or double-spends; and a per-keyword recent-capture guard ({@see capturedRecently()})
+     * makes each retry idempotent — a keyword already finalized this cycle is skipped, so the retries
+     * don't stack duplicate snapshots on the time-series.
+     *
+     * @return int snapshots written this pass
+     */
+    public function finalize(Site $site): int
+    {
+        $host = $this->host($site->domain_url);
+
+        $keywords = Keyword::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('status', 'scored')
+            ->get();
+
+        $priorityMarket = Market::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('tier', MarketTier::Priority->value)
+            ->first();
+
+        return $this->capture($this->allTasks($keywords, $host, $priorityMarket), $host, $priorityMarket, guardRecent: true);
+    }
+
     private function dueForDiscovery(Site $site): bool
     {
         $latest = Keyword::withoutGlobalScope(SiteScope::class)
@@ -167,9 +208,26 @@ class SitePipelineRefresher
             ? $this->allTasks($keywords, $host, $priorityMarket)
             : $this->scheduledTasks($site, $keywords, $host, $priorityMarket);
 
+        return $this->capture($sample, $host, $priorityMarket, guardRecent: false);
+    }
+
+    /**
+     * Read each sampled (keyword × lane) and record its snapshot. Records only real signal — a query
+     * the site doesn't rank for, or a not-yet-collected standard-mode grid, writes no snapshot.
+     *
+     * @param  list<array{0: Keyword, 1: string}>  $sample
+     * @param  bool  $guardRecent  When true (the finalize retries), skip a keyword+lane already captured
+     *                             within {@see FINALIZE_GUARD_MINUTES} so repeated passes don't duplicate.
+     * @return int snapshots written
+     */
+    private function capture(array $sample, ?string $host, ?Market $priorityMarket, bool $guardRecent): int
+    {
         $snapshots = 0;
         foreach ($sample as [$keyword, $lane]) {
             if ($lane === self::LANE_ORGANIC && $host !== null) {
+                if ($guardRecent && $this->capturedRecently($keyword, null)) {
+                    continue;
+                }
                 $owned = $this->serp->results($keyword->query)->ownedBy($host);
                 if ($owned !== []) {
                     usort($owned, fn ($a, $b) => $a->position <=> $b->position);
@@ -180,6 +238,9 @@ class SitePipelineRefresher
                 // City keywords pin their own market; ordinary keywords fall back to the priority market.
                 $market = $this->localMarketFor($keyword, $priorityMarket);
                 if ($market !== null) {
+                    if ($guardRecent && $this->capturedRecently($keyword, $market->id)) {
+                        continue;
+                    }
                     $grid = $this->grid->grid($keyword->query, $market->id);
                     if ($grid->coverage > 0.0 || $grid->packCompetitors !== []) {
                         $this->tracker->recordLocalGrid($keyword, $market, $grid);
@@ -190,6 +251,15 @@ class SitePipelineRefresher
         }
 
         return $snapshots;
+    }
+
+    /** A keyword+lane already has a snapshot from this on-demand cycle — skip it so retries don't duplicate. */
+    private function capturedRecently(Keyword $keyword, ?string $marketId): bool
+    {
+        $query = PositionSnapshot::withoutGlobalScope(SiteScope::class)->where('keyword_id', $keyword->id);
+        $query = $marketId === null ? $query->whereNull('market_id') : $query->where('market_id', $marketId);
+
+        return $query->where('captured_at', '>=', now()->subMinutes(self::FINALIZE_GUARD_MINUTES))->exists();
     }
 
     /**
