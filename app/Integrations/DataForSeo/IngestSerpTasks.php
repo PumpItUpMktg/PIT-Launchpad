@@ -96,13 +96,17 @@ class IngestSerpTasks implements ShouldQueue
     }
 
     /**
-     * Normalize a collected result into what the provider's read path expects:
-     * a SerpResultSet for organic, a parsed maps-item list for a grid cell.
+     * Normalize a collected result into the deploy-safe cache shape the provider's
+     * read path expects — plain arrays only, never a value object. Organic caches
+     * the {@see SerpResultSet::toArray()} shape (rebuilt on read via `fromArray`);
+     * maps caches a parsed maps-item list for a grid cell. Caching the object here
+     * is what previously poisoned the read (a `__PHP_Incomplete_Class` under stale
+     * worker code), stalling every position at "pending".
      *
      * @param  array<int, mixed>  $result
-     * @return SerpResultSet|list<array{rank: int|null, name: string, domain: string|null}>
+     * @return array<string, mixed>|list<array{rank: int|null, name: string, domain: string|null}>
      */
-    private function normalize(string $function, string $query, array $result): SerpResultSet|array
+    private function normalize(string $function, string $query, array $result): array
     {
         if ($function === 'maps') {
             return DataForSeoClient::parseMaps($result);
@@ -113,7 +117,7 @@ class IngestSerpTasks implements ShouldQueue
             DataForSeoClient::parseOrganic($result),
         );
 
-        return new SerpResultSet($query, $items);
+        return (new SerpResultSet($query, $items))->toArray();
     }
 
     /**
