@@ -325,6 +325,27 @@ it('a location page WITHOUT a pin keeps the null fallback and the drafter gets n
     expect(app(BlockContentAssembler::class)->compose($unpinned->fresh(), [], []))->toBeNull();
 });
 
+it('drops a FAQ answer that contradicts the single-source emergency flag (§8.3)', function () {
+    $site = locRelaySite();
+    $site->forceFill(['offers_emergency' => true])->save(); // policy: 24/7 site-wide
+    $location = locRelayLocation($site);
+    $page = locRelayPage($site, $location);
+    $page->forceFill(['slot_payload' => array_merge($page->slot_payload, [
+        'faq' => [
+            // A stale, contradicting emergency answer (the Bedminster case) — must be dropped.
+            ['question' => 'Do you offer emergency service?', 'answer' => 'No, we do not currently offer dedicated emergency dispatch service.'],
+            // A normal FAQ — kept untouched.
+            ['question' => 'Do you serve Norristown?', 'answer' => 'Yes, Norristown is in our core service area.'],
+        ],
+    ])])->save();
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)
+        ->not->toContain('do not currently offer dedicated emergency')   // contradiction filtered out
+        ->toContain('Do you serve Norristown?');                         // unrelated FAQ untouched
+});
+
 it('composes a TOWN page (parent_location_id, no own pin) — the town is the subject, grounded on the parent', function () {
     $site = locRelaySite();
     $parent = locRelayLocation($site);

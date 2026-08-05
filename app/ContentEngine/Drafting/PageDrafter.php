@@ -173,8 +173,10 @@ class PageDrafter
         }
 
         return 'OPERATIONAL FACTS — the ONLY operational claims you may make (hours, emergency '
-            .'availability, contact channels). An absent fact must not be mentioned; if '
-            .'offers_emergency_service is false, say so honestly when the question calls for it:'
+            .'availability, contact channels). An absent fact must not be mentioned. Emergency '
+            .'availability comes ONLY from offers_emergency_service and must be stated the SAME way '
+            .'everywhere (FAQ, body, meta): if TRUE you may state 24/7 emergency availability; if FALSE, '
+            .'never imply it and say so honestly when the question calls for it — never contradict the flag:'
             ."\n".$this->json($grounding->facts);
     }
 
