@@ -6,6 +6,7 @@ use App\Integrations\UrlInspection\GoogleIndexInspector;
 use App\Integrations\UrlInspection\IndexInspector;
 use App\Models\GoogleAccount;
 use App\Models\Site;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http as HttpFacade;
 
 function inspectGrant(string $status = 'connected'): void
@@ -84,6 +85,16 @@ it('flags a canonical Google disagrees with', function () {
 
     expect($status->state)->toBe(IndexCoverageState::ExcludedCanonical)
         ->and($status->canonicalMismatch())->toBeTrue();
+});
+
+it('degrades to null on a request timeout instead of aborting', function () {
+    inspectGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+    // A cURL timeout surfaces as a ConnectionException (NOT a GoogleException) — it must not propagate.
+    HttpFacade::fake(fn () => throw new ConnectionException('cURL error 28: Operation timed out'));
+
+    expect(app(IndexInspector::class)->inspect($site, 'https://spg.example/slow'))->toBeNull()
+        ->and(app(IndexInspector::class)->cached($site, 'https://spg.example/slow'))->toBeNull(); // not cached → retried later
 });
 
 it('stops inspecting once the per-day cap is reached', function () {
