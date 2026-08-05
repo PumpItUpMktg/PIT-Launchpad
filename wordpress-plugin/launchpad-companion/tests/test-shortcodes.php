@@ -119,6 +119,30 @@ class Test_Shortcodes extends WP_UnitTestCase
         $this->assertStringContainsString('href="tel:+15125550142"', $out);
         $this->assertStringContainsString('Call Now', $out);
         $this->assertStringContainsString('leadconnectorhq.com/widget/form/abc', $out); // GHL embed rendered
+        // The pasted embed has no title — one is injected so the iframe has an accessible name (WCAG 4.1.2).
+        $this->assertStringContainsString('title="Contact form"', $out);
+    }
+
+    public function test_a_form_embed_iframe_gets_a_title_but_keeps_an_existing_one(): void
+    {
+        // No title on the operator's snippet → a default is injected.
+        $this->assertStringContainsString(
+            'title="Contact form"',
+            \Launchpad\Companion\Render\SlotRenderer::ensure_iframe_title('<iframe src="https://x/form"></iframe>', 'Contact form')
+        );
+        // A provider that already set a title is left untouched (no double title).
+        $kept = \Launchpad\Companion\Render\SlotRenderer::ensure_iframe_title('<iframe title="Booking" src="https://x"></iframe>', 'Contact form');
+        $this->assertStringContainsString('title="Booking"', $kept);
+        $this->assertStringNotContainsString('title="Contact form"', $kept);
+    }
+
+    public function test_lp_map_iframe_has_a_title(): void
+    {
+        update_post_meta($this->post_id, Meta::SLOTS, ['map' => ['embed_url' => 'https://www.google.com/maps?q=x&output=embed']]);
+
+        $out = $this->sc('lp_map', 'map');
+        $this->assertStringContainsString('<iframe', $out);
+        $this->assertStringContainsString('title="Location map"', $out);
     }
 
     public function test_lp_cta_conversion_block_is_call_only_without_a_form(): void

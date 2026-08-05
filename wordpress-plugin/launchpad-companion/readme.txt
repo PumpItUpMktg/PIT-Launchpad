@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.29
+Stable tag: 0.9.30
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,13 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.30 =
+* Accessibility (iframe title): every rendered `<iframe>` now carries a title (its accessible name) —
+  WCAG 4.1.2 / Lighthouse "frame has no accessible name". The Launchpad-generated map embed gets
+  `title="Location map"`, and an operator-pasted lead-form embed that omits a title has `title="Contact
+  form"` injected (a provider that already set one is left untouched). Both render live, so this applies
+  site-wide on update with no content repush.
 
 = 0.9.29 =
 * Accessibility (heading order): footer column headings are now `<h2>` (were `<h5>`), so the footer no
