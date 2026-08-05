@@ -461,6 +461,7 @@ return [
             'rate hike', 'rate increase', 'fee increase', 'utility bill', 'water bill', 'sewer bill',
             'trash', 'garbage', 'recycling', 'grant', 'grants', 'bond', 'budget', 'tax', 'ratepayer',
             'millage', 'assessment fee', 'council approves', 'authority approves', 'ordinance',
+            'watershed', 'watershed plan', 'reservoir', // municipal-water governance, not a homeowner topic (§8.6)
         ],
     ],
 

@@ -49,3 +49,11 @@ it('never guesses geography when the footprint is unknown', function () {
     expect(spgGate()->rejection(News::item('Basement flooding in Lansing, Michigan', summary: 'Groundwater rising.'), []))
         ->toBeNull(); // topical passes; no footprint → no geo drop
 });
+
+it('denies a watershed-governance headline that slips past the allowlist via a drainage word (§8.6)', function () {
+    // "drainage" clears the allowlist, but a watershed-management HEADLINE is municipal governance, not a
+    // homeowner topic — the §8.6 deny-term catches it.
+    $gate = new ReactiveTopicGate(allow: ['drainage', 'flood', 'sump pump'], denyContext: ['grant', 'watershed']);
+    expect($gate->rejection(News::item('County adopts new watershed drainage management plan', summary: ''), ['NJ', 'PA']))
+        ->toBe('off_topic');
+});
