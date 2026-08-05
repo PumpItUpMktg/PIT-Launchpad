@@ -464,4 +464,24 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Footprint — the states the tenant markets in (§8.2 territory rule)
+    |--------------------------------------------------------------------------
+    |
+    | The single source for "in-footprint": legacy-URL normalization (an
+    | in-footprint legacy town → its location page or /areas-we-serve; an
+    | out-of-footprint one → 410 to flush the index). Two-letter USPS codes,
+    | upper-cased. SPG markets PA/NJ/MD today with NY/CT/DE planned, so all six
+    | count as in-footprint (a planned-state legacy URL is parked, not flushed).
+    | Install-wide for now (single tenant); per-tenant override lands with the
+    | multi-tenant territory work.
+    */
+    'footprint' => [
+        'states' => array_values(array_filter(array_map(
+            fn (string $s): string => strtoupper(trim($s)),
+            explode(',', (string) env('LAUNCHPAD_FOOTPRINT_STATES', 'PA,NJ,MD,NY,CT,DE'))
+        ))),
+    ],
+
 ];

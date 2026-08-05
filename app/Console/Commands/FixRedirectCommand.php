@@ -25,6 +25,7 @@ class FixRedirectCommand extends Command
         {--from= : The source path to fix, e.g. /hoboken/ (required)}
         {--to= : The correct destination, e.g. /hoboken-nj (required unless --delete)}
         {--code=301 : HTTP status for the redirect}
+        {--gone : Emit 410 Gone for --from (flush a dead / out-of-footprint legacy URL from the index; no --to needed)}
         {--delete : Deactivate the redirect for --from instead of repointing it}
         {--apply : Actually write the change (default is a preview)}
         {--push : After applying, queue the redirect push to WordPress}';
@@ -46,15 +47,17 @@ class FixRedirectCommand extends Command
         }
 
         $delete = (bool) $this->option('delete');
-        $to = $this->normalize((string) $this->option('to'));
-        if (! $delete && $to === '') {
-            $this->error('--to is required unless --delete (the correct destination, e.g. /hoboken-nj).');
+        $gone = (bool) $this->option('gone');
+        // --gone flushes the URL (410 Gone) with no destination — the plugin emits the status, no redirect.
+        $to = $gone ? '' : $this->normalize((string) $this->option('to'));
+        if (! $delete && ! $gone && $to === '') {
+            $this->error('--to is required unless --delete / --gone (the correct destination, e.g. /hoboken-nj).');
 
             return self::FAILURE;
         }
 
         $apply = (bool) $this->option('apply');
-        $code = (int) $this->option('code');
+        $code = $gone ? 410 : (int) $this->option('code');
 
         $existing = Redirect::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -68,6 +71,8 @@ class FixRedirectCommand extends Command
             $this->line($existing === null
                 ? "  • nothing to deactivate for {$from}"
                 : "  • would deactivate {$from}");
+        } elseif ($gone) {
+            $this->line("  • would flush {$from} → 410 Gone");
         } else {
             $this->line("  • would set {$from} → {$to} ({$code}, active)");
         }

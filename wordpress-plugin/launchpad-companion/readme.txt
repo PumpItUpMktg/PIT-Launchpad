@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.30
+Stable tag: 0.9.31
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,12 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.31 =
+* Redirects: honor a 4xx code (e.g. 410 Gone) in the redirect map — the handler now emits the status +
+  no-cache headers and stops, instead of attempting a destination-less `wp_safe_redirect`. Lets the
+  control plane FLUSH a dead or out-of-footprint legacy URL from the index (Stage 8.2), not only 301 it.
+  A row with `code >= 400` needs no `to_url`; 301/302 behavior is unchanged.
 
 = 0.9.30 =
 * Accessibility (iframe title): every rendered `<iframe>` now carries a title (its accessible name) —
