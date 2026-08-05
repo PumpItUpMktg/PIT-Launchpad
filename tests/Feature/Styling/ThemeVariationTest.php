@@ -1,5 +1,6 @@
 <?php
 
+use App\Branding\ColorContrast;
 use App\Styling\StyleVariation;
 
 /**
@@ -72,6 +73,20 @@ it('each style variation matches its control-plane StyleVariation tokens exactly
     $headingFamily = collect($json['settings']['typography']['fontFamilies'])
         ->firstWhere('slug', 'heading')['fontFamily'] ?? '';
     expect($headingFamily)->toContain($tokens['heading_font']);
+})->with(collect(StyleVariation::cases())->mapWithKeys(fn (StyleVariation $v): array => [$v->value => $v])->all());
+
+it('guarantees WCAG 4.5:1 for the on-accent / on-button / accent-ink text pairs', function (StyleVariation $variation) {
+    $json = variationJson($variation);
+    $accent = (string) paletteColor($json, 'accent');
+    $button = (string) paletteColor($json, 'button');
+    $base = (string) paletteColor($json, 'base');
+
+    // Text ON the accent / button fill must clear the AA floor (this is the flip that fixes a
+    // mid-tone accent shipping unreadable white text).
+    expect(ColorContrast::ratio((string) paletteColor($json, 'on-accent'), $accent))->toBeGreaterThanOrEqual(4.5)
+        ->and(ColorContrast::ratio((string) paletteColor($json, 'on-button'), $button))->toBeGreaterThanOrEqual(4.5)
+        // accent-ink is the accent used AS TEXT on the page surface (eyebrows/meta) — it must read there.
+        ->and(ColorContrast::ratio((string) paletteColor($json, 'accent-ink'), $base))->toBeGreaterThanOrEqual(4.5);
 })->with(collect(StyleVariation::cases())->mapWithKeys(fn (StyleVariation $v): array => [$v->value => $v])->all());
 
 it('bundles the heading webfont locally for each variation (fontFace → an existing woff2)', function (StyleVariation $variation) {

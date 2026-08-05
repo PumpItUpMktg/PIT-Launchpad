@@ -123,7 +123,7 @@ final class BlockSections
             }
             $meta = array_values(array_filter([trim((string) ($j['town'] ?? '')), trim((string) ($j['date'] ?? ''))]));
             if ($meta !== []) {
-                $children[] = $this->b->paragraph($this->text(implode(' · ', $meta)), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-job-meta']);
+                $children[] = $this->b->paragraph($this->text(implode(' · ', $meta)), ['textColor' => 'accent-ink', 'fontSize' => 'small', 'className' => 'lp-job-meta']);
             }
 
             return $this->b->column([$this->b->group($children, ['backgroundColor' => 'surface', 'className' => 'lp-card lp-job'])]);
@@ -170,7 +170,7 @@ final class BlockSections
             $children[] = $this->b->paragraph('<strong><a href="'.$this->attr($url).'">'.$this->text($title).'</a></strong>', ['className' => 'lp-post-title']);
             $date = trim((string) ($p['date'] ?? ''));
             if ($date !== '') {
-                $children[] = $this->b->paragraph($this->text($date), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-post-meta']);
+                $children[] = $this->b->paragraph($this->text($date), ['textColor' => 'accent-ink', 'fontSize' => 'small', 'className' => 'lp-post-meta']);
             }
 
             return $this->b->column([$this->b->group($children, ['backgroundColor' => 'surface', 'className' => 'lp-card lp-post'])]);
@@ -860,7 +860,7 @@ final class BlockSections
             $children = [];
             $stars = (int) ($q['stars'] ?? 0);
             if ($stars > 0) {
-                $children[] = $this->b->paragraph(str_repeat('★', min($stars, 5)), ['textColor' => 'accent', 'className' => 'lp-stars']);
+                $children[] = $this->b->paragraph(str_repeat('★', min($stars, 5)), ['textColor' => 'accent-ink', 'className' => 'lp-stars']);
             }
             $children[] = $this->b->paragraph('“'.$this->text($q['quote']).'”', ['className' => 'lp-quote-text']);
 
@@ -1019,7 +1019,7 @@ final class BlockSections
         if ($placeholder) {
             $children[] = $this->placeholderNote('appears when a mission is captured and the page is generated');
         }
-        $children[] = $this->b->paragraph('Our mission', ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-eyebrow']);
+        $children[] = $this->b->paragraph('Our mission', ['textColor' => 'accent-ink', 'fontSize' => 'small', 'className' => 'lp-eyebrow']);
         $children[] = $this->b->paragraph($this->text($statement), ['className' => 'lp-statement-text']);
 
         return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-statement', $placeholder)]);
@@ -1092,7 +1092,7 @@ final class BlockSections
             $children = [$this->avatar($name, trim((string) ($m['photo_url'] ?? ''))), $this->b->heading(3, $name)];
             $role = trim((string) ($m['role'] ?? ''));
             if ($role !== '') {
-                $children[] = $this->b->paragraph($this->text($role), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-team-role']);
+                $children[] = $this->b->paragraph($this->text($role), ['textColor' => 'accent-ink', 'fontSize' => 'small', 'className' => 'lp-team-role']);
             }
             $bio = trim((string) ($m['bio'] ?? ''));
             if ($bio !== '') {
@@ -1348,7 +1348,7 @@ final class BlockSections
     private function detailRow(string $label, string $valueHtml): string
     {
         return $this->b->group([
-            $this->b->paragraph($this->text($label), ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-contact-label']),
+            $this->b->paragraph($this->text($label), ['textColor' => 'accent-ink', 'fontSize' => 'small', 'className' => 'lp-contact-label']),
             $this->b->paragraph($valueHtml, ['className' => 'lp-contact-value']),
         ], ['className' => 'lp-contact-row']);
     }
@@ -1532,7 +1532,7 @@ final class BlockSections
         $classes = 'lp-section-head'.($center ? ' lp-section-head--center' : '');
 
         return $this->b->group([
-            $this->b->paragraph($eyebrow, ['textColor' => 'accent', 'fontSize' => 'small', 'className' => 'lp-eyebrow']),
+            $this->b->paragraph($eyebrow, ['textColor' => 'accent-ink', 'fontSize' => 'small', 'className' => 'lp-eyebrow']),
             $this->b->heading(2, $heading, $onDark ? ['textColor' => 'base'] : []),
         ], ['className' => $classes]);
     }

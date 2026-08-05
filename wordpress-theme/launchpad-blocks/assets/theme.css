@@ -395,7 +395,7 @@
 }
 
 .lp-section-head .lp-eyebrow {
-    color: var(--wp--preset--color--accent);
+    color: var(--wp--preset--color--accent-ink);
 }
 
 .lp-section-head h2 {
@@ -2060,7 +2060,7 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--wp--preset--color--accent);
+    color: var(--wp--preset--color--accent-ink);
     margin-bottom: var(--wp--preset--spacing--30);
 }
 

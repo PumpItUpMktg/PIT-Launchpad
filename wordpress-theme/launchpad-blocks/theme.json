@@ -20,6 +20,7 @@
                 { "slug": "primary", "name": "Primary", "color": "#123B6B" },
                 { "slug": "accent", "name": "Accent", "color": "#1D6FD6" },
                 { "slug": "on-accent", "name": "On accent", "color": "#ffffff" },
+                { "slug": "accent-ink", "name": "Accent ink", "color": "#1d6fd6" },
                 { "slug": "button", "name": "Button", "color": "#1D6FD6" },
                 { "slug": "on-button", "name": "On button", "color": "#ffffff" }
             ]

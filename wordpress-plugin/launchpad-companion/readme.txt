@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.27
+Stable tag: 0.9.28
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,14 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.28 =
+* Accessibility (brand contrast): the palette gains an `accent-ink` role — the brand accent darkened
+  just enough to read as small TEXT on the light page surface — and BrandPaint now re-declares it as
+  `--wp--preset--color--accent-ink`. Eyebrows, meta lines, review stars, team roles and contact labels
+  bind to it instead of the raw accent (a mid-tone that failed WCAG 4.5:1 as text). On-accent / on-button
+  text is now the WCAG max-contrast choice, so a CTA button with a mid-tone fill (e.g. orange) gets
+  legible near-black text rather than a sub-4.5:1 white. Bundled curated-palette mirror updated in lockstep.
 
 = 0.9.27 =
 * Performance: delay heavy THIRD-PARTY scripts until first user interaction, so they stop starving the

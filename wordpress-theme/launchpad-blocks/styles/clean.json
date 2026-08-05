@@ -47,6 +47,11 @@
                     "color": "#ffffff"
                 },
                 {
+                    "slug": "accent-ink",
+                    "name": "Accent ink",
+                    "color": "#1d6fd6"
+                },
+                {
                     "slug": "button",
                     "name": "Button",
                     "color": "#1D6FD6"

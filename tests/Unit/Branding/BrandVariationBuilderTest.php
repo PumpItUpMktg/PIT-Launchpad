@@ -2,6 +2,7 @@
 
 use App\Branding\BrandColors;
 use App\Branding\BrandVariationBuilder;
+use App\Branding\ColorContrast;
 use App\Styling\StyleVariation;
 
 function paletteMap(array $variation): array
@@ -52,10 +53,20 @@ it('picks the nearest base by tone', function () {
         ->and($b->nearestForColor('#1D6FD6'))->toBe('clean'); // cool + light
 });
 
-it('chooses on-accent for contrast (white on dark, dark on light)', function () {
+it('chooses on-accent by WCAG contrast (white on dark, near-black on light)', function () {
     $b = new BrandVariationBuilder;
-    expect($b->resolve(new BrandColors('#0B1F33', '#0B1F33'))['on_accent'])->toBe('#ffffff') // dark accent
-        ->and($b->resolve(new BrandColors('#0B1F33', '#f5c518'))['on_accent'])->toBe('#1f2937'); // light accent
+    expect($b->resolve(new BrandColors('#0B1F33', '#0B1F33'))['on_accent'])->toBe('#ffffff') // dark accent → white
+        ->and($b->resolve(new BrandColors('#0B1F33', '#f5c518'))['on_accent'])->toBe('#111827'); // light accent → near-black
+});
+
+it('never emits a sub-4.5:1 on-accent / accent-ink for a mid-tone accent (the CTA-contrast bug)', function () {
+    // #EA580C is exactly SPG's orange: white text fails 4.5:1, near-black passes — the flip must pick it.
+    $pal = paletteMap((new BrandVariationBuilder)->build(new BrandColors('#123B6B', '#EA580C')));
+
+    expect(ColorContrast::ratio($pal['on-accent'], $pal['accent']))->toBeGreaterThanOrEqual(4.5)
+        ->and(ColorContrast::ratio($pal['on-button'], $pal['button']))->toBeGreaterThanOrEqual(4.5)
+        // accent-ink must read as text on the light page base.
+        ->and(ColorContrast::ratio($pal['accent-ink'], $pal['base']))->toBeGreaterThanOrEqual(4.5);
 });
 
 it('borrows neutrals straight from the StyleVariation enum (no drift possible)', function () {

@@ -76,6 +76,9 @@ final class BrandVariationBuilder
             ['slug' => 'primary', 'name' => 'Primary', 'color' => $resolved['primary']],
             ['slug' => 'accent', 'name' => 'Accent', 'color' => $resolved['accent']],
             ['slug' => 'on-accent', 'name' => 'On accent', 'color' => $resolved['on_accent']],
+            // accent-ink: the accent hue darkened just enough to read as TEXT on the light page surface
+            // (eyebrows, meta). The raw accent is a mid-tone that fails 4.5:1 as small text on base.
+            ['slug' => 'accent-ink', 'name' => 'Accent ink', 'color' => ColorContrast::ink($resolved['accent'], $n['base'])],
             ['slug' => 'button', 'name' => 'Button', 'color' => $resolved['accent']],
             ['slug' => 'on-button', 'name' => 'On button', 'color' => $resolved['on_accent']],
         ];
@@ -134,14 +137,14 @@ final class BrandVariationBuilder
         return $l < 0.35 ? 'bold' : 'clean';
     }
 
-    /** White on a dark accent, near-black on a light one — WCAG-ish contrast for button text. */
+    /**
+     * The accessible text color for the accent (button/on-accent) — whichever of white / near-black wins
+     * on WCAG contrast, guaranteeing the legible choice. The old luminance threshold picked white on a
+     * mid-tone accent (e.g. orange), which fails 4.5:1 while near-black passes — the primary-CTA bug.
+     */
     private function onAccent(string $hex): string
     {
-        [$r, $g, $b] = $this->rgb($hex);
-        // Relative luminance (sRGB, simplified).
-        $lum = (0.2126 * $r + 0.7152 * $g + 0.0722 * $b) / 255;
-
-        return $lum < 0.55 ? '#ffffff' : '#1f2937';
+        return ColorContrast::onColor($hex);
     }
 
     private function normalize(string $hex): string

@@ -2,6 +2,8 @@
 
 namespace App\Styling;
 
+use App\Branding\ColorContrast;
+
 /**
  * The brand style variations of the Gutenberg pivot. Each maps 1:1 to a block-theme `theme.json`
  * style variation (`/styles/{slug}.json`) and carries a FULL six-role palette — base, surface, text,
@@ -78,7 +80,7 @@ enum StyleVariation: string
      */
     public function palette(): array
     {
-        return match ($this) {
+        $p = match ($this) {
             self::Clean => [
                 'base' => '#ffffff', 'surface' => '#f1f5f9', 'text' => '#0f172a', 'muted' => '#475569', 'border' => '#e2e8f0',
                 'primary' => '#123B6B', 'highlight' => '#1D6FD6', 'on_accent' => '#ffffff', 'button' => '#1D6FD6', 'on_button' => '#ffffff',
@@ -120,6 +122,15 @@ enum StyleVariation: string
                 'primary' => '#4D97E8', 'highlight' => '#38BDF8', 'on_accent' => '#06131f', 'button' => '#2F86E0', 'on_button' => '#ffffff',
             ],
         };
+
+        // on_accent / on_button are the TEXT color on the accent / button fill. Compute them by WCAG
+        // contrast rather than trusting the per-arm literals: several curated accents are mid-tones
+        // (orange, amber, teal) where the old hardcoded #ffffff falls under 4.5:1, but near-black clears
+        // it. Deriving here keeps the enum the single source and makes a sub-floor pair impossible.
+        $p['on_accent'] = ColorContrast::onColor($p['highlight']);
+        $p['on_button'] = ColorContrast::onColor($p['button']);
+
+        return $p;
     }
 
     /**
