@@ -5,7 +5,10 @@ use App\ContentEngine\Drafting\PageDrafter;
 use App\ContentEngine\Drafting\PageGroundingAssembler;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\MunicipalityType;
 use App\Enums\PageType;
+use App\Integrations\Census\County;
+use App\Integrations\Census\MunicipalityGazetteer;
 use App\Local\Proof\LocalJob;
 use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReview;
@@ -341,7 +344,32 @@ it('composes a TOWN page (parent_location_id, no own pin) — the town is the su
         ->and($markup)->toContain('Pequannock');  // the town is the subject
 });
 
-it('the location hub renders its NAP (address + hours + phone) and LINKS to its town pages', function () {
+/**
+ * §8.1 collapse: a location's "areas we serve" coverage now comes from the census CoverageArea (scoped
+ * to the location via source_location_ids), grouped by county, rendered as PLAIN names — the thin
+ * per-town child pages are gone. This mirrors seedAreasCoverage but scopes the coverage to one Location.
+ */
+function locScopedCoverage(Site $site, Location $location): void
+{
+    $location->forceFill(['county_geoids' => ['42091']])->save();
+
+    $gaz = Mockery::mock(MunicipalityGazetteer::class);
+    $gaz->shouldReceive('countiesInState')->andReturn([new County('42091', 'Montgomery County', '42', '091')]);
+    $gaz->shouldReceive('countyPolygons')->andReturn([
+        ['geo_id' => '42091', 'name' => 'Montgomery County', 'rings' => [[['lat' => 40.1, 'lng' => -75.3]]]],
+    ]);
+    app()->instance(MunicipalityGazetteer::class, $gaz);
+
+    foreach ([['Norristown', '4209153000', 'major', 35000], ['Audubon', '4209199999', 'small', 3000]] as [$name, $geo, $tier, $pop]) {
+        CoverageArea::factory()->create([
+            'site_id' => $site->id, 'name' => $name, 'type' => MunicipalityType::CountySubdivision,
+            'geo_id' => $geo, 'size_tier' => $tier, 'population' => $pop, 'lat' => 40.12, 'lng' => -75.34,
+            'source_location_ids' => [$location->id],
+        ]);
+    }
+}
+
+it('the location hub renders its NAP (address + hours + phone) and its county-grouped coverage', function () {
     $site = locRelaySite();
     $location = locRelayLocation($site, [
         'is_storefront' => true,
@@ -350,15 +378,7 @@ it('the location hub renders its NAP (address + hours + phone) and LINKS to its 
         'hours' => ['mon' => ['open' => '09:00', 'close' => '18:00'], 'tue' => ['open' => '09:00', 'close' => '18:00']],
     ]);
     $page = locRelayPage($site, $location);
-
-    // Two PUBLISHED town pages under this location → the hub links down to them (only live towns link).
-    foreach (['Norristown' => 'norristown', 'Audubon' => 'audubon'] as $title => $slug) {
-        Content::factory()->published()->create([
-            'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
-            'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null,
-            'title' => $title, 'slug' => $slug,
-        ]);
-    }
+    locScopedCoverage($site, $location);
 
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
@@ -367,51 +387,34 @@ it('the location hub renders its NAP (address + hours + phone) and LINKS to its 
         ->toContain('10 Trooper Rd')
         ->toContain('(610) 555-0142')
         ->toContain('9am')
-        // areas-served list: REAL internal links to the town pages (not just coverage prose).
+        // Coverage from CoverageArea (§8.1), grouped by county, PLAIN names — no per-town page links.
         ->toContain('lp-areas')
-        ->toContain('<a href="/norristown">Norristown</a>')
-        ->toContain('<a href="/audubon">Audubon</a>');
+        ->toContain('lp-areas-county')                  // the county subhead
+        ->toContain('Norristown')
+        ->toContain('Audubon')
+        ->not->toContain('<a href="/norristown"');      // towns are plain text, not child-page links
 });
 
-it('the areas list is a de-duped, published-only, comma-flowing line ordered largest-first, no ", ST", no size labels', function () {
+it('the location coverage is county-grouped PLAIN town names from CoverageArea, largest-first, no ", ST"', function () {
     $site = locRelaySite();
     $location = locRelayLocation($site, ['is_storefront' => true, 'address' => '10 Trooper Rd, Trooper, PA 19403']);
     $page = locRelayPage($site, $location);
-
-    // Census size tiers order the list largest-first (Norristown large → Audubon small).
-    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209111111', 'name' => 'Norristown', 'type' => 'county_subdivision', 'state' => 'PA', 'size_tier' => 'large', 'population' => 35000, 'source' => 'county']);
-    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209122222', 'name' => 'Audubon', 'type' => 'county_subdivision', 'state' => 'PA', 'size_tier' => 'small', 'population' => 3000, 'source' => 'county']);
-
-    // Titles carry ", PA" (dropped in the display); a DUPLICATE Norristown row + a DRAFT row must both
-    // be collapsed away (one live link per town).
-    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Norristown, PA', 'slug' => 'norristown']);
-    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Norristown, PA', 'slug' => 'norristown-dup']); // duplicate
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Audubon, PA', 'slug' => 'audubon-draft']); // draft → excluded
-    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Audubon, PA', 'slug' => 'audubon']);
+    locScopedCoverage($site, $location);
 
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
     expect($markup)
-        ->toContain('lp-areas--towns')
-        ->toContain('lp-areas-townlist')
-        ->not->toContain('lp-areas-bandlabel')         // no size labels
-        ->not->toContain('Larger cities')
-        ->toContain('>Norristown</a>')                 // ", PA" dropped in display
-        ->toContain('>Audubon</a>')
-        ->not->toContain('Norristown, PA</a>');        // state suffix not shown
+        ->toContain('lp-areas')
+        ->toContain('Montgomery County')                    // the county subhead
+        ->toContain('Norristown')
+        ->toContain('Audubon')
+        // Plain names — the per-town child pages were collapsed away, so no dead <a href> to them.
+        ->not->toContain('href="/norristown"')
+        ->not->toContain('href="/audubon"')
+        ->not->toContain('Norristown, PA');                 // ", ST" not shown
 
-    // De-duped: exactly ONE Norristown link (the duplicate + draft rows collapsed).
-    expect(substr_count($markup, '>Norristown</a>'))->toBe(1)
-        // Largest-first: Norristown (large) precedes Audubon (small).
-        ->and(strpos($markup, '>Norristown</a>'))->toBeLessThan(strpos($markup, '>Audubon</a>'));
-
-    // The pipe separator is in the MARKUP (not only theme CSS) so the towns never run together when the
-    // deployed stylesheet is stale — a spaced "|" between each town, so it also wraps on its own.
-    expect($markup)
-        ->toContain('lp-areas-sep')
-        ->toContain(' | ')
-        // Exactly one separator between the two town links (N towns → N-1 separators).
-        ->and(substr_count($markup, 'lp-areas-sep'))->toBe(1);
+    // Largest-first: Norristown (major) precedes Audubon (small).
+    expect(strpos($markup, 'Norristown'))->toBeLessThan(strpos($markup, 'Audubon'));
 });
 
 it('forLocation builds a scoped areas map — its served towns as LINKED points + a location pin', function () {
@@ -433,19 +436,19 @@ it('forLocation builds a scoped areas map — its served towns as LINKED points 
         ->and($map['pin']['lat'])->toBe(40.12);                     // the location pin
 });
 
-it('the location hub renders the interactive map mount above the town list when a map is available', function () {
+it('the location hub renders the interactive map mount above the coverage when a map is available', function () {
     $site = locRelaySite();
     $location = locRelayLocation($site, ['is_storefront' => true, 'address' => '10 Trooper Rd, Trooper, PA 19403']);
     $page = locRelayPage($site, $location);
-    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Norristown, PA', 'slug' => 'norristown']);
+    locScopedCoverage($site, $location);
 
-    // mapAvailable: true → the section carries the Leaflet mount (fed by the meta-blob) AND the list.
+    // mapAvailable: true → the section carries the Leaflet mount (fed by the meta-blob) AND the coverage.
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, [], mapAvailable: true);
 
     expect($markup)
         ->toContain('lp-areas--map')
-        ->toContain('lp-areas-map')                    // the Leaflet mount
-        ->toContain('<a href="/norristown">Norristown</a>'); // the crawlable fallback list stays
+        ->toContain('lp-areas-map')     // the Leaflet mount
+        ->toContain('Norristown');      // the crawlable coverage fallback stays
 });
 
 it('the location hub drops the address for a non-storefront (mobile base stays private) but keeps hours', function () {

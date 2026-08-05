@@ -51,7 +51,7 @@ final class ServiceAreaResolver
      *
      * @return list<array{county: string, cities: list<array{label: string, url: string}>}>
      */
-    public function byCounty(string $siteId): array
+    public function byCounty(string $siteId, ?string $locationId = null): array
     {
         $names = $this->countyNamesForSite($siteId); // geoId => county name
         if ($names === []) {
@@ -62,11 +62,22 @@ final class ServiceAreaResolver
         $urls = $this->locationUrls($siteId);
         $fallbackUrl = $this->areasPageUrl($siteId); // "see all areas we serve" — a real page or ''
 
+        $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->get(['name', 'geo_id', 'type', 'lat', 'lng', 'size_tier', 'population', 'source_location_ids']);
+
+        // §8.1 collapse: scope the coverage to a single physical Location — only the areas it serves
+        // (via `source_location_ids`). Filtered in PHP (the JSON column round-trips to an array cast)
+        // so it stays portable across the SQLite test driver and Postgres.
+        if ($locationId !== null) {
+            $areas = $areas->filter(
+                fn (CoverageArea $a): bool => is_array($a->source_location_ids) && in_array($locationId, $a->source_location_ids, true)
+            );
+        }
+
         /** @var array<string, list<array{name: string, url: string, type: MunicipalityType, key: array{0: int, 1: int, 2: string}}>> $buckets */
         $buckets = [];
-        foreach ($areas = CoverageArea::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)
-            ->get(['name', 'geo_id', 'type', 'lat', 'lng', 'size_tier', 'population']) as $area) {
+        foreach ($areas as $area) {
             $name = trim((string) $area->name);
             if ($name === '') {
                 continue;

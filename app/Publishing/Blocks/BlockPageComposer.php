@@ -942,7 +942,8 @@ final class BlockPageComposer
         ?string $address = null,
         ?string $email = null,
         array $hours = [],
-        array $townLinks = [],
+        array $coverageCounties = [],
+        array $coverageByCounty = [],
         array $localConditions = [],
         bool $hasMap = false,
         bool $areasMapAvailable = false,
@@ -1033,13 +1034,17 @@ final class BlockPageComposer
             activates: 'appears when this location\'s served towns are captured',
         );
 
-        // The "areas we serve" grid — real internal LINKS to each town page under this location (the
-        // hub → town spine). Empty when no town pages are materialized yet → the section drops.
-        $areas = $this->sections->areasServed(
+        // The "areas we serve" section — the towns this location covers, grouped by county, sourced from
+        // the census-derived CoverageArea (scoped to this location). §8.1 collapse: the thin per-town
+        // child pages are gone, so these render as PLAIN names (no dead links); the section drops when
+        // the location has no captured coverage. Same county-grouped block the home/areas page uses.
+        $areas = $this->sections->serviceAreas(
             eyebrow: 'Areas we serve',
             heading: $city !== '' ? 'Towns we serve from '.$city : 'Towns we serve',
-            links: $townLinks,
-            hasMap: $areasMapAvailable,
+            counties: $coverageCounties,
+            byCounty: $coverageByCounty,
+            preview: $preview,
+            mapAvailable: $areasMapAvailable,
         );
 
         // Reviews + jobs are STRICTLY provider-gated — preview: false is deliberate (no "Example"
