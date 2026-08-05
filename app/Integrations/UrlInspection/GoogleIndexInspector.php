@@ -4,7 +4,6 @@ namespace App\Integrations\UrlInspection;
 
 use App\Enums\IndexCoverageState;
 use App\Integrations\Google\GoogleConnectionService;
-use App\Integrations\Google\GoogleException;
 use App\Integrations\SearchConsole\GoogleSearchConsole;
 use App\Models\Site;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
@@ -98,7 +97,10 @@ final class GoogleIndexInspector implements IndexInspector
                     'languageCode' => 'en-US',
                 ]],
             );
-        } catch (GoogleException) {
+        } catch (Throwable) {
+            // ANY per-URL failure degrades to null (that URL → "not inspected"), never aborts the batch —
+            // URL Inspection is slow and a cURL timeout surfaces as a ConnectionException, NOT a
+            // GoogleException, so this must catch broadly. Not cached, so a later run retries it.
             return null;
         }
 
