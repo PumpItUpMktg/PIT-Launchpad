@@ -202,6 +202,7 @@ final class BlockPageComposer
         array $jobs = [],
         array $reviews = [],
         array $related = [],
+        array $locationAreas = [],
         array $trustStats = [],
         array $faqs = [],
         array $posts = [],
@@ -325,6 +326,14 @@ final class BlockPageComposer
             links: $related,
         );
 
+        // §8.4 reciprocal linking: a geo-neutral service page links to the tenant's LOCATION pages
+        // ("areas we serve") — the inverse of the location→service links. Drops when none are live.
+        $areasBlock = $this->sections->areasServed(
+            eyebrow: 'Where we work',
+            heading: 'Areas we serve',
+            links: $locationAreas,
+        );
+
         $faq = $this->sections->faqAccordion(
             eyebrow: 'Answers',
             heading: $this->heading($slots, 'faq_heading', 'Common questions'),
@@ -356,7 +365,7 @@ final class BlockPageComposer
 
         // Rhythm: the pushy CTA (accent) sits mid-page buffered by light sections on both sides;
         // hero and the soft close are the only other colored bands. D·L·L·Ls·Ls·Ls·(Ls)·C·L·Ls·L·L·D.
-        return $this->join([$hero, $introBlock, $symptomsBlock, $scope, $process, $cost, $compare, $ctaBold, $jobsBlock, $reviewsBlock, $relatedBlock, $faq, $postsBlock, $cta]);
+        return $this->join([$hero, $introBlock, $symptomsBlock, $scope, $process, $cost, $compare, $ctaBold, $jobsBlock, $reviewsBlock, $relatedBlock, $areasBlock, $faq, $postsBlock, $cta]);
     }
 
     /**
@@ -390,6 +399,7 @@ final class BlockPageComposer
         array $processSteps = [],
         array $certifications = [],
         array $reviews = [],
+        array $locationAreas = [],
         array $trustStats = [],
         array $faqs = [],
         array $posts = [],
@@ -449,6 +459,13 @@ final class BlockPageComposer
             preview: false,
         );
 
+        // §8.4 reciprocal linking: the hub links to the tenant's LOCATION pages too. Drops when none live.
+        $areasBlock = $this->sections->areasServed(
+            eyebrow: 'Where we work',
+            heading: 'Areas we serve',
+            links: $locationAreas,
+        );
+
         $faq = $this->sections->faqAccordion(
             eyebrow: 'Answers',
             heading: $this->heading($slots, 'faq_heading', 'Common questions'),
@@ -474,7 +491,7 @@ final class BlockPageComposer
         );
 
         // Routing page: hero and the close are the only colored bands (D·L·L·Ls·Ls·Ls·Ls·L·D).
-        return $this->join([$hero, $introBlock, $grid, $whyBlock, $process, $certs, $reviewsBlock, $faq, $postsBlock, $cta]);
+        return $this->join([$hero, $introBlock, $grid, $whyBlock, $process, $certs, $reviewsBlock, $areasBlock, $faq, $postsBlock, $cta]);
     }
 
     /** A muted framing paragraph (the scope-intro line) — kept tiny and local to composeSpoke. */

@@ -396,6 +396,7 @@ final class BlockContentAssembler
             jobs: $service !== null ? $this->serviceJobCards($service) : [],
             reviews: $service !== null ? $this->serviceReviewQuotes($service) : [],
             related: $this->relatedServiceLinks($content),
+            locationAreas: $this->locationPageLinks($content),
             trustStats: $this->trustStats($content),
             faqs: $this->faqItems($slots, $this->offersEmergency($content)),
             posts: $this->siloPosts($content),
@@ -454,6 +455,7 @@ final class BlockContentAssembler
             processSteps: $this->processSteps($content),
             certifications: $this->mergedCredentials($content),
             reviews: $this->hubReviewQuotes($content),
+            locationAreas: $this->locationPageLinks($content),
             trustStats: $this->trustStats($content),
             faqs: $this->faqItems($slots, $this->offersEmergency($content)),
             posts: $this->siloPosts($content),
@@ -569,6 +571,43 @@ final class BlockContentAssembler
             $title = trim((string) $sibling->title);
             if ($title !== '') {
                 $links[] = ['label' => $title, 'url' => $home.ltrim((string) $sibling->slug, '/')];
+            }
+        }
+
+        return $links;
+    }
+
+    /**
+     * §8.4 reciprocal linking: the site's published LOCATION landing pages, as links for a service/hub
+     * page's "areas we serve" module — the inverse of the location→service links. Landing pages only
+     * (a pinned location_id; town children were collapsed), live pages only. The ", ST" suffix is
+     * dropped in the block; empty → the section drops.
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function locationPageLinks(Content $content): array
+    {
+        $site = $this->site($content);
+        $home = is_string($site?->domain_url) && trim((string) $site->domain_url) !== ''
+            ? rtrim((string) $site->domain_url, '/').'/'
+            : '/';
+
+        $links = [];
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->whereNotNull('location_id') // pinned landing pages, not town children
+            ->where('status', ContentStatus::Published->value) // link only live pages
+            ->whereNotNull('slug')
+            ->orderBy('title')
+            ->get(['title', 'slug']);
+
+        foreach ($pages as $page) {
+            $title = trim((string) $page->title);
+            $slug = trim((string) $page->slug);
+            if ($title !== '' && $slug !== '') {
+                $links[] = ['label' => $title, 'url' => $home.ltrim($slug, '/')];
             }
         }
 

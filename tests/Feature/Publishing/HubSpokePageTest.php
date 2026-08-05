@@ -13,6 +13,7 @@ use App\Local\Proof\ServiceReviewProvider;
 use App\Models\Content;
 use App\Models\ConversionConfig;
 use App\Models\Keyword;
+use App\Models\Location;
 use App\Models\Market;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
@@ -145,6 +146,36 @@ it('composes the spoke: keyword H1, symptoms, scope, record process, cost with t
         // Gated reviews/jobs stay out with the null providers.
         ->not->toContain('lp-testimonials')
         ->not->toContain('lp-jobs');
+});
+
+it('the spoke and hub reciprocally link to the tenant location pages (§8.4)', function () {
+    $site = hsSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Services']);
+    $service = hsService($site, $silo);
+    $spoke = hsSpokePage($site, $silo, $service);
+    $hub = hsHubPage($site, $silo);
+
+    // A published LOCATION landing page → the geo-neutral service + hub pages link back to it.
+    $location = Location::factory()->create(['site_id' => $site->id]);
+    Content::factory()->published()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => $location->id, 'title' => 'Doylestown, PA', 'slug' => 'doylestown-pa',
+    ]);
+    // A DRAFT location page must never be linked (only live pages).
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => Location::factory()->create(['site_id' => $site->id])->id, 'title' => 'Draftville, PA', 'slug' => 'draftville-pa',
+    ]);
+
+    foreach ([$spoke, $hub] as $page) {
+        $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+        expect($markup)
+            ->toContain('lp-areas')                                        // the "areas we serve" module
+            ->toContain('Areas we serve')
+            ->toContain('href="https://sewergurus.com/doylestown-pa"')     // links the LIVE location page
+            ->toContain('>Doylestown</a>')                                 // ", PA" dropped in the label
+            ->not->toContain('Draftville');                                // the draft location is never linked
+    }
 });
 
 it('shows the silo blog feed on a service page — recent published posts routed to the silo, and drops cross-silo / draft posts', function () {
