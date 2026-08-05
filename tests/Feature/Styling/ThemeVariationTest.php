@@ -52,6 +52,16 @@ it('is a self-contained block theme (declared + has its own templates, no parent
     }
 });
 
+it('the blog index template carries a top-level h1 (the archive is not h1-less)', function () {
+    $html = (string) file_get_contents(base_path('wordpress-theme/launchpad-blocks/templates/index.html'));
+
+    // A static h1 (not wp:query-title, which renders empty on the posts home) so the listing always
+    // has exactly one top-level heading; the post-card titles below it are h2 (no skip).
+    expect($html)->toContain('"level":1')
+        ->toContain('<h1')
+        ->and(substr_count($html, '<h1'))->toBe(1);
+});
+
 it('each style variation matches its control-plane StyleVariation tokens exactly', function (StyleVariation $variation) {
     $json = variationJson($variation);
     $tokens = $variation->tokens();
