@@ -72,7 +72,11 @@ test('a hub page ships the BLOCK body with a services-grid of its silo children 
 
     // The resolved sibling_services still travel in slot_payload (the plugin's slot reference).
     expect($payload['slot_payload']['sibling_services'])->toHaveCount(2)
-        ->and($payload['slot_payload']['sibling_services'][0]['title'])->toBe('Hydro Jetting');
+        ->and($payload['slot_payload']['sibling_services'][0]['title'])->toBe('Hydro Jetting')
+        // Descriptive anchor (7.6): the card link names its target service via visually-hidden text,
+        // so the sibling cards aren't identical context-free "Learn more" links.
+        ->and($payload['slot_payload']['sibling_services'][0]['body'])
+        ->toContain('Learn more<span class="lp-sr-only"> about Hydro Jetting</span> →');
 });
 
 test('a hub page with no child services drops the services-grid section (no placeholder cards)', function () {

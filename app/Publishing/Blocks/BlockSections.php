@@ -1513,7 +1513,14 @@ final class BlockSections
         }
         $url = trim((string) ($c['url'] ?? ''));
         if ($url !== '') {
-            $children[] = $this->b->paragraph('<a href="'.$this->attr($url).'">Learn more →</a>', ['textColor' => 'accent']);
+            // Descriptive anchor: the visible text stays "Learn more →", but a visually-hidden suffix
+            // names the target service so the six cards aren't six identical "Learn more" links — an
+            // accessibility (link-purpose) + SEO (anchor text) win. Crawlers read the hidden text too.
+            $title = trim((string) ($c['title'] ?? ''));
+            $label = $title !== ''
+                ? 'Learn more<span class="lp-sr-only"> about '.$this->text($title).'</span> →'
+                : 'Learn more →';
+            $children[] = $this->b->paragraph('<a href="'.$this->attr($url).'">'.$label.'</a>', ['textColor' => 'accent']);
         }
 
         return $this->b->group($children, ['backgroundColor' => 'surface', 'className' => 'lp-card']);

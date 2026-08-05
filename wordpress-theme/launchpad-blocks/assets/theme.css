@@ -239,6 +239,22 @@
 }
 
 /* ------------------------------------------------------------------ *
+ * Screen-reader-only text — visually hidden but read by assistive tech AND crawled
+ * (clip technique, not display:none), so it can carry descriptive link context.
+ * ------------------------------------------------------------------ */
+.lp-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ------------------------------------------------------------------ *
  * Eyebrow — small uppercase label above hero / section headings.
  * ------------------------------------------------------------------ */
 .lp-eyebrow {
