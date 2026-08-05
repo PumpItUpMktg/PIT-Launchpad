@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.26
+Stable tag: 0.9.27
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,15 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.27 =
+* Performance: delay heavy THIRD-PARTY scripts until first user interaction, so they stop starving the
+  critical path on throttled connections (the download — not execution — is what blocks first paint).
+  Default host allowlist: Google Maps JS API, the LeadConnector chat widget CDNs, Google Tag Manager,
+  and Cloudflare Insights. Matched `<script src>` tags become inert `type="text/plain"` placeholders and
+  a tiny loader re-runs them, in order, on the first scroll/click/key/touch (idle + 8s fallback). Only
+  full frontend HTML GET responses are touched; first-party/theme/critical scripts are never matched.
+  Filterable: `lpc_delay_script_hosts` (adjust the list) and `lpc_delay_scripts_enabled` (off to disable).
 
 = 0.9.26 =
 * Footer: replace the platform tagline in the footer bottom bar with an agency credit
