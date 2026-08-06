@@ -43,3 +43,21 @@ it('handles a single-state tenant and empty inputs', function () {
         ->and(ServiceAreaTitle::qualify('Drain Cleaning', '', []))->toBe('Drain Cleaning')
         ->and(ServiceAreaTitle::qualify('', 'New Jersey', ['NJ']))->toBe('');
 });
+
+it('peels the region out of a "brand tagline · region" slot instead of falling back to abbreviations', function () {
+    // SPG's actual home service_area slot — before, the whole tagline was too long so it degraded to "NJ & PA".
+    $slot = 'Sump Pump & Basement Water Specialists · New Jersey & Eastern Pennsylvania';
+    expect(ServiceAreaTitle::qualify('Mold Testing', $slot, ['PA', 'MD', 'NJ']))
+        ->toBe('Mold Testing in New Jersey & Eastern Pennsylvania');
+});
+
+it('decodes HTML entities in the region slot', function () {
+    $slot = 'Specialists · New Jersey &amp; Eastern Pennsylvania';
+    expect(ServiceAreaTitle::qualify('Mold Testing', $slot, ['NJ', 'PA']))
+        ->toBe('Mold Testing in New Jersey & Eastern Pennsylvania');
+});
+
+it('does not split hyphenated place names (the ASCII hyphen is not a separator)', function () {
+    expect(ServiceAreaTitle::qualify('Drain Cleaning', 'Plumbers · Wilkes-Barre & Scranton', ['PA']))
+        ->toBe('Drain Cleaning in Wilkes-Barre & Scranton');
+});

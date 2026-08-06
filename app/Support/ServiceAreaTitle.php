@@ -15,11 +15,18 @@ namespace App\Support;
  *
  * Nothing here is hardcoded to a tenant: the full region is the tenant's configured `service_area`, and
  * the states are the tenant's own coverage/corporate states.
+ *
+ * The configured `service_area` is often a "brand tagline · region" slot (e.g. "Sump Pump & Basement
+ * Water Specialists · New Jersey & Eastern Pennsylvania") that also renders on the home page. Only the
+ * REGION half belongs in a title, so {@see cleanRegion()} peels the trailing segment off a middot/pipe/
+ * dash-separated slot (and decodes HTML entities) — the home tagline stays intact, the title gets the
+ * clean prose region instead of falling back to bare state abbreviations.
  */
 final class ServiceAreaTitle
 {
     /**
-     * @param  string  $fullRegion  the tenant's configured region phrase (e.g. "New Jersey & Eastern Pennsylvania")
+     * @param  string  $fullRegion  the tenant's configured region phrase, or a "tagline · region" slot
+     *                              (only the region half is used, e.g. "New Jersey & Eastern Pennsylvania")
      * @param  list<string>  $stateAbbrevs  the tenant's states, 2-letter (e.g. ["NJ", "PA"])
      */
     public static function qualify(string $title, string $fullRegion, array $stateAbbrevs, int $max = SeoTitle::MAX_LENGTH): string
@@ -33,7 +40,7 @@ final class ServiceAreaTitle
             array_map(fn ($s): string => strtoupper(trim((string) $s)), $stateAbbrevs),
             fn (string $s): bool => $s !== '',
         )));
-        $full = trim(preg_replace('/\s+/', ' ', $fullRegion) ?? '');
+        $full = self::cleanRegion($fullRegion);
 
         // Already carries geo? leave it (idempotent across repushes; respects a drafter that wrote geo).
         if (self::hasGeo($title, $abbrevs, $full)) {
@@ -55,6 +62,28 @@ final class ServiceAreaTitle
         }
 
         return $title; // nothing fits — a clean title beats a truncated region
+    }
+
+    /**
+     * Peel the REGION out of a possibly-tagline slot. A "brand tagline · region" slot (middot / pipe /
+     * en–em dash separated) carries the geo half LAST by convention — take the trailing segment; a slot
+     * with no such separator is already a clean region and is returned whole. HTML entities are decoded
+     * ("&amp;" → "&"). The ASCII hyphen is intentionally NOT a separator, so hyphenated place names
+     * ("Wilkes-Barre") survive.
+     */
+    private static function cleanRegion(string $raw): string
+    {
+        $raw = trim((string) preg_replace('/\s+/', ' ', html_entity_decode($raw, ENT_QUOTES | ENT_HTML5)));
+        if ($raw === '') {
+            return '';
+        }
+
+        $parts = array_values(array_filter(
+            array_map('trim', preg_split('/\s*[·|–—]\s*/u', $raw) ?: [$raw]),
+            fn (string $p): bool => $p !== '',
+        ));
+
+        return $parts === [] ? $raw : (string) end($parts);
     }
 
     /** True when the title already carries geo — a tenant state (abbrev/name) OR any "in {Place}" clause. */
