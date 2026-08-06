@@ -66,9 +66,11 @@ class PageDrafter
             $parts[] = "Primary target: {$grounding->targetKeyword}";
             $parts[] = 'ON-PAGE SEO (required): the hero_headline (the page H1) MUST contain the primary target keyword '
                 ."\"{$grounding->targetKeyword}\" verbatim — lead with it, then add the benefit. seo.meta_description MUST use "
-                ."\"{$grounding->targetKeyword}\" once, naturally. Put the exact phrase up front ONLY in these SEO spots (H1 + "
-                .'seo.title + seo.meta_description); the mid-page H2s still VARY per the heading rules below — never stuff the '
-                .'keyword across the body.';
+                ."\"{$grounding->targetKeyword}\" once, naturally. seo.title MUST contain \"{$grounding->targetKeyword}\" AND "
+                .'add distinguishing words AFTER it — NEVER a title that is ONLY the keyword (an exact-match-only title '
+                .'over-optimizes and ranks worse). Put the exact phrase up front ONLY in these SEO spots (H1 + seo.title + '
+                .'seo.meta_description); the mid-page H2s still VARY per the heading rules below — never stuff the keyword '
+                .'across the body.';
         }
 
         $parts[] = $this->voiceBlock($grounding);

@@ -51,8 +51,14 @@ class AuditServiceKeywordsCommand extends Command
             return self::SUCCESS;
         }
 
-        $icons = ['optimized' => '<info>✓ optimized</info>', 'partial' => '<comment>~ partial  </comment>', 'off_target' => '<fg=red>✗ off-target</>', 'no_target' => '<fg=red>✗ no target </>'];
-        $counts = ['optimized' => 0, 'partial' => 0, 'off_target' => 0, 'no_target' => 0];
+        $icons = [
+            'optimized' => '<info>✓ optimized</info>',
+            'over_optimized' => '<comment>! over-optimized</comment>',
+            'partial' => '<comment>~ partial  </comment>',
+            'off_target' => '<fg=red>✗ off-target</>',
+            'no_target' => '<fg=red>✗ no target </>',
+        ];
+        $counts = ['optimized' => 0, 'over_optimized' => 0, 'partial' => 0, 'off_target' => 0, 'no_target' => 0];
 
         $this->line("Target-keyword audit for <info>{$site->brand_name}</info> — {$pages->count()} service/hub page(s):");
         $this->newLine();
@@ -80,11 +86,14 @@ class AuditServiceKeywordsCommand extends Command
 
         $this->newLine();
         $this->line(sprintf(
-            'Summary: <info>%d optimized</info>, <comment>%d partial</comment>, <fg=red>%d off-target</>, <fg=red>%d without a target keyword</>.',
-            $counts['optimized'], $counts['partial'], $counts['off_target'], $counts['no_target'],
+            'Summary: <info>%d optimized</info>, <comment>%d over-optimized</comment>, <comment>%d partial</comment>, <fg=red>%d off-target</>, <fg=red>%d without a target keyword</>.',
+            $counts['optimized'], $counts['over_optimized'], $counts['partial'], $counts['off_target'], $counts['no_target'],
         ));
         if ($counts['off_target'] > 0 || $counts['no_target'] > 0) {
             $this->warn('Off-target / no-target pages need the target keyword worked into the SEO title + H1 (regenerate or edit in Review).');
+        }
+        if ($counts['over_optimized'] > 0) {
+            $this->warn('Over-optimized pages have a <title> that is ONLY the keyword — add a few words after it (launchpad:fix-service-headlines fixes this).');
         }
 
         return self::SUCCESS;
