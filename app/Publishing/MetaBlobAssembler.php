@@ -801,7 +801,7 @@ class MetaBlobAssembler
     {
         // Trailing-slash form (PublicUrl) so the canonical points at WordPress's real permalink, not a
         // slash-less URL that 301-redirects to it (which GSC reports as "Excluded (redirect)").
-        return PublicUrl::for($this->site($content)?->domain_url, $content->slug);
+        return PublicUrl::forContent($this->site($content)?->domain_url, $content);
     }
 
     /**

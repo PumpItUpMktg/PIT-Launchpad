@@ -142,7 +142,7 @@ class LiveBoards
             'id' => (string) $content->id,
             'title' => (string) $content->title,
             'type' => $content->page_type->value ?? 'page',
-            'url' => PublicUrl::for($site->domain_url, $content->slug) ?? '/'.ltrim((string) $content->slug, '/'),
+            'url' => PublicUrl::forContent($site->domain_url, $content) ?? '/'.ltrim((string) $content->slug, '/'),
             'published_at' => $content->published_at?->toDateString(),
             'days_live' => $content->published_at !== null ? (int) $content->published_at->diffInDays(now()) : null,
             'locked' => (bool) $content->locked,

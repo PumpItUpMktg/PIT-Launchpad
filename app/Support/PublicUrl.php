@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use App\Enums\PageType;
+use App\Models\Content;
+
 /**
  * The one place that builds a page's public URL — WITH the trailing slash WordPress uses for pretty
  * permalinks. Everything that emits or inspects a page URL (the canonical tag, OG url, the Live cards,
@@ -23,5 +26,17 @@ final class PublicUrl
         $path = trim((string) $slug, '/');
 
         return $base.'/'.($path === '' ? '' : $path.'/');
+    }
+
+    /**
+     * The public URL for a Content row. The HOME page canonicalizes to the domain root ("/") — its slug
+     * is "home" (the companion plugin's static-front-page marker), but WordPress serves it at "/", so a
+     * "/home/" canonical would compete with the real front page (Google picks "/").
+     */
+    public static function forContent(?string $domain, Content $content): ?string
+    {
+        $slug = $content->page_type === PageType::Home ? '' : (string) $content->slug;
+
+        return self::for($domain, $slug);
     }
 }

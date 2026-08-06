@@ -108,7 +108,7 @@ class LiveMetrics
 
         // Inspect the trailing-slash (canonical/permalink) form so GSC reports the FINAL URL as Indexed,
         // not the slash-less variant that 301-redirects to it ("Excluded (redirect)").
-        $url = PublicUrl::for($site->domain_url, $page->slug);
+        $url = PublicUrl::forContent($site->domain_url, $page);
         $status = $url !== null ? $this->indexInspector->cached($site, $url) : null;
         if ($status === null) {
             return $blank + ['pending' => 'Run index audit'];
