@@ -16,10 +16,14 @@ class DataForSeoException extends RuntimeException
         parent::__construct($message);
     }
 
+    /** DataForSEO's per-minute rate-limit envelope code — transient, retried with backoff (NOT fatal). */
+    public const RATE_LIMITED = 40202;
+
     public static function envelope(int $statusCode, string $message): self
     {
-        // 401xx auth, 402xx payment/quota — fatal, surface loudly, do not retry.
-        $fatal = $statusCode >= 40100 && $statusCode < 40300;
+        // 401xx auth, 402xx payment/quota — fatal, surface loudly, do not retry. The one exception is
+        // 40202 (rate limit per minute): transient, so it is retryable, not fatal.
+        $fatal = $statusCode >= 40100 && $statusCode < 40300 && $statusCode !== self::RATE_LIMITED;
 
         return new self("DataForSEO status_code {$statusCode}: {$message}", $statusCode, $fatal);
     }
