@@ -8,6 +8,7 @@ use App\Integrations\UrlInspection\IndexInspector;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Support\PublicUrl;
 
 /**
  * The per-tenant index-coverage audit — the honest answer to "does our marked index match what Google
@@ -40,7 +41,6 @@ class IndexCoverage
     {
         $connected = $this->inspector->connected($site);
 
-        $home = rtrim((string) $site->domain_url, '/');
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('status', ContentStatus::Published->value)
@@ -55,10 +55,13 @@ class IndexCoverage
         $inspected = 0;
 
         foreach ($pages as $content) {
-            $url = $home.'/'.ltrim((string) $content->slug, '/');
-            $status = ($connected && $home !== '')
+            // Trailing-slash form (PublicUrl) so this inspects/caches the SAME URL the Live cards read —
+            // the WordPress permalink, not the slash-less variant that 301-redirects to it.
+            $url = PublicUrl::for($site->domain_url, $content->slug);
+            $status = ($connected && $url !== null)
                 ? ($live ? $this->inspector->inspect($site, $url) : $this->inspector->cached($site, $url))
                 : null;
+            $url ??= '/'.ltrim((string) $content->slug, '/');
 
             if ($status === null) {
                 $state = IndexCoverageState::NotInspected;
