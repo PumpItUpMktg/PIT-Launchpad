@@ -80,6 +80,11 @@ return [
         'base_url' => env('DATAFORSEO_BASE_URL', 'https://api.dataforseo.com'),
         'mode' => env('DATAFORSEO_DEFAULT_MODE', 'standard'),
         'timeout' => (int) env('DATAFORSEO_TIMEOUT', 30),
+        // Rate limiting: proactively space requests to stay under the account's per-minute cap (a
+        // discovery burst otherwise trips status_code 40202), and the reactive backoff per retry when
+        // the cap is hit anyway. Tests set backoff to 0 to skip the sleep.
+        'rate_limit_per_min' => (int) env('DATAFORSEO_RATE_LIMIT_PER_MIN', 12),
+        'rate_limit_backoff_ms' => (int) env('DATAFORSEO_RATE_LIMIT_BACKOFF_MS', 5000),
         // Default geo for the location-less SerpProvider contract methods.
         'location_code' => (int) env('DATAFORSEO_LOCATION_CODE', 2840), // United States
         'language_code' => env('DATAFORSEO_LANGUAGE_CODE', 'en'),

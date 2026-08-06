@@ -23,6 +23,13 @@ class DataForSeoClient
 
     private const BACKOFF_MS = 400;
 
+    /** Reactive backoff on a 40202 rate-limit envelope (proactive throttle below usually prevents it). */
+    private const RATE_LIMIT_RETRIES = 5;
+
+    /** Monotonic timestamps of the requests issued in the last 60s — the proactive per-minute throttle. */
+    /** @var list<float> */
+    private array $requestTimes = [];
+
     public function __construct(
         private readonly Http $http,
         private readonly string $login,
@@ -403,7 +410,57 @@ class DataForSeoClient
      */
     private function request(string $path, array $body): array
     {
-        return $this->handle($this->pending()->post($this->url($path), $body));
+        return $this->send(fn (): array => $this->handle($this->pending()->post($this->url($path), $body)));
+    }
+
+    /**
+     * Issue a request under the DataForSEO rate limit: throttle proactively to stay under the per-minute
+     * cap (so a discovery burst never trips it), and — if the cap is hit anyway (e.g. a concurrent run) —
+     * back off and retry the transient 40202 instead of crashing the whole run. Any other envelope error
+     * (auth/quota, fatal) surfaces immediately.
+     *
+     * @param  callable(): array<string, mixed>  $fn
+     * @return array<string, mixed>
+     */
+    private function send(callable $fn): array
+    {
+        $this->throttle();
+
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                return $fn();
+            } catch (DataForSeoException $e) {
+                if ($e->statusCode !== DataForSeoException::RATE_LIMITED || $attempt > self::RATE_LIMIT_RETRIES) {
+                    throw $e;
+                }
+                $backoffMs = (int) config('services.dataforseo.rate_limit_backoff_ms', 5000);
+                if ($backoffMs > 0) {
+                    usleep($backoffMs * 1000 * $attempt); // escalating — clear the rolling per-minute window
+                }
+            }
+        }
+    }
+
+    /**
+     * Space requests to stay under DataForSEO's per-minute cap (config-driven, default 12/min): once the
+     * rolling 60s window is full, sleep until the oldest request ages out, then record this one.
+     */
+    private function throttle(): void
+    {
+        $perMin = max(1, (int) config('services.dataforseo.rate_limit_per_min', 12));
+        $now = microtime(true);
+        $this->requestTimes = array_values(array_filter($this->requestTimes, fn (float $t): bool => $now - $t < 60.0));
+
+        if (count($this->requestTimes) >= $perMin) {
+            $wait = 60.0 - ($now - $this->requestTimes[0]) + 0.25;
+            if ($wait > 0) {
+                usleep((int) ($wait * 1_000_000));
+            }
+            $now = microtime(true);
+            $this->requestTimes = array_values(array_filter($this->requestTimes, fn (float $t): bool => $now - $t < 60.0));
+        }
+
+        $this->requestTimes[] = microtime(true);
     }
 
     /**
@@ -415,7 +472,7 @@ class DataForSeoClient
      */
     private function requestGet(string $path): array
     {
-        return $this->handle($this->pending()->get($this->url($path)));
+        return $this->send(fn (): array => $this->handle($this->pending()->get($this->url($path))));
     }
 
     private function pending(): PendingRequest

@@ -188,3 +188,31 @@ it('marks a 402 quota/payment envelope fatal', function () {
 
     expect($e->fatal)->toBeTrue();
 });
+
+it('does NOT mark a 40202 rate-limit envelope fatal — it is transient/retryable', function () {
+    $e = DataForSeoException::envelope(DataForSeoException::RATE_LIMITED, 'rate limit per minute exceeded');
+
+    expect($e->fatal)->toBeFalse()
+        ->and($e->statusCode)->toBe(40202);
+});
+
+it('backs off and retries a 40202 rate-limit envelope, then succeeds', function () {
+    config(['services.dataforseo.rate_limit_backoff_ms' => 0]); // no real sleep in tests
+    HttpFacade::fake([
+        '*/keywords_data/google_ads/search_volume/live' => HttpFacade::sequence()
+            ->push(dfsEnvelope([], 40202), 200)   // first call trips the per-minute cap
+            ->push(dfsEnvelope([['keyword' => 'drain cleaning', 'search_volume' => 500, 'cpc' => 3.0, 'competition_index' => 30]]), 200),
+    ]);
+
+    $out = dfsClient()->liveSearchVolume(['drain cleaning'], 2840, 'en');
+
+    expect($out['drain cleaning']['volume'])->toBe(500);
+    HttpFacade::assertSentCount(2); // hit the limit, retried, succeeded — no crash
+});
+
+it('surfaces the 40202 loudly only after exhausting the bounded retries', function () {
+    config(['services.dataforseo.rate_limit_backoff_ms' => 0]);
+    HttpFacade::fake(['*' => HttpFacade::response(dfsEnvelope([], 40202), 200)]);
+
+    expect(fn () => dfsClient()->liveSearchVolume(['x'], 2840, 'en'))->toThrow(DataForSeoException::class);
+});
