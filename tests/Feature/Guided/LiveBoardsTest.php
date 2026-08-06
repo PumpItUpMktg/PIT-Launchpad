@@ -106,7 +106,7 @@ it('groups the Locations board: landing card, assigned towns, city-service pages
         ->and(collect($group['city_services'])->pluck('id')->all())->toBe([$pair->id])
         ->and($group['rollup']['towns_live'])->toBe(1)
         ->and(collect($board['orphans'])->pluck('id')->all())->toBe([$orphan->id])
-        ->and($group['towns'][0]['url'])->toBe('https://spg.example/norristown-pa');
+        ->and($group['towns'][0]['url'])->toBe('https://spg.example/norristown-pa/');
 });
 
 it('resolves the position block from the snapshot series with an honest delta and pendings', function () {
