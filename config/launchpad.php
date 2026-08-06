@@ -419,6 +419,37 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | GSC time-series retention (rank-source split relay)
+    |--------------------------------------------------------------------------
+    | Search Console serves a rolling ~16-month window; anything older is gone
+    | for good. We snapshot daily and NEVER overwrite, in a dual grain:
+    |
+    |  - gsc_url_daily        — one row per (site, date, url); GSC's NATIVE
+    |    impression-weighted blended position (pulled with [date,page], so no
+    |    client-side re-weighting can bias it). Retained indefinitely — the
+    |    per-URL cohort series refresh signals depend on.
+    |  - gsc_url_query_daily  — one row per (site, date, url, query, country,
+    |    device); full grain kept for `query_grain_retention_days`, then rolled
+    |    up into the monthly table and pruned.
+    |  - gsc_url_query_monthly — the rollup target (impression-weighted monthly
+    |    position); retained indefinitely for the long-term distinct-query and
+    |    banded top-3/10/20 trends.
+    |
+    | Each sync re-pulls a short trailing window (`trailing_repull_days`) and
+    | upserts on a grain hash, so GSC's ~3-day revisions + 2–3 day lag are
+    | absorbed without ever double-counting. `row_limit` is the GSC page size
+    | (max 25000); larger pulls paginate with startRow. `backfill_months` is the
+    | one-time recovery depth.
+    */
+    'gsc' => [
+        'trailing_repull_days' => (int) env('LAUNCHPAD_GSC_REPULL_DAYS', 4),
+        'query_grain_retention_days' => (int) env('LAUNCHPAD_GSC_QUERY_RETENTION_DAYS', 180),
+        'backfill_months' => (int) env('LAUNCHPAD_GSC_BACKFILL_MONTHS', 16),
+        'row_limit' => (int) env('LAUNCHPAD_GSC_ROW_LIMIT', 25000),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Bulk re-push throttle
     |--------------------------------------------------------------------------
     | A "Repush published" refreshes the engine-owned meta-blob (canonical / og /
