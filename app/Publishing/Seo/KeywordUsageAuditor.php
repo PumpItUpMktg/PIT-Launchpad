@@ -66,12 +66,27 @@ class KeywordUsageAuditor
 
         $missing = array_keys(array_filter($placements, fn (string $p): bool => $p === self::ABSENT));
 
+        $verdict = self::verdict($placements);
+        // Over-optimization: an on-target page whose <title> is ONLY the keyword (an exact-match, nothing
+        // else) — widely penalized by search engines. A distinct finding, not a win.
+        if ($verdict === 'optimized' && self::isBareKeyword($keyword, $fields['title'])) {
+            $verdict = 'over_optimized';
+        }
+
         return $base + [
             'keyword' => $keyword,
             'placements' => $placements,
             'missing' => $missing,
-            'verdict' => self::verdict($placements),
+            'verdict' => $verdict,
         ];
+    }
+
+    /** True when the text is NOTHING BUT the keyword (normalized) — the exact-match over-optimization case. */
+    public static function isBareKeyword(string $keyword, string $text): bool
+    {
+        $needle = self::normalize($keyword);
+
+        return $needle !== '' && self::normalize($text) === $needle;
     }
 
     /**

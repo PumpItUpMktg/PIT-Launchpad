@@ -39,19 +39,50 @@ function fixerWith(string $response): HeadlineKeywordFixer
     return new HeadlineKeywordFixer(app(ClaudeClient::class));
 }
 
-it('finds only pages whose H1 omits the target keyword', function () {
+it('finds pages whose H1 omits the keyword, and skips fully-healthy ones', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG']);
     offTargetPage($site, 'sump pump installation'); // H1 "Keep Your Basement Dry" → off-target
-    offTargetPage($site, 'sump pump repair', [      // H1 already carries the keyword → skipped
+    offTargetPage($site, 'sump pump repair', [      // H1 + non-bare title both carry the keyword → skipped
         'slug' => 'sump-pump-repair',
         'slot_payload' => ['hero_headline' => 'Sump Pump Repair, Same Day'],
-        'meta' => ['seo' => ['title' => 'Sump Pump Repair', 'meta_description' => 'Sump pump repair fast.']],
+        'meta' => ['seo' => ['title' => 'Sump Pump Repair, Same Day', 'meta_description' => 'Sump pump repair fast.']],
     ]);
 
     $pages = fixerWith('{}')->offTargetPages($site);
 
     expect($pages)->toHaveCount(1)
         ->and($pages->first()->slug)->toBe('sump-pump-installation');
+});
+
+it('also picks up an over-optimized page whose title is only the keyword', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    offTargetPage($site, 'commercial pump services', [
+        'slug' => 'commercial-pump-services',
+        'slot_payload' => ['hero_headline' => 'Commercial Pump Services You Can Rely On'], // H1 fine
+        'meta' => ['seo' => ['title' => 'Commercial Pump Services', 'meta_description' => 'Commercial pump services.']], // title is BARE
+    ]);
+
+    expect(fixerWith('{}')->offTargetPages($site))->toHaveCount(1);
+});
+
+it('rejects a bare-keyword title from the model and falls back to a non-bare title', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $page = offTargetPage($site, 'commercial pump services', [
+        'slug' => 'commercial-pump-services',
+        'title' => 'Commercial Pump Services',
+        'slot_payload' => ['hero_headline' => 'We Keep Plants Running'], // H1 off-target → page is picked up
+        'meta' => ['seo' => ['title' => 'Commercial Pump Services', 'meta_description' => 'Pumps.']],
+    ]);
+
+    // Model returns the bare keyword as the title — must be rejected.
+    $fix = fixerWith(json_encode([
+        'hero_headline' => 'Commercial Pump Services for Facilities',
+        'seo_title' => 'Commercial Pump Services',
+        'meta_description' => 'Commercial pump services for facilities and plants.',
+    ]))->propose($page->fresh());
+
+    expect(KeywordUsageAuditor::isBareKeyword('commercial pump services', $fix->newTitle))->toBeFalse()
+        ->and(strtolower($fix->newTitle))->toContain('commercial pump services'); // still on-keyword, just not ONLY it
 });
 
 it('adopts a Haiku rewrite that leads with the keyword and fits the budget', function () {

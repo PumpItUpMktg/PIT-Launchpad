@@ -63,7 +63,9 @@ class HeadlineKeywordFixer
             return false;
         }
 
-        return KeywordUsageAuditor::placement($keyword, $this->heroValue($page)) === KeywordUsageAuditor::ABSENT;
+        // Off-target: the H1 omits the keyword. Over-optimized: the <title> is ONLY the keyword.
+        return KeywordUsageAuditor::placement($keyword, $this->heroValue($page)) === KeywordUsageAuditor::ABSENT
+            || KeywordUsageAuditor::isBareKeyword($keyword, $this->titleValue($page));
     }
 
     /**
@@ -119,9 +121,10 @@ class HeadlineKeywordFixer
     {
         $parsed = $this->askModel($keyword, $oldH1, $oldTitle, $oldMeta, $heroMax);
 
-        $h1 = $this->acceptOrFallback($keyword, $parsed['hero_headline'] ?? null, $heroMax, $this->fallbackH1($keyword, $heroMax));
-        $title = $this->acceptOrFallback($keyword, $parsed['seo_title'] ?? null, self::TITLE_MAX, $this->fallbackTitle($keyword));
-        $meta = $this->acceptOrFallback($keyword, $parsed['meta_description'] ?? null, self::META_MAX, $this->fallbackMeta($keyword, $oldMeta, $page));
+        $h1 = $this->acceptOrFallback($keyword, $parsed['hero_headline'] ?? null, $heroMax, false, $this->fallbackH1($keyword, $heroMax));
+        // The <title> must NOT be the bare keyword (over-optimization) — require words beyond it.
+        $title = $this->acceptOrFallback($keyword, $parsed['seo_title'] ?? null, self::TITLE_MAX, true, $this->fallbackTitle($keyword, $oldTitle, $page));
+        $meta = $this->acceptOrFallback($keyword, $parsed['meta_description'] ?? null, self::META_MAX, false, $this->fallbackMeta($keyword, $oldMeta, $page));
 
         return [$h1, $title, $meta];
     }
@@ -133,6 +136,7 @@ class HeadlineKeywordFixer
     {
         $prompt = "Rewrite three SEO fields for a home-services page whose primary target keyword is \"{$keyword}\".\n"
             ."Rules: EACH field must contain \"{$keyword}\" verbatim. hero_headline and seo_title must LEAD with it, then a short benefit.\n"
+            ."seo_title must NEVER be ONLY \"{$keyword}\" — always add 2-4 distinguishing words AFTER it (an exact-match-only title over-optimizes and ranks worse).\n"
             ."Budgets (hard): hero_headline <= {$heroMax} chars, seo_title <= ".self::TITLE_MAX.' chars, meta_description <= '.self::META_MAX." chars.\n"
             ."Keep the brand's plain, confident voice. Do NOT invent facts, prices, or locations.\n"
             ."Current values:\n- hero_headline: {$oldH1}\n- seo_title: {$oldTitle}\n- meta_description: {$oldMeta}\n"
@@ -150,13 +154,18 @@ class HeadlineKeywordFixer
         return is_array($decoded) ? array_map(fn ($v): string => is_string($v) ? trim($v) : '', $decoded) : [];
     }
 
-    /** Accept the model's value only if it contains the keyword AND fits the budget; else the fallback. */
-    private function acceptOrFallback(string $keyword, ?string $value, int $max, string $fallback): string
+    /**
+     * Accept the model's value only if it contains the keyword AND fits the budget — and, when
+     * $mustExceedKeyword (the title), only if it is MORE than the bare keyword (never the exact match
+     * alone). Otherwise the fallback.
+     */
+    private function acceptOrFallback(string $keyword, ?string $value, int $max, bool $mustExceedKeyword, string $fallback): string
     {
         if (is_string($value)
             && $value !== ''
             && mb_strlen($value) <= $max
-            && KeywordUsageAuditor::placement($keyword, $value) !== KeywordUsageAuditor::ABSENT) {
+            && KeywordUsageAuditor::placement($keyword, $value) !== KeywordUsageAuditor::ABSENT
+            && (! $mustExceedKeyword || ! KeywordUsageAuditor::isBareKeyword($keyword, $value))) {
             return $value;
         }
 
@@ -168,9 +177,25 @@ class HeadlineKeywordFixer
         return mb_substr($this->titleCase($keyword), 0, $heroMax);
     }
 
-    private function fallbackTitle(string $keyword): string
+    /**
+     * A NON-BARE title fallback (never the keyword alone): keep the page's existing title if it already
+     * carries the keyword with words beyond it; otherwise lead with the keyword and append the brand.
+     */
+    private function fallbackTitle(string $keyword, string $oldTitle, Content $page): string
     {
-        return mb_substr($this->titleCase($keyword), 0, self::TITLE_MAX);
+        if ($oldTitle !== ''
+            && mb_strlen($oldTitle) <= self::TITLE_MAX
+            && KeywordUsageAuditor::placement($keyword, $oldTitle) !== KeywordUsageAuditor::ABSENT
+            && ! KeywordUsageAuditor::isBareKeyword($keyword, $oldTitle)) {
+            return $oldTitle;
+        }
+
+        $site = Site::withoutGlobalScopes()->find($page->site_id);
+        $brand = $site instanceof Site ? trim((string) $site->brand_name) : '';
+        $base = $this->titleCase($keyword);
+        $candidate = $brand !== '' ? "{$base} — {$brand}" : $base;
+
+        return mb_substr($candidate, 0, self::TITLE_MAX);
     }
 
     private function fallbackMeta(string $keyword, string $oldMeta, Content $page): string
@@ -206,6 +231,11 @@ class HeadlineKeywordFixer
         $raw = $slots[self::HERO_KEY] ?? '';
 
         return is_array($raw) ? (string) ($raw[0] ?? '') : (string) $raw;
+    }
+
+    private function titleValue(Content $page): string
+    {
+        return (string) ($this->seo($page)['title'] ?? $page->title ?? '');
     }
 
     private function heroSubhead(Content $page): string

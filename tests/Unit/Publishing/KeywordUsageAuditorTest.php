@@ -31,3 +31,9 @@ it('grades partial when present but not tight in the critical spots', function (
     $loose = ['slug' => 'exact', 'title' => 'partial', 'h1' => 'exact', 'meta_description' => 'absent', 'body' => 'exact'];
     expect(KeywordUsageAuditor::verdict($loose))->toBe('partial');
 });
+
+it('detects a bare-keyword (exact-match-only) value as over-optimization', function () {
+    expect(KeywordUsageAuditor::isBareKeyword('commercial pump services', 'Commercial Pump Services'))->toBeTrue()
+        ->and(KeywordUsageAuditor::isBareKeyword('commercial pump services', 'Commercial Pump Services for Plants'))->toBeFalse()
+        ->and(KeywordUsageAuditor::isBareKeyword('commercial pump services', 'Reliable Commercial Pump Services'))->toBeFalse();
+});
