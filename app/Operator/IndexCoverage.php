@@ -57,7 +57,7 @@ class IndexCoverage
         foreach ($pages as $content) {
             // Trailing-slash form (PublicUrl) so this inspects/caches the SAME URL the Live cards read —
             // the WordPress permalink, not the slash-less variant that 301-redirects to it.
-            $url = PublicUrl::for($site->domain_url, $content->slug);
+            $url = PublicUrl::forContent($site->domain_url, $content);
             $status = ($connected && $url !== null)
                 ? ($live ? $this->inspector->inspect($site, $url) : $this->inspector->cached($site, $url))
                 : null;
