@@ -9,8 +9,11 @@ use App\ContentEngine\Drafting\PageGroundingAssembler;
 use App\ContentEngine\Drafting\Sentinel;
 use App\ContentEngine\Drafting\SlotShaper;
 use App\Enums\ContentStatus;
+use App\Enums\KeywordSource;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Claude\CompletionResult;
+use App\Models\Content;
+use App\Models\Keyword;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\PageBuilder\Validation\KitValidator;
@@ -223,5 +226,99 @@ it('truncates and publishes when the retry still overshoots — never leaves the
 
     Log::shouldHaveReceived('warning')
         ->withArgs(fn (string $msg, array $ctx = []): bool => $msg === 'slot_truncated' && in_array('hero_subhead', $ctx['slots'] ?? [], true))
+        ->atLeast()->once();
+});
+
+/**
+ * A ClaudeClient that returns queued responses in order (repeating the last), recording prompts —
+ * so a test can drive the drafter's ONE corrective retry with a different second response.
+ */
+class QueuedFakeClaude implements ClaudeClient
+{
+    /** @var list<string> */
+    public array $prompts = [];
+
+    /** @param list<string> $responses */
+    public function __construct(private readonly array $responses) {}
+
+    public function complete(string $prompt, ?string $system = null): string
+    {
+        return $this->completeDetailed($prompt, $system)->text;
+    }
+
+    public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
+    {
+        $i = count($this->prompts);
+        $this->prompts[] = $prompt;
+
+        return new CompletionResult(
+            text: $this->responses[$i] ?? $this->responses[array_key_last($this->responses)],
+            stopReason: 'end_turn',
+        );
+    }
+}
+
+function keywordTargetedPage(string $query): Content
+{
+    $page = PageFixture::intakePage();
+    $kw = Keyword::create([
+        'site_id' => $page->site_id,
+        'query' => $query,
+        'source' => KeywordSource::Seed,
+        'status' => 'candidate',
+    ]);
+    $page->update(['target_keyword_id' => $kw->id]);
+
+    return $page->fresh();
+}
+
+it('re-prompts once when the H1 omits the target keyword, then adopts the corrected headline', function () {
+    $page = keywordTargetedPage('water heater installation');
+    $claim = proofIdFor($page->site_id);
+
+    $claude = new QueuedFakeClaude([
+        PageFixture::validResponse($claim, ['hero_headline' => 'Endless Hot Water, Guaranteed']),        // off-target H1
+        PageFixture::validResponse($claim, ['hero_headline' => 'Water Heater Installation in a Day']),   // corrected
+    ]);
+
+    $drafted = pageEngine($claude)->draftPage($page);
+
+    // The corrected headline (with the keyword) is what persisted.
+    expect(strtolower($drafted->slot_payload['hero_headline']))->toContain('water heater installation');
+
+    // Exactly one corrective retry, and it named the on-page SEO miss.
+    expect($claude->prompts)->toHaveCount(2)
+        ->and($claude->prompts[0])->toContain('the hero_headline (the page H1) MUST contain the primary target keyword')
+        ->and($claude->prompts[1])->toContain('ON-PAGE SEO CORRECTION');
+});
+
+it('does not retry when the H1 already contains the target keyword', function () {
+    $page = keywordTargetedPage('water heater installation');
+
+    $claude = new QueuedFakeClaude([
+        PageFixture::validResponse(proofIdFor($page->site_id), ['hero_headline' => 'Water Heater Installation, Done Right']),
+    ]);
+
+    pageEngine($claude)->draftPage($page);
+
+    expect($claude->prompts)->toHaveCount(1); // no corrective pass
+});
+
+it('logs an off-target warning when the H1 still misses after the one corrective pass', function () {
+    Log::spy();
+    $page = keywordTargetedPage('water heater installation');
+    $claim = proofIdFor($page->site_id);
+
+    // Both attempts omit the keyword — the bounded single retry can't fix it, so it degrades + logs.
+    $claude = new QueuedFakeClaude([
+        PageFixture::validResponse($claim, ['hero_headline' => 'Endless Hot Water, Guaranteed']),
+        PageFixture::validResponse($claim, ['hero_headline' => 'Endless Hot Water, Always']),
+    ]);
+
+    $drafted = pageEngine($claude)->draftPage($page);
+
+    expect($drafted->hasDraft())->toBeTrue(); // published anyway — degrade, never fail
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn (string $msg, array $ctx = []): bool => $msg === 'page_h1_off_target' && ($ctx['keyword'] ?? null) === 'water heater installation')
         ->atLeast()->once();
 });
