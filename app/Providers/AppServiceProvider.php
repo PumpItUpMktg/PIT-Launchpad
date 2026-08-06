@@ -100,6 +100,7 @@ use App\Locations\Dma\MetroResolver;
 use App\Models\User;
 use App\Onboarding\MissionPolisher;
 use App\Operator\Controls\BudgetControl;
+use App\Publishing\Seo\HeadlineKeywordFixer;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
@@ -523,6 +524,12 @@ class AppServiceProvider extends ServiceProvider
         // Mission polish is an opt-in one-sentence cleanup on the Brand intake — the cheap scoring
         // model is plenty; the honesty constraints live in the MissionPolisher prompt.
         $this->app->when(MissionPolisher::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
+
+        // The service-headline now-fixer reworks three short SEO fields to lead with the target keyword —
+        // a cheap Haiku pass with a deterministic keyword-guaranteed fallback.
+        $this->app->when(HeadlineKeywordFixer::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
 
