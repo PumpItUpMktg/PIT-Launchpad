@@ -49,9 +49,9 @@ it('tallies real index coverage across published pages and posts', function () {
     $mk('a-blog-post', ContentKind::Post);
 
     bindFakeInspector([
-        'https://spg.example/hoboken-nj' => status('https://spg.example/hoboken-nj', IndexCoverageState::Indexed),
-        'https://spg.example/clifton-nj' => status('https://spg.example/clifton-nj', IndexCoverageState::CrawledNotIndexed),
-        'https://spg.example/a-blog-post' => status('https://spg.example/a-blog-post', IndexCoverageState::Indexed),
+        'https://spg.example/hoboken-nj/' => status('https://spg.example/hoboken-nj/', IndexCoverageState::Indexed),
+        'https://spg.example/clifton-nj/' => status('https://spg.example/clifton-nj/', IndexCoverageState::CrawledNotIndexed),
+        'https://spg.example/a-blog-post/' => status('https://spg.example/a-blog-post/', IndexCoverageState::Indexed),
     ]);
 
     $r = app(IndexCoverage::class)->audit($site, live: true);
@@ -61,7 +61,9 @@ it('tallies real index coverage across published pages and posts', function () {
         ->and($r['indexed'])->toBe(2)
         ->and($r['inspected'])->toBe(3)
         ->and($r['by_state']['indexed'])->toBe(2)
-        ->and($r['by_state']['crawled_not_indexed'])->toBe(1);
+        ->and($r['by_state']['crawled_not_indexed'])->toBe(1)
+        // Inspects the trailing-slash permalink (same URL the Live cards read) — not the redirecting form.
+        ->and(collect($r['findings'])->pluck('url')->every(fn (string $u): bool => str_ends_with($u, '/')))->toBeTrue();
 });
 
 it('reports nothing fabricated when not connected', function () {
@@ -80,7 +82,7 @@ it('the audit-index command prints the coverage summary', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
     Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'hoboken-nj', 'title' => 'Hoboken']);
     bindFakeInspector([
-        'https://spg.example/hoboken-nj' => status('https://spg.example/hoboken-nj', IndexCoverageState::Indexed),
+        'https://spg.example/hoboken-nj/' => status('https://spg.example/hoboken-nj/', IndexCoverageState::Indexed),
     ]);
 
     $this->artisan('launchpad:audit-index --site=SPG')
