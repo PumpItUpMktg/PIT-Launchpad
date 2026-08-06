@@ -13,6 +13,7 @@ use App\PageBuilder\Validation\ValidationCode;
 use App\PageBuilder\Validation\ValidationContext;
 use App\PageBuilder\Validation\ValidationFailure;
 use App\PageBuilder\Validation\ValidationResult;
+use App\Publishing\Seo\KeywordUsageAuditor;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -83,13 +84,30 @@ class PageDraftingEngine
         // retry: if a slot ran past its hard max, re-prompt the drafter naming the overshoot with a
         // ~10%-tighter target and adopt the retry if it produced content. Then TRUNCATE any residual
         // overshoot at a sentence boundary (SlotLengthClamp) and publish — never reject.
+        // On-page SEO (target keyword in the H1) rides the SAME single retry as the budget overshoot — the
+        // hero_headline MUST contain the target keyword or the page ranks off-target. If EITHER needs a fix,
+        // one combined corrective re-prompt; adopt it if it produced content.
         $overshoot = $this->lengthOvershoots($this->validator->validate($kit, $slots, new ValidationContext($page, flags: $flags)));
-        if ($overshoot !== []) {
-            $retry = $this->drafter->attempt($grounding, $this->correctiveNote($kit, $slots, $overshoot));
+        $headlineNote = $this->headlineKeywordCorrective($grounding, $kit, $slots);
+        if ($overshoot !== [] || $headlineNote !== null) {
+            $note = trim($this->correctiveNote($kit, $slots, $overshoot)."\n\n".((string) $headlineNote));
+            $retry = $this->drafter->attempt($grounding, $note);
             if (($retry->payload->slots ?? []) !== []) {
                 $payload = $retry->payload;
                 $slots = $this->dropConditionedOut($kit, $this->shaper->shape($kit->slots, $payload->slots ?? []), $flags);
             }
+        }
+
+        // Bounded: if the H1 STILL misses the target keyword after the one corrective pass, don't loop —
+        // log it (surfaced like the heading-fallback / truncation warnings) and publish; the audit + card
+        // will show the drift for a manual edit.
+        if (($miss = $this->headlineKeywordMiss($grounding, $kit, $slots)) !== null) {
+            Log::warning('page_h1_off_target', [
+                'content_id' => $page->id,
+                'site_id' => (string) $page->site_id,
+                'keyword' => $miss['keyword'],
+                'h1' => $miss['value'],
+            ]);
         }
 
         // Final truncate: clamp every over-length text slot (scalar + repeater items) to its kit max at a
@@ -246,6 +264,66 @@ class PageDraftingEngine
         return 'CORRECTION — your previous draft OVERSHOT these character budgets and was rejected. This '
             ."attempt MUST come in under the tightened target for each, keeping every other slot valid:\n"
             .implode("\n", $lines);
+    }
+
+    /**
+     * The corrective note when the drafted H1 (hero_headline) omits the target keyword — the on-page SEO
+     * miss that makes a page rank off-target. Null when there's no target keyword, no hero heading slot, or
+     * the keyword is already present.
+     *
+     * @param  array<string, mixed>  $slots
+     */
+    private function headlineKeywordCorrective(PageGrounding $grounding, KitSchema $kit, array $slots): ?string
+    {
+        $miss = $this->headlineKeywordMiss($grounding, $kit, $slots);
+        if ($miss === null) {
+            return null;
+        }
+
+        return "ON-PAGE SEO CORRECTION — your {$miss['key']} (the page H1) was \"{$miss['value']}\", which does NOT "
+            ."contain the primary target keyword \"{$miss['keyword']}\". Rewrite {$miss['key']} to LEAD with "
+            ."\"{$miss['keyword']}\" verbatim, then the benefit, within its character budget. Keep every other slot valid.";
+    }
+
+    /**
+     * The H1's target-keyword miss, or null. The H1 is the hero-solution heading slot; a miss is when the
+     * page has a target keyword and that slot's value doesn't contain it (per the shared placement check).
+     *
+     * @param  array<string, mixed>  $slots
+     * @return array{key: string, keyword: string, value: string}|null
+     */
+    private function headlineKeywordMiss(PageGrounding $grounding, KitSchema $kit, array $slots): ?array
+    {
+        $keyword = $grounding->targetKeyword;
+        if (! is_string($keyword) || trim($keyword) === '') {
+            return null;
+        }
+
+        $key = $this->heroHeadlineKey($kit);
+        if ($key === null || ! array_key_exists($key, $slots)) {
+            return null;
+        }
+
+        $raw = $slots[$key];
+        $value = is_array($raw) ? (string) ($raw[0] ?? '') : (string) $raw;
+
+        if (KeywordUsageAuditor::placement($keyword, $value) === KeywordUsageAuditor::ABSENT) {
+            return ['key' => $key, 'keyword' => $keyword, 'value' => $value];
+        }
+
+        return null;
+    }
+
+    /** The kit's H1 slot key: the hero-solution heading. Null if the kit has no such slot. */
+    private function heroHeadlineKey(KitSchema $kit): ?string
+    {
+        foreach ($kit->slots as $slot) {
+            if ($slot->role === SlotRole::HeroSolution && $slot->contentType === SlotContentType::Heading) {
+                return $slot->key;
+            }
+        }
+
+        return null;
     }
 
     /**
