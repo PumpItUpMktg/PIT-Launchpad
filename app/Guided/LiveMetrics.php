@@ -15,6 +15,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\SerpTask;
 use App\Models\Site;
 use App\Operator\Coverage\PositionTracking;
+use App\Support\PublicUrl;
 use Illuminate\Support\Carbon;
 
 /**
@@ -105,8 +106,10 @@ class LiveMetrics
             return $blank + ['pending' => 'Connect Search Console'];
         }
 
-        $home = rtrim((string) $site->domain_url, '/');
-        $status = $home !== '' ? $this->indexInspector->cached($site, $home.'/'.ltrim((string) $page->slug, '/')) : null;
+        // Inspect the trailing-slash (canonical/permalink) form so GSC reports the FINAL URL as Indexed,
+        // not the slash-less variant that 301-redirects to it ("Excluded (redirect)").
+        $url = PublicUrl::for($site->domain_url, $page->slug);
+        $status = $url !== null ? $this->indexInspector->cached($site, $url) : null;
         if ($status === null) {
             return $blank + ['pending' => 'Run index audit'];
         }

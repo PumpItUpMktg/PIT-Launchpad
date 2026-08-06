@@ -61,7 +61,7 @@ test('the assembled meta-blob matches the companion-plugin /content contract', f
     // The SEO title is normalized — the "| Apex" branding suffix is stripped.
     expect($payload['seo'])->toHaveKeys(['title', 'meta_description', 'canonical', 'robots', 'og', 'schema_type', 'breadcrumbs'])
         ->and($payload['seo']['title'])->toBe('Water Heater Repair in Austin')
-        ->and($payload['seo']['canonical'])->toBe('https://apex.example/water-heater-repair-austin')
+        ->and($payload['seo']['canonical'])->toBe('https://apex.example/water-heater-repair-austin/')
         ->and($payload['seo']['og']['image'])->toBe($payload['images']['hero_image']['url'])
         ->and($payload['seo']['schema_type'])->toBe('Service');
 });
@@ -146,7 +146,7 @@ test('the pushed slug equals the assigned permalink exactly — the live URL can
     // The WordPress slug is the Launchpad permalink, verbatim — so every internal link that points
     // at /drain-cleaning-austin resolves to this page once it publishes.
     expect($payload['slug'])->toBe('drain-cleaning-austin')
-        ->and($payload['seo']['canonical'])->toEndWith('/drain-cleaning-austin');
+        ->and($payload['seo']['canonical'])->toEndWith('/drain-cleaning-austin/');
 });
 
 test('the meta-blob carries parent_content_id so the plugin can nest a town under its hub', function () {

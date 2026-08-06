@@ -11,6 +11,7 @@ use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Support\PublicUrl;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -137,15 +138,11 @@ class LiveBoards
      */
     private function card(Content $content, Site $site): array
     {
-        $home = is_string($site->domain_url) && trim((string) $site->domain_url) !== ''
-            ? rtrim((string) $site->domain_url, '/').'/'
-            : '/';
-
         return [
             'id' => (string) $content->id,
             'title' => (string) $content->title,
             'type' => $content->page_type->value ?? 'page',
-            'url' => $home.ltrim((string) $content->slug, '/'),
+            'url' => PublicUrl::for($site->domain_url, $content->slug) ?? '/'.ltrim((string) $content->slug, '/'),
             'published_at' => $content->published_at?->toDateString(),
             'days_live' => $content->published_at !== null ? (int) $content->published_at->diffInDays(now()) : null,
             'locked' => (bool) $content->locked,

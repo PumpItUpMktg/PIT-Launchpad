@@ -29,6 +29,7 @@ use App\Publishing\Blocks\NapPin;
 use App\Publishing\Blocks\ServiceAreaMap;
 use App\Publishing\Schema\LocationSchemaBuilder;
 use App\Publishing\Schema\ServiceSchemaBuilder;
+use App\Support\PublicUrl;
 use App\Support\SeoTitle;
 use App\Support\ServiceAreaTitle;
 use Illuminate\Support\Collection;
@@ -798,14 +799,9 @@ class MetaBlobAssembler
 
     private function canonical(Content $content): ?string
     {
-        $site = $this->site($content);
-        $domain = $site?->domain_url;
-
-        if (! is_string($domain) || $domain === '') {
-            return null;
-        }
-
-        return rtrim($domain, '/').'/'.ltrim($content->slug, '/');
+        // Trailing-slash form (PublicUrl) so the canonical points at WordPress's real permalink, not a
+        // slash-less URL that 301-redirects to it (which GSC reports as "Excluded (redirect)").
+        return PublicUrl::for($this->site($content)?->domain_url, $content->slug);
     }
 
     /**
