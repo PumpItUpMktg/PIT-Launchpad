@@ -117,6 +117,8 @@
                         <div class="ob-chips">
                             @if ($c['directed'])
                                 <span class="ob-chip kw">{{ $c['keyword'] }}</span>
+                            @elseif (! empty($c['revived']))
+                                <span class="ob-chip warn" title="Regenerated from a top-performing legacy URL — the old URL(s) 301 to this post on publish">↻ Revived · {{ number_format($c['revived_impressions']) }} impr{{ ($c['revived_urls'] ?? 0) > 1 ? ' · '.$c['revived_urls'].' URLs' : '' }}</span>
                             @else
                                 <span class="ob-chip">{{ $c['source'] }}</span>
                             @endif

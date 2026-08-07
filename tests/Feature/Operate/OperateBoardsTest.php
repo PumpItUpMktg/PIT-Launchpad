@@ -143,6 +143,29 @@ it('candidates sort directed-first and carry the keyword + the page it will supp
         ->and($cards[1]['source'])->toBe('Patch');
 });
 
+it('marks legacy-revival candidates with impressions + URL count and floats them above feed candidates', function () {
+    $site = opSite();
+
+    $feed = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Candidate,
+        'relevance_score' => 0.95, 'source_name' => 'Patch',
+    ]);
+    $revived = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Candidate,
+        'source_name' => 'Legacy revival (GSC)',
+        'meta' => ['revived_from_urls' => ['/a', '/b', '/c'], 'revived_query' => 'sump pump renovation cost', 'revived_impressions' => 360109],
+    ]);
+
+    $cards = app(BlogBoard::class)->candidates($site->id);
+    $card = collect($cards)->firstWhere('id', $revived->id);
+
+    expect($card['revived'])->toBeTrue()
+        ->and($card['revived_impressions'])->toBe(360109)
+        ->and($card['revived_urls'])->toBe(3)
+        ->and($cards[0]['id'])->toBe($revived->id)   // 360k reclaim floats above the higher-scored feed item
+        ->and($feed->id)->not->toBe($revived->id);
+});
+
 it('promote queues the existing generate path; dismiss records a rejection', function () {
     Queue::fake();
     $site = opSite();
