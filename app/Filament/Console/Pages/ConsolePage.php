@@ -69,16 +69,21 @@ abstract class ConsolePage extends Page
      */
     protected function ownedPost(string $contentId): ?Content
     {
-        $post = Content::withoutGlobalScope(SiteScope::class)
-            ->where('kind', ContentKind::Post->value)
-            ->whereKey($contentId)
-            ->first();
+        $post = $this->ownedContent($contentId);
 
-        if ($post === null || ! $this->user()->canSeeSite((string) $post->site_id)) {
+        return $post?->kind === ContentKind::Post ? $post : null;
+    }
+
+    /** Load any content (post OR page) the current user may act on, within a site they can see. */
+    protected function ownedContent(string $contentId): ?Content
+    {
+        $content = Content::withoutGlobalScope(SiteScope::class)->whereKey($contentId)->first();
+
+        if ($content === null || ! $this->user()->canSeeSite((string) $content->site_id)) {
             return null;
         }
 
-        return $post;
+        return $content;
     }
 
     protected function user(): User
