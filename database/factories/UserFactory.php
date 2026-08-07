@@ -44,4 +44,22 @@ class UserFactory extends Factory
             'email_verified_at' => null,
         ]);
     }
+
+    /** An internal Super Admin (platform owner tier). */
+    public function admin(): static
+    {
+        return $this->state(fn () => ['role' => UserRole::Admin]);
+    }
+
+    /** A client-side Site Admin (limited operating role). */
+    public function siteAdmin(): static
+    {
+        return $this->state(fn () => ['role' => UserRole::SiteAdmin]);
+    }
+
+    /** A read-only client-portal user. */
+    public function client(): static
+    {
+        return $this->state(fn () => ['role' => UserRole::Client]);
+    }
 }

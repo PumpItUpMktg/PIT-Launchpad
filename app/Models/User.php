@@ -4,6 +4,8 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\UserRole;
+use App\Security\Capability;
+use App\Security\RoleCapabilities;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
@@ -31,6 +33,9 @@ class User extends Authenticatable implements FilamentUser
     {
         return match ($panel->getId()) {
             'client' => $this->role === UserRole::Client,
+            // The stand-alone Operations Console: the internal Super Admin tier AND a client-side
+            // Site Admin. (Existing panels are unchanged — a Site Admin reaches neither.)
+            'console' => $this->isSuperAdmin() || $this->isSiteAdmin(),
             default => $this->role->isStaff(), // admin + operator reach the operator panel
         };
     }
@@ -38,6 +43,24 @@ class User extends Authenticatable implements FilamentUser
     public function isAdmin(): bool
     {
         return $this->role === UserRole::Admin;
+    }
+
+    /** The internal Super Admin tier (full authority incl. backend corrections). */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role->isSuperAdmin();
+    }
+
+    /** A client-side Site Admin (the limited operating role). */
+    public function isSiteAdmin(): bool
+    {
+        return $this->role === UserRole::SiteAdmin;
+    }
+
+    /** Whether this user's role holds a given operational capability ({@see RoleCapabilities}). */
+    public function hasCapability(Capability $capability): bool
+    {
+        return RoleCapabilities::allows($this->role, $capability);
     }
 
     /**
@@ -57,7 +80,9 @@ class User extends Authenticatable implements FilamentUser
 
         $memberships = $this->memberships()->get(['account_id', 'site_id']);
         if ($memberships->isEmpty()) {
-            return null; // unrestricted until membership is seeded
+            // Back-compat: manually-seeded operators with no memberships stay unrestricted. A Site Admin
+            // is ALWAYS scoped — no memberships means no sites, never the whole portfolio.
+            return $this->role === UserRole::SiteAdmin ? [] : null;
         }
 
         $siteIds = $memberships->pluck('site_id')->filter()->values();
