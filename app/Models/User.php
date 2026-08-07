@@ -80,7 +80,9 @@ class User extends Authenticatable implements FilamentUser
 
         $memberships = $this->memberships()->get(['account_id', 'site_id']);
         if ($memberships->isEmpty()) {
-            return null; // unrestricted until membership is seeded
+            // Back-compat: manually-seeded operators with no memberships stay unrestricted. A Site Admin
+            // is ALWAYS scoped — no memberships means no sites, never the whole portfolio.
+            return $this->role === UserRole::SiteAdmin ? [] : null;
         }
 
         $siteIds = $memberships->pluck('site_id')->filter()->values();
