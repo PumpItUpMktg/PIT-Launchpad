@@ -241,8 +241,8 @@ class LegacyRedirectPlanner
                 continue;
             }
             $inter = count(array_intersect($tokens, $other));
-            $union = count(array_unique(array_merge($tokens, $other)));
-            $score = $union > 0 ? $inter / $union : 0.0;
+            $union = count(array_unique(array_merge($tokens, $other))); // ≥ 1: both token sets are non-empty
+            $score = $inter / $union;
 
             if ($score > $bestScore) {
                 $bestScore = $score;
