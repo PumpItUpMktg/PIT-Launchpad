@@ -2,6 +2,7 @@
 
 namespace App\Publishing\Links;
 
+use App\ContentEngine\Linking\PostLinkInjector;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Jobs\PublishContent;
@@ -17,7 +18,7 @@ use App\Publishing\Redirects\GscUrlInventory;
  * the sitemap. Dropping a link from a page Google already earns impressions on lets the post inherit that
  * crawl path and index materially faster.
  *
- * The counterpart to {@see \App\ContentEngine\Linking\PostLinkInjector} (which links the post OUT to its
+ * The counterpart to {@see PostLinkInjector} (which links the post OUT to its
  * pillar + towns): this links the mesh IN to the post. It is deliberately tight:
  *
  *  - SILO-SCOPED — only pages in the post's own silo are considered (topical relevance, no link scheme).
