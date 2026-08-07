@@ -4,6 +4,8 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\UserRole;
+use App\Security\Capability;
+use App\Security\RoleCapabilities;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
@@ -38,6 +40,24 @@ class User extends Authenticatable implements FilamentUser
     public function isAdmin(): bool
     {
         return $this->role === UserRole::Admin;
+    }
+
+    /** The internal Super Admin tier (full authority incl. backend corrections). */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role->isSuperAdmin();
+    }
+
+    /** A client-side Site Admin (the limited operating role). */
+    public function isSiteAdmin(): bool
+    {
+        return $this->role === UserRole::SiteAdmin;
+    }
+
+    /** Whether this user's role holds a given operational capability ({@see RoleCapabilities}). */
+    public function hasCapability(Capability $capability): bool
+    {
+        return RoleCapabilities::allows($this->role, $capability);
     }
 
     /**
