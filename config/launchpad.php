@@ -450,6 +450,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Legacy content revival (migrated-site recovery)
+    |--------------------------------------------------------------------------
+    | The legacy-redirect planner's "unresolved" bucket is dominated by
+    | high-traffic informational URLs the new site has no equivalent for. Rather
+    | than 301 them into a service pillar (capturing the equity but losing the
+    | specific long-tail ranking), the reviver seeds a REVIEWABLE blog candidate
+    | for each — carrying its winning GSC query as the brief — which the operator
+    | generates through the normal gated flow; on publish the old URL 301s to the
+    | new post (so equity moves to the specific successor). `min_impressions` is
+    | the floor for "worth reviving"; `limit` caps a single run.
+    */
+    'legacy_revival' => [
+        'min_impressions' => (int) env('LAUNCHPAD_REVIVE_MIN_IMPRESSIONS', 5000),
+        'limit' => (int) env('LAUNCHPAD_REVIVE_LIMIT', 100),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Bulk re-push throttle
     |--------------------------------------------------------------------------
     | A "Repush published" refreshes the engine-owned meta-blob (canonical / og /
