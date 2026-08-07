@@ -3,12 +3,22 @@
         .ob-wrap { display:flex; flex-direction:column; gap:14px; }
         .ob-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
         .ob-tabs { display:inline-flex; gap:4px; border:1px solid rgba(148,163,184,.35); border-radius:9px; padding:3px; }
-        .ob-tab { border:0; background:transparent; font-size:13px; font-weight:600; padding:6px 15px; border-radius:7px; cursor:pointer; color:#64748b; }
+        .ob-tab { border:0; background:transparent; font-size:13px; font-weight:600; padding:6px 15px; border-radius:7px; cursor:pointer; color:#64748b; transition:background .12s ease, color .12s ease, transform .06s ease; }
         .ob-tab.on { background:#4f46e5; color:#fff; }
+        .ob-tab:hover:not(.on) { background:rgba(148,163,184,.16); color:#334155; }
+        .ob-tab:active { transform:translateY(1px); }
         .ob-select { font-size:12px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:4px 8px; background:transparent; }
-        .ob-btn { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:5px 12px; border-radius:7px; border:1px solid rgba(148,163,184,.4); background:transparent; cursor:pointer; text-decoration:none; }
+        .ob-btn { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:5px 12px; border-radius:7px; border:1px solid rgba(148,163,184,.4); background:transparent; cursor:pointer; text-decoration:none;
+            transition:background .12s ease, border-color .12s ease, box-shadow .12s ease, transform .06s ease; }
         .ob-btn.primary { background:#4f46e5; border-color:#4f46e5; color:#fff; }
         .ob-btn.danger { color:#dc2626; }
+        /* Interaction feedback — hover lifts, press depresses, focus rings, in-flight (wire:loading) reads busy. */
+        .ob-btn:hover { background:rgba(148,163,184,.14); border-color:rgba(100,116,139,.65); }
+        .ob-btn.primary:hover { background:#4338ca; border-color:#4338ca; box-shadow:0 2px 8px rgba(79,70,229,.35); }
+        .ob-btn.danger:hover { background:rgba(220,38,38,.10); border-color:rgba(220,38,38,.55); }
+        .ob-btn:active { transform:translateY(1px) scale(.985); }
+        .ob-btn:focus-visible, .ob-tab:focus-visible { outline:2px solid #6366f1; outline-offset:1px; }
+        .ob-btn:disabled, .ob-btn[disabled] { opacity:.5; cursor:progress; box-shadow:none; transform:none; }
         .ob-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:11px; }
         .ob-card { border:1px solid rgba(148,163,184,.35); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
         .ob-card h3 { margin:0; font-size:14px; line-height:1.35; }
@@ -132,8 +142,11 @@
                             <span class="ob-muted">{{ $c['angle'] }}</span>
                         @endif
                         <div class="ob-actions">
-                            <button class="ob-btn primary" wire:click="promote('{{ $c['id'] }}')">Promote</button>
-                            <button class="ob-btn danger" wire:click="dismissCandidate('{{ $c['id'] }}')">Dismiss</button>
+                            <button class="ob-btn primary" wire:click="promote('{{ $c['id'] }}')" wire:loading.attr="disabled" wire:target="promote('{{ $c['id'] }}')">
+                                <span wire:loading.remove wire:target="promote('{{ $c['id'] }}')">Promote</span>
+                                <span wire:loading wire:target="promote('{{ $c['id'] }}')"><span class="ob-spinner"></span> Promoting…</span>
+                            </button>
+                            <button class="ob-btn danger" wire:click="dismissCandidate('{{ $c['id'] }}')" wire:loading.attr="disabled" wire:target="dismissCandidate('{{ $c['id'] }}')">Dismiss</button>
                             @if ($c['score'] !== null)<span class="ob-muted" style="margin-left:auto">score {{ $c['score'] }}</span>@endif
                         </div>
                     </div>
@@ -179,10 +192,16 @@
                             @if ($d['state'] === 'writing')
                                 {{-- in flight — never interrupt a running job --}}
                             @elseif (! $d['has_draft'])
-                                <button class="ob-btn primary" wire:click="promote('{{ $d['id'] }}')">{{ $d['state'] === 'draft_failed' ? 'Retry draft' : 'Generate draft' }}</button>
+                                <button class="ob-btn primary" wire:click="promote('{{ $d['id'] }}')" wire:loading.attr="disabled" wire:target="promote('{{ $d['id'] }}')">
+                                    <span wire:loading.remove wire:target="promote('{{ $d['id'] }}')">{{ $d['state'] === 'draft_failed' ? 'Retry draft' : 'Generate draft' }}</span>
+                                    <span wire:loading wire:target="promote('{{ $d['id'] }}')"><span class="ob-spinner"></span> Starting…</span>
+                                </button>
                                 <button class="ob-btn danger" wire:click="startReject('{{ $d['id'] }}')">Reject</button>
                             @else
-                                <button class="ob-btn primary" wire:click="approve('{{ $d['id'] }}')">Approve</button>
+                                <button class="ob-btn primary" wire:click="approve('{{ $d['id'] }}')" wire:loading.attr="disabled" wire:target="approve('{{ $d['id'] }}')">
+                                    <span wire:loading.remove wire:target="approve('{{ $d['id'] }}')">Approve</span>
+                                    <span wire:loading wire:target="approve('{{ $d['id'] }}')"><span class="ob-spinner"></span> Approving…</span>
+                                </button>
                                 <a class="ob-btn" href="{{ $this->editUrl($d['id']) }}" wire:navigate>Edit</a>
                                 <button class="ob-btn" wire:click="regeneratePost('{{ $d['id'] }}')"
                                     wire:confirm="Re-draft this post from scratch (fresh copy + image)? The current draft is replaced; the URL slug is kept.">Regenerate</button>
