@@ -463,6 +463,9 @@ return [
     */
     'legacy_revival' => [
         'min_impressions' => (int) env('LAUNCHPAD_REVIVE_MIN_IMPRESSIONS', 5000),
+        // A slug_overlap family (the planner would 301 it to a pillar) is diverted to revival — keeping
+        // its specific ranking instead of consolidating — only when its total impressions clear this.
+        'divert_floor' => (int) env('LAUNCHPAD_REVIVE_DIVERT_FLOOR', 20000),
         'limit' => (int) env('LAUNCHPAD_REVIVE_LIMIT', 100),
     ],
 

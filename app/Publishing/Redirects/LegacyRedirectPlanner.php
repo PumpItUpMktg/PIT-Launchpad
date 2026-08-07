@@ -87,6 +87,10 @@ class LegacyRedirectPlanner
             ->filter()
             ->flip();
 
+        // URLs a revival candidate already claimed ({@see LegacyContentReviver}) drop out of the plan
+        // entirely — the reviver owns them, and the 301 is written when the new post publishes.
+        $revivedClaimed = $this->revivedClaimedPaths($site);
+
         $redirect = [];
         $gone = [];
         $unresolved = [];
@@ -109,8 +113,8 @@ class LegacyRedirectPlanner
 
                 continue; // an indexed URL that IS a current page — already preserved
             }
-            if ($existingFrom->has('/'.$key)) {
-                continue; // already has a redirect
+            if ($existingFrom->has('/'.$key) || isset($revivedClaimed['/'.$key])) {
+                continue; // already has a redirect, or is claimed for revival (301 written on publish)
             }
 
             $topQuery = $this->inventory->topQuery($site, $entry['url']);
@@ -163,6 +167,38 @@ class LegacyRedirectPlanner
     }
 
     /**
+     * The normalized legacy paths any revival candidate has claimed (its
+     * meta.revived_from_urls / revived_from_url), so the planner leaves them out.
+     *
+     * @return array<string, true>
+     */
+    private function revivedClaimedPaths(Site $site): array
+    {
+        $claimed = [];
+        $rows = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where(function ($q): void {
+                $q->whereNotNull('meta->revived_from_urls')->orWhereNotNull('meta->revived_from_url');
+            })
+            ->get(['meta']);
+
+        foreach ($rows as $row) {
+            $meta = $row->meta ?? [];
+            $urls = (array) ($meta['revived_from_urls'] ?? []);
+            if (is_string($meta['revived_from_url'] ?? null)) {
+                $urls[] = $meta['revived_from_url'];
+            }
+            foreach ($urls as $u) {
+                if (is_string($u) && $u !== '') {
+                    $claimed[$this->normalizeKey($u)] = true;
+                }
+            }
+        }
+
+        return $claimed;
+    }
+
+    /**
      * The routing cascade — most-confident match first. Returns a 301 target
      * ['to' => path, 'code' => 301, 'reason' => ...], or null (leave unresolved).
      *
@@ -204,9 +240,11 @@ class LegacyRedirectPlanner
 
         // 4. Slug-token overlap: the closest live page by (de-numbered) leaf tokens, if unambiguous
         //    and strong enough. A numbered dup that reaches here matched via its base.
+        // A numbered dup whose base is NOT a live page reaches here and matches by the base's tokens —
+        // it is an approximate (slug_overlap) match like any other, eligible for revival diversion.
         $best = $this->bestSlugOverlap($core, $leafToPath);
         if ($best !== null) {
-            return ['to' => $best, 'code' => 301, 'reason' => $numbered ? 'numbered_duplicate' : 'slug_overlap'];
+            return ['to' => $best, 'code' => 301, 'reason' => 'slug_overlap'];
         }
 
         // Out-of-footprint 410 is intentionally NOT auto-derived from a slug: a state-suffix heuristic

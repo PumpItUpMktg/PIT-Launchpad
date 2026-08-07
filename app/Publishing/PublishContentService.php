@@ -197,15 +197,20 @@ class PublishContentService
     }
 
     /**
-     * If this content was regenerated from an old-site URL (the legacy reviver stamped
-     * meta.revived_from_url), 301 that old URL to this now-live post. Idempotent upsert on from_url;
-     * never self-redirects (from == to) and never fires for ordinary content. The companion plugin
-     * serves it and §2 pushes it like any other Redirect row.
+     * If this content was regenerated from old-site URLs (the legacy reviver stamped
+     * meta.revived_from_urls — an old article plus its numbered duplicates), 301 every one of them to
+     * this now-live post. Idempotent upsert on from_url; never self-redirects (from == to) and never
+     * fires for ordinary content. The companion plugin serves them and §2 pushes them like any other
+     * Redirect row. Also honors the legacy single-URL `revived_from_url` shape.
      */
     private function writeRevivalRedirect(Content $content): void
     {
-        $from = ($content->meta ?? [])['revived_from_url'] ?? null;
-        if (! is_string($from) || trim($from) === '') {
+        $meta = $content->meta ?? [];
+        $froms = (array) ($meta['revived_from_urls'] ?? []);
+        if (is_string($meta['revived_from_url'] ?? null)) {
+            $froms[] = $meta['revived_from_url'];
+        }
+        if ($froms === []) {
             return;
         }
 
@@ -218,17 +223,21 @@ class PublishContentService
         if ($to === null) {
             return;
         }
-
-        $fromPath = $this->redirectPath($from);
         $toPath = $this->redirectPath($to);
-        if ($fromPath === '' || $fromPath === $toPath) {
-            return;
-        }
 
-        Redirect::withoutGlobalScopes()->updateOrCreate(
-            ['site_id' => $site->id, 'from_url' => $fromPath],
-            ['to_url' => $toPath, 'code' => 301, 'status' => 'active', 'source' => RedirectSource::Migration->value],
-        );
+        foreach ($froms as $from) {
+            if (! is_string($from)) {
+                continue;
+            }
+            $fromPath = $this->redirectPath($from);
+            if ($fromPath === '' || $fromPath === $toPath) {
+                continue; // nothing to redirect / would self-redirect
+            }
+            Redirect::withoutGlobalScopes()->updateOrCreate(
+                ['site_id' => $site->id, 'from_url' => $fromPath],
+                ['to_url' => $toPath, 'code' => 301, 'status' => 'active', 'source' => RedirectSource::Migration->value],
+            );
+        }
     }
 
     /** Leading-slash path, trailing slash + query/fragment stripped, lowercased — the plugin's key form. */
