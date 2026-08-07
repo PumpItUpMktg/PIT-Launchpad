@@ -36,4 +36,28 @@
             </select>
         </div>
     @endif
+
+    @if ($this->supportsTownFilter())
+        @php $counties = $this->storefrontCounties; @endphp
+        @if (count($counties) > 0)
+            <div class="bf-group">
+                <span class="bf-label">Area</span>
+                <select class="bf-select" wire:model.live="county">
+                    <option value="">All counties</option>
+                    @foreach ($counties as $c)
+                        <option value="{{ $c['geoid'] }}">{{ $c['name'] }}</option>
+                    @endforeach
+                </select>
+                @php $selectedTowns = collect($counties)->firstWhere('geoid', $county)['towns'] ?? []; @endphp
+                @if ($county && count($selectedTowns) > 0)
+                    <select class="bf-select" wire:model.live="town">
+                        <option value="">All towns in county</option>
+                        @foreach ($selectedTowns as $t)
+                            <option value="{{ $t['key'] }}">{{ $t['display'] }}</option>
+                        @endforeach
+                    </select>
+                @endif
+            </div>
+        @endif
+    @endif
 </div>

@@ -41,10 +41,15 @@ class BlogReview extends ConsolePage
         return 'Review';
     }
 
+    public function supportsTownFilter(): bool
+    {
+        return true;
+    }
+
     /** @return list<array<string, mixed>> */
     public function getReviewProperty(): array
     {
-        return app(BlogBoard::class)->review($this->siteId, $this->siloId);
+        return $this->filterByStorefrontTown(app(BlogBoard::class)->review($this->siteId, $this->siloId));
     }
 
     /** Accept a draft into the ready-to-publish queue (does NOT push to WordPress). */

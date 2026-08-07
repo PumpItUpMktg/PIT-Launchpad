@@ -34,10 +34,20 @@ class Published extends ConsolePage
         return 'Published';
     }
 
+    public function supportsTownFilter(): bool
+    {
+        return true;
+    }
+
     /** @return array{posts: list<array<string, mixed>>, pages: list<array<string, mixed>>} */
     public function getBoardProperty(): array
     {
-        return app(PublishedContentBoard::class)->forSite($this->siteId, $this->siloId);
+        $board = app(PublishedContentBoard::class)->forSite($this->siteId, $this->siloId);
+
+        return [
+            'posts' => $this->filterByStorefrontTown($board['posts']),
+            'pages' => $this->filterByStorefrontTown($board['pages']),
+        ];
     }
 
     /** Re-sync a live page/post to WordPress (idempotent by ULID). */

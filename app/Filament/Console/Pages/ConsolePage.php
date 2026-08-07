@@ -9,6 +9,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Operate\BlogBoard;
 use App\OpsConsole\ConsoleContext;
+use App\OpsConsole\StorefrontTowns;
 use App\Security\Capability;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
@@ -27,6 +28,11 @@ abstract class ConsolePage extends Page
     /** Optional silo filter for the blog pages (null = all silos). */
     public ?string $siloId = null;
 
+    /** Optional brick-and-mortar area filter: a storefront county, then a town within it. */
+    public ?string $county = null;
+
+    public ?string $town = null;
+
     public function mount(): void
     {
         $this->siteId = app(ConsoleContext::class)->current($this->user())?->id;
@@ -40,14 +46,75 @@ abstract class ConsolePage extends Page
             // Refused (not visible) — fall back to the resolved site.
             $this->siteId = app(ConsoleContext::class)->current($user)?->id;
         }
-        // A silo belongs to one site — clear the filter when the tenant changes.
+        // Filters belong to one tenant — clear them when the tenant changes.
         $this->siloId = null;
+        $this->county = null;
+        $this->town = null;
+    }
+
+    /** Picking a county resets the town within it. */
+    public function updatedCounty(): void
+    {
+        $this->town = null;
     }
 
     /** @return array<string, string> silo id => name for the current site (blog-page filter). */
     public function getSiloFilterOptionsProperty(): array
     {
         return app(BlogBoard::class)->siloOptions($this->siteId);
+    }
+
+    /**
+     * The storefront (brick-and-mortar) counties → towns cascade for the current site.
+     *
+     * @return list<array{geoid: string, name: string, towns: list<array{key: string, display: string}>}>
+     */
+    public function getStorefrontCountiesProperty(): array
+    {
+        $site = $this->currentSite();
+
+        return $site === null ? [] : app(StorefrontTowns::class)->counties($site);
+    }
+
+    /** Whether this page offers the brick-and-mortar town filter (only where posts have body/tags). */
+    public function supportsTownFilter(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Filter a list of BlogBoard cards (each has an `id`) down to posts that cover the selected
+     * storefront county/town. A no-op when no area filter is set or the page doesn't support it.
+     *
+     * @param  list<array<string, mixed>>  $cards
+     * @return list<array<string, mixed>>
+     */
+    protected function filterByStorefrontTown(array $cards): array
+    {
+        if (! $this->supportsTownFilter() || ($this->county === null && $this->town === null)) {
+            return $cards;
+        }
+        $site = $this->currentSite();
+        if ($site === null) {
+            return $cards;
+        }
+
+        $storefront = app(StorefrontTowns::class);
+        $targets = $storefront->targetTowns($site, $this->county, $this->town);
+        if ($targets === []) {
+            return [];
+        }
+
+        $ids = array_map(fn (array $c): string => (string) $c['id'], $cards);
+        $posts = Content::withoutGlobalScope(SiteScope::class)
+            ->whereIn('id', $ids)->get(['id', 'title', 'body'])
+            ->keyBy(fn (Content $c): string => (string) $c->id);
+
+        return array_values(array_filter($cards, function (array $c) use ($posts, $storefront, $targets): bool {
+            $post = $posts->get((string) $c['id']);
+
+            return $post instanceof Content && $storefront->postCovers($post, $targets);
+        }));
     }
 
     /** @return array<string, string> id => name for the site switcher. */
