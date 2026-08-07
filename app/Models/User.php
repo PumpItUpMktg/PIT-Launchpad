@@ -33,6 +33,9 @@ class User extends Authenticatable implements FilamentUser
     {
         return match ($panel->getId()) {
             'client' => $this->role === UserRole::Client,
+            // The stand-alone Operations Console: the internal Super Admin tier AND a client-side
+            // Site Admin. (Existing panels are unchanged — a Site Admin reaches neither.)
+            'console' => $this->isSuperAdmin() || $this->isSiteAdmin(),
             default => $this->role->isStaff(), // admin + operator reach the operator panel
         };
     }
