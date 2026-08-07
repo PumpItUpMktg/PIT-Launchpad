@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @include('filament.operate.partials.interactions')
     <div class="g-wrap">
         <style>
             .il-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }

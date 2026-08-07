@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @include('filament.operate.partials.interactions')
     <style>
         .op-wrap { display:flex; flex-direction:column; gap:16px; }
         .op-sub { color:#64748b; font-size:13px; max-width:64ch; margin:0; }
@@ -10,11 +11,8 @@
         .op-row { border:1px solid rgba(148,163,184,.35); border-radius:11px; padding:12px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
         .op-row h3 { margin:0; font-size:14.5px; min-width:160px; }
         .op-chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:3px 11px; border-radius:99px; cursor:pointer;
-            background:rgba(217,119,6,.12); color:#b45309; text-decoration:none; transition:transform .1s ease, box-shadow .12s ease, filter .12s ease; }
+            background:rgba(217,119,6,.12); color:#b45309; text-decoration:none; }
         .op-chip.danger { background:rgba(220,38,38,.12); color:#dc2626; }
-        .op-chip:hover { filter:brightness(1.05); transform:translateY(-1px); box-shadow:0 2px 7px rgba(15,23,42,.12); }
-        .op-chip:active { transform:translateY(0); box-shadow:none; }
-        .op-chip:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }
         .op-empty { border:1px dashed rgba(148,163,184,.4); border-radius:10px; padding:16px; color:#94a3b8; font-size:13.5px; text-align:center; }
     </style>
 
