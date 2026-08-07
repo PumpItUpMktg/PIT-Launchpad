@@ -21,8 +21,10 @@ use App\Models\Silo;
 use App\Models\Site;
 use App\PageBuilder\Validation\PublishEligibility;
 use App\PageBuilder\Validation\ValidationResult;
+use App\Publishing\Links\InboundLinkBooster;
 use App\Security\Audit;
 use App\Support\PublicUrl;
+use Throwable;
 
 /**
  * The publish entrypoint §6c's approve action calls. It drives the state machine
@@ -65,6 +67,7 @@ class PublishContentService
         private readonly Audit $audit,
         private readonly PublishEligibility $eligibility,
         private readonly PublishSiloService $silos,
+        private readonly InboundLinkBooster $inboundLinks,
     ) {}
 
     public static function isPublishable(ContentStatus $status): bool
@@ -186,6 +189,14 @@ class PublishContentService
         // location pages whose blog feed just changed — so the article lands on those pages without a
         // manual reconcile. No-op for a page, or a post that names no coverage town.
         $this->refreshLocationFeeds($content);
+
+        // Faster indexing: link this newly-live POST from the strongest already-indexed pages in its own
+        // silo (GSC-impression-ranked, natural anchors only). Never blocks the publish — the post is live.
+        try {
+            $this->inboundLinks->boost($content);
+        } catch (Throwable $e) {
+            report($e);
+        }
 
         // Instant "please crawl" ping to Bing/Yandex/etc (IndexNow). Its own queued job, config-gated,
         // swallow-all — never affects this publish. Google doesn't participate (sitemap covers it).
