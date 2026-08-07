@@ -41,6 +41,13 @@ Schedule::command('launchpad:reconcile-generated-feeds')->daily()->withoutOverla
 // fan-out can't stack runs.
 Schedule::command('launchpad:ingest-feeds')->hourly()->withoutOverlapping();
 
+// GSC time-series snapshot — pull a trailing window of Search Console per
+// connected site into the never-overwritten daily store (absorbing GSC's ~3-day
+// revisions idempotently), then roll aged query-grain rows into the monthly
+// table. Daily; withoutOverlapping so a slow multi-tenant pull can't stack. This
+// is what stops the rolling 16-month window from erasing history.
+Schedule::command('launchpad:sync-gsc')->daily()->withoutOverlapping();
+
 // §7c client monthly report — email each client the prior month's keyword-
 // improvement report (PDF attached) on the 1st. Defaults to last month so a
 // complete month is reported; per-site opt-out is having no client users.

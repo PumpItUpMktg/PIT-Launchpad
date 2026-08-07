@@ -15,6 +15,8 @@ interface SearchConsoleProvider
 {
     /**
      * @param  list<string>  $dimensions  query|page|date|country|device
+     * @param  int  $startRow  pagination offset — GSC caps a response at 25000 rows;
+     *                         loop $startRow += $rowLimit until a page returns fewer.
      * @return list<SearchAnalyticsRow>
      */
     public function searchAnalytics(
@@ -23,5 +25,6 @@ interface SearchConsoleProvider
         DateTimeInterface $end,
         array $dimensions = ['query'],
         int $rowLimit = 1000,
+        int $startRow = 0,
     ): array;
 }

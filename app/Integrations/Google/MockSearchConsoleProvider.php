@@ -34,7 +34,10 @@ class MockSearchConsoleProvider implements SearchConsoleProvider
         DateTimeInterface $end,
         array $dimensions = ['query'],
         int $rowLimit = 1000,
+        int $startRow = 0,
     ): array {
-        return $this->rows;
+        // Emulate GSC pagination so ingest/backfill loops terminate in tests:
+        // page $startRow..$startRow+$rowLimit of the programmed rows.
+        return array_slice($this->rows, max(0, $startRow), $rowLimit);
     }
 }
