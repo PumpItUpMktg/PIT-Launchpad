@@ -13,6 +13,7 @@ use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
+use App\Publishing\Redirects\LegacyContentReviver;
 use App\Publishing\TenantStorage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
@@ -57,6 +58,9 @@ class BlogBoard
         return $rows
             ->sortBy([
                 fn (Content $a, Content $b) => ($b->target_keyword_id !== null ? 1 : 0) <=> ($a->target_keyword_id !== null ? 1 : 0),
+                // Legacy-revival candidates (a recovered top-performer) sort ahead of feed candidates,
+                // most lost impressions first — the biggest reclaim jumps to the top of the backlog.
+                fn (Content $a, Content $b) => (int) $this->revivedImpressions($b) <=> (int) $this->revivedImpressions($a),
                 fn (Content $a, Content $b) => (float) ($b->relevance_score ?? 0) <=> (float) ($a->relevance_score ?? 0),
             ])
             ->values()
@@ -71,6 +75,9 @@ class BlogBoard
                 'tenant' => $c->site?->brand_name,
                 'angle' => $c->angle_hint,
                 'score' => $c->relevance_score !== null ? round((float) $c->relevance_score, 2) : null,
+                'revived' => $this->revivedUrls($c) !== [],
+                'revived_impressions' => $this->revivedImpressions($c),
+                'revived_urls' => count($this->revivedUrls($c)),
             ])
             ->all();
     }
@@ -376,6 +383,28 @@ class BlogBoard
             ->where('kind', ContentKind::Post->value)
             ->when($siteId !== null, fn (Builder $q) => $q->where('site_id', $siteId))
             ->when($siloId !== null, fn (Builder $q) => $q->where('matched_silo_id', $siloId));
+    }
+
+    /**
+     * The old-site URLs a legacy-revival candidate reclaims ({@see LegacyContentReviver}) —
+     * empty for an ordinary candidate. Honors both the list and the legacy single-URL shape.
+     *
+     * @return list<string>
+     */
+    private function revivedUrls(Content $c): array
+    {
+        $meta = $c->meta ?? [];
+        $urls = array_values(array_filter((array) ($meta['revived_from_urls'] ?? []), 'is_string'));
+        if ($urls === [] && is_string($meta['revived_from_url'] ?? null)) {
+            $urls[] = $meta['revived_from_url'];
+        }
+
+        return $urls;
+    }
+
+    private function revivedImpressions(Content $c): int
+    {
+        return (int) (($c->meta ?? [])['revived_impressions'] ?? 0);
     }
 
     /** The reverse consumption link (reactive lane): blog_targets.article_ref → this post. */
