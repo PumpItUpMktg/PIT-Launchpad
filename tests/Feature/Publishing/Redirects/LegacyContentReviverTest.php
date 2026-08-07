@@ -10,33 +10,48 @@ use App\Support\CurrentSite;
 
 // lrpDaily()/lrpQuery() are defined in LegacyRedirectPlannerTest.php (loaded suite-wide).
 
-it('revives high-value unresolved legacy URLs as reviewable blog candidates', function () {
+beforeEach(function () {
+    config()->set('launchpad.legacy_revival.min_impressions', 5000);
+    config()->set('launchpad.legacy_revival.divert_floor', 20000);
+});
+
+it('groups numbered families into one candidate, diverts high-value slug matches, and leaves low-value ones as redirects', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
     CurrentSite::set($site->id);
     Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'sump-pump-installation', 'title' => 'Sump Pump Installation']);
 
-    // Two unresolved informational URLs (no live equivalent): one above the floor, one below.
+    // A numbered cost family (slug_overlap → installation pillar), total 55k ≥ divert floor → revived whole.
+    lrpDaily($site, 'https://spg.example/sump-pump-installation-cost-breakdown-3/', 25000);
+    lrpDaily($site, 'https://spg.example/sump-pump-installation-cost-breakdown-8/', 30000);
+    // An unresolved informational article (no pillar), 8k ≥ floor → revived.
     lrpDaily($site, 'https://spg.example/sump-pump-alarm-troubleshooting/', 8000);
     lrpQuery($site, 'https://spg.example/sump-pump-alarm-troubleshooting/', 'sump pump alarm going off', 8000);
-    lrpDaily($site, 'https://spg.example/obscure-thin-note/', 1000);
+    // A low-value slug match (11k < divert floor, no unresolved) → stays a redirect, NOT revived.
+    lrpDaily($site, 'https://spg.example/water-powered-sump-pump-installation/', 11000);
 
-    $created = app(LegacyContentReviver::class)->revive($site, minImpressions: 5000, limit: 100);
+    $created = app(LegacyContentReviver::class)->revive($site, minImpressions: 5000);
 
-    expect($created)->toHaveCount(1);
-    $c = $created[0];
-    expect($c->kind)->toBe(ContentKind::Post)
-        ->and($c->status)->toBe(ContentStatus::Candidate)
-        ->and($c->title)->toBe('Sump Pump Alarm Going Off')
-        ->and($c->source_url)->toBe('/sump-pump-alarm-troubleshooting')
-        ->and($c->meta['revived_from_url'])->toBe('/sump-pump-alarm-troubleshooting')
-        ->and($c->meta['revived_impressions'])->toBe(8000)
-        ->and($c->angle_hint)->toContain('sump pump alarm going off');
+    expect($created)->toHaveCount(2);
 
-    // Below-floor URL was not revived.
-    expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('kind', ContentKind::Post->value)->count())->toBe(1);
+    $byQuery = collect($created)->keyBy(fn (Content $c): string => (string) $c->meta['revived_query']);
+
+    // The cost family collapsed to ONE candidate carrying BOTH old URLs.
+    $cost = collect($created)->first(fn (Content $c): bool => str_contains((string) $c->slug, 'sump-pump-installation-cost'));
+    expect($cost->kind)->toBe(ContentKind::Post)
+        ->and($cost->status)->toBe(ContentStatus::Candidate)
+        ->and($cost->meta['revived_from_urls'])->toContain('/sump-pump-installation-cost-breakdown-3')
+        ->and($cost->meta['revived_from_urls'])->toContain('/sump-pump-installation-cost-breakdown-8')
+        ->and($cost->meta['revived_impressions'])->toBe(55000);
+
+    // The unresolved alarm article revived on its own.
+    expect($byQuery->has('sump pump alarm going off'))->toBeTrue();
+
+    // The low-value slug match was NOT revived (no candidate claims it).
+    $claimed = collect($created)->flatMap(fn (Content $c): array => $c->meta['revived_from_urls']);
+    expect($claimed)->not->toContain('/water-powered-sump-pump-installation');
 });
 
-it('is idempotent — a URL already revived is not re-created', function () {
+it('is idempotent — the planner skips a URL a revival candidate already claimed', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG2', 'domain_url' => 'https://spg2.example']);
     CurrentSite::set($site->id);
 

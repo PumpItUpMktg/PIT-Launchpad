@@ -78,7 +78,7 @@ it('routes the legacy GSC inventory to 301/410/unresolved and never shadows a li
     $byFrom = collect($plan['redirect'])->keyBy('from');
     expect($plan['skipped_live'])->toBe(1)
         ->and($byFrom['/sump-pump-installation-cost-breakdown-3']['to'])->toBe('/sump-pump-installation')
-        ->and($byFrom['/sump-pump-installation-cost-breakdown-3']['reason'])->toBe('numbered_duplicate')
+        ->and($byFrom['/sump-pump-installation-cost-breakdown-3']['reason'])->toBe('slug_overlap')
         ->and($byFrom['/battery-backup-sump-pump-types-5']['to'])->toBe('/battery-backup-sump-pump-types')
         ->and($byFrom['/battery-backup-sump-pump-types-5']['reason'])->toBe('numbered_duplicate')
         ->and($byFrom['/hoboken']['to'])->toBe('/hoboken-nj')

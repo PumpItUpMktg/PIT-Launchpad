@@ -41,9 +41,12 @@ class ReviveLegacyContentCommand extends Command
         $plan = $reviver->plan($site, $floor, $limit);
 
         $this->line("<info>{$site->brand_name}</info> — legacy content revival");
-        $this->line(sprintf('  %d high-value unresolved URL(s) to revive as blog candidates:', count($plan)));
+        $this->line(sprintf('  %d family(ies) to revive as blog candidates (numbered dups grouped):', count($plan)));
         foreach ($plan as $row) {
-            $this->line(sprintf('    %8s  %s  →  “%s”', number_format($row['impressions']), $row['from'], $row['query'] ?? '—'));
+            $n = count($row['from_urls']);
+            $primary = $row['from_urls'][0] ?? '—';
+            $extra = $n > 1 ? " (+{$n} URLs)" : '';
+            $this->line(sprintf('    %8s  %s%s  →  “%s”', number_format($row['impressions']), $primary, $extra, $row['query'] ?? '—'));
         }
 
         if ($plan === []) {

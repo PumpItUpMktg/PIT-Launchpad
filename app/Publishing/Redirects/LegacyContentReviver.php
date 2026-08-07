@@ -13,61 +13,103 @@ use App\Publishing\PublishContentService;
 use Illuminate\Support\Str;
 
 /**
- * Turns the legacy-redirect planner's high-value UNRESOLVED URLs — the
- * high-traffic informational pages the new site has no equivalent for — into
- * reviewable blog candidates instead of pillar redirects. Each candidate carries
- * its winning GSC query as the writing brief and remembers its source URL in
- * `meta.revived_from_url`, so when the operator generates + publishes it (the
- * normal gated flow — this NEVER drafts), {@see PublishContentService}
- * 301s the old URL to the new post. Equity moves to the specific successor, not a
- * generic pillar.
+ * Turns the high-value informational legacy URLs into reviewable blog candidates
+ * instead of pillar redirects. It pools the redirect planner's UNRESOLVED URLs
+ * (no live equivalent) with its approximate pillar matches (`slug_overlap`), then
+ * GROUPS them into families (an old-site article and its numbered duplicates —
+ * `…-cost-breakdown-3/-4/-8` → one post) so a family is revived whole, never split
+ * between redirect and revival:
  *
- * Idempotent: a URL that already has a revived candidate (or now resolves to a
- * live page / redirect) is skipped, so re-running only fills gaps.
+ *  - an unresolved family revives once its total clears the `min_impressions`
+ *    floor (no pillar wanted it anyway);
+ *  - a slug_overlap-only family (the planner would 301 it to a pillar) is revived
+ *    only when it's high-value — total ≥ `divert_floor` — otherwise it stays a
+ *    redirect.
+ *
+ * Each revived candidate carries the family's winning GSC query as the brief and
+ * remembers ALL its source URLs in `meta.revived_from_urls`; the operator
+ * generates it through the normal gated flow (this NEVER drafts), and on publish
+ * {@see PublishContentService} 301s every one of those old URLs to
+ * the new post. The planner skips any URL a candidate has claimed, so the two
+ * commands coordinate and never double-handle a URL.
  */
 class LegacyContentReviver
 {
     public function __construct(private readonly LegacyRedirectPlanner $planner) {}
 
     /**
-     * The revival candidates a run WOULD create (dry view): the unresolved URLs
-     * at/above the impression floor, highest first, capped.
+     * The revival families a run WOULD create (dry view), highest total impressions first, capped.
      *
-     * @return list<array{from: string, query: ?string, impressions: int}>
+     * @return list<array{key: string, from_urls: list<string>, query: ?string, impressions: int}>
      */
     public function plan(Site $site, ?int $minImpressions = null, ?int $limit = null): array
     {
         $floor = $minImpressions ?? (int) config('launchpad.legacy_revival.min_impressions', 5000);
+        $divertFloor = (int) config('launchpad.legacy_revival.divert_floor', 20000);
         $cap = $limit ?? (int) config('launchpad.legacy_revival.limit', 100);
 
-        $existing = $this->existingRevivedFrom($site);
+        $planned = $this->planner->plan($site);
 
-        $rows = [];
-        foreach ($this->planner->plan($site)['unresolved'] as $u) {
-            if ($u['impressions'] < $floor || isset($existing[$u['from']])) {
-                continue;
-            }
-            $rows[] = ['from' => $u['from'], 'query' => $u['top_query'], 'impressions' => $u['impressions']];
-            if (count($rows) >= $cap) {
-                break;
+        // Pool the revival-eligible URLs: unresolved (no pillar) + approximate pillar matches.
+        $pool = [];
+        foreach ($planned['unresolved'] as $u) {
+            $pool[] = ['from' => $u['from'], 'query' => $u['top_query'], 'impressions' => $u['impressions'], 'unresolved' => true];
+        }
+        foreach ($planned['redirect'] as $r) {
+            if ($r['reason'] === 'slug_overlap') {
+                $pool[] = ['from' => $r['from'], 'query' => $r['top_query'], 'impressions' => $r['impressions'], 'unresolved' => false];
             }
         }
 
-        return $rows;
+        // Group into families by base path (numeric suffix stripped) so a numbered dup set is one post.
+        $families = [];
+        foreach ($pool as $row) {
+            $key = (string) preg_replace('/-\d+$/', '', $row['from']);
+            $fam = $families[$key] ?? ['key' => $key, 'members' => [], 'impressions' => 0, 'has_unresolved' => false];
+            $fam['members'][] = ['from' => $row['from'], 'query' => $row['query'], 'impressions' => $row['impressions']];
+            $fam['impressions'] += $row['impressions'];
+            $fam['has_unresolved'] = $fam['has_unresolved'] || $row['unresolved'];
+            $families[$key] = $fam;
+        }
+
+        $out = [];
+        foreach ($families as $fam) {
+            if ($fam['impressions'] < $floor) {
+                continue;
+            }
+            if (! $fam['has_unresolved'] && $fam['impressions'] < $divertFloor) {
+                continue; // a pillar match that isn't high-value enough to steal from the redirect
+            }
+
+            // Order members by impressions so the top one names the family (query + primary URL).
+            usort($fam['members'], fn (array $a, array $b): int => $b['impressions'] <=> $a['impressions']);
+            $out[] = [
+                'key' => $fam['key'],
+                'from_urls' => array_map(fn (array $m): string => (string) $m['from'], $fam['members']),
+                'query' => $fam['members'][0]['query'] ?? null,
+                'impressions' => $fam['impressions'],
+            ];
+        }
+
+        usort($out, fn (array $a, array $b): int => $b['impressions'] <=> $a['impressions']);
+
+        return array_slice($out, 0, $cap);
     }
 
     /**
-     * Create a blog candidate per planned URL (status `candidate`, gated for
-     * operator generation). Returns the created Content rows.
+     * Create one blog candidate per revival family (status `candidate`, gated for operator generation).
      *
      * @return list<Content>
      */
     public function revive(Site $site, ?int $minImpressions = null, ?int $limit = null): array
     {
         $created = [];
-        foreach ($this->plan($site, $minImpressions, $limit) as $row) {
-            $query = is_string($row['query']) && trim($row['query']) !== '' ? trim($row['query']) : $this->titleFromSlug($row['from']);
+        foreach ($this->plan($site, $minImpressions, $limit) as $family) {
+            $query = is_string($family['query']) && trim($family['query']) !== ''
+                ? trim($family['query'])
+                : $this->titleFromSlug($family['from_urls'][0]);
             $title = Str::title($query);
+            $count = count($family['from_urls']);
 
             $created[] = Content::create([
                 'site_id' => $site->id,
@@ -78,40 +120,25 @@ class LegacyContentReviver
                 'title' => $title,
                 'slug' => $this->uniqueSlug($site->id, $title),
                 'source_name' => 'Legacy revival (GSC)',
-                'source_url' => $row['from'],
+                'source_url' => $family['from_urls'][0],
                 'angle_hint' => sprintf(
-                    'Revive a top-performing legacy article. Write a comprehensive, up-to-date post targeting the query “%s” (the old URL earned %s impressions for it). On publish, the old URL 301s to this post.',
+                    'Revive a top-performing legacy article. Write a comprehensive, up-to-date post targeting the query “%s” (the old %s earned %s impressions for it). On publish, %s 301%s to this post.',
                     $query,
-                    number_format($row['impressions']),
+                    $count === 1 ? 'URL' : "{$count} URLs",
+                    number_format($family['impressions']),
+                    $count === 1 ? 'the old URL' : "all {$count} old URLs",
+                    $count === 1 ? 's' : '',
                 ),
                 'version' => 1,
                 'meta' => [
-                    'revived_from_url' => $row['from'],
+                    'revived_from_urls' => $family['from_urls'],
                     'revived_query' => $query,
-                    'revived_impressions' => $row['impressions'],
+                    'revived_impressions' => $family['impressions'],
                 ],
             ]);
         }
 
         return $created;
-    }
-
-    /**
-     * The set of legacy URLs already claimed by a revived candidate, so a re-run
-     * never double-creates.
-     *
-     * @return array<string, bool>
-     */
-    private function existingRevivedFrom(Site $site): array
-    {
-        return Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->whereNotNull('meta->revived_from_url')
-            ->get(['meta'])
-            ->map(fn (Content $c): mixed => $c->meta['revived_from_url'] ?? null)
-            ->filter(fn ($v): bool => is_string($v) && $v !== '')
-            ->mapWithKeys(fn ($v): array => [(string) $v => true])
-            ->all();
     }
 
     private function titleFromSlug(string $from): string
