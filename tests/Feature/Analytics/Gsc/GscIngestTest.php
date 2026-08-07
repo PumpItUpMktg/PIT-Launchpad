@@ -73,6 +73,20 @@ it('ingests both grains and parses the dimension keys per grain', function () {
     expect($mobile->query)->toBe('sump pump repair')->and($mobile->country)->toBe('usa')->and((int) $mobile->impressions)->toBe(120);
 });
 
+it('stores a very long GSC query (over the old 512-char limit) without truncating or crashing', function () {
+    $site = gscSite();
+    $d = Carbon::now()->subDays(2)->toDateString();
+    $longQuery = str_repeat('best sump pump for a residential basement ', 25); // ~1050 chars
+
+    (new GscSnapshotIngestor(gscProvider(
+        urlRows: [new SearchAnalyticsRow([$d, 'https://gsc.example/p/'], clicks: 1, impressions: 10, ctr: 0.1, position: 5.0)],
+        queryRows: [new SearchAnalyticsRow([$d, 'https://gsc.example/p/', $longQuery, 'usa', 'DESKTOP'], clicks: 1, impressions: 10, ctr: 0.1, position: 5.0)],
+    )))->sync($site);
+
+    $row = GscUrlQueryDaily::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->sole();
+    expect($row->query)->toBe($longQuery)->and(strlen($row->query))->toBeGreaterThan(512);
+});
+
 it('is idempotent — re-syncing an already-pulled window upserts in place, never doubling', function () {
     $site = gscSite();
     $d = Carbon::now()->subDays(2)->toDateString();
