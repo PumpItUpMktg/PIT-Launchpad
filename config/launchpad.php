@@ -115,6 +115,17 @@ return [
 
     'internal_linking' => [
         'local_posts' => (bool) env('LAUNCHPAD_LINK_LOCAL_POSTS', true),
+
+        // Inbound-link boost: when a blog post goes live, weave an inbound link to it FROM the strongest
+        // already-indexed pages in its own silo (ranked by real GSC impressions), so it inherits their
+        // crawl path and indexes faster. Only wraps a phrase the source page ALREADY uses — never
+        // fabricates a sentence. `mode`: 'revivals' fires solely for regenerated legacy posts (the initial
+        // wave), 'all' generalizes to every published post, 'off' disables it. Tight by default.
+        'inbound_boost' => [
+            'mode' => env('LAUNCHPAD_INBOUND_BOOST_MODE', 'revivals'),
+            'max_sources' => (int) env('LAUNCHPAD_INBOUND_BOOST_MAX_SOURCES', 2),
+            'min_source_impressions' => (int) env('LAUNCHPAD_INBOUND_BOOST_MIN_IMPRESSIONS', 1),
+        ],
     ],
 
     /*
