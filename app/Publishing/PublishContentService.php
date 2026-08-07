@@ -9,17 +9,20 @@ use App\Enums\ContentKind;
 use App\Enums\ContentSource;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Enums\RedirectSource;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\Jobs\PingIndexNow;
 use App\Jobs\PublishContent;
 use App\Models\Content;
+use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
 use App\PageBuilder\Validation\PublishEligibility;
 use App\PageBuilder\Validation\ValidationResult;
 use App\Security\Audit;
+use App\Support\PublicUrl;
 
 /**
  * The publish entrypoint §6c's approve action calls. It drives the state machine
@@ -170,6 +173,10 @@ class PublishContentService
         // Longtail lane: any blog target this article consumed is now live — drafted → published.
         app(BlogTargetQueue::class)->markPublishedByArticle($content);
 
+        // Legacy revival: a post regenerated from an old-site URL (meta.revived_from_url) 301s that
+        // old URL to this new page now that it's live — equity moves to the specific successor.
+        $this->writeRevivalRedirect($content);
+
         // Location page-drip: a newly-live TOWN page adds a link to its parent hub's "Areas we serve"
         // grid — but that grid is BAKED into the hub at publish time, so the hub would stay stale as
         // towns drip in. Re-publish the already-live parent hub so its town links stay complete.
@@ -187,6 +194,51 @@ class PublishContentService
         }
 
         return PublishResult::published($content, $wpPostId);
+    }
+
+    /**
+     * If this content was regenerated from an old-site URL (the legacy reviver stamped
+     * meta.revived_from_url), 301 that old URL to this now-live post. Idempotent upsert on from_url;
+     * never self-redirects (from == to) and never fires for ordinary content. The companion plugin
+     * serves it and §2 pushes it like any other Redirect row.
+     */
+    private function writeRevivalRedirect(Content $content): void
+    {
+        $from = ($content->meta ?? [])['revived_from_url'] ?? null;
+        if (! is_string($from) || trim($from) === '') {
+            return;
+        }
+
+        $site = Site::withoutGlobalScopes()->find($content->site_id);
+        if (! $site instanceof Site) {
+            return;
+        }
+
+        $to = PublicUrl::forContent($site->domain_url, $content);
+        if ($to === null) {
+            return;
+        }
+
+        $fromPath = $this->redirectPath($from);
+        $toPath = $this->redirectPath($to);
+        if ($fromPath === '' || $fromPath === $toPath) {
+            return;
+        }
+
+        Redirect::withoutGlobalScopes()->updateOrCreate(
+            ['site_id' => $site->id, 'from_url' => $fromPath],
+            ['to_url' => $toPath, 'code' => 301, 'status' => 'active', 'source' => RedirectSource::Migration->value],
+        );
+    }
+
+    /** Leading-slash path, trailing slash + query/fragment stripped, lowercased — the plugin's key form. */
+    private function redirectPath(string $value): string
+    {
+        $parsed = parse_url(trim($value), PHP_URL_PATH);
+        $path = is_string($parsed) ? $parsed : $value;
+        $path = strtolower(trim($path, '/'));
+
+        return $path === '' ? '' : '/'.$path;
     }
 
     /**
