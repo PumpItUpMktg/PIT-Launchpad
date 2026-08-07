@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @include('filament.operate.partials.interactions')
     {{-- Shared by the three Operate pages boards (Core / Service / Location): the WORK lane on
          top (everything not yet published, morphing primary), the LIVE cards beneath. Reuses the
          Live boards' chrome + card partial wholesale — same wire method names by design. --}}

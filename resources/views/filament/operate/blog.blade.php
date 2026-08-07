@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @include('filament.operate.partials.interactions')
     <style>
         .ob-wrap { display:flex; flex-direction:column; gap:14px; }
         .ob-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -132,8 +133,11 @@
                             <span class="ob-muted">{{ $c['angle'] }}</span>
                         @endif
                         <div class="ob-actions">
-                            <button class="ob-btn primary" wire:click="promote('{{ $c['id'] }}')">Promote</button>
-                            <button class="ob-btn danger" wire:click="dismissCandidate('{{ $c['id'] }}')">Dismiss</button>
+                            <button class="ob-btn primary" wire:click="promote('{{ $c['id'] }}')" wire:loading.attr="disabled" wire:target="promote('{{ $c['id'] }}')">
+                                <span wire:loading.remove wire:target="promote('{{ $c['id'] }}')">Promote</span>
+                                <span wire:loading wire:target="promote('{{ $c['id'] }}')"><span class="ob-spinner"></span> Promoting…</span>
+                            </button>
+                            <button class="ob-btn danger" wire:click="dismissCandidate('{{ $c['id'] }}')" wire:loading.attr="disabled" wire:target="dismissCandidate('{{ $c['id'] }}')">Dismiss</button>
                             @if ($c['score'] !== null)<span class="ob-muted" style="margin-left:auto">score {{ $c['score'] }}</span>@endif
                         </div>
                     </div>
@@ -179,10 +183,16 @@
                             @if ($d['state'] === 'writing')
                                 {{-- in flight — never interrupt a running job --}}
                             @elseif (! $d['has_draft'])
-                                <button class="ob-btn primary" wire:click="promote('{{ $d['id'] }}')">{{ $d['state'] === 'draft_failed' ? 'Retry draft' : 'Generate draft' }}</button>
+                                <button class="ob-btn primary" wire:click="promote('{{ $d['id'] }}')" wire:loading.attr="disabled" wire:target="promote('{{ $d['id'] }}')">
+                                    <span wire:loading.remove wire:target="promote('{{ $d['id'] }}')">{{ $d['state'] === 'draft_failed' ? 'Retry draft' : 'Generate draft' }}</span>
+                                    <span wire:loading wire:target="promote('{{ $d['id'] }}')"><span class="ob-spinner"></span> Starting…</span>
+                                </button>
                                 <button class="ob-btn danger" wire:click="startReject('{{ $d['id'] }}')">Reject</button>
                             @else
-                                <button class="ob-btn primary" wire:click="approve('{{ $d['id'] }}')">Approve</button>
+                                <button class="ob-btn primary" wire:click="approve('{{ $d['id'] }}')" wire:loading.attr="disabled" wire:target="approve('{{ $d['id'] }}')">
+                                    <span wire:loading.remove wire:target="approve('{{ $d['id'] }}')">Approve</span>
+                                    <span wire:loading wire:target="approve('{{ $d['id'] }}')"><span class="ob-spinner"></span> Approving…</span>
+                                </button>
                                 <a class="ob-btn" href="{{ $this->editUrl($d['id']) }}" wire:navigate>Edit</a>
                                 <button class="ob-btn" wire:click="regeneratePost('{{ $d['id'] }}')"
                                     wire:confirm="Re-draft this post from scratch (fresh copy + image)? The current draft is replaced; the URL slug is kept.">Regenerate</button>

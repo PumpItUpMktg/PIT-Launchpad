@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @include('filament.operate.partials.interactions')
     <style>
         .hm-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:8px; }
         .hm-sel { font-size:13px; border:1px solid rgba(148,163,184,.4); border-radius:8px; padding:5px 10px; background:transparent; }
