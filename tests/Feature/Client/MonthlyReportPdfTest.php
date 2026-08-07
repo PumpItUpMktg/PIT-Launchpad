@@ -15,7 +15,7 @@ function bindEmptyGsc(): void
 {
     app()->instance(SearchConsoleProvider::class, new class implements SearchConsoleProvider
     {
-        public function searchAnalytics(Site $site, DateTimeInterface $start, DateTimeInterface $end, array $dimensions = ['query'], int $rowLimit = 1000): array
+        public function searchAnalytics(Site $site, DateTimeInterface $start, DateTimeInterface $end, array $dimensions = ['query'], int $rowLimit = 1000, int $startRow = 0): array
         {
             return [];
         }

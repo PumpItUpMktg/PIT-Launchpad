@@ -30,6 +30,7 @@ class GoogleSearchConsoleProvider implements SearchConsoleProvider
         DateTimeInterface $end,
         array $dimensions = ['query'],
         int $rowLimit = 1000,
+        int $startRow = 0,
     ): array {
         $account = $this->connections->account();
         if ($account === null || $account->needsReconnect()) {
@@ -50,6 +51,7 @@ class GoogleSearchConsoleProvider implements SearchConsoleProvider
                 'endDate' => $end->format('Y-m-d'),
                 'dimensions' => $dimensions,
                 'rowLimit' => $rowLimit,
+                'startRow' => max(0, $startRow),
             ]],
         );
 

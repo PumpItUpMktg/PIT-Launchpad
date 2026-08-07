@@ -18,7 +18,7 @@ function bindMonthlyGsc(array $byMonth): void
     {
         public function __construct(private array $byMonth) {}
 
-        public function searchAnalytics(Site $site, DateTimeInterface $start, DateTimeInterface $end, array $dimensions = ['query'], int $rowLimit = 1000): array
+        public function searchAnalytics(Site $site, DateTimeInterface $start, DateTimeInterface $end, array $dimensions = ['query'], int $rowLimit = 1000, int $startRow = 0): array
         {
             $key = $start->format('Y-m');
             if (! isset($this->byMonth[$key])) {
@@ -74,7 +74,7 @@ it('lists the month\'s top Search Console queries (the long tail), most impressi
     // A range provider that answers the query-dimension pull with per-query rows.
     app()->instance(SearchConsoleProvider::class, new class implements SearchConsoleProvider
     {
-        public function searchAnalytics(Site $site, DateTimeInterface $start, DateTimeInterface $end, array $dimensions = ['query'], int $rowLimit = 1000): array
+        public function searchAnalytics(Site $site, DateTimeInterface $start, DateTimeInterface $end, array $dimensions = ['query'], int $rowLimit = 1000, int $startRow = 0): array
         {
             if ($dimensions !== ['query']) {
                 return [];
