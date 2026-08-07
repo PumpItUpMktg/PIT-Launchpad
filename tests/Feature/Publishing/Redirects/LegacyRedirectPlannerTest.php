@@ -58,22 +58,27 @@ it('routes the legacy GSC inventory to 301/410/unresolved and never shadows a li
 
     // Live published pages.
     Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'sump-pump-repair', 'title' => 'Sump Pump Repair', 'target_keyword_id' => $kw->id]);
+    Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'sump-pump-installation', 'title' => 'Sump Pump Installation']);
     Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'battery-backup-sump-pump-types', 'title' => 'Battery Backup Sump Pump Types']);
     Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'hoboken-nj', 'title' => 'Hoboken, NJ', 'page_type' => PageType::Location]);
 
-    // GSC inventory: a mix of live, orphaned, and junk URLs.
-    lrpDaily($site, 'https://spg.example/sump-pump-repair/', 900);              // live → skipped
-    lrpDaily($site, 'https://spg.example/battery-backup-sump-pump-types-5/', 300); // numbered dup
-    lrpDaily($site, 'https://spg.example/hoboken/', 200);                       // bare town
-    lrpDaily($site, 'https://spg.example/old-repair-writeup/', 150);           // routed by top query
+    // GSC inventory: a mix of live, orphaned, dup, and junk URLs.
+    lrpDaily($site, 'https://spg.example/sump-pump-repair/', 900);                       // live → skipped
+    lrpDaily($site, 'https://spg.example/sump-pump-installation-cost-breakdown-3/', 500); // dup, base NOT live → routes via base slug overlap
+    lrpDaily($site, 'https://spg.example/battery-backup-sump-pump-types-5/', 300);       // numbered dup, base live
+    lrpDaily($site, 'https://spg.example/hoboken/', 200);                                // bare town
+    lrpDaily($site, 'https://spg.example/old-repair-writeup/', 150);                     // routed by top query
     lrpQuery($site, 'https://spg.example/old-repair-writeup/', 'sump pump repair', 150);
-    lrpDaily($site, 'https://spg.example/venice-fl/', 40);                      // out-of-footprint → gone
-    lrpDaily($site, 'https://spg.example/mystery-widget-xyz/', 10);            // no signal → unresolved
+    lrpDaily($site, 'https://spg.example/water-damage-drying-near-me/', 100);            // "near-me" must NOT 410 → unresolved
+    lrpDaily($site, 'https://spg.example/venice-fl/', 40);                               // no confident target → unresolved
+    lrpDaily($site, 'https://spg.example/mystery-widget-xyz/', 10);                     // no signal → unresolved
 
     $plan = app(LegacyRedirectPlanner::class)->plan($site);
 
     $byFrom = collect($plan['redirect'])->keyBy('from');
     expect($plan['skipped_live'])->toBe(1)
+        ->and($byFrom['/sump-pump-installation-cost-breakdown-3']['to'])->toBe('/sump-pump-installation')
+        ->and($byFrom['/sump-pump-installation-cost-breakdown-3']['reason'])->toBe('numbered_duplicate')
         ->and($byFrom['/battery-backup-sump-pump-types-5']['to'])->toBe('/battery-backup-sump-pump-types')
         ->and($byFrom['/battery-backup-sump-pump-types-5']['reason'])->toBe('numbered_duplicate')
         ->and($byFrom['/hoboken']['to'])->toBe('/hoboken-nj')
@@ -81,21 +86,24 @@ it('routes the legacy GSC inventory to 301/410/unresolved and never shadows a li
         ->and($byFrom['/old-repair-writeup']['to'])->toBe('/sump-pump-repair')
         ->and($byFrom['/old-repair-writeup']['reason'])->toBe('top_query');
 
-    expect(collect($plan['gone'])->pluck('from'))->toContain('/venice-fl');
-    expect(collect($plan['gone'])->firstWhere('from', '/venice-fl')['reason'])->toBe('out_of_footprint');
-    expect(collect($plan['unresolved'])->pluck('from'))->toContain('/mystery-widget-xyz');
+    // No auto-410: "near-me" and unmatched geo-ish slugs are surfaced, never guessed as gone.
+    expect($plan['gone'])->toBe([]);
+    $unresolvedFrom = collect($plan['unresolved'])->pluck('from');
+    expect($unresolvedFrom)->toContain('/water-damage-drying-near-me')
+        ->and($unresolvedFrom)->toContain('/venice-fl')
+        ->and($unresolvedFrom)->toContain('/mystery-widget-xyz');
 
     // Ranked by lost impressions (highest first).
-    expect($plan['redirect'][0]['from'])->toBe('/battery-backup-sump-pump-types-5');
+    expect($plan['redirect'][0]['from'])->toBe('/sump-pump-installation-cost-breakdown-3');
 
-    // Apply persists 301 + 410 rows and never creates a redirect FROM a live page.
+    // Apply persists the 301 rows and never creates a redirect FROM a live page.
     $written = app(LegacyRedirectPlanner::class)->apply($site, $plan);
-    expect($written)->toBe(count($plan['redirect']) + count($plan['gone']));
+    expect($written)->toBe(count($plan['redirect']));
 
     $rows = Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('from_url');
     expect($rows->has('/sump-pump-repair'))->toBeFalse()               // live page never shadowed
-        ->and((int) $rows['/hoboken']->code)->toBe(301)
-        ->and((int) $rows['/venice-fl']->code)->toBe(410);
+        ->and($rows->has('/water-damage-drying-near-me'))->toBeFalse() // unresolved never written
+        ->and((int) $rows['/hoboken']->code)->toBe(301);
 });
 
 it('is idempotent and skips URLs that already have a redirect', function () {

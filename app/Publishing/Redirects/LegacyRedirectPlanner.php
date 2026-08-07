@@ -33,9 +33,6 @@ use Illuminate\Support\Str;
  */
 class LegacyRedirectPlanner
 {
-    /** USPS codes so an out-of-footprint town page (…-fl, …-tx) can be flushed with a 410. */
-    private const US_STATES = ['al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'fl', 'ga', 'hi', 'id', 'il', 'in', 'ia', 'ks', 'ky', 'la', 'me', 'md', 'ma', 'mi', 'mn', 'ms', 'mo', 'mt', 'ne', 'nv', 'nh', 'nj', 'nm', 'ny', 'nc', 'nd', 'oh', 'ok', 'or', 'pa', 'ri', 'sc', 'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy'];
-
     /** Slug-token Jaccard overlap at/above which an unambiguous best live page is a confident 301 target. */
     private const SLUG_OVERLAP_FLOOR = 0.6;
 
@@ -119,9 +116,7 @@ class LegacyRedirectPlanner
             $topQuery = $this->inventory->topQuery($site, $entry['url']);
             $target = $this->route($path, $topQuery, $livePaths, $leafToPath, $keywordToPath, $locationPages);
 
-            if ($target !== null && $target['code'] === 410) {
-                $gone[] = ['from' => '/'.$key, 'code' => 410, 'impressions' => $entry['impressions'], 'reason' => $target['reason']];
-            } elseif ($target !== null) {
+            if ($target !== null) {
                 $redirect[] = [
                     'from' => '/'.$key, 'to' => $target['to'], 'code' => 301,
                     'impressions' => $entry['impressions'], 'reason' => $target['reason'], 'top_query' => $topQuery,
@@ -168,28 +163,33 @@ class LegacyRedirectPlanner
     }
 
     /**
-     * The routing cascade — most-confident match first. Returns ['to' => path,
-     * 'code' => 301, 'reason' => ...] or a 410 marker, or null (leave unresolved).
+     * The routing cascade — most-confident match first. Returns a 301 target
+     * ['to' => path, 'code' => 301, 'reason' => ...], or null (leave unresolved).
      *
      * @param  array<string, bool>  $livePaths
      * @param  array<string, string>  $leafToPath
      * @param  array<string, string>  $keywordToPath
      * @param  array<string, string>  $locationPages
-     * @return array{to: string, code: int, reason: string}|array{to: null, code: int, reason: string}|null
+     * @return array{to: string, code: int, reason: string}|null
      */
     private function route(string $path, ?string $topQuery, array $livePaths, array $leafToPath, array $keywordToPath, array $locationPages): ?array
     {
         $leaf = $this->leaf($path);
+        // Old-site duplicate copies carry a numeric suffix (`-2`…`-10`). Strip it so a dup routes
+        // wherever its base would — and so the trailing digit doesn't drag slug-overlap under the floor.
+        $core = (string) preg_replace('/-\d+$/', '', $leaf);
+        if ($core === '') {
+            $core = $leaf;
+        }
+        $numbered = $core !== $leaf;
 
-        // 1. Numbered-duplicate collapse: /foo-3 → the live /…/foo (old-site pagination/dupe artifact).
-        if (preg_match('/^(.*?)-\d+$/', $leaf, $m) === 1 && $m[1] !== '') {
-            if (isset($leafToPath[$m[1]])) {
-                return ['to' => $leafToPath[$m[1]], 'code' => 301, 'reason' => 'numbered_duplicate'];
-            }
+        // 1. Numbered-duplicate collapse: /foo-3 → the live /…/foo, when the base itself is a live page.
+        if ($numbered && isset($leafToPath[$core])) {
+            return ['to' => $leafToPath[$core], 'code' => 301, 'reason' => 'numbered_duplicate'];
         }
 
         // 2. Town: a bare-town legacy slug → its canonical location page.
-        $bareTown = Str::slug($this->townName(str_replace('-', ' ', $leaf)));
+        $bareTown = Str::slug($this->townName(str_replace('-', ' ', $core)));
         if ($bareTown !== '' && isset($locationPages[$bareTown])) {
             return ['to' => $locationPages[$bareTown], 'code' => 301, 'reason' => 'town'];
         }
@@ -202,21 +202,18 @@ class LegacyRedirectPlanner
             }
         }
 
-        // 4. Slug-token overlap: the closest live page by leaf tokens, if unambiguous and strong enough.
-        $best = $this->bestSlugOverlap($leaf, $leafToPath);
+        // 4. Slug-token overlap: the closest live page by (de-numbered) leaf tokens, if unambiguous
+        //    and strong enough. A numbered dup that reaches here matched via its base.
+        $best = $this->bestSlugOverlap($core, $leafToPath);
         if ($best !== null) {
-            return ['to' => $best, 'code' => 301, 'reason' => 'slug_overlap'];
+            return ['to' => $best, 'code' => 301, 'reason' => $numbered ? 'numbered_duplicate' : 'slug_overlap'];
         }
 
-        // 5. Out-of-footprint town: a state-suffixed slug for a state we don't serve → gone.
-        if (preg_match('/-([a-z]{2})$/', $leaf, $m) === 1 && in_array($m[1], self::US_STATES, true)) {
-            $footprint = array_map('strtolower', (array) config('launchpad.footprint.states', []));
-            if (! in_array($m[1], $footprint, true)) {
-                return ['to' => null, 'code' => 410, 'reason' => 'out_of_footprint'];
-            }
-        }
-
-        return null; // unconfident — leave for a human
+        // Out-of-footprint 410 is intentionally NOT auto-derived from a slug: a state-suffix heuristic
+        // false-positives on common words ("…-near-me" reads as Maine), and a wrong 410 deletes a live
+        // page from the index. Anything unmatched is surfaced as unresolved for a human (or a data-driven
+        // 410 keyed on real Market/Location geo, later) rather than guessed.
+        return null;
     }
 
     /**
