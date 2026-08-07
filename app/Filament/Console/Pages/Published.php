@@ -37,7 +37,7 @@ class Published extends ConsolePage
     /** @return array{posts: list<array<string, mixed>>, pages: list<array<string, mixed>>} */
     public function getBoardProperty(): array
     {
-        return app(PublishedContentBoard::class)->forSite($this->siteId);
+        return app(PublishedContentBoard::class)->forSite($this->siteId, $this->siloId);
     }
 
     /** Re-sync a live page/post to WordPress (idempotent by ULID). */

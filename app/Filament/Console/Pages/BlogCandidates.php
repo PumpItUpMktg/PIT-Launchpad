@@ -39,7 +39,7 @@ class BlogCandidates extends ConsolePage
     /** @return list<array<string, mixed>> */
     public function getCandidatesProperty(): array
     {
-        return app(BlogBoard::class)->candidates($this->siteId);
+        return app(BlogBoard::class)->candidates($this->siteId, $this->siloId);
     }
 
     /** Generate a draft from a candidate (Sonnet + fal, on the worker). */

@@ -17,11 +17,12 @@ use App\Support\PublicUrl;
 class PublishedContentBoard
 {
     /**
-     * Live content for a site, split into blog posts and site pages, newest first.
+     * Live content for a site, split into blog posts and site pages, newest first. An optional silo
+     * filter scopes posts by `matched_silo_id` and pages by `silo_id` (the two silo links differ by kind).
      *
      * @return array{posts: list<array<string, mixed>>, pages: list<array<string, mixed>>}
      */
-    public function forSite(?string $siteId): array
+    public function forSite(?string $siteId, ?string $siloId = null): array
     {
         if ($siteId === null) {
             return ['posts' => [], 'pages' => []];
@@ -36,9 +37,14 @@ class PublishedContentBoard
             ->orderByDesc('updated_at')
             ->get();
 
+        $posts = $live->where('kind', ContentKind::Post)
+            ->when($siloId !== null, fn ($c) => $c->where('matched_silo_id', $siloId));
+        $pages = $live->where('kind', ContentKind::Page)
+            ->when($siloId !== null, fn ($c) => $c->where('silo_id', $siloId));
+
         return [
-            'posts' => $live->where('kind', ContentKind::Post)->map(fn (Content $c): array => $this->card($c, $domain))->values()->all(),
-            'pages' => $live->where('kind', ContentKind::Page)->map(fn (Content $c): array => $this->card($c, $domain))->values()->all(),
+            'posts' => $posts->map(fn (Content $c): array => $this->card($c, $domain))->values()->all(),
+            'pages' => $pages->map(fn (Content $c): array => $this->card($c, $domain))->values()->all(),
         ];
     }
 

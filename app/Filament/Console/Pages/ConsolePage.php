@@ -7,6 +7,7 @@ use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
+use App\Operate\BlogBoard;
 use App\OpsConsole\ConsoleContext;
 use App\Security\Capability;
 use Filament\Pages\Page;
@@ -23,6 +24,9 @@ abstract class ConsolePage extends Page
     /** The console's active site id (bound to the switcher; persisted via ConsoleContext). */
     public ?string $siteId = null;
 
+    /** Optional silo filter for the blog pages (null = all silos). */
+    public ?string $siloId = null;
+
     public function mount(): void
     {
         $this->siteId = app(ConsoleContext::class)->current($this->user())?->id;
@@ -36,6 +40,14 @@ abstract class ConsolePage extends Page
             // Refused (not visible) — fall back to the resolved site.
             $this->siteId = app(ConsoleContext::class)->current($user)?->id;
         }
+        // A silo belongs to one site — clear the filter when the tenant changes.
+        $this->siloId = null;
+    }
+
+    /** @return array<string, string> silo id => name for the current site (blog-page filter). */
+    public function getSiloFilterOptionsProperty(): array
+    {
+        return app(BlogBoard::class)->siloOptions($this->siteId);
     }
 
     /** @return array<string, string> id => name for the site switcher. */

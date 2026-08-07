@@ -44,7 +44,7 @@ class BlogReview extends ConsolePage
     /** @return list<array<string, mixed>> */
     public function getReviewProperty(): array
     {
-        return app(BlogBoard::class)->review($this->siteId);
+        return app(BlogBoard::class)->review($this->siteId, $this->siloId);
     }
 
     /** Accept a draft into the ready-to-publish queue (does NOT push to WordPress). */
