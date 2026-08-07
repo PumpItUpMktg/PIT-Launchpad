@@ -124,32 +124,46 @@ class StorefrontTowns
     }
 
     /**
-     * Whether a post covers any of the given storefront town keys — authoritative via ContentTown tags
-     * for a published post, else a whole-word title+body scan against the town displays.
+     * The storefront towns a post covers (display names) — authoritative via ContentTown tags for a
+     * published post, else a whole-word title+body scan against the town displays. Empty = covers none.
      *
      * @param  array<string, string>  $townDisplays  town key => display name (the candidate storefront towns)
+     * @return list<string>
      */
-    public function postCovers(Content $post, array $townDisplays): bool
+    public function matchTowns(Content $post, array $townDisplays): array
     {
         if ($townDisplays === []) {
-            return false;
+            return [];
         }
 
         $tagged = ContentTown::query()->where('content_id', $post->id)->pluck('town')->all();
         if ($tagged !== []) {
-            return array_intersect($tagged, array_keys($townDisplays)) !== [];
+            $keys = array_intersect(array_keys($townDisplays), $tagged);
+
+            return array_values(array_map(fn (string $k): string => $townDisplays[$k], $keys));
         }
 
         // No tags yet (draft/approved) — scan the copy for a whole-word mention of any candidate town.
         $haystack = ' '.mb_strtolower(trim(strip_tags((string) $post->title.' '.(string) $post->body))).' ';
+        $matched = [];
         foreach ($townDisplays as $display) {
             $name = mb_strtolower(trim(explode(',', $display, 2)[0]));
             if ($name !== '' && preg_match('/(?<![\p{L}\p{N}])'.preg_quote($name, '/').'(?![\p{L}\p{N}])/u', $haystack) === 1) {
-                return true;
+                $matched[] = $display;
             }
         }
 
-        return false;
+        return $matched;
+    }
+
+    /**
+     * Whether a post covers any of the given storefront town keys.
+     *
+     * @param  array<string, string>  $townDisplays  town key => display name
+     */
+    public function postCovers(Content $post, array $townDisplays): bool
+    {
+        return $this->matchTowns($post, $townDisplays) !== [];
     }
 
     /** The storefront town keys (+displays) to match against, for a county/town selection. */
