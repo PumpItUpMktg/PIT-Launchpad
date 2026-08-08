@@ -32,6 +32,7 @@ class GroundingAssembler
     public function assemble(DraftRequest $request, array $extraSources = []): Grounding
     {
         $voice = $this->voice->active($request->siteId);
+        $angle = $this->localInjection->angleFor($request);
 
         return new Grounding(
             claims: $this->claims($request->siteId),
@@ -39,8 +40,9 @@ class GroundingAssembler
             voiceProfile: $this->voice->toArray($voice),
             voiceProfileVersion: $voice !== null ? (int) $voice->version : 0,
             localInjectionAllowed: $request->allowsLocalInjection(),
-            towns: $this->localInjection->townsFor($request),
+            towns: $angle->towns(),
             kit: $this->kit($request),
+            localAngle: $angle,
         );
     }
 

@@ -11,6 +11,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Local town references on blog posts
+    |--------------------------------------------------------------------------
+    |
+    | A blog post stays relevant to ONE locale: its town tags/links are held to
+    | the dominant (county, state) cluster and capped. `ambiguous_town_names`
+    | lists extra common-English-word municipality names that must be
+    | state-qualified in the copy to count (on top of the built-in list) —
+    | prevents "a good deal" tagging Deal, NJ.
+    */
+    'local_town_cap' => (int) env('LAUNCHPAD_LOCAL_TOWN_CAP', 4),
+    'ambiguous_town_names' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | New Setup group (gathering relay) — CUT OVER, default ON
     |--------------------------------------------------------------------------
     |

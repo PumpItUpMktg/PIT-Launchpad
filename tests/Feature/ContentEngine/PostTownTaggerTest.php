@@ -89,6 +89,26 @@ it('is idempotent and drops a town no longer referenced', function () {
         ->and($result['tags_added'])->toBe(0);
 });
 
+it('caps tags to the dominant county+state cluster — a post stays relevant to one locale', function () {
+    $site = Site::factory()->create();
+    // Five Middlesex-County NJ towns…
+    foreach (['Edison', 'Woodbridge', 'Piscataway', 'Metuchen', 'Highland Park'] as $i => $name) {
+        CoverageArea::factory()->create([
+            'site_id' => $site->id, 'name' => $name, 'state' => 'NJ',
+            'geo_id' => '34023'.str_pad((string) (10 + $i), 5, '0', STR_PAD_LEFT),
+        ]);
+    }
+    // …and one Chester-County PA town the post also names.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Downingtown', 'state' => 'PA', 'geo_id' => '4202912345']);
+
+    $post = ttPost($site, 'Storm recap', 'Damage in Edison, Woodbridge, Piscataway, Metuchen and Highland Park — plus Downingtown, PA.');
+    app(PostTownTagger::class)->tag($site);
+
+    $towns = ttTowns($post);
+    expect($towns)->not->toContain('Downingtown')  // cross-state locale dropped
+        ->and(count($towns))->toBe(4);             // capped at 4 within the dominant NJ county
+});
+
 it('the --towns command option tags the site posts', function () {
     $site = Site::factory()->create(['brand_name' => 'TownCo']);
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Cranford']);

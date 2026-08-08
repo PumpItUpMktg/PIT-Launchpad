@@ -22,7 +22,8 @@
                     @if (! empty($r['keyword'])) <span class="k">Target:</span> {{ $r['keyword'] }} @endif
                     @php $state = $r['state'] ?? $r['status']; @endphp
                     <span class="bc-tag {{ $state === 'writing' ? 'writing' : (in_array($state, ['draft_failed','render_failed','publish_failed','undrafted'], true) ? 'bad' : '') }}">{{ str_replace('_', ' ', (string) $state) }}</span>
-                    @foreach (($r['towns'] ?? []) as $town) <span class="bc-tag town">📍 {{ $town }}</span> @endforeach
+                    @foreach (array_slice($r['towns'] ?? [], 0, 4) as $town) <span class="bc-tag town">📍 {{ $town }}</span> @endforeach
+                    @if (count($r['towns'] ?? []) > 4) <span class="bc-tag">+{{ count($r['towns']) - 4 }}</span> @endif
                 </div>
 
                 {{-- Excerpt (or draft error) --}}

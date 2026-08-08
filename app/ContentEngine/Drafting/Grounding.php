@@ -26,6 +26,7 @@ final class Grounding
         public readonly bool $localInjectionAllowed,
         public readonly array $towns = [],
         public readonly ?KitSchema $kit = null,
+        public readonly ?LocalAngle $localAngle = null,
     ) {}
 
     public function claim(string $id): ?Claim

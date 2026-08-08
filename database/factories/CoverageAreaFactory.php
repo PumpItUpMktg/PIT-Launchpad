@@ -19,7 +19,9 @@ class CoverageAreaFactory extends Factory
     {
         return [
             'site_id' => Site::factory(),
-            'geo_id' => (string) $this->faker->unique()->numerify('34######'),
+            // A valid 10-digit county-subdivision GEOID in Middlesex County, NJ (FIPS 34023) — same
+            // county by default so multi-town fixtures stay geographically coherent; unique cousub suffix.
+            'geo_id' => '34023'.$this->faker->unique()->numerify('#####'),
             'name' => $this->faker->city(),
             'type' => MunicipalityType::CountySubdivision,
             'state' => 'NJ',

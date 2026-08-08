@@ -119,12 +119,24 @@ class Drafter
 
     private function localBlock(Grounding $grounding): string
     {
-        if (! $grounding->localInjectionAllowed || $grounding->towns === []) {
+        $angle = $grounding->localAngle;
+        if (! $grounding->localInjectionAllowed || $angle === null || ! $angle->allowed()) {
             return 'LOCALIZATION: none — keep the copy town-agnostic. Do not name specific towns or neighborhoods.';
         }
 
-        return 'LOCALIZATION: this is a locally-relevant reactive piece. You MAY naturally reference these towns: '
-            .implode(', ', $grounding->towns).'. List any you used in "towns".';
+        $countyPhrase = $angle->county !== null ? " ({$angle->county})" : '';
+        $lines = [
+            'LOCALIZATION: a local angle is OPTIONAL here — use it ONLY if the story genuinely applies locally; never force a town in.',
+            "Our brick-and-mortar location is in {$angle->anchorTown}{$countyPhrase}.",
+        ];
+        if ($angle->storyTown !== null) {
+            $lines[] = "If there is a natural local angle, you MAY reference {$angle->storyTown} (a nearby community we serve) and tie the service back to our {$angle->anchorTown} location.";
+        } else {
+            $lines[] = "If there is a natural local angle, tie it back to our {$angle->anchorTown} location.";
+        }
+        $lines[] = 'Name AT MOST these towns and no others; if there is no genuine local angle, keep it town-agnostic. List any town you actually used in "towns".';
+
+        return implode(' ', $lines);
     }
 
     private function briefBlock(DraftRequest $request): string

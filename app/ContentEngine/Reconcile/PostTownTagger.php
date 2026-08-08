@@ -3,6 +3,7 @@
 namespace App\ContentEngine\Reconcile;
 
 use App\Enums\ContentKind;
+use App\Enums\MunicipalityType;
 use App\Models\Content;
 use App\Models\ContentTown;
 use App\Models\CoverageArea;
@@ -27,15 +28,10 @@ final class PostTownTagger
      */
     public function tag(Site $site): array
     {
-        $map = $this->coverageTownMap($site);   // normalized key => display name
-        if ($map === []) {
+        $towns = $this->coverageTowns($site);   // list of town meta (key, display, name, county, state)
+        if ($towns === []) {
             return ['posts_tagged' => 0, 'tags_added' => 0, 'tags_removed' => 0, 'changed_towns' => []];
         }
-
-        // Longest name first so a specific town wins an alternation over a substring town.
-        $displays = array_values($map);
-        usort($displays, fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
-        $pattern = '/\b('.implode('|', array_map(fn (string $d): string => preg_quote($d, '/'), $displays)).')\b/i';
 
         $posts = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -48,7 +44,7 @@ final class PostTownTagger
         $changed = [];
 
         foreach ($posts as $post) {
-            $result = $this->syncPostTowns($post, (string) $site->id, $map, $pattern);
+            $result = $this->syncPostTowns($post, (string) $site->id, $towns);
             $added += $result['added'];
             $removed += $result['removed'];
             foreach ($result['changed'] as $key) {
@@ -79,28 +75,32 @@ final class PostTownTagger
             return [];
         }
 
-        $map = $this->coverageTownMap($site);
-        if ($map === []) {
+        $towns = $this->coverageTowns($site);
+        if ($towns === []) {
             return [];
         }
 
-        $displays = array_values($map);
-        usort($displays, fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
-        $pattern = '/\b('.implode('|', array_map(fn (string $d): string => preg_quote($d, '/'), $displays)).')\b/i';
-
-        return $this->syncPostTowns($post, (string) $site->id, $map, $pattern)['changed'];
+        return $this->syncPostTowns($post, (string) $site->id, $towns)['changed'];
     }
 
     /**
      * Reconcile one post's `content_towns` rows against the towns its text names — add the new, drop the
      * gone. Shared by the full {@see tag()} sweep and the single-post {@see tagPost()} publish hook.
      *
-     * @param  array<string, string>  $map  normalized key => display
+     * @param  list<array{key: string, display: string, name: string, county: ?string, state: ?string}>  $towns
      * @return array{added: int, removed: int, tagged: bool, changed: list<string>}
      */
-    private function syncPostTowns(Content $post, string $siteId, array $map, string $pattern): array
+    private function syncPostTowns(Content $post, string $siteId, array $towns): array
     {
-        $found = $this->townsIn((string) $post->title.' '.(string) $post->body, $pattern, $map);
+        // Match, then keep only the dominant (county, state) cluster capped — a post stays relevant to
+        // ONE locale, so it never tags twenty scattered towns or a common word ("a good deal" ≠ Deal, NJ).
+        $matched = LocalTownCoherence::select(
+            LocalTownMatcher::scan((string) $post->title.' '.(string) $post->body, $towns)
+        );
+        $found = [];
+        foreach ($matched as $m) {
+            $found[$m['key']] = $m['display'];
+        }
         $existing = ContentTown::query()->where('content_id', $post->id)->get()->keyBy('town');
 
         $added = 0;
@@ -128,37 +128,26 @@ final class PostTownTagger
     }
 
     /**
-     * @param  array<string, string>  $map  normalized key => display
-     * @return array<string, string> the towns present in the text, key => display
+     * The site's coverage towns as matcher input — name (state stripped for display/key), plus the
+     * county FIPS (first 5 of a county-subdivision GEOID; null for a place) and state for coherence
+     * grouping and ambiguous-name disambiguation.
+     *
+     * @return list<array{key: string, display: string, name: string, county: ?string, state: ?string}>
      */
-    private function townsIn(string $text, string $pattern, array $map): array
+    private function coverageTowns(Site $site): array
     {
-        if (! preg_match_all($pattern, $text, $matches)) {
-            return [];
-        }
-
-        $found = [];
-        foreach ($matches[1] as $hit) {
-            $key = mb_strtolower(trim((string) $hit));
-            if (isset($map[$key])) {
-                $found[$key] = $map[$key];
+        $towns = [];
+        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get(['name', 'state', 'type', 'geo_id']) as $area) {
+            $name = trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim((string) $area->name)));
+            if ($name === '') {
+                continue;
             }
+            $geoId = (string) $area->geo_id;
+            $county = ($area->type === MunicipalityType::CountySubdivision && strlen($geoId) >= 5) ? substr($geoId, 0, 5) : null;
+            $state = trim((string) $area->state) !== '' ? mb_strtolower(trim((string) $area->state)) : null;
+            $towns[] = ['key' => mb_strtolower($name), 'display' => $name, 'name' => $name, 'county' => $county, 'state' => $state];
         }
 
-        return $found;
-    }
-
-    /** @return array<string, string> normalized key => display name, for the site's coverage towns */
-    private function coverageTownMap(Site $site): array
-    {
-        $map = [];
-        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->pluck('name') as $name) {
-            $display = trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim((string) $name)));
-            if ($display !== '') {
-                $map[mb_strtolower($display)] = $display;
-            }
-        }
-
-        return $map;
+        return $towns;
     }
 }
