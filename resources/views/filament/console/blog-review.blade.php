@@ -1,5 +1,5 @@
 <x-filament-panels::page>
-    @include('filament.console.partials.site-switcher')
+    @include('filament.console.partials.blog-filters')
 
     @php $review = $this->review; @endphp
 
@@ -13,6 +13,7 @@
         .rv-tag { display:inline-flex; padding:2px 8px; border-radius:99px; background:rgba(148,163,184,.14); }
         .rv-tag.writing { background:rgba(79,70,229,.13); color:#4f46e5; }
         .rv-tag.bad { background:rgba(220,38,38,.12); color:#dc2626; }
+        .rv-tag.town { background:rgba(217,119,6,.13); color:#b45309; }
         .rv-excerpt { font-size:12.5px; color:#64748b; max-width:80ch; }
         .rv-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
         .rv-btn { font-size:12.5px; font-weight:600; padding:6px 13px; border-radius:8px; cursor:pointer; border:1px solid rgba(148,163,184,.4); background:transparent; color:#334155; }
@@ -36,6 +37,7 @@
                         <span class="rv-tag {{ $state === 'writing' ? 'writing' : (in_array($state, ['draft_failed','render_failed','publish_failed','undrafted'], true) ? 'bad' : '') }}">{{ str_replace('_', ' ', (string) $state) }}</span>
                         @if (! empty($r['keyword'])) <span class="rv-tag">{{ $r['keyword'] }}</span> @endif
                         @if (! empty($r['silo'])) <span class="rv-tag">{{ $r['silo'] }}</span> @endif
+                        @foreach (($r['towns'] ?? []) as $town) <span class="rv-tag town">📍 {{ $town }}</span> @endforeach
                     </div>
                     @if (! empty($r['draft_error']))
                         <div class="rv-excerpt" style="color:#dc2626;">{{ $r['draft_error'] }}</div>

@@ -7,7 +7,9 @@ use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
+use App\Operate\BlogBoard;
 use App\OpsConsole\ConsoleContext;
+use App\OpsConsole\StorefrontTowns;
 use App\Security\Capability;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
@@ -23,6 +25,14 @@ abstract class ConsolePage extends Page
     /** The console's active site id (bound to the switcher; persisted via ConsoleContext). */
     public ?string $siteId = null;
 
+    /** Optional silo filter for the blog pages (null = all silos). */
+    public ?string $siloId = null;
+
+    /** Optional brick-and-mortar area filter: a storefront county, then a town within it. */
+    public ?string $county = null;
+
+    public ?string $town = null;
+
     public function mount(): void
     {
         $this->siteId = app(ConsoleContext::class)->current($this->user())?->id;
@@ -36,6 +46,106 @@ abstract class ConsolePage extends Page
             // Refused (not visible) — fall back to the resolved site.
             $this->siteId = app(ConsoleContext::class)->current($user)?->id;
         }
+        // Filters belong to one tenant — clear them when the tenant changes.
+        $this->siloId = null;
+        $this->county = null;
+        $this->town = null;
+    }
+
+    /** Picking a county resets the town within it. */
+    public function updatedCounty(): void
+    {
+        $this->town = null;
+    }
+
+    /** @return array<string, string> silo id => name for the current site (blog-page filter). */
+    public function getSiloFilterOptionsProperty(): array
+    {
+        return app(BlogBoard::class)->siloOptions($this->siteId);
+    }
+
+    /**
+     * The storefront (brick-and-mortar) counties → towns cascade for the current site.
+     *
+     * @return list<array{geoid: string, name: string, towns: list<array{key: string, display: string}>}>
+     */
+    public function getStorefrontCountiesProperty(): array
+    {
+        $site = $this->currentSite();
+
+        return $site === null ? [] : app(StorefrontTowns::class)->counties($site);
+    }
+
+    /** Whether this page offers the brick-and-mortar town filter (only where posts have body/tags). */
+    public function supportsTownFilter(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Enrich BlogBoard cards (each has an `id`) with the console extras every blog card shows: the
+     * storefront towns the post covers (chips), plus its silo and target keyword when the card doesn't
+     * already carry them (the Publish card doesn't). Loads the underlying posts ONCE for the whole list.
+     *
+     * @param  list<array<string, mixed>>  $cards
+     * @return list<array<string, mixed>>
+     */
+    protected function enrichBlogCards(array $cards): array
+    {
+        if ($cards === []) {
+            return $cards;
+        }
+        $site = $this->currentSite();
+        if ($site === null) {
+            return array_map(fn (array $c): array => $c + ['towns' => []], $cards);
+        }
+
+        $storefront = app(StorefrontTowns::class);
+        $townMap = $storefront->targetTowns($site, null, null);
+
+        $ids = array_map(fn (array $c): string => (string) $c['id'], $cards);
+        $posts = Content::withoutGlobalScope(SiteScope::class)
+            ->whereIn('id', $ids)
+            ->with(['matchedSilo', 'targetKeyword'])
+            ->get(['id', 'title', 'body', 'matched_silo_id', 'target_keyword_id'])
+            ->keyBy(fn (Content $c): string => (string) $c->id);
+
+        return array_map(function (array $c) use ($posts, $storefront, $townMap): array {
+            $post = $posts->get((string) $c['id']);
+            $c['towns'] = $post instanceof Content ? $storefront->matchTowns($post, $townMap) : [];
+            $c['silo'] ??= $post?->matchedSilo?->name;
+            $c['keyword'] ??= $post?->targetKeyword?->query;
+
+            return $c;
+        }, $cards);
+    }
+
+    /**
+     * Filter ENRICHED cards (carrying a `towns` list) down to those covering the selected storefront
+     * county/town. A no-op when no area filter is set or the page doesn't support it.
+     *
+     * @param  list<array<string, mixed>>  $cards
+     * @return list<array<string, mixed>>
+     */
+    protected function filterByStorefrontTown(array $cards): array
+    {
+        if (! $this->supportsTownFilter() || ($this->county === null && $this->town === null)) {
+            return $cards;
+        }
+        $site = $this->currentSite();
+        if ($site === null) {
+            return $cards;
+        }
+
+        $targets = array_values(app(StorefrontTowns::class)->targetTowns($site, $this->county, $this->town));
+        if ($targets === []) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $cards,
+            fn (array $c): bool => array_intersect($c['towns'] ?? [], $targets) !== [],
+        ));
     }
 
     /** @return array<string, string> id => name for the site switcher. */

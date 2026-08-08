@@ -1,5 +1,5 @@
 <x-filament-panels::page>
-    @include('filament.console.partials.site-switcher')
+    @include('filament.console.partials.blog-filters')
 
     @php $candidates = $this->candidates; @endphp
 
