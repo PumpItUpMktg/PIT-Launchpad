@@ -12,7 +12,7 @@
                     style="font-size:12px; padding:6px 10px; border-radius:8px; border:1px solid rgba(148,163,184,.4); background:transparent; color:#64748b; cursor:pointer;">Cancel</button>
         @else
             <button type="button" wire:click="startSwap('{{ $id }}')"
-                    style="font-size:12px; font-weight:600; padding:6px 12px; border-radius:8px; border:1px solid rgba(148,163,184,.4); background:transparent; color:#334155; cursor:pointer;">📷 Swap photo</button>
+                    style="font-size:12px; font-weight:600; padding:6px 12px; border-radius:8px; border:1px solid rgba(148,163,184,.4); background:transparent; color:#334155; cursor:pointer;">📷 Upload photo</button>
         @endif
     </div>
 @endif

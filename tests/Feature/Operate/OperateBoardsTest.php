@@ -139,8 +139,27 @@ it('candidates sort directed-first and carry the keyword + the page it will supp
     expect($cards[0]['id'])->toBe($directed->id)               // directed outranks higher-scored reactive
         ->and($cards[0]['keyword'])->toBe('sump pump maintenance cost')
         ->and($cards[0]['target_page'])->toBe('Sump Pumps Guide')
+        ->and($cards[0]['score'])->toBe(0.1)                    // score carried for the pronounced badge
         ->and($cards[1]['id'])->toBe($reactive->id)
-        ->and($cards[1]['source'])->toBe('Patch');
+        ->and($cards[1]['source'])->toBe('Patch')
+        ->and($cards[1]['date'])->toBe($reactive->created_at->toDateString());
+});
+
+it('publishing cards carry silo, source, date + keyword for the top-row chips', function () {
+    $site = opSite();
+    $silo = opSilo($site);
+    $kw = opKeyword($site, $silo, 'sump pump repair cost');
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved,
+        'matched_silo_id' => $silo->id, 'target_keyword_id' => $kw->id, 'title' => 'Ready piece',
+    ]);
+
+    $card = collect(app(BlogBoard::class)->publishing($site->id))->firstWhere('id', $post->id);
+
+    expect($card['silo'])->toBe('Sump Pumps')
+        ->and($card['source'])->toBe('directed')
+        ->and($card['keyword'])->toBe('sump pump repair cost')
+        ->and($card['date'])->toBe($post->created_at->toDateString());
 });
 
 it('marks legacy-revival candidates with impressions + URL count and floats them above feed candidates', function () {
