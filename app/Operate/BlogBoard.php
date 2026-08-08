@@ -72,6 +72,7 @@ class BlogBoard
                 'target_page' => $c->matchedSilo?->pillarContent?->title,
                 'source' => $c->target_keyword_id !== null ? 'directed' : (string) ($c->source_name ?? 'feed'),
                 'silo' => $c->matchedSilo?->name,
+                'date' => $c->created_at?->toDateString(),
                 'tenant' => $c->site?->brand_name,
                 'angle' => $c->angle_hint,
                 'score' => $c->relevance_score !== null ? round((float) $c->relevance_score, 2) : null,
@@ -97,13 +98,17 @@ class BlogBoard
                 ContentStatus::Rendering->value,
                 ContentStatus::Publishing->value,
             ])
-            ->with(['site'])
+            ->with(['site', 'matchedSilo', 'targetKeyword'])
             ->latest('updated_at')
             ->get()
             ->map(fn (Content $c) => [
                 'id' => (string) $c->id,
                 'title' => (string) $c->title,
                 'tenant' => $c->site?->brand_name,
+                'silo' => $c->matchedSilo?->name,
+                'source' => $c->target_keyword_id !== null ? 'directed' : (string) ($c->source_name ?? 'feed'),
+                'date' => $c->created_at?->toDateString(),
+                'keyword' => $c->targetKeyword?->query,
                 'state' => match ($c->status) {
                     ContentStatus::Rendering => 'rendering image',
                     ContentStatus::Publishing => 'pushing to WordPress',

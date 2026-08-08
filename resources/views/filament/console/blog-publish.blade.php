@@ -14,6 +14,10 @@
         .pb-meta { display:flex; gap:6px; flex-wrap:wrap; margin-top:2px; }
         .pb-tag { font-size:11px; padding:2px 8px; border-radius:99px; background:rgba(148,163,184,.14); color:#475569; }
         .pb-tag.town { background:rgba(217,119,6,.13); color:#b45309; }
+        .pb-tag.silo { background:rgba(79,70,229,.1); color:#4f46e5; }
+        .pb-tag.source { background:rgba(13,148,136,.12); color:#0f766e; }
+        .pb-tag.date { background:rgba(100,116,139,.12); color:#475569; }
+        .pb-top { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:2px; }
         .pb-btn { font-size:12.5px; font-weight:600; padding:7px 15px; border-radius:8px; cursor:pointer; border:1px solid #4f46e5; background:#4f46e5; color:#fff; }
         .pb-inflight { font-size:12px; color:#4f46e5; }
         .pb-empty { border:1px dashed rgba(148,163,184,.4); border-radius:10px; padding:22px; color:#94a3b8; font-size:13.5px; text-align:center; }
@@ -28,13 +32,20 @@
                     <img class="pb-thumb" src="{{ $p['image'] }}" alt="" loading="lazy">
                 @endif
                 <div class="pb-main">
+                    {{-- Top row: Silo · Source · Date --}}
+                    @if (! empty($p['silo']) || ! empty($p['source']) || ! empty($p['date']))
+                        <div class="pb-top">
+                            @if (! empty($p['silo'])) <span class="pb-tag silo">{{ $p['silo'] }}</span> @endif
+                            @if (! empty($p['source'])) <span class="pb-tag source">{{ $p['source'] }}</span> @endif
+                            @if (! empty($p['date'])) <span class="pb-tag date">🗓 {{ $p['date'] }}</span> @endif
+                        </div>
+                    @endif
                     <p class="pb-title">{{ $p['title'] ?: 'Untitled post' }}</p>
                     <div class="pb-state {{ ($p['stalled'] ?? false) ? 'stalled' : '' }}">
                         {{ $p['state'] ?? 'ready' }}{{ ($p['stalled'] ?? false) ? ' — stalled' : '' }}
                     </div>
-                    @if (! empty($p['silo']) || ! empty($p['keyword']) || ! empty($p['towns']))
+                    @if (! empty($p['keyword']) || ! empty($p['towns']))
                         <div class="pb-meta">
-                            @if (! empty($p['silo'])) <span class="pb-tag">{{ $p['silo'] }}</span> @endif
                             @if (! empty($p['keyword'])) <span class="pb-tag">{{ $p['keyword'] }}</span> @endif
                             @foreach (($p['towns'] ?? []) as $town) <span class="pb-tag town">📍 {{ $town }}</span> @endforeach
                         </div>

@@ -17,7 +17,9 @@
         .rv-tag.silo { background:rgba(79,70,229,.1); color:#4f46e5; }
         .rv-tag.source { background:rgba(13,148,136,.12); color:#0f766e; }
         .rv-tag.date { background:rgba(100,116,139,.12); color:#475569; }
-        .rv-thumb.empty { display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:11.5px; border:1px dashed rgba(148,163,184,.4); }
+        .rv-thumb.empty { display:flex; flex-direction:column; gap:2px; align-items:center; justify-content:center; color:#4f46e5; font-size:12px; font-weight:600; border:1px dashed rgba(79,70,229,.45); background:rgba(79,70,229,.04); cursor:pointer; }
+        .rv-thumb.empty .sub { font-size:10.5px; font-weight:500; color:#94a3b8; }
+        .rv-top { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:2px; }
         .rv-excerpt { font-size:12.5px; color:#64748b; max-width:80ch; }
         .rv-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
         .rv-btn { font-size:12.5px; font-weight:600; padding:6px 13px; border-radius:8px; cursor:pointer; border:1px solid rgba(148,163,184,.4); background:transparent; color:#334155; }
@@ -33,18 +35,28 @@
             <div class="rv-card" wire:key="rev-{{ $r['id'] }}">
                 @if (! empty($r['image']))
                     <img class="rv-thumb" src="{{ $r['image'] }}" alt="" loading="lazy">
+                @elseif ($this->can(\App\Security\Capability::EditContent))
+                    <div class="rv-thumb empty" wire:click="startSwap('{{ $r['id'] }}')">
+                        <span>⬆ Upload photo</span>
+                        <span class="sub">Image generates at publish</span>
+                    </div>
                 @else
-                    <div class="rv-thumb empty">No image yet</div>
+                    <div class="rv-thumb empty" style="cursor:default; color:#94a3b8; border-color:rgba(148,163,184,.4); background:transparent;">
+                        <span class="sub">Image generates at publish</span>
+                    </div>
                 @endif
                 <div class="rv-main">
+                    {{-- Top row: Silo · Source · Date --}}
+                    <div class="rv-top">
+                        @if (! empty($r['silo'])) <span class="rv-tag silo">{{ $r['silo'] }}</span> @endif
+                        @if (! empty($r['source'])) <span class="rv-tag source">{{ $r['source'] }}</span> @endif
+                        @if (! empty($r['date'])) <span class="rv-tag date">🗓 {{ $r['date'] }}</span> @endif
+                    </div>
                     <p class="rv-title">{{ $r['title'] ?: 'Untitled draft' }}</p>
                     <div class="rv-meta">
                         @php $state = $r['state'] ?? $r['status']; @endphp
                         <span class="rv-tag {{ $state === 'writing' ? 'writing' : (in_array($state, ['draft_failed','render_failed','publish_failed','undrafted'], true) ? 'bad' : '') }}">{{ str_replace('_', ' ', (string) $state) }}</span>
-                        @if (! empty($r['silo'])) <span class="rv-tag silo">{{ $r['silo'] }}</span> @endif
-                        @if (! empty($r['source'])) <span class="rv-tag source">{{ $r['source'] }}</span> @endif
                         @if (! empty($r['keyword'])) <span class="rv-tag">{{ $r['keyword'] }}</span> @endif
-                        @if (! empty($r['date'])) <span class="rv-tag date">🗓 {{ $r['date'] }}</span> @endif
                         @foreach (($r['towns'] ?? []) as $town) <span class="rv-tag town">📍 {{ $town }}</span> @endforeach
                     </div>
                     @if (! empty($r['draft_error']))
@@ -62,13 +74,17 @@
                     @endif
                 </div>
                 <div class="rv-actions">
-                    @if (($r['has_draft'] ?? false) && $this->can(\App\Security\Capability::ApproveContent))
+                    @php $hasDraft = $r['has_draft'] ?? false; @endphp
+                    @if ($hasDraft && $this->can(\App\Security\Capability::ApproveContent))
                         <button class="rv-btn primary" wire:click="approve('{{ $r['id'] }}')"
                                 wire:loading.attr="disabled" wire:target="approve('{{ $r['id'] }}')">Approve</button>
                     @endif
                     @if ($this->can(\App\Security\Capability::GenerateContent))
-                        <button class="rv-btn" wire:click="regenerate('{{ $r['id'] }}')"
-                                wire:loading.attr="disabled" wire:target="regenerate('{{ $r['id'] }}')">Regenerate</button>
+                        <button class="rv-btn {{ $hasDraft ? '' : 'primary' }}" wire:click="regenerate('{{ $r['id'] }}')"
+                                wire:loading.attr="disabled" wire:target="regenerate('{{ $r['id'] }}')">
+                            <span wire:loading.remove wire:target="regenerate('{{ $r['id'] }}')">{{ $hasDraft ? 'Regenerate' : 'Generate' }}</span>
+                            <span wire:loading wire:target="regenerate('{{ $r['id'] }}')">Working…</span>
+                        </button>
                     @endif
                     @if ($this->can(\App\Security\Capability::EditContent) && $rejectingId !== $r['id'])
                         <button class="rv-btn danger" wire:click="startReject('{{ $r['id'] }}')">Reject</button>
