@@ -4,8 +4,12 @@
     @php $board = $this->board; @endphp
 
     <style>
+        /* 3-up responsive grid */
+        .rc-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:14px; }
+        .pl-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px; }
         /* Rich post card */
-        .rc-card { border:1px solid rgba(148,163,184,.35); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:9px; margin-bottom:12px; }
+        .rc-card { border:1px solid rgba(148,163,184,.35); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:9px; }
+        .rc-thumb { width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:9px; background:rgba(148,163,184,.15); }
         .rc-head { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:flex-start; }
         .rc-chips { display:flex; gap:6px; flex-wrap:wrap; }
         .rc-chip { font-size:11px; font-weight:600; padding:2px 9px; border-radius:99px; background:rgba(148,163,184,.16); color:#475569; }
@@ -42,13 +46,18 @@
     </style>
 
     <div class="pl-h" style="margin-top:4px;">Blog posts ({{ count($board['posts']) }})</div>
-    @forelse ($board['posts'] as $post)
-        @include('filament.console.partials.post-card', ['post' => $post])
-    @empty
+    @if (count($board['posts']) > 0)
+        <div class="rc-grid">
+            @foreach ($board['posts'] as $post)
+                @include('filament.console.partials.post-card', ['post' => $post])
+            @endforeach
+        </div>
+    @else
         <div class="rc-empty">No live blog posts{{ ($county ?? null) || ($siloId ?? null) ? ' for this filter' : '' }} yet.</div>
-    @endforelse
+    @endif
 
     <div class="pl-h">Site pages ({{ count($board['pages']) }})</div>
+    <div class="pl-grid">
     @forelse ($board['pages'] as $item)
         <div class="pl-row" wire:key="livepage-{{ $item['id'] }}">
             <div class="pl-main">
@@ -71,4 +80,5 @@
     @empty
         <div class="rc-empty">No live site pages for this filter.</div>
     @endforelse
+    </div>
 </x-filament-panels::page>

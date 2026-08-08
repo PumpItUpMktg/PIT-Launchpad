@@ -3,6 +3,7 @@
 namespace App\Filament\Console\Pages;
 
 use App\ContentEngine\Review\ReviewActions;
+use App\Filament\Console\Concerns\SwapsPostImage;
 use App\Jobs\GeneratePost;
 use App\Operate\BlogBoard;
 use App\Security\Capability;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\Auth;
  */
 class BlogReview extends ConsolePage
 {
+    use SwapsPostImage;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clipboard-document-check';
 
     protected static ?string $navigationLabel = 'Review';

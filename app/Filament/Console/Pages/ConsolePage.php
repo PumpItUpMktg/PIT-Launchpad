@@ -9,6 +9,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Operate\BlogBoard;
 use App\OpsConsole\ConsoleContext;
+use App\OpsConsole\PostThumbnail;
 use App\OpsConsole\StorefrontTowns;
 use App\Security\Capability;
 use Filament\Pages\Page;
@@ -106,7 +107,7 @@ abstract class ConsolePage extends Page
         $ids = array_map(fn (array $c): string => (string) $c['id'], $cards);
         $posts = Content::withoutGlobalScope(SiteScope::class)
             ->whereIn('id', $ids)
-            ->with(['matchedSilo', 'targetKeyword'])
+            ->with(['matchedSilo', 'targetKeyword', 'renderJobs'])
             ->get(['id', 'title', 'body', 'matched_silo_id', 'target_keyword_id'])
             ->keyBy(fn (Content $c): string => (string) $c->id);
 
@@ -115,6 +116,7 @@ abstract class ConsolePage extends Page
             $c['towns'] = $post instanceof Content ? $storefront->matchTowns($post, $townMap) : [];
             $c['silo'] ??= $post?->matchedSilo?->name;
             $c['keyword'] ??= $post?->targetKeyword?->query;
+            $c['image'] ??= $post instanceof Content ? PostThumbnail::for($post) : null;
 
             return $c;
         }, $cards);

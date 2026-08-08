@@ -2,6 +2,7 @@
 
 namespace App\Filament\Console\Pages;
 
+use App\Filament\Console\Concerns\SwapsPostImage;
 use App\Jobs\PublishContent;
 use App\OpsConsole\PublishedContentBoard;
 use App\Security\Capability;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\Auth;
  */
 class Published extends ConsolePage
 {
+    use SwapsPostImage;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-globe-alt';
 
     protected static ?string $navigationLabel = 'Published';

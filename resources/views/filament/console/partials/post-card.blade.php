@@ -3,6 +3,11 @@
      both ways. $post is the PublishedContentBoard post-card array. --}}
 @php $m = $post['metrics']; @endphp
 <div class="rc-card" wire:key="live-{{ $post['id'] }}">
+    {{-- Thumbnail --}}
+    @if (! empty($post['image']))
+        <img class="rc-thumb" src="{{ $post['image'] }}" alt="" loading="lazy">
+    @endif
+
     {{-- Header: identity chips + live/index/bing status --}}
     <div class="rc-head">
         <div class="rc-chips">
@@ -100,4 +105,5 @@
                     wire:loading.attr="disabled" wire:target="repush('{{ $post['id'] }}')">Re-sync</button>
         @endif
     </div>
+    @include('filament.console.partials.swap-photo', ['id' => $post['id']])
 </div>
