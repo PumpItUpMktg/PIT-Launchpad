@@ -66,6 +66,7 @@
                         <button class="rv-btn danger" wire:click="startReject('{{ $r['id'] }}')">Reject</button>
                     @endif
                 </div>
+                @include('filament.console.partials.swap-photo', ['id' => $r['id']])
             </div>
         @empty
             <div class="rv-empty">Nothing waiting for review. Generated drafts land here.</div>

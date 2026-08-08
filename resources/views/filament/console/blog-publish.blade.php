@@ -51,6 +51,7 @@
                 @else
                     <span class="pb-inflight">In progress…</span>
                 @endif
+                @include('filament.console.partials.swap-photo', ['id' => $p['id']])
             </div>
         @empty
             <div class="pb-empty">Nothing ready to publish. Approve drafts in Review to queue them here.</div>

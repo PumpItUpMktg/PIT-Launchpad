@@ -105,4 +105,5 @@
                     wire:loading.attr="disabled" wire:target="repush('{{ $post['id'] }}')">Re-sync</button>
         @endif
     </div>
+    @include('filament.console.partials.swap-photo', ['id' => $post['id']])
 </div>

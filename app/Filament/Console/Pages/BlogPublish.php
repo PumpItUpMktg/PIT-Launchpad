@@ -3,6 +3,7 @@
 namespace App\Filament\Console\Pages;
 
 use App\ContentEngine\Review\ReviewActions;
+use App\Filament\Console\Concerns\SwapsPostImage;
 use App\Operate\BlogBoard;
 use App\Operate\QueueHealth;
 use App\Publishing\PostPublisher;
@@ -20,6 +21,8 @@ use Illuminate\Support\Facades\Auth;
  */
 class BlogPublish extends ConsolePage
 {
+    use SwapsPostImage;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-paper-airplane';
 
     protected static ?string $navigationLabel = 'Publish';
