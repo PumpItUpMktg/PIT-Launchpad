@@ -75,6 +75,7 @@ class BlogBoard
                 'date' => $c->created_at?->toDateString(),
                 'tenant' => $c->site?->brand_name,
                 'angle' => $c->angle_hint,
+                'excerpt' => $this->excerpt($c, $c->angle_hint),
                 'score' => $c->relevance_score !== null ? round((float) $c->relevance_score, 2) : null,
                 'revived' => $this->revivedUrls($c) !== [],
                 'revived_impressions' => $this->revivedImpressions($c),
@@ -109,6 +110,8 @@ class BlogBoard
                 'source' => $c->target_keyword_id !== null ? 'directed' : (string) ($c->source_name ?? 'feed'),
                 'date' => $c->created_at?->toDateString(),
                 'keyword' => $c->targetKeyword?->query,
+                'excerpt' => $this->excerpt($c),
+                'score' => $c->relevance_score !== null ? round((float) $c->relevance_score, 2) : null,
                 'state' => match ($c->status) {
                     ContentStatus::Rendering => 'rendering image',
                     ContentStatus::Publishing => 'pushing to WordPress',
@@ -169,7 +172,8 @@ class BlogBoard
                 'source' => $c->target_keyword_id !== null ? 'directed' : (string) ($c->source_name ?? 'feed'),
                 'date' => $c->created_at?->toDateString(),
                 'tenant' => $c->site?->brand_name,
-                'excerpt' => Str::words(trim(strip_tags((string) $c->body)), 100, '…'),
+                'excerpt' => $this->excerpt($c, $c->angle_hint),
+                'score' => $c->relevance_score !== null ? round((float) $c->relevance_score, 2) : null,
                 'image' => $this->thumbnail($c),
             ])
             ->all();
@@ -210,6 +214,17 @@ class BlogBoard
             'undrafted' => 4,
             default => 3 + (int) ($priority[$c->status->value] ?? 5),
         };
+    }
+
+    /** A short card excerpt from the post body, falling back to a provided hint (candidate angle). */
+    private function excerpt(Content $c, ?string $fallback = null): ?string
+    {
+        $body = trim(strip_tags((string) $c->body));
+        if ($body !== '') {
+            return Str::words($body, 30, '…');
+        }
+
+        return $fallback !== null && trim($fallback) !== '' ? trim($fallback) : null;
     }
 
     /** The generate-time rendered image (fal → R2), if one exists — the card's thumbnail. */
