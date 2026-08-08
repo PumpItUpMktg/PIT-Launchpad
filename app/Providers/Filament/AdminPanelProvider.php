@@ -54,6 +54,12 @@ class AdminPanelProvider extends PanelProvider
                 PanelsRenderHook::TOPBAR_START,
                 fn (): View => view('filament.operator.tenant-banner'),
             )
+            // Global button/control interaction feedback (hover/press/focus/busy) for every custom
+            // control across the panel — one sheet, prefix-based, fills every family. See the view.
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn (): View => view('filament.shared.interaction-styles'),
+            )
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             // The landing is the per-site Overview (App\Filament\Pages\Overview, slug '/') — the

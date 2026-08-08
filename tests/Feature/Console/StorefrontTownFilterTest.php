@@ -97,7 +97,7 @@ it('enriches Publish cards with silo, keyword and towns', function () {
         'site_id' => $site->id, 'status' => ContentStatus::Approved, 'matched_silo_id' => $silo->id,
         'target_keyword_id' => $keyword->id, 'title' => 'Sewer help in Havre de Grace',
         'body' => 'Serving Havre de Grace.', 'slug' => 'sewer-havre',
-    ]);
+    ])->releaseToPublish(); // released → on the Publish queue
 
     $page = new BlogPublish;
     $page->siteId = $site->id;

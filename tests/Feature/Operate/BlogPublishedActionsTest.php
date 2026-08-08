@@ -70,8 +70,10 @@ test('Take down moves a blog post back to candidate (re-enters the funnel, leave
 
 test('the in-flight lane flags an approved post stuck past the stall threshold', function () {
     $site = Site::factory()->create();
-    $fresh = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved, 'title' => 'Fresh']);
-    $stuck = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved, 'title' => 'Stuck']);
+    // Both are released to the Publish queue (approved + released → in-flight lane).
+    $released = ['released_to_publish_at' => now()->toIso8601String()];
+    $fresh = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved, 'title' => 'Fresh', 'meta' => $released]);
+    $stuck = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved, 'title' => 'Stuck', 'meta' => $released]);
     // Backdate the stuck one past the threshold (query-builder update doesn't touch timestamps).
     Content::withoutGlobalScope(SiteScope::class)->whereKey($stuck->id)
         ->update(['updated_at' => now()->subSeconds(BlogBoard::STALLED_AFTER_SECONDS + 60)]);
@@ -134,6 +136,8 @@ test('the publishing indicator lists posts in flight (approved / rendering / pub
     foreach ([ContentStatus::Approved, ContentStatus::Rendering, ContentStatus::Publishing] as $i => $status) {
         Content::factory()->create([
             'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => $status, 'title' => "InFlight {$i}",
+            // Approved shows on the Publish queue only once released; rendering/publishing are already in flight.
+            'meta' => $status === ContentStatus::Approved ? ['released_to_publish_at' => now()->toIso8601String()] : null,
         ]);
     }
     // A published + a needs_review post must NOT appear in the in-flight list.

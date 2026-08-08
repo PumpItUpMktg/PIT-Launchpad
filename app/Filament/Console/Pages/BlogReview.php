@@ -15,8 +15,8 @@ use Illuminate\Support\Facades\Auth;
  * Console → Operate → Review: the middle stage. Lists drafts awaiting review for the active site
  * ({@see BlogBoard::review()}) and offers the same review actions the operator queue does — Approve
  * ({@see ReviewActions::approve()}, the two-gate accept), Reject, and Regenerate
- * ({@see GeneratePost::enqueue()}). Approve moves a draft to READY-TO-PUBLISH; the actual push to
- * WordPress lives on the separate Publish page (live is kept apart from ready-to-publish, per the IA).
+ * ({@see GeneratePost::enqueue()}). Approve moves a draft to the APPROVED (preview) page for a final
+ * look; releasing it there queues it on the separate Publish page, which does the WordPress push.
  */
 class BlogReview extends ConsolePage
 {
@@ -49,13 +49,18 @@ class BlogReview extends ConsolePage
         return true;
     }
 
+    public function supportsScoreFilter(): bool
+    {
+        return true;
+    }
+
     /** @return list<array<string, mixed>> */
     public function getReviewProperty(): array
     {
-        return $this->filterByStorefrontTown($this->enrichBlogCards(app(BlogBoard::class)->review($this->siteId, $this->siloId)));
+        return $this->filterByScore($this->filterByStorefrontTown($this->enrichBlogCards(app(BlogBoard::class)->review($this->siteId, $this->siloId))));
     }
 
-    /** Accept a draft into the ready-to-publish queue (does NOT push to WordPress). */
+    /** Accept a draft into the Approved (preview) queue (does NOT push to WordPress). */
     public function approve(string $contentId): void
     {
         if (! $this->can(Capability::ApproveContent)) {
@@ -74,7 +79,7 @@ class BlogReview extends ConsolePage
             return;
         }
 
-        $note = Notification::make()->title('Approved — ready to publish.')->success();
+        $note = Notification::make()->title('Approved — moved to Approved for a final look.')->success();
         if ($result->warnings !== []) {
             $note->body(implode(' ', $result->warnings));
         }

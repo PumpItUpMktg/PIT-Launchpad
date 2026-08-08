@@ -2,13 +2,13 @@
     @include('filament.console.partials.blog-filters')
     @include('filament.console.partials.blog-card-styles')
 
-    @php $items = $this->publishing; @endphp
+    @php $items = $this->approved; @endphp
 
-    <p style="color:#94a3b8; font-size:13px; margin:0 0 4px;">Released posts, ready to push. Publishing pushes straight to WordPress. Preview &amp; QA happen on the Approved page; live posts appear under Published.</p>
+    <p style="color:#94a3b8; font-size:13px; margin:0 0 4px;">Approved posts, waiting for a final look. Preview the finished post, then Send to Publish to queue the push. Sent-to-Publish posts move to the Publish page.</p>
 
     <div class="bc-list">
         @forelse ($items as $p)
-            <div class="bc-card" wire:key="pub-{{ $p['id'] }}">
+            <div class="bc-card" wire:key="appr-{{ $p['id'] }}">
                 {{-- Generate-time hero render --}}
                 @include('filament.console.partials.blog-thumb', ['image' => $p['image'] ?? null])
 
@@ -34,24 +34,19 @@
                 {{-- Excerpt --}}
                 @if (! empty($p['excerpt'])) <div class="bc-excerpt">{{ $p['excerpt'] }}</div> @endif
 
-                {{-- State line --}}
-                <div class="bc-sub {{ ($p['stalled'] ?? false) ? 'stalled' : '' }}">
-                    {{ $p['state'] ?? 'ready' }}{{ ($p['stalled'] ?? false) ? ' — stalled' : '' }}
-                </div>
-
-                {{-- Footer: Publish + prominent score --}}
+                {{-- Footer: Preview + Send to Publish + score --}}
                 <div class="bc-foot">
                     <div class="bc-actions">
-                        @if (($p['state'] ?? '') === 'queued to publish' || ($p['stalled'] ?? false))
-                            @if ($this->can(\App\Security\Capability::PublishContent))
-                                <button class="bc-btn green" wire:click="publish('{{ $p['id'] }}')"
-                                        wire:loading.attr="disabled" wire:target="publish('{{ $p['id'] }}')">
-                                    <span wire:loading.remove wire:target="publish('{{ $p['id'] }}')">Publish</span>
-                                    <span wire:loading wire:target="publish('{{ $p['id'] }}')">Publishing…</span>
-                                </button>
-                            @endif
-                        @else
-                            <span class="bc-sub">In progress…</span>
+                        <a class="bc-btn" href="{{ \App\Filament\Console\Pages\BlogPreview::getUrl(['content' => $p['id']]) }}">Preview</a>
+                        @if ($this->can(\App\Security\Capability::ApproveContent))
+                            <button class="bc-btn green" wire:click="release('{{ $p['id'] }}')"
+                                    wire:loading.attr="disabled" wire:target="release('{{ $p['id'] }}')">
+                                <span wire:loading.remove wire:target="release('{{ $p['id'] }}')">Send to Publish</span>
+                                <span wire:loading wire:target="release('{{ $p['id'] }}')">Sending…</span>
+                            </button>
+                        @endif
+                        @if ($this->can(\App\Security\Capability::EditContent))
+                            <button class="bc-btn" wire:click="sendBack('{{ $p['id'] }}')">Back to Review</button>
                         @endif
                     </div>
                     @if (($p['score'] ?? null) !== null)
@@ -63,11 +58,11 @@
                     @endif
                 </div>
 
-                {{-- Upload / replace photo --}}
+                {{-- Swap the generate-time render for an operator-supplied photo --}}
                 @include('filament.console.partials.swap-photo', ['id' => $p['id']])
             </div>
         @empty
-            <div class="bc-empty">Nothing ready to publish. Approve drafts in Review to queue them here.</div>
+            <div class="bc-empty">Nothing approved yet. Approve drafts in Review and they land here for a final look.</div>
         @endforelse
     </div>
 </x-filament-panels::page>

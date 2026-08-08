@@ -37,6 +37,18 @@
         </div>
     @endif
 
+    @if ($this->supportsScoreFilter())
+        <div class="bf-group">
+            <span class="bf-label">Score</span>
+            <select class="bf-select" wire:model.live="scoreBand">
+                <option value="">All scores</option>
+                <option value="high">75+</option>
+                <option value="mid">50–75</option>
+                <option value="low">Under 50</option>
+            </select>
+        </div>
+    @endif
+
     @if ($this->supportsTownFilter())
         @php $counties = $this->storefrontCounties; @endphp
         @if (count($counties) > 0)

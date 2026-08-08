@@ -64,6 +64,42 @@ class ReviewActions
     }
 
     /**
+     * Release an approved page from the Approved (preview) queue to the push-only Publish queue —
+     * the operator's "Send to Publish". Re-checks the publish guard so a page that regressed (e.g. a
+     * required image now render_failed) can never be released for pushing. Sets a `meta` marker only;
+     * the actual WordPress push still happens on the Publish page's Publish button.
+     */
+    public function release(Content $content, ?string $actorId = null): ApproveResult
+    {
+        $blocker = $this->blockingReason($content);
+        if ($blocker !== null) {
+            return ApproveResult::blocked($blocker);
+        }
+
+        $warnings = $this->warnings($content);
+
+        $content->releaseToPublish();
+
+        return ApproveResult::approved($warnings);
+    }
+
+    /** Pull a released page back to the Approved (preview) queue (operator "Send back to Preview"). */
+    public function unrelease(Content $content, ?string $actorId = null): void
+    {
+        $content->returnToApproved();
+    }
+
+    /**
+     * Send an approved page back to Review — the operator wants to edit/redraft before it publishes.
+     * Clears any release marker and flips the status back to needs_review so it re-enters the queue.
+     */
+    public function returnToReview(Content $content, ?string $actorId = null): void
+    {
+        $content->returnToApproved();
+        $content->forceFill(['status' => ContentStatus::NeedsReview])->save();
+    }
+
+    /**
      * Publish an approved page — the compose-and-push. Enqueues §2's idempotent `PublishContent`
      * (compose into the Elementor template + brand kit, then push to WordPress). Re-checks the same
      * blocking guard so a render_failed page can never push a partial page.

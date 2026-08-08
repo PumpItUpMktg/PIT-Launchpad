@@ -59,6 +59,7 @@ it('publishes an approved post straight to WordPress (queued)', function () {
     $this->actingAs(User::factory()->create());
     $site = Site::factory()->create();
     $approved = ccDraft($site, ContentStatus::Approved);
+    $approved->releaseToPublish(); // released from the Approved page onto the Publish queue
 
     $page = new BlogPublish;
     $page->siteId = $site->id;
