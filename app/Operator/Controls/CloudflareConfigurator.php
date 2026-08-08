@@ -26,8 +26,11 @@ final class CloudflareConfigurator
             return CloudflareConfigureResult::noZone('(no domain)');
         }
 
-        if (! $this->cloudflare->verifyToken()) {
-            return CloudflareConfigureResult::invalidToken();
+        $token = $this->cloudflare->verifyToken();
+        if (! $token->ok) {
+            return $token->reason === 'unreachable'
+                ? CloudflareConfigureResult::unreachable($token->detail)
+                : CloudflareConfigureResult::invalidToken($token->detail);
         }
 
         $zoneId = $this->cloudflare->zoneIdForDomain($host);

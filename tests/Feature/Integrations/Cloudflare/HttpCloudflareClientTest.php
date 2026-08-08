@@ -1,20 +1,30 @@
 <?php
 
 use App\Integrations\Cloudflare\HttpCloudflareClient;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 const RULE_DESC = 'Launchpad control-plane sync (auto-managed) — allow /wp-json/launchpad/*';
 
-it('verifies an active token and rejects an inactive/absent one', function () {
+it('token verify: active vs rejected (with Cloudflare\'s error detail)', function () {
     Http::fakeSequence('*/user/tokens/verify')
         ->push(['result' => ['status' => 'active']], 200)
-        ->push(['result' => ['status' => 'disabled']], 200);
+        ->push(['success' => false, 'errors' => [['message' => 'Invalid API Token']]], 401);
 
-    expect((new HttpCloudflareClient('tok'))->verifyToken())->toBeTrue()
-        ->and((new HttpCloudflareClient('tok'))->verifyToken())->toBeFalse();
+    expect((new HttpCloudflareClient('tok'))->verifyToken()->ok)->toBeTrue();
+
+    $rejected = (new HttpCloudflareClient('tok'))->verifyToken();
+    expect($rejected->ok)->toBeFalse()
+        ->and($rejected->reason)->toBe('rejected')
+        ->and($rejected->detail)->toContain('Invalid API Token');
+});
+
+it('token verify: unreachable API and empty token are distinguished from a rejection', function () {
+    Http::fake(fn () => throw new ConnectionException('Could not resolve host: api.cloudflare.com'));
+    expect((new HttpCloudflareClient('tok'))->verifyToken()->reason)->toBe('unreachable');
 
     // No token → never calls the API.
-    expect((new HttpCloudflareClient(''))->verifyToken())->toBeFalse();
+    expect((new HttpCloudflareClient(''))->verifyToken()->reason)->toBe('empty');
 });
 
 it('resolves the zone by apex fallback (www.acme.com → acme.com)', function () {

@@ -3,6 +3,7 @@
 use App\Enums\ConnectionProvider;
 use App\Integrations\Cloudflare\CloudflareClient;
 use App\Integrations\Cloudflare\CloudflareRuleResult;
+use App\Integrations\Cloudflare\CloudflareTokenStatus;
 use App\Integrations\Cloudflare\MockCloudflareClient;
 use App\Models\Connection;
 use App\Models\Scopes\SiteScope;
@@ -10,15 +11,15 @@ use App\Models\Site;
 use App\Operator\Controls\CloudflareConfigurator;
 
 /** A CloudflareClient with per-call behavior for testing the orchestration branches. */
-function fakeCf(bool $tokenOk = true, ?string $zoneId = 'ZONE1', ?CloudflareRuleResult $rule = null): CloudflareClient
+function fakeCf(?CloudflareTokenStatus $token = null, ?string $zoneId = 'ZONE1', ?CloudflareRuleResult $rule = null): CloudflareClient
 {
-    return new class($tokenOk, $zoneId, $rule) implements CloudflareClient
+    return new class($token ?? CloudflareTokenStatus::active(), $zoneId, $rule) implements CloudflareClient
     {
-        public function __construct(private bool $tokenOk, private ?string $zoneId, private ?CloudflareRuleResult $rule) {}
+        public function __construct(private CloudflareTokenStatus $token, private ?string $zoneId, private ?CloudflareRuleResult $rule) {}
 
-        public function verifyToken(): bool
+        public function verifyToken(): CloudflareTokenStatus
         {
-            return $this->tokenOk;
+            return $this->token;
         }
 
         public function zoneIdForDomain(string $domain): ?string
@@ -56,11 +57,24 @@ it('configures the edge for a resolvable zone', function () {
         ->and($result->message)->toContain('/wp-json/launchpad/*');
 });
 
-it('reports invalid_token when the token is rejected', function () {
+it('reports invalid_token (with Cloudflare\'s detail) when the token is rejected', function () {
     config()->set('services.cloudflare.api_token', 'tok');
-    app()->instance(CloudflareClient::class, fakeCf(tokenOk: false));
+    app()->instance(CloudflareClient::class, fakeCf(token: CloudflareTokenStatus::rejected('Invalid API Token')));
 
-    expect(app(CloudflareConfigurator::class)->configureForUrl('https://acme.com')->status)->toBe('invalid_token');
+    $result = app(CloudflareConfigurator::class)->configureForUrl('https://acme.com');
+
+    expect($result->status)->toBe('invalid_token')
+        ->and($result->message)->toContain('Invalid API Token');
+});
+
+it('reports unreachable (network/egress) distinctly from a rejected token', function () {
+    config()->set('services.cloudflare.api_token', 'tok');
+    app()->instance(CloudflareClient::class, fakeCf(token: CloudflareTokenStatus::unreachable('Could not resolve host')));
+
+    $result = app(CloudflareConfigurator::class)->configureForUrl('https://acme.com');
+
+    expect($result->status)->toBe('unreachable')
+        ->and($result->message)->toContain('network/egress');
 });
 
 it('reports no_zone when the domain is not on the account', function () {
