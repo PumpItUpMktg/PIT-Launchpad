@@ -4,8 +4,8 @@
     @php $candidates = $this->candidates; @endphp
 
     <style>
-        .cc-list { display:flex; flex-direction:column; gap:10px; }
-        .cc-card { border:1px solid rgba(148,163,184,.35); border-radius:11px; padding:13px 15px; display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; }
+        .cc-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; }
+        .cc-card { border:1px solid rgba(148,163,184,.35); border-radius:11px; padding:13px 15px; display:flex; flex-direction:column; align-items:flex-start; gap:9px; }
         .cc-main { flex:1 1 320px; min-width:0; display:flex; flex-direction:column; gap:5px; }
         .cc-title { font-size:14.5px; font-weight:650; margin:0; }
         .cc-meta { display:flex; gap:8px; flex-wrap:wrap; font-size:11.5px; color:#94a3b8; }

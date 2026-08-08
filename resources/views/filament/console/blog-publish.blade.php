@@ -4,9 +4,10 @@
     @php $items = $this->publishing; @endphp
 
     <style>
-        .pb-list { display:flex; flex-direction:column; gap:10px; }
-        .pb-card { border:1px solid rgba(148,163,184,.35); border-radius:11px; padding:13px 15px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
-        .pb-main { flex:1 1 320px; min-width:0; display:flex; flex-direction:column; gap:4px; }
+        .pb-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; }
+        .pb-card { border:1px solid rgba(148,163,184,.35); border-radius:11px; padding:13px 15px; display:flex; flex-direction:column; gap:9px; align-items:stretch; }
+        .pb-thumb { width:100%; aspect-ratio:16/9; border-radius:8px; object-fit:cover; background:rgba(148,163,184,.15); }
+        .pb-main { min-width:0; display:flex; flex-direction:column; gap:4px; }
         .pb-title { font-size:14.5px; font-weight:650; margin:0; }
         .pb-state { font-size:12px; color:#94a3b8; }
         .pb-state.stalled { color:#dc2626; font-weight:600; }
@@ -23,6 +24,9 @@
     <div class="pb-list">
         @forelse ($items as $p)
             <div class="pb-card" wire:key="pub-{{ $p['id'] }}">
+                @if (! empty($p['image']))
+                    <img class="pb-thumb" src="{{ $p['image'] }}" alt="" loading="lazy">
+                @endif
                 <div class="pb-main">
                     <p class="pb-title">{{ $p['title'] ?: 'Untitled post' }}</p>
                     <div class="pb-state {{ ($p['stalled'] ?? false) ? 'stalled' : '' }}">

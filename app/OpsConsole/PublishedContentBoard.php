@@ -43,7 +43,7 @@ class PublishedContentBoard
         $live = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
             ->where('status', ContentStatus::Published->value)
-            ->with(['site', 'matchedSilo', 'silo'])
+            ->with(['site', 'matchedSilo', 'silo', 'renderJobs'])
             ->orderByDesc('published_at')
             ->orderByDesc('updated_at')
             ->get();
@@ -82,6 +82,7 @@ class PublishedContentBoard
             'indexnow_at' => $post->indexnow_submitted_at?->toDateString(),
             'silo' => $post->matchedSilo?->name,
             'towns' => $this->storefrontTowns->matchTowns($post, $townMap),
+            'image' => PostThumbnail::for($post),
             'links' => $this->links($post, $graph, $domain),
             'metrics' => $this->metrics->for($post),
         ];

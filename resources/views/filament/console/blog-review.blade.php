@@ -4,10 +4,10 @@
     @php $review = $this->review; @endphp
 
     <style>
-        .rv-list { display:flex; flex-direction:column; gap:10px; }
-        .rv-card { border:1px solid rgba(148,163,184,.35); border-radius:11px; padding:13px 15px; display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
-        .rv-thumb { width:64px; height:64px; border-radius:8px; object-fit:cover; flex:0 0 auto; background:rgba(148,163,184,.15); }
-        .rv-main { flex:1 1 320px; min-width:0; display:flex; flex-direction:column; gap:5px; }
+        .rv-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; }
+        .rv-card { border:1px solid rgba(148,163,184,.35); border-radius:11px; padding:13px 15px; display:flex; flex-direction:column; gap:9px; align-items:stretch; }
+        .rv-thumb { width:100%; aspect-ratio:16/9; border-radius:8px; object-fit:cover; background:rgba(148,163,184,.15); }
+        .rv-main { min-width:0; display:flex; flex-direction:column; gap:5px; }
         .rv-title { font-size:14.5px; font-weight:650; margin:0; }
         .rv-meta { display:flex; gap:8px; flex-wrap:wrap; font-size:11.5px; color:#94a3b8; }
         .rv-tag { display:inline-flex; padding:2px 8px; border-radius:99px; background:rgba(148,163,184,.14); }
