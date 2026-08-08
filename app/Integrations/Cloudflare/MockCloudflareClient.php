@@ -10,9 +10,9 @@ namespace App\Integrations\Cloudflare;
  */
 final class MockCloudflareClient implements CloudflareClient
 {
-    public function verifyToken(): bool
+    public function verifyToken(): CloudflareTokenStatus
     {
-        return true;
+        return CloudflareTokenStatus::active();
     }
 
     public function zoneIdForDomain(string $domain): ?string

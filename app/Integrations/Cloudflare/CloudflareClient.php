@@ -10,8 +10,8 @@ namespace App\Integrations\Cloudflare;
  */
 interface CloudflareClient
 {
-    /** Whether the configured token authenticates and is active. */
-    public function verifyToken(): bool;
+    /** Check the configured token, distinguishing active / rejected / unreachable / empty. */
+    public function verifyToken(): CloudflareTokenStatus;
 
     /** The zone id owning $domain (apex resolved from a host/subdomain), or null when no zone matches. */
     public function zoneIdForDomain(string $domain): ?string;

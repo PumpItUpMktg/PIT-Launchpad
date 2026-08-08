@@ -2,6 +2,7 @@
 
 namespace App\Integrations\Cloudflare;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -32,19 +33,26 @@ final class HttpCloudflareClient implements CloudflareClient
         private readonly int $timeout = 20,
     ) {}
 
-    public function verifyToken(): bool
+    public function verifyToken(): CloudflareTokenStatus
     {
         if ($this->token === '') {
-            return false;
+            return CloudflareTokenStatus::empty();
         }
 
         try {
             $response = $this->http()->get(self::BASE.'/user/tokens/verify');
-        } catch (Throwable) {
-            return false;
+        } catch (ConnectionException $e) {
+            return CloudflareTokenStatus::unreachable($e->getMessage());
+        } catch (Throwable $e) {
+            return CloudflareTokenStatus::unreachable($e->getMessage());
         }
 
-        return $response->successful() && $response->json('result.status') === 'active';
+        if ($response->successful() && $response->json('result.status') === 'active') {
+            return CloudflareTokenStatus::active();
+        }
+
+        // A 2xx with a non-active status, or a 401/403, is a genuine token rejection.
+        return CloudflareTokenStatus::rejected($this->apiError($response));
     }
 
     public function zoneIdForDomain(string $domain): ?string
