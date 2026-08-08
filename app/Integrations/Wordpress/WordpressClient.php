@@ -85,7 +85,12 @@ class WordpressClient
     public function authCheck(): ?array
     {
         try {
-            $response = $this->request()->get(rtrim($this->baseUrl, '/').self::NAMESPACE.'/auth-check');
+            // Cache-bust: this is a public GET, so an edge/CDN (or a WP page cache) can serve a STALE
+            // body — reporting "header stripped" from an earlier request even after the fix. A unique
+            // query param forces a cache miss and no-cache headers ask any layer not to store it.
+            $response = $this->request()
+                ->withHeaders(['Cache-Control' => 'no-cache', 'Pragma' => 'no-cache'])
+                ->get(rtrim($this->baseUrl, '/').self::NAMESPACE.'/auth-check', ['_lpnocache' => uniqid('', true)]);
         } catch (ConnectionException) {
             return null;
         }

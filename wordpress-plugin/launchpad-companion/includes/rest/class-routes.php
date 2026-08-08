@@ -134,7 +134,14 @@ final class Routes
 
     public function auth_check(): WP_REST_Response
     {
-        return new WP_REST_Response(AuthDiagnostics::payload(), 200);
+        // Never cache this: it's a public GET, and an edge/CDN or page cache serving a stale body would
+        // report a phantom "header stripped" long after the real cause is fixed. no-store keeps every
+        // layer (Cloudflare, WP page caches) from storing it, so each probe reflects the live request.
+        $response = new WP_REST_Response(AuthDiagnostics::payload(), 200);
+        $response->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        $response->header('Pragma', 'no-cache');
+
+        return $response;
     }
 
     /** Store the control plane's IndexNow key so it's served at /{key}.txt. */
