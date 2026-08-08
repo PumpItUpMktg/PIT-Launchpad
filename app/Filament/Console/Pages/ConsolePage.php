@@ -83,8 +83,46 @@ abstract class ConsolePage extends Page
     }
 
     /**
-     * Filter a list of BlogBoard cards (each has an `id`) down to posts that cover the selected
-     * storefront county/town. A no-op when no area filter is set or the page doesn't support it.
+     * Enrich BlogBoard cards (each has an `id`) with the console extras every blog card shows: the
+     * storefront towns the post covers (chips), plus its silo and target keyword when the card doesn't
+     * already carry them (the Publish card doesn't). Loads the underlying posts ONCE for the whole list.
+     *
+     * @param  list<array<string, mixed>>  $cards
+     * @return list<array<string, mixed>>
+     */
+    protected function enrichBlogCards(array $cards): array
+    {
+        if ($cards === []) {
+            return $cards;
+        }
+        $site = $this->currentSite();
+        if ($site === null) {
+            return array_map(fn (array $c): array => $c + ['towns' => []], $cards);
+        }
+
+        $storefront = app(StorefrontTowns::class);
+        $townMap = $storefront->targetTowns($site, null, null);
+
+        $ids = array_map(fn (array $c): string => (string) $c['id'], $cards);
+        $posts = Content::withoutGlobalScope(SiteScope::class)
+            ->whereIn('id', $ids)
+            ->with(['matchedSilo', 'targetKeyword'])
+            ->get(['id', 'title', 'body', 'matched_silo_id', 'target_keyword_id'])
+            ->keyBy(fn (Content $c): string => (string) $c->id);
+
+        return array_map(function (array $c) use ($posts, $storefront, $townMap): array {
+            $post = $posts->get((string) $c['id']);
+            $c['towns'] = $post instanceof Content ? $storefront->matchTowns($post, $townMap) : [];
+            $c['silo'] ??= $post?->matchedSilo?->name;
+            $c['keyword'] ??= $post?->targetKeyword?->query;
+
+            return $c;
+        }, $cards);
+    }
+
+    /**
+     * Filter ENRICHED cards (carrying a `towns` list) down to those covering the selected storefront
+     * county/town. A no-op when no area filter is set or the page doesn't support it.
      *
      * @param  list<array<string, mixed>>  $cards
      * @return list<array<string, mixed>>
@@ -99,22 +137,15 @@ abstract class ConsolePage extends Page
             return $cards;
         }
 
-        $storefront = app(StorefrontTowns::class);
-        $targets = $storefront->targetTowns($site, $this->county, $this->town);
+        $targets = array_values(app(StorefrontTowns::class)->targetTowns($site, $this->county, $this->town));
         if ($targets === []) {
             return [];
         }
 
-        $ids = array_map(fn (array $c): string => (string) $c['id'], $cards);
-        $posts = Content::withoutGlobalScope(SiteScope::class)
-            ->whereIn('id', $ids)->get(['id', 'title', 'body'])
-            ->keyBy(fn (Content $c): string => (string) $c->id);
-
-        return array_values(array_filter($cards, function (array $c) use ($posts, $storefront, $targets): bool {
-            $post = $posts->get((string) $c['id']);
-
-            return $post instanceof Content && $storefront->postCovers($post, $targets);
-        }));
+        return array_values(array_filter(
+            $cards,
+            fn (array $c): bool => array_intersect($c['towns'] ?? [], $targets) !== [],
+        ));
     }
 
     /** @return array<string, string> id => name for the site switcher. */

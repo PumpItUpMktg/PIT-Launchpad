@@ -2,6 +2,7 @@
 
 use App\Enums\ContentStatus;
 use App\Enums\MunicipalityType;
+use App\Filament\Console\Pages\BlogPublish;
 use App\Filament\Console\Pages\BlogReview;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MockMunicipalityGazetteer;
@@ -9,7 +10,9 @@ use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\Content;
 use App\Models\ContentTown;
 use App\Models\CoverageArea;
+use App\Models\Keyword;
 use App\Models\Location;
+use App\Models\Silo;
 use App\Models\Site;
 use App\Models\User;
 use App\OpsConsole\StorefrontTowns;
@@ -69,6 +72,40 @@ it('matches a published post by its town tag and a draft by its body text', func
     expect($storefront->postCovers($published, $targets))->toBeTrue()
         ->and($storefront->postCovers($draft, $targets))->toBeTrue()
         ->and($storefront->postCovers($elsewhere, $targets))->toBeFalse();
+});
+
+it('tags Review cards with the storefront towns they cover', function () {
+    [$site] = stSite();
+    $this->actingAs(User::factory()->create());
+
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'title' => 'Havre de Grace basements', 'body' => 'Havre de Grace advice.']);
+
+    $page = new BlogReview;
+    $page->siteId = $site->id;
+    $card = collect($page->getReviewProperty())->first();
+
+    expect($card['towns'])->toContain('Havre de Grace, MD');
+});
+
+it('enriches Publish cards with silo, keyword and towns', function () {
+    [$site] = stSite();
+    $this->actingAs(User::factory()->create());
+
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sewer Lines']);
+    $keyword = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sewer line repair']);
+    Content::factory()->post()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::Approved, 'matched_silo_id' => $silo->id,
+        'target_keyword_id' => $keyword->id, 'title' => 'Sewer help in Havre de Grace',
+        'body' => 'Serving Havre de Grace.', 'slug' => 'sewer-havre',
+    ]);
+
+    $page = new BlogPublish;
+    $page->siteId = $site->id;
+    $card = collect($page->getPublishingProperty())->first();
+
+    expect($card['silo'])->toBe('Sewer Lines')
+        ->and($card['keyword'])->toBe('sewer line repair')
+        ->and($card['towns'])->toContain('Havre de Grace, MD');
 });
 
 it('filters the Review page to posts covering the selected county', function () {

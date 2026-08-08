@@ -49,7 +49,7 @@ class BlogReview extends ConsolePage
     /** @return list<array<string, mixed>> */
     public function getReviewProperty(): array
     {
-        return $this->filterByStorefrontTown(app(BlogBoard::class)->review($this->siteId, $this->siloId));
+        return $this->filterByStorefrontTown($this->enrichBlogCards(app(BlogBoard::class)->review($this->siteId, $this->siloId)));
     }
 
     /** Accept a draft into the ready-to-publish queue (does NOT push to WordPress). */

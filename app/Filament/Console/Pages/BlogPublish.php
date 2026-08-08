@@ -45,7 +45,7 @@ class BlogPublish extends ConsolePage
     /** @return list<array<string, mixed>> Ready-to-publish (approved) + in-flight posts. */
     public function getPublishingProperty(): array
     {
-        return $this->filterByStorefrontTown(app(BlogBoard::class)->publishing($this->siteId, $this->siloId));
+        return $this->filterByStorefrontTown($this->enrichBlogCards(app(BlogBoard::class)->publishing($this->siteId, $this->siloId)));
     }
 
     /** Push a ready post straight to WordPress (queued; inline if the worker is stalled). */
