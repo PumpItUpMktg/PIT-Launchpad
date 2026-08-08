@@ -19,7 +19,8 @@ it('renders the three blog pipeline pages with a populated card', function () {
     $site = Site::factory()->create();
     Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Candidate, 'title' => 'Radon candidate', 'body' => '<p>An educational body.</p>', 'relevance_score' => 0.91]);
     Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'title' => 'Review draft', 'body' => '<p>A drafted body.</p>']);
-    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Approved, 'title' => 'Ready post', 'body' => '<p>A ready body.</p>']);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Approved, 'title' => 'Ready post', 'body' => '<p>A ready body.</p>'])
+        ->releaseToPublish(); // released → shows on the Publish page
 
     Livewire::test(BlogCandidates::class)->set('siteId', $site->id)
         ->assertOk()->assertSee('Radon candidate')->assertSee('Score');

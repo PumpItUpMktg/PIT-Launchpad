@@ -153,6 +153,7 @@ it('publishing cards carry silo, source, date + keyword for the top-row chips', 
         'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved,
         'matched_silo_id' => $silo->id, 'target_keyword_id' => $kw->id, 'title' => 'Ready piece',
     ]);
+    $post->releaseToPublish(); // released from Approved → on the Publish queue
 
     $card = collect(app(BlogBoard::class)->publishing($site->id))->firstWhere('id', $post->id);
 

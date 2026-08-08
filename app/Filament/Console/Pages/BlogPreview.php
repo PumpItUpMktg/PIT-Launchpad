@@ -8,6 +8,7 @@ use App\Security\Capability;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
+use Livewire\Attributes\Url;
 
 /**
  * Console → Operate → (hidden) Blog Preview: the read-only pre-publish render reached from the
@@ -29,14 +30,9 @@ class BlogPreview extends ConsolePage
         return false;
     }
 
-    /** The content id being previewed (from the query string). */
+    /** The content id being previewed (bound from the `?content=` query string). */
+    #[Url]
     public ?string $content = null;
-
-    public function mount(): void
-    {
-        parent::mount();
-        $this->content = request()->query('content');
-    }
 
     public function getTitle(): string
     {
