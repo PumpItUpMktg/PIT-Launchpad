@@ -90,6 +90,16 @@ class ReviewActions
     }
 
     /**
+     * Send an approved page back to Review — the operator wants to edit/redraft before it publishes.
+     * Clears any release marker and flips the status back to needs_review so it re-enters the queue.
+     */
+    public function returnToReview(Content $content, ?string $actorId = null): void
+    {
+        $content->returnToApproved();
+        $content->forceFill(['status' => ContentStatus::NeedsReview])->save();
+    }
+
+    /**
      * Publish an approved page — the compose-and-push. Enqueues §2's idempotent `PublishContent`
      * (compose into the Elementor template + brand kit, then push to WordPress). Re-checks the same
      * blocking guard so a render_failed page can never push a partial page.
