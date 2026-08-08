@@ -11,6 +11,8 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -38,6 +40,11 @@ class ConsolePanelProvider extends PanelProvider
             ->login()
             ->brandName('Operations Console')
             ->colors(['primary' => Color::Indigo])
+            // Global button/control interaction feedback (hover/press/focus/busy) for every custom control.
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn (): View => view('filament.shared.interaction-styles'),
+            )
             ->navigationGroups(['Operate', 'Recover', 'Administration'])
             ->discoverPages(in: app_path('Filament/Console/Pages'), for: 'App\Filament\Console\Pages')
             ->discoverResources(in: app_path('Filament/Console/Resources'), for: 'App\Filament\Console\Resources')

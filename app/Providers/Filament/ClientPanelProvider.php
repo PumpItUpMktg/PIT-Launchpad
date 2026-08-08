@@ -11,6 +11,8 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -36,6 +38,11 @@ class ClientPanelProvider extends PanelProvider
             ->brandName(fn (): string => app(ClientContext::class)->branding()['name'])
             ->brandLogo(fn () => app(ClientContext::class)->branding()['logo_url'])
             ->colors(fn (): array => ['primary' => Color::hex(app(ClientContext::class)->branding()['primary'])])
+            // Global button/control interaction feedback (hover/press/focus/busy) for every custom control.
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn (): View => view('filament.shared.interaction-styles'),
+            )
             ->discoverPages(in: app_path('Filament/Client/Pages'), for: 'App\Filament\Client\Pages')
             ->pages([Dashboard::class])
             ->discoverResources(in: app_path('Filament/Client/Resources'), for: 'App\Filament\Client\Resources')
