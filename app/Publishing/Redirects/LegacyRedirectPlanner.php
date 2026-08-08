@@ -48,6 +48,201 @@ class LegacyRedirectPlanner
      */
     public function plan(Site $site): array
     {
+        $ix = $this->buildIndex($site);
+        $livePaths = $ix['livePaths'];
+        $leafToPath = $ix['leafToPath'];
+        $keywordToPath = $ix['keywordToPath'];
+        $locationPages = $ix['locationPages'];
+        $existingFrom = $ix['existingFrom'];
+        $revivedClaimed = $ix['revivedClaimed'];
+
+        $redirect = [];
+        $gone = [];
+        $unresolved = [];
+        $skippedLive = 0;
+        $seen = [];
+
+        foreach ($this->inventory->urlTotals($site) as $entry) {
+            $path = $this->normalize($entry['url']);
+            if ($path === '') {
+                continue; // domain root — always live
+            }
+            $key = ltrim($path, '/');
+            if (isset($seen[$key])) {
+                continue; // one plan row per normalized path
+            }
+            $seen[$key] = true;
+
+            if (isset($livePaths[$path])) {
+                $skippedLive++;
+
+                continue; // an indexed URL that IS a current page — already preserved
+            }
+            if (isset($existingFrom['/'.$key]) || isset($revivedClaimed['/'.$key])) {
+                continue; // already has a redirect, or is claimed for revival (301 written on publish)
+            }
+
+            $topQuery = $this->inventory->topQuery($site, $entry['url']);
+            $target = $this->route($path, $topQuery, $livePaths, $leafToPath, $keywordToPath, $locationPages);
+
+            if ($target !== null) {
+                $redirect[] = [
+                    'from' => '/'.$key, 'to' => $target['to'], 'code' => 301,
+                    'impressions' => $entry['impressions'], 'reason' => $target['reason'], 'top_query' => $topQuery,
+                ];
+            } else {
+                $unresolved[] = ['from' => '/'.$key, 'impressions' => $entry['impressions'], 'top_query' => $topQuery];
+            }
+        }
+
+        return ['redirect' => $redirect, 'gone' => $gone, 'skipped_live' => $skippedLive, 'unresolved' => $unresolved];
+    }
+
+    /**
+     * Persist the plan's 301/410 rows (idempotent upsert on from_url), never
+     * shadowing a live page. Returns the number written.
+     *
+     * @param  array{redirect: list<array<string, mixed>>, gone: list<array<string, mixed>>}  $plan  the routed rows to persist (from {@see plan()} or {@see planCoverage()})
+     */
+    public function apply(Site $site, array $plan): int
+    {
+        $rows = [];
+        foreach ($plan['redirect'] as $r) {
+            $rows[] = ['from' => (string) $r['from'], 'to' => (string) $r['to'], 'code' => 301];
+        }
+        foreach ($plan['gone'] as $r) {
+            $rows[] = ['from' => (string) $r['from'], 'to' => '', 'code' => 410];
+        }
+        if ($rows === []) {
+            return 0;
+        }
+
+        return DB::transaction(function () use ($site, $rows): int {
+            $written = 0;
+            foreach ($rows as $row) {
+                Redirect::withoutGlobalScope(SiteScope::class)->updateOrCreate(
+                    ['site_id' => $site->id, 'from_url' => $row['from']],
+                    ['to_url' => $row['to'], 'code' => $row['code'], 'status' => 'active', 'source' => RedirectSource::Migration->value],
+                );
+                $written++;
+            }
+
+            return $written;
+        });
+    }
+
+    /**
+     * Guaranteed-coverage plan: every legacy URL in the UNION of the GSC
+     * impression inventory and a supplied 404 list resolves to a 301 — nothing
+     * is left to 404. The impression-driven {@see plan()} skips zero-impression
+     * URLs (they never reach `gsc_url_daily`) and parks unconfident ones as
+     * `unresolved`; this variant instead feeds in the caller's full 404 list and
+     * falls the cascade back to the closest live hub (any positive slug overlap),
+     * and finally the site root, so no legacy path can 404.
+     *
+     * Confident routing (numbered-dup / town / top-query / strong slug overlap)
+     * is unchanged — the fallback only fires when the cascade finds nothing. Rows
+     * a live page, an existing redirect, or a revival candidate already cover are
+     * left alone. Pure; persist with {@see apply()}.
+     *
+     * @param  list<string>  $extraUrls  legacy URLs/paths beyond the GSC inventory (e.g. a Search Console 404 export)
+     * @return array{
+     *   redirect: list<array{from: string, to: string, code: int, impressions: int, reason: string, top_query: ?string}>,
+     *   gone: list<array{from: string, code: int, impressions: int, reason: string}>,
+     *   skipped_live: int,
+     *   already: int,
+     *   inputs: int,
+     *   by_reason: array<string, int>,
+     * }
+     */
+    public function planCoverage(Site $site, array $extraUrls = []): array
+    {
+        $ix = $this->buildIndex($site);
+        $livePaths = $ix['livePaths'];
+        $leafToPath = $ix['leafToPath'];
+        $keywordToPath = $ix['keywordToPath'];
+        $locationPages = $ix['locationPages'];
+        $existingFrom = $ix['existingFrom'];
+        $revivedClaimed = $ix['revivedClaimed'];
+
+        // Union the impression inventory with the supplied 404 list so zero-impression
+        // legacy URLs (never in gsc_url_daily) are covered too. Impressions carry through
+        // for inventory URLs; list-only URLs default to 0.
+        $urls = [];
+        foreach ($this->inventory->urlTotals($site) as $entry) {
+            $urls[$entry['url']] ??= $entry['impressions'];
+        }
+        foreach ($extraUrls as $u) {
+            $u = trim($u);
+            if ($u !== '') {
+                $urls[$u] ??= 0;
+            }
+        }
+
+        $redirect = [];
+        $skippedLive = 0;
+        $already = 0;
+        $inputs = 0;
+        $seen = [];
+        foreach ($urls as $url => $impressions) {
+            $url = (string) $url;
+            $path = $this->normalize($url);
+            if ($path === '') {
+                continue; // domain root — always live
+            }
+            $key = ltrim($path, '/');
+            if (isset($seen[$key])) {
+                continue; // one row per normalized path
+            }
+            $seen[$key] = true;
+            $inputs++;
+
+            if (isset($livePaths[$path])) {
+                $skippedLive++;
+
+                continue; // already a live page — preserved
+            }
+            if (isset($existingFrom['/'.$key]) || isset($revivedClaimed['/'.$key])) {
+                $already++;
+
+                continue; // already redirected / claimed for revival
+            }
+
+            $topQuery = $this->inventory->topQuery($site, $url);
+            $target = $this->route($path, $topQuery, $livePaths, $leafToPath, $keywordToPath, $locationPages)
+                ?? $this->fallbackTarget($this->denumber($this->leaf($path)), $leafToPath);
+
+            $redirect[] = [
+                'from' => '/'.$key, 'to' => $target['to'], 'code' => 301,
+                'impressions' => (int) $impressions, 'reason' => $target['reason'], 'top_query' => $topQuery,
+            ];
+        }
+
+        $byReason = [];
+        foreach ($redirect as $r) {
+            $byReason[$r['reason']] = ($byReason[$r['reason']] ?? 0) + 1;
+        }
+
+        return [
+            'redirect' => $redirect, 'gone' => [], 'skipped_live' => $skippedLive,
+            'already' => $already, 'inputs' => $inputs, 'by_reason' => $byReason,
+        ];
+    }
+
+    /**
+     * Build the live-page + existing-redirect index the routing cascade reads.
+     *
+     * @return array{
+     *   livePaths: array<string, bool>,
+     *   leafToPath: array<string, string>,
+     *   keywordToPath: array<string, string>,
+     *   locationPages: array<string, string>,
+     *   existingFrom: array<string, true>,
+     *   revivedClaimed: array<string, true>,
+     * }
+     */
+    private function buildIndex(Site $site): array
+    {
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('status', ContentStatus::Published->value)
@@ -80,90 +275,71 @@ class LegacyRedirectPlanner
             }
         }
 
-        $existingFrom = Redirect::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->pluck('from_url')
-            ->map(fn ($u): string => $this->normalizeKey((string) $u))
-            ->filter()
-            ->flip();
+        $existingFrom = [];     // normalized existing from_url => true
+        foreach (Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->pluck('from_url') as $u) {
+            $k = $this->normalizeKey((string) $u);
+            if ($k !== '') {
+                $existingFrom[$k] = true;
+            }
+        }
 
         // URLs a revival candidate already claimed ({@see LegacyContentReviver}) drop out of the plan
         // entirely — the reviver owns them, and the 301 is written when the new post publishes.
         $revivedClaimed = $this->revivedClaimedPaths($site);
 
-        $redirect = [];
-        $gone = [];
-        $unresolved = [];
-        $skippedLive = 0;
-        $seen = [];
-
-        foreach ($this->inventory->urlTotals($site) as $entry) {
-            $path = $this->normalize($entry['url']);
-            if ($path === '') {
-                continue; // domain root — always live
-            }
-            $key = ltrim($path, '/');
-            if (isset($seen[$key])) {
-                continue; // one plan row per normalized path
-            }
-            $seen[$key] = true;
-
-            if (isset($livePaths[$path])) {
-                $skippedLive++;
-
-                continue; // an indexed URL that IS a current page — already preserved
-            }
-            if ($existingFrom->has('/'.$key) || isset($revivedClaimed['/'.$key])) {
-                continue; // already has a redirect, or is claimed for revival (301 written on publish)
-            }
-
-            $topQuery = $this->inventory->topQuery($site, $entry['url']);
-            $target = $this->route($path, $topQuery, $livePaths, $leafToPath, $keywordToPath, $locationPages);
-
-            if ($target !== null) {
-                $redirect[] = [
-                    'from' => '/'.$key, 'to' => $target['to'], 'code' => 301,
-                    'impressions' => $entry['impressions'], 'reason' => $target['reason'], 'top_query' => $topQuery,
-                ];
-            } else {
-                $unresolved[] = ['from' => '/'.$key, 'impressions' => $entry['impressions'], 'top_query' => $topQuery];
-            }
-        }
-
-        return ['redirect' => $redirect, 'gone' => $gone, 'skipped_live' => $skippedLive, 'unresolved' => $unresolved];
+        return [
+            'livePaths' => $livePaths,
+            'leafToPath' => $leafToPath,
+            'keywordToPath' => $keywordToPath,
+            'locationPages' => $locationPages,
+            'existingFrom' => $existingFrom,
+            'revivedClaimed' => $revivedClaimed,
+        ];
     }
 
     /**
-     * Persist the plan's 301/410 rows (idempotent upsert on from_url), never
-     * shadowing a live page. Returns the number written.
+     * The best fallback 301 target for a legacy URL the confidence cascade could
+     * not route: the live page with the highest positive slug-token overlap (any
+     * score; shortest path wins ties — the most hub-like), or the site root when
+     * nothing overlaps at all. Always a 301, so the URL never 404s.
      *
-     * @param  array{redirect: list<array<string, mixed>>, gone: list<array<string, mixed>>, skipped_live: int, unresolved: list<array<string, mixed>>}  $plan
+     * @param  array<string, string>  $leafToPath
+     * @return array{to: string, code: int, reason: string}
      */
-    public function apply(Site $site, array $plan): int
+    private function fallbackTarget(string $core, array $leafToPath): array
     {
-        $rows = [];
-        foreach ($plan['redirect'] as $r) {
-            $rows[] = ['from' => (string) $r['from'], 'to' => (string) $r['to'], 'code' => 301];
-        }
-        foreach ($plan['gone'] as $r) {
-            $rows[] = ['from' => (string) $r['from'], 'to' => '', 'code' => 410];
-        }
-        if ($rows === []) {
-            return 0;
-        }
-
-        return DB::transaction(function () use ($site, $rows): int {
-            $written = 0;
-            foreach ($rows as $row) {
-                Redirect::withoutGlobalScope(SiteScope::class)->updateOrCreate(
-                    ['site_id' => $site->id, 'from_url' => $row['from']],
-                    ['to_url' => $row['to'], 'code' => $row['code'], 'status' => 'active', 'source' => RedirectSource::Migration->value],
-                );
-                $written++;
+        $tokens = $this->tokens($core);
+        $bestScore = 0.0;
+        $bestPath = null;
+        if ($tokens !== []) {
+            foreach ($leafToPath as $liveLeaf => $path) {
+                $other = $this->tokens($liveLeaf);
+                if ($other === []) {
+                    continue;
+                }
+                $union = count(array_unique(array_merge($tokens, $other)));
+                $score = count(array_intersect($tokens, $other)) / $union;
+                if ($score <= 0) {
+                    continue;
+                }
+                if ($score > $bestScore || ($score === $bestScore && ($bestPath === null || strlen($path) < strlen($bestPath)))) {
+                    $bestScore = $score;
+                    $bestPath = $path;
+                }
             }
+        }
 
-            return $written;
-        });
+        return $bestPath !== null
+            ? ['to' => $bestPath, 'code' => 301, 'reason' => 'fallback_hub']
+            : ['to' => '/', 'code' => 301, 'reason' => 'fallback_home'];
+    }
+
+    /** Strip an old-site numbered-duplicate suffix (`…-3`) from a leaf; empty core keeps the leaf. */
+    private function denumber(string $leaf): string
+    {
+        $core = (string) preg_replace('/-\d+$/', '', $leaf);
+
+        return $core === '' ? $leaf : $core;
     }
 
     /**
