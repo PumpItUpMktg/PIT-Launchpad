@@ -34,6 +34,9 @@ abstract class ConsolePage extends Page
 
     public ?string $town = null;
 
+    /** Optional relevance-score band filter: 'high' (75+), 'mid' (50–75), 'low' (under 50). */
+    public ?string $scoreBand = null;
+
     public function mount(): void
     {
         $this->siteId = app(ConsoleContext::class)->current($this->user())?->id;
@@ -51,6 +54,7 @@ abstract class ConsolePage extends Page
         $this->siloId = null;
         $this->county = null;
         $this->town = null;
+        $this->scoreBand = null;
     }
 
     /** Picking a county resets the town within it. */
@@ -79,6 +83,12 @@ abstract class ConsolePage extends Page
 
     /** Whether this page offers the brick-and-mortar town filter (only where posts have body/tags). */
     public function supportsTownFilter(): bool
+    {
+        return false;
+    }
+
+    /** Whether this page offers the relevance-score band filter (only the scored card pages). */
+    public function supportsScoreFilter(): bool
     {
         return false;
     }
@@ -148,6 +158,35 @@ abstract class ConsolePage extends Page
             $cards,
             fn (array $c): bool => array_intersect($c['towns'] ?? [], $targets) !== [],
         ));
+    }
+
+    /**
+     * Filter cards down to a relevance-score band: 'high' (≥ .75), 'mid' (.50–.75), 'low' (< .50).
+     * A no-op when no band is set or the page doesn't support it. Cards with no score are excluded
+     * while a band is active (there is nothing to bucket them into).
+     *
+     * @param  list<array<string, mixed>>  $cards
+     * @return list<array<string, mixed>>
+     */
+    protected function filterByScore(array $cards): array
+    {
+        if (! $this->supportsScoreFilter() || $this->scoreBand === null || $this->scoreBand === '') {
+            return $cards;
+        }
+
+        return array_values(array_filter($cards, function (array $c): bool {
+            if (! isset($c['score'])) { // isset() is already false for a null score
+                return false;
+            }
+            $s = (float) $c['score'];
+
+            return match ($this->scoreBand) {
+                'high' => $s >= 0.75,
+                'mid' => $s >= 0.50 && $s < 0.75,
+                'low' => $s < 0.50,
+                default => true,
+            };
+        }));
     }
 
     /** @return array<string, string> id => name for the site switcher. */

@@ -47,10 +47,15 @@ class BlogApproved extends ConsolePage
         return true;
     }
 
+    public function supportsScoreFilter(): bool
+    {
+        return true;
+    }
+
     /** @return list<array<string, mixed>> Approved-but-not-released posts, richest-card first. */
     public function getApprovedProperty(): array
     {
-        return $this->filterByStorefrontTown($this->enrichBlogCards(app(BlogBoard::class)->approved($this->siteId, $this->siloId)));
+        return $this->filterByScore($this->filterByStorefrontTown($this->enrichBlogCards(app(BlogBoard::class)->approved($this->siteId, $this->siloId))));
     }
 
     /** Release an approved post to the push-only Publish queue (operator "Send to Publish"). */

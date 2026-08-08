@@ -49,10 +49,15 @@ class BlogReview extends ConsolePage
         return true;
     }
 
+    public function supportsScoreFilter(): bool
+    {
+        return true;
+    }
+
     /** @return list<array<string, mixed>> */
     public function getReviewProperty(): array
     {
-        return $this->filterByStorefrontTown($this->enrichBlogCards(app(BlogBoard::class)->review($this->siteId, $this->siloId)));
+        return $this->filterByScore($this->filterByStorefrontTown($this->enrichBlogCards(app(BlogBoard::class)->review($this->siteId, $this->siloId))));
     }
 
     /** Accept a draft into the Approved (preview) queue (does NOT push to WordPress). */
