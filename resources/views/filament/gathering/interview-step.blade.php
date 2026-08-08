@@ -53,6 +53,15 @@
                     </div>
 
                     @if ($interview->status === \App\Enums\InterviewStatus::InProgress)
+                        @if ($this->awaitingQuestion() && count($interview->turns) > 0)
+                            <div class="gi-retry" style="display:flex; align-items:center; gap:10px; padding:9px 12px; margin:2px 0 8px; border:1px solid rgba(217,119,6,.35); background:rgba(217,119,6,.08); border-radius:9px; font-size:13px; color:#b45309;">
+                                <span>The assistant didn’t reply to the last answer — it was saved.</span>
+                                <button class="g-btn primary" wire:click="retryQuestion" wire:loading.attr="disabled" wire:target="retryQuestion">
+                                    <span wire:loading.remove wire:target="retryQuestion">Ask again</span>
+                                    <span wire:loading wire:target="retryQuestion">Asking…</span>
+                                </button>
+                            </div>
+                        @endif
                         <div class="g-row" style="align-items:stretch">
                             <textarea class="g-textarea" rows="2" style="flex:1" placeholder="Type the owner's answer…"
                                 wire:model="input" wire:keydown.enter.prevent="send"></textarea>

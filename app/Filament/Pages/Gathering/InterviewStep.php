@@ -61,18 +61,39 @@ class InterviewStep extends GatheringPage
             return;
         }
 
-        app(InterviewEngine::class)->start($site);
+        $this->guard(fn () => app(InterviewEngine::class)->start($site));
     }
 
     public function send(): void
     {
         $interview = $this->openInterview();
-        if ($interview === null || trim($this->input) === '') {
+        $text = trim($this->input);
+        if ($interview === null || $text === '') {
             return;
         }
 
-        app(InterviewEngine::class)->answer($interview, $this->input);
+        // Clear the box up front: answer() persists the owner's turn BEFORE the model call, so even if
+        // the question generation fails the answer is saved — a re-send would double-record it. On
+        // failure the "Ask again" control regenerates the question from the saved transcript.
         $this->input = '';
+        $this->guard(
+            fn () => app(InterviewEngine::class)->answer($interview, $text),
+            'Your answer was saved. Tap “Ask again” to generate the next question — no need to retype.',
+        );
+    }
+
+    /** Regenerate the next question after a transient model failure — no new answer is recorded. */
+    public function retryQuestion(): void
+    {
+        $interview = $this->openInterview();
+        if ($interview === null) {
+            return;
+        }
+
+        $this->guard(
+            fn () => app(InterviewEngine::class)->resume($interview),
+            'Still couldn’t reach the assistant. Please try again in a moment.',
+        );
     }
 
     public function skipSection(string $section): void
@@ -83,7 +104,7 @@ class InterviewStep extends GatheringPage
             return;
         }
 
-        app(InterviewEngine::class)->skipSection($interview, $enum);
+        $this->guard(fn () => app(InterviewEngine::class)->skipSection($interview, $enum));
     }
 
     public function addNote(): void
@@ -93,8 +114,9 @@ class InterviewStep extends GatheringPage
             return;
         }
 
-        app(InterviewEngine::class)->note($interview, $this->noteInput);
+        $note = $this->noteInput;
         $this->noteInput = '';
+        $this->guard(fn () => app(InterviewEngine::class)->note($interview, $note));
     }
 
     /** End early is a first-class operator control — thin sections allowed; extraction runs. */
@@ -134,6 +156,22 @@ class InterviewStep extends GatheringPage
         };
     }
 
+    /**
+     * True when the interview owes the owner a question — the last turn is the operator's (or there
+     * are none yet) while still in progress. Normally momentary; it persists only when a model call
+     * failed to produce the next question, which is exactly when the "Ask again" control should show.
+     */
+    public function awaitingQuestion(): bool
+    {
+        $interview = $this->openInterview();
+        if ($interview === null) {
+            return false;
+        }
+        $last = $interview->turns()->reorder()->orderByDesc('id')->first();
+
+        return $last === null || $last->role === 'operator';
+    }
+
     private function openInterview(): ?Interview
     {
         $interview = $this->getInterviewProperty();
@@ -141,20 +179,38 @@ class InterviewStep extends GatheringPage
         return $interview !== null && $interview->status === InterviewStatus::InProgress ? $interview : null;
     }
 
+    /**
+     * Run a model-backed interview action, turning any failure (Claude timeout / 5xx / unparseable
+     * reply) into a friendly notice instead of Filament's generic "error loading this page." The
+     * transcript is always persisted first, so a failure never loses the owner's answer — the page
+     * simply offers a retry.
+     */
+    private function guard(\Closure $action, string $failBody = 'The assistant hit a snag. Your progress is saved — please try again in a moment.'): void
+    {
+        try {
+            $action();
+        } catch (\Throwable $e) {
+            report($e);
+            Notification::make()->warning()->title('The assistant didn’t respond')->body($failBody)->send();
+        }
+    }
+
     private function runExtraction(Interview $interview): void
     {
-        $summary = app(IntakeExtractor::class)->extract($interview);
+        $this->guard(function () use ($interview): void {
+            $summary = app(IntakeExtractor::class)->extract($interview);
 
-        Notification::make()->success()
-            ->title('Extraction complete')
-            ->body(sprintf(
-                '%d trust fact(s), %d service(s), %d location(s) seeded · %d suggestion(s) for review · voice draft %s. Confirmed fields were left untouched.',
-                $summary['trust'],
-                $summary['services'],
-                $summary['locations'],
-                $summary['suggestions'],
-                $summary['voice'] ? 'created' : 'unchanged',
-            ))
-            ->send();
+            Notification::make()->success()
+                ->title('Extraction complete')
+                ->body(sprintf(
+                    '%d trust fact(s), %d service(s), %d location(s) seeded · %d suggestion(s) for review · voice draft %s. Confirmed fields were left untouched.',
+                    $summary['trust'],
+                    $summary['services'],
+                    $summary['locations'],
+                    $summary['suggestions'],
+                    $summary['voice'] ? 'created' : 'unchanged',
+                ))
+                ->send();
+        }, 'The extraction step couldn’t reach the assistant. Your transcript is saved — tap “Extract now” to retry.');
     }
 }

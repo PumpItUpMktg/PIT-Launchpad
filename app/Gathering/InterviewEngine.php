@@ -57,6 +57,22 @@ class InterviewEngine
         return $this->ask($interview);
     }
 
+    /**
+     * Retry producing the next question from the CURRENT transcript, WITHOUT recording a new operator
+     * turn — the recovery path after a transient model/API failure mid-interview (the owner's answer
+     * was already persisted by {@see answer()} before the failed model call). A no-op (returns null)
+     * when a question is already waiting, so it is safe to call repeatedly.
+     */
+    public function resume(Interview $interview): ?InterviewTurn
+    {
+        $last = $interview->turns()->reorder()->orderByDesc('id')->first();
+        if ($last !== null && $last->role === 'assistant') {
+            return null; // a question is already pending — nothing to retry
+        }
+
+        return $this->ask($interview);
+    }
+
     /** Operator skip — the engine moves on and won't circle back to this section. */
     public function skipSection(Interview $interview, InterviewSection $section): InterviewTurn
     {
