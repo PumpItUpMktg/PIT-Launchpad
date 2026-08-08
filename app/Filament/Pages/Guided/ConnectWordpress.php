@@ -6,6 +6,7 @@ use App\Enums\SetupStep;
 use App\Guided\GuidedPage;
 use App\Guided\StepGate;
 use App\Onboarding\WordpressPrep;
+use App\Operator\Controls\CloudflareConfigurator;
 use Filament\Notifications\Notification;
 
 /**
@@ -92,6 +93,27 @@ class ConnectWordpress extends GuidedPage
         app(StepGate::class)->state($site)->update(['deps_ready' => true]);
         $this->appPassword = ''; // don't keep the secret in component state
         Notification::make()->title('WordPress connected & prepped.')->success()->send();
+    }
+
+    /**
+     * Auto-configure the tenant's Cloudflare edge (a WAF skip rule for /wp-json/launchpad/*) so the
+     * connect isn't blocked (403) or stripped (401) at the edge — the one-click fix for the Cloudflare
+     * cause. No-op with a friendly notice when no Cloudflare token is configured.
+     */
+    public function configureCloudflare(): void
+    {
+        if (trim($this->baseUrl) === '') {
+            Notification::make()->title('Enter your site URL first.')->warning()->send();
+
+            return;
+        }
+
+        $result = app(CloudflareConfigurator::class)->configureForUrl($this->baseUrl);
+
+        ($result->ok ? Notification::make()->success() : Notification::make()->warning())
+            ->title($result->ok ? 'Cloudflare configured' : 'Cloudflare not changed')
+            ->body($result->message)
+            ->send();
     }
 
     public function proceed(): void

@@ -73,6 +73,33 @@ class WordpressClient
     }
 
     /**
+     * Ask the companion plugin what it RECEIVED for this request — specifically whether the
+     * `Authorization` header survived the trip (the public `launchpad/v1/auth-check` route). Used to
+     * turn an ambiguous 401 into a precise "header stripped in transit (Cloudflare / host)" vs
+     * "Application Password rejected" diagnosis. We still send Basic auth so the plugin can see whether
+     * the edge stripped it. Returns null when the diagnostic isn't available (an older plugin 404s the
+     * route, or the host is unreachable/blocking) — the caller then falls back to a generic message.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function authCheck(): ?array
+    {
+        try {
+            $response = $this->request()->get(rtrim($this->baseUrl, '/').self::NAMESPACE.'/auth-check');
+        } catch (ConnectionException) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $data = $response->json();
+
+        return is_array($data) ? $data : null;
+    }
+
+    /**
      * Upsert a content page/post. Keyed on `content_id` (ULID); idempotent.
      *
      * @param  array<string, mixed>  $payload

@@ -38,7 +38,10 @@ class WordpressConnector
 
         $result = $client->pingResult();
         if (! $result['ok']) {
-            throw new WordpressException($this->explainFailure($credentials['base_url'], $result));
+            // A 401 is ambiguous — header stripped in transit vs a bad Application Password. Ask the
+            // plugin what it received so the message can be exact.
+            $diag = $result['status'] === 401 ? $client->authCheck() : null;
+            throw new WordpressException($this->explainFailure($credentials['base_url'], $result, $diag));
         }
 
         return Connection::withoutGlobalScope(SiteScope::class)->updateOrCreate(
@@ -107,8 +110,9 @@ class WordpressConnector
      * means the plugin route isn't there (wrong host / plugin off); 0 means the host was unreachable.
      *
      * @param  array{ok: bool, status: int, error: ?string}  $result
+     * @param  array<string, mixed>|null  $diag  the companion plugin's auth-check payload (401 only)
      */
-    private function explainFailure(string $baseUrl, array $result): string
+    private function explainFailure(string $baseUrl, array $result, ?array $diag = null): string
     {
         $endpoint = $baseUrl.'/wp-json/launchpad/v1/status';
         $tail = ' — nothing was saved.';
@@ -117,9 +121,38 @@ class WordpressConnector
             0 => "Could not reach {$baseUrl} — check the URL and that the site is live (DNS / timeout)".$tail,
             404 => "The Launchpad companion plugin isn't answering at {$endpoint} (HTTP 404) — confirm the plugin is active on THIS host and the URL matches WordPress's Site Address (Settings → General)".$tail,
             403 => "HTTP 403 on the plugin route — TWO likely causes, check this order: (1) a CDN / edge firewall is blocking the request BEFORE it reaches WordPress — most often Cloudflare Bot Fight Mode or a WAF managed rule. If the site is behind Cloudflare, allow /wp-json/launchpad/* (a WAF 'Skip' rule for that path, or turn off Bot Fight Mode), then retry. (2) the connecting user lacks the lp_manage_content capability — connect as the launchpad-sync user (re-activating the companion plugin re-grants it after a host/domain migration)".$tail,
-            401 => 'WordPress rejected the app password (HTTP 401 — not authenticated) — regenerate the Application Password, confirm the username is the user it was created for, and if it still fails your host may be stripping the Authorization header (common on nginx / FastCGI / some managed hosts), which must be forwarded for Application Passwords to work'.$tail,
+            401 => $this->explain401($diag).$tail,
             default => "WordPress returned HTTP {$result['status']} at {$endpoint}".($result['error'] !== null ? ' — '.$result['error'] : '').$tail,
         };
+    }
+
+    /**
+     * Turn a 401 into the RIGHT next action using the plugin's auth-check payload, which resolves the
+     * two causes that look identical from the control plane's side of the wire.
+     *
+     * @param  array<string, mixed>|null  $diag
+     */
+    private function explain401(?array $diag): string
+    {
+        // No diagnostic: an older companion plugin (no /auth-check route → 404 → null) or the probe was
+        // itself blocked. Keep the both-causes guidance and point at the plugin update for a precise read.
+        if ($diag === null) {
+            return 'WordPress rejected the request (HTTP 401 — not authenticated). Two causes look identical here: either the Authorization header was stripped before WordPress (common behind Cloudflare, and on nginx / FastCGI / some managed hosts — it must be forwarded for Application Passwords to work), or the Application Password itself is wrong. Update the companion plugin to 0.9.32+ for an exact diagnosis, then retry';
+        }
+
+        // The header never arrived → it is being stripped in transit. This is NOT a bad password.
+        if (($diag['authorization_received'] ?? true) === false) {
+            return 'WordPress never received the Authorization header — it is being STRIPPED in transit, so WordPress saw an anonymous request (HTTP 401). This is not a password problem. If the site is behind Cloudflare, add a WAF "Skip" rule for /wp-json/launchpad/* (Security → WAF → Custom rules → Skip → all remaining custom + managed rules); on nginx/FastCGI forward it with `fastcgi_param HTTP_AUTHORIZATION $http_authorization;`, or on Apache add `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1`. Then retry';
+        }
+
+        // Header arrived → WordPress genuinely rejected the credential.
+        if (($diag['application_passwords_available'] ?? true) === false) {
+            return 'The Authorization header reached WordPress, but Application Passwords are DISABLED there (HTTP 401) — they require the site to be served over HTTPS and can be switched off by a security plugin or filter. Confirm the Site Address is https://, re-enable Application Passwords, regenerate the password, and retry';
+        }
+
+        $who = isset($diag['username']) && (string) $diag['username'] !== '' ? ' for user "'.$diag['username'].'"' : '';
+
+        return 'The Authorization header reached WordPress'.$who.', but the Application Password was rejected (HTTP 401). Regenerate the Application Password (Users → the connecting user → Application Passwords — this is NOT the login password), confirm the username matches the user it was created for, and retry';
     }
 
     /**

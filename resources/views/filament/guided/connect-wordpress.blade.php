@@ -13,7 +13,14 @@
             <div class="lp-field"><label>Site URL</label><input class="lp-input" wire:model="baseUrl" placeholder="https://yoursite.com"></div>
             <div class="lp-field"><label>WordPress username</label><input class="lp-input" wire:model="username" placeholder="admin"></div>
             <div class="lp-field"><label>Application password</label><input class="lp-input" type="password" wire:model="appPassword" placeholder="xxxx xxxx xxxx xxxx"></div>
-            <button class="lp-mini primary" wire:click="connectAndPrep">Connect &amp; prep</button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <button class="lp-mini primary" wire:click="connectAndPrep">Connect &amp; prep</button>
+                <button class="lp-mini" wire:click="configureCloudflare" wire:loading.attr="disabled" wire:target="configureCloudflare">
+                    <span wire:loading.remove wire:target="configureCloudflare">Auto-configure Cloudflare</span>
+                    <span wire:loading wire:target="configureCloudflare">Configuring…</span>
+                </button>
+            </div>
+            <div class="hint">Behind Cloudflare and getting a 403/401 on connect? “Auto-configure Cloudflare” adds a WAF skip rule for <code>/wp-json/launchpad/*</code> so the sync gets through, then retry Connect.</div>
         </div>
 
         @if (! empty($checklist))

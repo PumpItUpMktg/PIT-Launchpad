@@ -72,6 +72,15 @@ return [
         'timeout' => (int) env('FAL_TIMEOUT', 60),
     ],
 
+    // Cloudflare API (agency-wide token) — auto-configures the edge for a tenant's WordPress so the
+    // control-plane sync isn't blocked/stripped. One scoped token over the account that holds the
+    // client zones; the zone is resolved per site by domain. Needs Zone → Zone (Read) + Zone → WAF
+    // (Edit). Absent token → the seam falls back to a no-op mock and the action reports "not configured".
+    'cloudflare' => [
+        'api_token' => env('CLOUDFLARE_API_TOKEN'),
+        'timeout' => (int) env('CLOUDFLARE_TIMEOUT', 20),
+    ],
+
     // DataForSEO — SERP + keyword data (§5). `mode` selects the standard
     // (task-based, cheaper) vs live (synchronous) request mode.
     'dataforseo' => [

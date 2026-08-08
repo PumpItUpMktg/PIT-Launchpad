@@ -29,6 +29,9 @@ use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Census\TigerwebGazetteer;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Claude\ClaudeClientFactory;
+use App\Integrations\Cloudflare\CloudflareClient;
+use App\Integrations\Cloudflare\HttpCloudflareClient;
+use App\Integrations\Cloudflare\MockCloudflareClient;
 use App\Integrations\Conversions\ConversionProvider;
 use App\Integrations\Conversions\ConversionProviders;
 use App\Integrations\Conversions\Ga4ConversionProvider;
@@ -220,6 +223,16 @@ class AppServiceProvider extends ServiceProvider
             (string) config('services.dataforseo.base_url', 'https://api.dataforseo.com'),
             (int) config('services.dataforseo.timeout', 30),
         ));
+
+        // Cloudflare edge auto-config seam (agency-wide token). Real adapter when a token is set; the
+        // no-network mock otherwise (the connect UI then reports "not configured").
+        $this->app->singleton(CloudflareClient::class, function () {
+            $token = (string) config('services.cloudflare.api_token', '');
+
+            return $token !== ''
+                ? new HttpCloudflareClient($token, (int) config('services.cloudflare.timeout', 20))
+                : new MockCloudflareClient;
+        });
 
         $this->app->singleton(SerpProvider::class, fn () => new DataForSeoSerpProvider(
             $this->app->make(DataForSeoClient::class),
