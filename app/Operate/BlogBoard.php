@@ -161,6 +161,8 @@ class BlogBoard
                 'draft_error' => $c->draftError(),
                 'keyword' => $c->targetKeyword->query ?? $this->consumedKeywordFor($c),
                 'silo' => $c->matchedSilo?->name,
+                'source' => $c->target_keyword_id !== null ? 'directed' : (string) ($c->source_name ?? 'feed'),
+                'date' => $c->created_at?->toDateString(),
                 'tenant' => $c->site?->brand_name,
                 'excerpt' => Str::words(trim(strip_tags((string) $c->body)), 100, '…'),
                 'image' => $this->thumbnail($c),

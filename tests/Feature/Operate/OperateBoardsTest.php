@@ -317,7 +317,16 @@ it('promote moves the candidate to Review as a writing card; undrafted review it
     $drafted->renderJobs()->create(['site_id' => $site->id, 'status' => RenderStatus::Succeeded, 'r2_key' => 'tenants/spg/posts/drafted.jpg']);
     $withThumb = collect($board->review($site->id))->firstWhere('id', $drafted->id);
     expect($withThumb['image'])->not->toBeNull()
-        ->and($withThumb['state'])->toBe('needs_review');
+        ->and($withThumb['state'])->toBe('needs_review')
+        // Review cards carry source + date so the card can show them alongside silo + photo.
+        ->and($withThumb['source'])->toBe('feed')          // reactive, no source_name
+        ->and($withThumb['date'])->toBe($drafted->created_at->toDateString());
+
+    // A directed draft (has a target keyword) reads as source "directed".
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair']);
+    $directed = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview, 'title' => 'Directed piece', 'body' => 'Real copy.', 'target_keyword_id' => $kw->id]);
+    $directedCard = collect($board->review($site->id))->firstWhere('id', $directed->id);
+    expect($directedCard['source'])->toBe('directed');
 });
 
 it('regenerate re-drafts an already-drafted review item — it flips to writing and keeps its slug', function () {
