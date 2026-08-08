@@ -102,28 +102,63 @@ class BlogBoard
             ->with(['site', 'matchedSilo', 'targetKeyword'])
             ->latest('updated_at')
             ->get()
-            ->map(fn (Content $c) => [
-                'id' => (string) $c->id,
-                'title' => (string) $c->title,
-                'tenant' => $c->site?->brand_name,
-                'silo' => $c->matchedSilo?->name,
-                'source' => $c->target_keyword_id !== null ? 'directed' : (string) ($c->source_name ?? 'feed'),
-                'date' => $c->created_at?->toDateString(),
-                'keyword' => $c->targetKeyword?->query,
-                'excerpt' => $this->excerpt($c),
-                'score' => $c->relevance_score !== null ? round((float) $c->relevance_score, 2) : null,
-                'state' => match ($c->status) {
-                    ContentStatus::Rendering => 'rendering image',
-                    ContentStatus::Publishing => 'pushing to WordPress',
-                    default => 'queued to publish',
-                },
-                // "Stuck": approved (job dispatched, never started rendering) for longer than a job
-                // should ever sit unprocessed. Flags a stalled worker and offers the inline escape hatch.
-                'stalled' => $c->status === ContentStatus::Approved
-                    && $c->updated_at !== null
-                    && $c->updated_at->lt(now()->subSeconds(self::STALLED_AFTER_SECONDS)),
-            ])
+            // The Publish queue is the RELEASED half of the two-gate split: an approved post that an
+            // operator has explicitly sent over from the Approved (preview) page, plus anything already
+            // in flight (rendering/publishing). Un-released approved posts wait on the Approved page.
+            ->filter(fn (Content $c) => $c->status !== ContentStatus::Approved || $c->isReleasedToPublish())
+            ->map(fn (Content $c) => $this->publishCard($c))
+            ->values()
             ->all();
+    }
+
+    /**
+     * The operator's Approved (preview / QA) queue: approved posts NOT yet released to Publish. This
+     * is the "page in the middle" — an operator previews the fully-rendered post here (image + body +
+     * links + SEO) and clicks Send to Publish to move it onto the push-only Publish page.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function approved(?string $siteId = null, ?string $siloId = null): array
+    {
+        return $this->posts($siteId, $siloId)
+            ->where('status', ContentStatus::Approved->value)
+            ->with(['site', 'matchedSilo', 'targetKeyword'])
+            ->latest('updated_at')
+            ->get()
+            ->reject(fn (Content $c) => $c->isReleasedToPublish())
+            ->map(fn (Content $c) => $this->publishCard($c))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The shared publish/approved card shape (both stages render the same rich card).
+     *
+     * @return array<string, mixed>
+     */
+    private function publishCard(Content $c): array
+    {
+        return [
+            'id' => (string) $c->id,
+            'title' => (string) $c->title,
+            'tenant' => $c->site?->brand_name,
+            'silo' => $c->matchedSilo?->name,
+            'source' => $c->target_keyword_id !== null ? 'directed' : (string) ($c->source_name ?? 'feed'),
+            'date' => $c->created_at?->toDateString(),
+            'keyword' => $c->targetKeyword?->query,
+            'excerpt' => $this->excerpt($c),
+            'score' => $c->relevance_score !== null ? round((float) $c->relevance_score, 2) : null,
+            'state' => match ($c->status) {
+                ContentStatus::Rendering => 'rendering image',
+                ContentStatus::Publishing => 'pushing to WordPress',
+                default => 'queued to publish',
+            },
+            // "Stuck": approved (job dispatched, never started rendering) for longer than a job
+            // should ever sit unprocessed. Flags a stalled worker and offers the inline escape hatch.
+            'stalled' => $c->status === ContentStatus::Approved
+                && $c->updated_at !== null
+                && $c->updated_at->lt(now()->subSeconds(self::STALLED_AFTER_SECONDS)),
+        ];
     }
 
     /**

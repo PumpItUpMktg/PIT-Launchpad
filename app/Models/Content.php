@@ -207,6 +207,36 @@ class Content extends Model
         $this->forceFill(['meta' => $meta])->save();
     }
 
+    /**
+     * Whether an approved post has been RELEASED from the operator's Approved (preview) queue to
+     * the Publish queue. The two-gate split (Option B): approve parks a draft at `Approved` for
+     * operator QA on the Approved page; releasing it (an explicit "Send to Publish") is what surfaces
+     * it on the push-only Publish page. A `meta` flag (not a status) so it never disturbs the
+     * ContentStatus state machine the publish pipeline drives.
+     */
+    public function isReleasedToPublish(): bool
+    {
+        return ($this->meta['released_to_publish_at'] ?? null) !== null;
+    }
+
+    /** Release an approved post to the Publish queue (operator "Send to Publish"). Idempotent. */
+    public function releaseToPublish(): void
+    {
+        $meta = $this->meta ?? [];
+        $meta['released_to_publish_at'] = now()->toIso8601String();
+
+        $this->forceFill(['meta' => $meta])->save();
+    }
+
+    /** Pull a released post back to the Approved (preview) queue. Idempotent. */
+    public function returnToApproved(): void
+    {
+        $meta = $this->meta ?? [];
+        unset($meta['released_to_publish_at']);
+
+        $this->forceFill(['meta' => $meta])->save();
+    }
+
     /** @return BelongsTo<Silo, $this> */
     public function silo(): BelongsTo
     {

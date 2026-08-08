@@ -7,6 +7,9 @@
     <div class="bc-list">
         @forelse ($review as $r)
             <div class="bc-card" wire:key="rev-{{ $r['id'] }}">
+                {{-- Generate-time hero render (present as soon as the draft lands) --}}
+                @include('filament.console.partials.blog-thumb', ['image' => $r['image'] ?? null])
+
                 {{-- Top line: silo · source · date --}}
                 <div class="bc-top">
                     @if (! empty($r['silo'])) <span class="bc-chip silo">{{ $r['silo'] }}</span> @endif
@@ -68,7 +71,7 @@
                     @endif
                 </div>
 
-                {{-- Upload photo (image renders at publish; operator can attach one now) --}}
+                {{-- Swap the generate-time render for an operator-supplied photo --}}
                 @include('filament.console.partials.swap-photo', ['id' => $r['id']])
             </div>
         @empty

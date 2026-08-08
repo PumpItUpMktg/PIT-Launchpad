@@ -7,6 +7,10 @@
 
     .bc-card { display:flex; flex-direction:column; gap:7px; min-width:0; border:1px solid rgba(148,163,184,.35); border-radius:12px; padding:13px 15px; }
 
+    /* Generate-time hero render (fal → R2). Present the moment a draft lands; no upload needed. */
+    .bc-thumb { width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:9px; background:rgba(148,163,184,.12); display:block; }
+    .bc-thumb-empty { width:100%; aspect-ratio:16/9; border-radius:9px; background:rgba(148,163,184,.1); border:1px dashed rgba(148,163,184,.4); display:flex; align-items:center; justify-content:center; font-size:11.5px; color:#94a3b8; }
+
     /* Top row: silo · source · date — one line, silo truncates, date pinned right. */
     .bc-top { display:flex; align-items:center; gap:6px; font-size:11px; min-width:0; }
     .bc-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:99px; white-space:nowrap; }

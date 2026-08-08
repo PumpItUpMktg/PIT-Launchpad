@@ -4,11 +4,14 @@
 
     @php $items = $this->publishing; @endphp
 
-    <p style="color:#94a3b8; font-size:13px; margin:0 0 4px;">Approved posts, ready to publish. Publishing pushes straight to WordPress. Live posts appear under Published.</p>
+    <p style="color:#94a3b8; font-size:13px; margin:0 0 4px;">Released posts, ready to push. Publishing pushes straight to WordPress. Preview &amp; QA happen on the Approved page; live posts appear under Published.</p>
 
     <div class="bc-list">
         @forelse ($items as $p)
             <div class="bc-card" wire:key="pub-{{ $p['id'] }}">
+                {{-- Generate-time hero render --}}
+                @include('filament.console.partials.blog-thumb', ['image' => $p['image'] ?? null])
+
                 {{-- Top line: silo · source · date --}}
                 <div class="bc-top">
                     @if (! empty($p['silo'])) <span class="bc-chip silo">{{ $p['silo'] }}</span> @endif
