@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.31
+Stable tag: 0.9.32
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,14 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.32 =
+* Connection diagnostics: new PUBLIC `launchpad/v1/auth-check` endpoint reports whether the
+  `Authorization` header actually reached WordPress, so the control plane can tell a header STRIPPED in
+  transit (Cloudflare edge, or nginx / FastCGI / some managed hosts) apart from a genuinely wrong
+  Application Password — two causes that both surface as an opaque HTTP 401. It returns only arrival +
+  environment flags (scheme, reflected username, Application-Passwords-available, SSL, version); never a
+  secret, and no more of an auth oracle than WordPress's own Basic-auth 401/200.
 
 = 0.9.31 =
 * Redirects: honor a 4xx code (e.g. 410 Gone) in the redirect map — the handler now emits the status +

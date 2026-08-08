@@ -59,13 +59,65 @@ it('explains a 404 as the plugin not answering at that URL', function () {
     expect(connections()->count())->toBe(0);
 });
 
-it('explains a 401 (not authenticated) as a rejected password / stripped auth header', function () {
-    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['code' => 'rest_forbidden', 'data' => ['status' => 401]], 401)]);
+it('a 401 with the Authorization header STRIPPED in transit reads as an edge/host problem, not a bad password', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/auth-check' => Http::response(['authorization_received' => false, 'scheme' => 'none'], 200),
+        '*/wp-json/launchpad/v1/status' => Http::response(['data' => ['status' => 401]], 401),
+    ]);
+    $site = Site::factory()->create();
+
+    expect(fn () => app(WordpressConnector::class)->connect($site->id, [
+        'base_url' => 'https://sumppumpgurus.com', 'username' => 'launchpad-sync', 'app_password' => 'anything12345',
+    ]))->toThrow(WordpressException::class, 'STRIPPED in transit');
+});
+
+it('a 401 where the header arrived reads as a rejected Application Password (and names the user)', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/auth-check' => Http::response([
+            'authorization_received' => true, 'scheme' => 'basic', 'username' => 'launchpad-sync',
+            'application_passwords_available' => true,
+        ], 200),
+        '*/wp-json/launchpad/v1/status' => Http::response('', 401),
+    ]);
     $site = Site::factory()->create();
 
     expect(fn () => app(WordpressConnector::class)->connect($site->id, [
         'base_url' => 'https://sumppumpgurus.com', 'username' => 'launchpad-sync', 'app_password' => 'badpass123456',
-    ]))->toThrow(WordpressException::class, 'rejected the app password');
+    ]))->toThrow(WordpressException::class, 'Application Password was rejected');
+
+    try {
+        app(WordpressConnector::class)->connect($site->id, [
+            'base_url' => 'https://sumppumpgurus.com', 'username' => 'launchpad-sync', 'app_password' => 'badpass123456',
+        ]);
+    } catch (WordpressException $e) {
+        expect($e->getMessage())->toContain('launchpad-sync');
+    }
+});
+
+it('a 401 with Application Passwords disabled points at HTTPS / a security plugin', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/auth-check' => Http::response([
+            'authorization_received' => true, 'application_passwords_available' => false, 'is_ssl' => false,
+        ], 200),
+        '*/wp-json/launchpad/v1/status' => Http::response('', 401),
+    ]);
+    $site = Site::factory()->create();
+
+    expect(fn () => app(WordpressConnector::class)->connect($site->id, [
+        'base_url' => 'https://sumppumpgurus.com', 'username' => 'launchpad-sync', 'app_password' => 'goodpass12345',
+    ]))->toThrow(WordpressException::class, 'Application Passwords are DISABLED');
+});
+
+it('a 401 with no diagnostic (older companion plugin) falls back and suggests updating', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/auth-check' => Http::response('', 404), // pre-0.9.32 plugin: route absent
+        '*/wp-json/launchpad/v1/status' => Http::response('', 401),
+    ]);
+    $site = Site::factory()->create();
+
+    expect(fn () => app(WordpressConnector::class)->connect($site->id, [
+        'base_url' => 'https://sumppumpgurus.com', 'username' => 'launchpad-sync', 'app_password' => 'whatever12345',
+    ]))->toThrow(WordpressException::class, 'Update the companion plugin');
 });
 
 it('explains a 403 (authenticated, forbidden) as a missing Launchpad capability', function () {

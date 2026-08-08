@@ -97,6 +97,17 @@ final class Routes
             'permission_callback' => $auth,
         ]);
 
+        // PUBLIC on purpose (no auth gate): reports ONLY whether the Authorization header survived the
+        // trip to WordPress (edge/host stripping is the #1 cause of a control-plane 401) plus the flags
+        // that gate Application Passwords — never a secret. It lets the connect flow tell "header stripped
+        // in transit (Cloudflare / nginx / FastCGI)" apart from "the Application Password is wrong",
+        // instead of one ambiguous 401. No more of an auth oracle than WP's own Basic-auth 401/200.
+        register_rest_route(self::NS, '/auth-check', [
+            'methods' => 'GET',
+            'callback' => [$this, 'auth_check'],
+            'permission_callback' => '__return_true',
+        ]);
+
         register_rest_route(self::NS, '/templates', [
             'methods' => 'GET',
             'callback' => [$this, 'templates'],
@@ -119,6 +130,11 @@ final class Routes
     public function status(): WP_REST_Response
     {
         return new WP_REST_Response(Status::payload(), 200);
+    }
+
+    public function auth_check(): WP_REST_Response
+    {
+        return new WP_REST_Response(AuthDiagnostics::payload(), 200);
     }
 
     /** Store the control plane's IndexNow key so it's served at /{key}.txt. */
