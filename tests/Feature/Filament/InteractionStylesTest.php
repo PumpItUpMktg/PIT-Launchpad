@@ -23,7 +23,11 @@ it('ships one prefix-based interaction sheet covering every custom control famil
         // Native Filament controls are left alone.
         ->toContain(':not([class*="fi-"])')
         // Accessibility: honor reduced-motion.
-        ->toContain('prefers-reduced-motion');
+        ->toContain('prefers-reduced-motion')
+        // Click confirmation: a JS-driven pulse so the user always knows the click landed.
+        ->toContain('@keyframes lp-click-pulse')
+        ->toContain('.lp-clicked')
+        ->toContain("addEventListener('click'");
 });
 
 it('injects the interaction sheet into a rendered panel', function () {

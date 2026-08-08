@@ -40,11 +40,23 @@
         box-shadow: 0 1px 4px rgba(15, 23, 42, .10);
     }
 
-    /* Press — a tactile depress the instant the click registers. */
+    /* Press — a tactile depress while the pointer is held down. */
     :where([class*="-btn"], [class*="-tab"], [class*="-pill"], [class*="-loctab"],
            a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick]):not([class*="fi-"]):active {
         transform: translateY(1px) scale(.985);
         box-shadow: none;
+    }
+
+    /* Click CONFIRMATION — a ring pulse fired by JS the instant a control is clicked, so the user
+       always knows the click landed even before a slow Livewire round-trip paints anything back.
+       Outlives :active (which vanishes on pointer release). Added/removed by the script below. */
+    @keyframes lp-click-pulse {
+        0%   { box-shadow: 0 0 0 0 rgba(99, 102, 241, .45); }
+        100% { box-shadow: 0 0 0 7px rgba(99, 102, 241, 0); }
+    }
+    :where([class*="-btn"], [class*="-tab"], [class*="-pill"], [class*="-loctab"], [class*="-chip"],
+           button, a[role="button"]).lp-clicked {
+        animation: lp-click-pulse .45s ease-out;
     }
 
     /* Keyboard focus ring (a11y) — visible in both themes. */
@@ -73,7 +85,7 @@
     :where(button:not([class]):focus-visible, a[role="button"]:not([class]):focus-visible) { outline: 2px solid #6366f1; outline-offset: 1px; }
     :where(button:not([class]):disabled) { opacity: .5; cursor: progress; }
 
-    /* Respect reduced-motion: keep the color/brightness cues, drop the movement. */
+    /* Respect reduced-motion: keep the color/brightness/ring cues, drop the movement. */
     @media (prefers-reduced-motion: reduce) {
         :where([class*="-btn"], [class*="-tab"], [class*="-pill"], [class*="-loctab"],
                [class*="-chip"], button, a):hover,
@@ -83,3 +95,32 @@
         }
     }
 </style>
+
+{{-- Fires the click-confirmation pulse on any clickable custom control. A single delegated listener on
+     `document` (which survives Filament's wire:navigate SPA hops), registered once. It only tags the
+     app's own controls + classless inline buttons; native Filament controls (.fi-*) are left alone. --}}
+<script>
+    (function () {
+        if (window.__lpClickFx) return;
+        window.__lpClickFx = true;
+
+        var SEL = '[class*="-btn"],[class*="-tab"],[class*="-pill"],[class*="-loctab"],'
+            + 'a[class*="-chip"],[class*="-chip"][wire\\:click],[class*="-chip"][onclick],'
+            + 'button:not([class]),a[role="button"]:not([class])';
+
+        document.addEventListener('click', function (e) {
+            var el = e.target && e.target.closest ? e.target.closest(SEL) : null;
+            if (!el) return;
+            if (String(el.className || '').indexOf('fi-') !== -1) return; // leave native Filament controls
+            el.classList.remove('lp-clicked');
+            void el.offsetWidth;            // reflow so a rapid re-click restarts the pulse
+            el.classList.add('lp-clicked');
+        }, true);
+
+        document.addEventListener('animationend', function (e) {
+            if (e.animationName === 'lp-click-pulse' && e.target && e.target.classList) {
+                e.target.classList.remove('lp-clicked');
+            }
+        });
+    })();
+</script>
