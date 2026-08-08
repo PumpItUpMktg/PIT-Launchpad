@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Http;
 
 it('diagnose-wordpress reports a stripped Authorization header', function () {
-    Http::fake(['*/wp-json/launchpad/v1/auth-check' => Http::response([
+    Http::fake(['*/wp-json/launchpad/v1/auth-check*' => Http::response([
         'authorization_received' => false, 'scheme' => 'none',
         'is_ssl' => true, 'application_passwords_available' => true, 'plugin_version' => '0.9.32',
     ], 200)]);
@@ -14,7 +14,7 @@ it('diagnose-wordpress reports a stripped Authorization header', function () {
 });
 
 it('diagnose-wordpress confirms the header is delivered', function () {
-    Http::fake(['*/wp-json/launchpad/v1/auth-check' => Http::response([
+    Http::fake(['*/wp-json/launchpad/v1/auth-check*' => Http::response([
         'authorization_received' => true, 'scheme' => 'basic', 'username' => 'launchpad-sync',
         'is_ssl' => true, 'application_passwords_available' => true, 'plugin_version' => '0.9.32',
     ], 200)]);
@@ -24,7 +24,7 @@ it('diagnose-wordpress confirms the header is delivered', function () {
 });
 
 it('diagnose-wordpress flags a missing/old auth-check endpoint (404)', function () {
-    Http::fake(['*/wp-json/launchpad/v1/auth-check' => Http::response('', 404)]);
+    Http::fake(['*/wp-json/launchpad/v1/auth-check*' => Http::response('', 404)]);
 
     $this->artisan('launchpad:diagnose-wordpress', ['site' => 'sandhogworks.com'])
         ->expectsOutputToContain("didn't answer")
@@ -33,7 +33,7 @@ it('diagnose-wordpress flags a missing/old auth-check endpoint (404)', function 
 
 it('with a real password: header arrives but the Application Password is REJECTED (401)', function () {
     Http::fake([
-        '*/wp-json/launchpad/v1/auth-check' => Http::response(['authorization_received' => true, 'scheme' => 'basic', 'application_passwords_available' => true], 200),
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => true, 'scheme' => 'basic', 'application_passwords_available' => true], 200),
         '*/wp-json/launchpad/v1/status' => Http::response(['data' => ['status' => 401]], 401),
     ]);
 
@@ -44,7 +44,7 @@ it('with a real password: header arrives but the Application Password is REJECTE
 
 it('with a real password: all green when the credential authenticates (200)', function () {
     Http::fake([
-        '*/wp-json/launchpad/v1/auth-check' => Http::response(['authorization_received' => true, 'scheme' => 'basic', 'application_passwords_available' => true], 200),
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => true, 'scheme' => 'basic', 'application_passwords_available' => true], 200),
         '*/wp-json/launchpad/v1/status' => Http::response(['ok' => true], 200),
     ]);
 
@@ -53,9 +53,23 @@ it('with a real password: all green when the credential authenticates (200)', fu
         ->assertExitCode(0);
 });
 
+it('authenticated credential WINS over a (cached) stripped auth-check reading', function () {
+    // The contradictory real-world case: the public auth-check GET is edge-cached and says "stripped",
+    // but the authed /status proves the header actually reaches WordPress.
+    Http::fake([
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => false, 'scheme' => 'none', 'application_passwords_available' => true], 200),
+        '*/wp-json/launchpad/v1/status' => Http::response(['ok' => true], 200),
+    ]);
+
+    $this->artisan('launchpad:diagnose-wordpress', ['site' => 'sandhogworks.com', '--password' => 'goodpass1234'])
+        ->expectsOutputToContain('ALL GREEN')
+        ->expectsOutputToContain('edge-cached')
+        ->assertExitCode(0);
+});
+
 it('with a real password: authenticated but missing capability (403)', function () {
     Http::fake([
-        '*/wp-json/launchpad/v1/auth-check' => Http::response(['authorization_received' => true, 'scheme' => 'basic', 'application_passwords_available' => true], 200),
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => true, 'scheme' => 'basic', 'application_passwords_available' => true], 200),
         '*/wp-json/launchpad/v1/status' => Http::response(['data' => ['status' => 403]], 403),
     ]);
 

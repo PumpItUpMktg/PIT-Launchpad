@@ -61,7 +61,7 @@ it('explains a 404 as the plugin not answering at that URL', function () {
 
 it('a 401 with the Authorization header STRIPPED in transit reads as an edge/host problem, not a bad password', function () {
     Http::fake([
-        '*/wp-json/launchpad/v1/auth-check' => Http::response(['authorization_received' => false, 'scheme' => 'none'], 200),
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => false, 'scheme' => 'none'], 200),
         '*/wp-json/launchpad/v1/status' => Http::response(['data' => ['status' => 401]], 401),
     ]);
     $site = Site::factory()->create();
@@ -73,7 +73,7 @@ it('a 401 with the Authorization header STRIPPED in transit reads as an edge/hos
 
 it('a 401 where the header arrived reads as a rejected Application Password (and names the user)', function () {
     Http::fake([
-        '*/wp-json/launchpad/v1/auth-check' => Http::response([
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response([
             'authorization_received' => true, 'scheme' => 'basic', 'username' => 'launchpad-sync',
             'application_passwords_available' => true,
         ], 200),
@@ -96,7 +96,7 @@ it('a 401 where the header arrived reads as a rejected Application Password (and
 
 it('a 401 with Application Passwords disabled points at HTTPS / a security plugin', function () {
     Http::fake([
-        '*/wp-json/launchpad/v1/auth-check' => Http::response([
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response([
             'authorization_received' => true, 'application_passwords_available' => false, 'is_ssl' => false,
         ], 200),
         '*/wp-json/launchpad/v1/status' => Http::response('', 401),
@@ -110,7 +110,7 @@ it('a 401 with Application Passwords disabled points at HTTPS / a security plugi
 
 it('a 401 with no diagnostic (older companion plugin) falls back and suggests updating', function () {
     Http::fake([
-        '*/wp-json/launchpad/v1/auth-check' => Http::response('', 404), // pre-0.9.32 plugin: route absent
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response('', 404), // pre-0.9.32 plugin: route absent
         '*/wp-json/launchpad/v1/status' => Http::response('', 401),
     ]);
     $site = Site::factory()->create();

@@ -77,6 +77,18 @@ class DiagnoseWordpress extends Command
      */
     private function diagnose(bool $received, array $diag, ?array $ping, string $baseUrl): int
     {
+        // The credential authenticating is AUTHORITATIVE — you cannot authenticate unless the header
+        // reached WordPress. So this wins even if the public auth-check said "stripped" (that GET can be
+        // edge-cached and serve a stale reading). Check it FIRST.
+        if ($ping !== null && $ping['ok']) {
+            if (! $received) {
+                $this->warn('Note: the public auth-check reported the header stripped, but the authenticated request below SUCCEEDED — so the header IS reaching WordPress. That row is almost certainly an edge-cached (Cloudflare / WP cache) stale response; trust the authenticated result.');
+            }
+            $this->info('Diagnosis: ALL GREEN — this Application Password authenticates against WordPress. Connect will succeed with these exact credentials.');
+
+            return self::SUCCESS;
+        }
+
         if (! $received) {
             $this->error('Diagnosis: the Authorization header is being STRIPPED before WordPress (Cloudflare edge, or nginx/FastCGI/Apache).');
             $this->line('  → Fix: launchpad:configure-cloudflare '.$this->hostOf($baseUrl).'  (or forward the header at the origin), then re-run this.');
@@ -92,12 +104,6 @@ class DiagnoseWordpress extends Command
 
         if ($ping === null) {
             $this->info('The header reaches WordPress and Application Passwords are enabled. Re-run with --user and --password to test whether the actual credential authenticates.');
-
-            return self::SUCCESS;
-        }
-
-        if ($ping['ok']) {
-            $this->info('Diagnosis: ALL GREEN — the header arrives AND this Application Password authenticates. Connect will succeed with these exact credentials.');
 
             return self::SUCCESS;
         }

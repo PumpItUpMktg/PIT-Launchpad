@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.32
+Stable tag: 0.9.33
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,12 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.33 =
+* Connection diagnostics: the public `launchpad/v1/auth-check` response is now sent `no-store` /
+  no-cache. It's a public GET, so an edge/CDN (Cloudflare) or a WP page cache could store it and later
+  serve a STALE body — reporting a phantom "Authorization header stripped" long after the real cause was
+  fixed. The no-cache headers keep every layer from storing it, so each probe reflects the live request.
 
 = 0.9.32 =
 * Connection diagnostics: new PUBLIC `launchpad/v1/auth-check` endpoint reports whether the
