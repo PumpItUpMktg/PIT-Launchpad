@@ -12,7 +12,8 @@
     <div class="rc-head">
         <div class="rc-chips">
             @if (! empty($post['silo'])) <span class="rc-chip silo">{{ $post['silo'] }}</span> @endif
-            @foreach (($post['towns'] ?? []) as $town) <span class="rc-chip town">📍 {{ $town }}</span> @endforeach
+            @foreach (array_slice($post['towns'] ?? [], 0, 4) as $town) <span class="rc-chip town">📍 {{ $town }}</span> @endforeach
+            @if (count($post['towns'] ?? []) > 4) <span class="rc-chip">+{{ count($post['towns']) - 4 }}</span> @endif
             @if ($post['days_live'] !== null) <span class="rc-chip">Live · {{ $post['days_live'] }}d</span> @endif
         </div>
         <div class="rc-chips">

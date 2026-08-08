@@ -2,6 +2,8 @@
 
 namespace App\OpsConsole;
 
+use App\ContentEngine\Reconcile\LocalTownCoherence;
+use App\ContentEngine\Reconcile\LocalTownMatcher;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\Content;
 use App\Models\ContentTown;
@@ -136,24 +138,67 @@ class StorefrontTowns
             return [];
         }
 
+        $meta = $this->townMeta($post);   // key => [name, county, state]
+
         $tagged = ContentTown::query()->where('content_id', $post->id)->pluck('town')->all();
         if ($tagged !== []) {
-            $keys = array_intersect(array_keys($townDisplays), $tagged);
-
-            return array_values(array_map(fn (string $k): string => $townDisplays[$k], $keys));
+            // Authoritative tags (the tagger already coheres + caps these); keep those in the visible set.
+            $matched = [];
+            $pos = 0;
+            foreach ($tagged as $key) {
+                if (isset($townDisplays[$key])) {
+                    $matched[] = ['key' => $key, 'display' => $townDisplays[$key], 'county' => $meta[$key]['county'] ?? null, 'state' => $meta[$key]['state'] ?? $this->stateOf($townDisplays[$key]), 'pos' => $pos++];
+                }
+            }
+        } else {
+            // No tags yet (draft/approved) — scan the copy, false-positive-guarded (§ LocalTownMatcher).
+            $towns = [];
+            foreach ($townDisplays as $key => $display) {
+                $towns[] = [
+                    'key' => (string) $key, 'display' => $display,
+                    'name' => $meta[$key]['name'] ?? $this->nameOf($display),
+                    'county' => $meta[$key]['county'] ?? null, 'state' => $meta[$key]['state'] ?? $this->stateOf($display),
+                ];
+            }
+            $matched = LocalTownMatcher::scan((string) $post->title.' '.(string) $post->body, $towns);
         }
 
-        // No tags yet (draft/approved) — scan the copy for a whole-word mention of any candidate town.
-        $haystack = ' '.mb_strtolower(trim(strip_tags((string) $post->title.' '.(string) $post->body))).' ';
-        $matched = [];
-        foreach ($townDisplays as $display) {
-            $name = mb_strtolower(trim(explode(',', $display, 2)[0]));
-            if ($name !== '' && preg_match('/(?<![\p{L}\p{N}])'.preg_quote($name, '/').'(?![\p{L}\p{N}])/u', $haystack) === 1) {
-                $matched[] = $display;
+        return array_map(fn (array $m): string => $m['display'], LocalTownCoherence::select($matched));
+    }
+
+    /**
+     * County (GEOID) + state + bare name per storefront town key, for the coherence/false-positive
+     * pass. Resolved from the same county grouping the filters use.
+     *
+     * @return array<string, array{name: string, county: ?string, state: ?string}>
+     */
+    private function townMeta(Content $post): array
+    {
+        $site = $post->site ?? Site::query()->find($post->site_id);
+        if (! $site instanceof Site) {
+            return [];
+        }
+
+        $meta = [];
+        foreach ($this->counties($site) as $county) {
+            foreach ($county['towns'] as $t) {
+                $meta[$t['key']] = ['name' => $this->nameOf($t['display']), 'county' => $county['geoid'], 'state' => $this->stateOf($t['display'])];
             }
         }
 
-        return $matched;
+        return $meta;
+    }
+
+    /** The town name without a trailing ", ST" state suffix. */
+    private function nameOf(string $display): string
+    {
+        return trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($display)));
+    }
+
+    /** The lowercased two-letter state from a ", ST" suffix, or null. */
+    private function stateOf(string $display): ?string
+    {
+        return preg_match('/,\s*([A-Za-z]{2})\.?$/', trim($display), $m) === 1 ? mb_strtolower($m[1]) : null;
     }
 
     /**

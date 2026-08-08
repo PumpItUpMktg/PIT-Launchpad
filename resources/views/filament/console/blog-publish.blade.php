@@ -23,7 +23,8 @@
                 @if (! empty($p['keyword']) || ! empty($p['towns']))
                     <div class="bc-kw">
                         @if (! empty($p['keyword'])) <span class="k">Target:</span> {{ $p['keyword'] }} @endif
-                        @foreach (($p['towns'] ?? []) as $town) <span class="bc-tag town">📍 {{ $town }}</span> @endforeach
+                        @foreach (array_slice($p['towns'] ?? [], 0, 4) as $town) <span class="bc-tag town">📍 {{ $town }}</span> @endforeach
+                        @if (count($p['towns'] ?? []) > 4) <span class="bc-tag">+{{ count($p['towns']) - 4 }}</span> @endif
                     </div>
                 @endif
 
