@@ -105,6 +105,31 @@ class WordpressClient
     }
 
     /**
+     * The plugin's registered route paths — GET the `launchpad/v1` namespace index (public discovery,
+     * lists routes regardless of their auth). Lets a diagnostic tell "the write route isn't there
+     * (older plugin)" from "the route IS there but a POST 404s (a write-blocker)". Null when the index
+     * itself can't be read (unreachable, or even GET is blocked).
+     *
+     * @return list<string>|null e.g. ['/launchpad/v1/style', '/launchpad/v1/content', …]
+     */
+    public function routeIndex(): ?array
+    {
+        try {
+            $response = $this->request()->get(rtrim($this->baseUrl, '/').self::NAMESPACE);
+        } catch (ConnectionException) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $routes = $response->json('routes');
+
+        return is_array($routes) ? array_keys($routes) : null;
+    }
+
+    /**
      * Upsert a content page/post. Keyed on `content_id` (ULID); idempotent.
      *
      * @param  array<string, mixed>  $payload
