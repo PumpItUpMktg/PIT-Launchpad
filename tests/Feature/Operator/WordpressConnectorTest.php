@@ -48,6 +48,32 @@ it('refuses to store a credential that fails verification', function () {
     expect(connections()->count())->toBe(0);
 });
 
+it('stores the POST-safe canonical base URL when the entered URL redirects', function () {
+    // pingResult follows the redirect → 200; canonicalBaseUrl (no-follow) then sees the 301.
+    Http::fakeSequence('*/wp-json/launchpad/v1/status')
+        ->push(['ok' => true], 200)
+        ->push('', 301, ['Location' => 'https://www.eric-site.com/wp-json/launchpad/v1/status']);
+    $site = Site::factory()->create();
+
+    $connection = app(WordpressConnector::class)->connect($site->id, [
+        'base_url' => 'https://eric-site.com', 'username' => 'launchpad-sync', 'app_password' => 'goodpass12345',
+    ]);
+
+    expect($connection->credentials['base_url'])->toBe('https://www.eric-site.com'); // canonical stored, not the entered non-www
+});
+
+it('keeps the entered base URL when there is no redirect', function () {
+    // Both the ping and the no-follow probe return 200 → no redirect → base unchanged.
+    Http::fake(['*/wp-json/launchpad/v1/status' => Http::response(['ok' => true], 200)]);
+    $site = Site::factory()->create();
+
+    $connection = app(WordpressConnector::class)->connect($site->id, [
+        'base_url' => 'https://eric-site.com', 'username' => 'launchpad-sync', 'app_password' => 'goodpass12345',
+    ]);
+
+    expect($connection->credentials['base_url'])->toBe('https://eric-site.com');
+});
+
 it('explains a 404 as the plugin not answering at that URL', function () {
     Http::fake(['*/wp-json/launchpad/v1/status' => Http::response('', 404)]);
     $site = Site::factory()->create();

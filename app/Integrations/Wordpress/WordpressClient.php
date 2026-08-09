@@ -130,6 +130,46 @@ class WordpressClient
     }
 
     /**
+     * The POST-safe canonical base URL, when the entered one REDIRECTS. A GET follows a 301/302 fine
+     * (so connect/status look healthy), but the same redirect DOWNGRADES a POST to GET — the write then
+     * reaches WordPress as GET, which has no route for /content or /style, so it 404s (rest_no_route).
+     * Probing without following the redirect surfaces the real target so writes can be pointed at it.
+     * Returns null when there is no redirect (the entered base is already canonical) or it can't tell.
+     */
+    public function canonicalBaseUrl(): ?string
+    {
+        try {
+            $response = $this->request()->withoutRedirecting()->get(rtrim($this->baseUrl, '/').self::NAMESPACE.'/status');
+        } catch (ConnectionException) {
+            return null;
+        }
+
+        if ($response->status() < 300 || $response->status() >= 400) {
+            return null; // not a redirect
+        }
+
+        $location = (string) $response->header('Location');
+        if ($location === '') {
+            return null;
+        }
+
+        // The Location is the redirected status URL — strip the endpoint suffix to recover the site base.
+        $suffix = self::NAMESPACE.'/status';
+        $pos = strpos($location, $suffix);
+        if ($pos !== false) {
+            return rtrim(substr($location, 0, $pos), '/');
+        }
+
+        // A redirect to somewhere else (e.g. the homepage): fall back to the scheme+host+port it points at.
+        $parts = parse_url($location);
+        if (isset($parts['scheme'], $parts['host'])) {
+            return $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+        }
+
+        return null;
+    }
+
+    /**
      * Upsert a content page/post. Keyed on `content_id` (ULID); idempotent.
      *
      * @param  array<string, mixed>  $payload
@@ -386,8 +426,9 @@ class WordpressClient
             ->withUserAgent(self::USER_AGENT)
             ->timeout(self::TIMEOUT)
             ->acceptJson()
-            ->retry(self::TRIES, self::BACKOFF_MS, function (\Throwable $e): bool {
-                // Retry transient failures only: connection errors and 5xx.
+            ->retry(self::TRIES, self::BACKOFF_MS, function (?\Throwable $e): bool {
+                // Retry transient failures only: connection errors and 5xx. `$e` is null when the retry
+                // handler evaluates a returned (non-thrown) response — e.g. a 3xx from withoutRedirecting.
                 return $e instanceof ConnectionException
                     || ($e instanceof RequestException && $e->response->serverError());
             }, throw: false);
