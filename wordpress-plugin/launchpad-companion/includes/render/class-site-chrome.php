@@ -50,6 +50,14 @@ final class SiteChrome
         }
         $out .= '</a>';
 
+        // Mobile menu toggle — a CSS-only checkbox + hamburger label (the theme hides both on desktop,
+        // shows the hamburger and drawers the nav on small screens). No JS, so it works even with the
+        // script-delay optimizer active. Sibling of .lp-nav so `:checked ~ .lp-nav` reveals it.
+        if (! empty($p['nav'])) {
+            $out .= '<input type="checkbox" id="lp-nav-toggle" class="lp-nav-checkbox">';
+            $out .= '<label for="lp-nav-toggle" class="lp-hamburger" aria-label="Menu"><span></span><span></span><span></span></label>';
+        }
+
         $out .= $this->navList($p['nav'] ?? [], 'lp-nav');
         $out .= $this->callbar($p);
 

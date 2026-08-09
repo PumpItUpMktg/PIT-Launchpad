@@ -1559,9 +1559,76 @@
     color: var(--wp--preset--color--base, #fff);
 }
 
+/* The mobile menu toggle (a CSS-only checkbox the plugin emits) — hidden on desktop, where the nav
+   shows inline. */
+.lp-nav-checkbox {
+    display: none;
+}
+
+.lp-hamburger {
+    display: none;
+}
+
 @media (max-width: 860px) {
+    /* Let the header row wrap so the nav can drop to its own full-width line below the bar. */
+    .lp-header-inner {
+        flex-wrap: wrap;
+    }
+
+    .lp-hamburger {
+        display: inline-flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 5px;
+        width: 42px;
+        height: 42px;
+        padding: 9px 8px;
+        margin-left: 0.5rem;
+        cursor: pointer;
+        color: inherit;
+    }
+
+    .lp-hamburger span {
+        display: block;
+        height: 2px;
+        width: 100%;
+        background: currentColor;
+        border-radius: 2px;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    /* The main nav collapses to a full-width stacked drawer, hidden until the box is checked. */
     .lp-header .lp-nav {
         display: none;
+        order: 10;
+        flex-basis: 100%;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: 0;
+        margin-top: 0.4rem;
+        border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+    }
+
+    .lp-nav-checkbox:checked ~ .lp-nav {
+        display: flex;
+    }
+
+    .lp-header .lp-nav a {
+        padding: 0.7rem 0.1rem;
+        font-size: 1rem;
+    }
+
+    /* Hamburger morphs to an X when the menu is open. */
+    .lp-nav-checkbox:checked ~ .lp-hamburger span:nth-child(1) {
+        transform: translateY(7px) rotate(45deg);
+    }
+
+    .lp-nav-checkbox:checked ~ .lp-hamburger span:nth-child(2) {
+        opacity: 0;
+    }
+
+    .lp-nav-checkbox:checked ~ .lp-hamburger span:nth-child(3) {
+        transform: translateY(-7px) rotate(-45deg);
     }
 }
 

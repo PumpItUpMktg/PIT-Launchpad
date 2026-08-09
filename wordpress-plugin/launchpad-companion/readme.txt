@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.33
+Stable tag: 0.9.34
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,13 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.34 =
+* Mobile header menu: the header now emits a CSS-only hamburger toggle (a checkbox + label beside the
+  brand), so the main nav is reachable on phones — previously the nav was simply hidden below 860px with
+  nothing to open it. No JavaScript (works even with the script-delay optimizer active); pairs with the
+  Launchpad Blocks theme 0.44.0 CSS that shows the hamburger and drawers the nav on small screens. Renders
+  live from the pushed site profile — no content repush needed after updating the plugin + theme.
 
 = 0.9.33 =
 * Connection diagnostics: the public `launchpad/v1/auth-check` response is now sent `no-store` /
