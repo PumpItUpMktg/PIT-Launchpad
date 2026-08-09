@@ -121,6 +121,58 @@ class Corrections extends ConsolePage
         Notification::make()->title('Requeued failed image renders.')->success()->send();
     }
 
+    /**
+     * Re-push this site's universal header/footer chrome (brand + NAP + the nav menu) to WordPress.
+     * The chrome is site-wide, so it never rides a page push — this is how a corrected menu (e.g. after
+     * the header nav is fixed) reaches the live site. Reuses {@see SyncSiteProfileCommand} verbatim.
+     */
+    public function syncChrome(): void
+    {
+        if (! $this->can(Capability::ResetPublishing) || $this->siteId === null) {
+            return;
+        }
+        $code = Artisan::call('launchpad:sync-site-profile', ['site' => $this->siteId]);
+
+        $code === 0
+            ? Notification::make()->title('Header & footer synced to WordPress.')->success()->send()
+            : Notification::make()->title('Chrome sync failed')->body(trim(Artisan::output()) ?: 'The plugin rejected the push.')->danger()->send();
+    }
+
+    /**
+     * Re-push every PUBLISHED post + page for this site to WordPress (refreshes the rendered body,
+     * canonical/og/schema, and slot content). Throttled into waves by the command; idempotent by ULID,
+     * so it updates the existing WordPress posts rather than duplicating. The fix-all after a content
+     * or template change that didn't ride an individual republish.
+     */
+    public function syncPages(): void
+    {
+        if (! $this->can(Capability::ResetPublishing) || $this->siteId === null) {
+            return;
+        }
+        $code = Artisan::call('launchpad:repush-published', ['--site' => $this->siteId, '--kind' => 'all']);
+
+        $code === 0
+            ? Notification::make()->title('Re-pushing all published pages & posts (throttled into waves).')->success()->send()
+            : Notification::make()->title('Page re-push failed')->body(trim(Artisan::output()) ?: 'Could not queue the re-push.')->danger()->send();
+    }
+
+    /**
+     * Re-push this site's silo tree to WordPress categories (roots-first, idempotent by ULID; renames
+     * any "Silo {ulid}" placeholder), and re-apply the fixed category to live posts. The fix for a
+     * category that never synced or shows the placeholder name.
+     */
+    public function syncSilos(): void
+    {
+        if (! $this->can(Capability::ResetPublishing) || $this->siteId === null) {
+            return;
+        }
+        $code = Artisan::call('launchpad:sync-silo-categories', ['site' => $this->siteId, '--repush-content' => true]);
+
+        $code === 0
+            ? Notification::make()->title('Silo categories synced to WordPress.')->success()->send()
+            : Notification::make()->title('Silo sync failed')->body(trim(Artisan::output()) ?: 'The plugin rejected the category push.')->danger()->send();
+    }
+
     /** Clear a page's publish protection so a re-publish can overwrite it again. */
     public function unlock(string $contentId): void
     {

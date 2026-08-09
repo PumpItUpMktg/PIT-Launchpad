@@ -232,9 +232,12 @@ final class SiteProfileAssembler
      * one that was taken down, is excluded — so the synced menu can never point at a URL that 404s.
      * TWO modes:
      *
-     *  - OPERATOR-CURATED: if the site has any `nav_featured` page, the header shows exactly those, in
-     *    the operator's manual `nav_order` (ascending, nulls last; importance then age break ties).
-     *    Uncapped — the operator decides how many top-level items there are.
+     *  - OPERATOR-CURATED: if the site has any featured SERVICE/HUB page, the services bar shows exactly
+     *    those, in the operator's manual `nav_order` (ascending, nulls last; importance then age break
+     *    ties). Uncapped — the operator decides how many top-level items there are. Only service/hub
+     *    pages are eligible: a core/company page an operator flagged (About, FAQ, …) belongs in the MAIN
+     *    nav, never the services bar — so featuring one can't hijack this bar and cannibalise the main
+     *    menu (the dedup below would otherwise strip it from both mainNav and company).
      *  - AUTOMATIC (no page featured): the service/hub pages ranked by IMPORTANCE (category hub first,
      *    then core/pillar, then supporting, then longtail guides), capped at {@see HEADER_SERVICE_LIMIT}.
      *    A hub's child service pages NEST under it (a dropdown), reflecting the operator's service
@@ -250,6 +253,9 @@ final class SiteProfileAssembler
             ->where('kind', ContentKind::Page->value)
             ->where('status', ContentStatus::Published->value)
             ->where('nav_featured', true)
+            // Only real service/hub pages populate the services bar. A featured core/company page is
+            // curation for the MAIN nav's order, not a signal to move it into the services strip.
+            ->whereIn('page_type', [PageType::Service->value, PageType::Hub->value])
             ->whereNotNull('slug')
             ->with('primaryService:id,silo_role')
             ->get();

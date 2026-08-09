@@ -216,16 +216,53 @@ it('can feature MORE than the automatic cap of 8 (operator decides the count)', 
     expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['services'])->toHaveCount(11);
 });
 
-it('never lists a featured page in both the services and company menus', function () {
+it('keeps a featured CORE page in the main nav, never the services bar (services is service/hub only)', function () {
+    // Regression: sandhogworks.com went live with its core pages flagged nav_featured. The old
+    // services() treated ANY featured page as a service, so About/FAQ/Contact were dumped into the
+    // services strip AND (via the dedup below) stripped from the main nav — leaving only "Areas We
+    // Serve" in the menu. A core/company page must stay in the MAIN nav; only service/hub pages are
+    // eligible for the services bar.
     $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
-    // The About page is a company link by slug — but the operator pins it into the header.
     Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'about', 'title' => 'About Us', 'nav_featured' => true, 'nav_order' => 1]);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'contact', 'title' => 'Contact', 'nav_featured' => true, 'nav_order' => 2]);
+    // A genuine service page IS eligible for the services bar.
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'slug' => 'drain-cleaning', 'title' => 'Drain Cleaning', 'nav_featured' => true, 'nav_order' => 1]);
 
     $profile = app(SiteProfileAssembler::class)->assemble($site->fresh());
 
-    expect(array_column($profile['services'], 'label'))->toContain('About Us')
-        ->and(array_column($profile['company'], 'label'))->not->toContain('About Us')  // deduped
-        ->and(array_column($profile['nav'], 'label'))->not->toContain('About Us');
+    // Services bar holds ONLY the service page — no core page invades it.
+    expect(array_column($profile['services'], 'label'))->toBe(['Drain Cleaning']);
+    // The featured core pages are still in the MAIN nav (not lost to the services strip).
+    expect(array_column($profile['nav'], 'label'))
+        ->toContain('About Us')->toContain('Contact')
+        ->not->toContain('Drain Cleaning');
+});
+
+it('with only core pages published, they all land in the main nav and the services bar is empty', function () {
+    // The exact sandhogworks.com shape: core pages published, no services yet. Every core page must be
+    // reachable from the main nav (so the mobile hamburger drawers them), and the services bar is
+    // omitted rather than back-filled with company pages.
+    $site = Site::factory()->create(['domain_url' => 'https://sandhogworks.example']);
+    foreach ([
+        ['home', 'Home', PageType::Home],
+        ['about', 'About', PageType::Utility],
+        ['why-choose-us', 'Why Choose Us', PageType::Utility],
+        ['faq', 'FAQ', PageType::Utility],
+        ['contact', 'Contact', PageType::Utility],
+        ['areas-we-serve', 'Areas We Serve', PageType::Utility],
+    ] as [$slug, $title, $type]) {
+        Content::factory()->published()->create([
+            'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => $type,
+            'slug' => $slug, 'title' => $title, 'nav_featured' => true,
+        ]);
+    }
+
+    $profile = app(SiteProfileAssembler::class)->assemble($site->fresh());
+
+    expect($profile['services'])->toBe([]);
+    expect(array_column($profile['nav'], 'label'))
+        ->toContain('About')->toContain('Why Choose Us')->toContain('FAQ')
+        ->toContain('Contact')->toContain('Areas We Serve');
 });
 
 it('lets an operator override the header tone regardless of the logo', function () {

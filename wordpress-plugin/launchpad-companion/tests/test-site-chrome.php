@@ -32,6 +32,26 @@ class Test_Site_Chrome extends WP_UnitTestCase
         $this->assertStringNotContainsString('lp-flegal', (new SiteChrome())->footer());
     }
 
+    public function test_header_emits_the_mobile_hamburger_toggle_when_there_is_a_nav(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'Sewer Gurus',
+            'nav' => [['label' => 'About', 'url' => 'https://sewergurus.com/about']],
+        ]);
+
+        $header = (new SiteChrome())->header();
+
+        $this->assertStringContainsString('lp-nav-checkbox', $header);
+        $this->assertStringContainsString('lp-hamburger', $header);
+    }
+
+    public function test_header_omits_the_hamburger_when_there_is_no_nav(): void
+    {
+        ( new SiteProfileStore() )->save(['brand_name' => 'Sewer Gurus']);
+
+        $this->assertStringNotContainsString('lp-hamburger', (new SiteChrome())->header());
+    }
+
     public function test_header_tone_survives_the_store_sanitize(): void
     {
         // Regression: the sanitize whitelist silently stripped header_tone, forcing every header light.
