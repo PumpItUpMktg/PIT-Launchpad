@@ -67,6 +67,33 @@ it('authenticated credential WINS over a (cached) stripped auth-check reading', 
         ->assertExitCode(0);
 });
 
+it('reports write routes REGISTERED (so a push 404 means a POST-blocker) from the route index', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => true, 'application_passwords_available' => true], 200),
+        '*/wp-json/launchpad/v1/status' => Http::response(['ok' => true], 200),
+        '*/wp-json/launchpad/v1' => Http::response(['routes' => [
+            '/launchpad/v1/style' => [], '/launchpad/v1/content' => [], '/launchpad/v1/brand-kit' => [],
+            '/launchpad/v1/silo' => [], '/launchpad/v1/redirects' => [],
+        ]], 200),
+    ]);
+
+    $this->artisan('launchpad:diagnose-wordpress', ['site' => 'sandhogworks.com', '--password' => 'goodpass1234'])
+        ->expectsOutputToContain('All write routes are registered')
+        ->assertExitCode(0);
+});
+
+it('flags MISSING write routes (older plugin) from the route index', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => true, 'application_passwords_available' => true], 200),
+        '*/wp-json/launchpad/v1/status' => Http::response(['ok' => true], 200),
+        '*/wp-json/launchpad/v1' => Http::response(['routes' => ['/launchpad/v1/status' => []]], 200), // no write routes
+    ]);
+
+    $this->artisan('launchpad:diagnose-wordpress', ['site' => 'sandhogworks.com', '--password' => 'goodpass1234'])
+        ->expectsOutputToContain('write routes are MISSING')
+        ->assertExitCode(1);
+});
+
 it('with a real password: authenticated but missing capability (403)', function () {
     Http::fake([
         '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => true, 'scheme' => 'basic', 'application_passwords_available' => true], 200),

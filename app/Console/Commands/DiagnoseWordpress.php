@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Enums\ConnectionProvider;
+use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Models\Connection;
 use App\Models\Scopes\SiteScope;
@@ -68,7 +69,51 @@ class DiagnoseWordpress extends Command
 
         $this->table(['Check', 'Value'], $rows);
 
-        return $this->diagnose($received, $diag, $ping, $baseUrl);
+        $primary = $this->diagnose($received, $diag, $ping, $baseUrl);
+
+        // The push/publish endpoints are POSTs. If they 404 while GETs work, is the route missing (old
+        // plugin) or blocked (a write-blocker)? The namespace index answers it.
+        $writesOk = $this->reportWriteRoutes($client);
+
+        return ($primary === self::SUCCESS && $writesOk) ? self::SUCCESS : self::FAILURE;
+    }
+
+    /**
+     * Report which WRITE routes the plugin has registered — so a brand-push / publish 404 resolves to
+     * "route missing → update the plugin" vs "route present → a security plugin / WAF is blocking POST".
+     * Returns false only when a route is confirmed missing (a hard problem); unknown index → true + warn.
+     */
+    private function reportWriteRoutes(WordpressClient $client): bool
+    {
+        $routes = $client->routeIndex();
+
+        $this->line('');
+        if ($routes === null) {
+            $this->warn("Couldn't read the plugin route index (launchpad/v1) — the plugin may be inactive, or even GET is blocked. Skipping the write-route check.");
+
+            return true;
+        }
+
+        $writes = ['/launchpad/v1/style', '/launchpad/v1/content', '/launchpad/v1/brand-kit', '/launchpad/v1/silo', '/launchpad/v1/redirects'];
+        $missing = [];
+        $this->table(['Write route (POST)', 'Status'], array_map(function (string $route) use ($routes, &$missing): array {
+            $present = in_array($route, $routes, true);
+            if (! $present) {
+                $missing[] = $route;
+            }
+
+            return [$route, $present ? 'registered' : 'MISSING'];
+        }, $writes));
+
+        if ($missing !== []) {
+            $this->error('Diagnosis: write routes are MISSING from the plugin ('.implode(', ', $missing).'). Update the companion plugin to 0.9.33+ and RE-ACTIVATE it (and clear OPcache if the server caches PHP) — a brand-push/publish to a route that isn\'t registered 404s.');
+
+            return false;
+        }
+
+        $this->info('All write routes are registered. If a brand-push or publish still returns 404, a security plugin ("Disable REST API" / Wordfence / Solid Security) or a host/WAF rule is blocking WRITE (POST) requests to the REST API — allow POST to /wp-json/launchpad/* (reads work, writes are refused).');
+
+        return true;
     }
 
     /**
