@@ -49,6 +49,19 @@
         </div>
 
         <div class="cr-card">
+            <h3>Re-sync to WordPress</h3>
+            <div class="cr-empty">Push corrected data back to the live site. Site-wide chrome and categories never ride an individual page publish — re-sync them here after a fix.</div>
+            <div class="cr-row">
+                <button class="cr-btn" wire:click="syncChrome" wire:confirm="Push this site's header, footer, and nav menu to WordPress?"
+                        @disabled($this->siteId === null)>Sync header &amp; footer</button>
+                <button class="cr-btn" wire:click="syncPages" wire:confirm="Re-push every published page &amp; post for this site to WordPress?"
+                        @disabled($this->siteId === null)>Sync pages</button>
+                <button class="cr-btn" wire:click="syncSilos" wire:confirm="Re-push this site's silo categories to WordPress?"
+                        @disabled($this->siteId === null)>Sync silo categories</button>
+            </div>
+        </div>
+
+        <div class="cr-card">
             <h3>Locked pages</h3>
             @forelse ($locked as $l)
                 <div class="cr-lock" wire:key="lock-{{ $l['id'] }}">
