@@ -94,6 +94,22 @@ it('flags MISSING write routes (older plugin) from the route index', function ()
         ->assertExitCode(1);
 });
 
+it('flags a base-URL redirect that downgrades POST→GET (the write-404 cause)', function () {
+    Http::fake([
+        '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => true, 'application_passwords_available' => true], 200),
+        '*/wp-json/launchpad/v1/status' => Http::response('', 301, ['Location' => 'https://www.sandhogworks.com/wp-json/launchpad/v1/status']),
+        '*/wp-json/launchpad/v1' => Http::response(['routes' => [
+            '/launchpad/v1/style' => [], '/launchpad/v1/content' => [], '/launchpad/v1/brand-kit' => [],
+            '/launchpad/v1/silo' => [], '/launchpad/v1/redirects' => [],
+        ]], 200),
+    ]);
+
+    // No --password → the credential ping is skipped, so /status is only hit by the no-follow redirect probe.
+    $this->artisan('launchpad:diagnose-wordpress', ['site' => 'sandhogworks.com'])
+        ->expectsOutputToContain('base URL REDIRECTS')
+        ->assertExitCode(1);
+});
+
 it('with a real password: authenticated but missing capability (403)', function () {
     Http::fake([
         '*/wp-json/launchpad/v1/auth-check*' => Http::response(['authorization_received' => true, 'scheme' => 'basic', 'application_passwords_available' => true], 200),

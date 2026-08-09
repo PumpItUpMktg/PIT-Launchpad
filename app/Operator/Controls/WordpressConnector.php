@@ -44,6 +44,13 @@ class WordpressConnector
             throw new WordpressException($this->explainFailure($credentials['base_url'], $result, $diag));
         }
 
+        // Store the POST-safe canonical URL if the entered one redirects — otherwise every write (POST)
+        // is downgraded to GET by the 301/302 and 404s at WordPress even though connect (GET) worked.
+        $canonical = $client->canonicalBaseUrl();
+        if ($canonical !== null && $canonical !== '' && rtrim($canonical, '/') !== rtrim($credentials['base_url'], '/')) {
+            $credentials['base_url'] = rtrim($canonical, '/');
+        }
+
         return Connection::withoutGlobalScope(SiteScope::class)->updateOrCreate(
             ['site_id' => $siteId, 'provider' => ConnectionProvider::WpAppPassword->value],
             [

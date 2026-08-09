@@ -75,7 +75,33 @@ class DiagnoseWordpress extends Command
         // plugin) or blocked (a write-blocker)? The namespace index answers it.
         $writesOk = $this->reportWriteRoutes($client);
 
-        return ($primary === self::SUCCESS && $writesOk) ? self::SUCCESS : self::FAILURE;
+        // A redirecting base URL downgrades POST→GET — the #1 cause of a write 404 that reads as
+        // rest_no_route while GETs succeed.
+        $noRedirect = $this->reportRedirect($client, $baseUrl);
+
+        return ($primary === self::SUCCESS && $writesOk && $noRedirect) ? self::SUCCESS : self::FAILURE;
+    }
+
+    /**
+     * Flag a redirecting base URL. A GET follows it (so connect looks fine), but a 301/302 downgrades a
+     * POST to GET, so writes hit WordPress as GET and 404 (rest_no_route). Returns false when a redirect
+     * is detected (a hard problem); no redirect / can't tell → true.
+     */
+    private function reportRedirect(WordpressClient $client, string $baseUrl): bool
+    {
+        $canonical = $client->canonicalBaseUrl();
+        $this->line('');
+
+        if ($canonical === null || $canonical === '' || rtrim($canonical, '/') === rtrim($baseUrl, '/')) {
+            $this->info('Base URL does not redirect — POSTs reach WordPress as POST.');
+
+            return true;
+        }
+
+        $this->error("Diagnosis: the base URL REDIRECTS ({$baseUrl} → {$canonical}). A 301/302 downgrades POST to GET, so writes (/content, /style) arrive at WordPress as GET and 404 (rest_no_route) even though connect (GET) works.");
+        $this->line("  → Fix: reconnect using the canonical URL exactly — {$canonical} — (match WordPress's Settings → General: scheme, www, trailing slash). A fresh connect now stores the canonical URL automatically.");
+
+        return false;
     }
 
     /**
