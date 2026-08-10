@@ -60,10 +60,10 @@ class LaunchReadiness
             $this->item('locations', 'Locations & coverage', $locations > 0, false,
                 $locations > 0 ? "{$locations} location(s)" : 'No locations — town pages and NAP need one.',
                 LocationsStep::getUrl()),
-            $this->item('address', 'Own business address', $this->addressIsUnique($site), true,
+            $this->item('address', 'Own business address', $this->addressIsUnique($site), false,
                 $this->addressIsUnique($site)
                     ? 'Address is the tenant\'s own.'
-                    : 'Address matches the agency or another tenant — a client cannot publish someone else\'s NAP. Fix before launch.',
+                    : 'Heads up: this address matches the agency or another tenant. Fine while testing; a real client should publish its own NAP before going live.',
                 BusinessStep::getUrl()),
             $this->item('voice', 'Voice profile', $voice, false,
                 $voice ? 'Profile present' : 'No voice profile — drafts fall back to a generic voice.',
@@ -102,10 +102,11 @@ class LaunchReadiness
     }
 
     /**
-     * A tenant must publish its OWN NAP. Red when the corporate address matches the agency's
+     * True when this tenant's corporate address is its own. Goes false (an ADVISORY warning — not a
+     * launch blocker; a shared address is fine during testing) when it matches the agency's
      * (config `launchpad.audit.agency_address`) or another tenant's — the portfolio-wide agency-address
      * leak the audit's NAP-001 surfaced. An empty address is not a duplicate (the advisory locations
-     * item covers a missing NAP), so it doesn't block here.
+     * item covers a missing NAP).
      */
     private function addressIsUnique(Site $site): bool
     {

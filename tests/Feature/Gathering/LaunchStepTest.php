@@ -143,7 +143,7 @@ it('a WordPress connection flips the advisory wordpress item green', function ()
     expect($items['wordpress']['ok'])->toBeTrue();
 });
 
-it('blocks launch when the tenant carries the agency address (NAP-001 gate)', function () {
+it('warns (does not block) when the tenant carries the agency address (NAP-001, advisory)', function () {
     config()->set('launchpad.audit.agency_address', '377 Valley Road, Clifton, NJ 07013');
     $readiness = app(LaunchReadiness::class);
 
@@ -153,19 +153,18 @@ it('blocks launch when the tenant carries the agency address (NAP-001 gate)', fu
         'corporate_state' => 'NJ', 'corporate_postal_code' => '07013',
     ])->save();
 
+    // Red on the checklist, but advisory — a shared address is fine during testing, so launch stays legal.
     $items = collect($readiness->checklist($site->fresh()))->keyBy('key');
     expect($items['address']['ok'])->toBeFalse()
-        ->and($items['address']['required'])->toBeTrue()
-        ->and($readiness->canLaunch($site->fresh()))->toBeFalse();
-
-    // Its own distinct address → clear, and launch-legal again.
-    $site->forceFill(['corporate_street' => '10 Main St', 'corporate_city' => 'Newark'])->save();
-    $items = collect($readiness->checklist($site->fresh()))->keyBy('key');
-    expect($items['address']['ok'])->toBeTrue()
+        ->and($items['address']['required'])->toBeFalse()
         ->and($readiness->canLaunch($site->fresh()))->toBeTrue();
+
+    // Its own distinct address → the warning clears.
+    $site->forceFill(['corporate_street' => '10 Main St', 'corporate_city' => 'Newark'])->save();
+    expect(collect($readiness->checklist($site->fresh()))->keyBy('key')['address']['ok'])->toBeTrue();
 });
 
-it('blocks launch when two tenants share the same corporate address', function () {
+it('warns when two tenants share the same corporate address, but still launch-legal', function () {
     config()->set('launchpad.audit.agency_address', '');
     $readiness = app(LaunchReadiness::class);
 
@@ -176,9 +175,10 @@ it('blocks launch when two tenants share the same corporate address', function (
 
     $items = collect($readiness->checklist($b->fresh()))->keyBy('key');
     expect($items['address']['ok'])->toBeFalse()
-        ->and($readiness->canLaunch($b->fresh()))->toBeFalse();
+        ->and($items['address']['required'])->toBeFalse()
+        ->and($readiness->canLaunch($b->fresh()))->toBeTrue();
 
-    // An empty address is not a duplicate — it doesn't block on this item.
+    // An empty address is not a duplicate — no warning.
     $c = launchReadySite();
     expect(collect($readiness->checklist($c->fresh()))->keyBy('key')['address']['ok'])->toBeTrue();
 });
