@@ -50,7 +50,9 @@ final class UnformattedRecordCheck implements AuditCheck
         foreach ($services as $service) {
             $bad = [];
             foreach (self::FIELDS as $field) {
-                foreach ((array) ($service->{$field} ?? []) as $item) {
+                // getAttribute (not ->{$field}) keeps the value typed mixed, so the string guard below
+                // is a real runtime check rather than a PHPStan "always true" on the @property list type.
+                foreach ((array) ($service->getAttribute($field) ?? []) as $item) {
                     if (is_string($item) && $this->isLowercaseFragment($item)) {
                         $bad[$field] = true;
                     }
