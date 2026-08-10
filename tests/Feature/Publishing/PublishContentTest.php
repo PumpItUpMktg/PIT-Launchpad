@@ -13,6 +13,7 @@ use App\Models\Market;
 use App\Models\ProofItem;
 use App\Models\Silo;
 use App\Publishing\PublishContentService;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -280,7 +281,7 @@ it('is unique per content id — the dedupe guard that stops re-push waves from 
 
     // ShouldBeUnique + uniqueId = the content ULID: a second dispatch for a page that already has a
     // publish job queued/in flight is dropped by the framework. uniqueFor is a generous safety expiry.
-    expect($job)->toBeInstanceOf(\Illuminate\Contracts\Queue\ShouldBeUnique::class)
+    expect($job)->toBeInstanceOf(ShouldBeUnique::class)
         ->and($job->uniqueId())->toBe('01JQZY8Z0EXAMPLECONTENTULID0')
         ->and($job->uniqueFor)->toBeGreaterThanOrEqual(300);
 });
