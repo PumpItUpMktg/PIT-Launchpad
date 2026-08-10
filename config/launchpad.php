@@ -562,4 +562,16 @@ return [
         ))),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Cross-tenant output audit (launchpad:audit)
+    |--------------------------------------------------------------------------
+    | The agency's own business address. A tenant whose corporate address matches
+    | this (or another tenant's) is publishing the wrong NAP — NAP-001 flags it.
+    | Keep it here (not hardcoded) so no per-tenant special-casing is needed.
+    */
+    'audit' => [
+        'agency_address' => env('LAUNCHPAD_AGENCY_ADDRESS', '377 Valley Road, Clifton, NJ 07013'),
+    ],
+
 ];
