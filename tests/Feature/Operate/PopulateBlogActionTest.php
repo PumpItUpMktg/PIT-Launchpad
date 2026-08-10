@@ -49,3 +49,13 @@ test('it refuses to populate with no active tenant', function () {
 
     Bus::assertNotDispatched(PopulateBlog::class);
 });
+
+it('keeps $timeout generous but below the queue retry_after (the feed fan-out out-ran the 60s default)', function () {
+    $job = new PopulateBlog('x');
+    $retryAfter = (int) config('queue.connections.database.retry_after');
+
+    expect($job->timeout)->toBeGreaterThanOrEqual(300)  // the HTTP feed fan-out needs minutes, not 60s
+        ->and($retryAfter)->toBeGreaterThanOrEqual(630)
+        ->and($job->timeout)->toBeLessThan($retryAfter) // no mid-flight re-reservation
+        ->and($job->tries)->toBe(1);                     // the funnel dedupes; a failed fetch won't self-heal
+});
