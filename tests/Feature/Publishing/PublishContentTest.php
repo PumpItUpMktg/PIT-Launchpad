@@ -15,6 +15,7 @@ use App\Models\Silo;
 use App\Publishing\PublishContentService;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\PublishHarness;
 
 function fakeContentEndpoint(int $wpPostId = 123, bool $skipped = false): void
@@ -272,4 +273,27 @@ test('publishing the hub itself never re-triggers a hub republish (no loop)', fu
 
     expect($result->isPublished())->toBeTrue();
     Bus::assertNotDispatched(PublishContent::class);
+});
+
+it('is unique per content id — the dedupe guard that stops re-push waves from stacking', function () {
+    $job = new PublishContent('01JQZY8Z0EXAMPLECONTENTULID0');
+
+    // ShouldBeUnique + uniqueId = the content ULID: a second dispatch for a page that already has a
+    // publish job queued/in flight is dropped by the framework. uniqueFor is a generous safety expiry.
+    expect($job)->toBeInstanceOf(\Illuminate\Contracts\Queue\ShouldBeUnique::class)
+        ->and($job->uniqueId())->toBe('01JQZY8Z0EXAMPLECONTENTULID0')
+        ->and($job->uniqueFor)->toBeGreaterThanOrEqual(300);
+});
+
+it('drops a duplicate publish dispatch for the same page, but not for a different page', function () {
+    Queue::fake();
+
+    // Two dispatches for the SAME page → the second is deduped away (one job).
+    PublishContent::dispatch('01JQZY8Z0SAMEPAGEULID000000');
+    PublishContent::dispatch('01JQZY8Z0SAMEPAGEULID000000');
+    Queue::assertPushed(PublishContent::class, 1);
+
+    // A DIFFERENT page still gets its own job.
+    PublishContent::dispatch('01JQZY8Z0OTHERPAGEULID00000');
+    Queue::assertPushed(PublishContent::class, 2);
 });
