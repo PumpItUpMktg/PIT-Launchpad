@@ -11,7 +11,6 @@ use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
-use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteBranding;
 use App\Publishing\PhoneNumber;
@@ -101,21 +100,15 @@ final class SiteProfileAssembler
      */
     private function weatherAlert(Site $site, ?Location $location, string $home): array
     {
-        $trade = mb_strtolower($this->trade($site));
-        $relevant = false;
-        foreach ((array) config('launchpad.weather_alert.trades', []) as $keyword) {
-            $keyword = mb_strtolower(trim((string) $keyword));
-            if ($keyword !== '' && str_contains($trade, $keyword)) {
-                $relevant = true;
-                break;
-            }
-        }
-
         [$lat, $lng] = $this->alertCoords($site, $location);
         $contact = $this->pagesBySlug($site, $home, ['contact', 'contact-us']);
 
         return [
-            'enabled' => $relevant && $lat !== null && $lng !== null,
+            // OPT-IN per tenant: the bar shows only when an operator has turned it on for this site
+            // (Console → Corrections), and only when we have coordinates to forecast against. It used to
+            // auto-enable from the tenant's trade keywords, which lit it up on every rain-relevant trade;
+            // now it's exclusive to the tenants explicitly opted in.
+            'enabled' => (bool) $site->weather_alert && $lat !== null && $lng !== null,
             'lat' => $lat,
             'lng' => $lng,
             'noun' => (string) config('launchpad.weather_alert.noun', 'sump pump'),
@@ -144,16 +137,6 @@ final class SiteProfileAssembler
             ->first();
 
         return $market !== null ? [(float) $market->lat, (float) $market->lng] : [null, null];
-    }
-
-    /** The site's captured trade (guided intake seed), or ''. */
-    private function trade(Site $site): string
-    {
-        $trade = SiloBlueprint::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->value('trade');
-
-        return is_string($trade) ? trim($trade) : '';
     }
 
     /**

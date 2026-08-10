@@ -5,6 +5,7 @@ namespace App\Filament\Console\Pages;
 use App\Enums\ContentStatus;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
+use App\Models\Site;
 use App\Models\User;
 use App\Operate\QueueHealth;
 use App\Security\Capability;
@@ -171,6 +172,38 @@ class Corrections extends ConsolePage
         $code === 0
             ? Notification::make()->title('Silo categories synced to WordPress.')->success()->send()
             : Notification::make()->title('Silo sync failed')->body(trim(Artisan::output()) ?: 'The plugin rejected the category push.')->danger()->send();
+    }
+
+    /** Whether the severe-weather (rain) alert bar is turned on for the current tenant. */
+    public function getWeatherAlertEnabledProperty(): bool
+    {
+        return $this->siteId !== null
+            && (bool) Site::withoutGlobalScopes()->whereKey($this->siteId)->value('weather_alert');
+    }
+
+    /**
+     * Toggle the per-tenant weather alert bar. It's opt-in (default off) so the rain strip is exclusive
+     * to the tenants it's relevant for — the assembler still requires coordinates for it to actually
+     * render. The change reaches WordPress on the next "Sync header & footer" (the bar rides the site
+     * profile, not a page publish).
+     */
+    public function toggleWeatherAlert(): void
+    {
+        if (! $this->can(Capability::ManageEngineControls) || $this->siteId === null) {
+            return;
+        }
+        $site = Site::withoutGlobalScopes()->find($this->siteId);
+        if ($site === null) {
+            return;
+        }
+
+        $site->forceFill(['weather_alert' => ! $site->weather_alert])->save();
+
+        Notification::make()
+            ->title($site->weather_alert
+                ? 'Weather alert bar ON — run “Sync header & footer” to push it live.'
+                : 'Weather alert bar OFF — run “Sync header & footer” to push it live.')
+            ->success()->send();
     }
 
     /** Clear a page's publish protection so a re-publish can overwrite it again. */

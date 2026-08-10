@@ -62,6 +62,15 @@
         </div>
 
         <div class="cr-card">
+            <h3>Weather alert bar</h3>
+            <div class="cr-empty">The severe-weather (rain) strip above the header. Off by default — turn it on only for tenants where it's relevant (e.g. sump pumps). It needs coordinates + a Contact page, and goes live on the next “Sync header &amp; footer”.</div>
+            <label class="cr-lock" style="cursor:pointer;">
+                <span>Show the weather alert bar on this tenant</span>
+                <input type="checkbox" wire:click="toggleWeatherAlert" @checked($this->weatherAlertEnabled) @disabled($this->siteId === null)>
+            </label>
+        </div>
+
+        <div class="cr-card">
             <h3>Locked pages</h3>
             @forelse ($locked as $l)
                 <div class="cr-lock" wire:key="lock-{{ $l['id'] }}">
