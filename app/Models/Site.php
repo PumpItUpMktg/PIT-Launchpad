@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 
 /**
  * @property SiteStatus $status
@@ -24,6 +25,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string|null $ga4_property GA4 property id to query for this tenant (from the shared Google grant)
  * @property string $brand_name
  * @property string|null $header_tone_override operator override for the header bar: 'light' | 'dark' | null (auto from logo)
+ * @property bool $weather_alert per-tenant opt-in for the severe-weather (rain) header bar
+ * @property Carbon|null $chrome_synced_at when the header/footer chrome was last pushed to WordPress
+ * @property string|null $chrome_synced_hash fingerprint of the last-pushed profile (drift detection)
  * @property bool $offers_emergency
  * @property string|null $phone corporate/main business phone (intake) — the site-wide number
  * @property string|null $emergency_phone corporate after-hours line (intake)
