@@ -12,6 +12,7 @@ use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Security\Capability;
 use BackedEnum;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 
@@ -138,14 +139,14 @@ class Corrections extends ConsolePage
             return ['selected' => false, 'never' => false, 'stale' => false, 'synced_at' => null];
         }
 
-        $never = $site->chrome_synced_at === null;
+        $syncedAt = $site->chrome_synced_at;
         $current = SiteProfileAssembler::fingerprint(app(SiteProfileAssembler::class)->assemble($site));
 
         return [
             'selected' => true,
-            'never' => $never,
-            'stale' => $never || $current !== (string) $site->chrome_synced_hash,
-            'synced_at' => $never ? null : $site->chrome_synced_at->diffForHumans(),
+            'never' => $syncedAt === null,
+            'stale' => $syncedAt === null || $current !== (string) $site->chrome_synced_hash,
+            'synced_at' => $syncedAt instanceof Carbon ? $syncedAt->diffForHumans() : null,
         ];
     }
 
