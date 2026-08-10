@@ -3,6 +3,7 @@
 namespace App\Audit;
 
 use App\Models\Site;
+use Throwable;
 
 /**
  * Runs a set of {@see AuditCheck}s across a set of tenants and assembles the {@see AuditReport}. A
@@ -22,7 +23,7 @@ final class AuditRunner
             foreach ($checks as $check) {
                 try {
                     $matrix[$site->id][$check->id()] = $check->run($site);
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $matrix[$site->id][$check->id()] = [
                         new Finding($site->id, (string) $site->brand_name, null, 'check errored: '.$e->getMessage()),
                     ];

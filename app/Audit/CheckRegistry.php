@@ -42,6 +42,11 @@ final class CheckRegistry
      */
     public function all(): array
     {
-        return array_map(fn (string $class): AuditCheck => $this->container->make($class), self::CHECKS);
+        return array_values(array_map(function (string $class): AuditCheck {
+            $check = $this->container->make($class);
+            assert($check instanceof AuditCheck);
+
+            return $check;
+        }, self::CHECKS));
     }
 }
