@@ -51,6 +51,16 @@
         <div class="cr-card">
             <h3>Re-sync to WordPress</h3>
             <div class="cr-empty">Push corrected data back to the live site. Site-wide chrome and categories never ride an individual page publish — re-sync them here after a fix.</div>
+            @php $chrome = $this->chromeStatus; @endphp
+            @if ($chrome['selected'])
+                @if ($chrome['never'])
+                    <div class="cr-fail" style="border-left-color:rgba(217,119,6,.6);color:#b45309;">⚠ Header &amp; footer has <b>never been synced</b> to this site — the nav won't render until you push it. Click <b>Sync header &amp; footer</b>.</div>
+                @elseif ($chrome['stale'])
+                    <div class="cr-fail" style="border-left-color:rgba(217,119,6,.6);color:#b45309;">⚠ The menu/profile <b>changed since the last sync</b> ({{ $chrome['synced_at'] }}). The live header is stale — click <b>Sync header &amp; footer</b> to push it.</div>
+                @else
+                    <div class="cr-empty" style="color:#15803d;">✓ Header &amp; footer is up to date (synced {{ $chrome['synced_at'] }}).</div>
+                @endif
+            @endif
             <div class="cr-row">
                 <button class="cr-btn" wire:click="syncChrome" wire:confirm="Push this site's header, footer, and nav menu to WordPress?"
                         @disabled($this->siteId === null)>Sync header &amp; footer</button>

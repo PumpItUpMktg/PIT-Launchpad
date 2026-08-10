@@ -1,9 +1,12 @@
 <?php
 
+use App\Enums\ContentKind;
+use App\Enums\PageType;
 use App\Filament\Console\Pages\Corrections;
 use App\Models\Content;
 use App\Models\Site;
 use App\Models\User;
+use App\Publishing\Chrome\SiteProfileAssembler;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -141,4 +144,39 @@ it('does nothing when a Site Admin invokes a correction', function () {
     (new Corrections)->clearFailed(); // capability gate → no-op
 
     expect(DB::table('failed_jobs')->count())->toBe(1);
+});
+
+it('reports header/footer chrome sync status — never, then up to date, then stale after a menu change', function () {
+    $this->actingAs(User::factory()->create());
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+
+    $console = new Corrections;
+    $console->siteId = $site->id;
+
+    // Never synced → flagged stale so the operator knows to push.
+    $status = $console->getChromeStatusProperty();
+    expect($status['selected'])->toBeTrue()
+        ->and($status['never'])->toBeTrue()
+        ->and($status['stale'])->toBeTrue();
+
+    // Stamp the current profile fingerprint → up to date.
+    $site->markChromeSynced(SiteProfileAssembler::fingerprint(app(SiteProfileAssembler::class)->assemble($site->fresh())));
+    $status = $console->getChromeStatusProperty();
+    expect($status['never'])->toBeFalse()
+        ->and($status['stale'])->toBeFalse();
+
+    // Publishing a featured service changes the menu → stale again until re-synced.
+    Content::factory()->published()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'water-heaters', 'title' => 'Water Heaters', 'nav_featured' => true,
+    ]);
+    expect($console->getChromeStatusProperty()['stale'])->toBeTrue();
+});
+
+it('reports no chrome status when no site is selected', function () {
+    $this->actingAs(User::factory()->create());
+    $console = new Corrections;
+    $console->siteId = null;
+
+    expect($console->getChromeStatusProperty()['selected'])->toBeFalse();
 });

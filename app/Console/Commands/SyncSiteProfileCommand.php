@@ -45,6 +45,9 @@ class SyncSiteProfileCommand extends Command
             return self::FAILURE;
         }
 
+        // Stamp what was pushed so surfaces can detect a later drift (the "menu is stale" hint).
+        $site->markChromeSynced(SiteProfileAssembler::fingerprint($profile));
+
         $this->info(sprintf(
             "Pushed site profile for '%s' — %d services, %d areas, %d company links%s.",
             $site->brand_name,

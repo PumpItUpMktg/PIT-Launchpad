@@ -348,3 +348,19 @@ it('keeps the weather alert OFF unless the operator opts the tenant in — no tr
     $noCoords = Site::factory()->create(['weather_alert' => true]);
     expect(app(SiteProfileAssembler::class)->assemble($noCoords->fresh())['alert']['enabled'])->toBeFalse();
 });
+
+it('fingerprints the assembled profile deterministically — same data same hash, a nav change differs', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example', 'brand_name' => 'Apex']);
+    $assembler = app(SiteProfileAssembler::class);
+
+    $hash = SiteProfileAssembler::fingerprint($assembler->assemble($site->fresh()));
+    // Re-assembling the same data yields the same fingerprint (the drift check depends on this).
+    expect(SiteProfileAssembler::fingerprint($assembler->assemble($site->fresh())))->toBe($hash);
+
+    // Featuring a newly published service moves the fingerprint → the menu is now out of sync.
+    Content::factory()->published()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'slug' => 'drain-cleaning', 'title' => 'Drain Cleaning', 'nav_featured' => true,
+    ]);
+    expect(SiteProfileAssembler::fingerprint($assembler->assemble($site->fresh())))->not->toBe($hash);
+});

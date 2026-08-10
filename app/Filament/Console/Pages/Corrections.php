@@ -8,6 +8,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
 use App\Operate\QueueHealth;
+use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Security\Capability;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -120,6 +121,32 @@ class Corrections extends ConsolePage
         Artisan::call('launchpad:reset-render');
 
         Notification::make()->title('Requeued failed image renders.')->success()->send();
+    }
+
+    /**
+     * The header/footer chrome sync state for the current tenant — whether the live menu has drifted
+     * from the control-plane data since the last "Sync header & footer". `stale` is true when the
+     * freshly-assembled profile no longer matches the fingerprint stamped at the last push (a menu
+     * re-order, a newly published page, a NAP edit), or when it has never been synced.
+     *
+     * @return array{selected: bool, never: bool, stale: bool, synced_at: ?string}
+     */
+    public function getChromeStatusProperty(): array
+    {
+        $site = $this->siteId === null ? null : Site::withoutGlobalScopes()->find($this->siteId);
+        if ($site === null) {
+            return ['selected' => false, 'never' => false, 'stale' => false, 'synced_at' => null];
+        }
+
+        $never = $site->chrome_synced_at === null;
+        $current = SiteProfileAssembler::fingerprint(app(SiteProfileAssembler::class)->assemble($site));
+
+        return [
+            'selected' => true,
+            'never' => $never,
+            'stale' => $never || $current !== (string) $site->chrome_synced_hash,
+            'synced_at' => $never ? null : $site->chrome_synced_at->diffForHumans(),
+        ];
     }
 
     /**

@@ -255,6 +255,7 @@ class Site extends Model
             'status' => SiteStatus::class,
             'offers_emergency' => 'boolean',
             'weather_alert' => 'boolean',
+            'chrome_synced_at' => 'datetime',
             'style_variation' => StyleVariation::class,
             'use_logo_colors' => 'boolean',
             'budget_ceiling' => 'integer',
@@ -263,5 +264,17 @@ class Site extends Model
             'insured' => 'boolean',
             'years_in_business' => 'integer',
         ];
+    }
+
+    /**
+     * Record a successful header/footer chrome push: the moment, and a fingerprint of the profile that
+     * was sent. Surfaces compare that fingerprint to the freshly-assembled profile to flag a stale menu.
+     */
+    public function markChromeSynced(string $fingerprint): void
+    {
+        $this->forceFill([
+            'chrome_synced_at' => now(),
+            'chrome_synced_hash' => $fingerprint,
+        ])->save();
     }
 }

@@ -10,6 +10,7 @@ use App\Models\Content;
 use App\Models\Location;
 use App\Models\Site;
 use App\Models\User;
+use App\Publishing\Chrome\SiteProfileAssembler;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
@@ -66,6 +67,26 @@ it('saves the header-tone override and pushes it', function () {
     // Auto clears the override back to null.
     Livewire::test(ListSites::class)->callTableAction('syncChrome', $site, data: ['header_tone' => '']);
     expect($site->fresh()->header_tone_override)->toBeNull();
+});
+
+it('stamps the chrome sync fingerprint so a later menu change reads as stale', function () {
+    Http::fake(['*/wp-json/launchpad/v1/site-profile' => Http::response(['updated' => true], 200)]);
+
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://apex.example']);
+    Connection::factory()->rotated()->create([
+        'site_id' => $site->id,
+        'provider' => ConnectionProvider::WpAppPassword->value,
+        'credentials' => ['base_url' => 'https://apex.example', 'username' => 'u', 'app_password' => 'pw'],
+    ]);
+    expect($site->chrome_synced_at)->toBeNull();
+
+    Livewire::test(ListSites::class)->callTableAction('syncChrome', $site);
+
+    $site->refresh();
+    expect($site->chrome_synced_at)->not->toBeNull()
+        ->and($site->chrome_synced_hash)->toBe(
+            SiteProfileAssembler::fingerprint(app(SiteProfileAssembler::class)->assemble($site))
+        );
 });
 
 it('surfaces a graceful failure when the site has no WordPress connection', function () {

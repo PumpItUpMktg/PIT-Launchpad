@@ -658,6 +658,9 @@ class SiteResource extends Resource
                     return;
                 }
 
+                // Stamp what was pushed so the "menu is stale" hint clears until the next change.
+                $record->markChromeSynced(SiteProfileAssembler::fingerprint($profile));
+
                 Notification::make()->success()->title('Header & footer synced')
                     ->body(sprintf(
                         '%s header · %d service(s) in the nav, %d service area(s), %d company link(s)%s.',
