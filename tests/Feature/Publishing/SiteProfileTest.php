@@ -9,7 +9,6 @@ use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Service;
-use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteBranding;
 use App\Publishing\Chrome\SiteProfileAssembler;
@@ -324,9 +323,8 @@ it('puts Areas We Serve in the header nav and Privacy/Terms in the footer legal 
         ->and(array_column($profile['nav'], 'label'))->not->toContain('Areas We Serve');
 });
 
-it('assembles the severe-weather alert config — enabled for a rain-relevant trade with coordinates', function () {
-    $site = Site::factory()->create(['domain_url' => 'https://drybasements.example']);
-    SiloBlueprint::factory()->create(['site_id' => $site->id, 'trade' => 'Basement Waterproofing & Sump Pumps']);
+it('enables the weather alert only when the tenant is opted in AND has coordinates', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://drybasements.example', 'weather_alert' => true]);
     Location::factory()->create(['site_id' => $site->id, 'lat' => 40.1215, 'lng' => -75.3399]);
     Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility, 'slug' => 'contact', 'title' => 'Contact']);
 
@@ -339,15 +337,14 @@ it('assembles the severe-weather alert config — enabled for a rain-relevant tr
         ->and($alert['cta_url'])->toBe('https://drybasements.example/contact');
 });
 
-it('disables the weather alert for a non-rain trade, and when there are no coordinates', function () {
-    // Rain-relevant trade but NO coordinates → disabled.
-    $noCoords = Site::factory()->create();
-    SiloBlueprint::factory()->create(['site_id' => $noCoords->id, 'trade' => 'Sump Pump Repair']);
-    expect(app(SiteProfileAssembler::class)->assemble($noCoords->fresh())['alert']['enabled'])->toBeFalse();
+it('keeps the weather alert OFF unless the operator opts the tenant in — no trade auto-enable', function () {
+    // Opted OUT (default) even with coordinates → disabled. The bar is exclusive to opted-in tenants;
+    // it no longer auto-enables from the trade.
+    $optedOut = Site::factory()->create(['weather_alert' => false]);
+    Location::factory()->create(['site_id' => $optedOut->id, 'lat' => 40.0, 'lng' => -75.0]);
+    expect(app(SiteProfileAssembler::class)->assemble($optedOut->fresh())['alert']['enabled'])->toBeFalse();
 
-    // Coordinates but an off-topic trade → disabled.
-    $offTopic = Site::factory()->create();
-    SiloBlueprint::factory()->create(['site_id' => $offTopic->id, 'trade' => 'Roofing']);
-    Location::factory()->create(['site_id' => $offTopic->id, 'lat' => 40.0, 'lng' => -75.0]);
-    expect(app(SiteProfileAssembler::class)->assemble($offTopic->fresh())['alert']['enabled'])->toBeFalse();
+    // Opted IN but NO coordinates → still disabled (nothing to forecast against).
+    $noCoords = Site::factory()->create(['weather_alert' => true]);
+    expect(app(SiteProfileAssembler::class)->assemble($noCoords->fresh())['alert']['enabled'])->toBeFalse();
 });

@@ -254,6 +254,7 @@ class Site extends Model
             'slug_conventions' => 'array',
             'status' => SiteStatus::class,
             'offers_emergency' => 'boolean',
+            'weather_alert' => 'boolean',
             'style_variation' => StyleVariation::class,
             'use_logo_colors' => 'boolean',
             'budget_ceiling' => 'integer',

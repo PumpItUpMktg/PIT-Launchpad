@@ -101,6 +101,39 @@ it('the re-sync actions are gated off a Site Admin (recover capability)', functi
     Artisan::shouldNotHaveReceived('call');
 });
 
+it('toggles the per-tenant weather alert bar for a Super Admin', function () {
+    $this->actingAs(User::factory()->create());
+    $site = Site::factory()->create(['weather_alert' => false]);
+
+    $console = new Corrections;
+    $console->siteId = $site->id;
+    expect($console->getWeatherAlertEnabledProperty())->toBeFalse();
+
+    $console->toggleWeatherAlert();
+    expect($site->fresh()->weather_alert)->toBeTrue()
+        ->and($console->getWeatherAlertEnabledProperty())->toBeTrue();
+
+    $console->toggleWeatherAlert();
+    expect($site->fresh()->weather_alert)->toBeFalse();
+});
+
+it('does not toggle the weather bar with no site selected or for a Site Admin', function () {
+    // No site selected → no-op.
+    $this->actingAs(User::factory()->create());
+    $console = new Corrections;
+    $console->siteId = null;
+    $console->toggleWeatherAlert(); // must not throw
+
+    // Site Admin lacks the engine-controls capability → no-op.
+    $this->actingAs(User::factory()->siteAdmin()->create());
+    $site = Site::factory()->create(['weather_alert' => false]);
+    $console = new Corrections;
+    $console->siteId = $site->id;
+    $console->toggleWeatherAlert();
+
+    expect($site->fresh()->weather_alert)->toBeFalse();
+});
+
 it('does nothing when a Site Admin invokes a correction', function () {
     $this->actingAs(User::factory()->siteAdmin()->create());
     ccFailedJob();
