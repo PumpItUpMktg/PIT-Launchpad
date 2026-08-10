@@ -16,10 +16,19 @@ use Illuminate\Support\Facades\Log;
  * never blocks on the keyword×geo feed fan-out. Idempotent: the funnel dedupes, so a repeat run never
  * doubles candidates. The CLI ({@see PopulateBlogCommand}) runs the whole chain
  * synchronously instead.
+ *
+ * The feed fan-out is HTTP-heavy and can run for minutes, so $timeout is lifted well off the 60s
+ * worker default (matching the other feed/AI jobs) and kept BELOW the DB queue's retry_after
+ * (config/queue.php) so the job can't be re-reserved mid-flight. tries=1: the funnel dedupes and a
+ * feed/transport failure won't fix itself on an immediate retry — the operator re-triggers.
  */
 class PopulateBlog implements ShouldQueue
 {
     use Queueable;
+
+    public int $tries = 1;
+
+    public int $timeout = 600;
 
     public function __construct(public readonly string $siteId) {}
 
