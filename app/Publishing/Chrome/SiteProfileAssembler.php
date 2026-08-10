@@ -35,6 +35,19 @@ final class SiteProfileAssembler
     public function __construct(private readonly SiteContact $contact) {}
 
     /**
+     * A stable fingerprint of an assembled profile — the whole pushed payload hashed. Stamped at sync
+     * time ({@see Site::markChromeSynced()}) and re-compared against a freshly-assembled profile to tell
+     * whether the live chrome has drifted (menu re-ordered, a page published, NAP edited). `assemble()`
+     * builds the array in a fixed key order, so the JSON encoding is deterministic.
+     *
+     * @param  array<string, mixed>  $profile
+     */
+    public static function fingerprint(array $profile): string
+    {
+        return sha1((string) json_encode($profile));
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function assemble(Site $site): array
