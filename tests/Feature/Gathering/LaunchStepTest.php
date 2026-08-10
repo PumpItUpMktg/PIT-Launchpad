@@ -142,3 +142,43 @@ it('a WordPress connection flips the advisory wordpress item green', function ()
     $items = collect(app(LaunchReadiness::class)->checklist($site))->keyBy('key');
     expect($items['wordpress']['ok'])->toBeTrue();
 });
+
+it('blocks launch when the tenant carries the agency address (NAP-001 gate)', function () {
+    config()->set('launchpad.audit.agency_address', '377 Valley Road, Clifton, NJ 07013');
+    $readiness = app(LaunchReadiness::class);
+
+    $site = launchReadySite();
+    $site->forceFill([
+        'corporate_street' => '377 Valley Road', 'corporate_city' => 'Clifton',
+        'corporate_state' => 'NJ', 'corporate_postal_code' => '07013',
+    ])->save();
+
+    $items = collect($readiness->checklist($site->fresh()))->keyBy('key');
+    expect($items['address']['ok'])->toBeFalse()
+        ->and($items['address']['required'])->toBeTrue()
+        ->and($readiness->canLaunch($site->fresh()))->toBeFalse();
+
+    // Its own distinct address → clear, and launch-legal again.
+    $site->forceFill(['corporate_street' => '10 Main St', 'corporate_city' => 'Newark'])->save();
+    $items = collect($readiness->checklist($site->fresh()))->keyBy('key');
+    expect($items['address']['ok'])->toBeTrue()
+        ->and($readiness->canLaunch($site->fresh()))->toBeTrue();
+});
+
+it('blocks launch when two tenants share the same corporate address', function () {
+    config()->set('launchpad.audit.agency_address', '');
+    $readiness = app(LaunchReadiness::class);
+
+    $a = launchReadySite();
+    $a->forceFill(['corporate_street' => '5 Depot Rd', 'corporate_city' => 'Trenton', 'corporate_state' => 'NJ', 'corporate_postal_code' => '08608'])->save();
+    $b = launchReadySite();
+    $b->forceFill(['corporate_street' => '5 Depot Rd', 'corporate_city' => 'Trenton', 'corporate_state' => 'NJ', 'corporate_postal_code' => '08608'])->save();
+
+    $items = collect($readiness->checklist($b->fresh()))->keyBy('key');
+    expect($items['address']['ok'])->toBeFalse()
+        ->and($readiness->canLaunch($b->fresh()))->toBeFalse();
+
+    // An empty address is not a duplicate — it doesn't block on this item.
+    $c = launchReadySite();
+    expect(collect($readiness->checklist($c->fresh()))->keyBy('key')['address']['ok'])->toBeTrue();
+});

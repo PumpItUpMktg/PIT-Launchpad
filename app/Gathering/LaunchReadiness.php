@@ -60,6 +60,11 @@ class LaunchReadiness
             $this->item('locations', 'Locations & coverage', $locations > 0, false,
                 $locations > 0 ? "{$locations} location(s)" : 'No locations — town pages and NAP need one.',
                 LocationsStep::getUrl()),
+            $this->item('address', 'Own business address', $this->addressIsUnique($site), true,
+                $this->addressIsUnique($site)
+                    ? 'Address is the tenant\'s own.'
+                    : 'Address matches the agency or another tenant — a client cannot publish someone else\'s NAP. Fix before launch.',
+                BusinessStep::getUrl()),
             $this->item('voice', 'Voice profile', $voice, false,
                 $voice ? 'Profile present' : 'No voice profile — drafts fall back to a generic voice.',
                 VoiceStep::getUrl()),
@@ -94,6 +99,35 @@ class LaunchReadiness
         }
 
         return true;
+    }
+
+    /**
+     * A tenant must publish its OWN NAP. Red when the corporate address matches the agency's
+     * (config `launchpad.audit.agency_address`) or another tenant's — the portfolio-wide agency-address
+     * leak the audit's NAP-001 surfaced. An empty address is not a duplicate (the advisory locations
+     * item covers a missing NAP), so it doesn't block here.
+     */
+    private function addressIsUnique(Site $site): bool
+    {
+        $addr = $this->normalizeAddress($site->corporateAddressLine());
+        if ($addr === '') {
+            return true;
+        }
+
+        $agency = $this->normalizeAddress((string) config('launchpad.audit.agency_address', ''));
+        if ($agency !== '' && $addr === $agency) {
+            return false;
+        }
+
+        return ! Site::withoutGlobalScopes()
+            ->whereKeyNot($site->id)
+            ->get()
+            ->contains(fn (Site $other): bool => $this->normalizeAddress($other->corporateAddressLine()) === $addr);
+    }
+
+    private function normalizeAddress(?string $s): string
+    {
+        return mb_strtolower(trim((string) preg_replace('/\s+/', ' ', (string) $s)));
     }
 
     /**
