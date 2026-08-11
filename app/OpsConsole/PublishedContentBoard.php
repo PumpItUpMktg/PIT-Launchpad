@@ -131,7 +131,9 @@ class PublishedContentBoard
         $out = [];
         foreach ($byLocation as $locId => $bucket) {
             $loc = $locId !== '__unassigned' ? $locations->get($locId) : null;
-            $name = $loc?->name ?? $bucket['hub']?->title ?? 'Unassigned';
+            $locName = $loc?->name;
+            $hubTitle = $bucket['hub']?->title;
+            $name = $locName ?? $hubTitle ?? 'Unassigned';
             $out[] = [
                 'location_id' => $locId,
                 'name' => trim((string) $name),
@@ -157,6 +159,7 @@ class PublishedContentBoard
     private function card(Content $c, ?string $domain, InternalLinkGraph $graph, array $townMap, bool $isPost): array
     {
         $target = $c->targetKeyword?->targetContent;
+        $siloName = $c->matchedSilo?->name;
 
         return [
             'id' => (string) $c->id,
@@ -175,7 +178,7 @@ class PublishedContentBoard
             'target_page' => $target instanceof Content
                 ? ['title' => (string) $target->title, 'url' => PublicUrl::forContent($domain, $target)]
                 : null,
-            'silo' => $c->matchedSilo?->name ?? $c->silo?->name,
+            'silo' => $siloName ?? $c->silo?->name,
             'towns' => $isPost ? $this->storefrontTowns->matchTowns($c, $townMap) : [],
             'image' => PostThumbnail::for($c),
             'links' => $this->links($c, $graph, $domain),

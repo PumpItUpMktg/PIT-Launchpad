@@ -34,8 +34,10 @@
         .pt-sub.on { background:rgba(79,70,229,.1); border-color:#4f46e5; color:#4f46e5; }
         .pt-badge { font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; background:rgba(217,119,6,.14); color:#b45309; }
 
-        /* 3-up responsive grid */
-        .rc-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:14px; }
+        /* Card grid — capped at 3 across for readability, dropping to 2 then 1 on narrower screens. */
+        .rc-cards { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; }
+        @media (max-width: 1100px) { .rc-cards { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 720px) { .rc-cards { grid-template-columns:1fr; } }
         /* Rich card */
         .rc-card { border:1px solid rgba(148,163,184,.35); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:9px; }
         .rc-thumb { width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:9px; background:rgba(148,163,184,.15); }
@@ -84,7 +86,7 @@
     {{-- Blog --}}
     @if ($activeTab === 'blog')
         @if (count($board['blog']) > 0)
-            <div class="rc-grid">
+            <div class="rc-cards">
                 @foreach ($board['blog'] as $post)
                     @include('filament.console.partials.post-card', ['post' => $post])
                 @endforeach
@@ -96,7 +98,7 @@
     {{-- Core Pages --}}
     @elseif ($activeTab === 'core')
         @if (count($board['core']) > 0)
-            <div class="rc-grid">
+            <div class="rc-cards">
                 @foreach ($board['core'] as $post)
                     @include('filament.console.partials.post-card', ['post' => $post])
                 @endforeach
@@ -108,7 +110,7 @@
     {{-- Service Pages --}}
     @elseif ($activeTab === 'service')
         @if (count($board['service']) > 0)
-            <div class="rc-grid">
+            <div class="rc-cards">
                 @foreach ($board['service'] as $post)
                     @include('filament.console.partials.post-card', ['post' => $post])
                 @endforeach
@@ -120,7 +122,7 @@
     {{-- Storefront Pages: the GMB / base-location hub pages --}}
     @elseif ($activeTab === 'storefront')
         @if ($hubs->count() > 0)
-            <div class="rc-grid">
+            <div class="rc-cards">
                 @foreach ($hubs as $sf)
                     <div wire:key="sf-hub-{{ $sf['location_id'] }}">
                         <div class="rc-chips" style="margin-bottom:6px;">
@@ -151,7 +153,7 @@
             </div>
 
             @if ($activeSf)
-                <div class="rc-grid">
+                <div class="rc-cards">
                     @foreach ($activeSf['towns'] as $post)
                         @include('filament.console.partials.post-card', ['post' => $post])
                     @endforeach
