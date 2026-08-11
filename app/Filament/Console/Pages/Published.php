@@ -42,15 +42,36 @@ class Published extends ConsolePage
         return true;
     }
 
-    /** @return array{posts: list<array<string, mixed>>, pages: list<array<string, mixed>>} */
+    /** Which tab is showing: blog | core | service | storefront | location. */
+    public string $activeTab = 'blog';
+
+    /** Location-Pages tab: which storefront's town pages are showing (base-location id). */
+    public ?string $activeStorefront = null;
+
+    /**
+     * @return array{blog: list<array<string, mixed>>, core: list<array<string, mixed>>, service: list<array<string, mixed>>, storefronts: list<array<string, mixed>>}
+     */
     public function getBoardProperty(): array
     {
         $board = app(PublishedContentBoard::class)->forSite($this->siteId, $this->siloId);
 
-        return [
-            'posts' => $this->filterByStorefrontTown($board['posts']),
-            'pages' => $this->filterByStorefrontTown($board['pages']),
-        ];
+        // The brick-and-mortar town filter is a blog-post filter (it scans post copy); pages pass through.
+        $board['blog'] = $this->filterByStorefrontTown($board['blog']);
+
+        return $board;
+    }
+
+    /** Show a tab. The Location tab's storefront sub-tab defaults to the first with towns in the view. */
+    public function showTab(string $tab): void
+    {
+        $this->activeTab = $tab;
+    }
+
+    /** Clear the storefront sub-tab selection when the tenant changes (it belongs to one site). */
+    public function updatedSiteId(): void
+    {
+        parent::updatedSiteId();
+        $this->activeStorefront = null;
     }
 
     /** Re-sync a live page/post to WordPress (idempotent by ULID). */

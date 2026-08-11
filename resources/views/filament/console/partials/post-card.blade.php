@@ -17,6 +17,10 @@
             @if ($post['days_live'] !== null) <span class="rc-chip">Live · {{ $post['days_live'] }}d</span> @endif
         </div>
         <div class="rc-chips">
+            @if (($post['score'] ?? null) !== null)
+                @php $sc = (float) $post['score']; @endphp
+                <span class="rc-chip score {{ $sc >= 0.7 ? 'good' : ($sc >= 0.4 ? '' : 'muted') }}" title="Engine score at generation — track it against real ranking/index below">◎ {{ number_format($sc, 2) }}</span>
+            @endif
             <span class="rc-chip {{ $m['index']['indexed'] ? 'good' : 'muted' }}">{{ $m['index']['label'] ?? $m['index']['pending'] ?? 'Index unknown' }}</span>
             @if (! empty($post['indexnow_at'])) <span class="rc-chip muted">↗ Submitted to Bing</span> @endif
         </div>
@@ -32,8 +36,18 @@
     {{-- Metrics grid --}}
     <div class="rc-grid">
         <div class="rc-stat">
-            <div class="rc-k">Target</div>
-            <div class="rc-v">{{ $m['keyword'] ?? '—' }}</div>
+            <div class="rc-k">Target keyword</div>
+            <div class="rc-v">{{ $m['keyword'] ?? ($post['keyword'] ?? '—') }}</div>
+        </div>
+        <div class="rc-stat">
+            <div class="rc-k">Target page</div>
+            <div class="rc-v">
+                @if (! empty($post['target_page']))
+                    <a class="rc-url" @if ($post['target_page']['url']) href="{{ $post['target_page']['url'] }}" target="_blank" rel="noopener" @endif>{{ $post['target_page']['title'] }} ↗</a>
+                @else
+                    <span class="rc-muted">—</span>
+                @endif
+            </div>
         </div>
         <div class="rc-stat">
             <div class="rc-k">Position</div>
