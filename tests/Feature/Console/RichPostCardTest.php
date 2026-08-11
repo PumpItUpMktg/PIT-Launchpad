@@ -25,7 +25,7 @@ it('builds a rich published-post card with metrics, silo, towns and both-way lin
     ]);
 
     $board = app(PublishedContentBoard::class)->forSite($site->id);
-    $card = collect($board['posts'])->firstWhere('id', $post->id);
+    $card = collect($board['blog'])->firstWhere('id', $post->id);
 
     expect($card)->not->toBeNull()
         ->and($card['silo'])->toBe('Sump Pumps')
@@ -44,7 +44,7 @@ it('reflects the honest pending states when nothing is connected', function () {
         'site_id' => $site->id, 'status' => ContentStatus::Published, 'wp_post_id' => 9, 'title' => 'Post', 'slug' => 'post',
     ]);
 
-    $card = collect(app(PublishedContentBoard::class)->forSite($site->id)['posts'])->firstWhere('id', $post->id);
+    $card = collect(app(PublishedContentBoard::class)->forSite($site->id)['blog'])->firstWhere('id', $post->id);
 
     // No Search Console / GA connected in the test → honest pending, never a fabricated number.
     expect($card['metrics']['gsc']['pending'])->not->toBeNull()

@@ -47,8 +47,8 @@ it('filters published posts and pages by silo', function () {
     $page->siloId = $siloA->id;
     $board = $page->getBoardProperty();
 
-    expect(collect($board['posts'])->pluck('id')->all())->toBe([$postA->id])
-        ->and(collect($board['pages'])->pluck('id')->all())->toBe([$pageA->id]);
+    expect(collect($board['blog'])->pluck('id')->all())->toBe([$postA->id])
+        ->and(collect($board['service'])->pluck('id')->all())->toBe([$pageA->id]);
 });
 
 it('clears the silo filter when the site changes', function () {
