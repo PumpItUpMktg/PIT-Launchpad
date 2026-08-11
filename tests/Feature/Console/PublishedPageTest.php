@@ -6,6 +6,7 @@ use App\Enums\PageType;
 use App\Filament\Console\Pages\Published;
 use App\Jobs\PublishContent;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\Site;
 use App\Models\User;
 use App\OpsConsole\PublishedContentBoard;
@@ -39,7 +40,7 @@ it('buckets live content into blog / core / service / storefront tabs', function
 
 it('groups location pages under their storefront: hub page vs town pages', function () {
     $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
-    $storefront = \App\Models\Location::factory()->create([
+    $storefront = Location::factory()->create([
         'site_id' => $site->id, 'name' => 'Clifton Office', 'is_storefront' => true,
     ]);
 
