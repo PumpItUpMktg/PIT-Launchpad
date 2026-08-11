@@ -4,7 +4,7 @@ use App\Enums\RenderStatus;
 use App\Filament\Console\Concerns\SwapsPostImage;
 use App\Filament\Console\Pages\BlogPublish;
 use App\Filament\Console\Pages\BlogReview;
-use App\Filament\Console\Pages\Published;
+use App\Filament\Console\Pages\PublishedBlog;
 use App\Integrations\Vision\MockVisionClient;
 use App\Integrations\Vision\VisionClient;
 use App\Models\Content;
@@ -64,7 +64,7 @@ it('updates the post\'s existing render job rather than adding a second', functi
 });
 
 it('wires the swap-photo trait onto the review, publish and published pages', function () {
-    foreach ([BlogReview::class, BlogPublish::class, Published::class] as $page) {
+    foreach ([BlogReview::class, BlogPublish::class, PublishedBlog::class] as $page) {
         expect(in_array(SwapsPostImage::class, class_uses_recursive($page), true))->toBeTrue();
     }
 });

@@ -3,7 +3,7 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
-use App\Filament\Console\Pages\Published;
+use App\Filament\Console\Pages\PublishedBlog;
 use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\Location;
@@ -75,7 +75,7 @@ it('re-syncs a live item to WordPress but skips one never pushed', function () {
     $live = Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'wp_post_id' => 111, 'title' => 'Live']);
     $neverPushed = Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'wp_post_id' => null, 'title' => 'No wp id']);
 
-    $page = new Published;
+    $page = new PublishedBlog;
     $page->siteId = $site->id;
 
     $page->repush($live->id);
