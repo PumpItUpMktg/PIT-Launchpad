@@ -64,7 +64,7 @@ class LiveMetrics
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
      *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
-     *   index: array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, pending: ?string},
+     *   index: array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, last_crawled_at: ?string, pending: ?string},
      *   bing: array{impressions: ?int, clicks: ?int, ctr: ?float, in_bing: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
@@ -110,7 +110,7 @@ class LiveMetrics
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
      *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
-     *   index: array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, pending: ?string},
+     *   index: array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, last_crawled_at: ?string, pending: ?string},
      *   bing: array{impressions: ?int, clicks: ?int, ctr: ?float, in_bing: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
@@ -126,7 +126,7 @@ class LiveMetrics
             'series' => [],
             'refresh_count' => 0,
             'gsc' => ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => $refreshing],
-            'index' => ['state' => null, 'label' => null, 'indexed' => false, 'coverage_state' => null, 'canonical_mismatch' => false, 'pending' => $refreshing],
+            'index' => ['state' => null, 'label' => null, 'indexed' => false, 'coverage_state' => null, 'canonical_mismatch' => false, 'last_crawled_at' => null, 'pending' => $refreshing],
             'bing' => ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_bing' => false, 'queries' => [], 'pending' => $refreshing],
             'traffic' => ['sessions' => null, 'pending' => $refreshing],
         ];
@@ -138,11 +138,11 @@ class LiveMetrics
      * Inspection is quota-limited): it lights up once `launchpad:audit-index` has inspected the URL, else
      * an honest pending. A `redirect`/`canonical` exclusion is a real, correct state, not a fabricated zero.
      *
-     * @return array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, pending: ?string}
+     * @return array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, last_crawled_at: ?string, pending: ?string}
      */
     private function indexBlock(?Site $site, Content $page): array
     {
-        $blank = ['state' => null, 'label' => null, 'indexed' => false, 'coverage_state' => null, 'canonical_mismatch' => false];
+        $blank = ['state' => null, 'label' => null, 'indexed' => false, 'coverage_state' => null, 'canonical_mismatch' => false, 'last_crawled_at' => null];
 
         if ($site === null || ! $this->indexInspector->connected($site)) {
             return $blank + ['pending' => 'Connect Search Console'];
@@ -162,6 +162,8 @@ class LiveMetrics
             'indexed' => $status->indexed(),
             'coverage_state' => $status->coverageState,
             'canonical_mismatch' => $status->canonicalMismatch(),
+            // Google's last-crawl timestamp for the URL — the honest "as of" date for the index verdict.
+            'last_crawled_at' => $status->lastCrawledAt?->toDateString(),
             'pending' => null,
         ];
     }
