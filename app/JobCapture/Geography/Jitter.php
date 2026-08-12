@@ -15,7 +15,7 @@ namespace App\JobCapture\Geography;
  * public map draws a 1-mile circle (larger than this 0.5-mile jitter) so the true address is always well
  * inside the circle, never near its edge. The true street address and exact point are never published.
  */
-final class Jitter
+class Jitter
 {
     private const MILES_PER_DEGREE_LAT = 69.0;
 

@@ -70,7 +70,9 @@ final class GeographyResolver
         $row->name = $county->name;
         $row->state = $stateAbbr;
         if (blank($row->slug)) {
-            $row->slug = $this->uniqueSlug(JobCounty::class, Str::slug($county->name).'-county', $stateAbbr, 'county_geoid', $county->geoId);
+            // The Census county NAME already carries its legal suffix ("Somerset County", "Acadia Parish",
+            // "Aleutians East Borough"), so the slug is just the slugified name + state — no "-county".
+            $row->slug = $this->uniqueSlug(JobCounty::class, Str::slug($county->name), $stateAbbr, 'county_geoid', $county->geoId);
         }
         $row->save();
 
