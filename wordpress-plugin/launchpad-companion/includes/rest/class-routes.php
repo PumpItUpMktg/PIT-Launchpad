@@ -13,6 +13,7 @@ use Launchpad\Companion\Content\BrandKitStore;
 use Launchpad\Companion\Content\ContentDiagnostics;
 use Launchpad\Companion\Content\StyleStore;
 use Launchpad\Companion\Content\ContentStore;
+use Launchpad\Companion\Content\JobStore;
 use Launchpad\Companion\Content\KitTemplateStore;
 use Launchpad\Companion\Content\RedirectStore;
 use Launchpad\Companion\Content\SiloStore;
@@ -64,6 +65,19 @@ final class Routes
         register_rest_route(self::NS, '/content/diagnose', [
             'methods' => 'GET',
             'callback' => [$this, 'diagnose_content'],
+            'permission_callback' => $auth,
+        ]);
+
+        // Job Capture (§9/§10): upsert / delete a `pig_job` post keyed on the control-plane ULID. Same
+        // authed contract + POST-delete rationale as /content.
+        register_rest_route(self::NS, '/job', [
+            'methods' => 'POST',
+            'callback' => [$this, 'job'],
+            'permission_callback' => $auth,
+        ]);
+        register_rest_route(self::NS, '/job/delete', [
+            'methods' => 'POST',
+            'callback' => [$this, 'delete_job'],
             'permission_callback' => $auth,
         ]);
 
@@ -185,6 +199,29 @@ final class Routes
         if (! empty($result['deleted'])) {
             $status = 200;
         } elseif (($result['error'] ?? '') === 'content_id required') {
+            $status = 422;
+        } else {
+            $status = 500;
+        }
+
+        return new WP_REST_Response($result, $status);
+    }
+
+    public function job(WP_REST_Request $request): WP_REST_Response
+    {
+        $result = ( new JobStore() )->upsert((array) $request->get_json_params());
+
+        return new WP_REST_Response($result, ($result['status'] ?? '') === 'error' ? 422 : 200);
+    }
+
+    public function delete_job(WP_REST_Request $request): WP_REST_Response
+    {
+        $params = (array) $request->get_json_params();
+        $result = ( new JobStore() )->delete((string) ($params['job_id'] ?? ''));
+
+        if (! empty($result['deleted'])) {
+            $status = 200;
+        } elseif (($result['error'] ?? '') === 'job_id required') {
             $status = 422;
         } else {
             $status = 500;

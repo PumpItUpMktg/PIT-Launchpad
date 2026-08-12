@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.34
+Stable tag: 0.9.35
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,15 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.35 =
+* Job Capture (§10): register the `pig_job` custom post type + prefixed `pig_city` / `pig_service`
+  taxonomies (public, has_archive, show_in_rest — so jobs are indexable URLs and appear natively in
+  block-theme and page-builder query loops). Adds the authed `launchpad/v1/job` + `/job/delete` REST
+  endpoints (ULID-keyed, idempotent upsert; images sideloaded to the media library and deduped, primary
+  becomes the featured image), and two render paths — the `[pig_jobs]` shortcode and the server-rendered
+  `launchpad/pig-jobs` block (both filterable by city/service). Job posts carry a "managed by Launchpad"
+  editor notice, since control-plane edits win on the next sync.
 
 = 0.9.34 =
 * Mobile header menu: the header now emits a CSS-only hamburger toggle (a checkbox + label beside the

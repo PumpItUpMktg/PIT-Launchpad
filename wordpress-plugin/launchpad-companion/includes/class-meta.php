@@ -32,6 +32,17 @@ final class Meta
     public const SEO = '_lp_seo';
     public const IMAGES = '_lp_images';
     public const KIND = '_lp_kind';
+
+    /** Job Capture (§9/§10): the control-plane ULID — the idempotency key for /job upserts. */
+    public const JOB_ID = '_pig_job_id';
+
+    /** Job Capture: the consolidated public job blob (client, location, images, job types). Only
+     * public-safe fields ever reach here — the true address / exact point are never sent. */
+    public const JOB_DATA = '_pig_job_data';
+
+    /** Job Capture: map of control-plane image key => sideloaded attachment id, so an unchanged
+     * re-push re-uploads nothing. */
+    public const JOB_MEDIA = '_pig_job_media';
     public const PAGE_TYPE = '_lp_page_type';
     public const KIT = '_lp_kit';
     public const KIT_VERSION = '_lp_kit_version';
