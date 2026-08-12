@@ -24,13 +24,14 @@ test('a Job is tenant-scoped and auto-fills site_id from the current site', func
     Job::factory()->create(['site_id' => $siteA->id]);
     Job::factory()->create(['site_id' => $siteB->id]);
 
-    CurrentSite::use($siteA->id, function () use ($siteA): void {
-        expect(Job::count())->toBe(1);
+    CurrentSite::set($siteA->id);
+    expect(Job::count())->toBe(1);
 
-        // No site_id passed — the trait fills it from the resolved tenant.
-        $created = Job::create(['raw_description' => 'Cleared a flooded basement.']);
-        expect($created->site_id)->toBe($siteA->id);
-    });
+    // No site_id passed — the trait fills it from the resolved tenant.
+    $created = Job::create(['raw_description' => 'Cleared a flooded basement.']);
+    expect($created->site_id)->toBe($siteA->id);
+
+    CurrentSite::clear();
 
     // Operator / cross-tenant context sees every tenant's rows.
     expect(Job::withoutGlobalScopes()->count())->toBe(3);
