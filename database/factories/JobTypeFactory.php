@@ -17,12 +17,12 @@ class JobTypeFactory extends Factory
     /** @return array<string, mixed> */
     public function definition(): array
     {
-        $label = str(fake()->unique()->word())->title().' Repair';
+        $label = (string) str(fake()->unique()->word())->title().' Repair';
 
         return [
             'site_id' => Site::factory(),
-            'label' => (string) $label,
-            'slug' => str($label)->slug(),
+            'label' => $label,
+            'slug' => (string) str($label)->slug(),
             'silo_id' => null,
             'source' => JobTypeSource::Native,
         ];
