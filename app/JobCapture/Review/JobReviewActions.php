@@ -4,6 +4,8 @@ namespace App\JobCapture\Review;
 
 use App\Enums\JobStatus;
 use App\Jobs\EnhanceJob;
+use App\Jobs\PublishJob;
+use App\Jobs\UnpublishJob;
 use App\Models\Job;
 
 /**
@@ -29,8 +31,8 @@ class JobReviewActions
     }
 
     /**
-     * Approve a reviewed job → `approved` (ready to publish). No WordPress push here — that is the §9
-     * pipeline. Returns false (no state change) when the job isn't approvable.
+     * Approve a reviewed job → `approved` and enqueue the §9 WordPress push ({@see PublishJob}, idempotent
+     * by ULID). Returns false (no state change, no push) when the job isn't approvable.
      */
     public function approve(Job $job): bool
     {
@@ -40,17 +42,28 @@ class JobReviewActions
 
         $job->forceFill(['status' => JobStatus::Approved, 'reject_reason' => null])->save();
 
+        PublishJob::dispatch($job->id);
+
         return true;
     }
 
-    /** Reject a reviewed job with an optional reason (the tech/operator sees why). */
+    /**
+     * Reject a reviewed job with an optional reason. If the job was already live on WordPress, its post is
+     * pulled DOWN ({@see UnpublishJob}) so a rejection never orphans a published post (§9).
+     */
     public function reject(Job $job, ?string $reason = null): void
     {
+        $wasPublished = $job->wp_post_id !== null;
+
         $reason = trim((string) $reason);
         $job->forceFill([
             'status' => JobStatus::Rejected,
             'reject_reason' => $reason !== '' ? $reason : null,
         ])->save();
+
+        if ($wasPublished) {
+            UnpublishJob::dispatch($job->id);
+        }
     }
 
     /**

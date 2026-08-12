@@ -4,6 +4,7 @@ use App\Enums\JobStatus;
 use App\JobCapture\Review\JobReviewActions;
 use App\JobCapture\Review\JobReviewQueue;
 use App\Jobs\EnhanceJob;
+use App\Jobs\PublishJob;
 use App\Models\Job;
 use App\Models\Site;
 use App\Support\CurrentSite;
@@ -28,7 +29,8 @@ test('the queue lists this site\'s review + captured jobs, review first, and cou
     CurrentSite::clear();
 });
 
-test('approve flips a reviewed, drafted job to approved and clears any reject reason', function () {
+test('approve flips a reviewed, drafted job to approved, clears the reject reason, and enqueues the publish', function () {
+    Queue::fake();
     $job = Job::factory()->create([
         'status' => JobStatus::Review, 'enhanced_description' => 'A grounded write-up.', 'reject_reason' => 'old',
     ]);
@@ -36,6 +38,8 @@ test('approve flips a reviewed, drafted job to approved and clears any reject re
     expect(app(JobReviewActions::class)->approve($job))->toBeTrue()
         ->and($job->refresh()->status)->toBe(JobStatus::Approved)
         ->and($job->reject_reason)->toBeNull();
+
+    Queue::assertPushed(PublishJob::class, fn (PublishJob $j): bool => $j->jobId === $job->id);
 });
 
 test('approve is blocked for an un-enhanced job (no empty post can be approved)', function () {
