@@ -3,7 +3,7 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Filament\Console\Pages\BlogCandidates;
-use App\Filament\Console\Pages\Published;
+use App\Filament\Console\Pages\PublishedServicePages;
 use App\Models\Content;
 use App\Models\Silo;
 use App\Models\Site;
@@ -42,7 +42,7 @@ it('filters published posts and pages by silo', function () {
     Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'matched_silo_id' => $siloB->id, 'wp_post_id' => 2, 'title' => 'Post B']);
     $pageA = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'silo_id' => $siloA->id, 'wp_post_id' => 3, 'title' => 'Page A', 'slug' => 'page-a']);
 
-    $page = new Published;
+    $page = new PublishedServicePages;
     $page->siteId = $site->id;
     $page->siloId = $siloA->id;
     $board = $page->getBoardProperty();
