@@ -21,7 +21,8 @@ test('it issues a 6-digit login code and redeems it once for a device token', fu
 test('it resolves a device token back to its device (tenant-agnostic lookup)', function () {
     $device = TechDevice::factory()->create();
     $auth = app(DeviceAuthenticator::class);
-    $token = $auth->redeemLoginCode($device->fresh(), $auth->issueLoginCode($device));
+    $code = $auth->issueLoginCode($device);
+    $token = $auth->redeemLoginCode($device->fresh(), $code);
 
     $resolved = $auth->resolveToken((string) $token);
 
@@ -45,7 +46,8 @@ test('a wrong or expired code never issues a token', function () {
 test('a revoked device resolves to null even with a valid token', function () {
     $device = TechDevice::factory()->create();
     $auth = app(DeviceAuthenticator::class);
-    $token = (string) $auth->redeemLoginCode($device->fresh(), $auth->issueLoginCode($device));
+    $code = $auth->issueLoginCode($device);
+    $token = (string) $auth->redeemLoginCode($device->fresh(), $code);
 
     $device->forceFill(['revoked_at' => now()])->save();
 

@@ -13,8 +13,9 @@ use Illuminate\Support\Facades\Storage;
 function techToken(TechDevice $device): string
 {
     $auth = app(DeviceAuthenticator::class);
+    $code = $auth->issueLoginCode($device);
 
-    return (string) $auth->redeemLoginCode($device->fresh(), $auth->issueLoginCode($device));
+    return (string) $auth->redeemLoginCode($device->fresh(), $code);
 }
 
 test('request-code then redeem yields a device token', function () {
