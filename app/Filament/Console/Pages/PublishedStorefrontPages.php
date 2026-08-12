@@ -24,4 +24,9 @@ class PublishedStorefrontPages extends PublishedPage
     {
         return 'Published · Storefront Pages';
     }
+
+    public function publishedSection(): string
+    {
+        return 'storefront';
+    }
 }

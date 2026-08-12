@@ -8,6 +8,7 @@ use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
 use App\Integrations\UrlInspection\IndexInspector;
+use App\Jobs\WarmLiveMetrics;
 use App\Models\Content;
 use App\Models\Keyword;
 use App\Models\PositionSnapshot;
@@ -68,8 +69,15 @@ class LiveMetrics
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
      */
-    public function for(Content $page): array
+    public function for(Content $page, bool $defer = false): array
     {
+        // Over the board's live-metrics budget (or an off-screen card): return a fully-shaped, zero-cost
+        // "refreshing" block — no DB, no external call. The WarmLiveMetrics worker fills the real values
+        // into cache off-request, so the next load shows them. Honest pending, never a fabricated number.
+        if ($defer) {
+            return $this->deferred();
+        }
+
         $site = $page->site;
         $keyword = $page->target_keyword_id !== null
             ? Keyword::withoutGlobalScope(SiteScope::class)->find($page->target_keyword_id)
@@ -87,6 +95,40 @@ class LiveMetrics
             'index' => $this->indexBlock($site, $page),
             'bing' => $this->bingBlock($site, $page),
             'traffic' => $this->trafficBlock($site, $page),
+        ];
+    }
+
+    /**
+     * A fully-shaped, zero-cost metrics block for a deferred render — matches {@see for()}'s contract
+     * exactly but touches no DB or vendor API. Every cell reads "Refreshing…" so the card renders
+     * instantly while {@see WarmLiveMetrics} warms the real values into cache.
+     *
+     * @return array{
+     *   keyword: ?string,
+     *   position: array{rank: ?int, delta: ?int, pending: ?string},
+     *   local: array{rank: ?int, market: ?string},
+     *   series: list<array{captured_at: string, rank: ?int}>,
+     *   refresh_count: int,
+     *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
+     *   index: array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, pending: ?string},
+     *   bing: array{impressions: ?int, clicks: ?int, ctr: ?float, in_bing: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
+     *   traffic: array{sessions: ?int, pending: ?string}
+     * }
+     */
+    private function deferred(): array
+    {
+        $refreshing = 'Refreshing…';
+
+        return [
+            'keyword' => null,
+            'position' => ['rank' => null, 'delta' => null, 'pending' => $refreshing],
+            'local' => ['rank' => null, 'market' => null],
+            'series' => [],
+            'refresh_count' => 0,
+            'gsc' => ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => $refreshing],
+            'index' => ['state' => null, 'label' => null, 'indexed' => false, 'coverage_state' => null, 'canonical_mismatch' => false, 'pending' => $refreshing],
+            'bing' => ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_bing' => false, 'queries' => [], 'pending' => $refreshing],
+            'traffic' => ['sessions' => null, 'pending' => $refreshing],
         ];
     }
 

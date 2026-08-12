@@ -51,6 +51,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Published board — live-metrics render budget
+    |--------------------------------------------------------------------------
+    |
+    | Seconds a single Published-page render may spend fetching live tracking
+    | (GSC / GA4 / Bing) before the remaining cards fall back to a "Refreshing…"
+    | state and a background warm pass (WarmLiveMetrics) fills the caches. Keeps a
+    | cold-cache, content-heavy page well under the origin/proxy request timeout.
+    */
+    'published_metrics_budget_seconds' => (float) env('LAUNCHPAD_PUBLISHED_METRICS_BUDGET_SECONDS', 6.0),
+
+    /*
+    |--------------------------------------------------------------------------
     | Standard pages
     |--------------------------------------------------------------------------
     |

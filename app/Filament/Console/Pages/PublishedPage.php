@@ -25,16 +25,19 @@ abstract class PublishedPage extends ConsolePage
 
     protected static string|\UnitEnum|null $navigationGroup = 'Published';
 
+    /** Which board bucket this page renders (blog|core|service|storefront|location) — scopes the read model. */
+    abstract public function publishedSection(): string;
+
     /**
-     * The full published board for the active site + optional silo filter. Each subclass renders its own
-     * slice; computing the whole board keeps a single source of truth (only one page renders at a time,
-     * so there is no extra cost in practice).
+     * The published board for the active site + optional silo filter, SCOPED to this page's section so
+     * only the bucket being shown does live-metrics work (the other buckets are skipped). See
+     * {@see PublishedContentBoard} for the render budget that bounds even a large bucket.
      *
      * @return array{blog: list<array<string, mixed>>, core: list<array<string, mixed>>, service: list<array<string, mixed>>, storefronts: list<array<string, mixed>>}
      */
     public function getBoardProperty(): array
     {
-        $board = app(PublishedContentBoard::class)->forSite($this->siteId, $this->siloId);
+        $board = app(PublishedContentBoard::class)->forSite($this->siteId, $this->siloId, $this->publishedSection());
 
         // The brick-and-mortar town filter is a blog-post filter (it scans post copy); it is a no-op
         // unless the page opts in (only the Blog page does), so it is safe to apply here for all.

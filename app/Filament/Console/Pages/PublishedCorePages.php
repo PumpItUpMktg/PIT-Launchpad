@@ -21,4 +21,9 @@ class PublishedCorePages extends PublishedPage
     {
         return 'Published · Core Pages';
     }
+
+    public function publishedSection(): string
+    {
+        return 'core';
+    }
 }

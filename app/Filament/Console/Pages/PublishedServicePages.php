@@ -21,4 +21,9 @@ class PublishedServicePages extends PublishedPage
     {
         return 'Published · Service Pages';
     }
+
+    public function publishedSection(): string
+    {
+        return 'service';
+    }
 }

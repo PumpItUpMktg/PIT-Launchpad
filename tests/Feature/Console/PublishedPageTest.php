@@ -5,6 +5,7 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Filament\Console\Pages\PublishedBlog;
 use App\Jobs\PublishContent;
+use App\Jobs\WarmLiveMetrics;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Site;
@@ -83,4 +84,44 @@ it('re-syncs a live item to WordPress but skips one never pushed', function () {
 
     Queue::assertPushed(PublishContent::class, 1);
     Queue::assertPushed(PublishContent::class, fn (PublishContent $job): bool => $job->contentId === $live->id);
+});
+
+it('scopes the board to the requested section — the other buckets are not built', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    $post = Content::factory()->post()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'title' => 'Post', 'slug' => 'post',
+    ]);
+    $service = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'status' => ContentStatus::Published, 'wp_post_id' => 2, 'title' => 'Svc', 'slug' => 'svc',
+    ]);
+
+    $board = app(PublishedContentBoard::class);
+
+    $blogOnly = $board->forSite($site->id, null, 'blog');
+    expect(collect($blogOnly['blog'])->pluck('id')->all())->toBe([$post->id])
+        ->and($blogOnly['service'])->toBe([])
+        ->and($blogOnly['core'])->toBe([]);
+
+    $serviceOnly = $board->forSite($site->id, null, 'service');
+    expect(collect($serviceOnly['service'])->pluck('id')->all())->toBe([$service->id])
+        ->and($serviceOnly['blog'])->toBe([]);
+});
+
+it('defers live metrics and queues a warm pass when the render budget is spent', function () {
+    Queue::fake();
+    // A negative budget forces every on-section card past the render budget on the first item.
+    config()->set('launchpad.published_metrics_budget_seconds', -1);
+
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    $post = Content::factory()->post()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'title' => 'Post', 'slug' => 'post',
+    ]);
+
+    $board = app(PublishedContentBoard::class)->forSite($site->id, null, 'blog');
+
+    expect($board['blog'][0]['metrics']['gsc']['pending'])->toBe('Refreshing…')
+        ->and($board['blog'][0]['metrics']['position']['pending'])->toBe('Refreshing…');
+
+    Queue::assertPushed(WarmLiveMetrics::class, fn (WarmLiveMetrics $job): bool => $job->siteId === $site->id);
 });

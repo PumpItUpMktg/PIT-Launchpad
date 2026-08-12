@@ -3,11 +3,11 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Filament\Console\Pages\BlogCandidates;
-use App\Filament\Console\Pages\PublishedServicePages;
 use App\Models\Content;
 use App\Models\Silo;
 use App\Models\Site;
 use App\Models\User;
+use App\OpsConsole\PublishedContentBoard;
 
 it('filters candidates by the selected silo', function () {
     $this->actingAs(User::factory()->create());
@@ -42,10 +42,8 @@ it('filters published posts and pages by silo', function () {
     Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'matched_silo_id' => $siloB->id, 'wp_post_id' => 2, 'title' => 'Post B']);
     $pageA = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'silo_id' => $siloA->id, 'wp_post_id' => 3, 'title' => 'Page A', 'slug' => 'page-a']);
 
-    $page = new PublishedServicePages;
-    $page->siteId = $site->id;
-    $page->siloId = $siloA->id;
-    $board = $page->getBoardProperty();
+    // The read model applies the silo filter to both posts and pages (section null → all buckets built).
+    $board = app(PublishedContentBoard::class)->forSite($site->id, $siloA->id);
 
     expect(collect($board['blog'])->pluck('id')->all())->toBe([$postA->id])
         ->and(collect($board['service'])->pluck('id')->all())->toBe([$pageA->id]);
