@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Integrations\UrlInspection\GoogleIndexInspector;
 use App\Models\Site;
 use App\Operator\IndexCoverage;
 use Illuminate\Console\Command;
@@ -13,7 +14,7 @@ use Illuminate\Support\Collection;
  * excluded-by-redirect, …). This is the authoritative answer to "does our marked index match Google?",
  * distinct from the impressions>0 badge on the cards.
  *
- * Quota-guarded + cached (see {@see \App\Integrations\UrlInspection\GoogleIndexInspector}) — safe to
+ * Quota-guarded + cached (see {@see GoogleIndexInspector}) — safe to
  * re-run; cached URLs cost no API call, and the run stops inspecting new URLs once the per-day cap is
  * reached (reported as "not inspected"). After a run the Live/blog cards show the real state from cache.
  *
