@@ -21,7 +21,8 @@
                 @php $sc = (float) $post['score']; @endphp
                 <span class="rc-chip score {{ $sc >= 0.7 ? 'good' : ($sc >= 0.4 ? '' : 'muted') }}" title="Engine score at generation — track it against real ranking/index below">◎ {{ number_format($sc, 2) }}</span>
             @endif
-            <span class="rc-chip {{ $m['index']['indexed'] ? 'good' : 'muted' }}">{{ $m['index']['label'] ?? $m['index']['pending'] ?? 'Index unknown' }}</span>
+            <span class="rc-chip {{ $m['index']['indexed'] ? 'good' : 'muted' }}"
+                  @if (! empty($m['index']['last_crawled_at'])) title="Google last crawled this URL on {{ $m['index']['last_crawled_at'] }}" @endif>{{ $m['index']['label'] ?? $m['index']['pending'] ?? 'Index unknown' }}@if (! empty($m['index']['last_crawled_at'])) · {{ $m['index']['last_crawled_at'] }}@endif</span>
             @if (! empty($post['indexnow_at'])) <span class="rc-chip muted">↗ Submitted to Bing</span> @endif
         </div>
     </div>
