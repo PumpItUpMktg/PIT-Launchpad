@@ -4,6 +4,7 @@ namespace App\JobCapture\Capture;
 
 use App\Enums\JobSource;
 use App\Enums\JobStatus;
+use App\Jobs\EnhanceJob;
 use App\Jobs\ResolveJobGeography;
 use App\Models\Job;
 use App\Models\TechDevice;
@@ -44,6 +45,12 @@ final class CaptureIntake
         // GPS present → resolve geography off the request; a walk-in without coordinates defers to review.
         if ($data->lat !== null && $data->lng !== null) {
             ResolveJobGeography::dispatch($job->id);
+        }
+
+        // Enhancement (§7) fires after submit, off the request — never blocking the tech, and re-runnable
+        // by the operator. Only when there is something to enhance.
+        if (trim((string) $job->source_description) !== '') {
+            EnhanceJob::dispatch($job->id);
         }
 
         return $job;

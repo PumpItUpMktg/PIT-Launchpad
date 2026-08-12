@@ -4,6 +4,7 @@ use App\Enums\JobSource;
 use App\Enums\JobStatus;
 use App\JobCapture\Capture\CaptureData;
 use App\JobCapture\Capture\CaptureIntake;
+use App\Jobs\EnhanceJob;
 use App\Jobs\ResolveJobGeography;
 use App\Models\TechDevice;
 use Illuminate\Support\Facades\Queue;
@@ -48,6 +49,17 @@ test('a walk-in without coordinates does not dispatch geography', function () {
 
     expect($job->lat_true)->toBeNull();
     Queue::assertNotPushed(ResolveJobGeography::class);
+});
+
+test('capturing a job with a description dispatches enhancement (§7)', function () {
+    Storage::fake('r2');
+    Queue::fake();
+
+    app(CaptureIntake::class)->capture(TechDevice::factory()->create(), new CaptureData(
+        rawDescription: 'Fixed a failed sump pump.',
+    ));
+
+    Queue::assertPushed(EnhanceJob::class);
 });
 
 test('it caps photos and job types at three', function () {
