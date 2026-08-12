@@ -33,6 +33,19 @@ class TenantStorage
         return $key;
     }
 
+    /**
+     * Store a Job Capture photo under the per-tenant, per-job prefix
+     * (`sites/{site}/jobs/{job}/{file}`) so a job's images are grouped and never collide across jobs.
+     */
+    public function putForJob(Site $site, string $jobId, string $filename, string $bytes): string
+    {
+        $key = $this->prefixFor($site).'/jobs/'.$jobId.'/'.$this->sanitize($filename);
+
+        Storage::disk(self::DISK)->put($key, $bytes);
+
+        return $key;
+    }
+
     private function sanitize(string $filename): string
     {
         $ext = pathinfo($filename, PATHINFO_EXTENSION);
