@@ -83,6 +83,7 @@ use App\Interview\Arrange\KeywordAssigner;
 use App\Interview\Arrange\SubClusterDetector;
 use App\Interview\Expansion\SiloExpander;
 use App\Interview\Volume\VolumeGrounder;
+use App\JobCapture\Enhancement\JobEnhancer;
 use App\KeywordGenerator\Cadence\CadenceScheduler;
 use App\KeywordGenerator\Cadence\Tiering;
 use App\KeywordGenerator\Cluster\ClusterLabeler;
@@ -569,6 +570,12 @@ class AppServiceProvider extends ServiceProvider
         // conversation quality matters, turns stay cheap, no tools in the loop.
         // Tests bind fakes on ClaudeClient as usual.
         $this->app->when([InterviewEngine::class, IntakeExtractor::class])
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->drafting());
+
+        // Job Capture enhancement (§7) — the SEO write-up runs on the Sonnet drafting lane.
+        // Tests construct JobEnhancer with a FakeClaudeClient directly.
+        $this->app->when(JobEnhancer::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->drafting());
     }
