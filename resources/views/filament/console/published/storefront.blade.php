@@ -16,6 +16,14 @@
                         @if ($sf['is_storefront']) <span class="pt-badge">Storefront</span> @endif
                         @if ($sf['gbp_linked']) <span class="pt-badge" style="background:rgba(22,163,74,.15); color:#15803d;">GBP linked</span> @endif
                     </div>
+                    @if (! empty($sf['counties']))
+                        <div class="rc-chips" style="margin-bottom:6px;" title="Counties this storefront serves">
+                            <span class="rc-chip muted">Serves</span>
+                            @foreach ($sf['counties'] as $county)
+                                <span class="rc-chip town">📍 {{ $county }}</span>
+                            @endforeach
+                        </div>
+                    @endif
                     @include('filament.console.partials.post-card', ['post' => $sf['hub']])
                 </div>
             @endforeach
