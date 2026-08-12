@@ -22,6 +22,11 @@ class PublishedBlog extends PublishedPage
         return 'Published · Blog';
     }
 
+    public function publishedSection(): string
+    {
+        return 'blog';
+    }
+
     /** The blog page offers the brick-and-mortar town filter (posts carry copy to scan). */
     public function supportsTownFilter(): bool
     {

@@ -28,6 +28,11 @@ class PublishedLocationPages extends PublishedPage
         return 'Published · Location Pages';
     }
 
+    public function publishedSection(): string
+    {
+        return 'location';
+    }
+
     /** Clear the storefront sub-tab selection when the tenant changes (it belongs to one site). */
     public function updatedSiteId(): void
     {
