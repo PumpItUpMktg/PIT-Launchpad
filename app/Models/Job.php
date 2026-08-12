@@ -47,6 +47,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string|null $joby_job_type_raw
  * @property int|null $wp_post_id
  * @property string|null $last_publish_error
+ * @property string|null $reject_reason
  */
 class Job extends Model
 {
@@ -96,5 +97,15 @@ class Job extends Model
     public function jobTypes(): HasMany
     {
         return $this->hasMany(JobTypeAssignment::class, 'job_capture_id');
+    }
+
+    /**
+     * Whether the enhancement pass (§7) produced a usable write-up. The single drafted-vs-undrafted test —
+     * approve and (later) the WordPress publish are both gated on it, so an un-enhanced job can never push
+     * an empty post.
+     */
+    public function hasDraft(): bool
+    {
+        return trim((string) $this->enhanced_description) !== '';
     }
 }
