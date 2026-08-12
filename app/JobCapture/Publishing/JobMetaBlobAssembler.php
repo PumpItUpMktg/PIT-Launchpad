@@ -54,7 +54,7 @@ final class JobMetaBlobAssembler
 
         $out = [];
         foreach ($photos as $i => $photo) {
-            $key = trim((string) ($photo['r2_key'] ?? ''));
+            $key = trim($photo['r2_key']);
             if ($key === '') {
                 continue;
             }
