@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AuthenticateTechDevice;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,7 +13,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // §5 capture PWA: authenticate a request by its tech device token.
+        $middleware->alias([
+            'tech.device' => AuthenticateTechDevice::class,
+        ]);
+
+        // The capture API is a token-authenticated, cookieless PWA surface — CSRF does not apply.
+        $middleware->validateCsrfTokens(except: [
+            'capture/api/*',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
