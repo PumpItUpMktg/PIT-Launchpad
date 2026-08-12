@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\GoogleConnectController;
 use App\Http\Controllers\JobCapture\CaptureController;
+use App\Http\Controllers\JobCapture\CapturePageController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -17,6 +18,13 @@ Route::get('/connections/google/authorize', [GoogleConnectController::class, 'au
     ->name('google.authorize');
 Route::get('/oauth/google/callback', [GoogleConnectController::class, 'callback'])
     ->name('google.callback');
+
+// §5 Job Capture PWA shell — the install-to-home-screen tech app, its manifest, and its
+// service worker. Public + static: the app authenticates client-side with a device token
+// and talks to the JSON API below. Declared before the /capture/api group.
+Route::get('capture', [CapturePageController::class, 'app'])->name('capture.app');
+Route::get('capture/manifest.webmanifest', [CapturePageController::class, 'manifest'])->name('capture.manifest');
+Route::get('capture/sw.js', [CapturePageController::class, 'serviceWorker'])->name('capture.sw');
 
 // §5 Job Capture PWA API. Auth endpoints are open (a magic-link device id + one-time
 // code); the job endpoints run behind the device-token middleware, which binds the
