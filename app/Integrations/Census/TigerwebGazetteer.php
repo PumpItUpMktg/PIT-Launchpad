@@ -60,6 +60,33 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
     }
 
     /**
+     * The place / county-subdivision a point falls in — a point-intersect query, MCD (cousub) layer
+     * first (the NJ/PA township/borough case), then Incorporated Places. Mirrors {@see countyAt()}'s
+     * plain-pair geometry form (the JSON-object form silently returns nothing in-app).
+     */
+    public function placeAt(float $lat, float $lng): ?Municipality
+    {
+        foreach ([['cousub', MunicipalityType::CountySubdivision], ['place', MunicipalityType::Place]] as [$layer, $type]) {
+            $features = $this->fetch($this->layers()[$layer], [
+                'f' => 'json',
+                'geometry' => "{$lng},{$lat}",
+                'geometryType' => 'esriGeometryPoint',
+                'inSR' => 4326,
+                'spatialRel' => 'esriSpatialRelIntersects',
+                'outFields' => 'GEOID,NAME,BASENAME,STATE,CENTLAT,CENTLON',
+                'returnGeometry' => 'false',
+            ]);
+
+            $municipality = $this->mapFeatures($features, $type)[0] ?? null;
+            if ($municipality !== null) {
+                return $municipality;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return list<County>
      */
     public function countiesInState(string $stateFips): array
