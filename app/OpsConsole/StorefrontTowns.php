@@ -100,6 +100,36 @@ class StorefrontTowns
         return $out;
     }
 
+    /**
+     * The counties a SINGLE storefront serves, as human names — its geocoded home county plus every
+     * owner-selected `county_geoids`, de-duped and name-ordered. Names come from the same cached Census
+     * gazetteer the county grouping uses (degrading to a "County NNN" label if a name can't be resolved).
+     * This is the "counties served" chip row on the storefront card; empty when the location names no county.
+     *
+     * @return list<string>
+     */
+    public function servedCountyNames(Location $storefront): array
+    {
+        $geoids = [];
+        $home = trim((string) $storefront->home_county_geoid);
+        if ($home !== '') {
+            $geoids[] = $home;
+        }
+        foreach (is_array($storefront->county_geoids) ? $storefront->county_geoids : [] as $g) {
+            $geoids[] = trim((string) $g);
+        }
+        $geoids = array_values(array_unique(array_filter($geoids, fn (string $g): bool => strlen($g) >= 5)));
+        if ($geoids === []) {
+            return [];
+        }
+
+        $names = $this->countyNames($geoids);
+        $out = array_values(array_unique(array_map(fn (string $g): string => $names[$g] ?? $this->fallbackName($g), $geoids)));
+        usort($out, fn (string $a, string $b): int => strcasecmp($a, $b));
+
+        return $out;
+    }
+
     /** The storefront town keys in a given county (for the town dropdown / county-level filter). */
     public function keysInCounty(Site $site, string $countyGeoid): array
     {

@@ -48,6 +48,15 @@ Schedule::command('launchpad:ingest-feeds')->hourly()->withoutOverlapping();
 // is what stops the rolling 16-month window from erasing history.
 Schedule::command('launchpad:sync-gsc')->daily()->withoutOverlapping();
 
+// Index-coverage audit — run a Google URL Inspection for every published URL on
+// each GSC-connected site so the Published cards read the REAL index verdict +
+// crawl date from cache (rather than the impressions>0 proxy). Weekly: index
+// status moves ~daily but the inspection is quota-limited (2,000/day/property),
+// so a weekly platform-wide sweep keeps the cards fresh without burning quota;
+// withoutOverlapping so a slow multi-tenant sweep can't stack. Ad-hoc single-site
+// refresh is the "Refresh index coverage" button on the Corrections console.
+Schedule::command('launchpad:audit-index')->weekly()->withoutOverlapping();
+
 // §7c client monthly report — email each client the prior month's keyword-
 // improvement report (PDF attached) on the 1st. Defaults to last month so a
 // complete month is reported; per-site opt-out is having no client users.

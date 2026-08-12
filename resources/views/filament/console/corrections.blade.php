@@ -72,6 +72,15 @@
         </div>
 
         <div class="cr-card">
+            <h3>Index coverage</h3>
+            <div class="cr-empty">Ask Google (via URL Inspection) whether each published page is actually indexed, and cache the verdict + crawl date so the Live/blog cards show the real “Indexed” state instead of the impressions proxy. Runs automatically every week — this button refreshes this tenant now. Quota-guarded and cached, so it’s safe to re-run.</div>
+            <div class="cr-row">
+                <button class="cr-btn" wire:click="refreshIndexCoverage" wire:confirm="Run a Google index-coverage audit for this site now?"
+                        @disabled($this->siteId === null)>Refresh index coverage</button>
+            </div>
+        </div>
+
+        <div class="cr-card">
             <h3>Weather alert bar</h3>
             <div class="cr-empty">The severe-weather (rain) strip above the header. Off by default — turn it on only for tenants where it's relevant (e.g. sump pumps). It needs coordinates + a Contact page, and goes live on the next “Sync header &amp; footer”.</div>
             <label class="cr-lock" style="cursor:pointer;">

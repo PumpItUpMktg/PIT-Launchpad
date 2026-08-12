@@ -51,6 +51,22 @@ it('groups storefront towns by county with a resolved county name', function () 
         ->and(collect($counties[0]['towns'])->pluck('key')->all())->toBe(['havre de grace']);
 });
 
+it('resolves a storefront\'s served counties to human names for the card pills', function () {
+    [, $store] = stSite();
+
+    expect(app(StorefrontTowns::class)->servedCountyNames($store))->toBe(['Harford County']);
+});
+
+it('a storefront with no county set has no served-county pills', function () {
+    $site = Site::factory()->create();
+    $store = Location::factory()->create([
+        'site_id' => $site->id, 'is_storefront' => true,
+        'home_county_geoid' => null, 'county_geoids' => [],
+    ]);
+
+    expect(app(StorefrontTowns::class)->servedCountyNames($store))->toBe([]);
+});
+
 it('a site with no storefront yields no counties', function () {
     $site = Site::factory()->create();
     Location::factory()->create(['site_id' => $site->id, 'is_storefront' => false]);

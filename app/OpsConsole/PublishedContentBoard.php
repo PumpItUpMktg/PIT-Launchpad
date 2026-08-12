@@ -152,7 +152,7 @@ class PublishedContentBoard
      * never silently dropped. The hub card is fully computed for the Storefront-Pages section, the town
      * cards for the Location-Pages section; the other side is deferred (never shown there).
      *
-     * @return list<array{location_id: string, name: string, is_storefront: bool, gbp_linked: bool, hub: array<string, mixed>|null, towns: list<array<string, mixed>>}>
+     * @return list<array{location_id: string, name: string, is_storefront: bool, gbp_linked: bool, counties: list<string>, hub: array<string, mixed>|null, towns: list<array<string, mixed>>}>
      */
     private function groupStorefronts(Collection $locationPages, string $siteId, ?string $domain, InternalLinkGraph $graph, array $townMap, ?string $section): array
     {
@@ -194,6 +194,7 @@ class PublishedContentBoard
                 'name' => trim((string) $name),
                 'is_storefront' => (bool) $loc?->is_storefront,
                 'gbp_linked' => $loc !== null && (trim((string) $loc->place_id) !== '' || trim((string) $loc->gbp_url) !== ''),
+                'counties' => $loc !== null ? $this->storefrontTowns->servedCountyNames($loc) : [],
                 'hub' => $bucket['hub'] instanceof Content ? $this->card($bucket['hub'], $domain, $graph, $townMap, false, $hubFull) : null,
                 'towns' => array_map(fn (Content $c): array => $this->card($c, $domain, $graph, $townMap, false, $townFull), $bucket['towns']),
             ];

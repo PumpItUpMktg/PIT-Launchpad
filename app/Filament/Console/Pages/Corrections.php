@@ -8,6 +8,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
 use App\Operate\QueueHealth;
+use App\Operator\IndexCoverage;
 use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Security\Capability;
 use BackedEnum;
@@ -122,6 +123,40 @@ class Corrections extends ConsolePage
         Artisan::call('launchpad:reset-render');
 
         Notification::make()->title('Requeued failed image renders.')->success()->send();
+    }
+
+    /**
+     * Run the real Google index-coverage audit for this tenant — a URL Inspection over every published
+     * page + post, caching each verdict so the Live/blog cards then read the REAL "Indexed" state + crawl
+     * date (instead of the impressions>0 proxy). This is the on-demand twin of the weekly
+     * `launchpad:audit-index` schedule; quota-guarded + cached, so it's safe to re-run. Reuses
+     * {@see IndexCoverage} verbatim and reports the X-of-Y result inline.
+     */
+    public function refreshIndexCoverage(): void
+    {
+        if (! $this->can(Capability::UnfreezeQueue) || $this->siteId === null) {
+            return;
+        }
+        $site = Site::withoutGlobalScopes()->find($this->siteId);
+        if ($site === null) {
+            return;
+        }
+
+        $r = app(IndexCoverage::class)->audit($site, live: true);
+
+        if (! $r['connected']) {
+            Notification::make()
+                ->title('Search Console not connected')
+                ->body('This tenant has no live Google grant or no GSC property picked — nothing could be inspected.')
+                ->warning()->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title("Index audit complete — {$r['indexed']} of {$r['total']} published URLs indexed.")
+            ->body("{$r['inspected']} inspected, {$r['not_inspected']} not inspected (quota/pending). The cards now show the real index verdict + crawl date.")
+            ->success()->send();
     }
 
     /**

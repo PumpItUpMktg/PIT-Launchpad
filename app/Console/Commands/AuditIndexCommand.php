@@ -6,6 +6,7 @@ use App\Integrations\UrlInspection\GoogleIndexInspector;
 use App\Models\Site;
 use App\Operator\IndexCoverage;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 
 /**
  * Audit a tenant's REAL Google index coverage — runs a URL Inspection for every published page + post and
@@ -13,38 +14,48 @@ use Illuminate\Console\Command;
  * excluded-by-redirect, …). This is the authoritative answer to "does our marked index match Google?",
  * distinct from the impressions>0 badge on the cards.
  *
- * Quota-guarded + cached (see {@see GoogleIndexInspector}) — safe to re-run;
- * cached URLs cost no API call, and the run stops inspecting new URLs once the per-day cap is reached
- * (reported as "not inspected"). After a run the Live/blog cards show the real state from cache.
+ * Quota-guarded + cached (see {@see GoogleIndexInspector}) — safe to
+ * re-run; cached URLs cost no API call, and the run stops inspecting new URLs once the per-day cap is
+ * reached (reported as "not inspected"). After a run the Live/blog cards show the real state from cache.
+ *
+ * Runnable ad hoc for one tenant (`--site=`), or across every GSC-connected site when `--site` is
+ * omitted — the form the weekly schedule uses so the index verdict + crawl date on the cards stay fresh
+ * without an operator having to remember to run it.
  */
 class AuditIndexCommand extends Command
 {
-    protected $signature = 'launchpad:audit-index {--site= : Site id or brand name (required)}';
+    protected $signature = 'launchpad:audit-index {--site= : Site id or brand name (all GSC-connected sites if omitted)}';
 
     protected $description = 'Audit real Google index coverage per URL (indexed / crawled-not-indexed / excluded-by-redirect) via URL Inspection.';
 
     public function handle(IndexCoverage $coverage): int
     {
-        $arg = trim((string) $this->option('site'));
-        if ($arg === '') {
-            $this->error('--site is required (id or brand name).');
-
+        $sites = $this->resolveSites();
+        if ($sites === null) {
             return self::FAILURE;
         }
+        if ($sites->isEmpty()) {
+            $this->warn('No GSC-connected sites (none has a gsc_property picked) — nothing to audit.');
 
-        $site = Site::query()->where('id', $arg)->orWhere('brand_name', $arg)->first();
-        if ($site === null) {
-            $this->error("No site matches [{$arg}].");
-
-            return self::FAILURE;
+            return self::SUCCESS;
         }
 
+        foreach ($sites as $site) {
+            $this->auditSite($site, $coverage);
+        }
+
+        return self::SUCCESS;
+    }
+
+    /** Run + report the index-coverage audit for a single tenant. */
+    private function auditSite(Site $site, IndexCoverage $coverage): void
+    {
         $r = $coverage->audit($site, live: true);
 
         if (! $r['connected']) {
             $this->warn("{$site->brand_name}: Search Console not connected (no grant or no GSC property picked) — nothing inspected.");
 
-            return self::SUCCESS;
+            return;
         }
 
         $this->line("<info>{$site->brand_name}</info> ({$site->id}) — index coverage");
@@ -73,7 +84,32 @@ class AuditIndexCommand extends Command
                 $this->line("    - {$f['url']}  →  {$f['google_canonical']}");
             }
         }
+    }
 
-        return self::SUCCESS;
+    /**
+     * One tenant when `--site` is given (id or brand name), else every GSC-connected site — the same
+     * "has a gsc_property picked" rule the inspector uses to decide a tenant is connected.
+     *
+     * @return Collection<int, Site>|null null on an unresolvable --site
+     */
+    private function resolveSites(): ?Collection
+    {
+        $arg = trim((string) $this->option('site'));
+
+        if ($arg !== '') {
+            $site = Site::query()->where('id', $arg)->orWhere('brand_name', $arg)->first();
+            if ($site === null) {
+                $this->error("No site matches [{$arg}].");
+
+                return null;
+            }
+
+            return collect([$site]);
+        }
+
+        return Site::query()
+            ->whereNotNull('gsc_property')
+            ->where('gsc_property', '!=', '')
+            ->get();
     }
 }
