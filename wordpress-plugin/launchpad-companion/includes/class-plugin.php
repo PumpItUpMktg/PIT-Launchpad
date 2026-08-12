@@ -11,8 +11,10 @@ namespace Launchpad\Companion;
 use Launchpad\Companion\Admin\SlotsScreen;
 use Launchpad\Companion\Content\AreaTaxonomy;
 use Launchpad\Companion\Content\EditGuard;
+use Launchpad\Companion\Content\JobCpt;
 use Launchpad\Companion\Content\KitTaxonomy;
 use Launchpad\Companion\Render\Assets;
+use Launchpad\Companion\Render\JobRender;
 use Launchpad\Companion\Render\BrandPaint;
 use Launchpad\Companion\Render\ScriptDelay;
 use Launchpad\Companion\Render\WeatherAlert;
@@ -56,6 +58,11 @@ final class Plugin
         // The lp_area town taxonomy (§B) — the towns a post references, queryable so a
         // location page can list its town's posts.
         add_action('init', [AreaTaxonomy::class, 'register']);
+
+        // Job Capture (§10): the pig_job CPT + pig_city/pig_service taxonomies, and the render paths
+        // ([pig_jobs] shortcode + the launchpad/pig-jobs block).
+        add_action('init', [JobCpt::class, 'register']);
+        ( new JobRender() )->register();
 
         // Receiver.
         add_action('rest_api_init', [new Routes(), 'register']);
@@ -142,6 +149,7 @@ final class Plugin
         self::register_page_categories();
         KitTaxonomy::register();
         AreaTaxonomy::register();
+        JobCpt::register();
         ( new Sitemap() )->add_rewrite_rules();
         ( new IndexNow() )->add_rewrite_rules();
         flush_rewrite_rules();
