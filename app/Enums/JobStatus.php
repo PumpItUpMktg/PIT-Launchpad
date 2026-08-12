@@ -22,6 +22,8 @@ enum JobStatus: string
     case Review = 'review';
     case Approved = 'approved';
     case Rejected = 'rejected';
+    case Publishing = 'publishing';
+    case PublishFailed = 'publish_failed';
     case Published = 'published';
 
     public function label(): string
@@ -34,6 +36,8 @@ enum JobStatus: string
             self::Review => 'In review',
             self::Approved => 'Approved',
             self::Rejected => 'Rejected',
+            self::Publishing => 'Publishing',
+            self::PublishFailed => 'Publish failed',
             self::Published => 'Published',
         };
     }

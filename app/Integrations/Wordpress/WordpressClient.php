@@ -181,6 +181,29 @@ class WordpressClient
     }
 
     /**
+     * Upsert a Job Capture post (the `pig_job` CPT). Keyed on `job_id` (ULID); idempotent, so a re-publish
+     * of an edited job updates the same WordPress post rather than duplicating (§9). Returns `wp_post_id`.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function upsertJob(array $payload): array
+    {
+        return $this->post('/job', $payload);
+    }
+
+    /**
+     * Pull a Job Capture post DOWN (the unapprove path — §9): the companion plugin unpublishes/removes the
+     * post for this ULID rather than leaving it orphaned live. Idempotent (a no-op if it's already gone).
+     *
+     * @return array<string, mixed>
+     */
+    public function deleteJob(string $jobId): array
+    {
+        return $this->post('/job/delete', ['job_id' => $jobId]);
+    }
+
+    /**
      * Upsert a silo → WP category. Returns the mapped `wp_category_id`.
      *
      * @param  array<string, mixed>  $payload
