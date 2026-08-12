@@ -18,6 +18,13 @@ interface MunicipalityGazetteer
     public function countyAt(float $lat, float $lng): ?County;
 
     /**
+     * The place / county-subdivision a point falls IN — a point-intersect query, MCD layer first
+     * (essential for NJ/PA), then Incorporated Places. This is the point→identity lookup Job Capture needs
+     * to normalize a captured coordinate to one canonical municipality (GEOID). Null if nothing contains it.
+     */
+    public function placeAt(float $lat, float $lng): ?Municipality;
+
+    /**
      * Every county in a state (for the per-location county multi-select).
      *
      * @return list<County>

@@ -41,6 +41,13 @@ class MockMunicipalityGazetteer implements MunicipalityGazetteer
         return $this->counties[0] ?? null;
     }
 
+    public function placeAt(float $lat, float $lng): ?Municipality
+    {
+        $this->queries[] = ['lat' => $lat, 'lng' => $lng, 'radius' => 0.0];
+
+        return $this->municipalities[0] ?? null;
+    }
+
     /**
      * @return list<County>
      */
