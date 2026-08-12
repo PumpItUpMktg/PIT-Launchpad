@@ -67,10 +67,11 @@ final class JobEnhancer
     /** The prompt — real job facts varied in, an explicit anti-templating instruction, JSON contract. */
     private function prompt(Job $job, string $source, int $photoCount): string
     {
-        $brand = trim((string) ($job->site?->brand_name ?? '')) ?: 'the company';
+        $brand = trim((string) ($job->site->brand_name ?? '')) ?: 'the company';
         $types = $job->jobTypes->pluck('label')->filter()->implode(', ');
-        $city = trim((string) ($job->city?->name ?? ''));
-        $county = trim((string) ($job->county?->name ?? ''));
+        // Geography FKs are nullable (an un-resolved / walk-in job) — guard on the id, not the relation.
+        $city = $job->job_city_id !== null ? trim((string) $job->city->name) : '';
+        $county = $job->job_county_id !== null ? trim((string) $job->county->name) : '';
         $where = trim($city.($county !== '' ? ($city !== '' ? ', ' : '').$county : ''));
 
         $facts = array_filter([
