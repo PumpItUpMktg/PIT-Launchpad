@@ -2,7 +2,9 @@
 
 namespace App\PageBuilder\Entities;
 
+use App\Enums\JobStatus;
 use App\Models\ConversionConfig;
+use App\Models\Job;
 use App\Models\Location;
 use App\Models\Offer;
 use App\Models\ProofItem;
@@ -57,9 +59,13 @@ class EntityResolver
 
             'market.profile' => $context->market !== null ? 1 : 0,
 
-            // No Job Capture model exists until that section ships; resolves to
-            // zero so the thin-page guard relies on market-tagged reviews today.
-            'jobcapture.radius' => 0,
+            // Published Job Capture posts backing a page's gated "jobs" section. Site-level for now
+            // (zero until the first job publishes, so behaviour is unchanged pre-launch); the §4 geography
+            // pipeline refines this to a radius/market-scoped count once jobs carry resolved coordinates.
+            'jobcapture.radius' => Job::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $siteId)
+                ->where('status', JobStatus::Published->value)
+                ->count(),
 
             default => null,
         };
