@@ -9,6 +9,7 @@ use App\JobCapture\Capture\CouldNotPlaceJobException;
 use App\JobCapture\Capture\ManualJobData;
 use App\JobCapture\Capture\ManualJobIntake;
 use App\JobCapture\Enhancement\DescriptionEnhancer;
+use App\JobCapture\Review\JobPhotoAttacher;
 use App\JobCapture\Review\JobReviewActions;
 use App\Models\Job;
 use App\Models\JobType;
@@ -90,6 +91,12 @@ class JobReview extends ConsolePage
 
     /** Set true when the operator picks a suggestion, so the live search doesn't immediately re-open. */
     public bool $addressPicked = false;
+
+    /** Per-review-card photo uploads, keyed by job id (each value a list of Livewire uploads).
+     *
+     * @var array<string, mixed>
+     */
+    public array $jobPhotos = [];
 
     /**
      * The jobs awaiting a decision for the active site — review first, then stuck-captured. Presented for
@@ -371,6 +378,33 @@ class JobReview extends ConsolePage
         $site = Site::withoutGlobalScopes()->find($this->siteId);
 
         return $site !== null && $this->user()->canSeeSite((string) $site->id) ? $site : null;
+    }
+
+    /** Attach the uploaded photos to an existing review-queue job (backfill / walk-in photographed later). */
+    public function attachPhotos(string $id): void
+    {
+        if (! $this->can(Capability::EditContent)) {
+            return;
+        }
+        $job = $this->ownedJob($id);
+        $uploads = $this->jobPhotos[$id] ?? null;
+        if ($job === null || ! is_array($uploads) || $uploads === []) {
+            return;
+        }
+
+        $photos = [];
+        foreach (array_slice(array_values($uploads), 0, Job::MAX_PHOTOS) as $i => $file) {
+            if ($file instanceof TemporaryUploadedFile) {
+                $photos[] = ['bytes' => (string) $file->get(), 'filename' => $file->getClientOriginalName() ?: ($i + 1).'.jpg'];
+            }
+        }
+
+        $added = app(JobPhotoAttacher::class)->attach($job, $photos);
+        unset($this->jobPhotos[$id]);
+
+        $added > 0
+            ? Notification::make()->title($added.' photo'.($added === 1 ? '' : 's').' added.')->success()->send()
+            : Notification::make()->title('No room for more photos on this job (max '.Job::MAX_PHOTOS.').')->warning()->send();
     }
 
     /** A job in a site the operator may see — the guard every mutating action runs first. */

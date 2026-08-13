@@ -133,6 +133,17 @@
                     </div>
                 @endif
 
+                @if (count($job['photos']) < 3)
+                    <div class="jr-row" style="gap:8px;">
+                        <input type="file" class="jr-field" style="max-width:320px;" wire:model="jobPhotos.{{ $job['id'] }}" multiple accept="image/*">
+                        <button class="jr-btn" wire:click="attachPhotos('{{ $job['id'] }}')" wire:loading.attr="disabled" wire:target="jobPhotos.{{ $job['id'] }},attachPhotos" type="button">
+                            <span wire:loading.remove wire:target="jobPhotos.{{ $job['id'] }}">Add photos</span>
+                            <span wire:loading wire:target="jobPhotos.{{ $job['id'] }}">Uploading…</span>
+                        </button>
+                        <span class="jr-empty">up to {{ 3 - count($job['photos']) }} more</span>
+                    </div>
+                @endif
+
                 @if ($editingId === $job['id'])
                     {{-- Inline edit: the source seed feeds re-enhance; title/meta ship as SEO. --}}
                     <div>
