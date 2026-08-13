@@ -5,7 +5,10 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ServiceResource\Pages\CreateService;
 use App\Filament\Resources\ServiceResource\Pages\EditService;
 use App\Filament\Resources\ServiceResource\Pages\ListServices;
+use App\Models\ConversionConfig;
+use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Support\CurrentSite;
 use BackedEnum;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -153,7 +156,13 @@ class ServiceResource extends Resource
                 ->helperText('Pulls your warranty trust copy onto the page.'),
 
             Toggle::make('referral_mode')->label('Referral only — we refer this, we don’t perform it')
-                ->helperText('Suppresses the price range, warranty, and Service-provider schema, and swaps the CTA to your referral. Set the referral CTA on the conversion config.'),
+                ->helperText('Suppresses the price range, warranty, and Service-provider schema, and swaps the CTA to your referral. Set the referral CTA on the conversion config.')
+                // On CREATE the toggle defaults to the tenant's referral default (Filament submits the field
+                // explicitly, so this is what makes the ServiceResource path respect the default). On EDIT
+                // Filament fills the record's own value, overriding this. Always independently editable.
+                ->default(fn (): bool => (bool) ConversionConfig::withoutGlobalScope(SiteScope::class)
+                    ->where('site_id', CurrentSite::id())
+                    ->value('referral_default')),
 
             Textarea::make('description')->label('Internal description')->rows(3)
                 ->helperText('Grounding context for the drafter (not rendered verbatim).'),

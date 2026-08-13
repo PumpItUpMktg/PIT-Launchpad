@@ -52,6 +52,18 @@
                     <span wire:loading wire:target="saveLeadForm">Saving…</span>
                 </button>
             </div>
+
+            <label style="display:flex;align-items:flex-start;gap:8px;margin-top:16px;cursor:pointer">
+                <input type="checkbox" wire:model="referralDefault" style="margin-top:3px">
+                <span>
+                    <strong>New services default to referral mode</strong>
+                    <span class="g-muted" style="display:block;font-size:12.5px">
+                        For a tenant that refers work rather than performing it: any service added after this is set to
+                        referral mode by default (no price range, no Service-provider schema, a referral CTA). You can still
+                        turn it off on an individual service, and this never changes services that already exist.
+                    </span>
+                </span>
+            </label>
         </div>
 
         @include('filament.gathering._next')

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * @property string|null $referral_cta_label button text for referral-mode services (e.g. "Find a provider")
  * @property string|null $referral_cta_url destination for referral-mode CTAs (the tenant's directory / partner)
+ * @property bool $referral_default new services default to referral_mode (seed only; never retroactive)
  */
 class ConversionConfig extends Model
 {
@@ -28,6 +29,7 @@ class ConversionConfig extends Model
             'lead_destination' => 'array',
             'forms' => 'array',
             'analytics_ids' => 'array',
+            'referral_default' => 'boolean',
         ];
     }
 }
