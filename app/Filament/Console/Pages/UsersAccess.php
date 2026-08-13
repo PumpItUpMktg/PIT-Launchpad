@@ -174,7 +174,11 @@ class UsersAccess extends ConsolePage
         $this->newEmail = '';
         $this->newSiteId = null;
 
-        Notification::make()->title("Provisioned {$name} — send them the capture link + code.")->success()->send();
+        if ($result['delivered']) {
+            Notification::make()->title("Provisioned {$name} — emailed the capture link + code to {$email}.")->success()->send();
+        } else {
+            Notification::make()->title("Provisioned {$name} — send them the capture link + code below.")->warning()->send();
+        }
     }
 
     public function dismissIssued(): void

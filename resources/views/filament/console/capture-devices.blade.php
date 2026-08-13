@@ -40,11 +40,14 @@
             <h3>Add a tech</h3>
             <div class="cd-row">
                 <div class="cd-field"><label>Name</label><input type="text" wire:model="newName" placeholder="Mike R."></div>
+                <div class="cd-field"><label>Email (to send the invite)</label><input type="email" wire:model="newEmail" placeholder="mike@example.com"></div>
                 <div class="cd-field"><label>Phone (optional)</label><input type="tel" wire:model="newPhone" placeholder="+1 555 123 4567"></div>
-                <button class="cd-btn go" wire:click="addDevice" @disabled($this->siteId === null)>Add &amp; issue code</button>
+                <button class="cd-btn go" wire:click="addDevice" @disabled($this->siteId === null)>Add &amp; send invite</button>
             </div>
             @if ($this->siteId === null)
                 <div class="cd-empty">Pick a site above first.</div>
+            @else
+                <div class="cd-empty">With an email we send the link + code straight to the tech. No email? You'll get the link + code to pass along.</div>
             @endif
         </div>
 
@@ -55,11 +58,11 @@
                     <span>
                         <strong>{{ $d['name'] }}</strong>
                         <span class="cd-badge {{ $d['active'] ? 'on' : 'off' }}">{{ $d['active'] ? 'Active' : 'Revoked' }}</span>
-                        <div class="meta">{{ $d['phone'] ?: 'no phone' }}{{ $d['last_active'] ? ' · last active '.$d['last_active'] : ' · never signed in' }}</div>
+                        <div class="meta">{{ $d['email'] ?: 'no email' }} · {{ $d['phone'] ?: 'no phone' }}{{ $d['last_active'] ? ' · last active '.$d['last_active'] : ' · never signed in' }}</div>
                     </span>
                     @if ($d['active'])
                         <span style="display:flex;gap:8px;">
-                            <button class="cd-btn" wire:click="reissueCode('{{ $d['id'] }}')">New code</button>
+                            <button class="cd-btn" wire:click="reissueCode('{{ $d['id'] }}')">{{ $d['email'] ? 'Resend invite' : 'New code' }}</button>
                             <button class="cd-btn danger" wire:click="revoke('{{ $d['id'] }}')" wire:confirm="Revoke {{ $d['name'] }}'s device? Their app stops working immediately.">Revoke</button>
                         </span>
                     @endif

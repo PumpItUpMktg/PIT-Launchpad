@@ -2,9 +2,11 @@
 
 use App\Enums\UserRole;
 use App\Filament\Console\Pages\CaptureDevices;
+use App\Mail\TechCaptureInviteMail;
 use App\Models\Site;
 use App\Models\TechDevice;
 use App\Models\User;
+use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 
 beforeEach(fn () => $this->actingAs(User::factory()->create())); // Operator (Super Admin) by default
@@ -37,6 +39,24 @@ it('adds a tech device and surfaces a capture link + one-time code', function ()
     // The tech is now a first-class platform account (unified identity): device → role=tech User.
     expect($device->user_id)->not->toBeNull()
         ->and($device->user->role)->toBe(UserRole::Tech);
+});
+
+it('emails the invite on add when an email is given, and resends it on reissue', function () {
+    Mail::fake();
+    $site = Site::factory()->create();
+
+    $page = new CaptureDevices;
+    $page->siteId = $site->id;
+    $page->newName = 'Emailed Tech';
+    $page->newEmail = 'et@example.com';
+    $page->addDevice();
+
+    Mail::assertSent(TechCaptureInviteMail::class, fn (TechCaptureInviteMail $m): bool => $m->hasTo('et@example.com'));
+
+    $device = TechDevice::withoutGlobalScopes()->where('site_id', $site->id)->first();
+    $page->reissueCode($device->id);
+
+    Mail::assertSent(TechCaptureInviteMail::class, 2); // once on add, once on resend
 });
 
 it('re-issues a fresh code for an existing device', function () {

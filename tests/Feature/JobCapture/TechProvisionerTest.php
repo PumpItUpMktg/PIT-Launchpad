@@ -2,9 +2,11 @@
 
 use App\Enums\UserRole;
 use App\JobCapture\Auth\TechProvisioner;
+use App\Mail\TechCaptureInviteMail;
 use App\Models\Site;
 use App\Models\TechDevice;
 use App\Models\User;
+use Illuminate\Support\Facades\Mail;
 
 it('provisions a tech as a role=tech user linked to a capture device with a one-time code', function () {
     $site = Site::factory()->create();
@@ -24,6 +26,28 @@ it('provisions a tech as a role=tech user linked to a capture device with a one-
     expect($user)->not->toBeNull()
         ->and($user->role)->toBe(UserRole::Tech)
         ->and($user->name)->toBe('Mike R.');
+});
+
+it('auto-emails the capture invite and reports delivered when the tech has an email', function () {
+    Mail::fake();
+    $site = Site::factory()->create();
+
+    $result = app(TechProvisioner::class)->provision($site->id, 'Mailed Mike', null, 'mike@example.com');
+
+    expect($result['delivered'])->toBeTrue();
+    Mail::assertSent(TechCaptureInviteMail::class, fn (TechCaptureInviteMail $mail): bool => $mail->hasTo('mike@example.com')
+        && $mail->code === $result['code']
+        && str_contains($mail->link, (string) $result['device']->id));
+});
+
+it('sends nothing and reports undelivered when no address is on file', function () {
+    Mail::fake();
+    $site = Site::factory()->create();
+
+    $result = app(TechProvisioner::class)->provision($site->id, 'No Email Ned');
+
+    expect($result['delivered'])->toBeFalse();
+    Mail::assertNothingSent();
 });
 
 it('uses a supplied real email for the user but leaves it unusable as a login until upgrade', function () {

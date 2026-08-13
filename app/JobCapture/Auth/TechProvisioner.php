@@ -10,17 +10,21 @@ use Illuminate\Support\Str;
 
 /**
  * Onboards a tech as a first-class platform account (§5): a User (role=tech, no panel access, no console
- * capabilities) plus a capture {@see TechDevice} bound to it, and the first login code. The User is the
- * unified identity — a Job Capture → Launchpad upgrade is then a role change, not a new account — while the
- * device token stays the tech's only sign-in (they never use email/password). Reused by the Capture Devices
- * screen and the Users & access hub.
+ * capabilities) plus a capture {@see TechDevice} bound to it, the first login code, and — when an email is
+ * on file — the capture invite auto-delivered ({@see TechInviteNotifier}). The User is the unified identity
+ * — a Job Capture → Launchpad upgrade is then a role change, not a new account — while the device token
+ * stays the tech's only sign-in (they never use email/password). Reused by the Capture Devices screen and
+ * the Users & access hub.
  */
 final class TechProvisioner
 {
-    public function __construct(private readonly DeviceAuthenticator $authenticator) {}
+    public function __construct(
+        private readonly DeviceAuthenticator $authenticator,
+        private readonly TechInviteNotifier $notifier,
+    ) {}
 
     /**
-     * @return array{device: TechDevice, code: string, link: string}
+     * @return array{device: TechDevice, code: string, link: string, delivered: bool}
      */
     public function provision(string $siteId, string $name, ?string $phone = null, ?string $email = null): array
     {
@@ -42,10 +46,14 @@ final class TechProvisioner
             'email' => $normalizedEmail,
         ]);
 
+        $code = $this->authenticator->issueLoginCode($device);
+        $link = url('/capture').'?device='.$device->id;
+
         return [
             'device' => $device,
-            'code' => $this->authenticator->issueLoginCode($device),
-            'link' => url('/capture').'?device='.$device->id,
+            'code' => $code,
+            'link' => $link,
+            'delivered' => $this->notifier->send($device, $code, $link), // auto-email when an address is on file
         ];
     }
 

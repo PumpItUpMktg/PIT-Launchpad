@@ -3,6 +3,7 @@
 namespace App\Filament\Console\Pages;
 
 use App\JobCapture\Auth\DeviceAuthenticator;
+use App\JobCapture\Auth\TechInviteNotifier;
 use App\JobCapture\Auth\TechProvisioner;
 use App\Models\Scopes\SiteScope;
 use App\Models\TechDevice;
@@ -38,6 +39,8 @@ class CaptureDevices extends ConsolePage
 
     public string $newPhone = '';
 
+    public string $newEmail = '';
+
     /**
      * The just-issued credential to show once (the code is never stored in plaintext, so it can only be
      * displayed at the moment it is minted).
@@ -54,7 +57,7 @@ class CaptureDevices extends ConsolePage
         return $user instanceof User && $user->hasCapability(Capability::ManageUsers);
     }
 
-    /** @return list<array{id: string, name: string, phone: string, active: bool, last_active: ?string}> */
+    /** @return list<array{id: string, name: string, phone: string, email: string, active: bool, last_active: ?string}> */
     public function getDevicesProperty(): array
     {
         if ($this->siteId === null) {
@@ -69,6 +72,7 @@ class CaptureDevices extends ConsolePage
                 'id' => (string) $device->id,
                 'name' => (string) $device->name,
                 'phone' => (string) $device->phone,
+                'email' => (string) $device->email,
                 'active' => $device->isActive(),
                 'last_active' => $device->last_active_at instanceof Carbon ? $device->last_active_at->diffForHumans() : null,
             ])
@@ -89,8 +93,11 @@ class CaptureDevices extends ConsolePage
             return;
         }
 
-        // Provisions the unified identity (a role=tech User) + its capture device + first login code.
-        $result = app(TechProvisioner::class)->provision($this->siteId, $name, trim($this->newPhone) ?: null);
+        $email = trim($this->newEmail) ?: null;
+
+        // Provisions the unified identity (a role=tech User) + its capture device + first login code, and
+        // auto-emails the invite when an address is supplied.
+        $result = app(TechProvisioner::class)->provision($this->siteId, $name, trim($this->newPhone) ?: null, $email);
 
         $this->lastIssued = [
             'name' => $name,
@@ -98,9 +105,10 @@ class CaptureDevices extends ConsolePage
             'code' => $result['code'],
         ];
 
-        Notification::make()->title("Added {$name} — send them the link + code.")->success()->send();
+        $this->notifyDelivery($result['delivered'], $name, $email);
         $this->newName = '';
         $this->newPhone = '';
+        $this->newEmail = '';
     }
 
     /** Issue a fresh login code for an existing device (e.g. the code expired before the tech used it). */
@@ -114,7 +122,7 @@ class CaptureDevices extends ConsolePage
             return;
         }
 
-        $this->issue($device, "New code for {$device->name}.");
+        $this->issue($device);
     }
 
     /** Revoke a device — its token stops working immediately (tech churn / lost phone). */
@@ -137,17 +145,30 @@ class CaptureDevices extends ConsolePage
         $this->lastIssued = null;
     }
 
-    private function issue(TechDevice $device, string $title): void
+    /** Mint a fresh code for a device, re-email the invite when possible, and show it as the manual fallback. */
+    private function issue(TechDevice $device): void
     {
         $code = app(DeviceAuthenticator::class)->issueLoginCode($device);
+        $link = url('/capture').'?device='.$device->id;
 
         $this->lastIssued = [
             'name' => (string) $device->name,
-            'link' => url('/capture').'?device='.$device->id,
+            'link' => $link,
             'code' => $code,
         ];
 
-        Notification::make()->title($title)->success()->send();
+        $delivered = app(TechInviteNotifier::class)->send($device, $code, $link);
+        $this->notifyDelivery($delivered, (string) $device->name, $device->email);
+    }
+
+    /** Tell the operator whether the invite was emailed, or that they need to hand off the link + code. */
+    private function notifyDelivery(bool $delivered, string $name, ?string $email): void
+    {
+        if ($delivered && $email !== null && $email !== '') {
+            Notification::make()->title("Emailed {$name}'s capture link + code to {$email}.")->success()->send();
+        } else {
+            Notification::make()->title("Send {$name} the link + code below — no email on file.")->warning()->send();
+        }
     }
 
     /** A device in a site the operator may see. */
