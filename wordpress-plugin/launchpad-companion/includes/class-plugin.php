@@ -117,6 +117,12 @@ final class Plugin
         // was lost in a site migration without needing a deactivate/reactivate. Hooked on `init` (not
         // admin_init) so it fires for REST requests too — the very connect attempt can self-heal.
         add_action('init', [self::class, 'maybe_upgrade']);
+
+        // Belt to maybe_upgrade's version gate: a migrated/cloned site copies the lpc_version option in the
+        // DB dump, so the version matches and the gated repair never runs — yet the service role can still
+        // have carried over WITHOUT the capability, 403-ing an otherwise-valid app password. This cheap
+        // roles-only re-grant runs every request (init, so REST too) and self-heals that case.
+        add_action('init', [ServiceUser::class, 'ensure_caps']);
     }
 
     /** Run install() once after a version change (see boot()). */

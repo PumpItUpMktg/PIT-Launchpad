@@ -2,8 +2,8 @@
 /**
  * The authed receiver for the Job Capture control plane. Registers the SAME `launchpad/v1/job` +
  * `/job/delete` contract the companion plugin exposes, so the control plane's push works against a
- * standalone site with no change. Auth is a standard WordPress Application Password (Basic auth) resolving
- * to a user who can edit posts.
+ * standalone site with no change. Auth is a standard WordPress Application Password (Basic auth); the route
+ * authorizes via {@see ServiceUser::can_manage()} (the `lp_manage_content` service cap, or `edit_posts`).
  *
  * @package PIG\Jobs
  */
@@ -40,7 +40,7 @@ final class Rest
 
     public function can_manage(): bool
     {
-        return current_user_can('edit_posts');
+        return ServiceUser::can_manage();
     }
 
     public function job(WP_REST_Request $request): WP_REST_Response
