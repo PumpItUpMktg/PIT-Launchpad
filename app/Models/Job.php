@@ -62,6 +62,9 @@ class Job extends Model
     /** A job carries at most this many types (§3) — enforced here, not at the DB. */
     public const MAX_JOB_TYPES = 3;
 
+    /** A job carries at most this many photos (§5) — the capture slots and the review-screen add both honor it. */
+    public const MAX_PHOTOS = 3;
+
     protected $guarded = [];
 
     /** @return array<string, string> */
