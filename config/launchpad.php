@@ -11,6 +11,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Platform super-users (god mode across every panel)
+    |--------------------------------------------------------------------------
+    |
+    | Emails that get EVERY capability and access to EVERY panel — the operator
+    | console AND the white-labeled client portal (with an all-clients switcher).
+    | The platform owner's account, independent of the stored role, so it survives
+    | any permission change. Comma-separated in LAUNCHPAD_SUPER_USERS.
+    */
+    'super_users' => array_values(array_filter(array_map(
+        static fn (string $email): string => strtolower(trim($email)),
+        explode(',', (string) env('LAUNCHPAD_SUPER_USERS', 'pumpitupmktg@gmail.com')),
+    ))),
+
+    /*
+    |--------------------------------------------------------------------------
     | Local town references on blog posts
     |--------------------------------------------------------------------------
     |

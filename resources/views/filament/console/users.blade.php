@@ -32,7 +32,7 @@
                         @endforeach
                     </select>
                 </div>
-                @if ($newRole === 'site_admin')
+                @if ($newRole === 'site_admin' || $newRole === 'tech')
                     <div class="us-field"><label>Site</label>
                         <select class="us-input" wire:model="newSiteId">
                             <option value="">—</option>
@@ -42,8 +42,20 @@
                         </select>
                     </div>
                 @endif
-                <button class="us-btn" wire:click="createUser">Create user</button>
+                <button class="us-btn" wire:click="createUser">{{ $newRole === 'tech' ? 'Provision tech' : 'Create user' }}</button>
             </div>
+            @if ($newRole === 'tech')
+                <p class="us-email" style="margin-top:8px;">A tech signs in on the capture PWA with a device code — email is optional (only used later if they upgrade to a full login).</p>
+            @endif
+
+            @if ($this->lastIssued)
+                <div class="us-card" style="margin-top:12px; border-color:#4f46e5;">
+                    <h3>Capture link for {{ $this->lastIssued['name'] }}</h3>
+                    <div class="us-field"><label>Link</label><input class="us-input" type="text" readonly value="{{ $this->lastIssued['link'] }}"></div>
+                    <div class="us-field" style="margin-top:8px;"><label>Login code</label><input class="us-input" type="text" readonly value="{{ $this->lastIssued['code'] }}"></div>
+                    <button class="us-btn" style="margin-top:10px; background:transparent; color:inherit; border-color:rgba(148,163,184,.4);" wire:click="dismissIssued">Dismiss</button>
+                </div>
+            @endif
         </div>
 
         <div class="us-card">

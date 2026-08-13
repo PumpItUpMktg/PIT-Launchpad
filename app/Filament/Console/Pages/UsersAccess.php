@@ -3,6 +3,7 @@
 namespace App\Filament\Console\Pages;
 
 use App\Enums\UserRole;
+use App\JobCapture\Auth\TechProvisioner;
 use App\Models\Membership;
 use App\Models\Site;
 use App\Models\User;
@@ -44,6 +45,14 @@ class UsersAccess extends ConsolePage
 
     public ?string $newSiteId = null;
 
+    /**
+     * The just-issued capture credential to show once after provisioning a tech (the code is never stored
+     * in plaintext, so it can only be displayed at the moment it is minted).
+     *
+     * @var array{name: string, link: string, code: string}|null
+     */
+    public ?array $lastIssued = null;
+
     public static function canAccess(): bool
     {
         $user = Auth::user();
@@ -82,6 +91,7 @@ class UsersAccess extends ConsolePage
             UserRole::Operator->value => 'Super Admin',
             UserRole::SiteAdmin->value => 'Site Admin',
             UserRole::Client->value => 'Client',
+            UserRole::Tech->value => 'Tech (capture device)',
         ];
     }
 
@@ -101,8 +111,22 @@ class UsersAccess extends ConsolePage
         $email = mb_strtolower(trim($this->newEmail));
         $role = UserRole::tryFrom($this->newRole);
 
-        if ($name === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL) || $role === null) {
-            Notification::make()->title('Enter a name, a valid email, and a role.')->danger()->send();
+        if ($role === null || $name === '') {
+            Notification::make()->title('Enter a name and pick a role.')->danger()->send();
+
+            return;
+        }
+
+        // A tech signs in only via a device token, so no email/password is required — provisioning mints
+        // the role=tech User, its site-scoped capture device, and the first login code to hand over.
+        if ($role === UserRole::Tech) {
+            $this->createTech($name, $email);
+
+            return;
+        }
+
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            Notification::make()->title('Enter a valid email.')->danger()->send();
 
             return;
         }
@@ -127,6 +151,39 @@ class UsersAccess extends ConsolePage
             ->title('User created')
             ->body("Temporary password for {$email}: {$tempPassword}")
             ->success()->persistent()->send();
+    }
+
+    /** Provision a tech (User + capture device + login code) and surface the capture link + code once. */
+    private function createTech(string $name, string $email): void
+    {
+        if ($this->newSiteId === null) {
+            Notification::make()->title('Pick the site the tech captures for.')->danger()->send();
+
+            return;
+        }
+
+        $result = app(TechProvisioner::class)->provision($this->newSiteId, $name, null, $email !== '' ? $email : null);
+
+        $this->lastIssued = [
+            'name' => $name,
+            'link' => $result['link'],
+            'code' => $result['code'],
+        ];
+
+        $this->newName = '';
+        $this->newEmail = '';
+        $this->newSiteId = null;
+
+        if ($result['delivered']) {
+            Notification::make()->title("Provisioned {$name} — emailed the capture link + code to {$email}.")->success()->send();
+        } else {
+            Notification::make()->title("Provisioned {$name} — send them the capture link + code below.")->warning()->send();
+        }
+    }
+
+    public function dismissIssued(): void
+    {
+        $this->lastIssued = null;
     }
 
     public function setRole(string $userId, string $roleValue): void

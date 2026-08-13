@@ -48,6 +48,7 @@ final class RoleCapabilities
             UserRole::Admin, UserRole::Operator => Capability::cases(), // Super Admin: everything
             UserRole::SiteAdmin => self::SITE_ADMIN,
             UserRole::Client => [],
+            UserRole::Tech => [], // field techs use the capture PWA only — no console capabilities
         };
     }
 

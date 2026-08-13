@@ -19,6 +19,11 @@ class ClientAccess
      */
     public function sites(User $user): Collection
     {
+        // A platform super-user sees every client's site (the all-clients switcher).
+        if ($user->isPlatformSuperUser()) {
+            return Site::query()->whereNotNull('account_id')->orderBy('brand_name')->get();
+        }
+
         $accountIds = $user->accounts()->pluck('accounts.id');
 
         return Site::query()->whereIn('account_id', $accountIds)->orderBy('brand_name')->get();
@@ -26,6 +31,15 @@ class ClientAccess
 
     public function account(User $user): ?Account
     {
+        // For a super-user the brand follows the site they've switched to, so the portal white-labels
+        // to whichever client they're viewing (rather than an account they don't belong to).
+        if ($user->isPlatformSuperUser()) {
+            $selected = session('client_site_id');
+            $site = $this->currentSite($user, is_string($selected) ? $selected : null);
+
+            return $site !== null ? Account::query()->find($site->account_id) : Account::query()->orderBy('brand_name')->first();
+        }
+
         return $user->accounts()->first();
     }
 

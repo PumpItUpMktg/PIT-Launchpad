@@ -20,6 +20,14 @@ enum UserRole: string
     /** The white-labeled client portal only — never the admin panel. */
     case Client = 'client';
 
+    /**
+     * A field tech — a first-class platform account that signs in ONLY to the capture PWA (via a device
+     * token, no password), never a Filament panel. Holding a User row (not just a device) means the
+     * identity is unified: when a client upgrades Job Capture → Launchpad, promoting a tech is a role
+     * change, not a new account.
+     */
+    case Tech = 'tech';
+
     /** Roles that reach the operator admin panel. */
     public function isStaff(): bool
     {
@@ -49,6 +57,7 @@ enum UserRole: string
             self::Admin, self::Operator => 'Super Admin',
             self::SiteAdmin => 'Site Admin',
             self::Client => 'Client',
+            self::Tech => 'Tech',
         };
     }
 }
