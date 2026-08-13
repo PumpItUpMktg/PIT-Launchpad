@@ -64,6 +64,24 @@ final class ServiceUser
         }
     }
 
+    /**
+     * Cheap, idempotent capability repair — re-grant CAP to the service role and administrators if either
+     * lost it. Runs on every request (hooked on `init`), so it heals a MIGRATED/cloned site that carried a
+     * stale role over in the DB dump: {@see maybe_upgrade()} only re-runs install() on a version CHANGE, but
+     * a migration copies the `lpc_version` option too, so the version matches and the version-gated repair
+     * never fires. This is roles-only (in-memory via the loaded roles cache — no query, no user creation),
+     * so it's safe to run unconditionally; the heavier user/role repair stays in {@see install()}.
+     */
+    public static function ensure_caps(): void
+    {
+        foreach ([self::ROLE, 'administrator'] as $role_name) {
+            $role = get_role($role_name);
+            if ($role && ! $role->has_cap(self::CAP)) {
+                $role->add_cap(self::CAP);
+            }
+        }
+    }
+
     public static function uninstall(): void
     {
         remove_role(self::ROLE);

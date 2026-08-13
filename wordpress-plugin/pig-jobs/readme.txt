@@ -4,7 +4,7 @@ Tags: jobs, portfolio, local-seo, custom-post-type
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -40,6 +40,18 @@ stock query loops all see the jobs natively — the shortcode/block are for ever
 5. Add `[pig_jobs]` to a page, or tag the page with a city/service and use a bare `[pig_jobs]`.
 
 == Changelog ==
+
+= 0.2.0 =
+* Coexistence guard: when the full Launchpad companion plugin is also active, this standalone plugin now
+  stands down entirely (the companion owns the `pig_job` CPT, the `launchpad/v1/job` route, and rendering).
+  Running both otherwise double-registered the same route with different permission gates, which could 403
+  a valid service-user Application Password on `/job`.
+* Dedicated service identity: adds the `launchpad_service` role + `lp_manage_content` capability (same names
+  the companion uses, so the control plane connects identically to either), granted to administrators too.
+  `/job` now authorizes on that capability OR `edit_posts` (back-compat with existing Editor/Admin
+  connections).
+* Self-heal: re-assert the capability on every request and re-run the install repair after a version change,
+  so a migrated/cloned site recovers without a manual reactivate instead of 403-ing.
 
 = 0.1.0 =
 * Initial scaffold: `pig_job` CPT + `pig_city`/`pig_service` taxonomies; the authed `launchpad/v1/job` +

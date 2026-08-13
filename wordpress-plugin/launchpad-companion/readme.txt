@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.35
+Stable tag: 0.9.36
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,15 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.36 =
+* Self-heal the service capability on a MIGRATED/cloned site. The existing upgrade repair only re-runs on
+  a version change, but a site migration (e.g. Duplicator) copies the `lpc_version` option in the DB dump,
+  so the version matches and the gated repair never fires — leaving a service role that carried over without
+  `lp_manage_content`, which 403s the `launchpad/v1/*` endpoints ("Sorry, you are not allowed to do that")
+  even though the Application Password is valid. A cheap roles-only re-grant now runs on every request
+  (`init`, so REST too), repairing that case with no manual reactivate. Fixes Job Capture pushes 403-ing
+  after a client-hosting migration.
 
 = 0.9.35 =
 * Job Capture (§10): register the `pig_job` custom post type + prefixed `pig_city` / `pig_service`
