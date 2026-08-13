@@ -3,7 +3,10 @@
 use App\Enums\JobStatus;
 use App\Filament\Console\Pages\PublishedJobs;
 use App\Jobs\PublishJob;
+use App\Jobs\UnpublishJob;
 use App\Models\Job;
+use App\Models\JobCounty;
+use App\Models\Location;
 use App\Models\Site;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
@@ -56,7 +59,7 @@ it('retries the WordPress push for a stuck pipeline job', function () {
     Queue::assertPushed(PublishJob::class, fn (PublishJob $j): bool => $j->jobId === $job->id);
 });
 
-it('does not retry a job that is already live', function () {
+it('re-pushes a live job (idempotent update to the same post)', function () {
     Queue::fake();
     $site = Site::factory()->create();
     $job = Job::factory()->published()->create(['site_id' => $site->id]);
@@ -65,5 +68,47 @@ it('does not retry a job that is already live', function () {
     $page->siteId = $site->id;
     $page->retryPublish($job->id);
 
-    Queue::assertNothingPushed();
+    Queue::assertPushed(PublishJob::class, fn (PublishJob $j): bool => $j->jobId === $job->id);
+});
+
+it('sends a published job back to the review queue to edit it, keeping its WP post', function () {
+    $site = Site::factory()->create();
+    $job = Job::factory()->published()->create(['site_id' => $site->id, 'wp_post_id' => 7]);
+
+    $page = new PublishedJobs;
+    $page->siteId = $site->id;
+    $page->editInReview($job->id);
+
+    expect($job->fresh()->status)->toBe(JobStatus::Review)
+        ->and($job->fresh()->wp_post_id)->toBe(7); // retained so re-approve republishes the same post
+});
+
+it('takes a live job down: pulls the WP post and parks it as approved', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    $job = Job::factory()->published()->create(['site_id' => $site->id, 'wp_post_id' => 7]);
+
+    $page = new PublishedJobs;
+    $page->siteId = $site->id;
+    $page->takeDown($job->id);
+
+    Queue::assertPushed(UnpublishJob::class, fn (UnpublishJob $j): bool => $j->jobId === $job->id);
+    expect($job->fresh()->status)->toBe(JobStatus::Approved);
+});
+
+it('shows the service type and the storefront the job references as pills', function () {
+    $site = Site::factory()->create();
+    $county = JobCounty::factory()->create(['county_geoid' => '34001']);
+    Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'Ocean City Shop', 'is_storefront' => true, 'county_geoids' => ['34001'],
+    ]);
+    $job = Job::factory()->published()->create(['site_id' => $site->id, 'job_county_id' => $county->id]);
+    $job->jobTypes()->create(['label' => 'Sump Pump', 'slug' => 'sump-pump']);
+
+    $page = new PublishedJobs;
+    $page->siteId = $site->id;
+    $card = $page->getPublishedJobsProperty()[0];
+
+    expect($card['job_types'])->toContain('Sump Pump')
+        ->and($card['storefront'])->toBe('Ocean City Shop');
 });

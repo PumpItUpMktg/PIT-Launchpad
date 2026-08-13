@@ -17,6 +17,9 @@
         .pj-meta { font-size:12px; color:#64748b; }
         .pj-chips { display:flex; gap:6px; flex-wrap:wrap; }
         .pj-chip { font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:99px; background:rgba(56,189,248,.14); color:#0284c7; }
+        .pj-chip.store { background:rgba(79,70,229,.14); color:#4f46e5; }
+        .pj-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:2px; }
+        .pj-btn.danger { border-color:rgba(220,38,38,.45); color:#dc2626; }
         .pj-badge { font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; align-self:flex-start; }
         .pj-badge.live { background:rgba(22,163,74,.15); color:#15803d; }
         .pj-badge.wait { background:rgba(202,138,4,.16); color:#a16207; }
@@ -44,11 +47,18 @@
                                 <span class="pj-badge {{ $badge($j['status']) }}">{{ $j['status_label'] }}</span>
                                 <p class="pj-title">{{ $j['title'] }}</p>
                                 <div class="pj-meta">{{ collect([$j['city'], $j['county']])->filter()->implode(', ') ?: 'Location pending' }}</div>
+                                @if (count($j['job_types']) > 0 || $j['storefront'])
+                                    <div class="pj-chips">
+                                        @foreach ($j['job_types'] as $t)<span class="pj-chip">{{ $t }}</span>@endforeach
+                                        @if ($j['storefront'])<span class="pj-chip store">{{ $j['storefront'] }}</span>@endif
+                                    </div>
+                                @endif
                                 @if ($j['error'])<div class="pj-err">{{ $j['error'] }}</div>@endif
-                                <div class="pj-foot">
-                                    <span>{{ $j['when'] ? 'updated '.$j['when'] : '' }}</span>
+                                <div class="pj-actions">
                                     <button class="pj-btn" wire:click="retryPublish('{{ $j['id'] }}')">Publish now</button>
+                                    <button class="pj-btn" wire:click="editInReview('{{ $j['id'] }}')">Edit</button>
                                 </div>
+                                <div class="pj-foot"><span>{{ $j['when'] ? 'updated '.$j['when'] : '' }}</span></div>
                             </div>
                         </div>
                     @endforeach
@@ -70,11 +80,17 @@
                                 <span class="pj-badge live">Published</span>
                                 <p class="pj-title">{{ $j['title'] }}</p>
                                 <div class="pj-meta">{{ collect([$j['city'], $j['county']])->filter()->implode(', ') ?: '—' }}</div>
-                                @if (count($j['job_types']) > 0)
+                                @if (count($j['job_types']) > 0 || $j['storefront'])
                                     <div class="pj-chips">
                                         @foreach ($j['job_types'] as $t)<span class="pj-chip">{{ $t }}</span>@endforeach
+                                        @if ($j['storefront'])<span class="pj-chip store">{{ $j['storefront'] }}</span>@endif
                                     </div>
                                 @endif
+                                <div class="pj-actions">
+                                    <button class="pj-btn" wire:click="editInReview('{{ $j['id'] }}')">Edit</button>
+                                    <button class="pj-btn" wire:click="retryPublish('{{ $j['id'] }}')">Repush</button>
+                                    <button class="pj-btn danger" wire:click="takeDown('{{ $j['id'] }}')" wire:confirm="Take '{{ $j['title'] }}' down from WordPress? It stays here as approved and can be re-pushed.">Take down</button>
+                                </div>
                                 <div class="pj-foot">
                                     <span>{{ $j['when'] ? 'published '.$j['when'] : '' }}</span>
                                     <span>{{ $j['wp_post_id'] ? 'WP #'.$j['wp_post_id'] : '' }}</span>
