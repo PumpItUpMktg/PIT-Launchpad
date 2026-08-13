@@ -31,6 +31,11 @@ class User extends Authenticatable implements FilamentUser
      */
     public function canAccessPanel(Panel $panel): bool
     {
+        // Platform super-user: god mode — every panel, including the client portal.
+        if ($this->isPlatformSuperUser()) {
+            return true;
+        }
+
         return match ($panel->getId()) {
             'client' => $this->role === UserRole::Client,
             // The stand-alone Operations Console: the internal Super Admin tier AND a client-side
@@ -38,6 +43,18 @@ class User extends Authenticatable implements FilamentUser
             'console' => $this->isSuperAdmin() || $this->isSiteAdmin(),
             default => $this->role->isStaff(), // admin + operator reach the operator panel
         };
+    }
+
+    /**
+     * The platform owner(s) — a config-driven email allowlist ({@see config('launchpad.super_users')})
+     * that gets EVERY capability and EVERY panel regardless of the stored role, so god-mode access
+     * survives any permission change.
+     */
+    public function isPlatformSuperUser(): bool
+    {
+        $email = strtolower(trim((string) $this->email));
+
+        return $email !== '' && in_array($email, (array) config('launchpad.super_users', []), true);
     }
 
     public function isAdmin(): bool
@@ -60,7 +77,7 @@ class User extends Authenticatable implements FilamentUser
     /** Whether this user's role holds a given operational capability ({@see RoleCapabilities}). */
     public function hasCapability(Capability $capability): bool
     {
-        return RoleCapabilities::allows($this->role, $capability);
+        return $this->isPlatformSuperUser() || RoleCapabilities::allows($this->role, $capability);
     }
 
     /**
