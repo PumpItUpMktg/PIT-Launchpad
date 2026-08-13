@@ -36,13 +36,17 @@ class ConnectionsStep extends GatheringPage
      */
     public ?string $formEmbed = null;
 
+    /** Tenant default: new services are created in referral mode (the tenant refers rather than performs). */
+    public bool $referralDefault = false;
+
     protected function afterSiteResolved(): void
     {
-        $this->formEmbed = $this->siteId === null
+        $config = $this->siteId === null
             ? null
-            : ConversionConfig::withoutGlobalScope(SiteScope::class)
-                ->where('site_id', $this->siteId)
-                ->value('form_embed');
+            : ConversionConfig::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->first();
+
+        $this->formEmbed = $config?->form_embed;
+        $this->referralDefault = (bool) $config?->referral_default;
     }
 
     /** Persist the lead-form embed for the working site (upsert on the unique site_id row). */
@@ -83,7 +87,7 @@ class ConnectionsStep extends GatheringPage
 
         ConversionConfig::withoutGlobalScope(SiteScope::class)->updateOrCreate(
             ['site_id' => $this->siteId],
-            ['form_embed' => $this->formEmbed],
+            ['form_embed' => $this->formEmbed, 'referral_default' => $this->referralDefault],
         );
     }
 

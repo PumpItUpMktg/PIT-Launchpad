@@ -6,6 +6,8 @@ use App\Enums\GeoApplicability;
 use App\Enums\ServicePageTreatment;
 use App\Enums\ServiceSiloRole;
 use App\Models\Concerns\BelongsToSite;
+use App\Models\Scopes\SiteScope;
+use App\Support\CurrentSite;
 use Database\Factories\ServiceFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -39,6 +41,27 @@ class Service extends Model
     use BelongsToSite, HasFactory, HasUlids;
 
     protected $guarded = [];
+
+    /**
+     * Seed a new service's referral_mode from the tenant's default (ConversionConfig.referral_default) —
+     * the single point EVERY service-creation path (intake collector, interview extractor, the Gathering
+     * ServicesStep, and the ServiceResource create) flows through. It seeds ONLY when the caller didn't set
+     * referral_mode explicitly, so the per-service flag stays authoritative, and it fires on `creating`
+     * only, so changing the tenant default never retroactively alters an existing service.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $service): void {
+            if (array_key_exists('referral_mode', $service->getAttributes())) {
+                return; // explicit value wins — never override a caller's choice
+            }
+
+            $siteId = $service->site_id ?: CurrentSite::id();
+            if ($siteId !== null && ConversionConfig::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->value('referral_default')) {
+                $service->referral_mode = true;
+            }
+        });
+    }
 
     /** @return HasMany<ServiceProblem, $this> */
     public function problems(): HasMany
