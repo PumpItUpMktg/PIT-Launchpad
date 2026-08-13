@@ -127,6 +127,38 @@ composer run dev
   the `Version:` header + `LPC_VERSION` in `launchpad-companion.php` and `Stable
   tag:` in `readme.txt`. Name the zip with the version (`launchpad-companion-<v>.zip`).
 
+## Output format — Gutenberg blocks only (Elementor is not part of the system)
+
+**Gutenberg core-block markup (`post_content`) rendered by the Launchpad block
+theme is the ONE supported output format.** Elementor is not part of the system
+going forward — do not build against it, do not add Elementor branches, and treat
+any Elementor reference you find as legacy to be retired, not extended. Core,
+service, hub, and location pages are all block-rendered today (via
+`app/Publishing/Blocks/BlockContentAssembler`); the meta-blob's `elementor_data`
+is `[]` for a block page and the companion plugin renders `post_content`.
+
+Three **quarantined, still-live** Elementor references remain, pending their own
+scoped retirement relays (each superseded but not yet removed). Do NOT expand
+them; when you touch nearby code, leave them isolated:
+
+1. **Service form-hero variant** — `PageConfig.hero_variant='form'` (operator
+   toggle on `PageResource`) routes a service page through
+   `MetaBlobAssembler::nativeBody` → `LibraryServiceComposer` + `FormHeroComposer`
+   → a real `_elementor_data` tree (the block form-hero hasn't shipped). Every
+   other service page is blocks.
+2. **"Generate Brand" → Elementor Global Kit** — `app/Branding/BrandStudio` (the
+   operator Generate-Brand action) pushes the Elementor Global Kit via
+   `BrandKitAssembler`/`WordpressClient::upsertBrandKit`/`/brand-kit`. Superseded
+   for styling by `StyleActivator` → `/style` (theme.json), but still wired.
+3. **Kit-template / Theme-Builder mapping** — `app/Operator/Controls/TemplateMapping`
+   (wired into `SiteResource`) + `MetaBlobAssembler::templateId` + `SiteTemplateMapping`
+   + `app/PageBuilder/Template/*` + the plugin `/kit-template` route. Superseded by
+   the block theme; the blob still carries a (usually null) `template_id`.
+
+`app/PageBuilder/Native/NativeComposer` remains only as the fallback for a legacy
+market-era location page pinned to neither `location_id` nor `parent_location_id`
+(stored data pending re-push), and has live tests — not new-generation code.
+
 ## Domain model (§1 — foundation data layer)
 
 The `§1` data layer is the multi-tenant control plane that builds and feeds

@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.36
+Stable tag: 0.9.37
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,12 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.37 =
+* Elementor cleanup: remove the legacy Elementor lp/* dynamic-tags subsystem (the `elementor/dynamic_tags/register`
+  hook, `TagManager`, and the `render/dynamic-tags/*` tag classes). It was a guarded no-op superseded by the
+  block shortcodes (the version-independent binding path) — Gutenberg blocks are the only supported output
+  format. No behavior change on a block theme; no content repush needed.
 
 = 0.9.36 =
 * Self-heal the service capability on a MIGRATED/cloned site. The existing upgrade repair only re-runs on
