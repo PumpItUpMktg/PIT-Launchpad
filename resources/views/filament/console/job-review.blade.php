@@ -30,9 +30,62 @@
         textarea.jr-field { min-height:90px; resize:vertical; }
         .jr-empty { color:#94a3b8; font-size:13px; }
         .jr-lbl { font-size:11px; color:#94a3b8; margin:8px 0 4px; }
+        .jr-add-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:12px; }
+        .jr-ac { position:relative; }
+        .jr-ac-list { position:absolute; z-index:20; left:0; right:0; top:calc(100% + 2px); background:var(--bg,#fff); border:1px solid rgba(148,163,184,.5); border-radius:8px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,.12); }
+        .jr-ac-item { padding:8px 11px; font-size:12.5px; cursor:pointer; color:#0f172a; background:#fff; }
+        .jr-ac-item:hover { background:rgba(56,189,248,.14); }
     </style>
 
     <div class="jr-wrap">
+        <div class="jr-card" wire:key="add-job-panel">
+            <div class="jr-head">
+                <h3>Add a previous job</h3>
+                <button class="jr-btn" wire:click="toggleAddJob">{{ $addingJob ? 'Cancel' : '+ Add job' }}</button>
+            </div>
+            @if ($addingJob)
+                @php $suggestions = $this->addressSuggestions; @endphp
+                <p class="jr-empty">Backfill a completed job. There’s no GPS, so type the address (it’s geocoded to place the job); everything else flows through review + publish like a captured job.</p>
+                <div class="jr-add-grid">
+                    <div>
+                        <div class="jr-lbl">Client name</div>
+                        <input type="text" class="jr-field" wire:model="newClientName" placeholder="Jane Homeowner">
+                    </div>
+                    <div class="jr-ac">
+                        <div class="jr-lbl">Job address</div>
+                        <input type="text" class="jr-field" wire:model.live.debounce.500ms="newAddress" placeholder="Start typing the street address…" autocomplete="off">
+                        @if (count($suggestions) > 0)
+                            <div class="jr-ac-list">
+                                @foreach ($suggestions as $s)
+                                    <div class="jr-ac-item" wire:key="ac-{{ md5($s) }}" wire:click="pickSuggestion(@js($s))">{{ $s }}</div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                    <div>
+                        <div class="jr-lbl">Date performed</div>
+                        <input type="date" class="jr-field" wire:model="newPerformedAt">
+                    </div>
+                    <div>
+                        <div class="jr-lbl">Service type(s) — comma separated</div>
+                        <input type="text" class="jr-field" wire:model="newJobTypes" placeholder="Sump pump replacement, French drain">
+                    </div>
+                </div>
+                <div>
+                    <div class="jr-lbl">What was done</div>
+                    <textarea class="jr-field" wire:model="newDescription" placeholder="A few sentences the AI writes the post from…"></textarea>
+                </div>
+                <div>
+                    <div class="jr-lbl">Photos (optional, up to 3)</div>
+                    <input type="file" class="jr-field" wire:model="newPhotos" multiple accept="image/*">
+                    <div wire:loading wire:target="newPhotos" class="jr-empty">Uploading…</div>
+                </div>
+                <div class="jr-row">
+                    <button class="jr-btn go" wire:click="addJob" wire:loading.attr="disabled" wire:target="addJob,newPhotos">Add job</button>
+                </div>
+            @endif
+        </div>
+
         @forelse ($jobs as $job)
             <div class="jr-card" wire:key="jr-{{ $job['id'] }}">
                 <div class="jr-head">

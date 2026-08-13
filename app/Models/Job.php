@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 /**
  * A captured job (§3) — site-scoped. The table is `job_captures`, NOT `jobs` (the database queue driver
@@ -26,6 +27,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $site_id
  * @property JobSource $source
  * @property JobStatus $status
+ * @property Carbon|null $performed_at when the work was done (operator backfill); null for capture-time jobs
  * @property string|null $tech_id soft reference to the capturing tech (§5)
  * @property string|null $client_name_full internal only — never pushed
  * @property string|null $client_name_display "First L." — pushed
@@ -68,6 +70,7 @@ class Job extends Model
         return [
             'source' => JobSource::class,
             'status' => JobStatus::class,
+            'performed_at' => 'date',
             'lat_true' => 'decimal:7',
             'lng_true' => 'decimal:7',
             'lat_jittered' => 'decimal:7',
