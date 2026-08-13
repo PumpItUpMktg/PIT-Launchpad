@@ -97,6 +97,16 @@ class ServiceSchemaBuilder
         ], $this->present(...));
     }
 
+    /**
+     * Whether this service/hub page's subject service is REFERRAL-mode — the tenant refers, not performs.
+     * The caller omits the `Service` node entirely for these (emitting `Service` at all asserts an offering
+     * the tenant doesn't make); the page keeps its WebPage / BreadcrumbList and the sitewide Organization.
+     */
+    public function isReferral(Content $content, Site $site): bool
+    {
+        return (bool) $this->subjectService($content, $site)?->referral_mode;
+    }
+
     /** The page's primary keyword (Content.target_keyword_id), or null. */
     protected function pageKeyword(Content $content): ?string
     {

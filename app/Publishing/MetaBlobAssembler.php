@@ -810,6 +810,12 @@ class MetaBlobAssembler
         if ($content->kind === ContentKind::Page && $content->page_type?->value === 'service') {
             $site = $this->site($content);
             if ($site !== null) {
+                // Referral-mode service: OMIT the Service node entirely (emitting it asserts an offering the
+                // tenant doesn't make). No stored fallback — the page keeps only its WebPage / BreadcrumbList
+                // + the sitewide Organization node (plugin-side, untouched).
+                if ($this->serviceSchema->isReferral($content, $site)) {
+                    return [null, null];
+                }
                 $home = is_string($site->domain_url) ? rtrim($site->domain_url, '/').'/' : '/';
 
                 return ['Service', $this->serviceSchema->build($content, $site, $home, $this->canonical($content))];
@@ -819,6 +825,10 @@ class MetaBlobAssembler
         if ($content->kind === ContentKind::Page && $content->page_type?->value === 'hub') {
             $site = $this->site($content);
             if ($site !== null) {
+                // A hub whose subject (pillar) service is referral-mode omits its Service node too.
+                if ($this->serviceSchema->isReferral($content, $site)) {
+                    return [null, null];
+                }
                 $home = is_string($site->domain_url) ? rtrim($site->domain_url, '/').'/' : '/';
 
                 return ['Service', $this->serviceSchema->buildForHub($content, $site, $home, $this->canonical($content), $this->hubSpokeItems($content, $home))];
