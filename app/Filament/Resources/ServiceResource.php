@@ -152,6 +152,9 @@ class ServiceResource extends Resource
             Toggle::make('warranty_applicable')->label('Warranty applies to this service')
                 ->helperText('Pulls your warranty trust copy onto the page.'),
 
+            Toggle::make('referral_mode')->label('Referral only — we refer this, we don’t perform it')
+                ->helperText('Suppresses the price range, warranty, and Service-provider schema, and swaps the CTA to your referral. Set the referral CTA on the conversion config.'),
+
             Textarea::make('description')->label('Internal description')->rows(3)
                 ->helperText('Grounding context for the drafter (not rendered verbatim).'),
         ];

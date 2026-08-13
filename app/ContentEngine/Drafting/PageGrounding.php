@@ -71,5 +71,9 @@ final class PageGrounding
          * @var list<string>
          */
         public readonly array $siblingHeadings = [],
+        // Referral mode: the tenant REFERS this service, never performs it. The drafter must switch to a
+        // connector voice — no first-person performance, no pricing/quoting, no warranty, no implied
+        // licensure in the trade. Set from the page's subject service's referral_mode.
+        public readonly bool $referralMode = false,
     ) {}
 }

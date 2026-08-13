@@ -208,7 +208,15 @@ final class BlockPageComposer
         array $posts = [],
         bool $preview = false,
         bool $hasForm = false,
+        // Referral mode (BlockContentAssembler passes a non-null ctaLabel iff the service is referral_mode):
+        // swap every quote CTA for the tenant's referral CTA and drop the pricing/quoting language.
+        ?string $ctaLabel = null,
+        ?string $ctaUrl = null,
     ): string {
+        $referral = $ctaLabel !== null;
+        $actionText = $ctaLabel ?? 'Get a free quote';
+        $actionUrl = $ctaUrl ?? '#contact';
+
         $hero = $this->sections->hero(
             eyebrow: 'Our services',
             // H1 = the primary keyword (the search intent) unless the drafter honestly beat it.
@@ -217,8 +225,8 @@ final class BlockPageComposer
             imageUrl: $this->imageUrl('hero_image', $images),
             imageAlt: $this->imageAlt('hero_image', $images),
             imageAttrs: $this->imageAttrs('hero_image', $images),
-            assessmentText: 'Get a free quote',
-            assessmentUrl: '#contact',
+            assessmentText: $actionText,
+            assessmentUrl: $actionUrl,
             trust: $this->heroTrust($ctx, $trustStats),
             ctx: $ctx,
         );
@@ -297,10 +305,12 @@ final class BlockPageComposer
 
         // The pushy mid-page ask — after the visitor has seen the scope and the honest cost story.
         $ctaBold = $this->sections->cta(
-            heading: 'Ready to get it fixed?',
-            body: 'Get a fast, free, no-obligation quote today.',
-            actionText: 'Get a free quote',
-            actionUrl: '#contact',
+            heading: $referral ? 'Need this handled?' : 'Ready to get it fixed?',
+            body: $referral
+                ? 'We’ll connect you with a licensed provider in our network.'
+                : 'Get a fast, free, no-obligation quote today.',
+            actionText: $actionText,
+            actionUrl: $actionUrl,
             ctx: $ctx,
             bold: true,
         );
@@ -355,10 +365,12 @@ final class BlockPageComposer
         // own anchor (it still links to #contact, which now lands on the form). Without a form, the soft
         // close IS the #contact target.
         $cta = $this->sections->cta(
-            heading: 'Have a question first?',
-            body: 'Tell us what you need and we’ll get right back to you — no pressure.',
-            actionText: 'Get in touch',
-            actionUrl: '#contact',
+            heading: $referral ? 'Looking for a provider?' : 'Have a question first?',
+            body: $referral
+                ? 'Tell us what you need and we’ll match you with someone in our network.'
+                : 'Tell us what you need and we’ll get right back to you — no pressure.',
+            actionText: $referral ? $actionText : 'Get in touch',
+            actionUrl: $actionUrl,
             ctx: $ctx,
             anchorContact: ! $hasForm,
         );

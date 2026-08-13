@@ -62,6 +62,7 @@ class PageDrafter
             ? "\"{$grounding->pageLabel}\" page"
             : "{$grounding->pageType->value} page";
         $parts[] = "Build the {$descriptor} for a home-services brand.";
+        $parts[] = $this->referralBlock($grounding);
         if ($grounding->targetKeyword !== null && $grounding->targetKeyword !== '') {
             $parts[] = "Primary target: {$grounding->targetKeyword}";
             $parts[] = 'ON-PAGE SEO (required): the hero_headline (the page H1) MUST contain the primary target keyword '
@@ -116,13 +117,39 @@ class PageDrafter
             ."beyond what is here):\n".$this->json($grounding->narrative);
     }
 
+    /**
+     * Referral-mode override. The tenant REFERS this service and does not perform it — the drafter must not
+     * write it in first person as the provider. Rides high in the prompt so it dominates the default
+     * problem→solution provider framing. Empty (dropped by array_filter) for a normal service.
+     */
+    private function referralBlock(PageGrounding $grounding): string
+    {
+        if (! $grounding->referralMode) {
+            return '';
+        }
+
+        return 'REFERRAL PAGE — CRITICAL FRAMING (this OVERRIDES the default provider/problem→solution voice): '
+            .'This business REFERS this service to a network of licensed providers — it does NOT perform, quote, '
+            .'price, warranty, or hold a license in this trade. You MUST: (1) write in a CONNECTOR voice — '
+            .'"we connect you with a licensed provider", "we match you with a vetted pro in our network" — and '
+            .'NEVER a first-person claim of doing the work ("we install / repair / replace / service it"); '
+            .'(2) include NO pricing, cost-to-you, quote, estimate, or "free quote" language; (3) include NO '
+            .'warranty, guarantee, or "we stand behind our work" language; (4) make NO claim or implication that '
+            .'this business is licensed or certified in this trade. Educational content about the work and what '
+            .'drives its cost is fine; performing, pricing, or warrantying it is not.';
+    }
+
     private function servicesBlock(PageGrounding $grounding): string
     {
         if ($grounding->services === []) {
             return 'SERVICES: none provided — keep the copy to the brand and its proof.';
         }
 
-        return "SERVICES in scope for this page:\n".$this->json($grounding->services);
+        $header = $grounding->referralMode
+            ? "SERVICES this page COVERS (referral — we REFER these, never claim to perform them):\n"
+            : "SERVICES in scope for this page:\n";
+
+        return $header.$this->json($grounding->services);
     }
 
     private function problemsBlock(PageGrounding $grounding): string

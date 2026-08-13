@@ -37,7 +37,7 @@ use Illuminate\Database\Eloquent\Collection;
 class ServicesStep extends GatheringPage
 {
     /** The enrichment fields the seeded chip + confirm-on-save track. */
-    public const ENRICHMENT_FIELDS = ['name', 'short_description', 'symptoms', 'scope_items', 'process_steps', 'cost_factors', 'price_range', 'comparison', 'warranty_applicable', 'description'];
+    public const ENRICHMENT_FIELDS = ['name', 'short_description', 'symptoms', 'scope_items', 'process_steps', 'cost_factors', 'price_range', 'comparison', 'warranty_applicable', 'referral_mode', 'description'];
 
     protected static ?string $slug = 'setup2/services';
 
@@ -485,6 +485,7 @@ class ServicesStep extends GatheringPage
             'price_range' => is_array($service->price_range) ? $service->price_range : [],
             'comparison' => $this->normalizeComparison(is_array($service->comparison) ? $service->comparison : []),
             'warranty_applicable' => (bool) $service->warranty_applicable,
+            'referral_mode' => (bool) $service->referral_mode,
             'description' => (string) $service->description,
         ];
     }

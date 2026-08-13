@@ -13,6 +13,7 @@ use App\Filament\Pages\Gathering\VoiceStep;
 use App\Guided\StepGate;
 use App\Models\ArrangementFlag;
 use App\Models\Connection;
+use App\Models\ConversionConfig;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
@@ -49,6 +50,8 @@ class LaunchReadiness
             ->where('provider', ConnectionProvider::WpAppPassword)->exists();
         $flags = ArrangementFlag::query()->where('site_id', $site->id)->count();
         $brandPushed = (bool) $this->stepGate->state($site)->brand_pushed;
+        $referralServices = Service::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('referral_mode', true)->count();
+        $referralCta = trim((string) (ConversionConfig::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('referral_cta_url') ?? '')) !== '';
 
         return [
             $this->item('business', 'Business & trade', trim((string) $site->brand_name) !== '' && $trade !== '', false,
@@ -56,6 +59,13 @@ class LaunchReadiness
                 BusinessStep::getUrl()),
             $this->item('services', 'Services stated', $services > 0, true,
                 $services > 0 ? "{$services} service(s)" : 'No services — nothing to build pages from.',
+                ServicesStep::getUrl()),
+            $this->item('referral_cta', 'Referral CTA', $referralServices === 0 || $referralCta, false,
+                match (true) {
+                    $referralServices === 0 => 'No referral-mode services.',
+                    $referralCta => 'Referral CTA configured.',
+                    default => "{$referralServices} referral service(s) but no referral CTA set — they fall back to the standard contact CTA. Set a referral label + URL on the conversion config.",
+                },
                 ServicesStep::getUrl()),
             $this->item('locations', 'Locations & coverage', $locations > 0, false,
                 $locations > 0 ? "{$locations} location(s)" : 'No locations — town pages and NAP need one.',

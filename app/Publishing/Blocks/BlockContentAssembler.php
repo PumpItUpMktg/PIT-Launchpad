@@ -351,6 +351,10 @@ final class BlockContentAssembler
     private function composeSpoke(Content $content, array $slots, array $images, PageContext $ctx, bool $preview): string
     {
         $service = $this->pinnedService($content);
+        // Referral mode: the tenant refers this service, never performs it → suppress the price range
+        // (cost FACTORS stay — legitimate education), drop the quote form, and swap the CTA to a referral.
+        $referral = (bool) $service?->referral_mode;
+        [$ctaLabel, $ctaUrl] = $this->referralCta($content, $referral);
 
         // Old-kit fallbacks: v1 pages drafted hero_problem/hero_solution; the intro falls back to
         // the v1 explainer pair so an un-regenerated page keeps its body.
@@ -391,7 +395,7 @@ final class BlockContentAssembler
             processSteps: $this->serviceProcessSteps($content, $service),
             costCopy: $this->storyParagraphs($this->slotString($slots, 'cost_copy')),
             costFactors: array_slice($this->strings($service?->cost_factors), 0, 8),
-            costRange: $this->costRangeLine($service),
+            costRange: $referral ? '' : $this->costRangeLine($service), // referral: suppress the range, keep factors
             comparison: is_array($service?->comparison) ? $service->comparison : [],
             jobs: $service !== null ? $this->serviceJobCards($service) : [],
             reviews: $service !== null ? $this->serviceReviewQuotes($service) : [],
@@ -401,8 +405,38 @@ final class BlockContentAssembler
             faqs: $this->faqItems($slots, $this->offersEmergency($content)),
             posts: $this->siloPosts($content),
             preview: $preview,
-            hasForm: $this->hasLeadForm($content),
+            hasForm: $referral ? false : $this->hasLeadForm($content), // referral: no quote form
+            ctaLabel: $ctaLabel,
+            ctaUrl: $ctaUrl,
         );
+    }
+
+    /**
+     * The referral CTA [label, url] for a referral-mode spoke, or [null, null] when the service isn't
+     * referral (standard quote CTA). A referral service with no tenant referral CTA configured falls back
+     * to the standard CONTACT target (never a quoting label, never a dead link); LaunchReadiness surfaces
+     * the missing config as a warning.
+     *
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function referralCta(Content $content, bool $referral): array
+    {
+        if (! $referral) {
+            return [null, null];
+        }
+
+        $config = ConversionConfig::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->first();
+
+        $url = trim((string) ($config->referral_cta_url ?? ''));
+        if ($url !== '') {
+            $label = trim((string) ($config->referral_cta_label ?? '')) ?: 'Find a provider';
+
+            return [$label, $url];
+        }
+
+        return ['Contact us', '#contact'];
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\ContentEngine\Drafting;
 use App\Build\Permalinks;
 use App\Enums\ContentKind;
 use App\Enums\PageType;
+use App\Enums\ServiceSiloRole;
 use App\Local\Grounding\LocationGrounding;
 use App\Models\Content;
 use App\Models\Location;
@@ -47,6 +48,13 @@ class PageGroundingAssembler
         $services = $this->groundingServices($page);
         $voice = $this->voice->active($siteId);
 
+        // The page is referral-mode when its SUBJECT service is: the pinned service for a spoke, else the
+        // silo's pillar (falling back to the first). Mirrors the render/schema subject-service resolution.
+        $subject = $page->primary_service_id !== null
+            ? $services->first()
+            : ($services->first(fn (Service $s): bool => $s->silo_role === ServiceSiloRole::Pillar) ?? $services->first());
+        $referral = (bool) $subject?->referral_mode;
+
         return new PageGrounding(
             kit: $kit,
             pageType: $page->page_type ?? PageType::Service,
@@ -65,6 +73,7 @@ class PageGroundingAssembler
             facts: $this->facts($page),
             location: $this->location($page),
             siblingHeadings: $this->siblingHeadings($page),
+            referralMode: $referral,
         );
     }
 
