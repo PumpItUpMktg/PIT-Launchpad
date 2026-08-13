@@ -8,8 +8,10 @@ use App\Integrations\Places\PlacesProvider;
 use App\JobCapture\Capture\CouldNotPlaceJobException;
 use App\JobCapture\Capture\ManualJobData;
 use App\JobCapture\Capture\ManualJobIntake;
+use App\JobCapture\Enhancement\DescriptionEnhancer;
 use App\JobCapture\Review\JobReviewActions;
 use App\Models\Job;
+use App\Models\JobType;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\TenantStorage;
@@ -69,7 +71,14 @@ class JobReview extends ConsolePage
 
     public string $newPerformedAt = '';
 
-    public string $newJobTypes = '';
+    /** Service types chosen from the site's vocabulary (labels).
+     *
+     * @var array<int, string>
+     */
+    public array $newJobTypeLabels = [];
+
+    /** Free-text service types not in the vocabulary (comma-separated). */
+    public string $newJobTypesOther = '';
 
     public string $newDescription = '';
 
@@ -286,15 +295,53 @@ class JobReview extends ConsolePage
         Notification::make()->title('Job added — resolving location & write-up, then it lands in review.')->success()->send();
     }
 
+    /**
+     * The service types the site already knows (vocabulary) for the multi-select — labels, alphabetical.
+     *
+     * @return list<string>
+     */
+    public function getJobTypeOptionsProperty(): array
+    {
+        if ($this->siteId === null) {
+            return [];
+        }
+
+        return JobType::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->siteId)
+            ->orderBy('label')
+            ->pluck('label')
+            ->filter()->unique()->values()->all();
+    }
+
+    /** AI-polish the operator's "what was done" notes in place, before the job is created. */
+    public function enhanceDescription(): void
+    {
+        if (! $this->can(Capability::GenerateContent) || trim($this->newDescription) === '') {
+            return;
+        }
+
+        $enhanced = app(DescriptionEnhancer::class)->enhance($this->newDescription, $this->selectedJobTypeLabels());
+        if ($enhanced !== '') {
+            $this->newDescription = $enhanced;
+            Notification::make()->title('Enhanced — review and tweak before adding.')->success()->send();
+        }
+    }
+
+    /** Selected vocabulary labels + free-text extras, trimmed and de-duped. @return list<string> */
+    private function selectedJobTypeLabels(): array
+    {
+        return collect($this->newJobTypeLabels)
+            ->merge(explode(',', $this->newJobTypesOther))
+            ->map(fn (string $type): string => trim($type))
+            ->filter()->unique()
+            ->take(Job::MAX_JOB_TYPES)
+            ->values()->all();
+    }
+
     /** @return list<array{label: string}> */
     private function parsedJobTypes(): array
     {
-        return collect(explode(',', $this->newJobTypes))
-            ->map(fn (string $type): string => trim($type))
-            ->filter()
-            ->take(Job::MAX_JOB_TYPES)
-            ->map(fn (string $label): array => ['label' => $label])
-            ->values()->all();
+        return array_map(fn (string $label): array => ['label' => $label], $this->selectedJobTypeLabels());
     }
 
     /** @return list<array{bytes: string, filename: string}> */
@@ -312,7 +359,8 @@ class JobReview extends ConsolePage
 
     private function resetAddJob(): void
     {
-        $this->newClientName = $this->newAddress = $this->newPerformedAt = $this->newJobTypes = $this->newDescription = '';
+        $this->newClientName = $this->newAddress = $this->newPerformedAt = $this->newJobTypesOther = $this->newDescription = '';
+        $this->newJobTypeLabels = [];
         $this->newPhotos = [];
         $this->addressPicked = false;
     }

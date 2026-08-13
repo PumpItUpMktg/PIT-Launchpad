@@ -5,16 +5,19 @@ use App\Enums\JobStatus;
 use App\Filament\Console\Pages\JobReview;
 use App\Integrations\Census\Geocoder;
 use App\Integrations\Census\GeocodeResult;
+use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Places\PlaceCandidate;
 use App\Integrations\Places\PlaceDetails;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\Places\PlacesStatus;
 use App\Jobs\PublishJob;
 use App\Models\Job;
+use App\Models\JobType;
 use App\Models\Site;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
+use Tests\Support\FakeClaudeClient;
 
 beforeEach(fn () => $this->actingAs(User::factory()->create())); // Operator by default
 
@@ -124,7 +127,8 @@ it('adds a previous job from the operator form (geocoded, captured, in the pipel
     $page->newClientName = 'Jane Homeowner';
     $page->newAddress = '12 Main St, Somerville NJ';
     $page->newPerformedAt = '2025-05-20';
-    $page->newJobTypes = 'Sump pump, French drain';
+    $page->newJobTypeLabels = ['Sump pump'];
+    $page->newJobTypesOther = 'French drain';
     $page->newDescription = 'Replaced the pump.';
     $page->addJob();
 
@@ -177,4 +181,28 @@ it('offers address autocomplete suggestions from the Places provider', function 
 
     expect($page->getAddressSuggestionsProperty())
         ->toBe(['12 Main St, Somerville NJ', '120 Main St, Somerville NJ']);
+});
+
+it('AI-enhances the "what was done" notes in place', function () {
+    app()->instance(
+        ClaudeClient::class,
+        new FakeClaudeClient('We replaced a failed sump pump and tested the new one under load.')
+    );
+
+    $page = new JobReview;
+    $page->newDescription = 'swapped pump';
+    $page->enhanceDescription();
+
+    expect($page->newDescription)->toBe('We replaced a failed sump pump and tested the new one under load.');
+});
+
+it('lists the site vocabulary as service-type options', function () {
+    $site = Site::factory()->create();
+    JobType::factory()->create(['site_id' => $site->id, 'label' => 'Sump Pump']);
+    JobType::factory()->create(['site_id' => $site->id, 'label' => 'French Drain']);
+
+    $page = new JobReview;
+    $page->siteId = $site->id;
+
+    expect($page->getJobTypeOptionsProperty())->toEqualCanonicalizing(['Sump Pump', 'French Drain']);
 });

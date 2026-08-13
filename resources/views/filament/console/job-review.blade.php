@@ -66,14 +66,30 @@
                         <div class="jr-lbl">Date performed</div>
                         <input type="date" class="jr-field" wire:model="newPerformedAt">
                     </div>
-                    <div>
-                        <div class="jr-lbl">Service type(s) — comma separated</div>
-                        <input type="text" class="jr-field" wire:model="newJobTypes" placeholder="Sump pump replacement, French drain">
-                    </div>
+                </div>
+                @php $typeOptions = $this->jobTypeOptions; @endphp
+                <div>
+                    <div class="jr-lbl">Service type(s) — select all that were performed</div>
+                    @if (count($typeOptions) > 0)
+                        <div class="jr-row" style="gap:12px;">
+                            @foreach ($typeOptions as $opt)
+                                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                                    <input type="checkbox" wire:model="newJobTypeLabels" value="{{ $opt }}"> {{ $opt }}
+                                </label>
+                            @endforeach
+                        </div>
+                    @endif
+                    <input type="text" class="jr-field" style="margin-top:8px;" wire:model="newJobTypesOther" placeholder="{{ count($typeOptions) > 0 ? 'Other service(s), comma separated' : 'Service(s) performed, comma separated' }}">
                 </div>
                 <div>
-                    <div class="jr-lbl">What was done</div>
-                    <textarea class="jr-field" wire:model="newDescription" placeholder="A few sentences the AI writes the post from…"></textarea>
+                    <div class="jr-lbl" style="display:flex;justify-content:space-between;align-items:center;">
+                        <span>What was done</span>
+                        <button class="jr-btn" wire:click="enhanceDescription" wire:loading.attr="disabled" wire:target="enhanceDescription" type="button">
+                            <span wire:loading.remove wire:target="enhanceDescription">✦ Enhance with AI</span>
+                            <span wire:loading wire:target="enhanceDescription">Enhancing…</span>
+                        </button>
+                    </div>
+                    <textarea class="jr-field" wire:model="newDescription" placeholder="Rough notes are fine — hit Enhance to polish, or write it yourself…"></textarea>
                 </div>
                 <div>
                     <div class="jr-lbl">Photos (optional, up to 3)</div>
