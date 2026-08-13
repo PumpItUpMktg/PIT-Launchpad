@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\UserRole;
 use App\Filament\Console\Pages\CaptureDevices;
 use App\Models\Site;
 use App\Models\TechDevice;
@@ -32,6 +33,10 @@ it('adds a tech device and surfaces a capture link + one-time code', function ()
         ->and($page->lastIssued['link'])->toContain('/capture?device='.$device->id)
         ->and($page->newName)->toBe('')   // form cleared
         ->and(collect($page->getDevicesProperty())->pluck('id'))->toContain($device->id);
+
+    // The tech is now a first-class platform account (unified identity): device → role=tech User.
+    expect($device->user_id)->not->toBeNull()
+        ->and($device->user->role)->toBe(UserRole::Tech);
 });
 
 it('re-issues a fresh code for an existing device', function () {

@@ -8,6 +8,7 @@ use Database\Factories\TechDeviceFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
@@ -19,6 +20,7 @@ use Illuminate\Support\Carbon;
  *
  * @property string $id
  * @property string $site_id
+ * @property string|null $user_id
  * @property string $name
  * @property string|null $phone
  * @property string|null $email
@@ -49,5 +51,14 @@ class TechDevice extends Model
     public function isActive(): bool
     {
         return $this->revoked_at === null;
+    }
+
+    /** The tech's platform user account (role=tech) — the unified identity behind the device.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

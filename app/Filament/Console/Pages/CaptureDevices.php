@@ -3,6 +3,7 @@
 namespace App\Filament\Console\Pages;
 
 use App\JobCapture\Auth\DeviceAuthenticator;
+use App\JobCapture\Auth\TechProvisioner;
 use App\Models\Scopes\SiteScope;
 use App\Models\TechDevice;
 use App\Models\User;
@@ -88,13 +89,16 @@ class CaptureDevices extends ConsolePage
             return;
         }
 
-        $device = TechDevice::create([
-            'site_id' => $this->siteId,
-            'name' => $name,
-            'phone' => trim($this->newPhone) ?: null,
-        ]);
+        // Provisions the unified identity (a role=tech User) + its capture device + first login code.
+        $result = app(TechProvisioner::class)->provision($this->siteId, $name, trim($this->newPhone) ?: null);
 
-        $this->issue($device, "Added {$name} — send them the link + code.");
+        $this->lastIssued = [
+            'name' => $name,
+            'link' => $result['link'],
+            'code' => $result['code'],
+        ];
+
+        Notification::make()->title("Added {$name} — send them the link + code.")->success()->send();
         $this->newName = '';
         $this->newPhone = '';
     }
