@@ -3,14 +3,22 @@
 namespace App\Filament\Console\Pages;
 
 use App\Enums\JobStatus;
+use App\Integrations\Places\PlaceCandidate;
+use App\Integrations\Places\PlacesProvider;
+use App\JobCapture\Capture\CouldNotPlaceJobException;
+use App\JobCapture\Capture\ManualJobData;
+use App\JobCapture\Capture\ManualJobIntake;
 use App\JobCapture\Review\JobReviewActions;
 use App\Models\Job;
 use App\Models\Scopes\SiteScope;
+use App\Models\Site;
 use App\Publishing\TenantStorage;
 use App\Security\Capability;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 use Throwable;
 
 /**
@@ -22,6 +30,8 @@ use Throwable;
  */
 class JobReview extends ConsolePage
 {
+    use WithFileUploads;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-camera';
 
     protected static ?string $navigationLabel = 'Job Review';
@@ -49,6 +59,28 @@ class JobReview extends ConsolePage
     public ?string $rejectingId = null;
 
     public string $rejectReason = '';
+
+    // Add-a-previous-job (operator backfill) state — no device, no GPS, so the address is typed + geocoded.
+    public bool $addingJob = false;
+
+    public string $newClientName = '';
+
+    public string $newAddress = '';
+
+    public string $newPerformedAt = '';
+
+    public string $newJobTypes = '';
+
+    public string $newDescription = '';
+
+    /** Livewire file uploads (TemporaryUploadedFile once uploaded; loosely typed for hydration safety).
+     *
+     * @var array<int, mixed>
+     */
+    public array $newPhotos = [];
+
+    /** Set true when the operator picks a suggestion, so the live search doesn't immediately re-open. */
+    public bool $addressPicked = false;
 
     /**
      * The jobs awaiting a decision for the active site — review first, then stuck-captured. Presented for
@@ -175,6 +207,122 @@ class JobReview extends ConsolePage
         app(JobReviewActions::class)->reject($job, $this->rejectReason);
         $this->rejectingId = null;
         Notification::make()->title('Rejected.')->success()->send();
+    }
+
+    /** Toggle the add-a-previous-job panel. */
+    public function toggleAddJob(): void
+    {
+        $this->addingJob = ! $this->addingJob;
+        if (! $this->addingJob) {
+            $this->resetAddJob();
+        }
+    }
+
+    /** Typing in the address box re-opens live suggestions (a prior pick no longer applies). */
+    public function updatedNewAddress(): void
+    {
+        $this->addressPicked = false;
+    }
+
+    /**
+     * Address autocomplete — Places candidates for the typed query. Min-length guarded and skipped right
+     * after a pick so the dropdown doesn't re-open over the chosen value.
+     *
+     * @return list<string>
+     */
+    public function getAddressSuggestionsProperty(): array
+    {
+        $query = trim($this->newAddress);
+        if ($this->addressPicked || mb_strlen($query) < 5) {
+            return [];
+        }
+
+        return collect(app(PlacesProvider::class)->search($query))
+            ->map(fn (PlaceCandidate $candidate): string => trim($candidate->address !== '' ? $candidate->address : $candidate->name))
+            ->filter()
+            ->unique()->take(6)->values()->all();
+    }
+
+    /** Fill the address from a chosen suggestion. */
+    public function pickSuggestion(string $address): void
+    {
+        $this->newAddress = $address;
+        $this->addressPicked = true;
+    }
+
+    /** Create a previous job from operator input — geocode the address, then run the normal pipeline. */
+    public function addJob(): void
+    {
+        if (! $this->can(Capability::EditContent) || $this->siteId === null) {
+            return;
+        }
+        $site = $this->workingSite();
+        if ($site === null) {
+            return;
+        }
+        if (trim($this->newClientName) === '' || trim($this->newAddress) === '') {
+            Notification::make()->title('Enter at least the client name and address.')->warning()->send();
+
+            return;
+        }
+
+        try {
+            app(ManualJobIntake::class)->intake($site, new ManualJobData(
+                clientName: $this->newClientName,
+                address: $this->newAddress,
+                performedAt: trim($this->newPerformedAt) ?: null,
+                rawDescription: trim($this->newDescription) ?: null,
+                jobTypes: $this->parsedJobTypes(),
+                photos: $this->uploadedPhotos(),
+            ));
+        } catch (CouldNotPlaceJobException $e) {
+            Notification::make()->title('Could not add the job')->body($e->getMessage())->danger()->send();
+
+            return;
+        }
+
+        $this->resetAddJob();
+        $this->addingJob = false;
+        Notification::make()->title('Job added — resolving location & write-up, then it lands in review.')->success()->send();
+    }
+
+    /** @return list<array{label: string}> */
+    private function parsedJobTypes(): array
+    {
+        return collect(explode(',', $this->newJobTypes))
+            ->map(fn (string $type): string => trim($type))
+            ->filter()
+            ->take(Job::MAX_JOB_TYPES)
+            ->map(fn (string $label): array => ['label' => $label])
+            ->values()->all();
+    }
+
+    /** @return list<array{bytes: string, filename: string}> */
+    private function uploadedPhotos(): array
+    {
+        $photos = [];
+        foreach (array_slice(array_values($this->newPhotos), 0, 3) as $i => $file) {
+            if ($file instanceof TemporaryUploadedFile) {
+                $photos[] = ['bytes' => (string) $file->get(), 'filename' => $file->getClientOriginalName() ?: ($i + 1).'.jpg'];
+            }
+        }
+
+        return $photos;
+    }
+
+    private function resetAddJob(): void
+    {
+        $this->newClientName = $this->newAddress = $this->newPerformedAt = $this->newJobTypes = $this->newDescription = '';
+        $this->newPhotos = [];
+        $this->addressPicked = false;
+    }
+
+    /** The active site as a model the operator may see — for the manual-intake service. */
+    private function workingSite(): ?Site
+    {
+        $site = Site::withoutGlobalScopes()->find($this->siteId);
+
+        return $site !== null && $this->user()->canSeeSite((string) $site->id) ? $site : null;
     }
 
     /** A job in a site the operator may see — the guard every mutating action runs first. */
