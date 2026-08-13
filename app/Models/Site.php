@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ProductPlan;
 use App\Enums\SiteStatus;
 use App\Models\Scopes\VisibleSiteScope;
 use App\Styling\StyleVariation;
@@ -16,6 +17,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property SiteStatus $status
+ * @property ProductPlan $product
  * @property int|null $budget_ceiling
  * @property int|null $silo_own_page_bar
  * @property array<string, int>|null $coverage_thresholds
@@ -257,6 +259,7 @@ class Site extends Model
         return [
             'slug_conventions' => 'array',
             'status' => SiteStatus::class,
+            'product' => ProductPlan::class,
             'offers_emergency' => 'boolean',
             'weather_alert' => 'boolean',
             'chrome_synced_at' => 'datetime',
