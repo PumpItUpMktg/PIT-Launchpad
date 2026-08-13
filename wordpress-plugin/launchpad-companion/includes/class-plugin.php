@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin bootstrap: wires the receiver (REST), renderer (dynamic tags +
+ * Plugin bootstrap: wires the receiver (REST), renderer (block shortcodes +
  * template routing), SEO emission, sitemap, and redirects.
  *
  * @package Launchpad\Companion
@@ -20,7 +20,6 @@ use Launchpad\Companion\Render\ScriptDelay;
 use Launchpad\Companion\Render\WeatherAlert;
 use Launchpad\Companion\Render\Shortcodes;
 use Launchpad\Companion\Render\SiteChrome;
-use Launchpad\Companion\Render\TagManager;
 use Launchpad\Companion\Render\TemplateRouter;
 use Launchpad\Companion\Rest\Routes;
 use Launchpad\Companion\Seo\Breadcrumbs;
@@ -70,11 +69,9 @@ final class Plugin
         // Locked / locally-edited protocol.
         ( new EditGuard() )->register();
 
-        // Renderer. Shortcodes are the Elementor-version-independent binding path
-        // (no Elementor dependency); the classic lp/* dynamic tags register on top
-        // for the V3 editor, guarded so a missing dynamic-tag API can't fatal.
+        // Renderer. Shortcodes are the only binding path — Gutenberg blocks are the
+        // supported output format; the legacy Elementor lp/* dynamic tags were removed.
         ( new Shortcodes() )->register();
-        add_action('elementor/dynamic_tags/register', [new TagManager(), 'register']);
         ( new TemplateRouter() )->register();
 
         // Universal header/footer chrome — [lp_header]/[lp_footer] render the pushed

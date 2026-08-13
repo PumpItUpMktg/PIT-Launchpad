@@ -19,7 +19,6 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
 use App\PageBuilder\Library\FormHeroComposer;
-use App\PageBuilder\Library\LibraryHubComposer;
 use App\PageBuilder\Library\LibraryServiceComposer;
 use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
@@ -57,7 +56,6 @@ class MetaBlobAssembler
         private readonly PublishEligibility $eligibility,
         private readonly NativeComposer $composer,
         private readonly LibraryServiceComposer $libraryService,
-        private readonly LibraryHubComposer $libraryHub,
         private readonly ServiceSchemaBuilder $serviceSchema,
         private readonly LocationSchemaBuilder $locationSchema,
         private readonly BlockContentAssembler $blockContent,
@@ -216,11 +214,10 @@ class MetaBlobAssembler
             }
         }
 
-        // The Gutenberg block body (non-null once a page type's block composer has shipped). When it's
-        // present the page is pure blocks — so it carries NO Elementor body at all: the plugin renders
-        // post_content and ignores elementor_data, and skipping the NativeComposer pass keeps a block
-        // page free of any Elementor payload. Location / hub pages (still Elementor-rendered) have no
-        // block body yet, so they keep their native Elementor tree.
+        // The Gutenberg block body. Core / service / hub / location pages are ALL block-rendered now — a
+        // non-null body here means the page is pure blocks: the plugin renders post_content and ignores
+        // elementor_data. (Only a legacy market-era location page with neither location_id nor
+        // parent_location_id still falls through to the native fallback — stored data pending re-push.)
         //
         // EXCEPTION — the form-hero variant (PageConfig.hero_variant=form) is an Elementor-only feature
         // (a hero with an embedded lead-form iframe kses would strip from block post_content). The block
@@ -278,9 +275,9 @@ class MetaBlobAssembler
             'images' => $images,
             'featured_image' => $this->ogImageUrl($content, $images),
             'seo' => $this->seo($content, $images),
-            // Tier-1 native Elementor body — ONLY for pages with no block body (service / location /
-            // hub, not yet migrated). A block page emits [] here: it is pure Gutenberg, so it carries no
-            // Elementor payload and the redundant NativeComposer pass is skipped. Posts are [] too.
+            // Native Elementor body — now ONLY the quarantined form-hero service variant (and a legacy
+            // unpinned-location fallback) reach this; every block page emits [] here (pure Gutenberg, no
+            // Elementor payload, native pass skipped). Posts are [] too.
             'elementor_data' => $postContent !== null ? [] : $this->nativeBody($content, $slots, $images, $source),
             // Gutenberg pivot: core-block markup for the WP post_content. Non-null once a page type's
             // block composer has shipped; the Layer-5 plugin prefers this over elementor_data.
@@ -354,11 +351,6 @@ class MetaBlobAssembler
             }
 
             return $tree;
-        }
-
-        // Silo-pillar HUB pages render off the same verified library (service-hub assembly).
-        if ($content->page_type?->value === 'hub') {
-            return $this->libraryHub->compose($slots, $images);
         }
 
         $schema = $this->schema($content);
