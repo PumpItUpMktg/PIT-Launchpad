@@ -1,0 +1,68 @@
+<?php
+
+use App\Filament\Console\Pages\CaptureDevices;
+use App\Models\Site;
+use App\Models\TechDevice;
+use App\Models\User;
+use Livewire\Livewire;
+
+beforeEach(fn () => $this->actingAs(User::factory()->create())); // Operator (Super Admin) by default
+
+it('is reachable only by the Super Admin tier', function () {
+    expect(CaptureDevices::canAccess())->toBeTrue();
+
+    $this->actingAs(User::factory()->siteAdmin()->create());
+    expect(CaptureDevices::canAccess())->toBeFalse();
+});
+
+it('adds a tech device and surfaces a capture link + one-time code', function () {
+    $site = Site::factory()->create();
+
+    $page = new CaptureDevices;
+    $page->siteId = $site->id;
+    $page->newName = 'Mike R.';
+    $page->newPhone = '+15551234567';
+    $page->addDevice();
+
+    $device = TechDevice::withoutGlobalScopes()->where('site_id', $site->id)->first();
+
+    expect($device)->not->toBeNull()
+        ->and($device->name)->toBe('Mike R.')
+        ->and($page->lastIssued['code'])->toMatch('/^\d{6}$/')
+        ->and($page->lastIssued['link'])->toContain('/capture?device='.$device->id)
+        ->and($page->newName)->toBe('')   // form cleared
+        ->and(collect($page->getDevicesProperty())->pluck('id'))->toContain($device->id);
+});
+
+it('re-issues a fresh code for an existing device', function () {
+    $site = Site::factory()->create();
+    $device = TechDevice::factory()->create(['site_id' => $site->id]);
+
+    $page = new CaptureDevices;
+    $page->siteId = $site->id;
+    $page->reissueCode($device->id);
+
+    expect($page->lastIssued['code'])->toMatch('/^\d{6}$/')
+        ->and($device->refresh()->login_code_hash)->not->toBeNull();
+});
+
+it('revokes a device', function () {
+    $site = Site::factory()->create();
+    $device = TechDevice::factory()->create(['site_id' => $site->id]);
+
+    $page = new CaptureDevices;
+    $page->siteId = $site->id;
+    $page->revoke($device->id);
+
+    expect($device->refresh()->revoked_at)->not->toBeNull();
+});
+
+it('renders the page (compiles the blade)', function () {
+    $site = Site::factory()->create();
+    TechDevice::factory()->create(['site_id' => $site->id, 'name' => 'Mike R.']);
+
+    Livewire::test(CaptureDevices::class)
+        ->set('siteId', $site->id)
+        ->assertOk()
+        ->assertSee('Mike R.');
+});
