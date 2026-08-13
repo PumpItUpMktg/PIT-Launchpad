@@ -6,6 +6,7 @@ use App\Enums\JobStatus;
 use App\Integrations\Places\PlaceCandidate;
 use App\Integrations\Places\PlacesProvider;
 use App\JobCapture\Capture\CouldNotPlaceJobException;
+use App\JobCapture\Capture\CsvJobImporter;
 use App\JobCapture\Capture\ManualJobData;
 use App\JobCapture\Capture\ManualJobIntake;
 use App\JobCapture\Enhancement\DescriptionEnhancer;
@@ -22,6 +23,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 /**
@@ -97,6 +99,9 @@ class JobReview extends ConsolePage
      * @var array<string, mixed>
      */
     public array $jobPhotos = [];
+
+    /** The CSV bulk-import upload (a single Livewire file). */
+    public mixed $csvFile = null;
 
     /**
      * The jobs awaiting a decision for the active site — review first, then stuck-captured. Presented for
@@ -378,6 +383,45 @@ class JobReview extends ConsolePage
         $site = Site::withoutGlobalScopes()->find($this->siteId);
 
         return $site !== null && $this->user()->canSeeSite((string) $site->id) ? $site : null;
+    }
+
+    /** Import previous jobs in bulk from an uploaded CSV — each row becomes a captured job in this queue. */
+    public function importCsv(): void
+    {
+        if (! $this->can(Capability::EditContent) || $this->siteId === null) {
+            return;
+        }
+        $site = $this->workingSite();
+        if ($site === null || ! $this->csvFile instanceof TemporaryUploadedFile) {
+            Notification::make()->title('Choose a CSV file first.')->warning()->send();
+
+            return;
+        }
+
+        $result = app(CsvJobImporter::class)->import($site, (string) $this->csvFile->get());
+        $this->csvFile = null;
+
+        $skipped = count($result['skipped']);
+        $body = $skipped > 0
+            ? $skipped.' row'.($skipped === 1 ? '' : 's').' skipped ('.collect($result['skipped'])->take(3)->map(fn (array $s): string => 'row '.$s['row'].': '.$s['reason'])->implode('; ').($skipped > 3 ? '…' : '').')'
+            : null;
+        if ($result['truncated']) {
+            $body = trim(($body ?? '').' Only the first '.CsvJobImporter::MAX_ROWS.' rows were imported — split larger files.');
+        }
+
+        Notification::make()
+            ->title($result['imported'].' job'.($result['imported'] === 1 ? '' : 's').' imported — resolving & enhancing, then they land here.')
+            ->body($body)
+            ->{$result['imported'] > 0 ? 'success' : 'warning'}()
+            ->send();
+    }
+
+    /** Download the CSV template (columns + an example row) for the bulk import. */
+    public function downloadTemplate(): StreamedResponse
+    {
+        $csv = app(CsvJobImporter::class)->template();
+
+        return response()->streamDownload(fn () => print ($csv), 'job-import-template.csv', ['Content-Type' => 'text/csv']);
     }
 
     /** Attach the uploaded photos to an existing review-queue job (backfill / walk-in photographed later). */

@@ -15,6 +15,7 @@ use App\Models\Job;
 use App\Models\JobType;
 use App\Models\Site;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\Support\FakeClaudeClient;
@@ -205,4 +206,34 @@ it('lists the site vocabulary as service-type options', function () {
     $page->siteId = $site->id;
 
     expect($page->getJobTypeOptionsProperty())->toEqualCanonicalizing(['Sump Pump', 'French Drain']);
+});
+
+it('bulk-imports jobs from an uploaded CSV', function () {
+    Queue::fake();
+    app()->instance(Geocoder::class, new class implements Geocoder
+    {
+        public function geocode(string $address): ?GeocodeResult
+        {
+            return new GeocodeResult(40.5, -74.4, $address);
+        }
+    });
+    $site = Site::factory()->create();
+    $csv = "client_name,address\nJane Homeowner,\"12 Main St\"\nJohn Q,\"9 Oak Ave\"\n";
+
+    Livewire::test(JobReview::class)
+        ->set('siteId', $site->id)
+        ->set('csvFile', UploadedFile::fake()->createWithContent('jobs.csv', $csv))
+        ->call('importCsv');
+
+    expect(Job::withoutGlobalScopes()->where('site_id', $site->id)->count())->toBe(2);
+});
+
+it('streams a CSV import template', function () {
+    $response = (new JobReview)->downloadTemplate();
+
+    expect($response->headers->get('content-type'))->toContain('text/csv');
+    ob_start();
+    $response->sendContent();
+    $body = ob_get_clean();
+    expect($body)->toContain('client_name,address,performed_at,service_types,description');
 });

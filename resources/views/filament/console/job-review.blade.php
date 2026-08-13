@@ -99,6 +99,21 @@
                 <div class="jr-row">
                     <button class="jr-btn go" wire:click="addJob" wire:loading.attr="disabled" wire:target="addJob,newPhotos">Add job</button>
                 </div>
+
+                <div style="border-top:1px solid rgba(148,163,184,.25); margin-top:6px; padding-top:12px;">
+                    <div class="jr-lbl" style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>Or import many at once (CSV — text only; add photos per job below after import)</span>
+                        <button class="jr-btn" wire:click="downloadTemplate" type="button">↓ Template</button>
+                    </div>
+                    <div class="jr-row" style="gap:8px;">
+                        <input type="file" class="jr-field" style="max-width:340px;" wire:model="csvFile" accept=".csv,text/csv">
+                        <button class="jr-btn go" wire:click="importCsv" wire:loading.attr="disabled" wire:target="csvFile,importCsv" type="button">
+                            <span wire:loading.remove wire:target="importCsv">Import CSV</span>
+                            <span wire:loading wire:target="importCsv">Importing…</span>
+                        </button>
+                    </div>
+                    <div class="jr-empty">Columns: client_name, address, performed_at, service_types (; separated), description.</div>
+                </div>
             @endif
         </div>
 
