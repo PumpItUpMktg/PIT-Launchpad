@@ -1,7 +1,7 @@
 @verbatim
 // Job Capture service worker (§5). Precaches the app shell so the PWA launches offline;
 // the offline UPLOAD queue is IndexedDB in the page, not here. API calls are never cached.
-const CACHE = 'job-capture-v1';
+const CACHE = 'job-capture-v2';
 const SHELL = ['/capture', '/capture/manifest.webmanifest', '/capture-icon.svg'];
 
 self.addEventListener('install', (event) => {
