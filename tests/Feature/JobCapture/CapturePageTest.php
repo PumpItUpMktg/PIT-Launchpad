@@ -8,6 +8,15 @@ test('the capture PWA shell renders', function () {
         ->assertSee('/capture/sw.js', false);
 });
 
+test('the shell exposes the library-upload path (photo capture OR upload) and the manual sync control', function () {
+    $this->get('/capture')
+        ->assertOk()
+        ->assertSee('id="upload-lib"', false)     // gallery upload beside tap-to-shoot
+        ->assertSee('id="lib-input"', false)
+        ->assertSee('id="sync-now"', false)       // manual retry for a stuck queue
+        ->assertSee('drainQueue({ interactive: true })', false);
+});
+
 test('the web app manifest is served with the manifest content type and PWA fields', function () {
     $response = $this->get('/capture/manifest.webmanifest')->assertOk();
 
