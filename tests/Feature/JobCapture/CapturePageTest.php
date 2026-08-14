@@ -29,7 +29,7 @@ test('the web app manifest is served with the manifest content type and PWA fiel
 });
 
 test('the service worker is served as javascript, scoped to /capture', function () {
-    $response = $this->get('/capture/sw.js')->assertOk()->assertSee('job-capture-v1', false);
+    $response = $this->get('/capture/sw.js')->assertOk()->assertSee('job-capture-v2', false);
 
     expect($response->headers->get('Content-Type'))->toContain('application/javascript')
         ->and($response->headers->get('Service-Worker-Allowed'))->toBe('/capture');
