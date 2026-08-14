@@ -18,7 +18,7 @@
   body { background:var(--bg); color:var(--ink); font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
   header .date { font-size:14px; color:var(--muted); }
-  .badge { font-size:13px; font-weight:700; padding:4px 10px; border-radius:99px; background:rgba(245,158,11,.16); color:var(--amber); }
+  .badge { font-size:13px; font-weight:700; padding:4px 10px; border-radius:99px; background:rgba(245,158,11,.16); color:var(--amber); cursor:pointer; }
   .badge.zero { background:rgba(148,163,184,.16); color:var(--muted); }
   main { padding:16px; max-width:640px; margin:0 auto; }
   .screen[hidden] { display:none; }
@@ -74,6 +74,7 @@
   <!-- JOB LIST -->
   <section class="screen" id="screen-list" hidden>
     <h1 id="hello">Today’s jobs</h1>
+    <button class="btn" id="sync-now" hidden>⤴ Upload queued jobs</button>
     <div id="jobs"></div>
     <p class="subtle center" id="jobs-empty" hidden>No assigned jobs. Tap “New job” for a walk-in.</p>
     <button class="btn" id="new-job">+ New job</button>
@@ -85,8 +86,10 @@
     <h1 id="capture-title">New job</h1>
     <div id="joby-fields"></div>
 
-    <label>Photos <span class="subtle">(tap to shoot — first is the featured photo)</span></label>
+    <label>Photos <span class="subtle">(tap a box to shoot, or upload — first is featured)</span></label>
     <div class="slots" id="slots"></div>
+    <button class="btn ghost" id="upload-lib" type="button">🖼 Upload from library</button>
+    <input type="file" id="lib-input" accept="image/*" multiple hidden>
 
     <div id="manual-fields">
       <label for="client">Customer name <span class="subtle">(optional)</span></label>
@@ -157,6 +160,7 @@
     const el = $('#pending');
     el.textContent = n + ' queued';
     el.classList.toggle('zero', n === 0);
+    const sync = $('#sync-now'); if (sync) sync.hidden = n === 0;   // show the manual retry only when there's a backlog
   }
 
   // ---- auth ----
@@ -166,9 +170,10 @@
     const t = token(); if (t) opts.headers['Authorization'] = 'Bearer ' + t;
     return fetch(API + path, opts);
   }
-  function logout() {
+  function logout(reason) {
     localStorage.removeItem(K.token); localStorage.removeItem(K.tech);
     $('#device').value = localStorage.getItem(K.device) || '';
+    $('#login-msg').textContent = reason || '';   // never bounce to login silently — say why
     show('login');
   }
 
@@ -252,24 +257,57 @@
   }
 
   // ---- sync ----
-  async function drainQueue() {
-    if (!navigator.onLine || !token()) return;
+  // Push the offline queue. `interactive` (a tap on “Sync now” / the badge) always reports the outcome;
+  // background drains (submit, reconnect, boot) stay quiet unless something actually happened. Queued jobs
+  // are only ever removed after a real accept — an error or expiry keeps them for the next attempt.
+  async function drainQueue({ interactive = false } = {}) {
+    if (!token()) { if (interactive) toast('Sign in to upload your queued jobs.'); return; }
+    const before = (await qAll()).length;
+    if (before === 0) { if (interactive) toast('You’re all caught up — nothing to upload.'); return; }
+    if (!navigator.onLine) { if (interactive) toast('You’re offline — they’ll upload automatically when you reconnect.'); return; }
+
+    let sessionExpired = false, hadError = false;
     for (const item of await qAll()) {
       try {
         const r = await api('/jobs', { method: 'POST', json: item.payload });
-        if (r.ok || r.status === 422) { await qDel(item.localId); }
-        else if (r.status === 401) { logout(); return; }
-      } catch (e) { /* offline / transient — stays queued */ }
+        if (r.ok || r.status === 422) { await qDel(item.localId); }   // accepted (or rejected as unprocessable) → done
+        else if (r.status === 401) { sessionExpired = true; break; }  // token died mid-drain
+        else { hadError = true; }                                      // 5xx / 403 / etc — keep it, surface it
+      } catch (e) { hadError = true; }                                 // offline / transient — stays queued
     }
+
     await refreshBadge();
+    const remaining = (await qAll()).length;
+    const sent = before - remaining;
+
+    if (sessionExpired) {
+      // Don’t disappear silently mid-upload: keep the queued jobs, explain, and prefill the device for re-sign-in.
+      logout('Your session expired. Sign in to finish uploading ' + remaining + ' job' + (remaining === 1 ? '' : 's') + '.');
+      return;
+    }
+
     loadJobs();
+    if (sent > 0 && remaining === 0) toast(sent + ' job' + (sent === 1 ? '' : 's') + ' uploaded.');
+    else if (remaining > 0 && (interactive || hadError)) toast('Couldn’t upload ' + remaining + ' job' + (remaining === 1 ? '' : 's') + ' — will keep trying.');
+  }
+
+  // Fill the empty photo slots (max 3) from a library selection — the “or upload” path beside tap-to-shoot.
+  async function addPhotosToEmptySlots(fileList) {
+    let full = false;
+    for (const file of Array.from(fileList || [])) {
+      const idx = capture.photos.findIndex((p) => !p);
+      if (idx === -1) { full = true; break; }
+      const d = await downscale(file);
+      if (d) { capture.photos[idx] = d; renderSlots(); }
+    }
+    if (full) toast('All 3 photo slots are full.');
   }
 
   // ---- job list ----
   async function loadJobs() {
     if (!token()) return;
     let data;
-    try { const r = await api('/jobs'); if (r.status === 401) return logout(); data = await r.json(); }
+    try { const r = await api('/jobs'); if (r.status === 401) return logout('Your session expired — sign in again.'); data = await r.json(); }
     catch (e) { return; }
     const wrap = $('#jobs'); wrap.innerHTML = '';
     const jobs = (data && data.jobs) || [];
@@ -312,13 +350,21 @@
       localStorage.setItem(K.token, t); if (tech) localStorage.setItem(K.tech, tech);
       show('list'); loadJobs(); drainQueue();
     });
-    $('#sign-out').addEventListener('click', logout);
+    $('#sign-out').addEventListener('click', () => logout());
     $('#new-job').addEventListener('click', () => startCapture(null));
     $('#cancel').addEventListener('click', () => { show('list'); loadJobs(); });
     $('#submit').addEventListener('click', submitCapture);
     $('#done-ok').addEventListener('click', () => { show('list'); loadJobs(); });
 
-    window.addEventListener('online', drainQueue);
+    // Photo “or upload” path: a library picker that fills the empty slots (tap-to-shoot still lives on each box).
+    $('#upload-lib').addEventListener('click', () => $('#lib-input').click());
+    $('#lib-input').addEventListener('change', async (e) => { await addPhotosToEmptySlots(e.target.files); e.target.value = ''; });
+
+    // Manual push: the “Sync now” button and a tap on the queued badge both force a drain with feedback.
+    $('#sync-now').addEventListener('click', () => drainQueue({ interactive: true }));
+    $('#pending').addEventListener('click', () => drainQueue({ interactive: true }));
+
+    window.addEventListener('online', () => drainQueue());   // reconnect → quiet background drain
 
     if (token()) { show('list'); loadJobs(); drainQueue(); } else { show('login'); }
 
