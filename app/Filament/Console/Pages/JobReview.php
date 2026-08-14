@@ -104,8 +104,9 @@ class JobReview extends ConsolePage
     public mixed $csvFile = null;
 
     /**
-     * The jobs awaiting a decision for the active site — review first, then stuck-captured. Presented for
-     * the blade (descriptions, resolved geography, photos with URLs + alt, primary index).
+     * The jobs awaiting a decision for the active site — review first, then captured/enhancing (including a
+     * job stranded at `enhancing` by a failed model call, so it stays visible and re-enhanceable). Presented
+     * for the blade (descriptions, resolved geography, photos with URLs + alt, primary index).
      *
      * @return list<array<string, mixed>>
      */
@@ -117,7 +118,7 @@ class JobReview extends ConsolePage
 
         return Job::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $this->siteId)
-            ->whereIn('status', [JobStatus::Review->value, JobStatus::Captured->value])
+            ->whereIn('status', [JobStatus::Review->value, JobStatus::Captured->value, JobStatus::Enhancing->value])
             ->with(['city', 'county', 'jobTypes'])
             ->orderByRaw('CASE status WHEN ? THEN 0 ELSE 1 END', [JobStatus::Review->value])
             ->latest()

@@ -29,6 +29,21 @@ test('the queue lists this site\'s review + captured jobs, review first, and cou
     CurrentSite::clear();
 });
 
+test('a job stranded at enhancing (failed/timed-out model call) still appears in the queue', function () {
+    $site = Site::factory()->create();
+    CurrentSite::set($site->id);
+
+    // The exact stranded case: enhancement flipped it to Enhancing, then the model call errored.
+    $stranded = Job::factory()->create(['site_id' => $site->id, 'status' => JobStatus::Enhancing]);
+
+    $ids = app(JobReviewQueue::class)->jobs()->pluck('id');
+
+    expect($ids)->toContain($stranded->id)   // visible + re-enhanceable, not lost
+        ->and(app(JobReviewQueue::class)->count())->toBe(0); // but not counted as review backlog
+
+    CurrentSite::clear();
+});
+
 test('approve flips a reviewed, drafted job to approved, clears the reject reason, and enqueues the publish', function () {
     Queue::fake();
     $job = Job::factory()->create([

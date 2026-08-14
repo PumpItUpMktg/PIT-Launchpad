@@ -37,7 +37,17 @@ final class JobEnhancer
         $job->forceFill(['status' => JobStatus::Enhancing])->save();
 
         $photoCount = is_array($job->photos) ? count($job->photos) : 0;
-        $data = $this->parse($this->claude->complete($this->prompt($job, $source, $photoCount), self::SYSTEM));
+
+        try {
+            $data = $this->parse($this->claude->complete($this->prompt($job, $source, $photoCount), self::SYSTEM));
+        } catch (\Throwable $e) {
+            // The model call errored or timed out — revert to Captured so the job stays visible and
+            // re-enhanceable in review rather than stranded at Enhancing (which the queue doesn't surface
+            // as a decision-ready row). Then re-throw for the caller / failed_jobs to record.
+            $job->forceFill(['status' => JobStatus::Captured])->save();
+
+            throw $e;
+        }
 
         $description = trim((string) ($data['description'] ?? ''));
         if ($description === '') {
