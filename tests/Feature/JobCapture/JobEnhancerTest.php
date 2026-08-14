@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\JobStatus;
+use App\Integrations\Claude\ClaudeClient;
+use App\Integrations\Claude\CompletionResult;
 use App\JobCapture\Enhancement\JobEnhancementException;
 use App\JobCapture\Enhancement\JobEnhancer;
 use App\Models\Job;
@@ -60,6 +62,30 @@ test('an empty write-up does not advance the job and throws', function () {
 
     expect(fn () => (new JobEnhancer(new FakeClaudeClient('{"title":"t"}')))->enhance($job))
         ->toThrow(JobEnhancementException::class);
+
+    expect($job->refresh()->status)->toBe(JobStatus::Captured)
+        ->and($job->enhanced_description)->toBeNull();
+});
+
+test('a thrown model call reverts the job to captured (never stranded at enhancing) and re-throws', function () {
+    // The model call fails outright (API error / timeout) — the job must not be left at Enhancing, where the
+    // review queue would never surface it. It reverts to Captured, visible and re-enhanceable.
+    $throwing = new class implements ClaudeClient
+    {
+        public function complete(string $prompt, ?string $system = null): string
+        {
+            throw new RuntimeException('Claude API timeout');
+        }
+
+        public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
+        {
+            throw new RuntimeException('Claude API timeout');
+        }
+    };
+    $job = jobToEnhance();
+
+    expect(fn () => (new JobEnhancer($throwing))->enhance($job))
+        ->toThrow(RuntimeException::class);
 
     expect($job->refresh()->status)->toBe(JobStatus::Captured)
         ->and($job->enhanced_description)->toBeNull();

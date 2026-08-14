@@ -11,9 +11,10 @@ use Illuminate\Database\Eloquent\Collection;
  * pushed to WordPress. Site-scoped (the ambient tenant scope), newest first. Kept a thin, testable read
  * model; the Filament resource renders over it.
  *
- * The actionable set is `review` (enhancement produced a write-up, needs approval) plus `captured` jobs
- * whose enhancement hasn't landed yet or failed back — surfaced so a stuck job is visible and re-enhanceable
- * rather than lost.
+ * The actionable set is `review` (enhancement produced a write-up, needs approval) plus `captured` and
+ * `enhancing` jobs — surfaced so a job that hasn't been enhanced yet, is mid-enhancement, or whose
+ * enhancement errored/timed out (leaving it stuck at `enhancing`) stays visible and re-enhanceable rather
+ * than lost. Without `enhancing` here, a job stranded by a failed model call would never appear.
  */
 class JobReviewQueue
 {
@@ -22,7 +23,7 @@ class JobReviewQueue
     {
         return Job::query()
             ->with(['city', 'county', 'jobTypes'])
-            ->whereIn('status', [JobStatus::Review->value, JobStatus::Captured->value])
+            ->whereIn('status', [JobStatus::Review->value, JobStatus::Captured->value, JobStatus::Enhancing->value])
             ->orderByRaw('CASE status WHEN ? THEN 0 ELSE 1 END', [JobStatus::Review->value])
             ->latest()
             ->get();
