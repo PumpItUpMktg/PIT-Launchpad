@@ -68,3 +68,24 @@ jobs:
 
       - name: Tests (Pest, in-memory SQLite)
         run: php artisan test
+
+  assets:
+    # Mirrors the Laravel Cloud deploy build so an asset/lockfile break fails the PR here,
+    # not silently at deploy time. `npm ci` requires a committed package-lock.json.
+    name: Assets (npm ci · build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install JS dependencies (reproducible)
+        run: npm ci
+
+      - name: Build assets (Vite)
+        run: npm run build
