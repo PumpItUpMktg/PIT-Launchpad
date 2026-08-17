@@ -2,20 +2,22 @@
 
 namespace App\KeywordGenerator\Pipeline;
 
-use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
+use App\Jobs\RefreshSitePipeline;
 use App\Models\Site;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Log;
-use Throwable;
 
 /**
- * Scheduled §5 driver — the missing caller. Per engine-eligible site it runs the
- * cadence-gated refresh (discovery + position tracking); the per-site cadence
- * lives in SitePipelineRefresher, so quiet sites cost nothing. Per-site failures
- * are isolated and logged — one tenant's failure can't abort the run, and the
- * artifact-based cadence naturally retries it next cycle.
+ * Scheduled §5 driver — the missing caller. It FANS OUT: one bounded {@see RefreshSitePipeline} job per
+ * engine-eligible site, rather than sweeping every site inline. The sweep posts rate-capped DataForSEO SERP
+ * tasks (default 12/min), so a keyword-heavy site is inherently slow; running them all in one job — which,
+ * lacking a $timeout, inherited the worker's 60s default — blew the timeout and wrote no snapshots. Each
+ * per-site job carries its own 600s budget and isolates one tenant's failure from the rest; the per-site
+ * cadence lives in SitePipelineRefresher, so quiet sites cost nothing.
+ *
+ * This driver itself only dispatches (fast, never times out); the actual work + per-site error handling is
+ * the child job's.
  */
 class RefreshKeywordPipelines implements ShouldQueue
 {
@@ -24,19 +26,10 @@ class RefreshKeywordPipelines implements ShouldQueue
     /** Sites the engine runs for — past onboarding, not suspended. */
     private const ELIGIBLE = [SiteStatus::Active, SiteStatus::Building, SiteStatus::Live];
 
-    public function handle(SitePipelineRefresher $refresher): void
+    public function handle(): void
     {
         Site::query()
             ->whereIn('status', array_map(fn (SiteStatus $s) => $s->value, self::ELIGIBLE))
-            ->each(function (Site $site) use ($refresher): void {
-                try {
-                    $refresher->refresh($site, PipelineTrigger::Scheduled);
-                } catch (Throwable $e) {
-                    Log::warning('§5 pipeline refresh failed', [
-                        'site_id' => $site->id,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            });
+            ->each(fn (Site $site) => RefreshSitePipeline::dispatch((string) $site->id));
     }
 }
