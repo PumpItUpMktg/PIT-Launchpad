@@ -7,6 +7,7 @@ use App\Integrations\Serp\MockSerpProvider;
 use App\Integrations\Serp\SerpProvider;
 use App\Integrations\Serp\SerpResult;
 use App\Integrations\Serp\SerpResultSet;
+use App\Jobs\RefreshSitePipeline;
 use App\KeywordGenerator\Pipeline\RefreshKeywordPipelines;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\Models\Keyword;
@@ -14,6 +15,7 @@ use App\Models\PositionSnapshot;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 
 /** A scored keyword whose recent score means discovery is NOT due (isolates tracking). */
 function s5TrackedKeyword(Site $site, string $query): Keyword
@@ -50,10 +52,34 @@ it('the scheduled driver tracks engine-eligible sites and skips the rest', funct
     $suspended = Site::factory()->create(['status' => 'suspended', 'domain_url' => 'https://zzz.com']);
     s5TrackedKeyword($suspended, 'plumber austin');
 
-    (new RefreshKeywordPipelines)->handle(app(SitePipelineRefresher::class));
+    // Fans out to a per-site job; the sync test queue runs it inline, so the snapshot lands here.
+    (new RefreshKeywordPipelines)->handle();
 
     expect(snapshotCount($active))->toBe(1)       // organic snapshot recorded
-        ->and(snapshotCount($suspended))->toBe(0); // ineligible — untouched
+        ->and(snapshotCount($suspended))->toBe(0); // ineligible — no job dispatched
+});
+
+it('fans out one bounded per-site job for each eligible site, skipping the rest', function () {
+    Queue::fake();
+
+    $active = Site::factory()->create(['status' => 'active']);
+    $building = Site::factory()->create(['status' => 'building']);
+    $live = Site::factory()->create(['status' => 'live']);
+    $suspended = Site::factory()->create(['status' => 'suspended']);
+    $onboarding = Site::factory()->create(['status' => 'onboarding']);
+
+    (new RefreshKeywordPipelines)->handle();
+
+    foreach ([$active, $building, $live] as $eligible) {
+        Queue::assertPushed(RefreshSitePipeline::class, fn (RefreshSitePipeline $j): bool => $j->siteId === $eligible->id);
+    }
+    foreach ([$suspended, $onboarding] as $ineligible) {
+        Queue::assertNotPushed(RefreshSitePipeline::class, fn (RefreshSitePipeline $j): bool => $j->siteId === $ineligible->id);
+    }
+
+    // Bounded like its siblings: an explicit timeout under the 630s queue retry_after, no retry storm.
+    expect((new RefreshSitePipeline('x'))->timeout)->toBe(600)
+        ->and((new RefreshSitePipeline('x'))->tries)->toBe(1);
 });
 
 it('records the own-domain organic rank and skips queries it does not rank for', function () {
@@ -120,9 +146,9 @@ it('isolates per-site failures — one site throwing does not abort the run', fu
     $healthy = Site::factory()->create(['status' => 'active', 'domain_url' => 'https://good.com']);
     s5TrackedKeyword($healthy, 'ok');
 
-    (new RefreshKeywordPipelines)->handle(app(SitePipelineRefresher::class));
+    (new RefreshKeywordPipelines)->handle();
 
-    // The healthy site still got its snapshot despite the other throwing.
+    // The healthy site still got its snapshot despite the other site's job throwing (per-site isolation).
     expect(snapshotCount($healthy))->toBe(1)
         ->and(snapshotCount($broken))->toBe(0);
 });
