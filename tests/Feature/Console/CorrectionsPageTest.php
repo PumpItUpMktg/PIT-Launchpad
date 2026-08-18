@@ -3,12 +3,15 @@
 use App\Enums\ContentKind;
 use App\Enums\PageType;
 use App\Filament\Console\Pages\Corrections;
+use App\Jobs\RefreshSitePositions;
 use App\Models\Content;
+use App\Models\Keyword;
 use App\Models\Site;
 use App\Models\User;
 use App\Publishing\Chrome\SiteProfileAssembler;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 function ccFailedJob(): void
@@ -102,6 +105,50 @@ it('the re-sync actions are gated off a Site Admin (recover capability)', functi
     $console->syncSilos();
 
     Artisan::shouldNotHaveReceived('call');
+});
+
+it('dispatches an on-demand ranking pull for a Super Admin with tracked keywords', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create());
+    $site = Site::factory()->create(['domain_url' => 'https://acme.com']);
+    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'plumber austin', 'status' => 'scored', 'opportunity_score' => 5.0]);
+
+    $console = new Corrections;
+    $console->siteId = $site->id;
+
+    expect($console->getRankingEstimateProperty()['empty'])->toBeFalse(); // a tracked keyword → something to pull
+
+    $console->refreshRankings();
+
+    Queue::assertPushed(RefreshSitePositions::class, fn (RefreshSitePositions $j): bool => $j->siteId === $site->id);
+});
+
+it('does not pull rankings when the site has no tracked keywords', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create());
+    $site = Site::factory()->create(['domain_url' => 'https://acme.com']); // no scored keywords
+
+    $console = new Corrections;
+    $console->siteId = $site->id;
+
+    expect($console->getRankingEstimateProperty()['empty'])->toBeTrue();
+
+    $console->refreshRankings();
+
+    Queue::assertNotPushed(RefreshSitePositions::class);
+});
+
+it('the ranking pull is gated off a Site Admin', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->siteAdmin()->create());
+    $site = Site::factory()->create(['domain_url' => 'https://acme.com']);
+    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'plumber austin', 'status' => 'scored', 'opportunity_score' => 5.0]);
+
+    $console = new Corrections;
+    $console->siteId = $site->id;
+    $console->refreshRankings();
+
+    Queue::assertNotPushed(RefreshSitePositions::class);
 });
 
 it('toggles the per-tenant weather alert bar for a Super Admin', function () {
