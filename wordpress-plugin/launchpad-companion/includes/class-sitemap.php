@@ -9,6 +9,8 @@
 
 namespace Launchpad\Companion;
 
+use Launchpad\Companion\Content\JobCpt;
+
 if (! defined('ABSPATH')) {
     exit;
 }
@@ -28,6 +30,7 @@ final class Sitemap
     {
         add_rewrite_rule('^sitemap\.xml$', 'index.php?lp_sitemap=index', 'top');
         add_rewrite_rule('^sitemap-content\.xml$', 'index.php?lp_sitemap=content', 'top');
+        add_rewrite_rule('^sitemap-jobs\.xml$', 'index.php?lp_sitemap=jobs', 'top');
     }
 
     /**
@@ -51,17 +54,35 @@ final class Sitemap
 
         header('Content-Type: application/xml; charset=UTF-8');
 
-        echo $type === 'index' ? $this->render_index() : $this->render_content(); // phpcs:ignore WordPress.Security.EscapeOutput
+        if ($type === 'index') {
+            $xml = $this->render_index();
+        } elseif ($type === 'jobs') {
+            $xml = $this->render_jobs();
+        } else {
+            $xml = $this->render_content();
+        }
+
+        echo $xml; // phpcs:ignore WordPress.Security.EscapeOutput
         exit;
     }
 
     private function render_index(): string
     {
-        $loc = esc_url(home_url('/sitemap-content.xml'));
+        // The core content sitemap is always present; the jobs child is listed only when there is at least
+        // one quality-passing published job, so Google is never handed an empty (or thin) jobs sitemap.
+        $children = ['sitemap-content.xml'];
+        if ($this->job_ids() !== []) {
+            $children[] = 'sitemap-jobs.xml';
+        }
+
+        $items = '';
+        foreach ($children as $child) {
+            $items .= '<sitemap><loc>' . esc_url(home_url('/' . $child)) . '</loc></sitemap>';
+        }
 
         return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
             . '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-            . '<sitemap><loc>' . $loc . '</loc></sitemap>'
+            . $items
             . '</sitemapindex>';
     }
 
@@ -93,6 +114,65 @@ final class Sitemap
             'meta_compare' => 'EXISTS',
             'suppress_filters' => false,
         ]));
+    }
+
+    /**
+     * The Job Capture sitemap — its own child so operators can watch job indexation in isolation in GSC
+     * (and so a thin job page can never dilute the core-content sitemap's coverage signal).
+     */
+    private function render_jobs(): string
+    {
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
+            . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+
+        foreach ($this->job_ids() as $post_id) {
+            $xml .= '<url><loc>' . esc_url((string) get_permalink($post_id)) . '</loc>'
+                . '<lastmod>' . esc_html((string) get_post_modified_time('c', true, $post_id)) . '</lastmod>'
+                . '</url>';
+        }
+
+        return $xml . '</urlset>';
+    }
+
+    /**
+     * Published `pig_job` posts that clear the quality bar for indexing. Thin jobs are kept OUT of the
+     * sitemap so Google is never handed doorway-style stubs — the biggest risk with programmatic job pages.
+     *
+     * @return array<int, int>
+     */
+    private function job_ids(): array
+    {
+        $ids = array_map('intval', get_posts([
+            'post_type' => JobCpt::POST_TYPE,
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'fields' => 'ids',
+            'meta_key' => Meta::JOB_ID,
+            'meta_compare' => 'EXISTS',
+            'suppress_filters' => false,
+        ]));
+
+        return array_values(array_filter($ids, [$this, 'is_indexable_job']));
+    }
+
+    /**
+     * The per-job quality gate: a real photo (featured image), a substantive write-up (non-empty body), and
+     * a resolved location (a `pig_city` term). All three must be present.
+     */
+    private function is_indexable_job(int $post_id): bool
+    {
+        if (! has_post_thumbnail($post_id)) {
+            return false;
+        }
+
+        $post = get_post($post_id);
+        if (! $post instanceof \WP_Post || trim((string) $post->post_content) === '') {
+            return false;
+        }
+
+        $cities = wp_get_post_terms($post_id, JobCpt::TAX_CITY, ['fields' => 'ids']);
+
+        return ! is_wp_error($cities) && $cities !== [];
     }
 
     public function robots_txt(string $output): string

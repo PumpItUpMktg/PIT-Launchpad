@@ -127,6 +127,12 @@ final class Plugin
     {
         if (get_option('lpc_version') !== LPC_VERSION) {
             ServiceUser::install();
+            // Rewrite rules only register at activation; a plugin UPDATE never re-activates, so re-register
+            // and flush here — otherwise a newly-added route (e.g. the jobs sitemap) 404s until an operator
+            // manually re-saves permalinks.
+            ( new Sitemap() )->add_rewrite_rules();
+            ( new IndexNow() )->add_rewrite_rules();
+            flush_rewrite_rules();
             update_option('lpc_version', LPC_VERSION);
         }
     }
