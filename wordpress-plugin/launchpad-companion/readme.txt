@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.37
+Stable tag: 0.9.38
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,14 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.38 =
+* Job Capture sitemap: publish a dedicated `/sitemap-jobs.xml` child (added to the sitemap index) listing
+  only quality-passing published `pig_job` posts — a real photo (featured image), a substantive write-up,
+  and a resolved city. Thin jobs are kept out so Google is never handed doorway-style stubs, and operators
+  can watch job indexation in isolation in Search Console without it diluting the core-content coverage.
+  Rewrite rules are re-registered + flushed on upgrade so the new URL resolves without a manual permalink
+  re-save. No behavior change for page/post content.
 
 = 0.9.37 =
 * Elementor cleanup: remove the legacy Elementor lp/* dynamic-tags subsystem (the `elementor/dynamic_tags/register`
