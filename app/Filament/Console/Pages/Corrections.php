@@ -3,6 +3,9 @@
 namespace App\Filament\Console\Pages;
 
 use App\Enums\ContentStatus;
+use App\Jobs\RefreshSitePositions;
+use App\KeywordGenerator\Pipeline\PositionPullEstimator;
+use App\KeywordGenerator\Pipeline\RefreshKeywordPipelines;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -157,6 +160,67 @@ class Corrections extends ConsolePage
             ->title("Index audit complete — {$r['indexed']} of {$r['total']} published URLs indexed.")
             ->body("{$r['inspected']} inspected, {$r['not_inspected']} not inspected (quota/pending). The cards now show the real index verdict + crawl date.")
             ->success()->send();
+    }
+
+    /**
+     * The DataForSEO ranking-pull estimate for the current site — drives the button's enabled state, its
+     * cost line, and the confirm text (it spends real credits, so the number is shown up front).
+     *
+     * @return array{empty: bool, label: string}
+     */
+    public function getRankingEstimateProperty(): array
+    {
+        $site = $this->siteId === null ? null : Site::withoutGlobalScopes()->find($this->siteId);
+        if ($site === null) {
+            return ['empty' => true, 'label' => 'Select a site first.'];
+        }
+
+        $e = app(PositionPullEstimator::class)->estimate($site);
+        if ($e->isEmpty()) {
+            return ['empty' => true, 'label' => 'No tracked keywords yet — run keyword discovery first (Setup → Silos & keywords).'];
+        }
+
+        return ['empty' => false, 'label' => sprintf('%d tracked keyword(s) · ~%d task(s) · est. %s', $e->keywords, $e->totalTasks(), $e->costLabel())];
+    }
+
+    /**
+     * On-demand DataForSEO ranking pull for this tenant — positions only (it does NOT discover new
+     * keywords). The manual twin of the nightly {@see RefreshKeywordPipelines}
+     * fan-out: dispatches {@see RefreshSitePositions} (force — every scored keyword, both lanes), which posts
+     * the SERP tasks; the IngestSerpTasks sweep + FinalizeSitePositions then write the snapshots the Live
+     * cards read, so rankings refresh within ~5–15 minutes. Costs real credits — hence the up-front estimate.
+     */
+    public function refreshRankings(): void
+    {
+        if (! $this->can(Capability::UnfreezeQueue) || $this->siteId === null) {
+            return;
+        }
+        $site = Site::withoutGlobalScopes()->find($this->siteId);
+        if ($site === null) {
+            return;
+        }
+
+        $estimate = app(PositionPullEstimator::class)->estimate($site);
+        if ($estimate->isEmpty()) {
+            Notification::make()->warning()
+                ->title('Nothing to pull yet')
+                ->body('This site has no tracked keywords to refresh — run keyword discovery first (Setup → Silos & keywords), then pull rankings.')
+                ->send();
+
+            return;
+        }
+
+        RefreshSitePositions::dispatch($site->id);
+
+        Notification::make()->success()
+            ->title('Pulling rankings — using DataForSEO credits')
+            ->body(sprintf(
+                'Refreshing %d tracked keyword(s) (~%d task(s), est. %s). Rankings update on the cards within ~5–15 minutes.',
+                $estimate->keywords,
+                $estimate->totalTasks(),
+                $estimate->costLabel(),
+            ))
+            ->send();
     }
 
     /**

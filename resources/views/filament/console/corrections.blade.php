@@ -81,6 +81,18 @@
         </div>
 
         <div class="cr-card">
+            <h3>Rankings</h3>
+            <div class="cr-empty">Pull fresh organic + local-pack positions from DataForSEO for this tenant’s tracked keywords now — the on-demand twin of the nightly pipeline. Rankings update on the Live cards within ~5–15 minutes. <b>Uses DataForSEO credits.</b></div>
+            @php $rank = $this->rankingEstimate; @endphp
+            <div class="cr-empty" style="{{ $rank['empty'] ? 'color:#b45309;' : '' }}">{{ $rank['label'] }}</div>
+            <div class="cr-row">
+                <button class="cr-btn warn" wire:click="refreshRankings"
+                        wire:confirm="Pull fresh rankings from DataForSEO now? This uses credits — {{ $rank['label'] }}."
+                        @disabled($this->siteId === null || $rank['empty'])>Refresh rankings now</button>
+            </div>
+        </div>
+
+        <div class="cr-card">
             <h3>Weather alert bar</h3>
             <div class="cr-empty">The severe-weather (rain) strip above the header. Off by default — turn it on only for tenants where it's relevant (e.g. sump pumps). It needs coordinates + a Contact page, and goes live on the next “Sync header &amp; footer”.</div>
             <label class="cr-lock" style="cursor:pointer;">
