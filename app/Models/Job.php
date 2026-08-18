@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * A captured job (§3) — site-scoped. The table is `job_captures`, NOT `jobs` (the database queue driver
@@ -48,6 +49,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $joby_job_id
  * @property string|null $joby_job_type_raw
  * @property int|null $wp_post_id
+ * @property Carbon|null $indexnow_submitted_at when the live job URL was accepted by IndexNow (drives the "Submitted to Bing" pill)
  * @property string|null $last_publish_error
  * @property string|null $reject_reason
  */
@@ -81,7 +83,43 @@ class Job extends Model
             'photos' => 'array',
             'primary_photo_index' => 'integer',
             'wp_post_id' => 'integer',
+            'indexnow_submitted_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The public post title the plugin publishes under — the drafted title, else a "{type} in {city}"
+     * fallback. THE single source for the title so the publish blob, the public slug, and the URL never
+     * drift apart ({@see JobMetaBlobAssembler} + {@see publicUrl()} both read this).
+     */
+    public function publicTitle(): string
+    {
+        $title = trim((string) $this->post_title);
+        if ($title !== '') {
+            return $title;
+        }
+
+        $type = $this->jobTypes->first()?->label;
+        $city = $this->job_city_id !== null ? $this->city->name : null;
+
+        return trim(($type ?: 'Completed Job').($city !== null && $city !== '' ? " in {$city}" : ''));
+    }
+
+    /** The `pig_job` post slug the plugin publishes under ({title}-{last 6 of the ULID}). */
+    public function publicSlug(): string
+    {
+        return Str::slug($this->publicTitle().'-'.substr($this->id, -6));
+    }
+
+    /**
+     * The job's live public URL on WordPress — `{domain}/jobs/{slug}/`. The `jobs` base is the companion
+     * plugin's default `pig_job` rewrite (`class-job-cpt.php`). Null when the site has no domain.
+     */
+    public function publicUrl(?string $domain): ?string
+    {
+        $domain = trim((string) $domain);
+
+        return $domain === '' ? null : rtrim($domain, '/').'/jobs/'.$this->publicSlug().'/';
     }
 
     /** @return BelongsTo<JobCity, $this> */

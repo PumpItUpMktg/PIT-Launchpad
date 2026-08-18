@@ -3,10 +3,12 @@
 use App\Enums\ConnectionProvider;
 use App\Enums\JobStatus;
 use App\JobCapture\Publishing\JobPublisher;
+use App\Jobs\PingJobIndexNow;
 use App\Models\Connection;
 use App\Models\Job;
 use App\Models\Site;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 /** An approved, drafted job on a site with a WordPress connection. */
 function publishableJob(): Job
@@ -49,6 +51,37 @@ test('it publishes an approved job to WordPress — keyed on the ULID, jittered 
         ->and($captured['location']['lat'])->toEqual((float) $job->lat_jittered)
         ->and($captured['location']['lat'])->not->toEqual((float) $job->lat_true)   // never the true point
         ->and($captured['images'][0]['alt'])->toBe('A new sump pump');
+});
+
+test('a successful publish pings IndexNow for the job (when ping_on_publish is on)', function () {
+    config()->set('services.indexnow.ping_on_publish', true);
+    Queue::fake();
+    Http::fake(['*/launchpad/v1/job' => Http::response(['wp_post_id' => 77, 'status' => 'publish'])]);
+
+    $job = publishableJob();
+    app(JobPublisher::class)->publish($job);
+
+    Queue::assertPushed(PingJobIndexNow::class, fn (PingJobIndexNow $j): bool => $j->jobId === $job->id);
+});
+
+test('a successful publish does NOT ping IndexNow when ping_on_publish is off', function () {
+    config()->set('services.indexnow.ping_on_publish', false);
+    Queue::fake();
+    Http::fake(['*/launchpad/v1/job' => Http::response(['wp_post_id' => 77, 'status' => 'publish'])]);
+
+    app(JobPublisher::class)->publish(publishableJob());
+
+    Queue::assertNotPushed(PingJobIndexNow::class);
+});
+
+test('a failed publish never pings IndexNow', function () {
+    config()->set('services.indexnow.ping_on_publish', true);
+    Queue::fake();
+    Http::fake(['*/launchpad/v1/job' => Http::response('nope', 500)]);
+
+    app(JobPublisher::class)->publish(publishableJob());
+
+    Queue::assertNotPushed(PingJobIndexNow::class);
 });
 
 test('a WordPress failure lands the job in publish_failed with the error surfaced', function () {

@@ -5,7 +5,6 @@ namespace App\JobCapture\Publishing;
 use App\Models\Job;
 use App\Publishing\TenantStorage;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -20,13 +19,13 @@ final class JobMetaBlobAssembler
     /** @return array<string, mixed> */
     public function assemble(Job $job): array
     {
-        $title = trim((string) $job->post_title) ?: $this->fallbackTitle($job);
+        $title = $job->publicTitle();
 
         return [
             'job_id' => $job->id,
             'status' => 'publish',
             'title' => $title,
-            'slug' => Str::slug($title.'-'.substr($job->id, -6)),
+            'slug' => $job->publicSlug(),
             'description' => (string) $job->enhanced_description,
             'client_name' => (string) $job->client_name_display,
             'seo' => [
@@ -76,13 +75,5 @@ final class JobMetaBlobAssembler
         } catch (Throwable) {
             return $key;   // no public URL configured (e.g. tests) — the plugin resolves from the key
         }
-    }
-
-    private function fallbackTitle(Job $job): string
-    {
-        $type = $job->jobTypes->first()?->label;
-        $city = $job->job_city_id !== null ? $job->city->name : null;
-
-        return trim(($type ?: 'Completed Job').($city !== null && $city !== '' ? " in {$city}" : ''));
     }
 }

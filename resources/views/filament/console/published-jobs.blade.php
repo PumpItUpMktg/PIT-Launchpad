@@ -24,6 +24,8 @@
         .pj-badge.live { background:rgba(22,163,74,.15); color:#15803d; }
         .pj-badge.wait { background:rgba(202,138,4,.16); color:#a16207; }
         .pj-badge.fail { background:rgba(220,38,38,.15); color:#dc2626; }
+        .pj-pills { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+        .pj-bing { font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; background:rgba(37,99,235,.12); color:#2563eb; }
         .pj-err { font-size:11.5px; color:#dc2626; word-break:break-word; }
         .pj-foot { font-size:11.5px; color:#94a3b8; display:flex; justify-content:space-between; align-items:center; gap:8px; }
         .pj-btn { font-size:12px; font-weight:600; padding:6px 12px; border-radius:8px; cursor:pointer; border:1px solid rgba(148,163,184,.45); background:transparent; color:inherit; }
@@ -77,7 +79,10 @@
                         <div class="pj-card" wire:key="pub-{{ $j['id'] }}">
                             @if ($j['photo'])<div class="pj-photo"><img src="{{ $j['photo'] }}" alt=""></div>@endif
                             <div class="pj-body">
-                                <span class="pj-badge live">Published</span>
+                                <div class="pj-pills">
+                                    <span class="pj-badge live">Published</span>
+                                    @if ($j['indexnow_at'])<span class="pj-bing" title="Submitted to IndexNow on {{ $j['indexnow_at'] }}">↗ Submitted to Bing</span>@endif
+                                </div>
                                 <p class="pj-title">{{ $j['title'] }}</p>
                                 <div class="pj-meta">{{ collect([$j['city'], $j['county']])->filter()->implode(', ') ?: '—' }}</div>
                                 @if (count($j['job_types']) > 0 || $j['storefront'])

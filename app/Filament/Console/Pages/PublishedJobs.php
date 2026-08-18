@@ -179,6 +179,7 @@ class PublishedJobs extends ConsolePage
             'meta' => (string) $job->meta_description,
             'photo' => is_array($primary) ? $this->url((string) $primary['r2_key']) : '',
             'wp_post_id' => $job->wp_post_id,
+            'indexnow_at' => $job->indexnow_submitted_at instanceof Carbon ? $job->indexnow_submitted_at->toDateString() : null,
             'error' => (string) $job->last_publish_error,
             'when' => $job->updated_at instanceof Carbon ? $job->updated_at->diffForHumans() : null,
         ];
