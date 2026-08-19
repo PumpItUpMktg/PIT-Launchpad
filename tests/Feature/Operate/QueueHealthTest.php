@@ -6,6 +6,47 @@ use App\Operate\QueueHealth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+function insertFailedJob(string $displayName, string $exception = 'Illuminate\\Queue\\MaxAttemptsExceededException: attempted too many times'): void
+{
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(),
+        'connection' => 'database',
+        'queue' => 'default',
+        'payload' => (string) json_encode(['displayName' => $displayName, 'data' => ['command' => '']]),
+        'exception' => $exception,
+        'failed_at' => now(),
+    ]);
+}
+
+test('a benign WarmLiveMetrics failure does not trip the stalled banner or show in failures', function () {
+    insertFailedJob('App\\Jobs\\WarmLiveMetrics');
+
+    $health = app(QueueHealth::class);
+
+    expect($health->snapshot()['failed'])->toBe(0)      // excluded from the count
+        ->and($health->snapshot()['stalled'])->toBeFalse() // so no phantom stall from an interrupted warm
+        ->and($health->failures())->toBe([]);           // and never listed (no "regenerate the page" nonsense)
+});
+
+test('a real (non-benign) failure still counts, stalls, and shows', function () {
+    insertFailedJob('App\\Jobs\\PublishContent');
+
+    $health = app(QueueHealth::class);
+
+    expect($health->snapshot()['failed'])->toBe(1)
+        ->and($health->snapshot()['stalled'])->toBeTrue()
+        ->and($health->failures())->toHaveCount(1);
+});
+
+test('pruneBenignFailures deletes only the benign warm rows', function () {
+    insertFailedJob('App\\Jobs\\WarmLiveMetrics');
+    insertFailedJob('App\\Jobs\\WarmLiveMetrics');
+    insertFailedJob('App\\Jobs\\PublishContent');
+
+    expect(app(QueueHealth::class)->pruneBenignFailures())->toBe(2)
+        ->and(DB::table('failed_jobs')->count())->toBe(1); // the real failure remains
+});
+
 test('QueueHealth flags a stalled worker when a job has sat past the threshold', function () {
     // A pending job that became available 10 minutes ago — past the 5-minute stall threshold.
     DB::table('jobs')->insert([

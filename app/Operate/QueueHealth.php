@@ -16,6 +16,13 @@ use Illuminate\Support\Facades\DB;
 final class QueueHealth
 {
     /**
+     * Job classes whose failed_jobs rows are BENIGN noise — idempotent, self-healing infra (cache warmers)
+     * that a deploy/worker-restart can interrupt mid-run. They must never trip the "stalled" banner or ask
+     * the operator to "clear + regenerate a page" (they touch no page). Basename match on the payload.
+     */
+    private const BENIGN = ['WarmLiveMetrics'];
+
+    /**
      * @return array{pending: int, oldest_minutes: int, failed: int, processing: int, draining: bool, worker_down: bool, stalled: bool}
      */
     public function snapshot(int $stalledAfterMinutes = 5): array
@@ -25,7 +32,13 @@ final class QueueHealth
         $oldestMinutes = $oldestAvailableAt !== null
             ? (int) floor(max(0, time() - (int) $oldestAvailableAt) / 60)
             : 0;
-        $failed = (int) DB::table('failed_jobs')->count();
+        // Benign warm-cache failures are self-healing noise — exclude them so an interrupted warm never
+        // shows a phantom "stalled" fault.
+        $failedQuery = DB::table('failed_jobs');
+        foreach (self::BENIGN as $class) {
+            $failedQuery->where('payload', 'not like', '%'.$class.'%');
+        }
+        $failed = (int) $failedQuery->count();
 
         // A job the worker is holding right now: `reserved_at` is stamped when a worker reserves a job
         // and cleared/deleted when it finishes. A recent reservation = a LIVE worker actively draining —
@@ -62,7 +75,9 @@ final class QueueHealth
      */
     public function failures(int $limit = 8): array
     {
-        $rows = DB::table('failed_jobs')->orderByDesc('failed_at')->get();
+        $rows = DB::table('failed_jobs')->orderByDesc('failed_at')->get()
+            ->reject(fn (object $r): bool => in_array($this->jobClass($r->payload), self::BENIGN, true)) // hide benign warm noise
+            ->values();
 
         // Resolve every referenced content id to a page title in ONE query — most failed jobs
         // (GeneratePage / GeneratePost / PublishContent / RenderImage) carry the content id they act on.
@@ -127,6 +142,22 @@ final class QueueHealth
     public function clearFailed(): int
     {
         return DB::table('failed_jobs')->delete();
+    }
+
+    /**
+     * Delete only the BENIGN (self-healing infra) failed_jobs rows — the warm-cache jobs a deploy/timeout
+     * can interrupt. Called on the scheduled warm so this noise auto-clears and the operator never has to
+     * hand-clear it. Returns the count removed.
+     */
+    public function pruneBenignFailures(): int
+    {
+        return DB::table('failed_jobs')
+            ->where(function ($q): void {
+                foreach (self::BENIGN as $class) {
+                    $q->orWhere('payload', 'like', '%'.$class.'%');
+                }
+            })
+            ->delete();
     }
 
     /** The job class from a serialized queue payload (e.g. "App\\Jobs\\PublishContent"), basename only. */
