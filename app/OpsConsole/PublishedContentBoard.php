@@ -79,7 +79,6 @@ class PublishedContentBoard
      */
     public function forSite(?string $siteId, ?string $siloId = null, ?string $section = null): array
     {
-        $this->renderStart = microtime(true);
         $this->warmDispatched = false;
 
         $empty = ['blog' => [], 'core' => [], 'service' => [], 'storefronts' => []];
@@ -111,6 +110,11 @@ class PublishedContentBoard
         // Shared context built ONCE and reused across every card (link graph + storefront-town map).
         $graph = app(InternalLinkGraph::class)->build($site);
         $townMap = $this->storefrontTowns->targetTowns($site, null, null);
+
+        // Start the live-metrics budget clock HERE — after the (potentially multi-second, on a large
+        // tenant) link-graph + town-map build — so that setup cost never steals the metrics budget and
+        // forces every card to defer to "Refreshing…". The budget is for the vendor fetches, not the graph.
+        $this->renderStart = microtime(true);
 
         $result = $empty;
 

@@ -41,6 +41,12 @@ Schedule::command('launchpad:reconcile-generated-feeds')->daily()->withoutOverla
 // fan-out can't stack runs.
 Schedule::command('launchpad:ingest-feeds')->hourly()->withoutOverlapping();
 
+// Published-board live-metrics warm — keep the GSC/index/position/GA4 caches populated for every
+// engine-eligible site so an operator opens a board that's already warm, instead of a cold render
+// deferring every card to "Refreshing…". Hourly (well under the vendor caches' TTL); withoutOverlapping.
+// Also prunes any benign warm-cache failure a deploy/timeout left in failed_jobs.
+Schedule::command('launchpad:warm-live-metrics')->hourly()->withoutOverlapping();
+
 // GSC time-series snapshot — pull a trailing window of Search Console per
 // connected site into the never-overwritten daily store (absorbing GSC's ~3-day
 // revisions idempotently), then roll aged query-grain rows into the monthly
