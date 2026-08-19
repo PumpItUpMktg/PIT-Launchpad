@@ -5,6 +5,7 @@ namespace App\JobCapture\Publishing;
 use App\Enums\JobStatus;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
+use App\Jobs\PingJobIndexNow;
 use App\Models\Job;
 
 /**
@@ -45,6 +46,12 @@ final class JobPublisher
             'wp_post_id' => (int) ($response['wp_post_id'] ?? 0),
             'last_publish_error' => null,
         ])->save();
+
+        // Tell IndexNow (Bing/Yandex/…) to crawl the new job URL — same publish-time hook + config gate as
+        // §2 content publishing. Off the critical path; a failed ping never affects the publish.
+        if (config('services.indexnow.ping_on_publish')) {
+            PingJobIndexNow::dispatch($job->id);
+        }
     }
 
     /**
