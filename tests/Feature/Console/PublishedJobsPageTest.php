@@ -2,6 +2,7 @@
 
 use App\Enums\JobStatus;
 use App\Filament\Console\Pages\PublishedJobs;
+use App\Integrations\SearchConsole\SitemapSubmitter;
 use App\Jobs\PublishJob;
 use App\Jobs\UnpublishJob;
 use App\Models\Job;
@@ -24,6 +25,30 @@ it('renders the page (compiles the blade)', function () {
         ->set('siteId', $site->id)
         ->assertOk()
         ->assertSee('New pump install in Newark');
+});
+
+it('submits the sitemap index (which covers the jobs child) to Google for an operator', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+
+    $submitter = Mockery::mock(SitemapSubmitter::class);
+    $submitter->shouldReceive('submit')->once()
+        ->with(Mockery::on(fn ($s): bool => $s->id === $site->id))
+        ->andReturn(['ok' => true, 'reason' => null, 'sitemap' => 'https://spg.example/sitemap.xml', 'connected' => true, 'submitted' => 12, 'pending' => false, 'errors' => 0, 'warnings' => 0]);
+    app()->instance(SitemapSubmitter::class, $submitter);
+
+    $page = new PublishedJobs;
+    $page->siteId = $site->id;
+    $page->submitSitemap(); // Mockery ->once() verifies the submit on teardown
+});
+
+it('does not submit the sitemap when no site is selected', function () {
+    $submitter = Mockery::mock(SitemapSubmitter::class);
+    $submitter->shouldNotReceive('submit');
+    app()->instance(SitemapSubmitter::class, $submitter);
+
+    $page = new PublishedJobs;
+    $page->siteId = null;
+    $page->submitSitemap();
 });
 
 it('lists published jobs as cards and separates the not-yet-live pipeline', function () {

@@ -3,12 +3,14 @@
 namespace App\Filament\Console\Pages;
 
 use App\Enums\JobStatus;
+use App\Integrations\SearchConsole\SitemapSubmitter;
 use App\JobCapture\Review\JobStorefrontResolver;
 use App\Jobs\PublishJob;
 use App\Jobs\UnpublishJob;
 use App\Models\Job;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use App\Models\Site;
 use App\Publishing\TenantStorage;
 use App\Security\Capability;
 use BackedEnum;
@@ -105,6 +107,46 @@ class PublishedJobs extends ConsolePage
      * Take a live job DOWN from WordPress (pull the post) and park it as approved-but-not-live, so it leaves
      * the published grid but stays re-pushable. Best-effort pull-down via the §2 UnpublishJob (idempotent).
      */
+    /**
+     * Submit the site's sitemap INDEX (/sitemap.xml — which now includes the `/sitemap-jobs.xml` child) to
+     * Google Search Console, so Google discovers and crawls the published job pages. Free (no DataForSEO);
+     * reuses {@see SitemapSubmitter} verbatim. Submitting the index covers the jobs child — Google follows
+     * the index to its children — so there is no separate jobs-sitemap submission.
+     */
+    public function submitSitemap(): void
+    {
+        if (! $this->can(Capability::PublishContent) || $this->siteId === null) {
+            return;
+        }
+        $site = Site::withoutGlobalScopes()->find($this->siteId);
+        if ($site === null) {
+            return;
+        }
+
+        $result = app(SitemapSubmitter::class)->submit($site);
+
+        if (! $result['ok']) {
+            $body = match ($result['reason']) {
+                'not_connected' => 'Connect Search Console for this site first (Connections → Connect Google, then pick its GSC property).',
+                'no_domain' => 'This site has no domain URL set.',
+                default => (string) $result['reason'],
+            };
+            Notification::make()->warning()->title('Could not submit sitemap')->body($body)->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title('Sitemap submitted to Google')
+            ->body(sprintf(
+                'Google is crawling %s (this includes the jobs sitemap). It reports %d URL(s)%s. Indexing can take days.',
+                (string) $result['sitemap'],
+                $result['submitted'],
+                $result['pending'] ? ' — still processing' : '',
+            ))
+            ->send();
+    }
+
     public function takeDown(string $id): void
     {
         if (! $this->can(Capability::PublishContent)) {
