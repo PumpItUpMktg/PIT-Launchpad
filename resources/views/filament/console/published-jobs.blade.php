@@ -71,6 +71,11 @@
         <div class="pj-sec">
             <h3>Published ({{ count($published) }})</h3>
             <p class="pj-sub">Jobs live on the client’s WordPress site.</p>
+            <div class="pj-actions" style="margin-bottom:12px">
+                <button class="pj-btn" wire:click="submitSitemap"
+                        wire:confirm="Submit this site’s sitemap (which now includes the jobs sitemap) to Google Search Console? Free — no DataForSEO credits. Requires Search Console connected."
+                        @disabled($this->siteId === null)>🌐 Submit sitemap to Google</button>
+            </div>
             @if (count($published) === 0)
                 <div class="pj-empty">No published jobs on this site yet. Approved jobs land here once they reach WordPress.</div>
             @else
