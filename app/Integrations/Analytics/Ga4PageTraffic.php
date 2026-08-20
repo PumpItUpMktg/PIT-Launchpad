@@ -78,6 +78,12 @@ class Ga4PageTraffic implements PageTrafficProvider
         // Property id may be stored as "properties/123" or bare "123".
         $propertyId = str_starts_with($property, 'properties/') ? substr($property, 11) : $property;
 
+        // WordPress serves permalinks WITH a trailing slash, so GA4 records the pagePath as "/foo/" — but
+        // the control-plane slug is "/foo". Match BOTH variants (inListFilter) so an EXACT filter never
+        // silently misses a trafficked page. Root ("/") has only one form.
+        $base = rtrim($pagePath, '/');
+        $variants = $base === '' ? ['/'] : [$base, $base.'/'];
+
         try {
             $json = $this->connections->request(
                 $account,
@@ -92,7 +98,7 @@ class Ga4PageTraffic implements PageTrafficProvider
                     'dimensionFilter' => [
                         'filter' => [
                             'fieldName' => 'pagePath',
-                            'stringFilter' => ['matchType' => 'EXACT', 'value' => $pagePath],
+                            'inListFilter' => ['values' => $variants],
                         ],
                     ],
                 ]],
@@ -102,10 +108,19 @@ class Ga4PageTraffic implements PageTrafficProvider
         }
 
         $rows = (array) ($json['rows'] ?? []);
-        if ($rows === [] || ! is_array($rows[0])) {
+        if ($rows === []) {
             return null;
         }
 
-        return (int) round((float) ($rows[0]['metricValues'][0]['value'] ?? 0));
+        // With no dimension requested GA4 returns one aggregated totals row, but sum defensively in case a
+        // row-per-path shape comes back.
+        $total = 0;
+        foreach ($rows as $row) {
+            if (is_array($row)) {
+                $total += (int) round((float) ($row['metricValues'][0]['value'] ?? 0));
+            }
+        }
+
+        return $total;
     }
 }

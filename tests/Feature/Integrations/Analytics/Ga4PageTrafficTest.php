@@ -58,10 +58,26 @@ it('returns a page\'s sessions from a pagePath-filtered GA4 report', function ()
     HttpFacade::assertSent(function ($request) {
         $filter = $request['dimensionFilter']['filter'] ?? [];
 
+        // Matches BOTH the slash-less slug and the trailing-slash WordPress permalink GA4 records.
         return $filter['fieldName'] === 'pagePath'
-            && $filter['stringFilter']['value'] === '/sump-pump-installation'
+            && $filter['inListFilter']['values'] === ['/sump-pump-installation', '/sump-pump-installation/']
             && $request['metrics'][0]['name'] === 'sessions';
     });
+});
+
+it('matches the trailing-slash pagePath WordPress records (the "collecting" false-negative fix)', function () {
+    ga4TrafficGrant();
+    $site = Site::factory()->create(['ga4_property' => 'properties/123']);
+
+    // GA4 returns the row under the trailing-slash path; the slug we query with has no slash.
+    HttpFacade::fake(['*/properties/123:runReport' => HttpFacade::response(['rows' => [['metricValues' => [['value' => '15']]]]])]);
+
+    expect(app(PageTrafficProvider::class)->sessions($site, '/sump-pump-maintenance/sump-pump-battery-replacement', 28))->toBe(15);
+
+    HttpFacade::assertSent(fn ($request) => ($request['dimensionFilter']['filter']['inListFilter']['values'] ?? []) === [
+        '/sump-pump-maintenance/sump-pump-battery-replacement',
+        '/sump-pump-maintenance/sump-pump-battery-replacement/',
+    ]);
 });
 
 it('accepts a bare (non-prefixed) property id', function () {
