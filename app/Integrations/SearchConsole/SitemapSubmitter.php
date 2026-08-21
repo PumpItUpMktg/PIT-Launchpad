@@ -69,7 +69,28 @@ class SitemapSubmitter
             return $this->fail($e->getMessage(), $sitemap);
         }
 
-        return ['ok' => true, 'reason' => null, 'sitemap' => $sitemap] + $this->status($site);
+        // Report THIS sitemap's own numbers — NOT the property-wide sum across every sitemap GSC has on
+        // file. A property often carries stale sitemaps (a legacy SEO-plugin set, old per-city sitemaps),
+        // and summing their URL counts wildly over-reports what we just submitted.
+        $status = $this->status($site);
+        $mine = null;
+        foreach ($status['sitemaps'] as $row) {
+            if ($row['path'] === $sitemap) {
+                $mine = $row;
+                break;
+            }
+        }
+
+        return [
+            'ok' => true,
+            'reason' => null,
+            'sitemap' => $sitemap,
+            'connected' => $status['connected'],
+            'submitted' => $mine !== null ? (int) $mine['submitted'] : 0,
+            'pending' => $mine !== null ? (bool) $mine['is_pending'] : true, // not in the list yet → still processing
+            'errors' => $mine !== null ? (int) $mine['errors'] : 0,
+            'warnings' => $mine !== null ? (int) $mine['warnings'] : 0,
+        ];
     }
 
     /**
