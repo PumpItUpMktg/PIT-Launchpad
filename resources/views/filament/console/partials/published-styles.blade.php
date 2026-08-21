@@ -26,6 +26,12 @@
     .rc-chip.score { background:rgba(79,70,229,.12); color:#4f46e5; }
     .rc-chip.score.good { background:rgba(22,163,74,.15); color:#15803d; }
     .rc-chip.score.muted { background:rgba(148,163,184,.16); color:#94a3b8; }
+    /* Indexing pill: grey (not submitted) → yellow (submitted) → green (indexed) — the at-a-glance drip signal. */
+    .rc-ipill { font-size:11px; font-weight:700; padding:2px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:5px; }
+    .rc-ipill::before { content:''; width:7px; height:7px; border-radius:50%; background:currentColor; }
+    .rc-ipill.unsubmitted { background:rgba(148,163,184,.18); color:#64748b; }
+    .rc-ipill.submitted { background:rgba(202,138,4,.16); color:#a16207; }
+    .rc-ipill.indexed { background:rgba(22,163,74,.16); color:#15803d; }
     .rc-title { font-size:15px; font-weight:680; }
     .rc-url { font-size:12px; color:#4f46e5; text-decoration:none; word-break:break-all; }
     .rc-sub { font-size:11.5px; color:#94a3b8; }
