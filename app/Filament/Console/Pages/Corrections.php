@@ -10,6 +10,7 @@ use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
+use App\Operate\CoverageDashboard;
 use App\Operate\QueueHealth;
 use App\Operator\IndexCoverage;
 use App\Publishing\Chrome\SiteProfileAssembler;
@@ -61,6 +62,22 @@ class Corrections extends ConsolePage
     public function getFailuresProperty(): array
     {
         return app(QueueHealth::class)->failures();
+    }
+
+    /**
+     * The index-&-visibility dashboard for the active tenant — live URLs by page type with their indexed vs
+     * not-indexed split and 28-day Search visibility, most-visible first. Cheap (cached verdicts + GSC store).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getCoverageProperty(): ?array
+    {
+        if ($this->siteId === null) {
+            return null;
+        }
+        $site = Site::withoutGlobalScopes()->find($this->siteId);
+
+        return $site === null ? null : app(CoverageDashboard::class)->forSite($site);
     }
 
     /** @return list<array{id: string, title: string, locked: bool, locally_edited: bool}> */
