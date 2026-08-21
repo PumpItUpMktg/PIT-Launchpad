@@ -4,8 +4,10 @@ namespace App\Operator;
 
 use App\Enums\ContentStatus;
 use App\Enums\IndexCoverageState;
+use App\Enums\JobStatus;
 use App\Integrations\UrlInspection\IndexInspector;
 use App\Models\Content;
+use App\Models\Job;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Support\PublicUrl;
@@ -92,6 +94,48 @@ class IndexCoverage
                 'coverage_state' => $status->coverageState,
                 'canonical_mismatch' => $status->canonicalMismatch(),
                 'google_canonical' => $status->googleCanonical,
+            ];
+        }
+
+        // Job Capture pages too — inspect + cache each published job's URL so the Published-Jobs cards can
+        // read the real index verdict (via IndexInspector::cached()), the same way the content cards do.
+        $jobs = Job::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('status', JobStatus::Published->value)
+            ->with(['jobTypes', 'city'])
+            ->get();
+
+        foreach ($jobs as $job) {
+            $url = $job->publicUrl($site->domain_url);
+            $status = ($connected && $url !== null)
+                ? ($live ? $this->inspector->inspect($site, $url) : $this->inspector->cached($site, $url))
+                : null;
+            $displayUrl = $url ?? $job->publicPath();
+
+            if ($status === null) {
+                $state = IndexCoverageState::NotInspected;
+                $byState[$state->value] = ($byState[$state->value] ?? 0) + 1;
+                $findings[] = [
+                    'content_id' => (string) $job->id, 'kind' => 'job',
+                    'title' => $job->publicTitle(), 'url' => $displayUrl, 'state' => $state->value, 'label' => $state->label(),
+                    'indexed' => false, 'coverage_state' => '', 'canonical_mismatch' => false, 'google_canonical' => null,
+                ];
+
+                continue;
+            }
+
+            $inspected++;
+            if ($status->indexed()) {
+                $indexed++;
+            }
+            $byState[$status->state->value] = ($byState[$status->state->value] ?? 0) + 1;
+
+            $findings[] = [
+                'content_id' => (string) $job->id, 'kind' => 'job',
+                'title' => $job->publicTitle(), 'url' => $displayUrl,
+                'state' => $status->state->value, 'label' => $status->state->label(),
+                'indexed' => $status->indexed(), 'coverage_state' => $status->coverageState,
+                'canonical_mismatch' => $status->canonicalMismatch(), 'google_canonical' => $status->googleCanonical,
             ];
         }
 

@@ -6,6 +6,7 @@ use App\Enums\IndexCoverageState;
 use App\Integrations\UrlInspection\IndexInspector;
 use App\Integrations\UrlInspection\IndexStatus;
 use App\Models\Content;
+use App\Models\Job;
 use App\Models\Site;
 use App\Operator\IndexCoverage;
 
@@ -38,6 +39,21 @@ function status(string $url, IndexCoverageState $state, string $coverage = ''): 
 {
     return new IndexStatus(url: $url, state: $state, coverageState: $coverage ?: $state->label());
 }
+
+it('includes published jobs in the audit so job pages get a real index verdict', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $job = Job::factory()->published()->create(['site_id' => $site->id, 'post_title' => 'Sump Pump Replacement'])->fresh();
+    $url = (string) $job->publicUrl('https://spg.example');
+
+    bindFakeInspector([$url => status($url, IndexCoverageState::Indexed)]);
+
+    $finding = collect(app(IndexCoverage::class)->audit($site)['findings'])->firstWhere('content_id', $job->id);
+
+    expect($finding)->not->toBeNull()
+        ->and($finding['kind'])->toBe('job')
+        ->and($finding['url'])->toBe($url)      // {domain}/jobs/{slug}/ — the trailing-slash form the cards read
+        ->and($finding['indexed'])->toBeTrue();
+});
 
 it('tallies real index coverage across published pages and posts', function () {
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);

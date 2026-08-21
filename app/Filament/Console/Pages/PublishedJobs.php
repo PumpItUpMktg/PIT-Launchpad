@@ -4,6 +4,7 @@ namespace App\Filament\Console\Pages;
 
 use App\Enums\JobStatus;
 use App\Integrations\SearchConsole\SitemapSubmitter;
+use App\JobCapture\Metrics\JobMetrics;
 use App\JobCapture\Review\JobStorefrontResolver;
 use App\Jobs\PublishJob;
 use App\Jobs\UnpublishJob;
@@ -224,6 +225,9 @@ class PublishedJobs extends ConsolePage
             'indexnow_at' => $job->indexnow_submitted_at instanceof Carbon ? $job->indexnow_submitted_at->toDateString() : null,
             'error' => (string) $job->last_publish_error,
             'when' => $job->updated_at instanceof Carbon ? $job->updated_at->diffForHumans() : null,
+            // Live tracking — index / GSC / GA4 — only for jobs that are actually live on WordPress. Job
+            // pages are proof content, not keyword targets, so there is deliberately no ranking block.
+            'metrics' => $job->status === JobStatus::Published ? app(JobMetrics::class)->for($job) : null,
         ];
     }
 

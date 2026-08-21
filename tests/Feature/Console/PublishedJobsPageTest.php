@@ -41,6 +41,24 @@ it('submits the sitemap index (which covers the jobs child) to Google for an ope
     $page->submitSitemap(); // Mockery ->once() verifies the submit on teardown
 });
 
+it('attaches live tracking (index/gsc/traffic) to published cards, but not to pipeline cards', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    Job::factory()->published()->create(['site_id' => $site->id]);
+    Job::factory()->create(['site_id' => $site->id, 'status' => JobStatus::Approved]); // pipeline (not live)
+
+    $page = new PublishedJobs;
+    $page->siteId = $site->id;
+
+    $published = $page->getPublishedJobsProperty();
+    $pipeline = $page->getPipelineJobsProperty();
+
+    // Not connected in tests → honest pending blocks (never a fabricated zero), but the block is present.
+    expect($published[0]['metrics'])->not->toBeNull()
+        ->and($published[0]['metrics']['index']['pending'])->not->toBeNull()
+        ->and($published[0]['metrics'])->toHaveKeys(['gsc', 'index', 'traffic'])
+        ->and($pipeline[0]['metrics'])->toBeNull(); // pipeline jobs aren't live → no tracking computed
+});
+
 it('does not submit the sitemap when no site is selected', function () {
     $submitter = Mockery::mock(SitemapSubmitter::class);
     $submitter->shouldNotReceive('submit');

@@ -122,6 +122,12 @@ class Job extends Model
         return $domain === '' ? null : rtrim($domain, '/').'/jobs/'.$this->publicSlug().'/';
     }
 
+    /** The path portion of the public URL (no trailing slash) — the key for the GSC / GA4 per-page lookups. */
+    public function publicPath(): string
+    {
+        return '/jobs/'.$this->publicSlug();
+    }
+
     /** @return BelongsTo<JobCity, $this> */
     public function city(): BelongsTo
     {

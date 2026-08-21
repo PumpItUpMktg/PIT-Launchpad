@@ -26,6 +26,15 @@
         .pj-badge.fail { background:rgba(220,38,38,.15); color:#dc2626; }
         .pj-pills { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
         .pj-bing { font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; background:rgba(37,99,235,.12); color:#2563eb; }
+        .pj-metrics { border-top:1px solid rgba(148,163,184,.25); padding-top:8px; margin-top:2px; display:flex; flex-direction:column; gap:5px; }
+        .pj-mrow { display:flex; align-items:baseline; gap:8px; font-size:11.5px; }
+        .pj-mlabel { color:#94a3b8; min-width:46px; font-weight:600; }
+        .pj-mval { color:#334155; font-variant-numeric:tabular-nums; }
+        .pj-mval.ok { color:#15803d; font-weight:600; }
+        .pj-mval.warn { color:#b45309; font-weight:600; }
+        .pj-mmuted { color:#94a3b8; }
+        .pj-mqueries { display:flex; flex-wrap:wrap; gap:4px; align-items:center; font-size:10.5px; }
+        .pj-mq { padding:1px 7px; border-radius:99px; background:rgba(56,189,248,.12); color:#0284c7; }
         .pj-err { font-size:11.5px; color:#dc2626; word-break:break-word; }
         .pj-foot { font-size:11.5px; color:#94a3b8; display:flex; justify-content:space-between; align-items:center; gap:8px; }
         .pj-btn { font-size:12px; font-weight:600; padding:6px 12px; border-radius:8px; cursor:pointer; border:1px solid rgba(148,163,184,.45); background:transparent; color:inherit; }
@@ -94,6 +103,42 @@
                                     <div class="pj-chips">
                                         @foreach ($j['job_types'] as $t)<span class="pj-chip">{{ $t }}</span>@endforeach
                                         @if ($j['storefront'])<span class="pj-chip store">{{ $j['storefront'] }}</span>@endif
+                                    </div>
+                                @endif
+                                @if ($j['metrics'])
+                                    @php $m = $j['metrics']; @endphp
+                                    <div class="pj-metrics">
+                                        <div class="pj-mrow">
+                                            <span class="pj-mlabel">Google</span>
+                                            @if ($m['index']['state'])
+                                                <span class="pj-mval {{ $m['index']['indexed'] ? 'ok' : 'warn' }}">{{ $m['index']['label'] }}</span>
+                                                @if ($m['index']['last_crawled_at'])<span class="pj-mmuted">crawled {{ $m['index']['last_crawled_at'] }}</span>@endif
+                                            @else
+                                                <span class="pj-mmuted">{{ $m['index']['pending'] }}</span>
+                                            @endif
+                                        </div>
+                                        <div class="pj-mrow">
+                                            <span class="pj-mlabel">Search</span>
+                                            @if ($m['gsc']['pending'])
+                                                <span class="pj-mmuted">{{ $m['gsc']['pending'] }}</span>
+                                            @else
+                                                <span class="pj-mval">{{ $m['gsc']['impressions'] }} impr · {{ $m['gsc']['clicks'] }} clicks · {{ number_format($m['gsc']['ctr'] ?? 0, 1) }}% CTR</span>
+                                            @endif
+                                        </div>
+                                        @if (! empty($m['gsc']['queries']))
+                                            <div class="pj-mqueries">
+                                                <span class="pj-mmuted">Found for:</span>
+                                                @foreach (array_slice($m['gsc']['queries'], 0, 4) as $q)<span class="pj-mq">{{ $q['query'] }}</span>@endforeach
+                                            </div>
+                                        @endif
+                                        <div class="pj-mrow">
+                                            <span class="pj-mlabel">Visits</span>
+                                            @if ($m['traffic']['pending'])
+                                                <span class="pj-mmuted">{{ $m['traffic']['pending'] }}</span>
+                                            @else
+                                                <span class="pj-mval">{{ $m['traffic']['sessions'] }} session{{ (int) $m['traffic']['sessions'] === 1 ? '' : 's' }} · 28d</span>
+                                            @endif
+                                        </div>
                                     </div>
                                 @endif
                                 <div class="pj-actions">
