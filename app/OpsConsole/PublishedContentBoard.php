@@ -222,6 +222,7 @@ class PublishedContentBoard
     {
         $target = $c->targetKeyword?->targetContent;
         $siloName = $c->matchedSilo?->name;
+        $metrics = $this->metricsFor($c, $full);
 
         return [
             'id' => (string) $c->id,
@@ -244,8 +245,38 @@ class PublishedContentBoard
             'towns' => $isPost ? $this->storefrontTowns->matchTowns($c, $townMap) : [],
             'image' => PostThumbnail::for($c),
             'links' => $this->links($c, $graph, $domain),
-            'metrics' => $this->metricsFor($c, $full),
+            'metrics' => $metrics,
+            'index_pill' => $this->indexPill($metrics, $c->indexnow_submitted_at !== null),
         ];
+    }
+
+    /**
+     * The at-a-glance indexing pill for a live page — the drip signal: grey (no index signal yet) → yellow
+     * (submitted to the engines, not indexed yet) → green (confirmed in Google). "Indexed" = the real
+     * URL-Inspection verdict OR earned Search impressions; "Submitted" = pinged to IndexNow, or Google
+     * already returned a (non-indexed) verdict for the URL.
+     *
+     * @param  array<string, mixed>  $metrics
+     * @return array{state: string, label: string, title: string}
+     */
+    private function indexPill(array $metrics, bool $indexNowSubmitted): array
+    {
+        $index = is_array($metrics['index'] ?? null) ? $metrics['index'] : [];
+        $gsc = is_array($metrics['gsc'] ?? null) ? $metrics['gsc'] : [];
+
+        if (($index['indexed'] ?? false) || ($gsc['in_google'] ?? false)) {
+            $crawled = empty($index['last_crawled_at']) ? '' : ' — last crawled '.$index['last_crawled_at'];
+
+            return ['state' => 'indexed', 'label' => 'Indexed', 'title' => 'Confirmed in Google'.$crawled];
+        }
+
+        if ($indexNowSubmitted || ($index['state'] ?? null) !== null) {
+            $why = empty($index['label']) ? '' : ' ('.$index['label'].')';
+
+            return ['state' => 'submitted', 'label' => 'Submitted', 'title' => 'Submitted to search — not indexed yet'.$why];
+        }
+
+        return ['state' => 'unsubmitted', 'label' => 'Not submitted', 'title' => 'No index signal yet — submit the sitemap and run an index audit'];
     }
 
     /**
