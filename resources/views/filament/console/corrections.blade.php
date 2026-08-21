@@ -20,6 +20,24 @@
         .cr-fail { font-size:12px; color:#64748b; border-left:2px solid rgba(220,38,38,.4); padding:2px 0 2px 10px; }
         .cr-lock { display:flex; align-items:center; gap:10px; justify-content:space-between; border:1px solid rgba(148,163,184,.3); border-radius:9px; padding:8px 12px; }
         .cr-empty { color:#94a3b8; font-size:13px; }
+        .cov-row { border:1px solid rgba(148,163,184,.3); border-radius:9px; margin-bottom:7px; }
+        .cov-row summary { list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 13px; }
+        .cov-row summary::-webkit-details-marker { display:none; }
+        .cov-row summary::before { content:'▸'; color:#94a3b8; font-size:11px; }
+        .cov-row[open] summary::before { content:'▾'; }
+        .cov-name { font-weight:700; font-size:13px; flex:1; }
+        .cov-cells { display:flex; gap:14px; font-size:12px; font-variant-numeric:tabular-nums; align-items:center; flex-wrap:wrap; }
+        .cov-green { color:#15803d; font-weight:700; } .cov-grey { color:#94a3b8; font-weight:700; }
+        .cov-detail { padding:4px 13px 12px; border-top:1px solid rgba(148,163,184,.2); }
+        .cov-extra { font-size:11.5px; color:#64748b; margin:8px 0 10px; }
+        .cov-page { display:flex; align-items:center; gap:9px; padding:4px 0; border-top:1px dashed rgba(148,163,184,.2); font-size:12px; }
+        .cov-ptitle { flex:1; color:#334155; }
+        .cov-pmetrics { color:#94a3b8; font-variant-numeric:tabular-nums; white-space:nowrap; }
+        .cov-pill { font-size:10px; font-weight:700; padding:1px 8px; border-radius:99px; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+        .cov-pill::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+        .cov-pill.unsubmitted { background:rgba(148,163,184,.18); color:#64748b; }
+        .cov-pill.submitted { background:rgba(202,138,4,.16); color:#a16207; }
+        .cov-pill.indexed { background:rgba(22,163,74,.16); color:#15803d; }
     </style>
 
     <div class="cr-wrap">
@@ -31,6 +49,53 @@
             <div class="cr-tile {{ $health['failed'] > 0 ? 'hot' : '' }}"><div class="n">{{ $health['failed'] }}</div><div class="l">failed jobs</div></div>
             <div class="cr-tile"><div class="n">{{ $health['oldest_minutes'] }}m</div><div class="l">oldest waiting</div></div>
         </div>
+
+        @php $cov = $this->coverage; @endphp
+        @if ($cov)
+            <div class="cr-card">
+                <h3>Index &amp; visibility</h3>
+                <div class="cr-empty">Live URLs by page type — indexed vs not, and 28-day Search visibility, most-visible first. Expand a row for its pages (spot the risers to poke and the zeros that aren’t earning). Reads cached index verdicts + the GSC store — no new API calls; run “Refresh index coverage” below to freshen the verdicts.</div>
+                <div class="cr-tiles">
+                    <div class="cr-tile"><div class="n">{{ number_format($cov['totals']['total']) }}</div><div class="l">live URLs</div></div>
+                    <div class="cr-tile ok"><div class="n">{{ number_format($cov['totals']['indexed']) }}</div><div class="l">indexed · {{ $cov['totals']['indexed_pct'] }}%</div></div>
+                    <div class="cr-tile"><div class="n">{{ number_format($cov['totals']['not_indexed']) }}</div><div class="l">not indexed</div></div>
+                    <div class="cr-tile"><div class="n">{{ number_format($cov['totals']['impressions']) }}</div><div class="l">impr · {{ $cov['window_days'] }}d</div></div>
+                    <div class="cr-tile"><div class="n">{{ number_format($cov['totals']['clicks']) }}</div><div class="l">clicks · {{ $cov['window_days'] }}d</div></div>
+                </div>
+                <div style="margin-top:12px">
+                    @forelse ($cov['groups'] as $g)
+                        <details class="cov-row">
+                            <summary>
+                                <span class="cov-name">{{ $g['label'] }}</span>
+                                <span class="cov-cells">
+                                    <span title="total pages">{{ $g['total'] }} total</span>
+                                    <span class="cov-green" title="indexed">{{ $g['indexed'] }} ✓</span>
+                                    <span class="cov-grey" title="not indexed">{{ $g['not_indexed'] }} ○</span>
+                                    <span title="impressions ({{ $cov['window_days'] }}d)">{{ number_format($g['impressions']) }} impr</span>
+                                    <span title="clicks ({{ $cov['window_days'] }}d)">{{ number_format($g['clicks']) }} clk</span>
+                                </span>
+                            </summary>
+                            <div class="cov-detail">
+                                <div class="cov-extra">
+                                    {{ $g['indexed_pct'] }}% indexed · {{ $g['submitted'] }} submitted · {{ $g['not_submitted'] }} not submitted
+                                    · CTR {{ $g['ctr'] }}% · avg pos {{ $g['avg_position'] ?? '—' }}
+                                    · {{ $g['orphans'] }} orphan{{ $g['orphans'] === 1 ? '' : 's' }} · {{ $g['canonical_mismatch'] }} canonical mismatch
+                                </div>
+                                @foreach ($g['pages'] as $p)
+                                    <div class="cov-page" wire:key="cov-{{ $p['id'] }}">
+                                        <span class="cov-pill {{ $p['pill'] }}">{{ $p['pill'] === 'indexed' ? 'Indexed' : ($p['pill'] === 'submitted' ? 'Submitted' : 'Not sub') }}</span>
+                                        <span class="cov-ptitle">{{ $p['title'] }}</span>
+                                        <span class="cov-pmetrics">{{ number_format($p['impressions']) }} impr · {{ number_format($p['clicks']) }} clk @if ($p['position'] !== null)· #{{ $p['position'] }}@endif</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </details>
+                    @empty
+                        <div class="cr-empty">No published pages on this site yet.</div>
+                    @endforelse
+                </div>
+            </div>
+        @endif
 
         <div class="cr-card">
             <h3>Queue</h3>

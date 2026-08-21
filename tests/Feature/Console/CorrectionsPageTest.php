@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Filament\Console\Pages\Corrections;
 use App\Jobs\RefreshSitePositions;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Livewire\Livewire;
 
 function ccFailedJob(): void
 {
@@ -32,6 +34,37 @@ it('is reachable only by a Super Admin', function () {
 
     $this->actingAs(User::factory()->siteAdmin()->create());
     expect(Corrections::canAccess())->toBeFalse();
+});
+
+it('exposes the index-&-visibility dashboard for the active site (null with no site)', function () {
+    $this->actingAs(User::factory()->create());
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'sump-pump-repair', 'title' => 'Sump Pump Repair',
+    ]);
+
+    $console = new Corrections;
+
+    $console->siteId = null;
+    expect($console->getCoverageProperty())->toBeNull();
+
+    $console->siteId = $site->id;
+    $cov = $console->getCoverageProperty();
+    expect($cov)->toHaveKeys(['totals', 'groups', 'window_days'])
+        ->and($cov['totals']['total'])->toBe(1)
+        ->and(collect($cov['groups'])->firstWhere('label', 'Service')['total'])->toBe(1);
+});
+
+it('renders the Corrections page with the coverage block (blade compiles)', function () {
+    Livewire::actingAs(User::factory()->create());
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 's', 'title' => 'S',
+    ]);
+
+    Livewire::test(Corrections::class)->set('siteId', $site->id)->assertOk()->assertSee('Index &amp; visibility', false);
 });
 
 it('clears failed jobs for a Super Admin', function () {
