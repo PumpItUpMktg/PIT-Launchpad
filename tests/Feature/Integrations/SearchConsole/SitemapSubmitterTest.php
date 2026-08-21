@@ -53,6 +53,44 @@ it('submits the site sitemap to Search Console and reports the submitted count',
         && $r->body() === '');
 });
 
+it('reports only OUR sitemap\'s count, not the property-wide sum across stale sitemaps', function () {
+    ssGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+
+    // GSC still has legacy per-city sitemaps registered (all with big counts) alongside ours.
+    $list = ['sitemap' => [
+        ['path' => 'https://spg.example/sitemap.xml', 'isPending' => false, 'errors' => 0, 'warnings' => 0, 'contents' => [['submitted' => 362]]],
+        ['path' => 'https://spg.example/montclair/page-sitemap.xml', 'isPending' => false, 'errors' => 0, 'warnings' => 0, 'contents' => [['submitted' => 706]]],
+        ['path' => 'https://spg.example/doylestown/page-sitemap.xml', 'isPending' => false, 'errors' => 0, 'warnings' => 0, 'contents' => [['submitted' => 205]]],
+    ]];
+
+    Http::fake([
+        '*/sitemaps/*' => Http::response('', 200),
+        '*/sitemaps' => Http::response($list),
+    ]);
+
+    $result = app(SitemapSubmitter::class)->submit($site);
+
+    expect($result['submitted'])->toBe(362) // our sitemap only — NOT 362+706+205
+        ->and($result['pending'])->toBeFalse();
+});
+
+it('reports pending when Google has not processed our sitemap yet', function () {
+    ssGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+
+    Http::fake([
+        '*/sitemaps/*' => Http::response('', 200),
+        '*/sitemaps' => Http::response(['sitemap' => []]), // ours not listed back yet
+    ]);
+
+    $result = app(SitemapSubmitter::class)->submit($site);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['submitted'])->toBe(0)
+        ->and($result['pending'])->toBeTrue();
+});
+
 it('surfaces Google\'s reason when the grant lacks write authority (read-only scope / restricted user)', function () {
     ssGrant();
     $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
