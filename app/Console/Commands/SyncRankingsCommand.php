@@ -46,7 +46,7 @@ class SyncRankingsCommand extends Command
             $this->line(sprintf('   %-28s → rankings sync queued (%s … %s)', $site->domain_url ?? $site->id, $start, $end));
         }
 
-        $this->info(sprintf('Queued %d rankings sync job(s) on the metrics:%s queue.', $sites->count(), DataForSeoMetricProvider::PROVIDER));
+        $this->info(sprintf('Queued %d rankings sync job(s) on the %s queue.', $sites->count(), SyncSiteMetrics::queueFor(DataForSeoMetricProvider::PROVIDER)));
 
         return self::SUCCESS;
     }

@@ -40,7 +40,7 @@ class SyncIndexStatesCommand extends Command
             $this->line(sprintf('   %-28s → index sync queued', $site->domain_url ?? $site->id));
         }
 
-        $this->info(sprintf('Queued %d index sync job(s) on the metrics:%s queue.', $sites->count(), IndexMetricProvider::PROVIDER));
+        $this->info(sprintf('Queued %d index sync job(s) on the %s queue.', $sites->count(), SyncSiteMetrics::queueFor(IndexMetricProvider::PROVIDER)));
 
         return self::SUCCESS;
     }
