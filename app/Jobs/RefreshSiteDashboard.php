@@ -2,8 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Metrics\MetricProviderRegistry;
-use App\Metrics\Milestones\MilestoneDeriver;
 use App\Metrics\Providers\DataForSeoMetricProvider;
 use App\Metrics\Providers\GscMetricProvider;
 use App\Metrics\Providers\IndexMetricProvider;
@@ -11,40 +9,34 @@ use App\Models\Site;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Log;
-use Throwable;
+use Illuminate\Support\Facades\Bus;
 
 /**
  * One-click "Refresh data" for a site's client dashboard (§ Client Dashboard v1) — the queued work behind
  * the dashboard's Refresh button and a friendlier alternative to the CLI backfill runbook.
  *
- * It runs the whole spine chain IN ORDER within a single job — GSC rollup → durable index state → keyword
- * rankings → milestones — by invoking the already-tested {@see SyncSiteMetrics} logic inline (so each step
- * still records a metric_sync_run) then deriving milestones last (they read what the syncs just wrote).
+ * It does NOT do the work itself — it dispatches a CHAIN of separate, individually-timeout-bounded jobs:
+ * GSC rollup → DataForSEO rankings → index inspection → milestone derivation. Each step is its own job with
+ * its own timeout, so a large site can never blow a single job's budget (an earlier all-in-one version timed
+ * out mid-run and left the later steps — keywords, index, milestones — unwritten). Steps run in order (each
+ * after the previous completes), and SyncSiteMetrics swallows provider errors onto its sync-run row so one
+ * provider hiccup doesn't halt the chain.
  *
- * It runs on the DEFAULT queue on purpose: the platform's standing worker already consumes `default`, so no
- * per-provider queue configuration is needed for the button to work. Every step is idempotent, and each is
- * isolated so one provider hiccup can't abort the rest. It rolls up data already collected (gsc_url_daily,
- * position_snapshots) and refreshes index state via URL Inspection; the one-time ~16-month GSC history pull
- * from Google stays the separate `launchpad:backfill-gsc`.
+ * Rollup windows are bounded to a recent refresh window: the one-time ~16-month history is loaded by
+ * launchpad:backfill-gsc, and the button just refreshes recent data, keeping every step small.
  */
 class RefreshSiteDashboard implements ShouldQueue
 {
     use Queueable;
 
-    /** Bounded to stay under the database queue's retry_after so a slow run can't be double-picked. */
-    public int $timeout = 600;
+    /** Trivial — this job only builds and dispatches the chain, so it can't time out. */
+    public int $timeout = 60;
 
     public int $tries = 1;
 
-    /** How far back each provider (re)builds — generous windows; idempotent, so cost is bounded by data volume. */
-    private const GSC_MONTHS = 16;
-
-    private const RANK_DAYS = 500;
-
     public function __construct(public readonly string $siteId) {}
 
-    public function handle(MetricProviderRegistry $registry, MilestoneDeriver $deriver): void
+    public function handle(): void
     {
         $site = Site::withoutGlobalScopes()->find($this->siteId);
         if ($site === null) {
@@ -52,35 +44,16 @@ class RefreshSiteDashboard implements ShouldQueue
         }
 
         $today = Carbon::now()->toDateString();
+        $windowDays = max(1, (int) config('launchpad.metrics.refresh_window_days', 90));
+        $windowStart = Carbon::now()->subDays($windowDays)->toDateString();
 
-        // Fast, DB-only rollups FIRST — then derive milestones — then the slow, budget-bounded index
-        // inspection LAST. Ordering this way means the hero, keyword standings and milestones populate even
-        // if the URL-Inspection step runs long on a large site; a second derive picks up the index milestone
-        // once index state exists.
-        $this->run($registry, GscMetricProvider::PROVIDER, Carbon::now()->subMonths(self::GSC_MONTHS)->toDateString(), $today);
-        $this->run($registry, DataForSeoMetricProvider::PROVIDER, Carbon::now()->subDays(self::RANK_DAYS)->toDateString(), $today);
-        $this->derive($deriver, $site);
-        $this->run($registry, IndexMetricProvider::PROVIDER, $today, $today);
-        $this->derive($deriver, $site);
-    }
-
-    /** Run one provider sync inline, isolating failures so one hiccup can't abort the rest. */
-    private function run(MetricProviderRegistry $registry, string $provider, string $start, string $end): void
-    {
-        try {
-            // Inline reuse of the queued sync's logic: opens/records a metric_sync_run and runs the provider.
-            (new SyncSiteMetrics($this->siteId, $provider, $start, $end))->handle($registry);
-        } catch (Throwable $e) {
-            Log::warning('dashboard refresh step failed', ['site_id' => $this->siteId, 'provider' => $provider, 'error' => $e->getMessage()]);
-        }
-    }
-
-    private function derive(MilestoneDeriver $deriver, Site $site): void
-    {
-        try {
-            $deriver->derive($site);
-        } catch (Throwable $e) {
-            Log::warning('dashboard milestone derivation failed', ['site_id' => $site->id, 'error' => $e->getMessage()]);
-        }
+        // Each step its own job (own timeout). Order: fast DB rollups, the budget-bounded index inspection,
+        // then milestones last so they read everything the syncs just wrote.
+        Bus::chain([
+            new SyncSiteMetrics($this->siteId, GscMetricProvider::PROVIDER, $windowStart, $today),
+            new SyncSiteMetrics($this->siteId, DataForSeoMetricProvider::PROVIDER, $windowStart, $today),
+            new SyncSiteMetrics($this->siteId, IndexMetricProvider::PROVIDER, $today, $today),
+            new DeriveSiteMilestones($this->siteId),
+        ])->dispatch();
     }
 }
