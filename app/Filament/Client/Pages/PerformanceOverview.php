@@ -11,7 +11,6 @@ use App\Client\Dashboard\Sparkline;
 use App\Jobs\RefreshSiteDashboard;
 use App\Models\Site;
 use BackedEnum;
-use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Illuminate\Support\Facades\Auth;
@@ -59,39 +58,39 @@ class PerformanceOverview extends BaseDashboard
 
     public function getTitle(): string
     {
-        return 'Your Performance';
+        return 'Performance';
+    }
+
+    /** Suppress Filament's default page header — the Blade renders a brand-led header instead. */
+    public function getHeading(): string
+    {
+        return '';
     }
 
     /**
-     * A one-click "Refresh data" — dispatches {@see RefreshSiteDashboard} for the site in view. Operator-only
-     * (platform super-user): a real client never triggers expensive external syncs; their data refreshes on
-     * the nightly schedule.
-     *
-     * @return array<int, Action>
+     * A one-click "Refresh data" (the brand-header button) — dispatches {@see RefreshSiteDashboard} for the
+     * site in view. Operator-only (platform super-user): a real client never triggers expensive external
+     * syncs; their data refreshes on the nightly schedule.
      */
-    protected function getHeaderActions(): array
+    public function refreshData(): void
     {
-        return [
-            Action::make('refresh')
-                ->label('Refresh data')
-                ->icon('heroicon-o-arrow-path')
-                ->visible(fn (): bool => Auth::user()?->isPlatformSuperUser() ?? false)
-                ->action(function (): void {
-                    $site = $this->resolveSite();
-                    if ($site === null) {
-                        Notification::make()->title('No site selected')->warning()->send();
+        if (! (Auth::user()?->isPlatformSuperUser() ?? false)) {
+            return;
+        }
 
-                        return;
-                    }
+        $site = $this->resolveSite();
+        if ($site === null) {
+            Notification::make()->title('No site selected')->warning()->send();
 
-                    RefreshSiteDashboard::dispatch($site->id);
-                    Notification::make()
-                        ->title('Refresh started')
-                        ->body('Rebuilding this dashboard from the latest Search Console, index and ranking data — it will update in a few minutes.')
-                        ->success()
-                        ->send();
-                }),
-        ];
+            return;
+        }
+
+        RefreshSiteDashboard::dispatch($site->id);
+        Notification::make()
+            ->title('Refresh started')
+            ->body('Rebuilding this dashboard from the latest Search Console, index and ranking data — it will update in a few minutes.')
+            ->success()
+            ->send();
     }
 
     /** Custom view renders the spine dashboard, not the widget grid. */
@@ -108,9 +107,10 @@ class PerformanceOverview extends BaseDashboard
         $site = $this->resolveSite();
         $branding = app(ClientContext::class)->branding();
         $siteOptions = $this->siteOptions();
+        $canRefresh = Auth::user()?->isPlatformSuperUser() ?? false;
 
         if ($site === null) {
-            return ['ready' => false, 'branding' => $branding, 'siteOptions' => $siteOptions, 'siteId' => $this->siteId];
+            return ['ready' => false, 'branding' => $branding, 'siteOptions' => $siteOptions, 'siteId' => $this->siteId, 'canRefresh' => $canRefresh];
         }
 
         $frames = app(LaunchWindow::class)->frames($site);
@@ -125,6 +125,7 @@ class PerformanceOverview extends BaseDashboard
             'branding' => $branding,
             'siteOptions' => $siteOptions,
             'siteId' => $this->siteId,
+            'canRefresh' => $canRefresh,
             'frames' => array_map(fn (Frame $f): string => $f->label, $frames),
             'frameKey' => $frame->key,
             'hero' => $dash->hero($site, $frame),
