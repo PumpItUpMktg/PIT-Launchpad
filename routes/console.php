@@ -71,6 +71,12 @@ Schedule::command('launchpad:audit-index')->weekly()->withoutOverlapping();
 // multi-tenant sweep can't stack.
 Schedule::command('sandhog:sync-index')->daily()->withoutOverlapping();
 
+// Client-dashboard rank spine — roll the §5 position-snapshot series up into the
+// metric spine (per-keyword rank + site standings) so the dashboard trends keyword
+// movement. Reads an existing store (no DataForSEO call), so it's cheap; daily with a
+// short trailing window, idempotent. withoutOverlapping so a slow sweep can't stack.
+Schedule::command('sandhog:sync-rankings')->daily()->withoutOverlapping();
+
 // §7c client monthly report — email each client the prior month's keyword-
 // improvement report (PDF attached) on the 1st. Defaults to last month so a
 // complete month is reported; per-site opt-out is having no client users.

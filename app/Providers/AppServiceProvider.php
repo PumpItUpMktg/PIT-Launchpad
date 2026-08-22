@@ -102,6 +102,7 @@ use App\Local\Proof\ServiceJobProvider;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Locations\Dma\MetroResolver;
 use App\Metrics\MetricProviderRegistry;
+use App\Metrics\Providers\DataForSeoMetricProvider;
 use App\Metrics\Providers\GscMetricProvider;
 use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\User;
@@ -137,6 +138,7 @@ class AppServiceProvider extends ServiceProvider
             $registry = new MetricProviderRegistry;
             $registry->register(new GscMetricProvider);
             $registry->register($app->make(IndexMetricProvider::class));
+            $registry->register(new DataForSeoMetricProvider);
 
             return $registry;
         });
