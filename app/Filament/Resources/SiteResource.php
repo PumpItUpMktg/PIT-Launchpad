@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Branding\BrandBrief;
 use App\Branding\BrandStudio;
 use App\Branding\Scheme;
+use App\Client\ClientContext;
 use App\Console\Commands\DeleteSiteCommand;
 use App\Console\Commands\SyncSiteProfileCommand;
 use App\ContentEngine\Reconcile\RebuildReconciler;
@@ -144,6 +145,7 @@ class SiteResource extends Resource
                 ActionGroup::make([
                     self::queueAction(),
                     self::cockpitAction(),
+                    self::viewClientDashboardAction(),
                     self::brandAction(),
                     self::narrativeAction(),
                     self::launchAction(),
@@ -179,6 +181,25 @@ class SiteResource extends Resource
                 app(ActiveTenant::class)->set($record->id);
 
                 return redirect(OperateDashboard::getUrl());
+            });
+    }
+
+    /**
+     * Jump to this tenant's client-facing performance dashboard (§ Client Dashboard v1) in the white-labeled
+     * /portal panel. Sets the client-panel site selection (the switcher key {@see ClientContext}
+     * reads) and redirects there. Only a platform super-user can reach the client panel, so the button is
+     * hidden for every other operator.
+     */
+    private static function viewClientDashboardAction(): Action
+    {
+        return Action::make('viewClientDashboard')
+            ->label('View client dashboard')
+            ->icon('heroicon-o-presentation-chart-line')
+            ->visible(fn (): bool => Auth::user()?->isPlatformSuperUser() ?? false)
+            ->action(function (Site $record) {
+                session(['client_site_id' => $record->id]);
+
+                return redirect('/portal');
             });
     }
 
