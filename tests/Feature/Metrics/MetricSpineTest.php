@@ -127,6 +127,19 @@ it('dispatches each provider sync onto its own queue', function () {
     Queue::assertPushed(SyncSiteMetrics::class, fn (SyncSiteMetrics $j): bool => $j->queue === 'metrics:gsc' && $j->provider === 'gsc');
 });
 
+it('collapses every metric sync onto one queue when LAUNCHPAD_METRICS_QUEUE is set', function () {
+    config(['launchpad.metrics.queue' => 'default']);
+    Queue::fake();
+    $site = Site::factory()->create();
+
+    SyncSiteMetrics::dispatch($site->id, 'gsc', '2026-08-01', '2026-08-31');
+    SyncSiteMetrics::dispatch($site->id, 'index', '2026-08-01', '2026-08-31');
+
+    expect(SyncSiteMetrics::queueFor('gsc'))->toBe('default')
+        ->and(SyncSiteMetrics::queueFor('dataforseo'))->toBe('default');
+    Queue::assertPushed(SyncSiteMetrics::class, fn (SyncSiteMetrics $j): bool => $j->queue === 'default');
+});
+
 it('builds oldest-first month-chunks clamped to today at the tail', function () {
     $chunks = BackfillGscMetricsCommand::monthChunks(Carbon::parse('2026-08-22'), 3);
 

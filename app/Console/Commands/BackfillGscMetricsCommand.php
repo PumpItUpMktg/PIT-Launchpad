@@ -68,7 +68,7 @@ class BackfillGscMetricsCommand extends Command
         }
 
         $this->info(sprintf('Queued %d GSC backfill job(s) across %d site(s) on the %s queue.',
-            $dispatched, $sites->count(), 'metrics:'.self::PROVIDER));
+            $dispatched, $sites->count(), SyncSiteMetrics::queueFor(self::PROVIDER)));
 
         return self::SUCCESS;
     }

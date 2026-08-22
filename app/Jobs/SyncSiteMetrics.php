@@ -40,7 +40,17 @@ class SyncSiteMetrics implements ShouldQueue
         public readonly string $rangeStart,
         public readonly string $rangeEnd,
     ) {
-        $this->onQueue('metrics:'.$provider);
+        // Per-provider queue by default (metrics:{provider}) so a slow provider can't starve a fast one;
+        // a single-worker deployment can collapse them all onto one queue via LAUNCHPAD_METRICS_QUEUE.
+        $this->onQueue(self::queueFor($provider));
+    }
+
+    /** The queue a provider's sync rides: the configured shared queue, else the per-provider default. */
+    public static function queueFor(string $provider): string
+    {
+        $configured = config('launchpad.metrics.queue');
+
+        return is_string($configured) && $configured !== '' ? $configured : 'metrics:'.$provider;
     }
 
     public function handle(MetricProviderRegistry $registry): void

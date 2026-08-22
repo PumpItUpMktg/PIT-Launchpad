@@ -26,6 +26,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Client-dashboard metric sync queue
+    |--------------------------------------------------------------------------
+    |
+    | The SyncSiteMetrics jobs (GSC / index / DataForSEO) default to a queue PER
+    | provider (metrics:gsc, metrics:index, metrics:dataforseo) so a slow provider
+    | can't starve a fast one at scale. That needs a worker consuming those queues.
+    |
+    | For a single-worker deployment, set LAUNCHPAD_METRICS_QUEUE=default and every
+    | metric sync rides the normal `default` queue your standing worker already
+    | processes — no per-queue worker configuration required. Leave it unset to keep
+    | the per-provider isolation.
+    */
+    'metrics' => [
+        'queue' => env('LAUNCHPAD_METRICS_QUEUE'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Local town references on blog posts
     |--------------------------------------------------------------------------
     |
