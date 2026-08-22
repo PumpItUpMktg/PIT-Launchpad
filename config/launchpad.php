@@ -46,6 +46,11 @@ return [
         // this budget is spent, then uses cached verdicts — repeated daily runs + the inspector cache fill
         // coverage over days. Kept well under the queue retry_after / job timeout.
         'index_budget_seconds' => (float) env('LAUNCHPAD_INDEX_BUDGET_SECONDS', 240),
+
+        // The Refresh-button rollup window (days). The one-time ~16-month history is loaded by
+        // launchpad:backfill-gsc; the on-demand button only needs to refresh recent data, so it rolls up
+        // this trailing window — keeping each chained step small and well inside its job timeout.
+        'refresh_window_days' => (int) env('LAUNCHPAD_METRICS_REFRESH_DAYS', 90),
     ],
 
     /*
