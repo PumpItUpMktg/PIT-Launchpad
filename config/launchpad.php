@@ -40,6 +40,12 @@ return [
     */
     'metrics' => [
         'queue' => env('LAUNCHPAD_METRICS_QUEUE'),
+
+        // Per-run wall-clock budget for the index sync's LIVE URL-Inspection calls (one Google call per
+        // URL). A large site can't inspect every URL inside a job timeout, so each run inspects live until
+        // this budget is spent, then uses cached verdicts — repeated daily runs + the inspector cache fill
+        // coverage over days. Kept well under the queue retry_after / job timeout.
+        'index_budget_seconds' => (float) env('LAUNCHPAD_INDEX_BUDGET_SECONDS', 240),
     ],
 
     /*

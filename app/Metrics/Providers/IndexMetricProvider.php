@@ -43,7 +43,9 @@ class IndexMetricProvider implements MetricProvider
 
     public function sync(Site $site, CarbonPeriod $range): SyncResult
     {
-        $audit = $this->coverage->audit($site, live: true);
+        // Bounded live inspection: inspect URLs until the per-run budget is spent, then use cached verdicts.
+        // A large site thus completes over several daily runs instead of blowing the job timeout in one pass.
+        $audit = $this->coverage->audit($site, live: true, liveBudgetSeconds: (float) config('launchpad.metrics.index_budget_seconds', 240));
         if (! $audit['connected']) {
             // No grant / no GSC property — nothing to inspect, nothing fabricated.
             return SyncResult::success(0);

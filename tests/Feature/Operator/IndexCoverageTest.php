@@ -82,6 +82,38 @@ it('tallies real index coverage across published pages and posts', function () {
         ->and(collect($r['findings'])->pluck('url')->every(fn (string $u): bool => str_ends_with($u, '/')))->toBeTrue();
 });
 
+it('respects the live-inspection time budget, falling back to cached verdicts once spent', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'x', 'title' => 'X']);
+
+    // A fake where a LIVE inspect() reports Indexed but nothing is cached yet — so we can tell which path ran.
+    app()->instance(IndexInspector::class, new class implements IndexInspector
+    {
+        public function connected(Site $site): bool
+        {
+            return true;
+        }
+
+        public function inspect(Site $site, string $url): ?IndexStatus
+        {
+            return new IndexStatus(url: $url, state: IndexCoverageState::Indexed, coverageState: 'Indexed');
+        }
+
+        public function cached(Site $site, string $url): ?IndexStatus
+        {
+            return null;
+        }
+    });
+
+    // Budget already spent (0s) → uses cached() → nothing inspected.
+    $spent = app(IndexCoverage::class)->audit($site, live: true, liveBudgetSeconds: 0.0);
+    expect($spent['inspected'])->toBe(0)->and($spent['not_inspected'])->toBe(1);
+
+    // No budget → live inspection runs.
+    $full = app(IndexCoverage::class)->audit($site, live: true);
+    expect($full['inspected'])->toBe(1)->and($full['indexed'])->toBe(1);
+});
+
 it('reports nothing fabricated when not connected', function () {
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
     Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'x', 'title' => 'X']);
