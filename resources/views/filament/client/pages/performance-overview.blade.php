@@ -1,14 +1,26 @@
 <x-filament-panels::page>
 @php($accent = $branding['primary'] ?? '#0f62c4')
 
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&display=swap">
+
 <style>
     .pd { --pd-accent: {{ $accent }}; --pd-ink:#111821; --pd-muted:#5a6675; --pd-faint:#8a95a3;
         --pd-surface:#fff; --pd-surface2:#f6f8fb; --pd-line:#e2e7ee; --pd-up:#1a8f52; --pd-up-soft:#e2f2e9;
-        --pd-work:#b9770a; color:var(--pd-ink); }
+        --pd-work:#b9770a; --pd-display:"Bricolage Grotesque","Public Sans",system-ui,sans-serif; color:var(--pd-ink); }
     .dark .pd { --pd-ink:#e7edf4; --pd-muted:#9aa7b5; --pd-faint:#6b7887; --pd-surface:#131a22;
         --pd-surface2:#0f151c; --pd-line:#232c37; --pd-up:#4cc07f; --pd-up-soft:#16281e; --pd-work:#d99a34; }
     .pd .pd-card { background:var(--pd-surface); border:1px solid var(--pd-line); border-radius:14px; padding:20px; }
-    .pd .pd-controls { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+    /* brand-led header */
+    .pd .pd-header { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding-bottom:18px; margin-bottom:22px; border-bottom:1px solid var(--pd-line); }
+    .pd .pd-brand { display:flex; align-items:center; gap:12px; }
+    .pd .pd-logo { width:40px; height:40px; border-radius:10px; flex:none; display:grid; place-items:center; color:#fff; font-family:var(--pd-display); font-weight:800; font-size:19px; background:var(--pd-accent); }
+    .pd .pd-logo-img { width:40px; height:40px; border-radius:10px; object-fit:contain; flex:none; background:var(--pd-surface2); }
+    .pd .pd-brand-name { font-family:var(--pd-display); font-weight:800; font-size:20px; letter-spacing:-.015em; }
+    .pd .pd-brand-sub { font-size:12.5px; color:var(--pd-faint); }
+    .pd .pd-header-controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .pd .pd-refresh { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#fff; background:var(--pd-accent); border:0; border-radius:9px; padding:8px 14px; cursor:pointer; }
+    .pd .pd-refresh:disabled { opacity:.6; cursor:default; }
+    .pd .pd-movement { font-size:12.5px; color:var(--pd-faint); margin:14px 2px 0; }
     .pd .pd-frame { display:inline-flex; background:var(--pd-surface2); border:1px solid var(--pd-line); border-radius:10px; padding:3px; }
     .pd .pd-frame button { font-size:13px; font-weight:600; border:0; background:transparent; color:var(--pd-muted); padding:6px 13px; border-radius:7px; cursor:pointer; }
     .pd .pd-frame button.on { background:var(--pd-surface); color:var(--pd-ink); box-shadow:0 1px 3px rgba(0,0,0,.12); }
@@ -16,15 +28,15 @@
     .pd .pd-spacer { flex:1 1 auto; }
     .pd .pd-hero { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
     @media (max-width:900px){ .pd .pd-hero{ grid-template-columns:1fr; } .pd .pd-cols{ grid-template-columns:1fr !important; } }
-    .pd .pd-eyebrow { font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--pd-muted); font-weight:600; }
-    .pd .pd-big { font-weight:800; font-size:44px; line-height:1.02; letter-spacing:-.02em; margin:8px 0 2px; font-variant-numeric:tabular-nums; }
+    .pd .pd-eyebrow { font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--pd-muted); font-weight:700; }
+    .pd .pd-big { font-family:var(--pd-display); font-weight:800; font-size:46px; line-height:1.02; letter-spacing:-.02em; margin:8px 0 2px; font-variant-numeric:tabular-nums; }
     .pd .pd-big .pd-unit { font-size:15px; font-weight:600; color:var(--pd-muted); }
     .pd .pd-say { font-size:13.5px; color:var(--pd-muted); }
     .pd .pd-foot { margin-top:14px; padding-top:13px; border-top:1px solid var(--pd-line); display:flex; align-items:center; gap:8px; }
     .pd .pd-delta { display:inline-flex; align-items:center; gap:5px; font-weight:700; font-size:13px; padding:3px 9px; border-radius:999px; color:var(--pd-up); background:var(--pd-up-soft); }
     .pd .pd-cols { display:grid; grid-template-columns:1.35fr 1fr; gap:16px; align-items:start; margin-top:16px; }
     .pd .pd-colstack { display:grid; gap:16px; }
-    .pd .pd-h { font-size:15px; font-weight:700; margin:0 0 12px; }
+    .pd .pd-h { font-family:var(--pd-display); font-size:16px; font-weight:700; letter-spacing:-.01em; margin:0 0 12px; }
     .pd .pd-legend { display:flex; gap:16px; font-size:12.5px; color:var(--pd-muted); flex-wrap:wrap; }
     .pd .pd-legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
     .pd .pd-band { display:grid; grid-template-columns:64px 1fr 34px; align-items:center; gap:12px; font-size:13px; margin-bottom:10px; }
@@ -60,21 +72,40 @@
         </div>
     @else
 
-        {{-- controls: frame toggle + (optional) site switcher --}}
-        <div class="pd-controls">
-            <div class="pd-frame" role="group" aria-label="Time frame">
-                @foreach ($frames as $key => $label)
-                    <button type="button" wire:click="setFrame('{{ $key }}')" @class(['on' => $key === $frameKey])>{{ $label }}</button>
-                @endforeach
+        {{-- brand-led header: logo + name on the left; refresh, switcher, frame toggle grouped right --}}
+        <div class="pd-header">
+            <div class="pd-brand">
+                @if (! empty($branding['logo_url']))
+                    <img class="pd-logo-img" src="{{ $branding['logo_url'] }}" alt="{{ $branding['name'] }}">
+                @else
+                    <div class="pd-logo">{{ mb_strtoupper(mb_substr($branding['name'], 0, 1)) }}</div>
+                @endif
+                <div>
+                    <div class="pd-brand-name">{{ $branding['name'] }}</div>
+                    <div class="pd-brand-sub">Performance</div>
+                </div>
             </div>
             <div class="pd-spacer"></div>
-            @if (count($siteOptions) > 1)
-                <select class="pd-select" wire:model.live="siteId" aria-label="Site">
-                    @foreach ($siteOptions as $id => $name)
-                        <option value="{{ $id }}">{{ $name }}</option>
+            <div class="pd-header-controls">
+                @if ($canRefresh)
+                    <button type="button" class="pd-refresh" wire:click="refreshData" wire:loading.attr="disabled" wire:target="refreshData">
+                        <span wire:loading.remove wire:target="refreshData">↻ Refresh data</span>
+                        <span wire:loading wire:target="refreshData">Refreshing…</span>
+                    </button>
+                @endif
+                @if (count($siteOptions) > 1)
+                    <select class="pd-select" wire:model.live="siteId" aria-label="Site">
+                        @foreach ($siteOptions as $id => $name)
+                            <option value="{{ $id }}">{{ $name }}</option>
+                        @endforeach
+                    </select>
+                @endif
+                <div class="pd-frame" role="group" aria-label="Time frame">
+                    @foreach ($frames as $key => $label)
+                        <button type="button" wire:click="setFrame('{{ $key }}')" @class(['on' => $key === $frameKey])>{{ $label }}</button>
                     @endforeach
-                </select>
-            @endif
+                </div>
+            </div>
         </div>
 
         {{-- hero --}}
@@ -82,12 +113,12 @@
             <div class="pd-card">
                 <div class="pd-eyebrow">Pages working</div>
                 <div class="pd-big">{{ number_format($hero['pages_working']['value']) }}</div>
-                <div class="pd-say">pages earning Google Search impressions</div>
+                <div class="pd-say">pages earning Search impressions &amp; clicks</div>
                 <div class="pd-foot">
                     @if ($hero['pages_working']['delta'] > 0)
                         <span class="pd-delta">▲ {{ number_format($hero['pages_working']['delta']) }}</span>
                     @endif
-                    <span class="pd-say">in the last 28 days</span>
+                    <span class="pd-say">new in the last 28 days</span>
                 </div>
             </div>
             <div class="pd-card">
@@ -113,6 +144,8 @@
                 </div>
             </div>
         </div>
+
+        <p class="pd-movement">Movement-first: the hero leads with what changed, not an absolute rank. Each tile compares the current frame to the one before it.</p>
 
         <div class="pd-cols">
             {{-- left column --}}

@@ -69,8 +69,8 @@ it('shows the Refresh button to a super-user and dispatches the job', function (
     $this->actingAs($boss);
 
     Livewire::test(PerformanceOverview::class)
-        ->assertActionVisible('refresh')
-        ->callAction('refresh');
+        ->assertSee('Refresh data')
+        ->call('refreshData');
 
     Queue::assertPushed(RefreshSiteDashboard::class, fn (RefreshSiteDashboard $j): bool => $j->siteId === $site->id);
 });
@@ -82,7 +82,9 @@ it('hides the Refresh button from a real client', function () {
     Filament::setCurrentPanel('client');
     $this->actingAs($client);
 
-    Livewire::test(PerformanceOverview::class)->assertActionHidden('refresh');
+    Livewire::test(PerformanceOverview::class)
+        ->assertDontSee('Refresh data')
+        ->call('refreshData'); // guarded no-op for a non-super-user
 
     Queue::assertNothingPushed();
 });
