@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Jobs\SyncSiteMetrics;
-use App\Metrics\MetricProviderRegistry;
+use App\Metrics\Providers\GscMetricProvider;
 use App\Models\MetricSyncRun;
 use App\Models\Site;
 use Illuminate\Console\Command;
@@ -13,8 +13,9 @@ use Illuminate\Support\Collection;
 /**
  * Backfill the GSC slice of the metric spine (§ Client Dashboard v1) — one month-chunk at a time so a long
  * history stays inside per-job limits and is resumable. It fans out {@see SyncSiteMetrics} on the `metrics:gsc`
- * queue; the GSC provider that actually pulls Search Analytics lands in PR 2. Until then the dispatched jobs
- * record a clear "provider not registered" sync-run, so this command already exercises the full wiring.
+ * queue; each job runs {@see GscMetricProvider}, which rolls up the existing
+ * `gsc_url_daily` store into snapshots (so the source GSC history must already be present — the daily sync
+ * and `launchpad:backfill-gsc` fill it).
  *
  *   sandhog:backfill-gsc {site?} {--months=16} {--resume}
  *
@@ -24,8 +25,8 @@ use Illuminate\Support\Collection;
  *
  * NOTE the `sandhog:` namespace (not `launchpad:`): the existing `launchpad:backfill-gsc`
  * ({@see BackfillGscCommand}) already pulls the GSC history into `gsc_url_daily`. This backfills the
- * client-dashboard SPINE — and PR 2's GSC provider should roll UP from `gsc_url_daily` into
- * `metric_snapshots` rather than re-hit the Search Console API.
+ * client-dashboard SPINE — the GSC provider rolls UP from `gsc_url_daily` into `metric_snapshots` rather
+ * than re-hit the Search Console API.
  */
 class BackfillGscMetricsCommand extends Command
 {
@@ -38,7 +39,7 @@ class BackfillGscMetricsCommand extends Command
 
     protected $description = 'Backfill GSC metrics into the client-dashboard spine, one resumable month-chunk per site.';
 
-    public function handle(MetricProviderRegistry $registry): int
+    public function handle(): int
     {
         $months = max(1, (int) $this->option('months'));
         $resume = (bool) $this->option('resume');
@@ -48,14 +49,6 @@ class BackfillGscMetricsCommand extends Command
             $this->error('No site found.');
 
             return self::FAILURE;
-        }
-
-        if (! $registry->has(self::PROVIDER)) {
-            // Non-destructive in PR 1: the provider is wired in PR 2. Report and stop rather than spraying
-            // "not registered" failure rows across the portfolio.
-            $this->warn(sprintf('The [%s] metric provider is not registered yet (lands in PR 2). Nothing dispatched.', self::PROVIDER));
-
-            return self::SUCCESS;
         }
 
         $chunks = self::monthChunks(Carbon::now(), $months);

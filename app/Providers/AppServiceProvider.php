@@ -102,6 +102,7 @@ use App\Local\Proof\ServiceJobProvider;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Locations\Dma\MetroResolver;
 use App\Metrics\MetricProviderRegistry;
+use App\Metrics\Providers\GscMetricProvider;
 use App\Models\User;
 use App\Onboarding\MissionPolisher;
 use App\Operator\Controls\BudgetControl;
@@ -128,10 +129,15 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(CurrentSite::class);
 
-        // Client-dashboard metric spine (§ Client Dashboard v1): the provider registry is a singleton so
-        // providers can register once at boot. It's empty here — the GSC provider registers in PR 2, the
-        // DataForSEO provider in PR 4 — and SyncSiteMetrics resolves providers from it by key.
-        $this->app->singleton(MetricProviderRegistry::class);
+        // Client-dashboard metric spine (§ Client Dashboard v1): the provider registry is a singleton with
+        // its providers registered here. GSC (PR 2) rolls up from gsc_url_daily; DataForSEO (PR 4) will join
+        // it. SyncSiteMetrics resolves providers from it by key.
+        $this->app->singleton(MetricProviderRegistry::class, function (): MetricProviderRegistry {
+            $registry = new MetricProviderRegistry;
+            $registry->register(new GscMetricProvider);
+
+            return $registry;
+        });
 
         $this->app->bind(ClaudeClient::class, fn ($app) => $app->make(ClaudeClientFactory::class)->default());
 
