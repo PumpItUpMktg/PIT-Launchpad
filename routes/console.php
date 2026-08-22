@@ -63,6 +63,14 @@ Schedule::command('launchpad:sync-gsc')->daily()->withoutOverlapping();
 // refresh is the "Refresh index coverage" button on the Corrections console.
 Schedule::command('launchpad:audit-index')->weekly()->withoutOverlapping();
 
+// Client-dashboard index spine — persist Google's per-URL verdicts into the
+// durable page_index_states table + stamp the daily pages_indexed/pages_known
+// snapshot the client dashboard trends. Shares the URL-Inspection cache with the
+// weekly audit above, so daily runs spend quota only on stale/new URLs (and thus
+// spread a large site's inspection across days). withoutOverlapping so a slow
+// multi-tenant sweep can't stack.
+Schedule::command('sandhog:sync-index')->daily()->withoutOverlapping();
+
 // §7c client monthly report — email each client the prior month's keyword-
 // improvement report (PDF attached) on the 1st. Defaults to last month so a
 // complete month is reported; per-site opt-out is having no client users.

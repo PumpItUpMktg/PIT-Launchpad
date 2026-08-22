@@ -103,6 +103,7 @@ use App\Local\Proof\ServiceReviewProvider;
 use App\Locations\Dma\MetroResolver;
 use App\Metrics\MetricProviderRegistry;
 use App\Metrics\Providers\GscMetricProvider;
+use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\User;
 use App\Onboarding\MissionPolisher;
 use App\Operator\Controls\BudgetControl;
@@ -132,9 +133,10 @@ class AppServiceProvider extends ServiceProvider
         // Client-dashboard metric spine (§ Client Dashboard v1): the provider registry is a singleton with
         // its providers registered here. GSC (PR 2) rolls up from gsc_url_daily; DataForSEO (PR 4) will join
         // it. SyncSiteMetrics resolves providers from it by key.
-        $this->app->singleton(MetricProviderRegistry::class, function (): MetricProviderRegistry {
+        $this->app->singleton(MetricProviderRegistry::class, function ($app): MetricProviderRegistry {
             $registry = new MetricProviderRegistry;
             $registry->register(new GscMetricProvider);
+            $registry->register($app->make(IndexMetricProvider::class));
 
             return $registry;
         });
