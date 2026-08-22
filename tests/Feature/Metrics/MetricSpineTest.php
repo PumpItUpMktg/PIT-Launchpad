@@ -95,7 +95,7 @@ it('scopes snapshots, index states and milestones to the tenant', function () {
 it('records a failed sync run when the provider is not registered', function () {
     $site = Site::factory()->create();
 
-    (new SyncSiteMetrics($site->id, 'gsc', '2026-08-01', '2026-08-31'))
+    (new SyncSiteMetrics($site->id, 'nonexistent', '2026-08-01', '2026-08-31'))
         ->handle(app(MetricProviderRegistry::class));
 
     $run = MetricSyncRun::withoutGlobalScopes()->first();
@@ -137,21 +137,9 @@ it('builds oldest-first month-chunks clamped to today at the tail', function () 
         ->and($chunks[2][1]->toDateString())->toBe('2026-08-22'); // clamped to "now", not 08-31
 });
 
-it('backfill does nothing while the gsc provider is unregistered', function () {
+it('backfill fans out one job per month-chunk', function () {
     Queue::fake();
     $site = Site::factory()->create();
-
-    $this->artisan('sandhog:backfill-gsc', ['site' => $site->id, '--months' => 3])
-        ->expectsOutputToContain('not registered yet')
-        ->assertSuccessful();
-
-    Queue::assertNothingPushed();
-});
-
-it('backfill fans out one job per month-chunk once the provider is registered', function () {
-    Queue::fake();
-    $site = Site::factory()->create();
-    app(MetricProviderRegistry::class)->register(fakeGscProvider());
 
     $this->artisan('sandhog:backfill-gsc', ['site' => $site->id, '--months' => 4])->assertSuccessful();
 
@@ -161,7 +149,6 @@ it('backfill fans out one job per month-chunk once the provider is registered', 
 it('backfill --resume skips month-chunks a successful run already covers', function () {
     Queue::fake();
     $site = Site::factory()->create();
-    app(MetricProviderRegistry::class)->register(fakeGscProvider());
 
     // One chunk (the oldest of a 3-month walk from a first-of-month "now") already succeeded.
     $chunks = BackfillGscMetricsCommand::monthChunks(Carbon::now(), 3);
