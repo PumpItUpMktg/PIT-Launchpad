@@ -77,6 +77,11 @@ Schedule::command('sandhog:sync-index')->daily()->withoutOverlapping();
 // short trailing window, idempotent. withoutOverlapping so a slow sweep can't stack.
 Schedule::command('sandhog:sync-rankings')->daily()->withoutOverlapping();
 
+// Client-dashboard milestones — derive the client's narrative beats (first indexed,
+// first page-1 keyword, blog-volume) from the metric spine + page-index state. Runs
+// after the day's syncs; cheap + read-only over the DB, idempotent per (site, key).
+Schedule::command('sandhog:derive-milestones')->dailyAt('05:00')->withoutOverlapping();
+
 // §7c client monthly report — email each client the prior month's keyword-
 // improvement report (PDF attached) on the 1st. Defaults to last month so a
 // complete month is reported; per-site opt-out is having no client users.
