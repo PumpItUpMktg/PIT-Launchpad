@@ -3,11 +3,11 @@
 namespace App\Providers\Filament;
 
 use App\Client\ClientContext;
+use App\Filament\Client\Pages\PerformanceOverview;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -44,7 +44,9 @@ class ClientPanelProvider extends PanelProvider
                 fn (): View => view('filament.shared.interaction-styles'),
             )
             ->discoverPages(in: app_path('Filament/Client/Pages'), for: 'App\Filament\Client\Pages')
-            ->pages([Dashboard::class])
+            // The spine-backed PerformanceOverview (a Dashboard subclass) is the client landing; the
+            // default widget dashboard is retired in favor of it, with the §7c widgets moved to Insights.
+            ->pages([PerformanceOverview::class])
             ->discoverResources(in: app_path('Filament/Client/Resources'), for: 'App\Filament\Client\Resources')
             ->discoverWidgets(in: app_path('Filament/Client/Widgets'), for: 'App\Filament\Client\Widgets')
             ->middleware([
