@@ -39,9 +39,15 @@ class IndexCoverage
      *   findings: list<array{content_id: string, kind: string, title: string, url: string, state: string, label: string, indexed: bool, coverage_state: string, canonical_mismatch: bool, google_canonical: ?string}>,
      * }
      */
-    public function audit(Site $site, bool $live = true): array
+    public function audit(Site $site, bool $live = true, ?float $liveBudgetSeconds = null): array
     {
         $connected = $this->inspector->connected($site);
+
+        // A live inspection is one Google URL-Inspection call per URL (quota + latency bound), so a large
+        // site can't inspect every URL inside a queue/job timeout. With a budget, we inspect live until it's
+        // spent, then fall back to cached verdicts for the rest — repeated runs + the inspector's cache TTL
+        // fill coverage over days. Null budget = inspect everything (the weekly console audit's behavior).
+        $deadline = $liveBudgetSeconds !== null ? microtime(true) + $liveBudgetSeconds : null;
 
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -61,7 +67,7 @@ class IndexCoverage
             // the WordPress permalink, not the slash-less variant that 301-redirects to it.
             $url = PublicUrl::forContent($site->domain_url, $content);
             $status = ($connected && $url !== null)
-                ? ($live ? $this->inspector->inspect($site, $url) : $this->inspector->cached($site, $url))
+                ? ($this->inspectLive($live, $deadline) ? $this->inspector->inspect($site, $url) : $this->inspector->cached($site, $url))
                 : null;
             $url ??= '/'.ltrim((string) $content->slug, '/');
 
@@ -108,7 +114,7 @@ class IndexCoverage
         foreach ($jobs as $job) {
             $url = $job->publicUrl($site->domain_url);
             $status = ($connected && $url !== null)
-                ? ($live ? $this->inspector->inspect($site, $url) : $this->inspector->cached($site, $url))
+                ? ($this->inspectLive($live, $deadline) ? $this->inspector->inspect($site, $url) : $this->inspector->cached($site, $url))
                 : null;
             $displayUrl = $url ?? $job->publicPath();
 
@@ -150,5 +156,11 @@ class IndexCoverage
             'by_state' => $byState,
             'findings' => $findings,
         ];
+    }
+
+    /** Whether to make a live inspection now: only when live mode is on and the time budget isn't spent. */
+    private function inspectLive(bool $live, ?float $deadline): bool
+    {
+        return $live && ($deadline === null || microtime(true) < $deadline);
     }
 }

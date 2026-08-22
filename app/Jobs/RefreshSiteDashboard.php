@@ -52,22 +52,31 @@ class RefreshSiteDashboard implements ShouldQueue
         }
 
         $today = Carbon::now()->toDateString();
-        $steps = [
-            [GscMetricProvider::PROVIDER, Carbon::now()->subMonths(self::GSC_MONTHS)->toDateString(), $today],
-            [IndexMetricProvider::PROVIDER, $today, $today],
-            [DataForSeoMetricProvider::PROVIDER, Carbon::now()->subDays(self::RANK_DAYS)->toDateString(), $today],
-        ];
 
-        foreach ($steps as [$provider, $start, $end]) {
-            try {
-                // Inline reuse of the queued sync's logic: opens/records a metric_sync_run and runs the
-                // provider. SyncSiteMetrics::handle swallows provider errors onto the run, so this won't throw.
-                (new SyncSiteMetrics($this->siteId, $provider, $start, $end))->handle($registry);
-            } catch (Throwable $e) {
-                Log::warning('dashboard refresh step failed', ['site_id' => $site->id, 'provider' => $provider, 'error' => $e->getMessage()]);
-            }
+        // Fast, DB-only rollups FIRST — then derive milestones — then the slow, budget-bounded index
+        // inspection LAST. Ordering this way means the hero, keyword standings and milestones populate even
+        // if the URL-Inspection step runs long on a large site; a second derive picks up the index milestone
+        // once index state exists.
+        $this->run($registry, GscMetricProvider::PROVIDER, Carbon::now()->subMonths(self::GSC_MONTHS)->toDateString(), $today);
+        $this->run($registry, DataForSeoMetricProvider::PROVIDER, Carbon::now()->subDays(self::RANK_DAYS)->toDateString(), $today);
+        $this->derive($deriver, $site);
+        $this->run($registry, IndexMetricProvider::PROVIDER, $today, $today);
+        $this->derive($deriver, $site);
+    }
+
+    /** Run one provider sync inline, isolating failures so one hiccup can't abort the rest. */
+    private function run(MetricProviderRegistry $registry, string $provider, string $start, string $end): void
+    {
+        try {
+            // Inline reuse of the queued sync's logic: opens/records a metric_sync_run and runs the provider.
+            (new SyncSiteMetrics($this->siteId, $provider, $start, $end))->handle($registry);
+        } catch (Throwable $e) {
+            Log::warning('dashboard refresh step failed', ['site_id' => $this->siteId, 'provider' => $provider, 'error' => $e->getMessage()]);
         }
+    }
 
+    private function derive(MilestoneDeriver $deriver, Site $site): void
+    {
         try {
             $deriver->derive($site);
         } catch (Throwable $e) {
