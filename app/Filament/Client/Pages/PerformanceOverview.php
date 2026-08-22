@@ -8,9 +8,13 @@ use App\Client\Dashboard\ClientDashboard;
 use App\Client\Dashboard\Frame;
 use App\Client\Dashboard\LaunchWindow;
 use App\Client\Dashboard\Sparkline;
+use App\Jobs\RefreshSiteDashboard;
 use App\Models\Site;
 use BackedEnum;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * The client's performance landing (§ Client Dashboard v1, PR 6b) — the white-labeled `/portal` home each
@@ -56,6 +60,38 @@ class PerformanceOverview extends BaseDashboard
     public function getTitle(): string
     {
         return 'Your Performance';
+    }
+
+    /**
+     * A one-click "Refresh data" — dispatches {@see RefreshSiteDashboard} for the site in view. Operator-only
+     * (platform super-user): a real client never triggers expensive external syncs; their data refreshes on
+     * the nightly schedule.
+     *
+     * @return array<int, Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('refresh')
+                ->label('Refresh data')
+                ->icon('heroicon-o-arrow-path')
+                ->visible(fn (): bool => Auth::user()?->isPlatformSuperUser() ?? false)
+                ->action(function (): void {
+                    $site = $this->resolveSite();
+                    if ($site === null) {
+                        Notification::make()->title('No site selected')->warning()->send();
+
+                        return;
+                    }
+
+                    RefreshSiteDashboard::dispatch($site->id);
+                    Notification::make()
+                        ->title('Refresh started')
+                        ->body('Rebuilding this dashboard from the latest Search Console, index and ranking data — it will update in a few minutes.')
+                        ->success()
+                        ->send();
+                }),
+        ];
     }
 
     /** Custom view renders the spine dashboard, not the widget grid. */
