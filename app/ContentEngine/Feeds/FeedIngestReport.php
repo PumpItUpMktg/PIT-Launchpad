@@ -35,13 +35,16 @@ final class FeedIngestReport
     public static function fromFunnel(string $feedId, string $label, int $fetched, FunnelResult $funnel): self
     {
         $prefilteredOut = count(array_filter($funnel->dropped, fn (array $d) => $d['reason'] === 'pre_filter'));
-        $scoreRejected = count($funnel->dropped) - $prefilteredOut;
+        $alreadyIngested = count(array_filter($funnel->dropped, fn (array $d) => $d['reason'] === 'already_ingested'));
+        // Everything else in `dropped` is a scorer rejection (brand-safety / off-silo / competitor / below
+        // threshold). already_ingested is a dedup, not a score rejection, so it is excluded here.
+        $scoreRejected = count($funnel->dropped) - $prefilteredOut - $alreadyIngested;
         $routed = count($funnel->created);
         $parked = count($funnel->parked);
         $refreshMarked = count($funnel->refreshMarked);
 
-        // Same-story clustering collapses survivors before scoring; what was merged
-        // away (never individually scored) is the deduped count.
+        // Deduped = article-identity skips (already_ingested) + same-story clustering merges (items collapsed
+        // before scoring). The residual absorbs the clustering merges automatically.
         $deduped = max(0, ($fetched - $prefilteredOut) - ($routed + $parked + $refreshMarked + $scoreRejected));
 
         return new self($feedId, $label, $fetched, $prefilteredOut, $deduped, $scoreRejected, $routed, $parked, $refreshMarked);

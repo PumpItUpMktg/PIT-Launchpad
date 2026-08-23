@@ -47,3 +47,18 @@ it('breaks a funnel result into legible per-stage counts', function () {
         ->and($report->deduped)->toBe(1)     // (10 - 4) - (2 + 1 + 0 + 2)
         ->and($report->line())->toContain('fetched 10');
 });
+
+it('counts already-ingested article-identity skips as deduped, not score-rejected', function () {
+    // 6 fetched → 3 already-ingested (dedup), 1 below-threshold (score), 2 routed.
+    $dropped = array_merge(
+        array_fill(0, 3, ['title' => 'dup', 'reason' => 'already_ingested']),
+        [['title' => 'weak', 'reason' => 'below_threshold']],
+    );
+    $funnel = new FunnelResult([new Content, new Content], [], [], [], $dropped);
+
+    $report = FeedIngestReport::fromFunnel('f2', 'Feed', 6, $funnel);
+
+    expect($report->scoreRejected)->toBe(1)  // the below_threshold only — dedup is excluded
+        ->and($report->routed)->toBe(2)
+        ->and($report->deduped)->toBe(3);    // (6 - 0) - (2 + 0 + 0 + 1)
+});

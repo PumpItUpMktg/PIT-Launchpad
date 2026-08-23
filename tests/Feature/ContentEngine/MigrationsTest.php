@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 test('the §1 additions are present', function () {
     expect(Schema::hasTable('refresh_events'))->toBeTrue()
         ->and(Schema::hasColumns('contents', [
-            'source_name', 'source_url', 'matched_silo_id', 'angle_hint', 'relevance_score', 'local_relevance',
+            'source_name', 'source_url', 'external_id', 'matched_silo_id', 'angle_hint', 'relevance_score', 'local_relevance',
         ]))->toBeTrue();
 });
 
