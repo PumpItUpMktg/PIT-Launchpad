@@ -57,6 +57,23 @@
     .pd .pd-dot { position:absolute; left:0; top:3px; width:16px; height:16px; border-radius:50%; background:var(--pd-accent); border:3px solid var(--pd-surface); box-shadow:0 0 0 1px var(--pd-line); }
     .pd .pd-ev { font-weight:600; font-size:14px; }
     .pd .pd-dt { font-size:12px; color:var(--pd-faint); }
+    /* awaiting-indexing card */
+    .pd .pd-idx { margin-top:16px; }
+    .pd .pd-idx-lead { font-size:13.5px; color:var(--pd-muted); margin:-4px 0 16px; }
+    .pd .pd-idx-count { display:inline-block; font-family:var(--pd-display); font-weight:800; font-size:13px; color:var(--pd-work); background:var(--pd-surface2); border-radius:999px; padding:1px 10px; margin-left:8px; vertical-align:2px; }
+    .pd .pd-idx-group { margin-bottom:16px; }
+    .pd .pd-idx-group:last-child { margin-bottom:0; }
+    .pd .pd-idx-type { font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--pd-muted); margin:0 0 8px; }
+    .pd .pd-idx-n { font-weight:700; color:var(--pd-faint); }
+    .pd .pd-idx-list { list-style:none; margin:0; padding:0; display:grid; gap:9px; }
+    .pd .pd-idx-row { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:14px; font-size:13.5px; padding-bottom:9px; border-bottom:1px solid var(--pd-line); }
+    .pd .pd-idx-row:last-child { border-bottom:0; padding-bottom:0; }
+    .pd .pd-idx-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+    .pd .pd-idx-title a { color:var(--pd-ink); text-decoration:none; }
+    .pd .pd-idx-title a:hover { text-decoration:underline; }
+    .pd .pd-idx-status { font-size:11.5px; font-weight:700; color:var(--pd-work); border:1px solid var(--pd-line); border-radius:999px; padding:2px 9px; white-space:nowrap; }
+    .pd .pd-idx-date { font-size:12px; color:var(--pd-faint); white-space:nowrap; font-variant-numeric:tabular-nums; }
+    @media (max-width:900px){ .pd .pd-idx-row{ grid-template-columns:1fr auto; } .pd .pd-idx-date{ grid-column:1 / -1; } }
     .pd .pd-note { margin-top:22px; padding:15px 17px; border:1px solid var(--pd-line); border-radius:12px; background:var(--pd-surface2); font-size:12.5px; color:var(--pd-muted); }
     .pd .pd-empty { text-align:center; padding:56px 20px; color:var(--pd-muted); }
     .pd .pd-empty h3 { font-size:18px; color:var(--pd-ink); margin:0 0 6px; }
@@ -220,6 +237,36 @@
                 </div>
             </div>
         </div>
+
+        {{-- awaiting indexing: managed pages Google hasn't indexed yet, by type, oldest-waiting first --}}
+        @if (! empty($awaitingIndexing['groups']))
+            <div class="pd-card pd-idx">
+                <h2 class="pd-h">Awaiting indexing<span class="pd-idx-count">{{ number_format($awaitingIndexing['total']) }}</span></h2>
+                <p class="pd-idx-lead">Published pages Google hasn’t added to Search yet. New pages typically take a few days to a few weeks — this is normal; a page waiting unusually long is worth a look.</p>
+                @foreach ($awaitingIndexing['groups'] as $group)
+                    <div class="pd-idx-group">
+                        <div class="pd-idx-type">{{ $group['type'] }} <span class="pd-idx-n">{{ count($group['pages']) }}</span></div>
+                        <ul class="pd-idx-list">
+                            @foreach ($group['pages'] as $p)
+                                <li class="pd-idx-row">
+                                    <span class="pd-idx-title">
+                                        @if (! empty($p['url']))
+                                            <a href="{{ $p['url'] }}" target="_blank" rel="noopener">{{ $p['title'] }}</a>
+                                        @else
+                                            {{ $p['title'] }}
+                                        @endif
+                                    </span>
+                                    <span class="pd-idx-status">{{ $p['status'] }}</span>
+                                    <span class="pd-idx-date">
+                                        {{ $p['published_on'] ? \Illuminate\Support\Carbon::parse($p['published_on'])->isoFormat('MMM D, YYYY') : '—' }}@if ($p['days_waiting'] !== null) · {{ $p['days_waiting'].'d' }}@endif
+                                    </span>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endforeach
+            </div>
+        @endif
 
         <div class="pd-note">
             Refresh markers annotate the trend as <strong>observed correlation</strong> — not a guarantee of cause.
