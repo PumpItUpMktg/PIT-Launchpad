@@ -2,6 +2,7 @@
 
 namespace App\ContentEngine;
 
+use App\Enums\CandidateClassification;
 use App\Enums\RelevanceBand;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\News\NewsItem;
@@ -41,6 +42,12 @@ class RelevanceScorer
 
         $brandSafe = (bool) ($data['brand_safe'] ?? true);
         $score = (float) ($data['relevance'] ?? 0.0);
+        $timeliness = (float) ($data['timeliness'] ?? 0.0);
+        $localRelevance = (bool) ($data['local_relevance'] ?? false);
+        // A competitor's OWN announcement / press release / promo is not a news hook for us — drop it.
+        $competitorPromo = (bool) ($data['competitor_promo'] ?? false);
+        $classification = CandidateClassification::tryFrom((string) ($data['classification'] ?? ''))
+            ?? CandidateClassification::derive($timeliness, $localRelevance);
 
         $matchedSilo = isset($data['matched_silo'])
             ? $silos->first(fn (Silo $s) => strcasecmp($s->name, (string) $data['matched_silo']) === 0)
@@ -58,6 +65,7 @@ class RelevanceScorer
         }
 
         $band = match (true) {
+            $competitorPromo => RelevanceBand::Dropped,               // competitor's own announcement — not our news
             ! $brandSafe => RelevanceBand::Dropped,
             $matchedSilo === null => RelevanceBand::Dropped,          // silo-match gate
             $score >= $this->draftThreshold => RelevanceBand::DraftReady,
@@ -71,10 +79,12 @@ class RelevanceScorer
             matchedSiloId: $matchedSilo?->id,
             angleHint: isset($data['angle']) ? (string) $data['angle'] : null,
             advisoryValue: (float) ($data['advisory_value'] ?? 0.0),
-            timeliness: (float) ($data['timeliness'] ?? 0.0),
-            localRelevance: (bool) ($data['local_relevance'] ?? false),
+            timeliness: $timeliness,
+            localRelevance: $localRelevance,
             brandSafe: $brandSafe,
             rationale: (string) ($data['rationale'] ?? ''),
+            classification: $classification,
+            competitorPromo: $competitorPromo,
         );
     }
 
@@ -111,8 +121,13 @@ class RelevanceScorer
             ."Title: {$item->title}\nSummary: {$item->summary}\nSource: {$item->sourceName}\n\n"
             ."Silos (route to the best match by its include terms; NEVER route to a silo when the item matches its [NOT: …] terms; null if none fits):\n{$siloLines}\n\n"
             .'Return ONLY JSON: {"relevance":0..1,"matched_silo":"<silo name|null>","angle":"<advisory angle>",'
-            .'"advisory_value":0..1,"timeliness":0..1,"local_relevance":true|false,"brand_safe":true|false,"rationale":"..."}. '
-            .'brand_safe is false for off-brand, controversial, or tragedy-exploitative items.';
+            .'"advisory_value":0..1,"timeliness":0..1,"local_relevance":true|false,"brand_safe":true|false,'
+            .'"classification":"local|time_sensitive|evergreen","competitor_promo":true|false,"rationale":"..."}. '
+            .'brand_safe is false for off-brand, controversial, or tragedy-exploitative items. '
+            .'classification: "local" if the story is anchored to a specific place in/near the brand\'s service area; '
+            .'else "time_sensitive" if it is a timely event/news hook whose value decays quickly; else "evergreen" for durable advisory topics. '
+            .'competitor_promo is true ONLY when the item is a rival home-services company\'s OWN announcement, press release, '
+            .'promotion, hiring notice, or ad (not our brand, and not neutral industry news) — such items must be dropped.';
     }
 
     private function system(): string
