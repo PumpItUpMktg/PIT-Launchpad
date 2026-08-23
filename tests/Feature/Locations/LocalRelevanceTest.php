@@ -84,8 +84,15 @@ test('the same town scores differently for two different businesses', function (
     $rowA = collect($relevance->forSite($a))->firstWhere('geo_id', '30');
     $rowB = collect($relevance->forSite($b))->firstWhere('geo_id', '30');
 
-    // Per-business signals — the whole point: no two sites get identical local data.
-    expect($rowA['signals']->demandIndex)->not->toBe($rowB['signals']->demandIndex);
+    // Per-business signals — the whole point: no two sites get identical local data. Compare the full
+    // signal profile (not one dimension), so distinctness holds even against an astronomically-rare
+    // single-value hash collision.
+    $profile = fn (array $row): array => [
+        $row['signals']->demandIndex,
+        $row['signals']->competitorDensity,
+        $row['signals']->marketReviewIndex,
+    ];
+    expect($profile($rowA))->not->toBe($profile($rowB));
 });
 
 test('the read-model carries score, readiness, and selection state per town', function () {

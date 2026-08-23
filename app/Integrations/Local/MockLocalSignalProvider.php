@@ -38,11 +38,16 @@ final class MockLocalSignalProvider implements LocalSignalProvider
         );
     }
 
-    /** A stable 0–1 value seeded per site + town + trade + dimension. */
+    /**
+     * A stable 0–1 value seeded per site + town + trade + dimension. Uses the FULL 32-bit hash space
+     * (~4.3B buckets) so two different sites practically never land on the same value — the old `% 1000`
+     * left only 1,000 buckets, which collided ~0.1% of the time and made the per-business distinctness
+     * flaky. crc32 can be negative on 32-bit PHP, so mask to unsigned before scaling.
+     */
     private function unit(string $siteId, string $geoId, string $trade, string $dimension): float
     {
-        $hash = crc32($siteId.'|'.$geoId.'|'.$trade.'|'.$dimension);
+        $hash = crc32($siteId.'|'.$geoId.'|'.$trade.'|'.$dimension) & 0xFFFFFFFF;
 
-        return ($hash % 1000) / 1000.0;
+        return $hash / 0x100000000;
     }
 }
