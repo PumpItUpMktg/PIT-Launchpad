@@ -27,13 +27,14 @@ afterEach(function () {
     CurrentSite::clear();
 });
 
-it('dispatches a chain of gsc → dataforseo → index → milestones (each its own job)', function () {
+it('dispatches a chain of gsc → dataforseo → ga4 → index → milestones (each its own job)', function () {
     Bus::fake();
     $site = Site::factory()->create();
 
     (new RefreshSiteDashboard($site->id))->handle();
 
     Bus::assertChained([
+        SyncSiteMetrics::class,
         SyncSiteMetrics::class,
         SyncSiteMetrics::class,
         SyncSiteMetrics::class,
