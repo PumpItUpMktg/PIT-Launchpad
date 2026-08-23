@@ -4,7 +4,9 @@ namespace App\Console\Commands;
 
 use App\ContentEngine\CandidateBackfill;
 use App\Models\Site;
+use App\Support\SiteFinder;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 
 /**
  * Backfill the §6a timeliness pill (Local / Time-sensitive / Evergreen) onto candidates
@@ -21,14 +23,24 @@ class ClassifyCandidatesCommand extends Command
 
     public function handle(CandidateBackfill $backfill): int
     {
-        $site = Site::withoutGlobalScopes()
-            ->where('id', $this->argument('site'))->orWhere('brand_name', $this->argument('site'))->first();
+        $needle = (string) $this->argument('site');
+        $matches = SiteFinder::matches($needle);
 
-        if ($site === null) {
-            $this->error("No site matches [{$this->argument('site')}].");
+        if ($matches->isEmpty()) {
+            $this->error("No site matches [{$needle}]. Available sites:");
+            $this->listSites(SiteFinder::all());
 
             return self::FAILURE;
         }
+
+        if ($matches->count() > 1) {
+            $this->error("[{$needle}] is ambiguous — it matches {$matches->count()} sites. Re-run with the id or exact name:");
+            $this->listSites($matches);
+
+            return self::FAILURE;
+        }
+
+        $site = $matches->first();
 
         $r = $backfill->backfill($site, (bool) $this->option('drop-competitors'));
 
@@ -42,5 +54,20 @@ class ClassifyCandidatesCommand extends Command
         ));
 
         return self::SUCCESS;
+    }
+
+    /** @param  Collection<int, Site>  $sites */
+    private function listSites(Collection $sites): void
+    {
+        if ($sites->isEmpty()) {
+            $this->line('  (none)');
+
+            return;
+        }
+
+        $this->table(
+            ['Brand name', 'Site id', 'Domain'],
+            $sites->map(fn (Site $s): array => [$s->brand_name, $s->id, $s->domain_url])->all(),
+        );
     }
 }

@@ -95,3 +95,38 @@ it('the classify-candidates command runs for a site', function () {
         ->expectsOutputToContain('1 classified')
         ->assertSuccessful();
 });
+
+it('the command resolves a site by a partial, case-insensitive brand name', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    $silo = Silo::factory()->create([
+        'site_id' => $site->id, 'name' => 'Water Heaters',
+        'rule_set' => ['include_patterns' => ['water heater'], 'exclude_patterns' => []],
+    ]);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Candidate,
+        'matched_silo_id' => $silo->id, 'title' => 'Cold snap advisory for water heaters',
+    ]);
+    bindBackfillScorer();
+
+    $this->artisan('launchpad:classify-candidates', ['site' => 'sump'])  // not the exact brand name
+        ->expectsOutputToContain('1 classified')
+        ->assertSuccessful();
+});
+
+it('the command lists available sites when the identifier matches nothing', function () {
+    Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+
+    $this->artisan('launchpad:classify-candidates', ['site' => 'no-such-tenant'])
+        ->expectsOutputToContain('No site matches')
+        ->expectsOutputToContain('Sump Pump Gurus')   // the real option is shown, not a dead end
+        ->assertFailed();
+});
+
+it('the command refuses an ambiguous identifier and lists the matches', function () {
+    Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    Site::factory()->create(['brand_name' => 'Sump Pump Heroes']);
+
+    $this->artisan('launchpad:classify-candidates', ['site' => 'sump'])
+        ->expectsOutputToContain('ambiguous')
+        ->assertFailed();
+});
