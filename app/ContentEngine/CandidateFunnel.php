@@ -194,6 +194,12 @@ class CandidateFunnel
             'angle_hint' => $relevance->angleHint,
             'relevance_score' => round($relevance->score, 4),
             'local_relevance' => $relevance->localRelevance,
+            // The board reads these off `meta` (no migration): the timeliness pill and the article's real
+            // publish date (source pubDate — distinct from ingest `created_at` and WP `published_at`).
+            'meta' => [
+                'classification' => $relevance->classification->value,
+                'source_published_at' => $item->publishedAt->format('Y-m-d'),
+            ],
             'version' => 1,
         ]);
     }
@@ -201,6 +207,7 @@ class CandidateFunnel
     private function dropReason(RelevanceResult $relevance): string
     {
         return match (true) {
+            $relevance->competitorPromo => 'competitor_promo',
             ! $relevance->brandSafe => 'brand_safety',
             $relevance->matchedSiloId === null => 'no_silo_match',
             default => 'below_threshold',

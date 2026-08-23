@@ -7,10 +7,11 @@
     <div class="bc-list">
         @forelse ($candidates as $c)
             <div class="bc-card" wire:key="cand-{{ $c['id'] }}">
-                {{-- Top line: silo · source · date --}}
+                {{-- Top line: silo · source · classification pill · date --}}
                 <div class="bc-top">
                     @if (! empty($c['silo'])) <span class="bc-chip silo">{{ $c['silo'] }}</span> @endif
                     @if (! empty($c['source'])) <span class="bc-chip source">{{ $c['source'] }}</span> @endif
+                    @if (! empty($c['classification'])) <span class="bc-chip pill-{{ $c['classification_kind'] }}">{{ $c['classification'] }}</span> @endif
                     @if (! empty($c['date'])) <span class="bc-chip date">🗓 {{ $c['date'] }}</span> @endif
                 </div>
 

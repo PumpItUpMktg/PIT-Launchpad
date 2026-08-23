@@ -3,6 +3,7 @@
 namespace App\Operate;
 
 use App\Enums\BlogTargetStatus;
+use App\Enums\CandidateClassification;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\RenderStatus;
@@ -72,7 +73,10 @@ class BlogBoard
                 'target_page' => $c->matchedSilo?->pillarContent?->title,
                 'source' => $c->target_keyword_id !== null ? 'directed' : (string) ($c->source_name ?? 'feed'),
                 'silo' => $c->matchedSilo?->name,
-                'date' => $c->created_at?->toDateString(),
+                // The article's real publish date (source pubDate) when captured at ingest, else the ingest date.
+                'date' => $c->meta['source_published_at'] ?? $c->created_at?->toDateString(),
+                'classification' => $this->classificationOf($c)?->label(),
+                'classification_kind' => $this->classificationOf($c)?->pillKind(),
                 'tenant' => $c->site?->brand_name,
                 'angle' => $c->angle_hint,
                 'excerpt' => $this->excerpt($c, $c->angle_hint),
@@ -82,6 +86,14 @@ class BlogBoard
                 'revived_urls' => count($this->revivedUrls($c)),
             ])
             ->all();
+    }
+
+    /** The §6a timeliness classification stashed on the candidate's meta (drives the board pill). */
+    private function classificationOf(Content $c): ?CandidateClassification
+    {
+        $value = $c->meta['classification'] ?? null;
+
+        return is_string($value) ? CandidateClassification::tryFrom($value) : null;
     }
 
     /**

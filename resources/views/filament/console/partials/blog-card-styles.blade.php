@@ -17,6 +17,10 @@
     .bc-chip.silo { background:rgba(79,70,229,.1); color:#4f46e5; overflow:hidden; text-overflow:ellipsis; min-width:0; }
     .bc-chip.source { background:rgba(13,148,136,.12); color:#0f766e; flex:none; }
     .bc-chip.date { background:rgba(100,116,139,.12); color:#475569; flex:none; margin-left:auto; }
+    /* Timeliness classification pill: local (blue) · time-sensitive (amber) · evergreen (green). */
+    .bc-chip.pill-local { background:rgba(37,99,235,.12); color:#1d4ed8; flex:none; font-weight:600; }
+    .bc-chip.pill-time { background:rgba(217,119,6,.14); color:#b45309; flex:none; font-weight:600; }
+    .bc-chip.pill-ever { background:rgba(22,163,74,.12); color:#15803d; flex:none; font-weight:600; }
 
     .bc-title { font-size:14.5px; font-weight:660; margin:0; line-height:1.3; }
     .bc-kw { font-size:12px; font-weight:600; color:#4f46e5; }
