@@ -78,9 +78,25 @@ class CandidateFunnel
         $gateOn = (bool) config('launchpad.reactive.enabled', true);
         $footprint = $gateOn ? $this->footprintStates($site) : [];
 
+        // Article-identity dedup: the hourly ingest re-serves the same articles, and Haiku may route the
+        // same story to a different silo each run — so the silo-scoped near-dup net can miss it. Skip any
+        // item we've already ingested for this site (any status), keyed on the feed's stable externalId.
+        $known = $this->knownExternalIds($site, $items);
+        $seen = [];
+
         $dropped = [];
         $filtered = [];
         foreach ($items as $item) {
+            $ext = trim($item->externalId);
+            if ($ext !== '' && (isset($known[$ext]) || isset($seen[$ext]))) {
+                $dropped[] = ['title' => $item->title, 'reason' => 'already_ingested'];
+
+                continue;
+            }
+            if ($ext !== '') {
+                $seen[$ext] = true;
+            }
+
             if (! $this->preFilter->passes($item)) {
                 $dropped[] = ['title' => $item->title, 'reason' => 'pre_filter'];
 
@@ -191,6 +207,7 @@ class CandidateFunnel
             'slug' => $this->uniqueSlug($site->id, $item->title),
             'source_name' => $item->sourceName,
             'source_url' => $item->url,
+            'external_id' => $item->externalId !== '' ? $item->externalId : null,
             'angle_hint' => $relevance->angleHint,
             'relevance_score' => round($relevance->score, 4),
             'local_relevance' => $relevance->localRelevance,
@@ -202,6 +219,33 @@ class CandidateFunnel
             ],
             'version' => 1,
         ]);
+    }
+
+    /**
+     * The externalIds already present as Content for this site, restricted to the incoming batch so the
+     * lookup stays a single indexed query regardless of how large the site's history is.
+     *
+     * @param  list<NewsItem>  $items
+     * @return array<string, true>
+     */
+    private function knownExternalIds(Site $site, array $items): array
+    {
+        $incoming = array_values(array_unique(array_filter(array_map(
+            fn (NewsItem $i): string => trim($i->externalId),
+            $items,
+        ), fn (string $id): bool => $id !== '')));
+
+        if ($incoming === []) {
+            return [];
+        }
+
+        $existing = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereIn('external_id', $incoming)
+            ->pluck('external_id')
+            ->all();
+
+        return array_fill_keys(array_map('strval', $existing), true);
     }
 
     private function dropReason(RelevanceResult $relevance): string

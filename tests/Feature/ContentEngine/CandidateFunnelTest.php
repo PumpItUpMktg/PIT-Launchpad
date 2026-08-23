@@ -126,6 +126,57 @@ test('the funnel drops a competitor\'s own announcement (competitor_promo)', fun
         ->and(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0);
 });
 
+test('the funnel skips an article it has already ingested (external_id dedup) and persists the id', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create([
+        'site_id' => $site->id, 'name' => 'Water Heaters',
+        'rule_set' => ['include_patterns' => ['water heater', 'tankless'], 'exclude_patterns' => []],
+    ]);
+
+    // The same article, previously ingested (Haiku had routed it elsewhere — a different silo doesn't matter,
+    // dedup is by article identity across the whole site).
+    $item = News::item('Tankless water heater rebate announced');
+    Content::factory()->post()->create([
+        'site_id' => $site->id, 'silo_id' => $silo->id, 'status' => ContentStatus::Candidate,
+        'external_id' => $item->externalId, 'title' => 'Previously ingested copy', 'slug' => 'prev-copy',
+    ]);
+
+    $claude = (new ScriptedClaudeClient)->fallback(relevanceJson(0.85, 'Water Heaters'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    $result = app(CandidateFunnel::class)->process($site, [$item]);
+
+    expect($result->created)->toHaveCount(0)
+        ->and(array_column($result->dropped, 'reason'))->toContain('already_ingested')
+        // Only the pre-existing row remains — no second candidate for the same article.
+        ->and(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1);
+});
+
+test('the funnel dedups the same article repeated within one batch and stores its external_id', function () {
+    $site = Site::factory()->create();
+    Silo::factory()->create([
+        'site_id' => $site->id, 'name' => 'Water Heaters',
+        'rule_set' => ['include_patterns' => ['water heater'], 'exclude_patterns' => []],
+    ]);
+
+    $claude = (new ScriptedClaudeClient)->fallback(relevanceJson(0.85, 'Water Heaters'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    // Two identical items (same title + source ⇒ same externalId) in a single fetch.
+    $items = [
+        News::item('Water heater rebate roundup', source: 'IoT For All'),
+        News::item('Water heater rebate roundup', source: 'IoT For All'),
+    ];
+
+    $result = app(CandidateFunnel::class)->process($site, $items);
+
+    expect($result->created)->toHaveCount(1)
+        ->and($result->created[0]->external_id)->toBe($items[0]->externalId)
+        ->and(array_filter($result->dropped, fn ($d) => $d['reason'] === 'already_ingested'))->toHaveCount(1);
+});
+
 test('the reactive gate drops off-topic finance and out-of-footprint items before scoring', function () {
     config([
         'launchpad.reactive.enabled' => true,
