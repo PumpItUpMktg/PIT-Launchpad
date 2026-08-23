@@ -118,7 +118,6 @@ class PerformanceOverview extends BaseDashboard
         $dash = app(ClientDashboard::class);
 
         $visibility = $dash->visibility($site, $frame);
-        $indexTrend = $dash->indexTrend($site, $frame);
 
         return [
             'ready' => true,
@@ -132,11 +131,9 @@ class PerformanceOverview extends BaseDashboard
             'visibility' => $visibility,
             'standings' => $dash->standings($site, $frame),
             'milestones' => $dash->milestones($site),
-            'indexTrend' => $indexTrend,
             'meta' => $dash->meta($site, $frame),
             'charts' => [
                 'visibility' => $this->visibilityChart($visibility),
-                'index' => $this->indexChart($indexTrend),
             ],
         ];
     }
@@ -189,26 +186,6 @@ class PerformanceOverview extends BaseDashboard
             'clickLine' => Sparkline::points($clicks, $w, $h, $max),
             'markers' => $markers,
             'has_data' => $impr !== [],
-        ];
-    }
-
-    /**
-     * @param  list<array{date: string, indexed: int, known: int}>  $indexTrend
-     * @return array<string, mixed>
-     */
-    private function indexChart(array $indexTrend): array
-    {
-        $w = 320;
-        $h = 150;
-        $indexed = array_map(fn (array $r): int => $r['indexed'], $indexTrend);
-        $known = array_map(fn (array $r): int => $r['known'], $indexTrend);
-        $max = $known === [] ? 0 : (float) max($known);
-
-        return [
-            'indexedArea' => Sparkline::areaPath($indexed, $w, $h, $max),
-            'indexedLine' => Sparkline::points($indexed, $w, $h, $max),
-            'knownLine' => Sparkline::points($known, $w, $h, $max),
-            'has_data' => $indexed !== [],
         ];
     }
 }

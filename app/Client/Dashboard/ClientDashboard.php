@@ -2,8 +2,15 @@
 
 namespace App\Client\Dashboard;
 
+use App\Enums\ContentStatus;
+use App\Enums\JobStatus;
+use App\Metrics\UrlNormalizer;
 use App\Models\ClientMilestone;
+use App\Models\Content;
+use App\Models\Job;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Support\PublicUrl;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -19,13 +26,16 @@ class ClientDashboard
 {
     private const MOMENTUM_DAYS = 28;
 
+    /** @var array<string, array<string, true>> managed-path sets keyed by site id (per-request memo) */
+    private array $managedPathsCache = [];
+
     /**
      * The three movement-first hero tiles.
      *
      * @return array{
      *   pages_working: array{value: int, delta: int},
      *   keywords_improved: array{value: int, reached_page1: int},
-     *   pages_added: array{indexed: int, total: int, delta: int}
+     *   pages_added: array{indexed: int, delta: int}
      * }
      */
     public function hero(Site $site, Frame $frame): array
@@ -37,21 +47,25 @@ class ClientDashboard
         ];
     }
 
-    /** Pages earning Search impressions within the frame, with trailing-28-day momentum. */
+    /**
+     * Pages WE MANAGE that earn Search impressions within the frame, with trailing-28-day momentum. Scoped to
+     * Launchpad-built pages (not the client's pre-existing site) so the dashboard never claims work we didn't
+     * do — the whole-site footprint lives in the Search-visibility trend instead.
+     */
     private function pagesWorking(Site $site, Frame $frame): array
     {
-        $distinct = fn (string $start, string $end): int => (int) DB::table('metric_snapshots')
-            ->where('site_id', $site->id)->where('provider', 'gsc')->where('metric_key', 'impressions')
-            ->where('dimension_type', 'page')->where('value_numeric', '>', 0)
-            ->whereBetween('period_date', [$start, $end])
-            ->distinct()->count('dimension_value');
+        $managed = $this->managedPaths($site);
+        $working = fn (string $start, string $end): int => count(array_intersect_key(
+            array_flip($this->gscImpressionPaths($site, $start, $end)),
+            $managed,
+        ));
 
         $end = $frame->end;
-        $recent = $distinct($end->copy()->subDays(self::MOMENTUM_DAYS - 1)->toDateString(), $end->toDateString());
-        $previous = $distinct($end->copy()->subDays(self::MOMENTUM_DAYS * 2 - 1)->toDateString(), $end->copy()->subDays(self::MOMENTUM_DAYS)->toDateString());
+        $recent = $working($end->copy()->subDays(self::MOMENTUM_DAYS - 1)->toDateString(), $end->toDateString());
+        $previous = $working($end->copy()->subDays(self::MOMENTUM_DAYS * 2 - 1)->toDateString(), $end->copy()->subDays(self::MOMENTUM_DAYS)->toDateString());
 
         return [
-            'value' => $distinct($frame->startDate(), $frame->endDate()),
+            'value' => $working($frame->startDate(), $frame->endDate()),
             'delta' => $recent - $previous,
         ];
     }
@@ -75,17 +89,100 @@ class ClientDashboard
         return ['value' => $improved, 'reached_page1' => $page1];
     }
 
-    /** Pages Google has indexed (as of the frame end), with trailing-28-day momentum. */
+    /**
+     * Pages WE MANAGE that Google has indexed: a managed page counts as indexed if it earns GSC impressions
+     * (can't without being indexed) OR URL Inspection reports PASS — the operator cards' union rule, scoped to
+     * Launchpad-built pages. Deduped on the normalized path; no ratio. Delta = managed pages newly appearing
+     * in Google over the last 28 days.
+     */
     private function pagesAdded(Site $site, Frame $frame): array
     {
-        $indexed = fn (string $asOf): int => $this->siteValueAsOf($site, 'index', 'pages_indexed', $asOf);
-        $end = $frame->endDate();
+        $managed = $this->managedPaths($site);
+        $end = $frame->end;
+        $endDate = $frame->endDate();
 
-        return [
-            'indexed' => $indexed($end),
-            'total' => $this->siteValueAsOf($site, 'index', 'pages_known', $end),
-            'delta' => $indexed($end) - $indexed($frame->end->copy()->subDays(self::MOMENTUM_DAYS)->toDateString()),
-        ];
+        $indexed = [];
+        foreach ($this->gscImpressionPaths($site, null, $endDate) as $path) {
+            if (isset($managed[$path])) {
+                $indexed[$path] = true;
+            }
+        }
+        foreach ($this->indexPassUrls($site) as $url) {
+            $path = UrlNormalizer::path($url);
+            if (isset($managed[$path])) {
+                $indexed[$path] = true;
+            }
+        }
+
+        // Momentum: managed pages that began earning impressions in the last 28 days.
+        $before = array_flip($this->gscImpressionPaths($site, null, $end->copy()->subDays(self::MOMENTUM_DAYS)->toDateString()));
+        $newly = 0;
+        foreach ($this->gscImpressionPaths($site, $end->copy()->subDays(self::MOMENTUM_DAYS - 1)->toDateString(), $endDate) as $path) {
+            if (isset($managed[$path]) && ! isset($before[$path])) {
+                $newly++;
+            }
+        }
+
+        return ['indexed' => count($indexed), 'delta' => $newly];
+    }
+
+    /**
+     * The set (path => true) of pages Launchpad manages for this site — published Content (pages + posts) and
+     * published Jobs — normalized the same way GSC page keys are, so they intersect. Cached per instance.
+     *
+     * @return array<string, true>
+     */
+    private function managedPaths(Site $site): array
+    {
+        if (isset($this->managedPathsCache[$site->id])) {
+            return $this->managedPathsCache[$site->id];
+        }
+
+        $paths = [];
+        $contents = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('status', ContentStatus::Published->value)
+            ->whereNotNull('slug')->get(['page_type', 'slug']);
+        foreach ($contents as $content) {
+            $url = PublicUrl::forContent($site->domain_url, $content);
+            $paths[UrlNormalizer::path($url ?? '/'.ltrim((string) $content->slug, '/'))] = true;
+        }
+
+        $jobs = Job::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('status', JobStatus::Published->value)->get();
+        foreach ($jobs as $job) {
+            $url = $job->publicUrl($site->domain_url);
+            if ($url !== null) {
+                $paths[UrlNormalizer::path($url)] = true;
+            }
+        }
+
+        return $this->managedPathsCache[$site->id] = $paths;
+    }
+
+    /**
+     * Distinct normalized page paths that earned GSC impressions on or before $end (optionally on/after $start).
+     *
+     * @return list<string>
+     */
+    private function gscImpressionPaths(Site $site, ?string $start, string $end): array
+    {
+        $q = DB::table('metric_snapshots')
+            ->where('site_id', $site->id)->where('provider', 'gsc')->where('metric_key', 'impressions')
+            ->where('dimension_type', 'page')->where('value_numeric', '>', 0)
+            ->where('period_date', '<=', $end);
+        if ($start !== null) {
+            $q->where('period_date', '>=', $start);
+        }
+
+        return $q->distinct()->pluck('dimension_value')->all();
+    }
+
+    /** URL-Inspection PASS page URLs for the site. @return list<string> */
+    private function indexPassUrls(Site $site): array
+    {
+        return DB::table('page_index_states')
+            ->where('site_id', $site->id)->where('index_verdict', 'PASS')
+            ->pluck('url_normalized')->all();
     }
 
     /**
