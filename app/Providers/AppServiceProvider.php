@@ -15,7 +15,9 @@ use App\Enums\NewsProvider as NewsProviderType;
 use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
 use App\Integrations\Analytics\Ga4PageTraffic;
+use App\Integrations\Analytics\Ga4SiteTraffic;
 use App\Integrations\Analytics\PageTrafficProvider;
+use App\Integrations\Analytics\SiteTrafficProvider;
 use App\Integrations\BingWebmaster\BingWebmaster;
 use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\BingWebmaster\NullBingWebmaster;
@@ -103,6 +105,7 @@ use App\Local\Proof\ServiceReviewProvider;
 use App\Locations\Dma\MetroResolver;
 use App\Metrics\MetricProviderRegistry;
 use App\Metrics\Providers\DataForSeoMetricProvider;
+use App\Metrics\Providers\Ga4MetricProvider;
 use App\Metrics\Providers\GscMetricProvider;
 use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\User;
@@ -139,6 +142,7 @@ class AppServiceProvider extends ServiceProvider
             $registry->register(new GscMetricProvider);
             $registry->register($app->make(IndexMetricProvider::class));
             $registry->register(new DataForSeoMetricProvider);
+            $registry->register($app->make(Ga4MetricProvider::class));
 
             return $registry;
         });
@@ -537,6 +541,14 @@ class AppServiceProvider extends ServiceProvider
         // one. connected() is true only once the grant is live AND the Site has a GA4 property picked;
         // until then the cards show the honest "Connect GA4" / collecting prompt (old Null behavior).
         $this->app->bind(PageTrafficProvider::class, fn () => new Ga4PageTraffic(
+            $this->app->make(GoogleConnectionService::class),
+            $this->app->make(CacheRepository::class),
+            (string) config('services.google.ga4_data_base_url', 'https://analyticsdata.googleapis.com/v1beta'),
+            (int) config('services.google.ga4_cache_ttl', 21600),
+        ));
+        // Site-wide GA4 daily sessions for the metric spine (the Ga4MetricProvider slice) — same grant,
+        // one report over a date range, honest no-op until the Site's GA4 property is connected.
+        $this->app->bind(SiteTrafficProvider::class, fn () => new Ga4SiteTraffic(
             $this->app->make(GoogleConnectionService::class),
             $this->app->make(CacheRepository::class),
             (string) config('services.google.ga4_data_base_url', 'https://analyticsdata.googleapis.com/v1beta'),
