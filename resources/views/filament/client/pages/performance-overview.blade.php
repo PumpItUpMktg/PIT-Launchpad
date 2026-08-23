@@ -134,8 +134,8 @@
             </div>
             <div class="pd-card">
                 <div class="pd-eyebrow">Pages Google added</div>
-                <div class="pd-big">{{ number_format($hero['pages_added']['indexed']) }}<span class="pd-unit"> / {{ number_format($hero['pages_added']['total']) }}</span></div>
-                <div class="pd-say">of your pages are indexed by Google</div>
+                <div class="pd-big">{{ number_format($hero['pages_added']['indexed']) }}</div>
+                <div class="pd-say">of our pages Google has indexed</div>
                 <div class="pd-foot">
                     @if ($hero['pages_added']['delta'] > 0)
                         <span class="pd-delta">▲ {{ number_format($hero['pages_added']['delta']) }}</span>
@@ -216,23 +216,6 @@
                         </ul>
                     @else
                         <p class="pd-say">Your first milestones will appear as Google indexes your pages and keywords start ranking.</p>
-                    @endif
-                </div>
-
-                <div class="pd-card">
-                    <h2 class="pd-h">Pages indexed</h2>
-                    @if ($charts['index']['has_data'])
-                        <svg class="pd-chart" viewBox="0 0 320 150" preserveAspectRatio="none" role="img" aria-label="Indexed pages over time versus total pages">
-                            @if ($charts['index']['indexedArea'])<path d="{{ $charts['index']['indexedArea'] }}" fill="var(--pd-up)" fill-opacity="0.14"/>@endif
-                            <polyline points="{{ $charts['index']['knownLine'] }}" fill="none" stroke="var(--pd-faint)" stroke-width="1.5" stroke-dasharray="4 4"/>
-                            <polyline points="{{ $charts['index']['indexedLine'] }}" fill="none" stroke="var(--pd-up)" stroke-width="2.5"/>
-                        </svg>
-                        <div class="pd-legend" style="margin-top:8px">
-                            <span><i style="background:var(--pd-up)"></i>Indexed ({{ $hero['pages_added']['indexed'] }})</span>
-                            <span><i style="background:var(--pd-faint)"></i>Total pages ({{ $hero['pages_added']['total'] }})</span>
-                        </div>
-                    @else
-                        <p class="pd-say">Indexing data will appear once Google inspects your pages.</p>
                     @endif
                 </div>
             </div>

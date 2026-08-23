@@ -4,7 +4,11 @@ use App\Client\Dashboard\ClientDashboard;
 use App\Client\Dashboard\Frame;
 use App\Client\Dashboard\LaunchWindow;
 use App\Enums\AuditAction;
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Models\ClientMilestone;
+use App\Models\Content;
 use App\Models\Site;
 use App\Support\CurrentSite;
 use Illuminate\Support\Carbon;
@@ -22,6 +26,15 @@ function cdSnap(Site $site, string $provider, string $metric, string $dimType, s
         'dimension_type' => $dimType, 'dimension_value' => $dimValue, 'period_grain' => 'day', 'period_date' => $date,
         'value_numeric' => $value, 'value_json' => $json !== null ? json_encode($json) : null,
         'captured_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+    ]);
+}
+
+/** A published Launchpad-managed page (so its path counts as managed). */
+function cdPage(Site $site, string $slug, int $wpId): void
+{
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'status' => ContentStatus::Published, 'wp_post_id' => $wpId, 'slug' => $slug, 'title' => mb_strtoupper($slug),
     ]);
 }
 
@@ -56,33 +69,42 @@ it('offers last_28 always and since_launch only once a launch anchor exists', fu
     expect(array_keys(app(LaunchWindow::class)->frames($site)))->toBe(['since_launch', 'last_28']);
 });
 
-it('builds the movement-first hero from the spine', function () {
-    $site = Site::factory()->create();
+it('builds the movement-first hero from the spine, scoped to managed pages', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
     $frame = cdFrame(end: '2026-08-31');
 
-    // pages working: 4 distinct pages with impressions in-frame; momentum recent(2) − previous(1) = +1.
+    // Pages Launchpad manages (published) — a,b,c,d earn impressions; e is indexed but not yet earning.
+    // A GSC path with NO managed page (/x) must be EXCLUDED (the client's pre-existing site).
+    foreach (['a', 'b', 'c', 'd', 'e'] as $i => $slug) {
+        cdPage($site, $slug, $i + 1);
+    }
+
+    // pages working: managed pages with impressions in-frame; momentum recent(a,d=2) − previous(b=1) = +1.
     cdSnap($site, 'gsc', 'impressions', 'page', '/a', '2026-08-20', 10); // recent
     cdSnap($site, 'gsc', 'impressions', 'page', '/d', '2026-08-25', 4);  // recent
     cdSnap($site, 'gsc', 'impressions', 'page', '/b', '2026-07-15', 7);  // previous 28d
     cdSnap($site, 'gsc', 'impressions', 'page', '/c', '2026-03-01', 3);  // in-frame, older
+    cdSnap($site, 'gsc', 'impressions', 'page', '/x', '2026-08-20', 99); // pre-existing page, NOT managed → excluded
 
-    // keywords: kwA improves 20→8 (page-1), kwB newly ranked at 5 (page-1), kwC worsens 4→9.
+    // /e is indexed via URL Inspection but earns no impressions yet → union still counts it.
+    DB::table('page_index_states')->insert([
+        'id' => (string) Str::ulid(), 'site_id' => $site->id, 'url' => 'https://apex.example/e',
+        'url_normalized' => 'https://apex.example/e', 'index_verdict' => 'PASS', 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    // keywords: kwA improves 20→8 (page-1), kwB newly ranked at 5, kwC worsens 4→9.
     cdSnap($site, 'dataforseo', 'rank', 'keyword', 'kwA', '2025-12-01', 20, ['query' => 'a']);
     cdSnap($site, 'dataforseo', 'rank', 'keyword', 'kwA', '2026-08-20', 8, ['query' => 'a']);
     cdSnap($site, 'dataforseo', 'rank', 'keyword', 'kwB', '2026-08-10', 5, ['query' => 'b']);
     cdSnap($site, 'dataforseo', 'rank', 'keyword', 'kwC', '2025-12-15', 4, ['query' => 'c']); // baseline before frame
     cdSnap($site, 'dataforseo', 'rank', 'keyword', 'kwC', '2026-08-01', 9, ['query' => 'c']); // worsened, still page 1
 
-    // pages added: indexed 52 as-of end, 43 as-of 28d earlier → +9; total 61.
-    cdSnap($site, 'index', 'pages_indexed', 'site', '', '2026-08-03', 43);
-    cdSnap($site, 'index', 'pages_indexed', 'site', '', '2026-08-31', 52);
-    cdSnap($site, 'index', 'pages_known', 'site', '', '2026-08-31', 61);
-
     $hero = app(ClientDashboard::class)->hero($site, $frame);
 
+    // /x excluded → 4 managed working; pages added = a,b,c,d (earning) + e (PASS) = 5.
     expect($hero['pages_working'])->toBe(['value' => 4, 'delta' => 1])
         ->and($hero['keywords_improved'])->toBe(['value' => 1, 'reached_page1' => 1])
-        ->and($hero['pages_added'])->toBe(['indexed' => 52, 'total' => 61, 'delta' => 9]);
+        ->and($hero['pages_added'])->toBe(['indexed' => 5, 'delta' => 2]);
 });
 
 it('reports keyword standings as-of the end plus climbers and newly-ranked movers', function () {
