@@ -8,6 +8,7 @@ use App\Integrations\UrlInspection\IndexStatus;
 use App\Models\Content;
 use App\Models\Job;
 use App\Models\Site;
+use App\Models\User;
 use App\Operator\IndexCoverage;
 
 /** A deterministic IndexInspector keyed by URL — no HTTP. */
@@ -80,6 +81,21 @@ it('tallies real index coverage across published pages and posts', function () {
         ->and($r['by_state']['crawled_not_indexed'])->toBe(1)
         // Inspects the trailing-slash permalink (same URL the Live cards read) — not the redirecting form.
         ->and(collect($r['findings'])->pluck('url')->every(fn (string $u): bool => str_ends_with($u, '/')))->toBeTrue();
+});
+
+it('audits every published page for the site, ignoring the actor tenant-visibility scope', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'hoboken-nj', 'title' => 'Hoboken']);
+
+    // A restricted actor (Site Admin, no memberships) → VisibleTenantScope hides ALL content in cross-tenant
+    // mode. This is what made the audit report 22 of 407 in production.
+    $this->actingAs(User::factory()->siteAdmin()->create());
+    expect(Content::where('site_id', $site->id)->count())->toBe(0); // a normally-scoped query sees nothing
+
+    bindFakeInspector(['https://spg.example/hoboken-nj/' => status('https://spg.example/hoboken-nj/', IndexCoverageState::Indexed)]);
+
+    // audit() strips ALL global scopes (it filters by site_id itself), so it still sees the site's page.
+    expect(app(IndexCoverage::class)->audit($site)['total'])->toBe(1);
 });
 
 it('respects the live-inspection time budget, falling back to cached verdicts once spent', function () {

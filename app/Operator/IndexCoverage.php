@@ -8,7 +8,6 @@ use App\Enums\JobStatus;
 use App\Integrations\UrlInspection\IndexInspector;
 use App\Models\Content;
 use App\Models\Job;
-use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Support\PublicUrl;
 
@@ -49,7 +48,7 @@ class IndexCoverage
         // fill coverage over days. Null budget = inspect everything (the weekly console audit's behavior).
         $deadline = $liveBudgetSeconds !== null ? microtime(true) + $liveBudgetSeconds : null;
 
-        $pages = Content::withoutGlobalScope(SiteScope::class)
+        $pages = Content::withoutGlobalScopes()
             ->where('site_id', $site->id)
             ->where('status', ContentStatus::Published->value)
             ->whereNotNull('slug')
@@ -105,7 +104,7 @@ class IndexCoverage
 
         // Job Capture pages too — inspect + cache each published job's URL so the Published-Jobs cards can
         // read the real index verdict (via IndexInspector::cached()), the same way the content cards do.
-        $jobs = Job::withoutGlobalScope(SiteScope::class)
+        $jobs = Job::withoutGlobalScopes()
             ->where('site_id', $site->id)
             ->where('status', JobStatus::Published->value)
             ->with(['jobTypes', 'city'])

@@ -8,7 +8,6 @@ use App\Metrics\UrlNormalizer;
 use App\Models\ClientMilestone;
 use App\Models\Content;
 use App\Models\Job;
-use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Support\PublicUrl;
 use Illuminate\Support\Facades\DB;
@@ -139,7 +138,7 @@ class ClientDashboard
         }
 
         $paths = [];
-        $contents = Content::withoutGlobalScope(SiteScope::class)
+        $contents = Content::withoutGlobalScopes()
             ->where('site_id', $site->id)->where('status', ContentStatus::Published->value)
             ->whereNotNull('slug')->get(['page_type', 'slug']);
         foreach ($contents as $content) {
@@ -147,7 +146,7 @@ class ClientDashboard
             $paths[UrlNormalizer::path($url ?? '/'.ltrim((string) $content->slug, '/'))] = true;
         }
 
-        $jobs = Job::withoutGlobalScope(SiteScope::class)
+        $jobs = Job::withoutGlobalScopes()
             ->where('site_id', $site->id)->where('status', JobStatus::Published->value)->get();
         foreach ($jobs as $job) {
             $url = $job->publicUrl($site->domain_url);
