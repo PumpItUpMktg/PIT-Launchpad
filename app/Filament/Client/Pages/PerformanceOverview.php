@@ -131,6 +131,7 @@ class PerformanceOverview extends BaseDashboard
             'visibility' => $visibility,
             'standings' => $dash->standings($site, $frame),
             'milestones' => $dash->milestones($site),
+            'awaitingIndexing' => $dash->awaitingIndexing($site),
             'meta' => $dash->meta($site, $frame),
             'charts' => [
                 'visibility' => $this->visibilityChart($visibility),

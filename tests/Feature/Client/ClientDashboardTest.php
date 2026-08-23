@@ -7,10 +7,13 @@ use App\Enums\AuditAction;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Metrics\UrlNormalizer;
 use App\Models\ClientMilestone;
 use App\Models\Content;
+use App\Models\PageIndexState;
 use App\Models\Site;
 use App\Support\CurrentSite;
+use App\Support\PublicUrl;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -169,4 +172,60 @@ it('builds the indexed-vs-known trend over the frame', function () {
 
     expect(app(ClientDashboard::class)->indexTrend($site, $frame))
         ->toBe([['date' => '2026-08-05', 'indexed' => 40, 'known' => 55]]);
+});
+
+it('lists managed published pages awaiting indexing, grouped by type, excluding indexed ones', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+
+    $mk = fn (string $slug, ContentKind $kind, ?PageType $type, string $publishedAt) => Content::factory()->create([
+        'site_id' => $site->id, 'kind' => $kind, 'page_type' => $type, 'status' => ContentStatus::Published,
+        'wp_post_id' => 1, 'slug' => $slug, 'title' => mb_strtoupper($slug), 'published_at' => $publishedAt,
+    ]);
+
+    $indexedSvc = $mk('indexed-svc', ContentKind::Page, PageType::Service, '2026-07-01');   // PASS ⇒ excluded
+    $pendingSvc = $mk('pending-svc', ContentKind::Page, PageType::Service, '2026-08-01');   // crawled, not indexed ⇒ shown
+    $loc = $mk('hoboken-nj', ContentKind::Page, PageType::Location, '2026-08-10');          // never inspected ⇒ shown
+    $indexedPost = $mk('a-post', ContentKind::Post, null, '2026-08-02');                    // impressions ⇒ excluded
+
+    $url = fn (Content $c): string => PublicUrl::forContent($site->domain_url, $c);
+    $norm = fn (Content $c): string => UrlNormalizer::url($url($c));
+
+    PageIndexState::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'url' => $url($indexedSvc), 'url_normalized' => $norm($indexedSvc), 'index_verdict' => 'PASS',
+    ]);
+    PageIndexState::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'url' => $url($pendingSvc), 'url_normalized' => $norm($pendingSvc), 'index_verdict' => 'crawled_not_indexed',
+    ]);
+    // The post is "indexed" purely by earning Search impressions.
+    cdSnap($site, 'gsc', 'impressions', 'page', UrlNormalizer::path($url($indexedPost)), '2026-08-03', 12);
+
+    $result = app(ClientDashboard::class)->awaitingIndexing($site);
+
+    expect($result['total'])->toBe(2)
+        ->and(array_column($result['groups'], 'type'))->toBe(['Service pages', 'Location pages']);
+
+    $svc = collect($result['groups'])->firstWhere('type', 'Service pages');
+    expect($svc['pages'])->toHaveCount(1)
+        ->and($svc['pages'][0]['title'])->toBe('PENDING-SVC')
+        ->and($svc['pages'][0]['status'])->toBe('Crawled — not indexed')
+        ->and($svc['pages'][0]['published_on'])->toBe('2026-08-01');
+
+    $locGroup = collect($result['groups'])->firstWhere('type', 'Location pages');
+    expect($locGroup['pages'][0]['status'])->toBe('Not yet inspected');
+});
+
+it('excludes a correctly redirect-excluded page from awaiting indexing', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $redirect = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'old-slug', 'title' => 'Old', 'published_at' => '2026-08-01',
+    ]);
+    PageIndexState::withoutGlobalScopes()->create([
+        'site_id' => $site->id,
+        'url' => PublicUrl::forContent($site->domain_url, $redirect),
+        'url_normalized' => UrlNormalizer::url(PublicUrl::forContent($site->domain_url, $redirect)),
+        'index_verdict' => 'excluded_redirect',
+    ]);
+
+    expect(app(ClientDashboard::class)->awaitingIndexing($site)['total'])->toBe(0);
 });

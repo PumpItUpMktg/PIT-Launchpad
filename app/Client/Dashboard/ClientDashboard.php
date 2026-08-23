@@ -2,8 +2,11 @@
 
 namespace App\Client\Dashboard;
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\IndexCoverageState;
 use App\Enums\JobStatus;
+use App\Enums\PageType;
 use App\Metrics\UrlNormalizer;
 use App\Models\ClientMilestone;
 use App\Models\Content;
@@ -294,6 +297,82 @@ class ClientDashboard
             'launch_date' => $frame->key === 'since_launch' ? $frame->startDate() : null,
             'data_through' => $through !== null ? substr((string) $through, 0, 10) : null,
         ];
+    }
+
+    /**
+     * Managed published pages Google has NOT yet indexed, grouped by page type, oldest-waiting first — so the
+     * client can see what's still pending and raise it if a page lingers. "Indexed" is the same honest union
+     * the hero uses (earns GSC impressions OR URL-Inspection reports PASS). Correct non-index states — a 301
+     * redirect source, a canonical duplicate — are excluded (they're working as intended, not pending). Read
+     * model only; it takes no push action.
+     *
+     * @return array{total: int, groups: list<array{type: string, pages: list<array{title: string, url: ?string, published_on: ?string, days_waiting: ?int, status: string}>}>}
+     */
+    public function awaitingIndexing(Site $site): array
+    {
+        $impressions = array_flip($this->gscImpressionPaths($site, null, now()->toDateString()));
+        $verdicts = DB::table('page_index_states')
+            ->where('site_id', $site->id)
+            ->pluck('index_verdict', 'url_normalized')
+            ->all();
+
+        // Non-index verdicts that are CORRECT, not pending — never shown as "awaiting".
+        $correctlyExcluded = [IndexCoverageState::ExcludedRedirect->value, IndexCoverageState::ExcludedCanonical->value];
+
+        $contents = Content::withoutGlobalScopes()
+            ->where('site_id', $site->id)->where('status', ContentStatus::Published->value)
+            ->whereNotNull('slug')->get(['kind', 'page_type', 'slug', 'title', 'published_at']);
+
+        /** @var array<string, list<array<string, mixed>>> $grouped */
+        $grouped = [];
+        foreach ($contents as $c) {
+            $url = PublicUrl::forContent($site->domain_url, $c);
+            $path = UrlNormalizer::path($url ?? '/'.ltrim((string) $c->slug, '/'));
+            if (isset($impressions[$path])) {
+                continue; // earns Search impressions ⇒ Google holds it
+            }
+
+            $verdict = $url !== null ? ($verdicts[UrlNormalizer::url($url)] ?? null) : null;
+            if ($verdict === 'PASS' || ($verdict !== null && in_array($verdict, $correctlyExcluded, true))) {
+                continue;
+            }
+
+            $state = $verdict !== null ? IndexCoverageState::tryFrom($verdict) : null;
+            $grouped[$this->typeBucket($c)][] = [
+                'title' => (string) $c->title,
+                'url' => $url,
+                'published_on' => $c->published_at?->toDateString(),
+                'days_waiting' => $c->published_at !== null ? (int) $c->published_at->diffInDays(now()) : null,
+                'status' => ($state ?? IndexCoverageState::NotInspected)->label(),
+            ];
+        }
+
+        $groups = [];
+        $total = 0;
+        foreach (['Service pages', 'Location pages', 'Core pages', 'Blog posts'] as $type) {
+            if (empty($grouped[$type])) {
+                continue;
+            }
+            usort($grouped[$type], fn (array $a, array $b): int => (string) ($a['published_on'] ?? '') <=> (string) ($b['published_on'] ?? ''));
+            $groups[] = ['type' => $type, 'pages' => $grouped[$type]];
+            $total += count($grouped[$type]);
+        }
+
+        return ['total' => $total, 'groups' => $groups];
+    }
+
+    /** The client-facing page-family bucket a page belongs to (mirrors the console's board grouping). */
+    private function typeBucket(Content $c): string
+    {
+        if ($c->kind === ContentKind::Post) {
+            return 'Blog posts';
+        }
+
+        return match ($c->page_type) {
+            PageType::Service, PageType::Hub, PageType::Pillar, PageType::Cluster => 'Service pages',
+            PageType::Location => 'Location pages',
+            default => 'Core pages', // Home, Utility, or unset
+        };
     }
 
     // ---- internals -------------------------------------------------------
