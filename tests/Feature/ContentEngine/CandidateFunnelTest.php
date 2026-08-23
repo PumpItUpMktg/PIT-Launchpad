@@ -72,7 +72,10 @@ test('the funnel routes a mixed batch into candidates, parks, drops and refreshe
         ->and($result->created[0]->silo_id)->toBe($silo->id)
         ->and($result->created[0]->source_name)->toBe('Local Tribune')
         ->and((bool) $result->created[0]->local_relevance)->toBeTrue()
-        ->and($result->created[0]->angle_hint)->not->toBeNull();
+        ->and($result->created[0]->angle_hint)->not->toBeNull()
+        // The board pill + article date ride on meta: local_relevance:true derives the Local classification.
+        ->and($result->created[0]->meta['classification'])->toBe('local')
+        ->and($result->created[0]->meta['source_published_at'])->not->toBeNull();
 
     // Borderline parked into review.
     expect($result->parked)->toHaveCount(1)
@@ -96,6 +99,31 @@ test('the funnel routes a mixed batch into candidates, parks, drops and refreshe
     // the borderline one is in_review, the refresh one was not duplicated.
     expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('kind', 'post')->count())
         ->toBe(3); // live page + draft-ready + borderline
+});
+
+test('the funnel drops a competitor\'s own announcement (competitor_promo)', function () {
+    $site = Site::factory()->create();
+    Silo::factory()->create([
+        'site_id' => $site->id,
+        'name' => 'Water Heaters',
+        'rule_set' => ['include_patterns' => ['water heater', 'tankless'], 'exclude_patterns' => []],
+    ]);
+
+    // Otherwise-relevant, brand-safe, silo-matched — but it is a rival's press release.
+    $claude = (new ScriptedClaudeClient)->fallback(json_encode([
+        'relevance' => 0.9, 'matched_silo' => 'Water Heaters', 'angle' => 'x',
+        'brand_safe' => true, 'competitor_promo' => true,
+    ]));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    $result = app(CandidateFunnel::class)->process($site, [
+        News::item('Rival Plumbing announces new tankless install service'),
+    ]);
+
+    expect($result->created)->toHaveCount(0)
+        ->and(array_column($result->dropped, 'reason'))->toContain('competitor_promo')
+        ->and(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0);
 });
 
 test('the reactive gate drops off-topic finance and out-of-footprint items before scoring', function () {

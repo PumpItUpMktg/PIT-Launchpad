@@ -145,6 +145,22 @@ it('candidates sort directed-first and carry the keyword + the page it will supp
         ->and($cards[1]['date'])->toBe($reactive->created_at->toDateString());
 });
 
+it('candidate cards carry the timeliness pill and the article publish date from meta', function () {
+    $site = opSite();
+    $silo = opSilo($site);
+    $candidate = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Candidate,
+        'matched_silo_id' => $silo->id, 'relevance_score' => 0.9, 'source_name' => 'Patch',
+        'meta' => ['classification' => 'time_sensitive', 'source_published_at' => '2026-08-01'],
+    ]);
+
+    $card = collect(app(BlogBoard::class)->candidates($site->id))->firstWhere('id', $candidate->id);
+
+    expect($card['classification'])->toBe('Time-sensitive')
+        ->and($card['classification_kind'])->toBe('time')
+        ->and($card['date'])->toBe('2026-08-01');            // the article's real date, not ingest created_at
+});
+
 it('publishing cards carry silo, source, date + keyword for the top-row chips', function () {
     $site = opSite();
     $silo = opSilo($site);

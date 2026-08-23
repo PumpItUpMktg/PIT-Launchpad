@@ -1,6 +1,7 @@
 <?php
 
 use App\ContentEngine\RelevanceScorer;
+use App\Enums\CandidateClassification;
 use App\Enums\RelevanceBand;
 use App\Models\Silo;
 use App\Models\Site;
@@ -72,4 +73,47 @@ test('a borderline score is parked', function () {
     $result = (new RelevanceScorer($claude))->score(News::item('Mild advisory about tankless water heater myths'), $silos);
 
     expect($result->band)->toBe(RelevanceBand::Borderline);
+});
+
+test('a competitor\'s own announcement is dropped even when otherwise relevant', function () {
+    $site = Site::factory()->create();
+    $silos = collect([siloFor($site)]);
+
+    // High relevance, brand-safe, silo match — but it is a rival's press release.
+    $claude = (new ScriptedClaudeClient)->fallback(json_encode([
+        'relevance' => 0.9, 'matched_silo' => 'Water Heaters', 'brand_safe' => true, 'competitor_promo' => true,
+    ]));
+
+    $result = (new RelevanceScorer($claude))->score(News::item('Rival Plumbing announces new tankless install service'), $silos);
+
+    expect($result->band)->toBe(RelevanceBand::Dropped)
+        ->and($result->competitorPromo)->toBeTrue();
+});
+
+test('it carries the model\'s explicit timeliness classification', function () {
+    $site = Site::factory()->create();
+    $silos = collect([siloFor($site)]);
+
+    $claude = (new ScriptedClaudeClient)->fallback(json_encode([
+        'relevance' => 0.8, 'matched_silo' => 'Water Heaters', 'brand_safe' => true, 'classification' => 'time_sensitive',
+    ]));
+
+    $result = (new RelevanceScorer($claude))->score(News::item('Cold snap this weekend threatens pipes'), $silos);
+
+    expect($result->classification)->toBe(CandidateClassification::TimeSensitive);
+});
+
+test('it derives a classification from numeric signals when the model omits one', function () {
+    $site = Site::factory()->create();
+    $silos = collect([siloFor($site)]);
+
+    // No `classification` key, but local_relevance true → derives Local (footprint wins).
+    $claude = (new ScriptedClaudeClient)->fallback(json_encode([
+        'relevance' => 0.8, 'matched_silo' => 'Water Heaters', 'brand_safe' => true,
+        'timeliness' => 0.9, 'local_relevance' => true,
+    ]));
+
+    $result = (new RelevanceScorer($claude))->score(News::item('Township basement flooding after storm'), $silos);
+
+    expect($result->classification)->toBe(CandidateClassification::Local);
 });
