@@ -3,8 +3,10 @@
 namespace App\Filament\Resources\GeoPromptResource\Pages;
 
 use App\Filament\Resources\GeoPromptResource;
+use App\Jobs\SeedSiteGeoPrompts;
 use App\Jobs\SyncSiteGeo;
 use App\Models\GeoPrompt;
+use App\Models\Service;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
@@ -20,6 +22,21 @@ class ListGeoPrompts extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('seed')
+                ->label('Auto-seed prompts')
+                ->icon('heroicon-o-square-3-stack-3d')
+                ->requiresConfirmation()
+                ->modalDescription('Generate GEO prompts from each site\'s services × priority markets × intents (bounded + idempotent — re-running only adds what\'s new).')
+                ->action(function (): void {
+                    $siteIds = Service::query()->distinct()->pluck('site_id');
+                    foreach ($siteIds as $siteId) {
+                        SeedSiteGeoPrompts::dispatch((string) $siteId);
+                    }
+                    Notification::make()
+                        ->title($siteIds->isEmpty() ? 'No sites with services to seed' : "Seeding queued for {$siteIds->count()} site(s)")
+                        ->success()
+                        ->send();
+                }),
             Action::make('run')
                 ->label('Run GEO check')
                 ->icon('heroicon-o-sparkles')
