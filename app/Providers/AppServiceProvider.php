@@ -14,6 +14,7 @@ use App\Enums\EmbeddingsProvider as EmbeddingsProviderType;
 use App\Enums\NewsProvider as NewsProviderType;
 use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
+use App\Geo\GeoAnswerJudge;
 use App\Integrations\Analytics\Ga4PageTraffic;
 use App\Integrations\Analytics\Ga4SiteTraffic;
 use App\Integrations\Analytics\PageTrafficProvider;
@@ -583,6 +584,11 @@ class AppServiceProvider extends ServiceProvider
         // thinking. Both clients come from the one factory so the probe can build
         // the identical client (see ClaudeClientFactory).
         $this->app->when(RelevanceScorer::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
+
+        // GEO answer judging (cited / position / sentiment / competitors) is a cheap Haiku pass, like scoring.
+        $this->app->when(GeoAnswerJudge::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
 

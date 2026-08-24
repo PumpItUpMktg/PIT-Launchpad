@@ -71,6 +71,12 @@ Schedule::command('launchpad:audit-index')->weekly()->withoutOverlapping();
 // multi-tenant sweep can't stack.
 Schedule::command('sandhog:sync-index')->daily()->withoutOverlapping();
 
+// Operator GEO board — measure AI-search visibility (Claude web-search) for each site's active,
+// operator-curated prompts into the durable geo_snapshots time-series. Weekly + budget-bounded +
+// freshness-cached: each prompt is a web-search answer + a Haiku judge. withoutOverlapping so a slow
+// multi-tenant sweep can't stack.
+Schedule::command('sandhog:sync-geo')->weekly()->withoutOverlapping();
+
 // Client-dashboard "Site speed" — measure Core Web Vitals (PageSpeed Insights) for each site's
 // published pages into the durable page_vitals table. Weekly + budget-bounded + freshness-cached: one
 // PSI call per URL is slow and quota-limited, so a weekly sweep fills coverage over time. withoutOverlapping
