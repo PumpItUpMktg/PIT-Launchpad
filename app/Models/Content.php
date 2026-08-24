@@ -9,10 +9,10 @@ use App\Enums\DraftTrigger;
 use App\Enums\IntakeType;
 use App\Enums\PageType;
 use App\Enums\StandardPageType;
+use App\Geo\GeoGapBridge;
 use App\Models\Concerns\BelongsToSite;
 use App\Models\Scopes\SiteScope;
 use Database\Factories\ContentFactory;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -387,21 +387,9 @@ class Content extends Model
     }
 
     /**
-     * The GEO growth-loop lane — content materialized from an absent AI-search gap
-     * (see {@see \App\Geo\GeoGapBridge}). Its own review home is the AI section, so
-     * the blog/page queues scope it out with {@see scopeExcludingGeoLane}.
+     * The GEO growth-loop lane (`draft_lane`) — content materialized from an absent AI-search gap by
+     * {@see GeoGapBridge}. Its review home is the AI section, so the blog/page queues filter it out;
+     * because SQL `draft_lane != 'geo'` drops NULLs, the exclusion must OR in `whereNull('draft_lane')`.
      */
     public const GEO_LANE = 'geo';
-
-    /** GEO-lane content only. */
-    public function scopeGeoLane(Builder $query): Builder
-    {
-        return $query->where('draft_lane', self::GEO_LANE);
-    }
-
-    /** Everything except the GEO lane — null draft_lane included (SQL `!=` drops NULLs, so be explicit). */
-    public function scopeExcludingGeoLane(Builder $query): Builder
-    {
-        return $query->where(fn (Builder $q) => $q->where('draft_lane', '!=', self::GEO_LANE)->orWhereNull('draft_lane'));
-    }
 }

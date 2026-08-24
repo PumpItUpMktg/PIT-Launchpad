@@ -70,7 +70,8 @@ class ContentReviewResource extends Resource
             ->withoutGlobalScope(SiteScope::class)
             ->whereIn('status', ReviewQueue::statusValues())
             // GEO-lane drafts are reviewed in the AI section (AI → AI Content), not the blog review queue.
-            ->excludingGeoLane()
+            // SQL `!=` drops NULLs, so OR the null lane back in.
+            ->where(fn (Builder $q) => $q->where('draft_lane', '!=', Content::GEO_LANE)->orWhereNull('draft_lane'))
             ->orderByRaw(ReviewQueue::priorityOrder())
             ->orderBy('created_at');
     }

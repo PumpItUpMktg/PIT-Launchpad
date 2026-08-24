@@ -9,6 +9,8 @@ use App\Enums\UserRole;
 use App\Filament\Resources\AiContentResource\Pages\EditAiContent;
 use App\Filament\Resources\AiContentResource\Pages\ListAiContent;
 use App\Filament\Resources\Concerns\ContentReviewActions;
+use App\Filament\Widgets\GeoContentSummaryWidget;
+use App\Geo\GeoGapBridge;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use BackedEnum;
@@ -22,11 +24,11 @@ use Illuminate\Support\Facades\Auth;
 
 /**
  * The AI-search content review — GEO-lane posts (materialized from absent AI-search gaps by
- * {@see \App\Geo\GeoGapBridge}) get their own home in the AI section instead of diluting the blog
+ * {@see GeoGapBridge}) get their own home in the AI section instead of diluting the blog
  * Candidates + Review queues. One page carries them through the whole pre-publish flow: bridged
  * candidate → Generate post → review/edit → Approve → Publish. Published GEO content then lives in
  * the normal Published surface; a per-silo published tally rides the list header
- * ({@see \App\Filament\Widgets\GeoContentSummaryWidget}) so the operator sees the body of work land.
+ * ({@see GeoContentSummaryWidget}) so the operator sees the body of work land.
  *
  * Actions + edit form are single-sourced with the blog review queue via {@see ContentReviewActions}.
  * Operator-only.
@@ -80,7 +82,7 @@ class AiContentResource extends Resource
     {
         return parent::getEloquentQuery()
             ->withoutGlobalScope(SiteScope::class)
-            ->geoLane()
+            ->where('draft_lane', Content::GEO_LANE)
             ->whereIn('status', self::statuses())
             // Blocked (render/publish failed) first, then review, then fresh candidates; newest within a band.
             ->orderByRaw("case status

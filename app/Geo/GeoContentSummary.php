@@ -5,6 +5,8 @@ namespace App\Geo;
 use App\Enums\ContentStatus;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
+use App\Models\Silo;
+use App\Models\Site;
 use Illuminate\Support\Collection;
 
 /**
@@ -24,20 +26,33 @@ class GeoContentSummary
     public function publishedBySilo(): array
     {
         $rows = Content::withoutGlobalScope(SiteScope::class)
-            ->geoLane()
+            ->where('draft_lane', Content::GEO_LANE)
             ->where('status', ContentStatus::Published->value)
-            ->with(['silo:id,name', 'site:id,brand_name'])
             ->get(['id', 'site_id', 'silo_id']);
+
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        // Name lookups keyed by id — avoids per-row relation loads (and their nullable-relation typing).
+        $siloNames = Silo::withoutGlobalScope(SiteScope::class)
+            ->whereIn('id', $rows->pluck('silo_id')->filter()->unique()->all())
+            ->pluck('name', 'id');
+        $siteNames = Site::query()
+            ->whereIn('id', $rows->pluck('site_id')->unique()->all())
+            ->pluck('brand_name', 'id');
 
         return $rows
             ->groupBy(fn (Content $c): string => (string) ($c->silo_id ?? '__none'))
-            ->map(function (Collection $group): array {
+            ->map(function (Collection $group) use ($siloNames, $siteNames): array {
                 $first = $group->first();
+                $siloId = $first?->silo_id;
+                $siteId = $first?->site_id;
 
                 return [
-                    'silo_id' => $first->silo_id !== null ? (string) $first->silo_id : null,
-                    'silo' => $first->silo?->name ?? 'Uncategorized',
-                    'tenant' => $first->site?->brand_name,
+                    'silo_id' => $siloId !== null ? (string) $siloId : null,
+                    'silo' => $siloId !== null ? (string) ($siloNames[$siloId] ?? 'Uncategorized') : 'Uncategorized',
+                    'tenant' => $siteId !== null ? ($siteNames[$siteId] ?? null) : null,
                     'published' => $group->count(),
                 ];
             })
@@ -54,7 +69,7 @@ class GeoContentSummary
     public function laneCounts(): array
     {
         $counts = Content::withoutGlobalScope(SiteScope::class)
-            ->geoLane()
+            ->where('draft_lane', Content::GEO_LANE)
             ->selectRaw('status, count(*) as aggregate')
             ->groupBy('status')
             ->pluck('aggregate', 'status');

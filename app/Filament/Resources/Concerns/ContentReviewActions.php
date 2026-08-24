@@ -5,6 +5,8 @@ namespace App\Filament\Resources\Concerns;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
 use App\Enums\ReviewFlag;
+use App\Filament\Resources\AiContentResource;
+use App\Filament\Resources\ContentReviewResource;
 use App\Jobs\GeneratePost;
 use App\Models\Content;
 use App\Publishing\PostPublisher;
@@ -22,8 +24,8 @@ use Illuminate\Support\Facades\Auth;
 
 /**
  * The review row-actions + edit form shared by every content-review surface — the §6c blog review queue
- * ({@see \App\Filament\Resources\ContentReviewResource}) and the AI-search review page
- * ({@see \App\Filament\Resources\AiContentResource}). Single-sourced so a change to how a draft is
+ * ({@see ContentReviewResource}) and the AI-search review page
+ * ({@see AiContentResource}). Single-sourced so a change to how a draft is
  * generated / approved / published / rejected / locked lands identically on both. All logic delegates to
  * the testable {@see ReviewActions} / {@see PostPublisher} services; these builders are the thin surface.
  */
