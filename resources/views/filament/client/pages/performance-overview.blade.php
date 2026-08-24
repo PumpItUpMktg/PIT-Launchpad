@@ -57,6 +57,32 @@
     .pd .pd-dot { position:absolute; left:0; top:3px; width:16px; height:16px; border-radius:50%; background:var(--pd-accent); border:3px solid var(--pd-surface); box-shadow:0 0 0 1px var(--pd-line); }
     .pd .pd-ev { font-weight:600; font-size:14px; }
     .pd .pd-dt { font-size:12px; color:var(--pd-faint); }
+    /* funnel: impressions → clicks → visits */
+    .pd .pd-funnel { display:grid; grid-template-columns:1fr auto 1fr auto 1fr; align-items:start; gap:10px; }
+    @media (max-width:760px){ .pd .pd-funnel{ grid-template-columns:1fr; } .pd .pd-funnel .pd-arrow{ display:none; } }
+    .pd .pd-step { text-align:center; }
+    .pd .pd-step .n { font-family:var(--pd-display); font-weight:800; font-size:34px; line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+    .pd .pd-step .l { font-size:12.5px; color:var(--pd-muted); margin-top:5px; }
+    .pd .pd-step .d { font-size:12.5px; font-weight:700; margin-top:5px; }
+    .pd .pd-arrow { color:var(--pd-faint); font-size:22px; align-self:center; }
+    .pd .pd-up { color:var(--pd-up); }
+    .pd .pd-down { color:#c0392b; }
+    .dark .pd .pd-down { color:#f0776a; }
+    .pd .pd-funnel-foot { margin-top:15px; padding-top:12px; border-top:1px solid var(--pd-line); font-size:12.5px; color:var(--pd-muted); display:flex; gap:20px; flex-wrap:wrap; }
+    .pd .pd-funnel-foot b { color:var(--pd-ink); }
+    /* ranking stat strip */
+    .pd .pd-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+    @media (max-width:760px){ .pd .pd-stats{ grid-template-columns:1fr; } }
+    .pd .pd-stat .l { font-size:12.5px; color:var(--pd-muted); }
+    .pd .pd-stat .n { font-family:var(--pd-display); font-weight:800; font-size:30px; letter-spacing:-.02em; margin-top:3px; font-variant-numeric:tabular-nums; }
+    .pd .pd-stat .d { font-size:12.5px; font-weight:700; margin-top:6px; }
+    /* top queries table */
+    .pd .pd-qtable { width:100%; border-collapse:collapse; font-size:13.5px; }
+    .pd .pd-qtable th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--pd-muted); font-weight:700; padding:0 0 9px; border-bottom:1px solid var(--pd-line); }
+    .pd .pd-qtable th.num, .pd .pd-qtable td.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .pd .pd-qtable td { padding:10px 0; border-bottom:1px solid var(--pd-line); }
+    .pd .pd-qtable tr:last-child td { border-bottom:0; }
+    .pd .pd-qtable .q { font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; }
     /* awaiting-indexing card */
     .pd .pd-idx { margin-top:16px; }
     .pd .pd-idx-lead { font-size:13.5px; color:var(--pd-muted); margin:-4px 0 16px; }
@@ -162,6 +188,40 @@
             </div>
         </div>
 
+        {{-- how people found you: impressions → clicks → visits --}}
+        <div class="pd-card" style="margin-top:16px">
+            <h2 class="pd-h">How people found you</h2>
+            <p class="pd-idx-lead">From a search result to a visit on your site.</p>
+            <div class="pd-funnel">
+                <div class="pd-step">
+                    <div class="n">{{ $this->fmtCount($funnel['impressions']['value']) }}</div>
+                    <div class="l">Saw you in Google</div>
+                    {!! $this->deltaBadge($funnel['impressions']['delta_pct']) !!}
+                </div>
+                <div class="pd-arrow">→</div>
+                <div class="pd-step">
+                    <div class="n">{{ $this->fmtCount($funnel['clicks']['value']) }}</div>
+                    <div class="l">Clicked through</div>
+                    {!! $this->deltaBadge($funnel['clicks']['delta_pct']) !!}
+                </div>
+                <div class="pd-arrow">→</div>
+                <div class="pd-step">
+                    @if ($funnel['visits']['available'])
+                        <div class="n">{{ $this->fmtCount($funnel['visits']['value']) }}</div>
+                        <div class="l">Visited your site</div>
+                        {!! $this->deltaBadge($funnel['visits']['delta_pct']) !!}
+                    @else
+                        <div class="n" style="color:var(--pd-faint)">—</div>
+                        <div class="l">Visited your site</div>
+                        <div class="d" style="color:var(--pd-faint)">Connect GA4</div>
+                    @endif
+                </div>
+            </div>
+            <div class="pd-funnel-foot">
+                <span><b>{{ number_format($funnel['click_rate'], 1) }}%</b> click rate</span>
+            </div>
+        </div>
+
         <p class="pd-movement">Movement-first: the hero leads with what changed, not an absolute rank. Each tile compares the current frame to the one before it.</p>
 
         <div class="pd-cols">
@@ -235,6 +295,76 @@
                         <p class="pd-say">Your first milestones will appear as Google indexes your pages and keywords start ranking.</p>
                     @endif
                 </div>
+            </div>
+        </div>
+
+        {{-- how well you're ranking: site-level GSC position / CTR / clicks --}}
+        <div class="pd-card" style="margin-top:16px">
+            <h2 class="pd-h">How well you’re ranking</h2>
+            <p class="pd-idx-lead">Your position in Google and the queries bringing traffic.</p>
+            <div class="pd-stats">
+                <div class="pd-stat">
+                    <div class="l">Avg position</div>
+                    <div class="n">{{ $ranking['avg_position']['value'] !== null ? '#'.number_format($ranking['avg_position']['value'], 0) : '—' }}</div>
+                    @if ($ranking['avg_position']['delta'] !== null && (float) $ranking['avg_position']['delta'] != 0.0)
+                        @php($imp = $ranking['avg_position']['delta'] > 0)
+                        <div class="d {{ $imp ? 'pd-up' : 'pd-down' }}">{{ $imp ? '▲' : '▼' }} {{ number_format(abs($ranking['avg_position']['delta']), 1) }} spots</div>
+                    @endif
+                </div>
+                <div class="pd-stat">
+                    <div class="l">Click rate</div>
+                    <div class="n">{{ number_format($ranking['ctr']['value'], 2) }}%</div>
+                    {!! $this->deltaBadge($ranking['ctr']['delta_pct']) !!}
+                </div>
+                <div class="pd-stat">
+                    <div class="l">Total clicks</div>
+                    <div class="n">{{ number_format($ranking['clicks']['value']) }}</div>
+                    {!! $this->deltaBadge($ranking['clicks']['delta_pct']) !!}
+                </div>
+            </div>
+        </div>
+
+        {{-- traffic over time + top queries --}}
+        <div class="pd-cols" style="margin-top:16px">
+            <div class="pd-card">
+                <h2 class="pd-h">Traffic over time</h2>
+                <p class="pd-idx-lead">Visits vs search clicks.</p>
+                @if ($charts['traffic']['has_data'])
+                    <div class="pd-legend" style="margin-bottom:10px">
+                        <span><i style="background:var(--pd-accent)"></i>Visits</span>
+                        <span><i style="background:var(--pd-up)"></i>Search clicks</span>
+                    </div>
+                    <svg class="pd-chart" viewBox="0 0 620 200" preserveAspectRatio="none" role="img" aria-label="Visits and search clicks over time">
+                        @if ($charts['traffic']['visitsArea'])<path d="{{ $charts['traffic']['visitsArea'] }}" fill="var(--pd-accent)" fill-opacity="0.12"/>@endif
+                        <polyline points="{{ $charts['traffic']['visitsLine'] }}" fill="none" stroke="var(--pd-accent)" stroke-width="2.5"/>
+                        <polyline points="{{ $charts['traffic']['clickLine'] }}" fill="none" stroke="var(--pd-up)" stroke-width="2.5"/>
+                    </svg>
+                @else
+                    <p class="pd-say">No visit data yet — connect GA4 to see visits alongside your search clicks.</p>
+                @endif
+            </div>
+            <div class="pd-card">
+                <h2 class="pd-h">Top queries</h2>
+                @if (! empty($topQueries))
+                    <table class="pd-qtable">
+                        <thead>
+                            <tr><th>Query</th><th class="num">Clicks</th><th class="num">Impr.</th><th class="num">CTR</th><th class="num">Pos.</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($topQueries as $q)
+                                <tr>
+                                    <td class="q">{{ $q['query'] }}</td>
+                                    <td class="num">{{ number_format($q['clicks']) }}</td>
+                                    <td class="num">{{ number_format($q['impressions']) }}</td>
+                                    <td class="num">{{ number_format($q['ctr'], 1) }}%</td>
+                                    <td class="num">{{ $q['position'] !== null ? '#'.number_format($q['position'], 0) : '—' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                @else
+                    <p class="pd-say">Google hasn’t reported search queries yet — they’ll appear as your impressions grow.</p>
+                @endif
             </div>
         </div>
 

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Metrics\Providers\DataForSeoMetricProvider;
+use App\Metrics\Providers\Ga4MetricProvider;
 use App\Metrics\Providers\GscMetricProvider;
 use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\Site;
@@ -52,6 +53,7 @@ class RefreshSiteDashboard implements ShouldQueue
         Bus::chain([
             new SyncSiteMetrics($this->siteId, GscMetricProvider::PROVIDER, $windowStart, $today),
             new SyncSiteMetrics($this->siteId, DataForSeoMetricProvider::PROVIDER, $windowStart, $today),
+            new SyncSiteMetrics($this->siteId, Ga4MetricProvider::PROVIDER, $windowStart, $today),
             new SyncSiteMetrics($this->siteId, IndexMetricProvider::PROVIDER, $today, $today),
             new DeriveSiteMilestones($this->siteId),
         ])->dispatch();

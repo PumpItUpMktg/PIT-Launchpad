@@ -8,6 +8,7 @@ use App\Client\Dashboard\ClientDashboard;
 use App\Client\Dashboard\Frame;
 use App\Client\Dashboard\LaunchWindow;
 use App\Client\Dashboard\Sparkline;
+use App\Client\Dashboard\TrafficInsights;
 use App\Jobs\RefreshSiteDashboard;
 use App\Models\Site;
 use BackedEnum;
@@ -99,6 +100,25 @@ class PerformanceOverview extends BaseDashboard
         return [];
     }
 
+    /** Compact count for the funnel steps: 7,500 → "7.5K". */
+    public function fmtCount(int $n): string
+    {
+        return $n >= 1000 ? number_format($n / 1000, 1).'K' : number_format($n);
+    }
+
+    /** A ▲/▼ percentage-delta badge (green up / red down); empty when there's no prior period to compare. */
+    public function deltaBadge(?float $pct): string
+    {
+        if ($pct === null) {
+            return '';
+        }
+
+        $cls = $pct >= 0 ? 'pd-up' : 'pd-down';
+        $arrow = $pct >= 0 ? '▲' : '▼';
+
+        return '<div class="d '.$cls.'">'.$arrow.' '.number_format(abs($pct), 1).'%</div>';
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -118,6 +138,8 @@ class PerformanceOverview extends BaseDashboard
         $dash = app(ClientDashboard::class);
 
         $visibility = $dash->visibility($site, $frame);
+        $traffic = app(TrafficInsights::class);
+        $trafficSeries = $traffic->trafficSeries($site, $frame);
 
         return [
             'ready' => true,
@@ -128,6 +150,9 @@ class PerformanceOverview extends BaseDashboard
             'frames' => array_map(fn (Frame $f): string => $f->label, $frames),
             'frameKey' => $frame->key,
             'hero' => $dash->hero($site, $frame),
+            'funnel' => $traffic->funnel($site, $frame),
+            'ranking' => $traffic->rankingStats($site, $frame),
+            'topQueries' => $traffic->topQueries($site, $frame),
             'visibility' => $visibility,
             'standings' => $dash->standings($site, $frame),
             'milestones' => $dash->milestones($site),
@@ -135,6 +160,7 @@ class PerformanceOverview extends BaseDashboard
             'meta' => $dash->meta($site, $frame),
             'charts' => [
                 'visibility' => $this->visibilityChart($visibility),
+                'traffic' => $this->trafficChart($trafficSeries),
             ],
         ];
     }
@@ -187,6 +213,28 @@ class PerformanceOverview extends BaseDashboard
             'clickLine' => Sparkline::points($clicks, $w, $h, $max),
             'markers' => $markers,
             'has_data' => $impr !== [],
+        ];
+    }
+
+    /**
+     * Visits (GA4) vs Search clicks (GSC) over the frame — two comparable-scale lines on a shared max.
+     *
+     * @param  list<array{date: string, visits: int, clicks: int}>  $series
+     * @return array<string, mixed>
+     */
+    private function trafficChart(array $series): array
+    {
+        $w = 620;
+        $h = 200;
+        $visits = array_map(fn (array $r): int => $r['visits'], $series);
+        $clicks = array_map(fn (array $r): int => $r['clicks'], $series);
+        $max = ($visits === [] && $clicks === []) ? 0 : (float) max(1, max([...$visits, ...$clicks]));
+
+        return [
+            'visitsArea' => Sparkline::areaPath($visits, $w, $h, $max),
+            'visitsLine' => Sparkline::points($visits, $w, $h, $max),
+            'clickLine' => Sparkline::points($clicks, $w, $h, $max),
+            'has_data' => array_sum($visits) > 0 || array_sum($clicks) > 0,
         ];
     }
 }
