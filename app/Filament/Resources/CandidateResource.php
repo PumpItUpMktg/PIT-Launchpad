@@ -59,6 +59,8 @@ class CandidateResource extends Resource
             // published through the blog template. Pages generate via PageResource.
             ->where('kind', ContentKind::Post->value)
             ->whereIn('status', [ContentStatus::Candidate->value, ContentStatus::Scored->value])
+            // GEO-lane candidates have their own review home (AI → AI Content); keep them out of the blog queue.
+            ->excludingGeoLane()
             ->orderByDesc('relevance_score');
     }
 

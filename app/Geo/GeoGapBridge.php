@@ -42,7 +42,7 @@ class GeoGapBridge
             ->where('site_id', $site->id)
             ->where('active', true)
             ->whereNotNull('service_id')
-            ->with(['snapshots', 'market'])
+            ->with(['snapshots', 'market', 'service'])
             ->get();
 
         $gaps = $prompts
@@ -107,8 +107,11 @@ class GeoGapBridge
                 'geo_gap' => [
                     'geo_prompt_id' => (string) $gap->id,
                     'service_id' => $gap->service_id !== null ? (string) $gap->service_id : null,
+                    'service' => $gap->service?->name,
                     'market_id' => $gap->market_id !== null ? (string) $gap->market_id : null,
+                    'market' => $gap->market?->name,
                     'intent' => $gap->intent?->value,
+                    'intent_label' => $gap->intent?->label(),
                     'competitors' => $competitors,
                     'engines_measured' => $gap->engineSummary()['measured'],
                 ],
