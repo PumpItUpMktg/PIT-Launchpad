@@ -9,6 +9,7 @@ use App\Enums\DraftTrigger;
 use App\Enums\IntakeType;
 use App\Enums\PageType;
 use App\Enums\StandardPageType;
+use App\Geo\GeoGapBridge;
 use App\Models\Concerns\BelongsToSite;
 use App\Models\Scopes\SiteScope;
 use Database\Factories\ContentFactory;
@@ -384,4 +385,11 @@ class Content extends Model
             'nav_order' => 'integer',
         ];
     }
+
+    /**
+     * The GEO growth-loop lane (`draft_lane`) — content materialized from an absent AI-search gap by
+     * {@see GeoGapBridge}. Its review home is the AI section, so the blog/page queues filter it out;
+     * because SQL `draft_lane != 'geo'` drops NULLs, the exclusion must OR in `whereNull('draft_lane')`.
+     */
+    public const GEO_LANE = 'geo';
 }

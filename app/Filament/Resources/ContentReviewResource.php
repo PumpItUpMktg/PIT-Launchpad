@@ -3,34 +3,23 @@
 namespace App\Filament\Resources;
 
 use App\ContentEngine\Review\AlertFlags;
-use App\ContentEngine\Review\ReviewActions;
 use App\ContentEngine\Review\ReviewQueue;
 use App\Enums\ContentKind;
 use App\Enums\DraftTrigger;
 use App\Enums\ReviewFlag;
 use App\Enums\UserRole;
+use App\Filament\Resources\Concerns\ContentReviewActions;
 use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
 use App\Filament\Resources\ContentReviewResource\Pages\ListContentReviews;
-use App\Jobs\GeneratePost;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
-use App\Publishing\PostPublisher;
 use BackedEnum;
-use Filament\Actions\Action;
-use Filament\Actions\BulkAction;
-use Filament\Forms\Components\KeyValue;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -38,9 +27,14 @@ use Illuminate\Support\Facades\Auth;
  * flagged-first, filterable per tenant/silo/kind/trigger/alert, with the
  * approve→publish wiring that closes the pipeline. A thin Filament surface over
  * the testable ReviewActions / AlertFlags / ReviewQueue services. Operator-only.
+ *
+ * GEO-lane drafts are reviewed on their own AI-section page ({@see AiContentResource});
+ * this queue scopes them out so the blog review stays blog-only.
  */
 class ContentReviewResource extends Resource
 {
+    use ContentReviewActions;
+
     protected static ?string $model = Content::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-inbox-stack';
@@ -75,6 +69,9 @@ class ContentReviewResource extends Resource
         return parent::getEloquentQuery()
             ->withoutGlobalScope(SiteScope::class)
             ->whereIn('status', ReviewQueue::statusValues())
+            // GEO-lane drafts are reviewed in the AI section (AI → AI Content), not the blog review queue.
+            // SQL `!=` drops NULLs, so OR the null lane back in.
+            ->where(fn (Builder $q) => $q->where('draft_lane', '!=', Content::GEO_LANE)->orWhereNull('draft_lane'))
             ->orderByRaw(ReviewQueue::priorityOrder())
             ->orderBy('created_at');
     }
@@ -134,145 +131,6 @@ class ContentReviewResource extends Resource
             ]);
     }
 
-    public static function form(Schema $schema): Schema
-    {
-        return $schema->components([
-            Section::make('Draft')->schema([
-                KeyValue::make('slot_payload')->label('Kit slots')->visible(fn (?Content $record) => $record?->slot_payload !== null),
-                Textarea::make('body')->rows(12)->visible(fn (?Content $record) => $record?->body !== null),
-            ]),
-            Section::make('SEO')->schema([
-                TextInput::make('seo_title')->label('Title')->dehydrated(),
-                Textarea::make('seo_meta')->label('Meta description')->rows(2)->dehydrated(),
-                TextInput::make('slug'),
-            ]),
-        ]);
-    }
-
-    /**
-     * Draft a borderline candidate that landed in the queue undrafted (§6a routes
-     * borderline-relevance items straight to in_review). Without this, those rows
-     * were stranded — the "Generate post" action lived only on the Candidates
-     * screen, which lists candidate/scored, never in_review. Shown only when the
-     * row has no draft yet; the expensive Sonnet+fal step still runs on confirm.
-     */
-    private static function generateAction(): Action
-    {
-        return Action::make('generate')
-            ->label('Generate post')
-            ->icon('heroicon-o-sparkles')
-            ->color('info')
-            // Post lane only — a page parked in in_review must not be re-kinded to a post.
-            ->visible(fn (Content $record): bool => $record->kind === ContentKind::Post && ! $record->hasDraft() && ! $record->isGenerating())
-            ->requiresConfirmation()
-            ->modalDescription('Queues the draft (Sonnet) + image render (fal) on the worker — the expensive step runs in the background, not in this request. The row shows "Generating" until the draft is ready.')
-            ->action(function (Content $record): void {
-                GeneratePost::enqueue($record, actorId: Auth::id());
-
-                Notification::make()->success()
-                    ->title('Queued — generating on the worker')
-                    ->body("'{$record->title}' is being drafted; the row will update when it's ready.")->send();
-            });
-    }
-
-    private static function approveAction(): Action
-    {
-        return Action::make('approve')
-            ->color('success')
-            ->requiresConfirmation()
-            ->action(function (Content $record): void {
-                $result = app(ReviewActions::class)->approve($record, Auth::id());
-
-                if ($result->isBlocked()) {
-                    Notification::make()->danger()
-                        ->title('Cannot approve')->body($result->blockedReason)->send();
-
-                    return;
-                }
-
-                $notification = Notification::make()->success()->title('Approved — ready to publish');
-                if ($result->warnings !== []) {
-                    $notification->body(implode(' ', $result->warnings));
-                }
-                $notification->send();
-            });
-    }
-
-    /**
-     * Per-post publish — push this reviewed post straight to WordPress now (the
-     * single-post analog of launch-site). Gated on a verified, non-compromised
-     * connection; reuses the proven publish path, so it honors {skipped:true} and
-     * is idempotent on re-publish.
-     */
-    private static function publishNowAction(): Action
-    {
-        return Action::make('publish_now')
-            ->label('Publish now')
-            ->icon('heroicon-o-paper-airplane')
-            // An undrafted item can't publish (it would push an empty post) — hide it.
-            ->visible(fn (Content $record): bool => $record->hasDraft())
-            ->requiresConfirmation()
-            ->modalDescription('Renders images and pushes this post to WordPress now (keyed by content_id — safe to re-run; a page edited in WordPress is skipped, not overwritten).')
-            ->action(function (Content $record): void {
-                $result = app(PostPublisher::class)->publish($record, Auth::id());
-
-                if ($result->isPublished()) {
-                    Notification::make()->success()
-                        ->title('Published to WordPress')->body("wp #{$result->wpPostId}")->send();
-
-                    return;
-                }
-
-                if ($result->wasSkipped()) {
-                    Notification::make()->warning()->title('Skipped')->body($result->message)->send();
-
-                    return;
-                }
-
-                Notification::make()->danger()->title('Publish failed')->body($result->message)->send();
-            });
-    }
-
-    private static function rejectAction(): Action
-    {
-        return Action::make('reject')
-            ->color('danger')
-            ->schema([Textarea::make('reason')->required()])
-            ->action(function (Content $record, array $data): void {
-                app(ReviewActions::class)->reject($record, (string) $data['reason']);
-                Notification::make()->success()->title('Rejected')->send();
-            });
-    }
-
-    private static function lockAction(): Action
-    {
-        return Action::make('lock')
-            ->color('warning')
-            ->requiresConfirmation()
-            ->visible(fn (Content $record) => ! $record->locked)
-            ->action(function (Content $record): void {
-                app(ReviewActions::class)->lock($record);
-                Notification::make()->success()->title('Locked')->send();
-            });
-    }
-
-    private static function bulkApproveAction(): BulkAction
-    {
-        return BulkAction::make('bulkApprove')
-            ->label('Approve selected')
-            ->color('success')
-            ->requiresConfirmation()
-            ->action(function (Collection $records): void {
-                $results = app(ReviewActions::class)->bulkApprove($records, Auth::id());
-                $blocked = count(array_filter($results, fn ($r) => $r->isBlocked()));
-                $approved = count($results) - $blocked;
-
-                Notification::make()->success()
-                    ->title("Approved {$approved}, blocked {$blocked}")
-                    ->send();
-            });
-    }
-
     /**
      * @return array<string, PageRegistration>
      */
@@ -282,47 +140,5 @@ class ContentReviewResource extends Resource
             'index' => ListContentReviews::route('/'),
             'edit' => EditContentReview::route('/{record}/edit'),
         ];
-    }
-
-    /**
-     * The drafted-vs-undrafted indicator for a queue row. Drafting is synchronous
-     * (no async "generating" state to surface), so a row is Drafted, carries a
-     * persisted draft-failure marker, or is simply Awaiting draft.
-     */
-    private static function draftState(Content $record): string
-    {
-        return match ($record->generationState()) {
-            'drafted' => 'Drafted',
-            'generating' => 'Generating',
-            'failed' => 'Draft failed',
-            default => 'Awaiting draft',
-        };
-    }
-
-    /**
-     * @param  array<int, BackedEnum>  $cases
-     * @return array<string, string>
-     */
-    private static function enumOptions(array $cases): array
-    {
-        $options = [];
-        foreach ($cases as $case) {
-            $options[$case->value] = ucwords(str_replace('_', ' ', (string) $case->value));
-        }
-
-        return $options;
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private static function flagOptions(): array
-    {
-        $options = [];
-        foreach (ReviewFlag::cases() as $flag) {
-            $options[$flag->value] = $flag->label();
-        }
-
-        return $options;
     }
 }
