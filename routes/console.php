@@ -71,6 +71,12 @@ Schedule::command('launchpad:audit-index')->weekly()->withoutOverlapping();
 // multi-tenant sweep can't stack.
 Schedule::command('sandhog:sync-index')->daily()->withoutOverlapping();
 
+// Client-dashboard "Site speed" — measure Core Web Vitals (PageSpeed Insights) for each site's
+// published pages into the durable page_vitals table. Weekly + budget-bounded + freshness-cached: one
+// PSI call per URL is slow and quota-limited, so a weekly sweep fills coverage over time. withoutOverlapping
+// so a slow multi-tenant sweep can't stack.
+Schedule::command('sandhog:sync-vitals')->weekly()->withoutOverlapping();
+
 // Client-dashboard rank spine — roll the §5 position-snapshot series up into the
 // metric spine (per-keyword rank + site standings) so the dashboard trends keyword
 // movement. Reads an existing store (no DataForSEO call), so it's cheap; daily with a

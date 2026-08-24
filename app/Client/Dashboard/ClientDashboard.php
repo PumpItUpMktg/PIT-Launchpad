@@ -375,6 +375,56 @@ class ClientDashboard
         };
     }
 
+    /**
+     * The "Site speed" summary from the durable page_vitals readings: the median performance score, how
+     * many measured pages pass Core Web Vitals, and the slowest pages to look at. Empty when nothing has
+     * been measured yet (PageSpeed disabled or the weekly sweep hasn't run).
+     *
+     * @return array{measured: int, median_score: ?int, cwv_pass: int, slowest: list<array{title: string, url: string, score: ?int, lcp_ms: ?int, cls: ?float}>}
+     */
+    public function siteVitals(Site $site): array
+    {
+        $rows = DB::table('page_vitals')
+            ->where('site_id', $site->id)->whereNotNull('measured_at')
+            ->get(['content_id', 'url', 'performance_score', 'lcp_ms', 'cls', 'inp_ms']);
+
+        if ($rows->isEmpty()) {
+            return ['measured' => 0, 'median_score' => null, 'cwv_pass' => 0, 'slowest' => []];
+        }
+
+        $scores = $rows->pluck('performance_score')->filter(fn ($s) => $s !== null)->map(fn ($s): int => (int) $s)->sort()->values()->all();
+        $pass = $rows->filter(fn ($r): bool => $r->lcp_ms !== null && $r->cls !== null
+            && (int) $r->lcp_ms <= 2500 && (float) $r->cls <= 0.1 && ($r->inp_ms === null || (int) $r->inp_ms <= 200))->count();
+
+        $titles = Content::withoutGlobalScopes()
+            ->whereIn('id', $rows->pluck('content_id')->filter()->all())
+            ->pluck('title', 'id');
+
+        $slowest = $rows->sortBy(fn ($r) => $r->performance_score ?? 101)->take(5)->map(fn ($r): array => [
+            'title' => (string) ($titles[$r->content_id] ?? $r->url),
+            'url' => (string) $r->url,
+            'score' => $r->performance_score !== null ? (int) $r->performance_score : null,
+            'lcp_ms' => $r->lcp_ms !== null ? (int) $r->lcp_ms : null,
+            'cls' => $r->cls !== null ? (float) $r->cls : null,
+        ])->values()->all();
+
+        return [
+            'measured' => $rows->count(),
+            'median_score' => $scores === [] ? null : (int) round($this->median($scores)),
+            'cwv_pass' => $pass,
+            'slowest' => $slowest,
+        ];
+    }
+
+    /** @param  list<int>  $sorted  ascending */
+    private function median(array $sorted): float
+    {
+        $n = count($sorted);
+        $mid = intdiv($n, 2);
+
+        return $n % 2 === 1 ? (float) $sorted[$mid] : ($sorted[$mid - 1] + $sorted[$mid]) / 2;
+    }
+
     // ---- internals -------------------------------------------------------
 
     /**

@@ -83,6 +83,23 @@
     .pd .pd-qtable td { padding:10px 0; border-bottom:1px solid var(--pd-line); }
     .pd .pd-qtable tr:last-child td { border-bottom:0; }
     .pd .pd-qtable .q { font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+    /* site speed (core web vitals) */
+    .pd .pd-speed { display:grid; grid-template-columns:auto 1fr; gap:22px; align-items:center; }
+    @media (max-width:640px){ .pd .pd-speed{ grid-template-columns:1fr; } }
+    .pd .pd-score { width:104px; height:104px; border-radius:50%; display:grid; place-items:center; flex:none;
+        background:conic-gradient(var(--sc) calc(var(--pct) * 1%), var(--pd-surface2) 0); }
+    .pd .pd-score .inner { width:82px; height:82px; border-radius:50%; background:var(--pd-surface); display:grid; place-items:center; }
+    .pd .pd-score .num { font-family:var(--pd-display); font-weight:800; font-size:30px; line-height:1; font-variant-numeric:tabular-nums; }
+    .pd .pd-score .cap { font-size:9.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--pd-muted); font-weight:700; margin-top:2px; }
+    .pd .pd-speed-meta { font-size:13.5px; color:var(--pd-muted); }
+    .pd .pd-speed-meta b { color:var(--pd-ink); }
+    .pd .pd-slow { list-style:none; margin:12px 0 0; padding:0; display:grid; gap:8px; }
+    .pd .pd-slow li { display:grid; grid-template-columns:1fr auto auto; gap:12px; align-items:center; font-size:13px; padding-bottom:8px; border-bottom:1px solid var(--pd-line); }
+    .pd .pd-slow li:last-child { border-bottom:0; padding-bottom:0; }
+    .pd .pd-slow .t { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+    .pd .pd-slow .t a { color:var(--pd-ink); text-decoration:none; }
+    .pd .pd-slow .m { font-size:12px; color:var(--pd-faint); white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .pd .pd-slow .badge { font-size:11.5px; font-weight:800; padding:1px 8px; border-radius:999px; white-space:nowrap; }
     /* awaiting-indexing card */
     .pd .pd-idx { margin-top:16px; }
     .pd .pd-idx-lead { font-size:13.5px; color:var(--pd-muted); margin:-4px 0 16px; }
@@ -367,6 +384,42 @@
                 @endif
             </div>
         </div>
+
+        {{-- site speed: Core Web Vitals from PageSpeed Insights --}}
+        @if (! empty($vitals['measured']))
+            @php($score = $vitals['median_score'])
+            @php($scoreColor = $score === null ? 'var(--pd-faint)' : ($score >= 90 ? 'var(--pd-up)' : ($score >= 50 ? 'var(--pd-work)' : '#c0392b')))
+            <div class="pd-card" style="margin-top:16px">
+                <h2 class="pd-h">Site speed</h2>
+                <p class="pd-idx-lead">How fast your pages load for visitors, measured by Google’s Core Web Vitals.</p>
+                <div class="pd-speed">
+                    <div class="pd-score" style="--sc:{{ $scoreColor }}; --pct:{{ $score ?? 0 }}">
+                        <div class="inner">
+                            <div>
+                                <div class="num" style="color:{{ $scoreColor }}">{{ $score ?? '—' }}</div>
+                                <div class="cap">Speed</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="pd-speed-meta"><b>{{ $vitals['cwv_pass'] }}</b> of <b>{{ $vitals['measured'] }}</b> measured pages pass Core Web Vitals (fast load, stable layout, responsive).</div>
+                        @if (! empty($vitals['slowest']))
+                            <ul class="pd-slow">
+                                @foreach ($vitals['slowest'] as $p)
+                                    @php($ps = $p['score'])
+                                    @php($pc = $ps === null ? 'var(--pd-faint)' : ($ps >= 90 ? 'var(--pd-up)' : ($ps >= 50 ? 'var(--pd-work)' : '#c0392b')))
+                                    <li>
+                                        <span class="t">@if (! empty($p['url']))<a href="{{ $p['url'] }}" target="_blank" rel="noopener">{{ $p['title'] }}</a>@else{{ $p['title'] }}@endif</span>
+                                        <span class="m">@if ($p['lcp_ms'] !== null){{ number_format($p['lcp_ms'] / 1000, 1).'s LCP' }}@endif</span>
+                                        <span class="badge" style="color:{{ $pc }}; background:var(--pd-surface2)">{{ $ps ?? '—' }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        @endif
 
         {{-- awaiting indexing: managed pages Google hasn't indexed yet, by type, oldest-waiting first --}}
         @if (! empty($awaitingIndexing['groups']))

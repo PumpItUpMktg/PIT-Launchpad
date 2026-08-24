@@ -67,6 +67,8 @@ use App\Integrations\News\MockOnDemandSourcePull;
 use App\Integrations\News\NewsApiProvider;
 use App\Integrations\News\NewsProvider;
 use App\Integrations\News\OnDemandSourcePull;
+use App\Integrations\PageSpeed\PageSpeedInsights;
+use App\Integrations\PageSpeed\PageSpeedProvider;
 use App\Integrations\Places\GooglePlacesClient;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\SearchConsole\GoogleSearchConsole;
@@ -553,6 +555,14 @@ class AppServiceProvider extends ServiceProvider
             $this->app->make(CacheRepository::class),
             (string) config('services.google.ga4_data_base_url', 'https://analyticsdata.googleapis.com/v1beta'),
             (int) config('services.google.ga4_cache_ttl', 21600),
+        ));
+        // Core Web Vitals via the free PageSpeed Insights API (client "Site speed" card).
+        $this->app->bind(PageSpeedProvider::class, fn () => new PageSpeedInsights(
+            $this->app->make(Http::class),
+            (bool) config('services.pagespeed.enabled', true),
+            (string) config('services.pagespeed.base_url', 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'),
+            config('services.pagespeed.api_key'),
+            (int) config('services.pagespeed.timeout', 60),
         ));
 
         // Relevance scoring runs on the cheaper Haiku model with NO extended

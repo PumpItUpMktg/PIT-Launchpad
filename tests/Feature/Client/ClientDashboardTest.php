@@ -41,6 +41,15 @@ function cdPage(Site $site, string $slug, int $wpId): void
     ]);
 }
 
+/** Like cdPage but returns the created Content (for tests that link rows to it). */
+function cdPageReturn(Site $site, string $slug): Content
+{
+    return Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => $slug, 'title' => mb_strtoupper($slug),
+    ]);
+}
+
 /** A fixed frame for deterministic assertions. */
 function cdFrame(string $start = '2026-01-01', string $end = '2026-08-31'): Frame
 {
@@ -228,4 +237,35 @@ it('excludes a correctly redirect-excluded page from awaiting indexing', functio
     ]);
 
     expect(app(ClientDashboard::class)->awaitingIndexing($site)['total'])->toBe(0);
+});
+
+it('summarizes site speed from durable page_vitals readings', function () {
+    $site = Site::factory()->create();
+    $mk = function (string $slug, int $score, int $lcp, float $cls) use ($site) {
+        $page = cdPageReturn($site, $slug);
+        DB::table('page_vitals')->insert([
+            'id' => (string) Str::ulid(), 'site_id' => $site->id, 'content_id' => $page->id,
+            'url' => 'https://x/'.$slug.'/', 'url_normalized' => 'https://x/'.$slug.'/', 'strategy' => 'mobile',
+            'performance_score' => $score, 'lcp_ms' => $lcp, 'cls' => $cls, 'measured_at' => now(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+    };
+    $mk('fast', 95, 1800, 0.02);   // passes CWV
+    $mk('mid', 60, 2400, 0.05);    // passes CWV
+    $mk('slow', 30, 4200, 0.3);    // fails CWV
+
+    $v = app(ClientDashboard::class)->siteVitals($site);
+
+    expect($v['measured'])->toBe(3)
+        ->and($v['median_score'])->toBe(60)          // median of [30,60,95]
+        ->and($v['cwv_pass'])->toBe(2)
+        ->and($v['slowest'][0]['title'])->toBe('SLOW')   // worst score first
+        ->and($v['slowest'][0]['score'])->toBe(30);
+});
+
+it('returns an empty site-speed summary when nothing is measured', function () {
+    $site = Site::factory()->create();
+
+    expect(app(ClientDashboard::class)->siteVitals($site))
+        ->toBe(['measured' => 0, 'median_score' => null, 'cwv_pass' => 0, 'slowest' => []]);
 });
