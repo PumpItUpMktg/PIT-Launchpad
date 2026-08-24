@@ -18,6 +18,8 @@ use App\Integrations\Analytics\Ga4PageTraffic;
 use App\Integrations\Analytics\Ga4SiteTraffic;
 use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\Analytics\SiteTrafficProvider;
+use App\Integrations\AiSearch\AiEngineProvider;
+use App\Integrations\AiSearch\ClaudeWebSearchEngine;
 use App\Integrations\BingWebmaster\BingWebmaster;
 use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\BingWebmaster\NullBingWebmaster;
@@ -555,6 +557,17 @@ class AppServiceProvider extends ServiceProvider
             $this->app->make(CacheRepository::class),
             (string) config('services.google.ga4_data_base_url', 'https://analyticsdata.googleapis.com/v1beta'),
             (int) config('services.google.ga4_cache_ttl', 21600),
+        ));
+        // GEO (AI-search visibility): the Claude web-search engine talks to the Anthropic Messages API
+        // directly (the shared ClaudeClient is text-only). Disabled without an API key.
+        $this->app->bind(AiEngineProvider::class, fn () => new ClaudeWebSearchEngine(
+            $this->app->make(Http::class),
+            config('services.anthropic.key'),
+            (string) config('services.anthropic.base_url', 'https://api.anthropic.com'),
+            (string) config('services.anthropic.geo_model', 'claude-sonnet-4-6'),
+            (int) config('services.anthropic.geo_web_search_max_uses', 5),
+            (int) config('services.anthropic.max_tokens', 4096),
+            (int) config('services.anthropic.timeout', 240),
         ));
         // Core Web Vitals via the free PageSpeed Insights API (client "Site speed" card).
         $this->app->bind(PageSpeedProvider::class, fn () => new PageSpeedInsights(

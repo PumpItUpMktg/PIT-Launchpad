@@ -53,6 +53,14 @@ return [
         'refresh_window_days' => (int) env('LAUNCHPAD_METRICS_REFRESH_DAYS', 90),
     ],
 
+    'geo' => [
+        // AI-search visibility (GEO) audit. Each active prompt is one web-search answer + a Haiku judge,
+        // so a run measures prompts until this wall-clock budget is spent; the weekly sweep + a per-prompt
+        // freshness window fill coverage over time (mirrors the vitals/index audits).
+        'budget_seconds' => (float) env('LAUNCHPAD_GEO_BUDGET_SECONDS', 240),
+        'freshness_days' => (int) env('LAUNCHPAD_GEO_FRESHNESS_DAYS', 6),
+    ],
+
     'vitals' => [
         // Core Web Vitals (PageSpeed Insights) audit. Each URL is one PSI call (~seconds), so a run
         // measures until this wall-clock budget is spent, then leaves the rest for the next run — the
