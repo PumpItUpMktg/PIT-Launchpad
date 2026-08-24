@@ -53,6 +53,15 @@ return [
         'refresh_window_days' => (int) env('LAUNCHPAD_METRICS_REFRESH_DAYS', 90),
     ],
 
+    'vitals' => [
+        // Core Web Vitals (PageSpeed Insights) audit. Each URL is one PSI call (~seconds), so a run
+        // measures until this wall-clock budget is spent, then leaves the rest for the next run — the
+        // weekly sweep + the freshness window fill coverage over time without burning quota.
+        'budget_seconds' => (float) env('LAUNCHPAD_VITALS_BUDGET_SECONDS', 240),
+        // A URL measured within this many days is skipped (its stored reading is still fresh).
+        'freshness_days' => (int) env('LAUNCHPAD_VITALS_FRESHNESS_DAYS', 7),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Local town references on blog posts

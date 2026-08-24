@@ -155,6 +155,16 @@ return [
     // to); per-client access/refresh tokens live in the §9 vault, never here.
     // OAuth/API endpoints are non-secret defaults. Maps key is separate (location
     // pages), GBP is out (v1.5).
+    'pagespeed' => [
+        // Google PageSpeed Insights (Lighthouse) — free Core Web Vitals for the client "Site speed" card.
+        // No per-tenant auth; an optional API key lifts the anonymous quota. Off → the card shows "not
+        // measured yet" instead of scores.
+        'enabled' => (bool) env('PAGESPEED_ENABLED', true),
+        'base_url' => env('PAGESPEED_BASE_URL', 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'),
+        'api_key' => env('PAGESPEED_API_KEY'),
+        'timeout' => (int) env('PAGESPEED_TIMEOUT', 60),
+    ],
+
     'google' => [
         'project_id' => env('GOOGLE_PROJECT_ID'),
         'maps_api_key' => env('GOOGLE_MAPS_API_KEY'),
