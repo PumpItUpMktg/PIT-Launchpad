@@ -41,6 +41,9 @@ return [
         'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
         'model' => env('ANTHROPIC_MODEL', 'claude-opus-4-8'),
         'scoring_model' => env('ANTHROPIC_SCORING_MODEL', 'claude-haiku-4-5'),
+        // GEO (AI-search visibility): the web-search-capable model + how many searches per answer.
+        'geo_model' => env('ANTHROPIC_GEO_MODEL', 'claude-sonnet-4-6'),
+        'geo_web_search_max_uses' => (int) env('ANTHROPIC_GEO_MAX_USES', 5),
         'drafting_model' => env('ANTHROPIC_DRAFTING_MODEL', 'claude-sonnet-4-6'),
         'vision_model' => env('ANTHROPIC_VISION_MODEL', 'claude-sonnet-4-6'),
         'max_tokens' => (int) env('ANTHROPIC_MAX_TOKENS', 4096),
