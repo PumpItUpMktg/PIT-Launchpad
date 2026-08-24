@@ -20,6 +20,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * GEO (AI-search visibility) — operator-curated test prompts + their latest observed result per prompt.
@@ -54,14 +55,22 @@ class GeoPromptResource extends Resource
             ->columns([
                 TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('prompt')->label('Prompt')->limit(60)->wrap(),
-                IconColumn::make('latestSnapshot.cited')->label('Cited')->boolean()->placeholder('—'),
-                TextColumn::make('latestSnapshot.position')->label('Rank')->placeholder('—'),
-                TextColumn::make('latestSnapshot.sentiment')->label('Sentiment')->badge()->placeholder('—')
-                    ->color(fn (?string $state): string => match ($state) {
-                        'positive' => 'success',
-                        'negative' => 'danger',
-                        'neutral' => 'warning',
-                        default => 'gray',
+                // Cited in N of M engines that have a reading (latest per engine).
+                TextColumn::make('cited_engines')->label('Cited (engines)')->badge()
+                    ->state(function (GeoPrompt $record): string {
+                        $s = $record->engineSummary();
+
+                        return $s['measured'] === 0 ? '—' : $s['cited'].'/'.$s['measured'];
+                    })
+                    ->color(function (GeoPrompt $record): string {
+                        $s = $record->engineSummary();
+
+                        return match (true) {
+                            $s['measured'] === 0 => 'gray',
+                            $s['cited'] === 0 => 'danger',
+                            $s['cited'] === $s['measured'] => 'success',
+                            default => 'warning',
+                        };
                     }),
                 TextColumn::make('latestSnapshot.checked_at')->label('Checked')->since()->placeholder('never'),
                 IconColumn::make('active')->boolean(),
@@ -88,6 +97,12 @@ class GeoPromptResource extends Resource
             TextInput::make('label')->helperText('Optional short label for the board.'),
             Toggle::make('active')->default(true),
         ]);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        // Eager-load snapshots so the per-engine "cited N/M" column doesn't N+1 across the board.
+        return parent::getEloquentQuery()->with('snapshots');
     }
 
     /**

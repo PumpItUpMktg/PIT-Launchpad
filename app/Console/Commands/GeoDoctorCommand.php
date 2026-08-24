@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use App\Geo\GeoAnswerJudge;
 use App\Geo\GeoVisibilityAudit;
-use App\Integrations\AiSearch\AiEngineProvider;
+use App\Integrations\AiSearch\AiEngineRegistry;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
 use Illuminate\Console\Command;
@@ -41,11 +41,7 @@ class GeoDoctorCommand extends Command
                 return true;
             },
             // Resolving each from the container exercises its binding — a broken wire throws and is caught below.
-            'AiEngineProvider resolves' => function (): bool {
-                app(AiEngineProvider::class);
-
-                return true;
-            },
+            'AI engine(s) registered' => fn (): bool => app(AiEngineRegistry::class)->all() !== [],
             'GeoAnswerJudge resolves' => function (): bool {
                 app(GeoAnswerJudge::class);
 
@@ -66,10 +62,10 @@ class GeoDoctorCommand extends Command
             $rows[] = [$ok ? '✓' : '✗', $label, $detail];
         }
 
-        // Informational: engine identity + whether it's configured, and the prompt/snapshot counts.
-        $engine = app(AiEngineProvider::class);
-        $rows[] = ['·', 'AI engine', $engine->key().' — '.($engine->enabled() ? 'configured' : 'not configured (audit no-ops)')];
-        $rows[] = ['·', 'GEO model', (string) config('services.anthropic.geo_model', '—')];
+        // Informational: each engine + whether it's configured, and the prompt/snapshot counts.
+        foreach (app(AiEngineRegistry::class)->all() as $engine) {
+            $rows[] = ['·', 'AI engine: '.$engine->key(), $engine->enabled() ? 'configured' : 'not configured (skipped by the audit)'];
+        }
         $rows[] = ['·', 'Prompts / snapshots', $this->countsLine()];
 
         $this->table(['', 'Check', 'Detail'], $rows);

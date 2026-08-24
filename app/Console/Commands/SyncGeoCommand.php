@@ -29,13 +29,13 @@ class SyncGeoCommand extends Command
         foreach ($sites as $site) {
             $r = $audit->audit($site);
             if (! $r['enabled']) {
-                $this->warn('The AI search engine is not configured (no ANTHROPIC_API_KEY) — nothing measured.');
+                $this->warn('No AI search engine is configured (set ANTHROPIC_API_KEY and/or PERPLEXITY_API_KEY) — nothing measured.');
 
                 return self::SUCCESS;
             }
             $this->line(sprintf(
-                '<info>%s</info> — %d measured, %d still fresh, %d deferred (of %d active prompts).',
-                $site->brand_name, $r['measured'], $r['skipped_fresh'], $r['deferred'], $r['total'],
+                '<info>%s</info> — %d measured, %d still fresh, %d deferred (across %d engine(s), %d checks).',
+                $site->brand_name, $r['measured'], $r['skipped_fresh'], $r['deferred'], $r['engines'], $r['total'],
             ));
         }
 

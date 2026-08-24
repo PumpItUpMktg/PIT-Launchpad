@@ -158,6 +158,14 @@ return [
     // to); per-client access/refresh tokens live in the §9 vault, never here.
     // OAuth/API endpoints are non-secret defaults. Maps key is separate (location
     // pages), GBP is out (v1.5).
+    'perplexity' => [
+        // GEO engine (Perplexity Sonar) — answers with native citations. Disabled (no-op) without a key.
+        'key' => env('PERPLEXITY_API_KEY'),
+        'base_url' => env('PERPLEXITY_BASE_URL', 'https://api.perplexity.ai'),
+        'model' => env('PERPLEXITY_MODEL', 'sonar'),
+        'timeout' => (int) env('PERPLEXITY_TIMEOUT', 60),
+    ],
+
     'pagespeed' => [
         // Google PageSpeed Insights (Lighthouse) — free Core Web Vitals for the client "Site speed" card.
         // No per-tenant auth; an optional API key lifts the anonymous quota. Off → the card shows "not

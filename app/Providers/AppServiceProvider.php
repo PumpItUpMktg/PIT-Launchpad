@@ -16,7 +16,9 @@ use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
 use App\Geo\GeoAnswerJudge;
 use App\Integrations\AiSearch\AiEngineProvider;
+use App\Integrations\AiSearch\AiEngineRegistry;
 use App\Integrations\AiSearch\ClaudeWebSearchEngine;
+use App\Integrations\AiSearch\PerplexityEngine;
 use App\Integrations\Analytics\Ga4PageTraffic;
 use App\Integrations\Analytics\Ga4SiteTraffic;
 use App\Integrations\Analytics\PageTrafficProvider;
@@ -570,6 +572,19 @@ class AppServiceProvider extends ServiceProvider
             (int) config('services.anthropic.max_tokens', 4096),
             (int) config('services.anthropic.timeout', 240),
         ));
+        // Perplexity (Sonar) GEO engine — native citations. Disabled without a key.
+        $this->app->bind(PerplexityEngine::class, fn () => new PerplexityEngine(
+            $this->app->make(Http::class),
+            config('services.perplexity.key'),
+            (string) config('services.perplexity.base_url', 'https://api.perplexity.ai'),
+            (string) config('services.perplexity.model', 'sonar'),
+            (int) config('services.perplexity.timeout', 60),
+        ));
+        // The GEO engine set the audit fans out across. Add OpenAI/Gemini adapters here later — no other
+        // change needed (each snapshot already records its engine; the audit runs every ENABLED engine).
+        $this->app->singleton(AiEngineRegistry::class, fn ($app): AiEngineRegistry => (new AiEngineRegistry)
+            ->register($app->make(AiEngineProvider::class))    // Claude web-search
+            ->register($app->make(PerplexityEngine::class)));  // Perplexity Sonar
         // Core Web Vitals via the free PageSpeed Insights API (client "Site speed" card).
         $this->app->bind(PageSpeedProvider::class, fn () => new PageSpeedInsights(
             $this->app->make(Http::class),
