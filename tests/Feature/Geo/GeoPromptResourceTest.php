@@ -2,8 +2,10 @@
 
 use App\Enums\UserRole;
 use App\Filament\Resources\GeoPromptResource\Pages\ListGeoPrompts;
+use App\Jobs\SeedSiteGeoPrompts;
 use App\Jobs\SyncSiteGeo;
 use App\Models\GeoPrompt;
+use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -20,6 +22,18 @@ it('lists GEO prompts with their latest result for an operator', function () {
     Livewire::test(ListGeoPrompts::class)
         ->assertOk()
         ->assertCanSeeTableRecords([$prompt]);
+});
+
+it('queues an auto-seed per site that has services', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $a = Site::factory()->create();
+    Site::factory()->create(); // no services → not seeded
+    Service::factory()->create(['site_id' => $a->id]);
+
+    Livewire::test(ListGeoPrompts::class)->callAction('seed');
+
+    Queue::assertPushed(SeedSiteGeoPrompts::class, 1);
 });
 
 it('queues one GEO check per site that has active prompts', function () {
