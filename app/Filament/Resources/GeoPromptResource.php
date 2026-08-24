@@ -38,6 +38,16 @@ class GeoPromptResource extends Resource
 
     protected static ?int $navigationSort = 6;
 
+    /**
+     * Menu-map family tag: a new Phase-1 operator surface whose final-IA placement (and eventual
+     * client-portal exposure) is still to be decided — so it inventories under "pending", not the
+     * final sidebar.
+     */
+    public static function menuTag(): string
+    {
+        return 'unaddressed';
+    }
+
     public static function table(Table $table): Table
     {
         return $table
