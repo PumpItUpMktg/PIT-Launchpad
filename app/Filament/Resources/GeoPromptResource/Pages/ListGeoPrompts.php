@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\GeoPromptResource\Pages;
 
 use App\Filament\Resources\GeoPromptResource;
+use App\Jobs\BridgeSiteGeoGaps;
 use App\Jobs\SeedSiteGeoPrompts;
 use App\Jobs\SyncSiteGeo;
 use App\Jobs\TopUpSiteGeoPrompts;
@@ -51,6 +52,21 @@ class ListGeoPrompts extends ListRecords
                     }
                     Notification::make()
                         ->title($siteIds->isEmpty() ? 'No measured sites to top up yet' : "Top-ups queued for {$siteIds->count()} site(s)")
+                        ->success()
+                        ->send();
+                }),
+            Action::make('bridge')
+                ->label('Bridge gaps to content')
+                ->icon('heroicon-o-arrow-right-circle')
+                ->requiresConfirmation()
+                ->modalDescription('Turn each absent gap (a prompt no engine cites) into a directed content candidate on the review queue — pinned to the gap\'s service silo, ready to generate & publish. Bounded + idempotent; nothing is drafted or published automatically.')
+                ->action(function (): void {
+                    $siteIds = GeoSnapshot::query()->distinct()->pluck('site_id');
+                    foreach ($siteIds as $siteId) {
+                        BridgeSiteGeoGaps::dispatch((string) $siteId);
+                    }
+                    Notification::make()
+                        ->title($siteIds->isEmpty() ? 'No measured sites to bridge yet' : "Gap bridge queued for {$siteIds->count()} site(s)")
                         ->success()
                         ->send();
                 }),

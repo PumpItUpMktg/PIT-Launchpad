@@ -74,6 +74,14 @@ return [
             'max_variants_per_gap' => (int) env('LAUNCHPAD_GEO_TOPUP_MAX_VARIANTS', 2),
             'max_prompts' => (int) env('LAUNCHPAD_GEO_TOPUP_MAX_PROMPTS', 20),
         ],
+
+        // Gap → content bridge bounding — an absent gap (a prompt no engine cites) becomes ONE directed
+        // content candidate that flows through the normal §6 review → publish path and gets re-measured on
+        // the next GEO check. Cap how many gaps are bridged per run (priority-market first); idempotent by
+        // external_id, so re-running only fills what's newly gone absent.
+        'bridge' => [
+            'max_gaps' => (int) env('LAUNCHPAD_GEO_BRIDGE_MAX_GAPS', 8),
+        ],
     ],
 
     'vitals' => [
