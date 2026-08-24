@@ -22,7 +22,7 @@ final class AiAnswer
     public function citationUrls(): array
     {
         return array_values(array_filter(array_map(
-            fn (array $c): string => mb_strtolower(trim($c['url'] ?? '')),
+            fn (array $c): string => mb_strtolower(trim($c['url'])),
             $this->citations,
         ), fn (string $u): bool => $u !== ''));
     }

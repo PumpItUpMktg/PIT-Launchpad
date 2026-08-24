@@ -1,11 +1,12 @@
 <?php
 
 use App\Integrations\AiSearch\ClaudeWebSearchEngine;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Http;
 
 function engine(?string $key = 'sk-test'): ClaudeWebSearchEngine
 {
-    return new ClaudeWebSearchEngine(app(\Illuminate\Http\Client\Factory::class), $key, 'https://api.anthropic.com', 'claude-sonnet-4-6');
+    return new ClaudeWebSearchEngine(app(Factory::class), $key, 'https://api.anthropic.com', 'claude-sonnet-4-6');
 }
 
 it('is disabled without an API key', function () {
