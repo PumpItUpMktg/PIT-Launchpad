@@ -4,6 +4,7 @@ use App\Geo\GeoAnswerJudge;
 use App\Geo\GeoVisibilityAudit;
 use App\Integrations\AiSearch\AiAnswer;
 use App\Integrations\AiSearch\AiEngineProvider;
+use App\Integrations\AiSearch\AiEngineRegistry;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
 use App\Models\Scopes\SiteScope;
@@ -14,15 +15,15 @@ use Tests\Support\ScriptedClaudeClient;
 afterEach(fn () => CurrentSite::clear());
 
 /** A deterministic AI engine keyed by prompt text — no HTTP. */
-function fakeEngine(array $byPrompt, bool $enabled = true): AiEngineProvider
+function fakeEngine(array $byPrompt, bool $enabled = true, string $key = 'claude'): AiEngineProvider
 {
-    return new class($byPrompt, $enabled) implements AiEngineProvider
+    return new class($byPrompt, $enabled, $key) implements AiEngineProvider
     {
-        public function __construct(private array $byPrompt, private bool $enabled) {}
+        public function __construct(private array $byPrompt, private bool $enabled, private string $key) {}
 
         public function key(): string
         {
-            return 'claude';
+            return $this->key;
         }
 
         public function enabled(): bool
@@ -35,6 +36,17 @@ function fakeEngine(array $byPrompt, bool $enabled = true): AiEngineProvider
             return $this->byPrompt[$prompt] ?? null;
         }
     };
+}
+
+/** A registry pre-loaded with the given engines. */
+function geoRegistry(AiEngineProvider ...$engines): AiEngineRegistry
+{
+    $registry = new AiEngineRegistry;
+    foreach ($engines as $engine) {
+        $registry->register($engine);
+    }
+
+    return $registry;
 }
 
 function judgeReturning(array $json): GeoAnswerJudge
@@ -78,7 +90,7 @@ it('audits active prompts and writes durable snapshots (inactive excluded)', fun
         'best sump pump repair union nj' => new AiAnswer('Sump Pump Gurus is top rated.', [['url' => 'https://sumppumpgurus.com/', 'title' => 'SPG']]),
         'how to fix a sump pump' => new AiAnswer('A general guide with no brands.', []),
     ]);
-    $r = (new GeoVisibilityAudit($engine, judgeReturning(['cited' => false, 'position' => 1, 'sentiment' => 'positive', 'competitors' => []])))
+    $r = (new GeoVisibilityAudit(geoRegistry($engine), judgeReturning(['cited' => false, 'position' => 1, 'sentiment' => 'positive', 'competitors' => []])))
         ->audit($site);
 
     expect($r)->toMatchArray(['enabled' => true, 'total' => 2, 'measured' => 2, 'skipped_fresh' => 0, 'deferred' => 0]);
@@ -88,13 +100,31 @@ it('audits active prompts and writes durable snapshots (inactive excluded)', fun
     expect(GeoSnapshot::withoutGlobalScope(SiteScope::class)->where('geo_prompt_id', $p2->id)->first()->cited)->toBeFalse();
 });
 
+it('fans a prompt out across every enabled engine, one snapshot per engine', function () {
+    $site = geoSite();
+    $prompt = geoPrompt($site, 'best sump pump repair');
+
+    $claude = fakeEngine(['best sump pump repair' => new AiAnswer('Sump Pump Gurus is great.', [['url' => 'https://sumppumpgurus.com/', 'title' => 'SPG']])], key: 'claude');
+    $perplexity = fakeEngine(['best sump pump repair' => new AiAnswer('Consider Acme Plumbing.', [])], key: 'perplexity');
+
+    $r = (new GeoVisibilityAudit(geoRegistry($claude, $perplexity), judgeReturning(['cited' => false, 'position' => 1, 'sentiment' => 'positive', 'competitors' => []])))
+        ->audit($site);
+
+    expect($r)->toMatchArray(['enabled' => true, 'engines' => 2, 'total' => 2, 'measured' => 2]);
+
+    $byEngine = GeoSnapshot::withoutGlobalScope(SiteScope::class)->where('geo_prompt_id', $prompt->id)->get()->keyBy('engine');
+    expect($byEngine)->toHaveCount(2)
+        ->and($byEngine['claude']->cited)->toBeTrue()     // domain cited
+        ->and($byEngine['perplexity']->cited)->toBeFalse(); // brand absent
+});
+
 it('skips a prompt whose latest snapshot is still fresh', function () {
     $site = geoSite();
     $p = geoPrompt($site, 'a prompt');
     GeoSnapshot::create(['site_id' => $site->id, 'geo_prompt_id' => $p->id, 'engine' => 'claude',
         'cited' => true, 'sentiment' => 'positive', 'checked_at' => now()->subDay()]);
 
-    $r = (new GeoVisibilityAudit(fakeEngine([]), judgeReturning([])))->audit($site, freshnessDays: 6);
+    $r = (new GeoVisibilityAudit(geoRegistry(fakeEngine([])), judgeReturning([])))->audit($site, freshnessDays: 6);
 
     expect($r['skipped_fresh'])->toBe(1)->and($r['measured'])->toBe(0);
 });
@@ -104,7 +134,7 @@ it('defers prompts once the budget is spent', function () {
     geoPrompt($site, 'p1');
     geoPrompt($site, 'p2');
 
-    $r = (new GeoVisibilityAudit(fakeEngine([]), judgeReturning([])))->audit($site, budgetSeconds: 0.0);
+    $r = (new GeoVisibilityAudit(geoRegistry(fakeEngine([])), judgeReturning([])))->audit($site, budgetSeconds: 0.0);
 
     expect($r['measured'])->toBe(0)->and($r['deferred'])->toBe(2)
         ->and(GeoSnapshot::withoutGlobalScope(SiteScope::class)->count())->toBe(0);
@@ -114,7 +144,7 @@ it('is a clean no-op when the engine is disabled', function () {
     $site = geoSite();
     geoPrompt($site, 'p1');
 
-    expect((new GeoVisibilityAudit(fakeEngine([], enabled: false), judgeReturning([])))->audit($site)['enabled'])->toBeFalse()
+    expect((new GeoVisibilityAudit(geoRegistry(fakeEngine([], enabled: false)), judgeReturning([])))->audit($site)['enabled'])->toBeFalse()
         ->and(GeoSnapshot::withoutGlobalScope(SiteScope::class)->count())->toBe(0);
 });
 
@@ -122,7 +152,7 @@ it('the sync-geo command runs for a site', function () {
     $site = geoSite();
     $p = geoPrompt($site, 'best sump pump repair');
     $engine = fakeEngine(['best sump pump repair' => new AiAnswer('Sump Pump Gurus leads.', [])]);
-    app()->instance(GeoVisibilityAudit::class, new GeoVisibilityAudit($engine, judgeReturning(['cited' => true, 'position' => 1, 'sentiment' => 'positive', 'competitors' => []])));
+    app()->instance(GeoVisibilityAudit::class, new GeoVisibilityAudit(geoRegistry($engine), judgeReturning(['cited' => true, 'position' => 1, 'sentiment' => 'positive', 'competitors' => []])));
 
     $this->artisan('sandhog:sync-geo', ['site' => $site->id])
         ->expectsOutputToContain('1 measured')

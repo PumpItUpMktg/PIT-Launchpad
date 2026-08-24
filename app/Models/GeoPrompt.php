@@ -39,4 +39,18 @@ class GeoPrompt extends Model
     {
         return $this->hasOne(GeoSnapshot::class)->latestOfMany('checked_at');
     }
+
+    /**
+     * How many engines have a reading and how many currently cite the brand — the latest snapshot PER
+     * engine (so re-runs don't double-count). Reads the loaded `snapshots` relation; eager-load it to
+     * avoid N+1.
+     *
+     * @return array{measured: int, cited: int}
+     */
+    public function engineSummary(): array
+    {
+        $latestPerEngine = $this->snapshots->sortByDesc('checked_at')->unique('engine');
+
+        return ['measured' => $latestPerEngine->count(), 'cited' => $latestPerEngine->where('cited', true)->count()];
+    }
 }
