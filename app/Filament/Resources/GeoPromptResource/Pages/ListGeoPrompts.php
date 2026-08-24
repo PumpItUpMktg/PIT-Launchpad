@@ -5,7 +5,9 @@ namespace App\Filament\Resources\GeoPromptResource\Pages;
 use App\Filament\Resources\GeoPromptResource;
 use App\Jobs\SeedSiteGeoPrompts;
 use App\Jobs\SyncSiteGeo;
+use App\Jobs\TopUpSiteGeoPrompts;
 use App\Models\GeoPrompt;
+use App\Models\GeoSnapshot;
 use App\Models\Service;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -34,6 +36,21 @@ class ListGeoPrompts extends ListRecords
                     }
                     Notification::make()
                         ->title($siteIds->isEmpty() ? 'No sites with services to seed' : "Seeding queued for {$siteIds->count()} site(s)")
+                        ->success()
+                        ->send();
+                }),
+            Action::make('topup')
+                ->label('Generate top-ups')
+                ->icon('heroicon-o-sparkles')
+                ->requiresConfirmation()
+                ->modalDescription('Use AI to add prompt variants for the absent gaps (prompts no engine cites) — neutral rephrasings + head-to-heads. Bounded; the variants land tagged "assisted" and active.')
+                ->action(function (): void {
+                    $siteIds = GeoSnapshot::query()->distinct()->pluck('site_id');
+                    foreach ($siteIds as $siteId) {
+                        TopUpSiteGeoPrompts::dispatch((string) $siteId);
+                    }
+                    Notification::make()
+                        ->title($siteIds->isEmpty() ? 'No measured sites to top up yet' : "Top-ups queued for {$siteIds->count()} site(s)")
                         ->success()
                         ->send();
                 }),

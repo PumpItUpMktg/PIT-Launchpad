@@ -66,6 +66,14 @@ return [
             'max_markets' => (int) env('LAUNCHPAD_GEO_SEED_MAX_MARKETS', 5),
             'max_prompts' => (int) env('LAUNCHPAD_GEO_SEED_MAX_PROMPTS', 60),
         ],
+
+        // Assisted weakness top-ups — one Claude call per absent gap, so cap the gaps addressed, variants
+        // per gap, and total prompts added per run.
+        'topup' => [
+            'max_gaps' => (int) env('LAUNCHPAD_GEO_TOPUP_MAX_GAPS', 8),
+            'max_variants_per_gap' => (int) env('LAUNCHPAD_GEO_TOPUP_MAX_VARIANTS', 2),
+            'max_prompts' => (int) env('LAUNCHPAD_GEO_TOPUP_MAX_PROMPTS', 20),
+        ],
     ],
 
     'vitals' => [

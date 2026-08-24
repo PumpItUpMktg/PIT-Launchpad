@@ -15,6 +15,7 @@ use App\Enums\NewsProvider as NewsProviderType;
 use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
 use App\Geo\GeoAnswerJudge;
+use App\Geo\GeoPromptTopUp;
 use App\Integrations\AiSearch\AiEngineProvider;
 use App\Integrations\AiSearch\AiEngineRegistry;
 use App\Integrations\AiSearch\ClaudeWebSearchEngine;
@@ -604,6 +605,11 @@ class AppServiceProvider extends ServiceProvider
 
         // GEO answer judging (cited / position / sentiment / competitors) is a cheap Haiku pass, like scoring.
         $this->app->when(GeoAnswerJudge::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
+
+        // GEO weakness top-ups generate prompt variants — also a cheap Haiku pass.
+        $this->app->when(GeoPromptTopUp::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
 
