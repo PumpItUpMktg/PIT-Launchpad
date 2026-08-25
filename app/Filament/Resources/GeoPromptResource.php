@@ -66,6 +66,8 @@ class GeoPromptResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            // Refresh live so the "Checked" times + cited badges update as a running GEO check measures.
+            ->poll('15s')
             ->columns([
                 TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('prompt')->label('Prompt')->limit(60)->wrap(),

@@ -1,6 +1,7 @@
 <?php
 
 use App\Geo\GeoAnswerJudge;
+use App\Geo\GeoCheckStatus;
 use App\Geo\GeoVisibilityAudit;
 use App\Integrations\AiSearch\AiAnswer;
 use App\Integrations\AiSearch\AiEngineProvider;
@@ -157,4 +158,41 @@ it('the sync-geo command runs for a site', function () {
     $this->artisan('sandhog:sync-geo', ['site' => $site->id])
         ->expectsOutputToContain('1 measured')
         ->assertSuccessful();
+});
+
+it('marks the tenant checking during the run and clears the flag when done', function () {
+    $site = geoSite();
+    geoPrompt($site, 'q1');
+
+    $seenRunning = false;
+    $engine = new class implements AiEngineProvider
+    {
+        public Closure $onAsk;
+
+        public function key(): string
+        {
+            return 'claude';
+        }
+
+        public function enabled(): bool
+        {
+            return true;
+        }
+
+        public function ask(string $prompt): ?AiAnswer
+        {
+            ($this->onAsk)();
+
+            return new AiAnswer('Sump Pump Gurus is great.', []);
+        }
+    };
+    $engine->onAsk = function () use (&$seenRunning, $site): void {
+        $seenRunning = app(GeoCheckStatus::class)->isRunning($site->id);
+    };
+
+    (new GeoVisibilityAudit(geoRegistry($engine), judgeReturning(['cited' => true, 'position' => 1, 'sentiment' => 'positive', 'competitors' => []])))
+        ->audit($site);
+
+    expect($seenRunning)->toBeTrue()                                        // flag was set while measuring
+        ->and(app(GeoCheckStatus::class)->isRunning($site->id))->toBeFalse(); // and cleared afterwards
 });
