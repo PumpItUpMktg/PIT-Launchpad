@@ -40,6 +40,14 @@
                 @endforeach
             </select>
         @endif
+        @if (count($this->locations) > 1)
+            <select class="gc-select" wire:model.live="locationId" aria-label="Brick-and-mortar location">
+                <option value="">All shops</option>
+                @foreach ($this->locations as $id => $name)
+                    <option value="{{ $id }}">{{ $name }}</option>
+                @endforeach
+            </select>
+        @endif
         <span style="font-size:12.5px;color:var(--gc-muted)">Observed AI-answer coverage — sampled, not a guarantee.</span>
     </div>
 

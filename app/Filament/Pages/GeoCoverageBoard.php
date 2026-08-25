@@ -4,6 +4,8 @@ namespace App\Filament\Pages;
 
 use App\Geo\GeoCoverage;
 use App\Models\GeoPrompt;
+use App\Models\Location;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use BackedEnum;
 use Filament\Pages\Page;
@@ -34,10 +36,19 @@ class GeoCoverageBoard extends Page
     /** Selected tenant (operator picks). */
     public ?string $siteId = null;
 
+    /** Selected brick-and-mortar shop — null = all of the tenant's shops. */
+    public ?string $locationId = null;
+
     /** Menu-map family tag: a Phase-1 operator surface whose final placement is still to be decided. */
     public static function menuTag(): string
     {
         return 'unaddressed';
+    }
+
+    /** Switching tenant clears the shop focus — the prior tenant's locations don't belong to the new one. */
+    public function updatedSiteId(): void
+    {
+        $this->locationId = null;
     }
 
     public function mount(): void
@@ -57,6 +68,25 @@ class GeoCoverageBoard extends Page
             ->all();
     }
 
+    /**
+     * The selected tenant's brick-and-mortar shops (excludes NAP-merged rows), for the shop selector.
+     *
+     * @return array<string, string>
+     */
+    public function getLocationsProperty(): array
+    {
+        if ($this->siteId === null) {
+            return [];
+        }
+
+        return Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->siteId)->whereNull('merged_into_id')
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->map(fn ($name, $id): string => (string) ($name ?: $id))
+            ->all();
+    }
+
     /** @return array<string, mixed>|null */
     public function getReportProperty(): ?array
     {
@@ -65,6 +95,6 @@ class GeoCoverageBoard extends Page
         }
         $site = Site::query()->whereKey($this->siteId)->first();
 
-        return $site !== null ? app(GeoCoverage::class)->report($site) : null;
+        return $site !== null ? app(GeoCoverage::class)->report($site, $this->locationId ?: null) : null;
     }
 }
