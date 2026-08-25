@@ -2,7 +2,9 @@
 
 namespace App\Geo;
 
+use App\Enums\GeoCheckAction;
 use App\Integrations\AiSearch\AiEngineRegistry;
+use App\Models\GeoCheckEvent;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
 use App\Models\Scopes\SiteScope;
@@ -49,11 +51,13 @@ class GeoVisibilityAudit
         // rest next run.
         $prompts = GeoPrompt::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->where('active', true)
+            ->with('coverageArea')
             ->workOrder()
             ->get();
 
         $brand = (string) $site->brand_name;
         $domain = $site->domain_url;
+        $runId = (string) Str::ulid();   // groups this run's activity-log events
 
         // Mark the tenant "checking" for the in-process indicator; always cleared, even on error.
         $status = app(GeoCheckStatus::class);
@@ -70,18 +74,22 @@ class GeoVisibilityAudit
                         ->latest('checked_at')->first();
                     if ($latest !== null && $latest->checked_at->greaterThan($freshBefore)) {
                         $skippedFresh++;
+                        $this->event($site, $runId, $prompt, $engineKey, GeoCheckAction::SkippedFresh);
 
                         continue;
                     }
 
                     if (microtime(true) >= $deadline) {
                         $deferred++;
+                        $this->event($site, $runId, $prompt, $engineKey, GeoCheckAction::Deferred);
 
                         continue;
                     }
 
                     $answer = $engine->ask($prompt->prompt);
                     if ($answer === null) {
+                        $this->event($site, $runId, $prompt, $engineKey, GeoCheckAction::Error);
+
                         continue;   // engine error — keep prior readings, don't write a blank
                     }
 
@@ -99,6 +107,7 @@ class GeoVisibilityAudit
                         'checked_at' => Carbon::now(),
                     ]);
                     $measured++;
+                    $this->event($site, $runId, $prompt, $engineKey, GeoCheckAction::Measured, $verdict->cited, $verdict->competitors);
                 }
             }
         } finally {
@@ -106,5 +115,24 @@ class GeoVisibilityAudit
         }
 
         return ['enabled' => true, 'engines' => count($engines), 'total' => $total, 'measured' => $measured, 'skipped_fresh' => $skippedFresh, 'deferred' => $deferred];
+    }
+
+    /**
+     * Append one activity-log row for the step just taken (see {@see GeoCheckEvent}).
+     *
+     * @param  list<string>|null  $competitors
+     */
+    private function event(Site $site, string $runId, GeoPrompt $prompt, string $engineKey, GeoCheckAction $action, ?bool $cited = null, ?array $competitors = null): void
+    {
+        GeoCheckEvent::create([
+            'site_id' => $site->id,
+            'run_id' => $runId,
+            'geo_prompt_id' => $prompt->id,
+            'engine' => $engineKey,
+            'action' => $action->value,
+            'cited' => $cited,
+            'competitors' => $competitors,
+            'town' => data_get($prompt->coverageArea, 'name'),
+        ]);
     }
 }
