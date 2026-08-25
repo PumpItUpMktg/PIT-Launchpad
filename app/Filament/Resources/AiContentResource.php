@@ -177,7 +177,7 @@ class AiContentResource extends Resource
     {
         $gap = is_array($record->meta['geo_gap'] ?? null) ? $record->meta['geo_gap'] : [];
         $parts = array_values(array_filter([
-            is_string($gap['market'] ?? null) ? $gap['market'] : null,
+            is_string($gap['town'] ?? null) ? $gap['town'] : null,
             is_string($gap['intent_label'] ?? null) ? $gap['intent_label'] : null,
         ]));
 

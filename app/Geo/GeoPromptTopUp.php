@@ -14,7 +14,7 @@ use App\Models\Site;
  * ask Claude (Haiku) for extra, natural ways a real homeowner would pose the same question, plus a
  * head-to-head vs the competitor that's winning. The variety separates "we phrased it oddly" from a genuine
  * absence, and gives the coverage matrix more signal. Variants are created `source=assisted`, tagged with the
- * parent's service/market/intent, active (the operator can prune them). Neutral by construction — anything
+ * parent's service/town/intent, active (the operator can prune them). Neutral by construction — anything
  * that names the brand is dropped (a brand-leading prompt fabricates a win). Bounded + idempotent.
  */
 class GeoPromptTopUp
@@ -32,7 +32,7 @@ class GeoPromptTopUp
         $brand = trim((string) $site->brand_name);
 
         $prompts = GeoPrompt::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)->where('active', true)->with(['service', 'market'])->get();
+            ->where('site_id', $site->id)->where('active', true)->with(['service', 'coverageArea'])->get();
 
         $latest = [];   // [prompt_id][engine] => snapshot
         foreach (GeoSnapshot::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
@@ -41,12 +41,12 @@ class GeoPromptTopUp
             $latest[$s->geo_prompt_id][$s->engine] ??= $s;
         }
 
-        // Absent = measured but cited in no engine. Priority-market first (mirrors the gap ranking).
+        // Absent = measured but cited in no engine. Biggest-town first (mirrors the gap ranking).
         $absent = $prompts->filter(function (GeoPrompt $p) use ($latest): bool {
             $rows = $latest[$p->id] ?? [];
 
             return $rows !== [] && ! collect($rows)->contains(fn ($s): bool => (bool) $s->cited);
-        })->sortBy(fn (GeoPrompt $p): int => $p->market?->tier?->value === 'priority' ? 0 : 1)->values()->take($maxGaps);
+        })->sortBy(fn (GeoPrompt $p): int => $this->tierRank($p->size_tier?->value))->values()->take($maxGaps);
 
         $texts = [];
         foreach ($prompts as $p) {
@@ -76,7 +76,8 @@ class GeoPromptTopUp
                 GeoPrompt::create([
                     'site_id' => $site->id,
                     'service_id' => $p->service_id,
-                    'market_id' => $p->market_id,
+                    'coverage_area_id' => $p->coverage_area_id,
+                    'size_tier' => $p->size_tier?->value,
                     'intent' => $p->intent?->value,
                     'source' => GeoPromptSource::Assisted->value,
                     'prompt' => $text,
@@ -119,7 +120,7 @@ class GeoPromptTopUp
     private function prompt(string $brand, GeoPrompt $prompt, array $competitors, int $n): string
     {
         $service = trim((string) $prompt->service?->name);
-        $place = trim((string) $prompt->market?->name);
+        $place = trim((string) $prompt->coverageArea?->name);
         $comp = $competitors === [] ? '(none observed)' : implode(', ', $competitors);
 
         return "A home-services brand is NOT appearing in AI search answers for this question:\n\"{$prompt->prompt}\"\n\n"
@@ -135,6 +136,14 @@ class GeoPromptTopUp
     private function system(): string
     {
         return 'You write realistic consumer search prompts for measuring AI-search visibility. Return strict JSON only.';
+    }
+
+    private function tierRank(?string $tier): int
+    {
+        return match ($tier) {
+            'major' => 0, 'large' => 1, 'medium' => 2, 'small' => 3,
+            default => 4,
+        };
     }
 
     /** @return array<string, mixed> */

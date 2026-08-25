@@ -61,7 +61,7 @@
                     <tr>
                         <th class="gc-row">Service</th>
                         @foreach ($report['columns'] as $col)
-                            <th>{{ $col['name'] }}@if ($col['tier'] === 'priority')<span class="gc-tier">priority</span>@endif</th>
+                            <th>{{ $col['name'] }}@if (! empty($col['tier']))<span class="gc-tier">{{ $col['tier'] }}</span>@endif</th>
                         @endforeach
                     </tr>
                 </thead>
@@ -99,13 +99,13 @@
         @else
             <table class="gc-gaps">
                 <thead>
-                    <tr><th>Prompt</th><th>Service · Market</th><th>Intent</th><th>Cited instead</th></tr>
+                    <tr><th>Prompt</th><th>Service · Town</th><th>Intent</th><th>Cited instead</th></tr>
                 </thead>
                 <tbody>
                     @foreach ($report['gaps'] as $gap)
                         <tr>
                             <td class="q">{{ $gap['prompt'] }}</td>
-                            <td>{{ trim(($gap['service'] ?? '—').' · '.($gap['market'] ?? 'service-wide'), ' ·') }}</td>
+                            <td>{{ trim(($gap['service'] ?? '—').' · '.($gap['town'] ?? 'service-wide'), ' ·') }}</td>
                             <td>{{ $gap['intent'] ?? '—' }}</td>
                             <td class="gc-comp">{{ empty($gap['competitors']) ? '—' : implode(', ', $gap['competitors']) }}</td>
                         </tr>
