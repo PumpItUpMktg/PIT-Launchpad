@@ -50,46 +50,54 @@ class GeoVisibilityAudit
         $brand = (string) $site->brand_name;
         $domain = $site->domain_url;
 
-        foreach ($prompts as $prompt) {
-            foreach ($engines as $engine) {
-                $total++;
-                $engineKey = $engine->key();
+        // Mark the tenant "checking" for the in-process indicator; always cleared, even on error.
+        $status = app(GeoCheckStatus::class);
+        $status->begin((string) $site->id);
 
-                $latest = GeoSnapshot::withoutGlobalScope(SiteScope::class)
-                    ->where('site_id', $site->id)->where('geo_prompt_id', $prompt->id)->where('engine', $engineKey)
-                    ->latest('checked_at')->first();
-                if ($latest !== null && $latest->checked_at->greaterThan($freshBefore)) {
-                    $skippedFresh++;
+        try {
+            foreach ($prompts as $prompt) {
+                foreach ($engines as $engine) {
+                    $total++;
+                    $engineKey = $engine->key();
 
-                    continue;
+                    $latest = GeoSnapshot::withoutGlobalScope(SiteScope::class)
+                        ->where('site_id', $site->id)->where('geo_prompt_id', $prompt->id)->where('engine', $engineKey)
+                        ->latest('checked_at')->first();
+                    if ($latest !== null && $latest->checked_at->greaterThan($freshBefore)) {
+                        $skippedFresh++;
+
+                        continue;
+                    }
+
+                    if (microtime(true) >= $deadline) {
+                        $deferred++;
+
+                        continue;
+                    }
+
+                    $answer = $engine->ask($prompt->prompt);
+                    if ($answer === null) {
+                        continue;   // engine error — keep prior readings, don't write a blank
+                    }
+
+                    $verdict = $this->judge->judge($brand, $domain, $prompt->prompt, $answer);
+
+                    GeoSnapshot::create([
+                        'site_id' => $site->id,
+                        'geo_prompt_id' => $prompt->id,
+                        'engine' => $engineKey,
+                        'cited' => $verdict->cited,
+                        'position' => $verdict->position,
+                        'sentiment' => $verdict->sentiment,
+                        'competitors' => $verdict->competitors,
+                        'answer_excerpt' => Str::limit($answer->text, 500),
+                        'checked_at' => Carbon::now(),
+                    ]);
+                    $measured++;
                 }
-
-                if (microtime(true) >= $deadline) {
-                    $deferred++;
-
-                    continue;
-                }
-
-                $answer = $engine->ask($prompt->prompt);
-                if ($answer === null) {
-                    continue;   // engine error — keep prior readings, don't write a blank
-                }
-
-                $verdict = $this->judge->judge($brand, $domain, $prompt->prompt, $answer);
-
-                GeoSnapshot::create([
-                    'site_id' => $site->id,
-                    'geo_prompt_id' => $prompt->id,
-                    'engine' => $engineKey,
-                    'cited' => $verdict->cited,
-                    'position' => $verdict->position,
-                    'sentiment' => $verdict->sentiment,
-                    'competitors' => $verdict->competitors,
-                    'answer_excerpt' => Str::limit($answer->text, 500),
-                    'checked_at' => Carbon::now(),
-                ]);
-                $measured++;
             }
+        } finally {
+            $status->finish((string) $site->id);
         }
 
         return ['enabled' => true, 'engines' => count($engines), 'total' => $total, 'measured' => $measured, 'skipped_fresh' => $skippedFresh, 'deferred' => $deferred];

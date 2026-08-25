@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\GeoPromptResource\Pages;
 
 use App\Filament\Resources\GeoPromptResource;
+use App\Filament\Widgets\GeoCheckStatusWidget;
 use App\Jobs\BridgeSiteGeoGaps;
 use App\Jobs\SeedSiteGeoPrompts;
 use App\Jobs\SyncSiteGeo;
@@ -14,10 +15,21 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Widgets\Widget;
 
 class ListGeoPrompts extends ListRecords
 {
     protected static string $resource = GeoPromptResource::class;
+
+    /**
+     * @return array<class-string<Widget>>
+     */
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            GeoCheckStatusWidget::class,
+        ];
+    }
 
     /**
      * @return array<Action>

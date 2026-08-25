@@ -6,6 +6,8 @@ use App\Filament\Resources\GeoPromptResource\Pages\CreateGeoPrompt;
 use App\Filament\Resources\GeoPromptResource\Pages\EditGeoPrompt;
 use App\Filament\Resources\GeoPromptResource\Pages\ListGeoPrompts;
 use App\Models\GeoPrompt;
+use App\Models\Scopes\SiteScope;
+use App\Support\WorkingTenant;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -18,6 +20,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -49,9 +52,22 @@ class GeoPromptResource extends Resource
         return 'unaddressed';
     }
 
+    /**
+     * The tenant the screen opens scoped to: the operator's session working site, else the first tenant
+     * that already has GEO prompts. Null (all tenants) only when nothing is selected and none exist yet.
+     */
+    private static function defaultTenantId(): ?string
+    {
+        $fallback = GeoPrompt::query()->withoutGlobalScope(SiteScope::class)->value('site_id');
+
+        return WorkingTenant::id() ?? (is_string($fallback) ? $fallback : null);
+    }
+
     public static function table(Table $table): Table
     {
         return $table
+            // Refresh live so the "Checked" times + cited badges update as a running GEO check measures.
+            ->poll('15s')
             ->columns([
                 TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('prompt')->label('Prompt')->limit(60)->wrap(),
@@ -76,9 +92,10 @@ class GeoPromptResource extends Resource
                 IconColumn::make('active')->boolean(),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
+                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name')
+                    ->default(self::defaultTenantId()),
                 SelectFilter::make('active')->options([1 => 'Active', 0 => 'Inactive']),
-            ])
+            ], layout: FiltersLayout::AboveContent)
             ->recordActions([
                 Action::make('toggle')
                     ->label(fn (GeoPrompt $record): string => $record->active ? 'Deactivate' : 'Activate')
