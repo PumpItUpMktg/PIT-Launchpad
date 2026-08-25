@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\GeoIntent;
 use App\Enums\GeoPromptSource;
+use App\Enums\SizeTier;
 use App\Models\Concerns\BelongsToSite;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -19,6 +20,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string $site_id
  * @property string|null $service_id
  * @property string|null $market_id
+ * @property string|null $coverage_area_id the covered TOWN this prompt measures (GEO's geography = CoverageArea)
+ * @property SizeTier|null $size_tier the town's population tier, denormalized so the audit orders major→small
  * @property GeoIntent|null $intent
  * @property GeoPromptSource $source
  * @property string $prompt
@@ -38,6 +41,7 @@ class GeoPrompt extends Model
             'active' => 'boolean',
             'intent' => GeoIntent::class,
             'source' => GeoPromptSource::class,
+            'size_tier' => SizeTier::class,
         ];
     }
 
@@ -47,7 +51,23 @@ class GeoPrompt extends Model
         return $this->belongsTo(Service::class);
     }
 
-    /** @return BelongsTo<Market, $this> */
+    /**
+     * The covered town this prompt measures — GEO's geography is the CoverageArea set (the location-linked,
+     * size-tiered municipalities the platform publishes pages for), not the curated Market list.
+     *
+     * @return BelongsTo<CoverageArea, $this>
+     */
+    public function coverageArea(): BelongsTo
+    {
+        return $this->belongsTo(CoverageArea::class);
+    }
+
+    /**
+     * @deprecated GEO no longer targets Markets — kept only so legacy `market_id` rows resolve. Use
+     * {@see coverageArea()}.
+     *
+     * @return BelongsTo<Market, $this>
+     */
     public function market(): BelongsTo
     {
         return $this->belongsTo(Market::class);

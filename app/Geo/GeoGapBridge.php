@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
  * review → publish path (nothing is drafted or published here — generation is never automatic), and the
  * next GEO check re-measures the prompt, so weakness → brief → publish → re-measure is one loop.
  *
- * Bounded (priority-market first, config `launchpad.geo.bridge.max_gaps`) and idempotent: each bridged
+ * Bounded (biggest-town first, config `launchpad.geo.bridge.max_gaps`) and idempotent: each bridged
  * candidate carries `external_id = "geo-gap:<geo_prompt_id>"`, so re-running only materializes gaps that
  * have newly gone absent and never double-assigns a prompt already bridged.
  */
@@ -36,13 +36,13 @@ class GeoGapBridge
         $max = max(1, (int) config('launchpad.geo.bridge.max_gaps', 8));
 
         // Absent gaps carry a service (untagged manual prompts can't be routed to a silo, so they're not
-        // bridgeable). Eager-load snapshots for engineSummary() and rank priority-market first — the same
+        // bridgeable). Eager-load snapshots for engineSummary() and rank biggest-town first — the same
         // order GeoCoverage surfaces gaps in, so the operator sees the board's top gaps become content.
         $prompts = GeoPrompt::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('active', true)
             ->whereNotNull('service_id')
-            ->with(['snapshots', 'market', 'service'])
+            ->with(['snapshots', 'coverageArea', 'service'])
             ->get();
 
         $gaps = $prompts
@@ -52,7 +52,7 @@ class GeoGapBridge
                 return $summary['measured'] > 0 && $summary['cited'] === 0;
             })
             ->sortBy(fn (GeoPrompt $p): array => [
-                $p->market?->tier?->value === 'priority' ? 0 : 1,
+                $this->tierRank($p->size_tier?->value),
                 -$p->engineSummary()['measured'],
             ])
             ->take($max)
@@ -108,8 +108,10 @@ class GeoGapBridge
                     'geo_prompt_id' => (string) $gap->id,
                     'service_id' => $gap->service_id !== null ? (string) $gap->service_id : null,
                     'service' => $gap->service?->name,
-                    'market_id' => $gap->market_id !== null ? (string) $gap->market_id : null,
-                    'market' => $gap->market?->name,
+                    'coverage_area_id' => $gap->coverage_area_id !== null ? (string) $gap->coverage_area_id : null,
+                    'town' => $gap->coverageArea?->name,
+                    'size_tier' => $gap->size_tier?->value,
+                    'location_id' => $this->owningLocationId($gap),
                     'intent' => $gap->intent?->value,
                     'intent_label' => $gap->intent?->label(),
                     'competitors' => $competitors,
@@ -172,6 +174,22 @@ class GeoGapBridge
         }
 
         return $hint;
+    }
+
+    /** The brick-and-mortar location that owns this gap's town (first coverage owner), if any. */
+    private function owningLocationId(GeoPrompt $gap): ?string
+    {
+        $ids = data_get($gap->coverageArea, 'source_location_ids');
+
+        return is_array($ids) && isset($ids[0]) ? (string) $ids[0] : null;
+    }
+
+    private function tierRank(?string $tier): int
+    {
+        return match ($tier) {
+            'major' => 0, 'large' => 1, 'medium' => 2, 'small' => 3,
+            default => 4,
+        };
     }
 
     private function uniqueSlug(string $siteId, string $title): string

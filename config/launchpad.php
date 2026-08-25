@@ -60,10 +60,10 @@ return [
         'budget_seconds' => (float) env('LAUNCHPAD_GEO_BUDGET_SECONDS', 240),
         'freshness_days' => (int) env('LAUNCHPAD_GEO_FRESHNESS_DAYS', 6),
 
-        // Auto-seed bounding — geo prompts multiply fast (services × markets × intents × engines × cadence),
-        // so cap the market fan-out (priority-tier first) and the total prompts seeded per tenant.
+        // Auto-seed bounding — geo prompts multiply fast (services × towns × intents × engines × cadence),
+        // so cap the town fan-out (biggest published towns first) and the total prompts seeded per tenant.
         'seed' => [
-            'max_markets' => (int) env('LAUNCHPAD_GEO_SEED_MAX_MARKETS', 5),
+            'max_towns' => (int) env('LAUNCHPAD_GEO_SEED_MAX_TOWNS', 40),
             'max_prompts' => (int) env('LAUNCHPAD_GEO_SEED_MAX_PROMPTS', 60),
         ],
 
