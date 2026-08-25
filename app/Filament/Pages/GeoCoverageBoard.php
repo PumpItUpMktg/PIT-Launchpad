@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Geo\GeoCoverage;
+use App\Geo\GeoCoverageVerification;
 use App\Models\GeoPrompt;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -96,5 +97,26 @@ class GeoCoverageBoard extends Page
         $site = Site::query()->whereKey($this->siteId)->first();
 
         return $site !== null ? app(GeoCoverage::class)->report($site, $this->locationId ?: null) : null;
+    }
+
+    /**
+     * The coverage-check accuracy view — "does the AI know this shop serves these towns?" — reported apart
+     * from the visibility matrix. Null when no tenant is selected or the tenant has no coverage prompts.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getVerificationProperty(): ?array
+    {
+        if ($this->siteId === null) {
+            return null;
+        }
+        $site = Site::query()->whereKey($this->siteId)->first();
+        if ($site === null) {
+            return null;
+        }
+
+        $report = app(GeoCoverageVerification::class)->report($site, $this->locationId ?: null);
+
+        return $report['total'] > 0 ? $report : null;
     }
 }

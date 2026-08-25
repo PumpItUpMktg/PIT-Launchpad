@@ -124,5 +124,42 @@
 
         <p class="gc-note">Every reading is one sampled AI answer per engine — trend it, don't treat a single cell as ground truth.</p>
     @endif
+
+    {{-- Coverage-check accuracy — a separate lane from the visibility matrix, shown whenever coverage prompts exist. --}}
+    @if ($this->verification !== null)
+        @php($ver = $this->verification)
+        <h3 class="gc-h" style="margin-top:28px;">Coverage accuracy — does the AI know this shop serves these towns?</h3>
+        <div class="gc-summary">
+            <span><b>{{ $ver['summary']['confirmed'] }}</b> confirmed</span>
+            <span><b>{{ $ver['summary']['unaware'] }}</b> unaware</span>
+            <span><b>{{ $ver['summary']['negative'] }}</b> negative</span>
+            <span><b>{{ $ver['summary']['unknown'] }}</b> not yet checked</span>
+        </div>
+        <table class="gc-gaps">
+            <thead>
+                <tr><th>Service · Town</th><th>Does the AI know them here?</th></tr>
+            </thead>
+            <tbody>
+                @foreach ($ver['rows'] as $row)
+                    @php($v = $row['verdict'])
+                    <tr>
+                        <td>{{ trim(($row['service'] ?? '—').' · '.($row['town'] ?? '—'), ' ·') }}</td>
+                        <td>
+                            @if ($v === 'confirmed')
+                                <span style="color:#15803d;font-weight:700;">Confirmed</span>
+                            @elseif ($v === 'unaware')
+                                <span style="color:#c0392b;font-weight:700;">Unaware — fix listing/schema</span>
+                            @elseif ($v === 'negative')
+                                <span style="color:#b45309;font-weight:700;">Negative mention</span>
+                            @else
+                                <span style="color:var(--gc-faint);">Not yet checked</span>
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+        <p class="gc-note">Coverage checks name the business, so they measure what the AI KNOWS about you — not competitive visibility. "Unaware" means the AI didn't confirm you serve that town; the fix is your listing / service-area page / schema, not a blog post.</p>
+    @endif
 </div>
 </x-filament-panels::page>

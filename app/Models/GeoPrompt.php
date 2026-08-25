@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\GeoIntent;
+use App\Enums\GeoPromptKind;
 use App\Enums\GeoPromptPriority;
 use App\Enums\GeoPromptSource;
 use App\Enums\SizeTier;
@@ -25,6 +26,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string|null $coverage_area_id the covered TOWN this prompt measures (GEO's geography = CoverageArea)
  * @property SizeTier|null $size_tier the town's population tier, denormalized so the audit orders major→small
  * @property GeoPromptPriority $priority operator override; leads the check + content order ahead of size_tier
+ * @property GeoPromptKind $kind visibility (primary cited% metric) vs coverage (brand-anchored accuracy check)
  * @property GeoIntent|null $intent
  * @property GeoPromptSource $source
  * @property string $prompt
@@ -46,6 +48,7 @@ class GeoPrompt extends Model
             'source' => GeoPromptSource::class,
             'size_tier' => SizeTier::class,
             'priority' => GeoPromptPriority::class,
+            'kind' => GeoPromptKind::class,
         ];
     }
 

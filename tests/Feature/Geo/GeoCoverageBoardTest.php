@@ -37,6 +37,22 @@ it('renders the GEO coverage board with the matrix + gap list for an operator', 
         ->assertSee('Rival Plumbing');  // the competitor cited on the absent gap
 });
 
+it('renders the coverage-accuracy section for brand-anchored coverage prompts', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $svc = Service::factory()->create(['site_id' => $site->id, 'name' => 'Repair']);
+    $town = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Union', 'state' => 'NJ', 'size_tier' => 'major', 'population' => 60000, 'page_selected' => true]);
+
+    $cov = GeoPrompt::create(['site_id' => $site->id, 'service_id' => $svc->id, 'coverage_area_id' => $town->id, 'size_tier' => 'major', 'kind' => 'coverage', 'prompt' => 'does SPG serve union', 'active' => true]);
+    GeoSnapshot::create(['site_id' => $site->id, 'geo_prompt_id' => $cov->id, 'engine' => 'claude', 'cited' => false, 'checked_at' => now()]);   // unaware
+
+    Livewire::test(GeoCoverageBoard::class)
+        ->set('siteId', $site->id)
+        ->assertSee('Coverage accuracy — does the AI know this shop serves these towns?', escape: false)
+        ->assertSee('Unaware — fix listing/schema');
+});
+
 it('offers a brick-and-mortar selector and scopes the grid to the chosen shop', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
 
