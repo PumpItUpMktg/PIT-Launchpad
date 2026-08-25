@@ -2,17 +2,22 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\ResolvesSiteLocation;
 use App\Geo\GeoPromptSeeder;
 use App\Support\SiteFinder;
 use Illuminate\Console\Command;
 
 /**
- * Auto-seed a site's GEO prompt set from its service × market × intent matrix (bounded, idempotent).
- * Operator-run: it populates the board so the coverage matrix has something to measure.
+ * Auto-seed a site's GEO prompt set from its service × town × intent matrix (bounded, idempotent).
+ * Operator-run: it populates the board so the coverage matrix has something to measure. `--location`
+ * scopes to one brick-and-mortar shop's towns (the operator's area selection).
  */
 class SeedGeoPromptsCommand extends Command
 {
-    protected $signature = 'sandhog:seed-geo-prompts {site : Site id, brand name, or domain (partial ok)}';
+    use ResolvesSiteLocation;
+
+    protected $signature = 'sandhog:seed-geo-prompts {site : Site id, brand name, or domain (partial ok)}
+        {--location= : Scope to one brick-and-mortar shop (id or name)}';
 
     protected $description = 'Auto-seed GEO prompts from a site\'s services × towns × intents (bounded).';
 
@@ -33,7 +38,11 @@ class SeedGeoPromptsCommand extends Command
         }
 
         $site = $matches->first();
-        $r = $seeder->seed($site);
+        $locationId = $this->resolveLocationId($site);
+        if ($locationId === false) {
+            return self::FAILURE;
+        }
+        $r = $seeder->seed($site, $locationId);
 
         $this->line(sprintf(
             '<info>%s</info> — %d prompt(s) created, %d already present (from %d service(s) × %d town(s)).',

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\ResolvesSiteLocation;
 use App\Geo\GeoCoveragePromptSeeder;
 use App\Support\SiteFinder;
 use Illuminate\Console\Command;
@@ -10,10 +11,14 @@ use Illuminate\Console\Command;
  * Seed the GEO coverage-check lane — brand-anchored "does {brand} offer {service} in {town}?" prompts per
  * service × published town, to catch when an AI has wrong/missing facts about a shop's service area. These
  * are an accuracy check (reported apart from the cited% visibility metric), not a visibility number.
+ * `--location` scopes to one brick-and-mortar shop's towns.
  */
 class SeedGeoCoveragePromptsCommand extends Command
 {
-    protected $signature = 'sandhog:seed-geo-coverage-prompts {site : Site id, brand name, or domain (partial ok)}';
+    use ResolvesSiteLocation;
+
+    protected $signature = 'sandhog:seed-geo-coverage-prompts {site : Site id, brand name, or domain (partial ok)}
+        {--location= : Scope to one brick-and-mortar shop (id or name)}';
 
     protected $description = 'Seed brand-anchored GEO coverage-check prompts for a site.';
 
@@ -34,7 +39,11 @@ class SeedGeoCoveragePromptsCommand extends Command
         }
 
         $site = $matches->first();
-        $r = $seeder->seed($site);
+        $locationId = $this->resolveLocationId($site);
+        if ($locationId === false) {
+            return self::FAILURE;
+        }
+        $r = $seeder->seed($site, $locationId);
 
         if ($r['created'] === 0 && $r['skipped'] === 0 && trim((string) $site->brand_name) === '') {
             $this->warn("{$site->brand_name} — coverage checks name the business, so a brand name is required (none set).");

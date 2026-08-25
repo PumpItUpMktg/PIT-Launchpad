@@ -7,6 +7,7 @@ use App\Models\CoverageArea;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
 use App\Models\Location;
+use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
@@ -51,6 +52,25 @@ it('renders the coverage-accuracy section for brand-anchored coverage prompts', 
         ->set('siteId', $site->id)
         ->assertSee('Coverage accuracy — does the AI know this shop serves these towns?', escape: false)
         ->assertSee('Unaware — fix listing/schema');
+});
+
+it('seeds visibility prompts scoped to the selected shop from the board', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $svc = Service::factory()->create(['site_id' => $site->id, 'name' => 'Repair']);
+    $njShop = Location::factory()->create(['site_id' => $site->id, 'name' => 'NJ Shop']);
+    $njTown = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Union', 'state' => 'NJ', 'size_tier' => 'major', 'population' => 60000, 'page_selected' => true, 'source_location_ids' => [$njShop->id]]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'HavreDeGrace', 'state' => 'MD', 'size_tier' => 'major', 'population' => 55000, 'page_selected' => true, 'source_location_ids' => ['md-shop']]);
+
+    Livewire::test(GeoCoverageBoard::class)
+        ->set('siteId', $site->id)
+        ->set('locationId', $njShop->id)
+        ->callAction('seedVisibility');
+
+    // Only the NJ shop's town got prompts — the MD town was not seeded.
+    $towns = GeoPrompt::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->pluck('coverage_area_id')->filter()->unique()->values()->all();
+    expect($towns)->toBe([$njTown->id]);
 });
 
 it('offers a brick-and-mortar selector and scopes the grid to the chosen shop', function () {

@@ -22,9 +22,11 @@ use App\Models\Site;
 class GeoCoveragePromptSeeder
 {
     /**
+     * @param  string|null  $locationId  scope to ONE brick-and-mortar shop's towns (the operator's area
+     *                                   selection). Null = all of the tenant's published towns.
      * @return array{created: int, skipped: int, services: int, towns: int}
      */
-    public function seed(Site $site): array
+    public function seed(Site $site, ?string $locationId = null): array
     {
         $brand = trim((string) $site->brand_name);
         if ($brand === '') {
@@ -42,8 +44,11 @@ class GeoCoveragePromptSeeder
             ->where('site_id', $site->id)->where('page_selected', true)
             ->orderByRaw("case size_tier when 'major' then 0 when 'large' then 1 when 'medium' then 2 when 'small' then 3 else 4 end")
             ->orderByDesc('population')->orderBy('name')
-            ->limit($maxTowns)
             ->get();
+        if ($locationId !== null) {
+            $towns = $towns->filter(fn (CoverageArea $t): bool => in_array($locationId, $t->source_location_ids ?? [], true))->values();
+        }
+        $towns = $towns->take($maxTowns);
 
         // Existing (service|town) combos in the coverage lane, for idempotent re-seeding.
         $seen = [];

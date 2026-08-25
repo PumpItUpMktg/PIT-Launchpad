@@ -92,6 +92,20 @@ it('caps towns, biggest first', function () {
         ->and(geoPrompts($site)->pluck('coverage_area_id')->filter()->unique()->values()->all())->toBe([$major->id]);
 });
 
+it('scopes seeding to one brick-and-mortar shop', function () {
+    config(['launchpad.geo.seed.max_towns' => 40, 'launchpad.geo.seed.max_prompts' => 100]);
+    $site = geoSeedSite();
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Repair']);
+    $shopA = 'loc-a';
+    $townA = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Ashop', 'state' => 'NJ', 'size_tier' => 'major', 'population' => 60000, 'page_selected' => true, 'source_location_ids' => [$shopA]]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Belsewhere', 'state' => 'MD', 'size_tier' => 'major', 'population' => 55000, 'page_selected' => true, 'source_location_ids' => ['loc-b']]);
+
+    app(GeoPromptSeeder::class)->seed($site, $shopA);
+
+    // Only shop A's town is seeded — the other shop's town (e.g. an MD area) is left out.
+    expect(geoPrompts($site)->pluck('coverage_area_id')->filter()->unique()->values()->all())->toBe([$townA->id]);
+});
+
 it('only seeds published towns (page_selected)', function () {
     config(['launchpad.geo.seed.max_towns' => 40, 'launchpad.geo.seed.max_prompts' => 100]);
     $site = geoSeedSite();
