@@ -7,16 +7,22 @@ use App\Enums\GeoPromptPriority;
 use App\Filament\Resources\GeoPromptResource\Pages\CreateGeoPrompt;
 use App\Filament\Resources\GeoPromptResource\Pages\EditGeoPrompt;
 use App\Filament\Resources\GeoPromptResource\Pages\ListGeoPrompts;
+use App\Models\CoverageArea;
+use App\Models\GeoCheckEvent;
 use App\Models\GeoPrompt;
+use App\Models\GeoSnapshot;
+use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Support\WorkingTenant;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -27,6 +33,7 @@ use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 /**
  * GEO (AI-search visibility) — operator-curated test prompts + their latest observed result per prompt.
@@ -102,6 +109,10 @@ class GeoPromptResource extends Resource
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name')
                     ->default(self::defaultTenantId()),
+                // View one brick-and-mortar shop's prompts at a time (its towns, via source_location_ids).
+                SelectFilter::make('location')->label('Brick & mortar')
+                    ->options(fn (): array => self::locationOptions())
+                    ->query(fn (Builder $query, array $data): Builder => self::scopeToLocation($query, $data['value'] ?? null)),
                 SelectFilter::make('kind')->label('Lane')->options(GeoPromptKind::options()),
                 SelectFilter::make('priority')->options(GeoPromptPriority::options()),
                 SelectFilter::make('active')->options([1 => 'Active', 0 => 'Inactive']),
@@ -112,7 +123,60 @@ class GeoPromptResource extends Resource
                     ->icon('heroicon-o-power')
                     ->action(fn (GeoPrompt $record) => $record->forceFill(['active' => ! $record->active])->save()),
                 DeleteAction::make(),
+            ])
+            ->bulkActions([
+                BulkAction::make('deleteSelected')
+                    ->label('Delete selected')
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalDescription('Permanently delete the selected GEO prompts and their snapshots. Use the Brick & mortar + Lane filters to select an area (e.g. a state you\'re not targeting), then delete.')
+                    ->action(function (Collection $records): void {
+                        $ids = $records->pluck('id')->all();
+                        GeoSnapshot::withoutGlobalScope(SiteScope::class)->whereIn('geo_prompt_id', $ids)->delete();
+                        GeoCheckEvent::withoutGlobalScope(SiteScope::class)->whereIn('geo_prompt_id', $ids)->delete();
+                        GeoPrompt::withoutGlobalScope(SiteScope::class)->whereIn('id', $ids)->delete();
+
+                        Notification::make()->success()->title('Deleted '.count($ids).' prompt(s)')->send();
+                    }),
             ]);
+    }
+
+    /**
+     * The brick-and-mortar shops (of the default/working tenant) for the location filter.
+     *
+     * @return array<string, string>
+     */
+    private static function locationOptions(): array
+    {
+        $query = Location::withoutGlobalScope(SiteScope::class)->whereNull('merged_into_id');
+        $tenant = self::defaultTenantId();
+        if ($tenant !== null) {
+            $query->where('site_id', $tenant);
+        }
+
+        return $query->orderBy('name')->pluck('name', 'id')->all();
+    }
+
+    /**
+     * Scope the prompt list to the towns owned by one brick-and-mortar shop (source_location_ids). Resolved
+     * in PHP so it's DB-agnostic across the JSON column.
+     *
+     * @param  Builder<GeoPrompt>  $query
+     * @return Builder<GeoPrompt>
+     */
+    private static function scopeToLocation(Builder $query, mixed $locationId): Builder
+    {
+        if (! is_string($locationId) || $locationId === '') {
+            return $query;
+        }
+
+        $townIds = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->get(['id', 'source_location_ids'])
+            ->filter(fn (CoverageArea $t): bool => in_array($locationId, $t->source_location_ids ?? [], true))
+            ->pluck('id')->all();
+
+        return $query->whereIn('coverage_area_id', $townIds);
     }
 
     public static function form(Schema $schema): Schema

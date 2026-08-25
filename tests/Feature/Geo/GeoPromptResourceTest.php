@@ -6,8 +6,11 @@ use App\Jobs\BridgeSiteGeoGaps;
 use App\Jobs\SeedSiteGeoPrompts;
 use App\Jobs\SyncSiteGeo;
 use App\Jobs\TopUpSiteGeoPrompts;
+use App\Models\CoverageArea;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
+use App\Models\Location;
+use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
@@ -91,4 +94,36 @@ it('queues one GEO check per site that has active prompts', function () {
     Livewire::test(ListGeoPrompts::class)->callAction('run');
 
     Queue::assertPushed(SyncSiteGeo::class, 2);   // a + b (distinct sites with an active prompt)
+});
+
+it('filters the prompt list to one brick-and-mortar shop', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create();
+    $svc = Service::factory()->create(['site_id' => $site->id]);
+    $njShop = Location::factory()->create(['site_id' => $site->id, 'name' => 'NJ Shop']);
+
+    $njTown = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Union', 'state' => 'NJ', 'size_tier' => 'major', 'population' => 60000, 'page_selected' => true, 'source_location_ids' => [$njShop->id]]);
+    $mdTown = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bel Air', 'state' => 'MD', 'size_tier' => 'major', 'population' => 55000, 'page_selected' => true, 'source_location_ids' => ['md-shop']]);
+    $njP = GeoPrompt::create(['site_id' => $site->id, 'service_id' => $svc->id, 'coverage_area_id' => $njTown->id, 'prompt' => 'NJ prompt', 'active' => true]);
+    $mdP = GeoPrompt::create(['site_id' => $site->id, 'service_id' => $svc->id, 'coverage_area_id' => $mdTown->id, 'prompt' => 'MD prompt', 'active' => true]);
+
+    Livewire::test(ListGeoPrompts::class)
+        ->filterTable('location', $njShop->id)
+        ->assertCanSeeTableRecords([$njP])
+        ->assertCanNotSeeTableRecords([$mdP]);
+});
+
+it('bulk-deletes selected prompts and their snapshots', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create();
+    $keep = GeoPrompt::create(['site_id' => $site->id, 'prompt' => 'keep', 'active' => true]);
+    $drop = GeoPrompt::create(['site_id' => $site->id, 'prompt' => 'drop', 'active' => true]);
+    GeoSnapshot::create(['site_id' => $site->id, 'geo_prompt_id' => $drop->id, 'engine' => 'claude', 'cited' => false, 'checked_at' => now()]);
+
+    Livewire::test(ListGeoPrompts::class)
+        ->callTableBulkAction('deleteSelected', [$drop]);
+
+    expect(GeoPrompt::withoutGlobalScope(SiteScope::class)->whereKey($drop->id)->exists())->toBeFalse()
+        ->and(GeoPrompt::withoutGlobalScope(SiteScope::class)->whereKey($keep->id)->exists())->toBeTrue()
+        ->and(GeoSnapshot::withoutGlobalScope(SiteScope::class)->where('geo_prompt_id', $drop->id)->count())->toBe(0);
 });
