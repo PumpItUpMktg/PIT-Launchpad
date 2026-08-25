@@ -1,17 +1,27 @@
 <?php
 
+use App\Enums\GeoCheckAction;
 use App\Geo\GeoAnswerJudge;
 use App\Geo\GeoCheckStatus;
 use App\Geo\GeoVisibilityAudit;
 use App\Integrations\AiSearch\AiAnswer;
 use App\Integrations\AiSearch\AiEngineProvider;
 use App\Integrations\AiSearch\AiEngineRegistry;
+use App\Models\CoverageArea;
+use App\Models\GeoCheckEvent;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Support\CurrentSite;
+use Illuminate\Database\Eloquent\Collection;
 use Tests\Support\ScriptedClaudeClient;
+
+/** @return Collection<int, GeoCheckEvent> */
+function geoEvents(Site $site)
+{
+    return GeoCheckEvent::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
+}
 
 afterEach(fn () => CurrentSite::clear());
 
@@ -158,6 +168,44 @@ it('the sync-geo command runs for a site', function () {
     $this->artisan('sandhog:sync-geo', ['site' => $site->id])
         ->expectsOutputToContain('1 measured')
         ->assertSuccessful();
+});
+
+it('writes a measured activity-log event (with town, cited, competitors) per measured pair', function () {
+    $site = geoSite();
+    $town = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Union', 'state' => 'NJ', 'size_tier' => 'major', 'population' => 60000, 'page_selected' => true]);
+    GeoPrompt::create(['site_id' => $site->id, 'coverage_area_id' => $town->id, 'size_tier' => 'major', 'prompt' => 'best repair union', 'active' => true]);
+
+    $engine = fakeEngine(['best repair union' => new AiAnswer('Acme leads.', [])]);
+    (new GeoVisibilityAudit(geoRegistry($engine), judgeReturning(['cited' => false, 'position' => 1, 'sentiment' => 'positive', 'competitors' => ['Acme']])))->audit($site);
+
+    $event = geoEvents($site)->sole();
+    expect($event->action)->toBe(GeoCheckAction::Measured)
+        ->and($event->town)->toBe('Union')
+        ->and($event->engine)->toBe('claude')
+        ->and($event->cited)->toBeFalse()
+        ->and($event->competitors)->toBe(['Acme'])
+        ->and($event->run_id)->not->toBeNull();
+});
+
+it('logs skipped-fresh, deferred, and error steps', function () {
+    // Fresh → skipped.
+    $freshSite = geoSite();
+    $p = geoPrompt($freshSite, 'a prompt');
+    GeoSnapshot::create(['site_id' => $freshSite->id, 'geo_prompt_id' => $p->id, 'engine' => 'claude', 'cited' => true, 'checked_at' => now()->subDay()]);
+    (new GeoVisibilityAudit(geoRegistry(fakeEngine([])), judgeReturning([])))->audit($freshSite, freshnessDays: 6);
+    expect(geoEvents($freshSite)->pluck('action')->all())->toBe([GeoCheckAction::SkippedFresh]);
+
+    // Budget spent → deferred.
+    $budgetSite = geoSite();
+    geoPrompt($budgetSite, 'p1');
+    (new GeoVisibilityAudit(geoRegistry(fakeEngine([])), judgeReturning([])))->audit($budgetSite, budgetSeconds: 0.0);
+    expect(geoEvents($budgetSite)->pluck('action')->all())->toBe([GeoCheckAction::Deferred]);
+
+    // Engine returns null → error.
+    $errSite = geoSite();
+    geoPrompt($errSite, 'unanswered');
+    (new GeoVisibilityAudit(geoRegistry(fakeEngine([])), judgeReturning([])))->audit($errSite);
+    expect(geoEvents($errSite)->pluck('action')->all())->toBe([GeoCheckAction::Error]);
 });
 
 it('marks the tenant checking during the run and clears the flag when done', function () {

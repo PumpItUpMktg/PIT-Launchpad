@@ -77,6 +77,9 @@ Schedule::command('sandhog:sync-index')->daily()->withoutOverlapping();
 // multi-tenant sweep can't stack.
 Schedule::command('sandhog:sync-geo')->weekly()->withoutOverlapping();
 
+// Prune the GEO check activity log past its retention window so the append-only table stays bounded.
+Schedule::command('sandhog:prune-geo-events')->weekly();
+
 // Client-dashboard "Site speed" — measure Core Web Vitals (PageSpeed Insights) for each site's
 // published pages into the durable page_vitals table. Weekly + budget-bounded + freshness-cached: one
 // PSI call per URL is slow and quota-limited, so a weekly sweep fills coverage over time. withoutOverlapping

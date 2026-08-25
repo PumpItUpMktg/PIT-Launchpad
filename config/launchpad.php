@@ -75,6 +75,12 @@ return [
             'max_prompts' => (int) env('LAUNCHPAD_GEO_TOPUP_MAX_PROMPTS', 20),
         ],
 
+        // Check activity log — one row per (prompt × engine) step so the operator can see what the engine
+        // is doing; append-only, pruned past this retention window so the table doesn't grow unbounded.
+        'events' => [
+            'retention_days' => (int) env('LAUNCHPAD_GEO_EVENTS_RETENTION_DAYS', 7),
+        ],
+
         // Gap → content bridge bounding — an absent gap (a prompt no engine cites) becomes ONE directed
         // content candidate that flows through the normal §6 review → publish path and gets re-measured on
         // the next GEO check. Cap how many gaps are bridged per run (priority-market first); idempotent by

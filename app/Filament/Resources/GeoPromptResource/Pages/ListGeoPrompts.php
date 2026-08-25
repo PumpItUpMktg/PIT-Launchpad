@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\GeoPromptResource\Pages;
 
 use App\Filament\Resources\GeoPromptResource;
+use App\Filament\Widgets\GeoCheckActivityWidget;
 use App\Filament\Widgets\GeoCheckStatusWidget;
 use App\Jobs\BridgeSiteGeoGaps;
 use App\Jobs\SeedSiteGeoPrompts;
@@ -28,6 +29,7 @@ class ListGeoPrompts extends ListRecords
     {
         return [
             GeoCheckStatusWidget::class,
+            GeoCheckActivityWidget::class,
         ];
     }
 

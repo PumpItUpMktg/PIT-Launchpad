@@ -52,6 +52,7 @@ class GeoGapBridge
                 return $summary['measured'] > 0 && $summary['cited'] === 0;
             })
             ->sortBy(fn (GeoPrompt $p): array => [
+                $p->priority->rank(),
                 $this->tierRank($p->size_tier?->value),
                 -$p->engineSummary()['measured'],
             ])

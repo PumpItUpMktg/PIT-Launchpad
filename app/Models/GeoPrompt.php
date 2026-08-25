@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use App\Enums\GeoIntent;
+use App\Enums\GeoPromptPriority;
 use App\Enums\GeoPromptSource;
 use App\Enums\SizeTier;
 use App\Models\Concerns\BelongsToSite;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string|null $market_id
  * @property string|null $coverage_area_id the covered TOWN this prompt measures (GEO's geography = CoverageArea)
  * @property SizeTier|null $size_tier the town's population tier, denormalized so the audit orders major→small
+ * @property GeoPromptPriority $priority operator override; leads the check + content order ahead of size_tier
  * @property GeoIntent|null $intent
  * @property GeoPromptSource $source
  * @property string $prompt
@@ -42,7 +45,24 @@ class GeoPrompt extends Model
             'intent' => GeoIntent::class,
             'source' => GeoPromptSource::class,
             'size_tier' => SizeTier::class,
+            'priority' => GeoPromptPriority::class,
         ];
+    }
+
+    /**
+     * The shared "what to work first" ordering — operator priority (high→low) leads, then the town size
+     * tier (major→small), then oldest. The audit and the gap bridge both apply it so the operator's manual
+     * priority pins an item to the front of a budget-bounded run and of the content queue alike.
+     *
+     * @param  Builder<GeoPrompt>  $query
+     * @return Builder<GeoPrompt>
+     */
+    public function scopeWorkOrder($query)
+    {
+        return $query
+            ->orderByRaw("case priority when 'high' then 0 when 'normal' then 1 else 2 end")
+            ->orderByRaw("case size_tier when 'major' then 0 when 'large' then 1 when 'medium' then 2 when 'small' then 3 else 4 end")
+            ->orderBy('created_at');
     }
 
     /** @return BelongsTo<Service, $this> */
