@@ -3,12 +3,16 @@
 namespace App\Filament\Pages;
 
 use App\Geo\GeoCoverage;
+use App\Geo\GeoCoveragePromptSeeder;
 use App\Geo\GeoCoverageVerification;
+use App\Geo\GeoPromptSeeder;
 use App\Models\GeoPrompt;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use BackedEnum;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 
 /**
@@ -50,6 +54,54 @@ class GeoCoverageBoard extends Page
     public function updatedSiteId(): void
     {
         $this->locationId = null;
+    }
+
+    /**
+     * Seed GEO prompts for the SELECTED area only — the operator picks a tenant + brick-and-mortar shop
+     * above, and seeding scopes to that shop's towns (so you target one area at a time instead of the
+     * whole footprint). Seeding is DB-only (no LLM), so it runs inline. "All shops" seeds every town.
+     *
+     * @return array<Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('seedVisibility')
+                ->label('Seed visibility prompts')
+                ->icon('heroicon-o-sparkles')
+                ->visible(fn (): bool => $this->siteId !== null)
+                ->requiresConfirmation()
+                ->modalDescription(fn (): string => 'Seed neutral "best {service} in {town}" prompts for '.$this->scopeLabel().' (published towns, biggest first). Bounded + idempotent.')
+                ->action(fn () => $this->runSeed(app(GeoPromptSeeder::class))),
+            Action::make('seedCoverage')
+                ->label('Seed coverage checks')
+                ->icon('heroicon-o-shield-check')
+                ->visible(fn (): bool => $this->siteId !== null)
+                ->requiresConfirmation()
+                ->modalDescription(fn (): string => 'Seed brand-anchored "does {brand} serve {town}?" accuracy checks for '.$this->scopeLabel().'. Bounded + idempotent.')
+                ->action(fn () => $this->runSeed(app(GeoCoveragePromptSeeder::class))),
+        ];
+    }
+
+    private function runSeed(GeoPromptSeeder|GeoCoveragePromptSeeder $seeder): void
+    {
+        $site = $this->siteId !== null ? Site::query()->whereKey($this->siteId)->first() : null;
+        if ($site === null) {
+            return;
+        }
+
+        $r = $seeder->seed($site, $this->locationId ?: null);
+
+        Notification::make()
+            ->title($r['created'] > 0 ? "Seeded {$r['created']} prompt(s) for ".$this->scopeLabel() : 'No new prompts to seed for '.$this->scopeLabel())
+            ->success()
+            ->send();
+    }
+
+    /** A human label for the current tenant + shop scope, for the seed confirmations. */
+    private function scopeLabel(): string
+    {
+        return $this->locationId !== null ? ($this->locations[$this->locationId] ?? 'this shop') : 'all shops';
     }
 
     public function mount(): void

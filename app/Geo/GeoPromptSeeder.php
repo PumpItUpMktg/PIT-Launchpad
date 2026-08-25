@@ -27,9 +27,12 @@ use Illuminate\Support\Collection;
 class GeoPromptSeeder
 {
     /**
+     * @param  string|null  $locationId  scope to ONE brick-and-mortar shop's towns (via CoverageArea
+     *                                   source_location_ids) — the operator's area selection. Null = all
+     *                                   of the tenant's published towns.
      * @return array{created: int, skipped: int, services: int, towns: int}
      */
-    public function seed(Site $site): array
+    public function seed(Site $site, ?string $locationId = null): array
     {
         $maxTowns = max(0, (int) config('launchpad.geo.seed.max_towns', 40));
         $maxPrompts = max(0, (int) config('launchpad.geo.seed.max_prompts', 60));
@@ -38,14 +41,18 @@ class GeoPromptSeeder
         $services = Service::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->orderBy('name')->get();
 
-        // Published towns only, biggest first — the cap keeps the highest-value municipalities.
+        // Published towns only, biggest first — the cap keeps the highest-value municipalities. When a
+        // shop is selected, keep only the towns it serves (so the operator targets one area at a time).
         $towns = CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->where('page_selected', true)
             ->orderByRaw($this->tierOrderSql())
             ->orderByDesc('population')
             ->orderBy('name')
-            ->limit($maxTowns)
             ->get();
+        if ($locationId !== null) {
+            $towns = $towns->filter(fn (CoverageArea $t): bool => in_array($locationId, $t->source_location_ids ?? [], true))->values();
+        }
+        $towns = $towns->take($maxTowns);
 
         // Existing (service|town|intent) combos + prompt texts, for idempotent re-seeding.
         $seen = [];
