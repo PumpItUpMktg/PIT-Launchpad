@@ -77,6 +77,26 @@ it('builds the coverage matrix + gaps + summary from tagged prompts and snapshot
     expect(array_column($r['columns'], 'name'))->toBe(['Union', 'Clifton']);
 });
 
+it('scopes the report to a single brick-and-mortar shop', function () {
+    $site = Site::factory()->create();
+    $svc = Service::factory()->create(['site_id' => $site->id, 'name' => 'Repair']);
+    $shopA = 'loc-a';
+    $shopB = 'loc-b';
+    $townA = covTown($site, 'Ashopville', 'major', 60000, [$shopA]);
+    $townB = covTown($site, 'Bshoptown', 'major', 55000, [$shopB]);
+    covPrompt($site, $svc, $townA, GeoIntent::Hire);
+    covPrompt($site, $svc, $townB, GeoIntent::Hire);
+
+    // No shop → both towns.
+    expect(array_column(app(GeoCoverage::class)->report($site)['columns'], 'name'))->toBe(['Ashopville', 'Bshoptown']);
+
+    // Shop A → only its town + prompt; the columns carry the owning location.
+    $scoped = app(GeoCoverage::class)->report($site, $shopA);
+    expect(array_column($scoped['columns'], 'name'))->toBe(['Ashopville'])
+        ->and($scoped['summary']['prompts'])->toBe(1)
+        ->and($scoped['columns'][0]['location_id'])->toBe($shopA);
+});
+
 it('ranks absent-gaps biggest-town first, then by competitors', function () {
     $site = Site::factory()->create();
     $svc = Service::factory()->create(['site_id' => $site->id, 'name' => 'Repair']);

@@ -21,6 +21,10 @@ use Illuminate\Support\Collection;
 class GeoCoverage
 {
     /**
+     * When `$locationId` is given, the report is scoped to that brick-and-mortar shop — only the towns it
+     * owns (via `CoverageArea.source_location_ids`) and their prompts — so a multi-location tenant can be
+     * worked one storefront at a time.
+     *
      * @return array{
      *   services: list<array{id: string, name: string}>,
      *   columns: list<array{key: string, name: string, tier: ?string, location_id: ?string}>,
@@ -29,7 +33,7 @@ class GeoCoverage
      *   summary: array{prompts: int, measured: int, cited: int, untested_cells: int, engines: int}
      * }
      */
-    public function report(Site $site): array
+    public function report(Site $site, ?string $locationId = null): array
     {
         $services = Service::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->orderBy('name')->get(['id', 'name']);
@@ -44,6 +48,14 @@ class GeoCoverage
             ->where('site_id', $site->id)->whereIn('id', $townIds)
             ->orderByRaw($this->tierOrderSql())->orderByDesc('population')->orderBy('name')
             ->get(['id', 'name', 'state', 'size_tier', 'source_location_ids']);
+
+        // Brick-and-mortar focus: keep only this shop's towns and their prompts (service-wide, townless
+        // prompts aren't location-specific, so they drop out of a shop-scoped view).
+        if ($locationId !== null) {
+            $towns = $towns->filter(fn (CoverageArea $t): bool => in_array($locationId, $t->source_location_ids ?? [], true))->values();
+            $keep = array_flip($towns->pluck('id')->all());
+            $prompts = $prompts->filter(fn (GeoPrompt $p): bool => $p->coverage_area_id !== null && isset($keep[$p->coverage_area_id]))->values();
+        }
 
         // Latest snapshot per (prompt, engine).
         $snaps = GeoSnapshot::withoutGlobalScope(SiteScope::class)

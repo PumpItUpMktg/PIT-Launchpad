@@ -6,6 +6,7 @@ use App\Filament\Pages\GeoCoverageBoard;
 use App\Models\CoverageArea;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
+use App\Models\Location;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
@@ -34,4 +35,28 @@ it('renders the GEO coverage board with the matrix + gap list for an operator', 
         ->assertSee('50%')              // the Repair × Union matrix cell (1 of 2 prompts cited)
         ->assertSee("Where you're absent", escape: false)
         ->assertSee('Rival Plumbing');  // the competitor cited on the absent gap
+});
+
+it('offers a brick-and-mortar selector and scopes the grid to the chosen shop', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $svc = Service::factory()->create(['site_id' => $site->id, 'name' => 'Repair']);
+    $west = Location::factory()->create(['site_id' => $site->id, 'name' => 'West Shop']);
+    $east = Location::factory()->create(['site_id' => $site->id, 'name' => 'East Shop']);
+
+    $townW = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Unionville', 'state' => 'NJ', 'size_tier' => 'major', 'population' => 60000, 'page_selected' => true, 'source_location_ids' => [$west->id]]);
+    $townE = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Edisonville', 'state' => 'NJ', 'size_tier' => 'major', 'population' => 55000, 'page_selected' => true, 'source_location_ids' => [$east->id]]);
+    GeoPrompt::create(['site_id' => $site->id, 'service_id' => $svc->id, 'coverage_area_id' => $townW->id, 'size_tier' => 'major', 'intent' => 'hire', 'prompt' => 'q west', 'active' => true]);
+    GeoPrompt::create(['site_id' => $site->id, 'service_id' => $svc->id, 'coverage_area_id' => $townE->id, 'size_tier' => 'major', 'intent' => 'hire', 'prompt' => 'q east', 'active' => true]);
+
+    Livewire::test(GeoCoverageBoard::class)
+        ->set('siteId', $site->id)
+        ->assertSee('West Shop')         // both shops offered in the selector
+        ->assertSee('East Shop')
+        ->assertSee('Unionville')        // all shops → both towns as columns
+        ->assertSee('Edisonville')
+        ->set('locationId', $west->id)   // focus the West shop
+        ->assertSee('Unionville')
+        ->assertDontSee('Edisonville');  // East shop's town drops out of the scoped grid
 });
