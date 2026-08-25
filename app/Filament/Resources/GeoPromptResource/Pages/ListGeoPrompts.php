@@ -5,13 +5,16 @@ namespace App\Filament\Resources\GeoPromptResource\Pages;
 use App\Filament\Resources\GeoPromptResource;
 use App\Filament\Widgets\GeoCheckActivityWidget;
 use App\Filament\Widgets\GeoCheckStatusWidget;
+use App\Geo\GeoCoveragePromptSeeder;
 use App\Jobs\BridgeSiteGeoGaps;
 use App\Jobs\SeedSiteGeoPrompts;
 use App\Jobs\SyncSiteGeo;
 use App\Jobs\TopUpSiteGeoPrompts;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
+use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\Site;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
@@ -51,6 +54,26 @@ class ListGeoPrompts extends ListRecords
                     }
                     Notification::make()
                         ->title($siteIds->isEmpty() ? 'No sites with services to seed' : "Seeding queued for {$siteIds->count()} site(s)")
+                        ->success()
+                        ->send();
+                }),
+            Action::make('seedCoverage')
+                ->label('Seed coverage checks')
+                ->icon('heroicon-o-shield-check')
+                ->requiresConfirmation()
+                ->modalDescription('Generate brand-anchored "does {brand} offer {service} in {town}?" prompts per site (published towns). These are an accuracy check — reported apart from the visibility score — to catch when an AI has your service area wrong. Bounded + idempotent.')
+                ->action(function (): void {
+                    $seeder = app(GeoCoveragePromptSeeder::class);
+                    $created = 0;
+                    $siteIds = Service::query()->distinct()->pluck('site_id');
+                    foreach ($siteIds as $siteId) {
+                        $site = Site::query()->withoutGlobalScope(SiteScope::class)->find($siteId);
+                        if ($site !== null) {
+                            $created += $seeder->seed($site)['created'];
+                        }
+                    }
+                    Notification::make()
+                        ->title($created > 0 ? "Seeded {$created} coverage-check prompt(s)" : 'No new coverage checks to seed')
                         ->success()
                         ->send();
                 }),

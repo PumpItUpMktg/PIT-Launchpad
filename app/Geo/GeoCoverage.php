@@ -2,6 +2,7 @@
 
 namespace App\Geo;
 
+use App\Enums\GeoPromptKind;
 use App\Models\CoverageArea;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
@@ -38,8 +39,11 @@ class GeoCoverage
         $services = Service::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->orderBy('name')->get(['id', 'name']);
 
+        // Visibility lane only — brand-anchored coverage-check prompts measure accuracy, not visibility,
+        // and would inflate the cited% grid, so they're reported separately (see GeoCoverageVerification).
         $prompts = GeoPrompt::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->where('active', true)
+            ->where('kind', GeoPromptKind::Visibility->value)
             ->get(['id', 'service_id', 'coverage_area_id', 'size_tier', 'intent', 'prompt', 'label']);
 
         // The towns actually referenced by the prompts (bounded by the seed cap), biggest-first.

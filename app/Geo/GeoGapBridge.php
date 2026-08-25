@@ -4,6 +4,7 @@ namespace App\Geo;
 
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\GeoPromptKind;
 use App\Enums\IntakeType;
 use App\Models\Content;
 use App\Models\GeoPrompt;
@@ -41,6 +42,7 @@ class GeoGapBridge
         $prompts = GeoPrompt::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('active', true)
+            ->where('kind', GeoPromptKind::Visibility->value)   // coverage-check gaps are a schema/GBP fix, not a blog post
             ->whereNotNull('service_id')
             ->with(['snapshots', 'coverageArea', 'service'])
             ->get();

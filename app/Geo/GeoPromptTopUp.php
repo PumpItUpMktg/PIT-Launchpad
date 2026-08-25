@@ -2,6 +2,7 @@
 
 namespace App\Geo;
 
+use App\Enums\GeoPromptKind;
 use App\Enums\GeoPromptSource;
 use App\Integrations\Claude\ClaudeClient;
 use App\Models\GeoPrompt;
@@ -32,7 +33,9 @@ class GeoPromptTopUp
         $brand = trim((string) $site->brand_name);
 
         $prompts = GeoPrompt::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)->where('active', true)->with(['service', 'coverageArea'])->get();
+            ->where('site_id', $site->id)->where('active', true)
+            ->where('kind', GeoPromptKind::Visibility->value)   // only the neutral visibility lane gets AI-phrased variants
+            ->with(['service', 'coverageArea'])->get();
 
         $latest = [];   // [prompt_id][engine] => snapshot
         foreach (GeoSnapshot::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\GeoPromptKind;
 use App\Enums\GeoPromptPriority;
 use App\Filament\Resources\GeoPromptResource\Pages\CreateGeoPrompt;
 use App\Filament\Resources\GeoPromptResource\Pages\EditGeoPrompt;
@@ -72,6 +73,9 @@ class GeoPromptResource extends Resource
             ->poll('15s')
             ->columns([
                 TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
+                TextColumn::make('kind')->label('Lane')->badge()
+                    ->formatStateUsing(fn (GeoPromptKind $state): string => $state->label())
+                    ->color(fn (GeoPromptKind $state): string => $state === GeoPromptKind::Coverage ? 'warning' : 'gray'),
                 TextColumn::make('prompt')->label('Prompt')->limit(60)->wrap(),
                 // Cited in N of M engines that have a reading (latest per engine).
                 TextColumn::make('cited_engines')->label('Cited (engines)')->badge()
@@ -98,6 +102,7 @@ class GeoPromptResource extends Resource
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name')
                     ->default(self::defaultTenantId()),
+                SelectFilter::make('kind')->label('Lane')->options(GeoPromptKind::options()),
                 SelectFilter::make('priority')->options(GeoPromptPriority::options()),
                 SelectFilter::make('active')->options([1 => 'Active', 0 => 'Inactive']),
             ], layout: FiltersLayout::AboveContent)
