@@ -27,6 +27,20 @@ it('lists GEO prompts with their latest result for an operator', function () {
         ->assertCanSeeTableRecords([$prompt]);
 });
 
+it('defaults the tenant filter to the operator\'s session working site', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $a = Site::factory()->create();
+    $b = Site::factory()->create();
+    $promptA = GeoPrompt::create(['site_id' => $a->id, 'prompt' => 'a', 'active' => true]);
+    $promptB = GeoPrompt::create(['site_id' => $b->id, 'prompt' => 'b', 'active' => true]);
+    session(['guided_site_id' => $a->id]);
+
+    // The page opens scoped to the working tenant — B's prompts are filtered out until the operator changes it.
+    Livewire::test(ListGeoPrompts::class)
+        ->assertCanSeeTableRecords([$promptA])
+        ->assertCanNotSeeTableRecords([$promptB]);
+});
+
 it('queues an auto-seed per site that has services', function () {
     Queue::fake();
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
