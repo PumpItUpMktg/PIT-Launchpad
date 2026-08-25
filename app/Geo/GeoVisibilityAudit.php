@@ -44,8 +44,13 @@ class GeoVisibilityAudit
         $deadline = microtime(true) + $budget;
         $freshBefore = Carbon::now()->subDays($freshness);
 
+        // Biggest towns first (major → small, ungrouped last), then oldest — so a budget-bounded run spends
+        // its calls on the highest-value municipalities and the freshness cache advances the rest next run.
         $prompts = GeoPrompt::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)->where('active', true)->get();
+            ->where('site_id', $site->id)->where('active', true)
+            ->orderByRaw("case size_tier when 'major' then 0 when 'large' then 1 when 'medium' then 2 when 'small' then 3 else 4 end")
+            ->orderBy('created_at')
+            ->get();
 
         $brand = (string) $site->brand_name;
         $domain = $site->domain_url;

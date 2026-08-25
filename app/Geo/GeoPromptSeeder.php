@@ -4,58 +4,60 @@ namespace App\Geo;
 
 use App\Enums\GeoIntent;
 use App\Enums\GeoPromptSource;
+use App\Enums\SizeTier;
+use App\Models\CoverageArea;
 use App\Models\GeoPrompt;
-use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
 use Illuminate\Support\Collection;
 
 /**
- * Auto-seeds a site's GEO prompt set from the service × market × intent matrix, tagging each prompt with
- * its dimensions so the coverage matrix and gap → content bridge can read them. Bounded (the §5 way):
- * PRIORITY markets first, capped market fan-out, capped total prompts — because prompts multiply fast and
- * every one is a metered engine call. Idempotent: an already-present (service, market, intent) combo is
- * skipped, so re-seeding only adds what's new (e.g. after a new service or market lands).
+ * Auto-seeds a site's GEO prompt set from the service × TOWN × intent matrix. GEO's geography is the
+ * CoverageArea set — the location-linked, size-tiered municipalities the platform actually publishes
+ * pages for — so every measured town is one we have a page to win with, and each gap maps to a real page.
  *
- * Prompts are deterministic templates (neutral, demand-shaped) — cheap, re-runnable, and not brand-leading;
- * AI-phrased variety comes with the assisted weakness top-ups (a later phase).
+ * Bounded + tier-aware: only `page_selected` towns, and the candidate order puts the primary demand
+ * question (Hire) across every town — biggest towns first (major → small) — before secondary intents, so
+ * a capped run "ensures coverage" (breadth) rather than over-measuring a handful of big towns. Idempotent:
+ * an already-present (service, town, intent) combo is skipped, so re-seeding only adds what's new.
+ *
+ * Prompts stay neutral / demand-shaped (never brand-leading); AI-phrased variety comes from the top-ups.
  */
 class GeoPromptSeeder
 {
     /**
-     * @return array{created: int, skipped: int, services: int, markets: int}
+     * @return array{created: int, skipped: int, services: int, towns: int}
      */
     public function seed(Site $site): array
     {
-        $maxMarkets = max(0, (int) config('launchpad.geo.seed.max_markets', 5));
+        $maxTowns = max(0, (int) config('launchpad.geo.seed.max_towns', 40));
         $maxPrompts = max(0, (int) config('launchpad.geo.seed.max_prompts', 60));
         $brand = trim((string) $site->brand_name);
 
         $services = Service::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->orderBy('name')->get();
 
-        // Priority-tier markets first, then coverage; capped.
-        $markets = Market::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->orderByRaw("case when tier = 'priority' then 0 else 1 end")
+        // Published towns only, biggest first — the cap keeps the highest-value municipalities.
+        $towns = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('page_selected', true)
+            ->orderByRaw($this->tierOrderSql())
+            ->orderByDesc('population')
             ->orderBy('name')
-            ->limit($maxMarkets)
+            ->limit($maxTowns)
             ->get();
 
-        // Existing (service|market|intent) combos + prompt texts, for idempotent re-seeding.
+        // Existing (service|town|intent) combos + prompt texts, for idempotent re-seeding.
         $seen = [];
         $texts = [];
-        foreach (GeoPrompt::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get(['service_id', 'market_id', 'intent', 'prompt']) as $existing) {
-            $seen[$this->comboKey($existing->service_id, $existing->market_id, $existing->intent?->value)] = true;
+        foreach (GeoPrompt::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get(['service_id', 'coverage_area_id', 'intent', 'prompt']) as $existing) {
+            $seen[$this->comboKey($existing->service_id, $existing->coverage_area_id, $existing->intent?->value)] = true;
             $texts[mb_strtolower(trim((string) $existing->prompt))] = true;
         }
 
-        $candidates = $this->candidates($services, $markets, $brand);
-
         $created = 0;
         $skipped = 0;
-        foreach ($candidates as $c) {
+        foreach ($this->candidates($services, $towns, $brand) as $c) {
             if ($created >= $maxPrompts) {
                 break;
             }
@@ -64,11 +66,11 @@ class GeoPromptSeeder
             $service = $c['service'];
             /** @var GeoIntent $intent */
             $intent = $c['intent'];
-            /** @var Market|null $market */
-            $market = $c['market'];
+            /** @var CoverageArea|null $town */
+            $town = $c['town'];
 
-            $combo = $this->comboKey($service->id, $market?->id, $intent->value);
-            $text = $intent->render($service->name, $market?->name, $market?->region, $brand);
+            $combo = $this->comboKey($service->id, $town?->id, $intent->value);
+            $text = $intent->render($service->name, $town?->name, $town?->state, $brand);
 
             if (isset($seen[$combo]) || isset($texts[mb_strtolower($text)])) {
                 $skipped++;
@@ -79,11 +81,12 @@ class GeoPromptSeeder
             GeoPrompt::create([
                 'site_id' => $site->id,
                 'service_id' => $service->id,
-                'market_id' => $market?->id,
+                'coverage_area_id' => $town?->id,
+                'size_tier' => $town?->size_tier,
                 'intent' => $intent->value,
                 'source' => GeoPromptSource::Auto->value,
                 'prompt' => $text,
-                'label' => $service->name.' · '.$intent->label(),
+                'label' => $town !== null ? $service->name.' · '.$town->name : $service->name.' · '.$intent->label(),
                 'active' => true,
             ]);
             $seen[$combo] = true;
@@ -91,19 +94,20 @@ class GeoPromptSeeder
             $created++;
         }
 
-        return ['created' => $created, 'skipped' => $skipped, 'services' => $services->count(), 'markets' => $markets->count()];
+        return ['created' => $created, 'skipped' => $skipped, 'services' => $services->count(), 'towns' => $towns->count()];
     }
 
     /**
-     * The service × intent × market cells, ordered so the cap keeps the highest-value prompts: highest-value
-     * intents (hire/cost) first, priority markets before coverage, brand/service-level (non-geo) intents
-     * always kept.
+     * The service × intent × town cells, ordered so the cap keeps the highest-value prompts and ENSURES
+     * BREADTH: the primary intent (Hire) is spread across every town — biggest towns first — before any
+     * secondary intent, so a capped run covers the whole footprint on the core question rather than going
+     * deep on a few towns. Non-geo intents (HowTo/Reviews) are service-level (asked once, no town).
      *
      * @param  Collection<int, Service>  $services
-     * @param  Collection<int, Market>  $markets
-     * @return list<array{service: Service, intent: GeoIntent, market: Market|null}>
+     * @param  Collection<int, CoverageArea>  $towns
+     * @return list<array{service: Service, intent: GeoIntent, town: CoverageArea|null}>
      */
-    private function candidates($services, $markets, string $brand): array
+    private function candidates($services, $towns, string $brand): array
     {
         $intentRank = [GeoIntent::Hire->value => 0, GeoIntent::Cost->value => 1, GeoIntent::Emergency->value => 2, GeoIntent::Comparison->value => 3, GeoIntent::Reviews->value => 4, GeoIntent::HowTo->value => 5];
 
@@ -113,26 +117,42 @@ class GeoPromptSeeder
                 if ($intent->needsBrand() && $brand === '') {
                     continue;
                 }
-                $targets = $intent->isGeo() ? $markets->all() : [null];
-                foreach ($targets as $market) {
-                    $out[] = ['service' => $service, 'intent' => $intent, 'market' => $market];
+                $targets = $intent->isGeo() ? $towns->all() : [null];
+                foreach ($targets as $town) {
+                    $out[] = ['service' => $service, 'intent' => $intent, 'town' => $town];
                 }
             }
         }
 
+        // Intent first (Hire across all towns before Cost), then town tier (major→small), then service.
         usort($out, function (array $a, array $b) use ($intentRank): int {
-            $aTier = $a['market'] === null ? 0 : ($a['market']->tier->value === 'priority' ? 0 : 1);
-            $bTier = $b['market'] === null ? 0 : ($b['market']->tier->value === 'priority' ? 0 : 1);
-
-            return [$intentRank[$a['intent']->value], $aTier, $a['service']->name]
-                <=> [$intentRank[$b['intent']->value], $bTier, $b['service']->name];
+            return [$intentRank[$a['intent']->value], $this->tierRank($a['town']), $a['service']->name]
+                <=> [$intentRank[$b['intent']->value], $this->tierRank($b['town']), $b['service']->name];
         });
 
         return $out;
     }
 
-    private function comboKey(?string $serviceId, ?string $marketId, ?string $intent): string
+    private function tierRank(?CoverageArea $town): int
     {
-        return ($serviceId ?? '').'|'.($marketId ?? '').'|'.($intent ?? '');
+        // CoverageArea.size_tier is a raw string column (major|large|medium|small|null).
+        return match ($town?->size_tier) {
+            SizeTier::Major->value => 0,
+            SizeTier::Large->value => 1,
+            SizeTier::Medium->value => 2,
+            SizeTier::Small->value => 3,
+            default => 4,   // ungrouped town, or a service-level (townless) prompt
+        };
+    }
+
+    /** SQL ordering for the town pull — major first, ungrouped (null tier) last. */
+    private function tierOrderSql(): string
+    {
+        return "case size_tier when 'major' then 0 when 'large' then 1 when 'medium' then 2 when 'small' then 3 else 4 end";
+    }
+
+    private function comboKey(?string $serviceId, ?string $townId, ?string $intent): string
+    {
+        return ($serviceId ?? '').'|'.($townId ?? '').'|'.($intent ?? '');
     }
 }
