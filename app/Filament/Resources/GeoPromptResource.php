@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\GeoPromptPriority;
 use App\Filament\Resources\GeoPromptResource\Pages\CreateGeoPrompt;
 use App\Filament\Resources\GeoPromptResource\Pages\EditGeoPrompt;
 use App\Filament\Resources\GeoPromptResource\Pages\ListGeoPrompts;
@@ -19,6 +20,7 @@ use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\SelectColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\SelectFilter;
@@ -88,12 +90,15 @@ class GeoPromptResource extends Resource
                             default => 'warning',
                         };
                     }),
+                // Inline operator priority — the "let the user prioritize" lever; leads the check order.
+                SelectColumn::make('priority')->label('Priority')->options(GeoPromptPriority::options())->selectablePlaceholder(false),
                 TextColumn::make('latestSnapshot.checked_at')->label('Checked')->since()->placeholder('never'),
                 IconColumn::make('active')->boolean(),
             ])
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name')
                     ->default(self::defaultTenantId()),
+                SelectFilter::make('priority')->options(GeoPromptPriority::options()),
                 SelectFilter::make('active')->options([1 => 'Active', 0 => 'Inactive']),
             ], layout: FiltersLayout::AboveContent)
             ->recordActions([
@@ -112,6 +117,8 @@ class GeoPromptResource extends Resource
             Textarea::make('prompt')->required()->rows(3)
                 ->helperText('The question to test in AI search — e.g. "best sump pump repair in Union, NJ".'),
             TextInput::make('label')->helperText('Optional short label for the board.'),
+            Select::make('priority')->options(GeoPromptPriority::options())->default(GeoPromptPriority::Normal->value)
+                ->helperText('High-priority prompts are checked and turned into content first.'),
             Toggle::make('active')->default(true),
         ]);
     }
