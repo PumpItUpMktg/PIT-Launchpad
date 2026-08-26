@@ -9,6 +9,7 @@ use App\Enums\UserRole;
 use App\Filament\Resources\AiContentResource\Pages\EditAiContent;
 use App\Filament\Resources\AiContentResource\Pages\ListAiContent;
 use App\Filament\Resources\Concerns\ContentReviewActions;
+use App\Filament\Support\SiloFilter;
 use App\Filament\Widgets\GeoContentSummaryWidget;
 use App\Geo\GeoGapBridge;
 use App\Models\Content;
@@ -143,7 +144,7 @@ class AiContentResource extends Resource
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name')
                     ->default(self::defaultTenantId()),
-                SelectFilter::make('silo_id')->label('Silo')->relationship('silo', 'name'),
+                SiloFilter::scopedToTenant(),
                 SelectFilter::make('status')->options(self::enumOptions(ContentStatus::cases())),
             ], layout: FiltersLayout::AboveContent)
             ->recordActions([

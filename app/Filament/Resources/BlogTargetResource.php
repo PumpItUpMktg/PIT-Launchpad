@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\ContentEngine\BlogQueue\BlogTargetQueue;
 use App\Enums\BlogTargetStatus;
 use App\Filament\Resources\BlogTargetResource\Pages\ListBlogTargets;
+use App\Filament\Support\SiloFilter;
 use App\Models\BlogTarget;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -65,7 +66,7 @@ class BlogTargetResource extends Resource
             ->defaultSort('queued_at')
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
-                SelectFilter::make('silo_id')->label('Silo')->relationship('silo', 'name'),
+                SiloFilter::scopedToTenant(),
                 SelectFilter::make('status')->options(
                     collect(BlogTargetStatus::cases())->mapWithKeys(fn (BlogTargetStatus $s) => [$s->value => $s->label()])->all()
                 ),

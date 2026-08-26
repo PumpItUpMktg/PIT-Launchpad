@@ -11,6 +11,7 @@ use App\Enums\UserRole;
 use App\Filament\Resources\Concerns\ContentReviewActions;
 use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
 use App\Filament\Resources\ContentReviewResource\Pages\ListContentReviews;
+use App\Filament\Support\SiloFilter;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use BackedEnum;
@@ -106,7 +107,7 @@ class ContentReviewResource extends Resource
             ])
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
-                SelectFilter::make('silo_id')->label('Silo')->relationship('silo', 'name'),
+                SiloFilter::scopedToTenant(),
                 SelectFilter::make('kind')->options(self::enumOptions(ContentKind::cases())),
                 SelectFilter::make('draft_trigger')->label('Lane')->options(self::enumOptions(DraftTrigger::cases())),
                 SelectFilter::make('flag')
