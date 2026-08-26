@@ -127,7 +127,15 @@ class GeoActivityConsole extends Page
             'engines' => $engines,
             'measured' => $events->where('action', GeoCheckAction::Measured)->count(),
             'total' => $activePrompts * $engineCount,
-            'feed' => $events->take(30)->map(fn (GeoCheckEvent $e): array => [
+            // Surface the answer-bearing steps first: a budget-capped run can end in a long tail of
+            // Deferred rows that would otherwise fill the newest-30 window and bury every measured/fresh
+            // step. Rank measured+fresh ahead of error ahead of deferred; events arrive newest-first and
+            // PHP's sort is stable, so newest-first is preserved within each rank.
+            'feed' => $events->sortBy(fn (GeoCheckEvent $e): int => match ($e->action) {
+                GeoCheckAction::Measured, GeoCheckAction::SkippedFresh => 0,
+                GeoCheckAction::Error => 1,
+                GeoCheckAction::Deferred => 2,
+            })->take(30)->map(fn (GeoCheckEvent $e): array => [
                 'town' => $e->town,
                 'engine' => $e->engine,
                 'action' => $e->action->label(),
