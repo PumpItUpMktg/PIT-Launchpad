@@ -23,7 +23,7 @@ class QueueDiagnoseCommand extends Command
         {--recent : Also list the most recent individual failures with timestamps}
         {--flush : After reporting, DELETE all failed_jobs rows (clears the dead-job backlog + the stalled banner)}';
 
-    protected $description = 'Diagnose the database queue — pending backlog + age, and failed jobs grouped by job class + exception (the WHY behind a stalled worker). --flush clears the dead jobs.';
+    protected $description = 'Diagnose the database queue — pending backlog + age + a by-type breakdown of what is waiting, and failed jobs grouped by job class + exception (the WHY behind a stalled worker). --flush clears the dead jobs.';
 
     public function handle(): int
     {
@@ -34,6 +34,30 @@ class QueueDiagnoseCommand extends Command
         $this->line('<info>Pending</info>: '.$pending.' job(s)'
             .($pending > 0 ? " · oldest {$oldestMinutes}m old" : '')
             .($pending > 0 && $oldestMinutes >= 5 ? '  <comment>(ageing — the worker may be DOWN, not just failing jobs)</comment>' : ''));
+
+        // WHICH jobs are waiting: group the pending backlog by job class (+ oldest age, + any in flight).
+        // This is what a "7 queued, which ones?" question needs — especially when nothing has FAILED (the
+        // worker-down case), where the failures section below is empty.
+        if ($pending > 0) {
+            $now = time();
+            $pendingGroups = DB::table('jobs')->get(['payload', 'available_at', 'reserved_at'])
+                ->groupBy(fn (object $row): string => $this->jobClass($row->payload))
+                ->map(fn ($rows, string $class): array => [
+                    'class' => $class,
+                    'count' => $rows->count(),
+                    'oldest' => (int) floor(max(0, $now - (int) $rows->min('available_at')) / 60),
+                    'reserved' => $rows->whereNotNull('reserved_at')->count(),
+                ])
+                ->sortByDesc('count')
+                ->values();
+
+            $this->newLine();
+            $this->line('<info>Pending by type</info>:');
+            foreach ($pendingGroups as $g) {
+                $inflight = $g['reserved'] > 0 ? "  <info>({$g['reserved']} in flight)</info>" : '';
+                $this->line("  <comment>{$g['count']}×</comment>  {$g['class']}  · oldest {$g['oldest']}m{$inflight}");
+            }
+        }
 
         $failed = DB::table('failed_jobs')->orderByDesc('failed_at')->get();
         $this->line('<info>Failed</info>: '.$failed->count().' job(s).');

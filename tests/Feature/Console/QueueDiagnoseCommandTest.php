@@ -13,6 +13,17 @@ function failedJob(string $jobClass, string $exception, ?string $failedAt = null
     ]);
 }
 
+function pendingJob(string $jobClass, int $ageMinutes = 20, bool $reserved = false): void
+{
+    $ts = now()->subMinutes($ageMinutes)->timestamp;
+    DB::table('jobs')->insert([
+        'queue' => 'default', 'attempts' => 0,
+        'reserved_at' => $reserved ? time() : null,
+        'available_at' => $ts, 'created_at' => $ts,
+        'payload' => json_encode(['displayName' => $jobClass]),
+    ]);
+}
+
 it('groups failed jobs by class + exception, most frequent first', function () {
     // Three fal-credit failures + one WP 401 → the fal cause should lead.
     failedJob('App\\Jobs\\RenderImage', "RuntimeException: fal returned HTTP 402 — insufficient credits\n#0 /app/...");
@@ -42,6 +53,28 @@ it('flags a worker that is DOWN when jobs are queued but none have failed', func
 
     expect($out)->toContain('Pending: 1 job(s)')
         ->toContain('WORKER being down');
+});
+
+it('breaks the pending backlog down by job type, most frequent first', function () {
+    // 7 stuck jobs, no failures — the worker-down case where the "which ones?" answer matters most.
+    pendingJob('App\\Jobs\\PublishJob', 4292);
+    pendingJob('App\\Jobs\\PublishJob', 4000);
+    pendingJob('App\\Jobs\\PublishJob', 3900);
+    pendingJob('App\\Jobs\\PublishJob', 3800);
+    pendingJob('App\\Jobs\\RenderImage', 3000);
+    pendingJob('App\\Jobs\\RenderImage', 2900);
+    pendingJob('App\\Jobs\\SyncSiteGeo', 1000, reserved: true);
+
+    Artisan::call('launchpad:queue-diagnose');
+    $out = Artisan::output();
+
+    expect($out)->toContain('Pending: 7 job(s)')
+        ->toContain('Pending by type')
+        ->toContain('4×')                 // the PublishJob group leads
+        ->toContain('PublishJob')
+        ->toContain('RenderImage')
+        ->toContain('SyncSiteGeo')
+        ->toContain('1 in flight');       // the reserved job is flagged as being worked
 });
 
 it('reports a clean queue', function () {
