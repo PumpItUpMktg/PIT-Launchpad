@@ -208,6 +208,45 @@ it('logs skipped-fresh, deferred, and error steps', function () {
     expect(geoEvents($errSite)->pluck('action')->all())->toBe([GeoCheckAction::Error]);
 });
 
+it('stamps the now-contacting cursor while calling an engine, and clears it after', function () {
+    $site = geoSite();
+    geoPrompt($site, 'q1');
+
+    $seen = null;
+    $engine = new class implements AiEngineProvider
+    {
+        public Closure $onAsk;
+
+        public function key(): string
+        {
+            return 'claude';
+        }
+
+        public function enabled(): bool
+        {
+            return true;
+        }
+
+        public function ask(string $prompt): ?AiAnswer
+        {
+            ($this->onAsk)();
+
+            return new AiAnswer('Sump Pump Gurus.', []);
+        }
+    };
+    $engine->onAsk = function () use (&$seen, $site): void {
+        $seen = app(GeoCheckStatus::class)->currentContact($site->id);
+    };
+
+    (new GeoVisibilityAudit(geoRegistry($engine), judgeReturning(['cited' => true, 'position' => 1, 'sentiment' => 'positive', 'competitors' => []])))
+        ->audit($site);
+
+    expect($seen)->not->toBeNull()
+        ->and($seen['engine'])->toBe('claude')
+        ->and($seen['prompt'])->toBe('q1')
+        ->and(app(GeoCheckStatus::class)->currentContact($site->id))->toBeNull();   // cleared when done
+});
+
 it('marks the tenant checking during the run and clears the flag when done', function () {
     $site = geoSite();
     geoPrompt($site, 'q1');

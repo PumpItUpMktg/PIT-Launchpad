@@ -86,6 +86,9 @@ class GeoVisibilityAudit
                         continue;
                     }
 
+                    // Live cursor for the activity console — what we're contacting right now.
+                    $status->markContacting((string) $site->id, $engineKey, $prompt->prompt, data_get($prompt->coverageArea, 'name'));
+
                     $answer = $engine->ask($prompt->prompt);
                     if ($answer === null) {
                         $this->event($site, $runId, $prompt, $engineKey, GeoCheckAction::Error);
