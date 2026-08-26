@@ -27,6 +27,8 @@
         .gac .gac-row:last-child { border-bottom:0; }
         .gac .gac-rowtop { display:flex; align-items:baseline; gap:10px; }
         .gac .gac-prompt { margin:3px 0 0 18px; font-size:11.5px; color:var(--gac-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .gac .gac-answer { margin:4px 0 0 18px; padding:7px 10px; font-size:12px; line-height:1.5; color:inherit; background:var(--gac-surface2); border:1px solid var(--gac-line); border-radius:8px; }
+        .gac .gac-answer .gac-answer-label { display:block; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--gac-faint); margin-bottom:2px; }
         .gac .gac-rowdot { width:8px; height:8px; border-radius:50%; flex:none; align-self:center; }
         .gac .gac-where { font-weight:600; }
         .gac .gac-eng { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--gac-faint); }
@@ -118,6 +120,9 @@
                         </div>
                         @if (! empty($row['prompt']))
                             <div class="gac-prompt" title="{{ $row['prompt'] }}">“{{ $row['prompt'] }}”</div>
+                        @endif
+                        @if (! empty($row['answer']))
+                            <div class="gac-answer"><span class="gac-answer-label">{{ $row['engine'] }} answered</span>{{ $row['answer'] }}</div>
                         @endif
                     </div>
                 @endforeach
