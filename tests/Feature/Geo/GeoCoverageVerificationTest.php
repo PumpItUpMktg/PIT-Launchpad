@@ -115,6 +115,24 @@ it('scopes the coverage verdicts to a brick-and-mortar shop', function () {
         ->and($scoped['rows'][0]['town'])->toBe('AtownA');
 });
 
+it('refreshes coverage-check prompt text from the current town name', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://spg.example']);
+    $svc = Service::factory()->create(['site_id' => $site->id, 'name' => 'Repair']);
+    $town = verTown($site, 'Union');
+    app(GeoCoveragePromptSeeder::class)->seed($site);
+
+    $prompt = GeoPrompt::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('kind', GeoPromptKind::Coverage->value)->sole();
+    expect($prompt->prompt)->toContain('Union');
+
+    $town->forceFill(['name' => 'Newark'])->save();
+
+    $r = app(GeoCoveragePromptSeeder::class)->refresh($site);
+
+    expect($r['updated'])->toBe(1)
+        ->and($prompt->fresh()->prompt)->toContain('Newark')
+        ->and($prompt->fresh()->prompt)->not->toContain('Union');
+});
+
 it('the seed-geo-coverage-prompts command runs for a site', function () {
     $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
     Service::factory()->create(['site_id' => $site->id, 'name' => 'Repair']);
