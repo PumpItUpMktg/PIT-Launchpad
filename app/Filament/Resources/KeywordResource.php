@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Enums\KeywordSource;
 use App\Filament\Resources\KeywordResource\Pages\ListKeywords;
+use App\Filament\Support\SiloFilter;
 use App\Models\Keyword;
 use App\Operator\Coverage\KeywordStandings;
 use App\Operator\Coverage\PositionTracking;
@@ -70,7 +71,7 @@ class KeywordResource extends Resource
             ])
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
-                SelectFilter::make('silo_id')->label('Silo')->relationship('silo', 'name'),
+                SiloFilter::scopedToTenant(),
                 SelectFilter::make('source')->options(self::sourceOptions()),
                 SelectFilter::make('coverage')
                     ->options(['gap' => 'Uncovered (gap)', 'covered' => 'Covered'])
