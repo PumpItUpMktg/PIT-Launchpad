@@ -26,6 +26,17 @@ it('begins, reports running with a start time, and finishes', function () {
         ->and($status->startedAt('site-1'))->toBeNull();
 });
 
+it('tracks the now-contacting cursor and clears it when the run finishes', function () {
+    $status = app(GeoCheckStatus::class);
+    expect($status->currentContact('site-1'))->toBeNull();
+
+    $status->markContacting('site-1', 'perplexity', 'best sump pump repair in Union', 'Union');
+    expect($status->currentContact('site-1'))->toMatchArray(['engine' => 'perplexity', 'prompt' => 'best sump pump repair in Union', 'town' => 'Union']);
+
+    $status->finish('site-1');
+    expect($status->currentContact('site-1'))->toBeNull();
+});
+
 it('the status widget shows a running check with live progress', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);

@@ -22,6 +22,33 @@ class GeoCheckStatus
     public function finish(string $siteId): void
     {
         Cache::forget($this->key($siteId));
+        Cache::forget($this->cursorKey($siteId));
+    }
+
+    /**
+     * Stamp the prompt+engine the run is contacting RIGHT NOW — the live cursor behind the activity
+     * console. Overwritten each step; cleared when the run finishes.
+     */
+    public function markContacting(string $siteId, string $engine, string $prompt, ?string $town): void
+    {
+        Cache::put($this->cursorKey($siteId), [
+            'engine' => $engine,
+            'prompt' => $prompt,
+            'town' => $town,
+            'at' => Carbon::now()->toIso8601String(),
+        ], $this->ttlSeconds());
+    }
+
+    /**
+     * What the run is contacting right now (engine/prompt/town), or null when nothing is in flight.
+     *
+     * @return array{engine: string, prompt: string, town: ?string, at: string}|null
+     */
+    public function currentContact(string $siteId): ?array
+    {
+        $value = Cache::get($this->cursorKey($siteId));
+
+        return is_array($value) ? $value : null;
     }
 
     /** When the current run started, or null if the tenant isn't being checked right now. */
@@ -40,6 +67,11 @@ class GeoCheckStatus
     private function key(string $siteId): string
     {
         return "geo:check:running:{$siteId}";
+    }
+
+    private function cursorKey(string $siteId): string
+    {
+        return "geo:check:contacting:{$siteId}";
     }
 
     private function ttlSeconds(): int
