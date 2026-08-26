@@ -23,8 +23,10 @@
         .gac .gac-lane .gac-tally b { color:inherit; font-weight:800; font-variant-numeric:tabular-nums; }
         .gac h3.gac-h { font-size:14px; font-weight:700; margin:8px 0 10px; }
         .gac .gac-feed { max-height:360px; overflow-y:auto; border:1px solid var(--gac-line); border-radius:12px; }
-        .gac .gac-row { display:flex; align-items:baseline; gap:10px; padding:8px 12px; border-bottom:1px solid var(--gac-line); font-size:13px; }
+        .gac .gac-row { padding:8px 12px; border-bottom:1px solid var(--gac-line); font-size:13px; }
         .gac .gac-row:last-child { border-bottom:0; }
+        .gac .gac-rowtop { display:flex; align-items:baseline; gap:10px; }
+        .gac .gac-prompt { margin:3px 0 0 18px; font-size:11.5px; color:var(--gac-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .gac .gac-rowdot { width:8px; height:8px; border-radius:50%; flex:none; align-self:center; }
         .gac .gac-where { font-weight:600; }
         .gac .gac-eng { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--gac-faint); }
@@ -101,17 +103,22 @@
             <div class="gac-feed">
                 @foreach ($c['feed'] as $row)
                     <div class="gac-row">
-                        <span class="gac-rowdot" style="background: {{ $row['color'] }}"></span>
-                        <span class="gac-where">{{ $row['town'] ?? 'Service-wide' }}</span>
-                        <span class="gac-eng">{{ $row['engine'] }}</span>
-                        @if ($row['is_measured'])
-                            @if ($row['cited'])
-                                <span class="gac-cited">cited</span>
-                            @else
-                                <span class="gac-absent">absent</span>@if (! empty($row['competitors']))<span class="gac-comp">— {{ implode(', ', array_slice($row['competitors'], 0, 3)) }}</span>@endif
+                        <div class="gac-rowtop">
+                            <span class="gac-rowdot" style="background: {{ $row['color'] }}"></span>
+                            <span class="gac-where">{{ $row['town'] ?? 'Service-wide' }}</span>
+                            <span class="gac-eng">{{ $row['engine'] }}</span>
+                            @if ($row['is_measured'])
+                                @if ($row['cited'])
+                                    <span class="gac-cited">cited</span>
+                                @else
+                                    <span class="gac-absent">absent</span>@if (! empty($row['competitors']))<span class="gac-comp">— {{ implode(', ', array_slice($row['competitors'], 0, 3)) }}</span>@endif
+                                @endif
                             @endif
+                            <span class="gac-act">{{ $row['action'] }}</span>
+                        </div>
+                        @if (! empty($row['prompt']))
+                            <div class="gac-prompt" title="{{ $row['prompt'] }}">“{{ $row['prompt'] }}”</div>
                         @endif
-                        <span class="gac-act">{{ $row['action'] }}</span>
                     </div>
                 @endforeach
             </div>
