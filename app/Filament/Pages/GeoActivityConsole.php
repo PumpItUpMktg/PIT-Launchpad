@@ -8,6 +8,7 @@ use App\Geo\GeoCheckStatus;
 use App\Integrations\AiSearch\AiEngineRegistry;
 use App\Models\GeoCheckEvent;
 use App\Models\GeoPrompt;
+use App\Models\GeoSnapshot;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use BackedEnum;
@@ -108,6 +109,17 @@ class GeoActivityConsole extends Page
             ->where('site_id', $siteId)->where('active', true)->count();
         $engineCount = max(1, count($enabledKeys) ?: $engineKeys->count());
 
+        // The engine's answer prose lives on GeoSnapshot (answer_excerpt), keyed by (prompt, engine);
+        // pull the latest per pair so each measured feed row can print what the engine actually said.
+        $promptIds = $events->pluck('geo_prompt_id')->filter()->unique()->values();
+        $excerpts = $promptIds->isEmpty()
+            ? collect()
+            : GeoSnapshot::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $siteId)->whereIn('geo_prompt_id', $promptIds)
+                ->latest('checked_at')->get(['geo_prompt_id', 'engine', 'answer_excerpt'])
+                ->groupBy(fn (GeoSnapshot $s): string => $s->geo_prompt_id.'|'.$s->engine)
+                ->map(fn ($group) => $group->first()->answer_excerpt);
+
         return [
             'running' => $status->isRunning($siteId),
             'started_at' => $status->startedAt($siteId),
@@ -124,6 +136,9 @@ class GeoActivityConsole extends Page
                 'cited' => $e->cited,
                 'competitors' => $e->competitors ?? [],
                 'prompt' => data_get($e->prompt, 'prompt'),
+                'answer' => $e->action === GeoCheckAction::Measured
+                    ? $excerpts->get($e->geo_prompt_id.'|'.$e->engine)
+                    : null,
             ])->all(),
         ];
     }

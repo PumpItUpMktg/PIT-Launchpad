@@ -6,6 +6,7 @@ use App\Filament\Pages\GeoActivityConsole;
 use App\Geo\GeoCheckStatus;
 use App\Models\GeoCheckEvent;
 use App\Models\GeoPrompt;
+use App\Models\GeoSnapshot;
 use App\Models\Site;
 use App\Models\User;
 use App\Support\CurrentSite;
@@ -30,6 +31,7 @@ it('renders the live console — engine lanes, the step feed, and the now-contac
     $prompt = GeoPrompt::create(['site_id' => $site->id, 'prompt' => 'best sump pump repair in Union', 'active' => true]);
     GeoCheckEvent::create(['site_id' => $site->id, 'run_id' => 'run-1', 'engine' => 'claude', 'geo_prompt_id' => $prompt->id, 'action' => GeoCheckAction::Measured->value, 'town' => 'Union', 'cited' => false, 'competitors' => ['Rival Plumbing']]);
     GeoCheckEvent::create(['site_id' => $site->id, 'run_id' => 'run-1', 'engine' => 'perplexity', 'action' => GeoCheckAction::Deferred->value, 'town' => 'Union']);
+    GeoSnapshot::create(['site_id' => $site->id, 'geo_prompt_id' => $prompt->id, 'engine' => 'claude', 'cited' => false, 'answer_excerpt' => 'For sump pump repair in Union, Rival Plumbing is often recommended.', 'checked_at' => now()]);
     app(GeoCheckStatus::class)->markContacting($site->id, 'perplexity', 'best sump pump repair in Union', 'Union');
 
     Livewire::test(GeoActivityConsole::class)
@@ -40,5 +42,6 @@ it('renders the live console — engine lanes, the step feed, and the now-contac
         ->assertSee('Union')                           // feed town
         ->assertSee('Rival Plumbing')                  // competitor on the absent measured step
         ->assertSee('best sump pump repair in Union')  // the prompt each step measured
+        ->assertSee('is often recommended')            // the engine's printed response prose
         ->assertSee('Contacting');                     // the live now-contacting cursor
 });
