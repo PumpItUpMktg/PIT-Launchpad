@@ -102,9 +102,9 @@ use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
 use App\Listeners\SyncWireframeKitsOnMigrate;
+use App\Local\Proof\JobCaptureLocalJobs;
 use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReviewProvider;
-use App\Local\Proof\NullLocalJobs;
 use App\Local\Proof\NullLocalReviews;
 use App\Local\Proof\NullServiceJobs;
 use App\Local\Proof\NullServiceReviews;
@@ -490,7 +490,10 @@ class AppServiceProvider extends ServiceProvider
         // systems aren't deployed, so the null providers bind (sections omit). Real providers
         // replace these bindings with no composer changes.
         $this->app->bind(LocalReviewProvider::class, NullLocalReviews::class);
-        $this->app->bind(LocalJobProvider::class, NullLocalJobs::class);
+        // Job Capture has deployed — location pages surface the site's PUBLISHED jobs as recent-work
+        // proof, filtered to the towns/radius the location serves. (Service-page jobs still Null until
+        // the job-type ↔ service mapping is wired.)
+        $this->app->bind(LocalJobProvider::class, JobCaptureLocalJobs::class);
         $this->app->bind(ServiceReviewProvider::class, NullServiceReviews::class);
         $this->app->bind(ServiceJobProvider::class, NullServiceJobs::class);
         // Card-facing GSC: the real bridge onto the shared Google grant (PR-A). It reports "connected"
