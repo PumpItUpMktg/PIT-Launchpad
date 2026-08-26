@@ -3,6 +3,7 @@
 namespace App\Geo;
 
 use App\Enums\GeoIntent;
+use App\Enums\GeoPromptKind;
 use App\Enums\GeoPromptSource;
 use App\Enums\SizeTier;
 use App\Models\CoverageArea;
@@ -102,6 +103,52 @@ class GeoPromptSeeder
         }
 
         return ['created' => $created, 'skipped' => $skipped, 'services' => $services->count(), 'towns' => $towns->count()];
+    }
+
+    /**
+     * Re-render the text (and label) of existing AUTO-seeded visibility prompts from the CURRENT town
+     * names — the fix after `launchpad:clean-coverage-names`, since a prompt's text is frozen at seed time
+     * and cleaning the town name doesn't rewrite it. Only touches source=Auto prompts (never operator-
+     * written or AI-phrased assisted variants); optionally scoped to one shop's towns.
+     *
+     * @return array{updated: int, checked: int}
+     */
+    public function refresh(Site $site, ?string $locationId = null): array
+    {
+        $brand = trim((string) $site->brand_name);
+
+        $prompts = GeoPrompt::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', GeoPromptKind::Visibility->value)
+            ->where('source', GeoPromptSource::Auto->value)
+            ->with(['service', 'coverageArea'])
+            ->get();
+
+        if ($locationId !== null) {
+            $prompts = $prompts->filter(fn (GeoPrompt $p): bool => $p->coverage_area_id !== null
+                && in_array($locationId, (array) data_get($p->coverageArea, 'source_location_ids', []), true))->values();
+        }
+
+        $updated = 0;
+        foreach ($prompts as $p) {
+            if ($p->intent === null || $p->service_id === null) {
+                continue;   // can't re-render without a service + intent
+            }
+            $svcName = (string) data_get($p->service, 'name');
+            $town = data_get($p->coverageArea, 'name');
+            $state = data_get($p->coverageArea, 'state');
+            $townName = is_string($town) ? $town : null;
+
+            $text = $p->intent->render($svcName, $townName, is_string($state) ? $state : null, $brand);
+            $label = $townName !== null ? $svcName.' · '.$townName : $svcName.' · '.$p->intent->label();
+
+            if ($text !== $p->prompt || $label !== $p->label) {
+                $p->forceFill(['prompt' => $text, 'label' => $label])->save();
+                $updated++;
+            }
+        }
+
+        return ['updated' => $updated, 'checked' => $prompts->count()];
     }
 
     /**

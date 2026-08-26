@@ -89,6 +89,54 @@ class GeoCoveragePromptSeeder
         return ['created' => $created, 'skipped' => $skipped, 'services' => $services->count(), 'towns' => $towns->count()];
     }
 
+    /**
+     * Re-render existing AUTO-seeded coverage-check prompts from the CURRENT town names (the fix after
+     * `launchpad:clean-coverage-names`; a prompt's text is frozen at seed time). Optionally scoped to one
+     * shop's towns.
+     *
+     * @return array{updated: int, checked: int}
+     */
+    public function refresh(Site $site, ?string $locationId = null): array
+    {
+        $brand = trim((string) $site->brand_name);
+        if ($brand === '') {
+            return ['updated' => 0, 'checked' => 0];
+        }
+        $domain = trim((string) $site->domain_url);
+
+        $prompts = GeoPrompt::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', GeoPromptKind::Coverage->value)
+            ->where('source', GeoPromptSource::Auto->value)
+            ->with(['service', 'coverageArea'])
+            ->get();
+
+        if ($locationId !== null) {
+            $prompts = $prompts->filter(fn (GeoPrompt $p): bool => $p->coverage_area_id !== null
+                && in_array($locationId, (array) data_get($p->coverageArea, 'source_location_ids', []), true))->values();
+        }
+
+        $updated = 0;
+        foreach ($prompts as $p) {
+            $town = data_get($p->coverageArea, 'name');
+            if ($p->service_id === null || ! is_string($town)) {
+                continue;
+            }
+            $svcName = (string) data_get($p->service, 'name');
+            $state = data_get($p->coverageArea, 'state');
+
+            $text = $this->question($brand, $domain, $svcName, $town, is_string($state) ? $state : '');
+            $label = 'Coverage · '.$town;
+
+            if ($text !== $p->prompt || $label !== $p->label) {
+                $p->forceFill(['prompt' => $text, 'label' => $label])->save();
+                $updated++;
+            }
+        }
+
+        return ['updated' => $updated, 'checked' => $prompts->count()];
+    }
+
     private function question(string $brand, string $domain, string $service, string $town, string $state): string
     {
         $svc = mb_strtolower(trim($service));

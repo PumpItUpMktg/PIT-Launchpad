@@ -131,6 +131,41 @@ it('skips brand reviews when the site has no brand name', function () {
         ->and(geoPrompts($site)->contains(fn (GeoPrompt $p) => $p->intent === GeoIntent::Reviews))->toBeFalse();
 });
 
+it('refreshes existing prompt text from the current town name', function () {
+    config(['launchpad.geo.seed.max_towns' => 40, 'launchpad.geo.seed.max_prompts' => 100]);
+    $site = geoSeedSite();
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Repair']);
+    $town = geoTown($site, 'Union');
+    app(GeoPromptSeeder::class)->seed($site);
+
+    $hire = geoPrompts($site)->first(fn (GeoPrompt $p) => $p->intent === GeoIntent::Hire);
+    expect($hire->prompt)->toContain('Union');
+
+    // The town is renamed at the source (e.g. after launchpad:clean-coverage-names strips "2, ").
+    $town->forceFill(['name' => 'Newark'])->save();
+
+    $r = app(GeoPromptSeeder::class)->refresh($site);
+
+    expect($r['updated'])->toBeGreaterThan(0)
+        ->and($hire->fresh()->prompt)->toContain('Newark')
+        ->and($hire->fresh()->prompt)->not->toContain('Union');
+});
+
+it('the seed-geo-prompts --refresh command re-renders prompts', function () {
+    config(['launchpad.geo.seed.max_towns' => 40, 'launchpad.geo.seed.max_prompts' => 100]);
+    $site = geoSeedSite();
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Repair']);
+    $town = geoTown($site, 'Union');
+    app(GeoPromptSeeder::class)->seed($site);
+    $town->forceFill(['name' => 'Newark'])->save();
+
+    $this->artisan('sandhog:seed-geo-prompts', ['site' => $site->id, '--refresh' => true])
+        ->expectsOutputToContain('refreshed')
+        ->assertSuccessful();
+
+    expect(geoPrompts($site)->first(fn (GeoPrompt $p) => $p->intent === GeoIntent::Hire)->prompt)->toContain('Newark');
+});
+
 it('the seed-geo-prompts command runs for a site', function () {
     $site = geoSeedSite();
     Service::factory()->create(['site_id' => $site->id]);

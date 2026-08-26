@@ -18,7 +18,8 @@ class SeedGeoCoveragePromptsCommand extends Command
     use ResolvesSiteLocation;
 
     protected $signature = 'sandhog:seed-geo-coverage-prompts {site : Site id, brand name, or domain (partial ok)}
-        {--location= : Scope to one brick-and-mortar shop (id or name)}';
+        {--location= : Scope to one brick-and-mortar shop (id or name)}
+        {--refresh : Re-render existing auto-seeded coverage prompts from the current town names}';
 
     protected $description = 'Seed brand-anchored GEO coverage-check prompts for a site.';
 
@@ -43,6 +44,14 @@ class SeedGeoCoveragePromptsCommand extends Command
         if ($locationId === false) {
             return self::FAILURE;
         }
+
+        if ($this->option('refresh')) {
+            $r = $seeder->refresh($site, $locationId);
+            $this->line(sprintf('<info>%s</info> — %d coverage-check prompt(s) refreshed of %d checked.', $site->brand_name, $r['updated'], $r['checked']));
+
+            return self::SUCCESS;
+        }
+
         $r = $seeder->seed($site, $locationId);
 
         if ($r['created'] === 0 && $r['skipped'] === 0 && trim((string) $site->brand_name) === '') {
