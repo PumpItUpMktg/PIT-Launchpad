@@ -8,14 +8,13 @@ use App\Enums\PageType;
 use App\Enums\StandardPageType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
-use App\Locations\LocationLandingFactory;
-use App\Locations\TownLocationAssigner;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Support\TownName;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
 
@@ -245,17 +244,14 @@ final class ServiceAreaResolver
     }
 
     /**
-     * The town-name key both sides of the location-link join normalize to. A location page is titled
-     * "{City}, {ST}" ({@see LocationLandingFactory}) while a {@see CoverageArea} name is the
-     * bare "{City}"; stripping a trailing ", ST" makes the two agree (mirrors
-     * {@see TownLocationAssigner} townKey). Without it EVERY town missed its own page and
-     * fell back to the "Areas we serve" page.
+     * The town-name key both sides of the location-link join normalize to — the shared {@see TownName}
+     * helper (strips a trailing ", ST" so a location page titled "{City}, {ST}" matches a bare
+     * {@see CoverageArea} "{City}"). Without it EVERY town missed its own page and fell back to the
+     * "Areas we serve" page.
      */
     private function key(string $name): string
     {
-        $name = trim((string) preg_replace('/,\s*[A-Za-z]{2}$/', '', trim($name)));
-
-        return mb_strtolower($name);
+        return TownName::key($name);
     }
 
     /**
