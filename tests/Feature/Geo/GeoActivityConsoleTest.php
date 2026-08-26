@@ -61,3 +61,22 @@ it('prints the cached answer on a skipped-fresh step too (the fresh re-run case)
         ->assertOk()
         ->assertSee('installs sump pumps across Cranford');   // cached answer prints on the fresh step
 });
+
+it('surfaces the measured answer even behind a wall of newer deferred rows', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $prompt = GeoPrompt::create(['site_id' => $site->id, 'prompt' => 'sump pump repair Ardmore', 'active' => true]);
+
+    // One measured step early in the run...
+    GeoCheckEvent::create(['site_id' => $site->id, 'run_id' => 'run-3', 'engine' => 'claude', 'geo_prompt_id' => $prompt->id, 'action' => GeoCheckAction::Measured->value, 'town' => 'Ardmore', 'cited' => true, 'created_at' => now()->subMinutes(5)]);
+    GeoSnapshot::create(['site_id' => $site->id, 'geo_prompt_id' => $prompt->id, 'engine' => 'claude', 'cited' => true, 'answer_excerpt' => 'SPG is a top choice for sump pump repair in Ardmore.', 'checked_at' => now()->subMinutes(5)]);
+    // ...then 40 newer deferred steps (budget ran out) that would fill the newest-30 window.
+    foreach (range(1, 40) as $i) {
+        GeoCheckEvent::create(['site_id' => $site->id, 'run_id' => 'run-3', 'engine' => 'claude', 'action' => GeoCheckAction::Deferred->value, 'town' => "Town {$i}", 'created_at' => now()->subMinutes(4)->addSeconds($i)]);
+    }
+
+    Livewire::test(GeoActivityConsole::class)
+        ->set('siteId', $site->id)
+        ->assertOk()
+        ->assertSee('top choice for sump pump repair in Ardmore');   // answer surfaces despite 40 newer deferred rows
+});
