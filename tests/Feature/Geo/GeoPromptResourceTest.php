@@ -82,7 +82,7 @@ it('queues a gap→content bridge per site that has snapshots', function () {
     Queue::assertPushed(BridgeSiteGeoGaps::class, 1);
 });
 
-it('queues one GEO check per site that has active prompts', function () {
+it('runs the GEO check only for the tenant selected in the filter', function () {
     Queue::fake();
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $a = Site::factory()->create();
@@ -91,7 +91,26 @@ it('queues one GEO check per site that has active prompts', function () {
     GeoPrompt::create(['site_id' => $b->id, 'prompt' => 'q', 'active' => true]);
     GeoPrompt::create(['site_id' => $b->id, 'prompt' => 'r', 'active' => false]);
 
-    Livewire::test(ListGeoPrompts::class)->callAction('run');
+    Livewire::test(ListGeoPrompts::class)
+        ->filterTable('site_id', $b->id)
+        ->callAction('run');
+
+    // Isolated to B — A is not touched even though it also has an active prompt.
+    Queue::assertPushed(SyncSiteGeo::class, 1);
+    Queue::assertPushed(SyncSiteGeo::class, fn (SyncSiteGeo $job): bool => $job->siteId === (string) $b->id);
+});
+
+it('runs the GEO check for all tenants when the filter is cleared to "All"', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $a = Site::factory()->create();
+    $b = Site::factory()->create();
+    GeoPrompt::create(['site_id' => $a->id, 'prompt' => 'p', 'active' => true]);
+    GeoPrompt::create(['site_id' => $b->id, 'prompt' => 'q', 'active' => true]);
+
+    Livewire::test(ListGeoPrompts::class)
+        ->filterTable('site_id', null)   // "All" — no tenant scope
+        ->callAction('run');
 
     Queue::assertPushed(SyncSiteGeo::class, 2);   // a + b (distinct sites with an active prompt)
 });
