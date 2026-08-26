@@ -242,6 +242,18 @@ return [
             'max_sources' => (int) env('LAUNCHPAD_INBOUND_BOOST_MAX_SOURCES', 2),
             'min_source_impressions' => (int) env('LAUNCHPAD_INBOUND_BOOST_MIN_IMPRESSIONS', 1),
         ],
+
+        // Index boost (operator-run, launchpad:boost-indexing): help NEWLY-published PAGES that Google
+        // hasn't indexed yet get discovered, by adding a controlled "Related" link to each from a few
+        // ALREADY-INDEXED pages (index_verdict=PASS in page_index_states), same silo preferred. The source
+        // pages are re-pushed (idempotent by ULID), so Google follows the new crawl path. Bounded so it
+        // never bloats a page or reads as a link scheme.
+        'index_boost' => [
+            'window_days' => (int) env('LAUNCHPAD_INDEX_BOOST_WINDOW_DAYS', 30),  // "newly published" cutoff
+            'max_targets' => (int) env('LAUNCHPAD_INDEX_BOOST_MAX_TARGETS', 25),  // new pages boosted per run
+            'max_sources_per_target' => (int) env('LAUNCHPAD_INDEX_BOOST_MAX_SOURCES', 3),
+            'max_links_per_source' => (int) env('LAUNCHPAD_INDEX_BOOST_MAX_LINKS_PER_SOURCE', 3),  // anti-bloat
+        ],
     ],
 
     /*
