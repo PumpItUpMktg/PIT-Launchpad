@@ -45,3 +45,19 @@ it('renders the live console — engine lanes, the step feed, and the now-contac
         ->assertSee('is often recommended')            // the engine's printed response prose
         ->assertSee('Contacting');                     // the live now-contacting cursor
 });
+
+it('prints the cached answer on a skipped-fresh step too (the fresh re-run case)', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    $prompt = GeoPrompt::create(['site_id' => $site->id, 'prompt' => 'sump pump install Cranford', 'active' => true]);
+
+    // A re-run within the freshness window: the step is skipped-fresh, not re-measured...
+    GeoCheckEvent::create(['site_id' => $site->id, 'run_id' => 'run-2', 'engine' => 'claude', 'geo_prompt_id' => $prompt->id, 'action' => GeoCheckAction::SkippedFresh->value, 'town' => 'Cranford']);
+    // ...but its prior snapshot still holds the answer, which should still print.
+    GeoSnapshot::create(['site_id' => $site->id, 'geo_prompt_id' => $prompt->id, 'engine' => 'claude', 'cited' => true, 'answer_excerpt' => 'SPG installs sump pumps across Cranford.', 'checked_at' => now()->subHour()]);
+
+    Livewire::test(GeoActivityConsole::class)
+        ->set('siteId', $site->id)
+        ->assertOk()
+        ->assertSee('installs sump pumps across Cranford');   // cached answer prints on the fresh step
+});

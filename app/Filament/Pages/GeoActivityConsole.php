@@ -136,7 +136,9 @@ class GeoActivityConsole extends Page
                 'cited' => $e->cited,
                 'competitors' => $e->competitors ?? [],
                 'prompt' => data_get($e->prompt, 'prompt'),
-                'answer' => $e->action === GeoCheckAction::Measured
+                // Print the engine's answer for a measured step AND for a skipped-fresh one (its cached
+                // snapshot answer is still the current answer); deferred/error steps have none to show.
+                'answer' => in_array($e->action, [GeoCheckAction::Measured, GeoCheckAction::SkippedFresh], true)
                     ? $excerpts->get($e->geo_prompt_id.'|'.$e->engine)
                     : null,
             ])->all(),
