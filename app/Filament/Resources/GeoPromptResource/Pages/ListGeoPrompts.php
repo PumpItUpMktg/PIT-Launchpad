@@ -37,6 +37,30 @@ class ListGeoPrompts extends ListRecords
     }
 
     /**
+     * The tenant selected in the table's "Tenant" filter, or null when the operator has chosen "All".
+     * Every header action scopes to it so a GEO run/seed/bridge fires only for the tenant on screen,
+     * never fanning out across the whole portfolio.
+     */
+    private function selectedTenantId(): ?string
+    {
+        $value = data_get($this->getTableFilterState('site_id'), 'value');
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    /** Human label for the scope, for confirmation copy and notifications. */
+    private function scopeLabel(?string $tenantId): string
+    {
+        if ($tenantId === null) {
+            return 'every tenant with matching prompts';
+        }
+
+        $name = Site::query()->withoutGlobalScope(SiteScope::class)->whereKey($tenantId)->value('brand_name');
+
+        return is_string($name) && $name !== '' ? $name : 'the selected tenant';
+    }
+
+    /**
      * @return array<Action>
      */
     protected function getHeaderActions(): array
@@ -46,9 +70,12 @@ class ListGeoPrompts extends ListRecords
                 ->label('Auto-seed prompts')
                 ->icon('heroicon-o-square-3-stack-3d')
                 ->requiresConfirmation()
-                ->modalDescription('Generate GEO prompts from each site\'s services × priority markets × intents (bounded + idempotent — re-running only adds what\'s new).')
+                ->modalDescription(fn (): string => 'Generate GEO prompts from services × priority markets × intents for '.$this->scopeLabel($this->selectedTenantId()).' (bounded + idempotent — re-running only adds what\'s new).')
                 ->action(function (): void {
-                    $siteIds = Service::query()->distinct()->pluck('site_id');
+                    $tenantId = $this->selectedTenantId();
+                    $siteIds = Service::query()
+                        ->when($tenantId !== null, fn ($q) => $q->where('site_id', $tenantId))
+                        ->distinct()->pluck('site_id');
                     foreach ($siteIds as $siteId) {
                         SeedSiteGeoPrompts::dispatch((string) $siteId);
                     }
@@ -61,11 +88,14 @@ class ListGeoPrompts extends ListRecords
                 ->label('Seed coverage checks')
                 ->icon('heroicon-o-shield-check')
                 ->requiresConfirmation()
-                ->modalDescription('Generate brand-anchored "does {brand} offer {service} in {town}?" prompts per site (published towns). These are an accuracy check — reported apart from the visibility score — to catch when an AI has your service area wrong. Bounded + idempotent.')
+                ->modalDescription(fn (): string => 'Generate brand-anchored "does {brand} offer {service} in {town}?" prompts (published towns) for '.$this->scopeLabel($this->selectedTenantId()).'. These are an accuracy check — reported apart from the visibility score — to catch when an AI has your service area wrong. Bounded + idempotent.')
                 ->action(function (): void {
+                    $tenantId = $this->selectedTenantId();
                     $seeder = app(GeoCoveragePromptSeeder::class);
                     $created = 0;
-                    $siteIds = Service::query()->distinct()->pluck('site_id');
+                    $siteIds = Service::query()
+                        ->when($tenantId !== null, fn ($q) => $q->where('site_id', $tenantId))
+                        ->distinct()->pluck('site_id');
                     foreach ($siteIds as $siteId) {
                         $site = Site::query()->withoutGlobalScope(SiteScope::class)->find($siteId);
                         if ($site !== null) {
@@ -81,9 +111,12 @@ class ListGeoPrompts extends ListRecords
                 ->label('Generate top-ups')
                 ->icon('heroicon-o-sparkles')
                 ->requiresConfirmation()
-                ->modalDescription('Use AI to add prompt variants for the absent gaps (prompts no engine cites) — neutral rephrasings + head-to-heads. Bounded; the variants land tagged "assisted" and active.')
+                ->modalDescription(fn (): string => 'Use AI to add prompt variants for the absent gaps (prompts no engine cites) for '.$this->scopeLabel($this->selectedTenantId()).' — neutral rephrasings + head-to-heads. Bounded; the variants land tagged "assisted" and active.')
                 ->action(function (): void {
-                    $siteIds = GeoSnapshot::query()->distinct()->pluck('site_id');
+                    $tenantId = $this->selectedTenantId();
+                    $siteIds = GeoSnapshot::query()
+                        ->when($tenantId !== null, fn ($q) => $q->where('site_id', $tenantId))
+                        ->distinct()->pluck('site_id');
                     foreach ($siteIds as $siteId) {
                         TopUpSiteGeoPrompts::dispatch((string) $siteId);
                     }
@@ -96,9 +129,12 @@ class ListGeoPrompts extends ListRecords
                 ->label('Bridge gaps to content')
                 ->icon('heroicon-o-arrow-right-circle')
                 ->requiresConfirmation()
-                ->modalDescription('Turn each absent gap (a prompt no engine cites) into a directed content candidate on the review queue — pinned to the gap\'s service silo, ready to generate & publish. Bounded + idempotent; nothing is drafted or published automatically.')
+                ->modalDescription(fn (): string => 'Turn each absent gap (a prompt no engine cites) for '.$this->scopeLabel($this->selectedTenantId()).' into a directed content candidate on the review queue — pinned to the gap\'s service silo, ready to generate & publish. Bounded + idempotent; nothing is drafted or published automatically.')
                 ->action(function (): void {
-                    $siteIds = GeoSnapshot::query()->distinct()->pluck('site_id');
+                    $tenantId = $this->selectedTenantId();
+                    $siteIds = GeoSnapshot::query()
+                        ->when($tenantId !== null, fn ($q) => $q->where('site_id', $tenantId))
+                        ->distinct()->pluck('site_id');
                     foreach ($siteIds as $siteId) {
                         BridgeSiteGeoGaps::dispatch((string) $siteId);
                     }
@@ -111,9 +147,12 @@ class ListGeoPrompts extends ListRecords
                 ->label('Run GEO check')
                 ->icon('heroicon-o-sparkles')
                 ->requiresConfirmation()
-                ->modalDescription('Queue an AI-search visibility check for every site that has active prompts. Results appear as each run finishes.')
+                ->modalDescription(fn (): string => 'Queue an AI-search visibility check for '.$this->scopeLabel($this->selectedTenantId()).' (its active prompts). Results appear as each run finishes.')
                 ->action(function (): void {
-                    $siteIds = GeoPrompt::query()->where('active', true)->distinct()->pluck('site_id');
+                    $tenantId = $this->selectedTenantId();
+                    $siteIds = GeoPrompt::query()->where('active', true)
+                        ->when($tenantId !== null, fn ($q) => $q->where('site_id', $tenantId))
+                        ->distinct()->pluck('site_id');
                     foreach ($siteIds as $siteId) {
                         SyncSiteGeo::dispatch((string) $siteId);
                     }
