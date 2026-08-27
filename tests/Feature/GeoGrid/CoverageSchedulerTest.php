@@ -3,6 +3,9 @@
 use App\Enums\ScanCadence;
 use App\GeoGrid\CoveragePlanEstimator;
 use App\Jobs\RunCoverageScan;
+use App\Jobs\SeedSiteCoverage;
+use App\Locations\CountyCoverage;
+use App\Locations\CoverageWriter;
 use App\Models\CoverageArea;
 use App\Models\CoverageScanPlan;
 use App\Models\Keyword;
@@ -12,6 +15,7 @@ use App\Models\Site;
 use App\Operator\Controls\CoveragePlanControl;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 
 function gbpLoc(Site $site, array $extra = []): Location
 {
@@ -78,6 +82,13 @@ it('offers keywords grouped by silo, with an ungrouped bucket', function () {
     expect($opts)->toHaveKey('Sump Pumps')->toHaveKey('Ungrouped')
         ->and(collect($opts['Sump Pumps'])->values()->all())->toBe(['sump pump repair'])
         ->and(collect($opts['Ungrouped'])->values()->all())->toBe(['loose keyword']);
+});
+
+it('the SeedSiteCoverage job no-ops for an unknown site', function () {
+    (new SeedSiteCoverage((string) Str::ulid()))
+        ->handle(app(CountyCoverage::class), app(CoverageWriter::class));
+
+    expect(CoverageArea::count())->toBe(0);   // returns before touching Census/writer
 });
 
 it('run-now dispatches one job per keyword and stamps last_run_at', function () {
