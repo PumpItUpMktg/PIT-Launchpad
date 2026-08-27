@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToSite;
 use App\Models\Scopes\ActiveLocationScope;
 use Database\Factories\LocationFactory;
 use Illuminate\Database\Eloquent\Attributes\ScopedBy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,7 +25,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $home_county_geoid 5-digit county FIPS the geocoded point falls in
  * @property list<string>|null $county_geoids owner-selected counties served (5-digit GEOIDs)
  * @property string|null $address
- * @property string|null $place_id
+ * @property string|null $place_id GBP/Places identifier — the hard key geo-grid ranks are matched by
+ * @property float|null $grid_spacing_miles per-location geo-grid point spacing (miles); null → {@see Location::DEFAULT_GRID_SPACING_MILES}
  * @property array<int, array<string, mixed>>|null $served_towns GBP service-area towns {name, state, lat, lng, geocoded} — one location owns a town per site
  * @property string|null $market_notes operator free-text market context, fed VERBATIM to the location-page drafter
  * @property array<string, mixed>|null $grounding_cache cached local facts {facts, sources, fetched_at} (90-day staleness)
@@ -53,7 +55,62 @@ class Location extends Model
             'served_towns' => 'array',
             'grounding_cache' => 'array',
             'coverage_suggestions' => 'array',
+            'grid_spacing_miles' => 'decimal:2',
         ];
+    }
+
+    /** Default grid point spacing (miles) when a location carries no per-location override — the Local Falcon parity value. */
+    public const DEFAULT_GRID_SPACING_MILES = 1.5;
+
+    /**
+     * GBP-BACKED locations only: those with an attached Google Business Profile (a `gbp_url`), never a
+     * NAP-reconcile row that was folded into another. The gate for the per-location dashboard + geo grid —
+     * non-visitable bases (home, storage) with no listing get neither.
+     *
+     * @param  Builder<Location>  $query
+     * @return Builder<Location>
+     */
+    public function scopeGbpBacked(Builder $query): Builder
+    {
+        return $query->whereNotNull('gbp_url')->whereNull('merged_into_id');
+    }
+
+    /** Whether this location has an attached GBP listing (dashboard-eligible). */
+    public function isGbpBacked(): bool
+    {
+        return trim((string) $this->gbp_url) !== '' && $this->merged_into_id === null;
+    }
+
+    /**
+     * Whether this location can be geo-grid scanned: GBP-backed AND carrying the hard prerequisites — the
+     * `place_id` ranks are matched by (never business name) and the GBP `lat`/`lng` the grid centers on.
+     */
+    public function isGridReady(): bool
+    {
+        return $this->isGbpBacked()
+            && trim((string) $this->place_id) !== ''
+            && $this->lat !== null && $this->lng !== null;
+    }
+
+    /**
+     * Scannable locations — GBP-backed with a place_id and a center coordinate. The set the scan command
+     * iterates.
+     *
+     * @param  Builder<Location>  $query
+     * @return Builder<Location>
+     */
+    public function scopeGridReady(Builder $query): Builder
+    {
+        return $this->scopeGbpBacked($query)
+            ->whereNotNull('place_id')->whereNotNull('lat')->whereNotNull('lng');
+    }
+
+    /** The grid point spacing (miles) to scan this location at — its override, else the default. */
+    public function gridSpacingMiles(): float
+    {
+        return $this->grid_spacing_miles !== null
+            ? (float) $this->grid_spacing_miles
+            : self::DEFAULT_GRID_SPACING_MILES;
     }
 
     /**

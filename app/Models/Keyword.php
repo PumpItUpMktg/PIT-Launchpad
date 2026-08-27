@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $intent §5 search intent (transactional/commercial/informational — string, read by scoring; longtail routing keys on it)
  * @property int $priority
  * @property string|null $target_content_id
+ * @property bool $is_grid_keyword opts this keyword into geo-grid scanning (49 DataForSEO requests per location)
  */
 class Keyword extends Model
 {
@@ -77,6 +78,7 @@ class Keyword extends Model
             'opportunity_score' => 'decimal:4',
             'beatability' => 'decimal:4',
             'priority' => 'integer',
+            'is_grid_keyword' => 'boolean',
         ];
     }
 }
