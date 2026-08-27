@@ -111,7 +111,22 @@ it('parses local maps items', function () {
     $out = dfsClient()->liveMaps('drain cleaning', '30.27,-97.74,14', 'en');
 
     expect($out)->toHaveCount(1)
-        ->and($out[0])->toBe(['rank' => 1, 'name' => 'Joe Plumbing', 'domain' => 'joe.com']);
+        ->and($out[0])->toBe(['rank' => 1, 'name' => 'Joe Plumbing', 'domain' => 'joe.com', 'place_id' => null, 'cid' => null]);
+});
+
+it('keeps place_id and cid from a maps item for geo-grid rank matching', function () {
+    HttpFacade::fake([
+        '*/serp/google/maps/live/advanced' => HttpFacade::response(dfsEnvelope([[
+            'items' => [
+                ['type' => 'maps_search', 'rank_absolute' => 1, 'title' => 'Joe Plumbing', 'domain' => 'joe.com', 'place_id' => 'ChIJ_joe', 'cid' => '123'],
+            ],
+        ]])),
+    ]);
+
+    $out = dfsClient()->liveMaps('drain cleaning', '30.27,-97.74,14', 'en');
+
+    expect($out[0]['place_id'])->toBe('ChIJ_joe')
+        ->and($out[0]['cid'])->toBe('123');
 });
 
 it('reads the zero-cost account endpoint for the verify probe', function () {

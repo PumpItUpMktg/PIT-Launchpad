@@ -272,10 +272,13 @@ return [
     'geo_grid' => [
         'grid_size' => (int) env('LAUNCHPAD_GEO_GRID_SIZE', 7),          // odd; 7×7 = the Local Falcon parity size
         'spacing_miles' => (float) env('LAUNCHPAD_GEO_GRID_SPACING_MILES', 1.5),
-        'zoom' => (int) env('LAUNCHPAD_GEO_GRID_ZOOM', 15),             // calibration constant — hold across scans
+        'zoom' => (int) env('LAUNCHPAD_GEO_GRID_ZOOM', 13),             // calibration constant (matches Local Falcon) — hold across scans
         'depth_cap' => (int) env('LAUNCHPAD_GEO_GRID_DEPTH', 20),       // rank depth; beyond it = not found
         'request_ceiling' => (int) env('LAUNCHPAD_GEO_GRID_REQUEST_CEILING', 5000),  // hard per-run abort (§7)
         'cost_per_request' => (float) env('LAUNCHPAD_GEO_GRID_COST_PER_REQUEST', 0.002),  // ESTIMATE — verify pricing
+        'device' => env('LAUNCHPAD_GEO_GRID_DEVICE', 'desktop'),        // fixed device (calibration constant)
+        'poll_interval_seconds' => (int) env('LAUNCHPAD_GEO_GRID_POLL_INTERVAL', 5),   // standard-mode task poll
+        'poll_max_attempts' => (int) env('LAUNCHPAD_GEO_GRID_POLL_ATTEMPTS', 24),      // ~2 min ceiling per scan
     ],
 
     /*
