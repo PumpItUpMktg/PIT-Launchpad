@@ -58,4 +58,22 @@ final class GeoGridGeometry
     {
         return $gridSize * $gridSize;
     }
+
+    /**
+     * Pin spacing (miles) that puts the outermost axis pins at the given RADIUS on an N×N grid — the
+     * conversion from Local Falcon's grid "radius" (center → edge, horizontally/vertically) to our
+     * pin-to-pin spacing. For a 7×7 the edge is 3 steps out, so a 10-mile radius is 10 ÷ 3 ≈ 3.33 mi
+     * spacing. This is the single guard against the radius-vs-spacing footgun that otherwise makes a
+     * DataForSEO grid 3× the footprint of the Local Falcon grid it's meant to match.
+     */
+    public static function spacingForRadius(float $radiusMiles, int $gridSize): float
+    {
+        return $radiusMiles / max(1, intdiv($gridSize, 2));
+    }
+
+    /** The inverse: the center → edge radius (miles) an N×N grid at the given pin spacing covers. */
+    public static function radiusForSpacing(float $spacingMiles, int $gridSize): float
+    {
+        return $spacingMiles * max(1, intdiv($gridSize, 2));
+    }
 }

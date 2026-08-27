@@ -29,6 +29,20 @@ it('dry-run reports the plan and spends nothing', function () {
     expect(GeoGridScan::count())->toBe(0);
 });
 
+it('shows the --radius override converted to spacing in the dry-run plan', function () {
+    config(['launchpad.geo_grid.grid_size' => 7]);
+    Http::fake();
+    $site = Site::factory()->create();
+    gridReadyLocation($site, ['name' => 'Montclair']);
+    Keyword::factory()->create(['site_id' => $site->id, 'is_grid_keyword' => true, 'query' => 'sump pump repair']);
+
+    $this->artisan('launchpad:geo-grid-scan', ['site' => $site->id, '--radius' => 10, '--dry-run' => true])
+        ->expectsOutputToContain('radius 10 mi → spacing 3.33 mi')
+        ->assertExitCode(0);
+
+    Http::assertNothingSent();
+});
+
 it('aborts a live run that exceeds the hard request ceiling', function () {
     Http::fake();
     config()->set('launchpad.geo_grid.request_ceiling', 50);   // 2 locations × 1 kw × 49 = 98 > 50

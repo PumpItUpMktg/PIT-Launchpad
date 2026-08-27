@@ -40,11 +40,13 @@ it('is grid-ready only with a place_id and a center coordinate', function () {
     expect($ids->all())->toBe([$ready->id]);
 });
 
-it('falls back to the default grid spacing when the location has no override', function () {
+it('falls back to the radius-derived default grid spacing when the location has no override', function () {
+    config(['launchpad.geo_grid.radius_miles' => 10, 'launchpad.geo_grid.grid_size' => 7]);
     $site = Site::factory()->create();
     $default = Location::factory()->create(['site_id' => $site->id, 'grid_spacing_miles' => null]);
     $custom = Location::factory()->create(['site_id' => $site->id, 'grid_spacing_miles' => 3.0]);
 
-    expect($default->gridSpacingMiles())->toBe(1.5)
+    // 10mi radius on a 7×7 = 3 steps to the edge → 10 ÷ 3 spacing (the Local Falcon-calibrated footprint).
+    expect($default->gridSpacingMiles())->toBe(10 / 3)
         ->and($custom->gridSpacingMiles())->toBe(3.0);
 });

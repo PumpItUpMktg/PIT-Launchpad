@@ -19,7 +19,8 @@ use Illuminate\Console\Command;
  */
 class GeoGridPlanCommand extends Command
 {
-    protected $signature = 'launchpad:geo-grid-plan {site : Site id, brand name, or domain (partial ok)}';
+    protected $signature = 'launchpad:geo-grid-plan {site : Site id, brand name, or domain (partial ok)}
+        {--radius= : Preview at this grid RADIUS in miles (Local Falcon-style, center→edge) instead of each location\'s own spacing}';
 
     protected $description = 'Dry-run a geo-grid scan: locations × grid keywords × points → total requests + estimated cost. No API calls.';
 
@@ -64,11 +65,20 @@ class GeoGridPlanCommand extends Command
             ['Hard request ceiling', number_format($ceiling)],
         ]);
 
+        $radiusOpt = $this->option('radius');
+        if ($radiusOpt !== null) {
+            $override = GeoGridGeometry::spacingForRadius((float) $radiusOpt, $gridSize);
+            $this->comment(sprintf('--radius override: %.1f mi radius → %.2f mi spacing for ALL locations below.', (float) $radiusOpt, $override));
+        }
         if ($locations->isNotEmpty()) {
             $this->line('<info>Grid-ready locations</info>:');
             foreach ($locations as $loc) {
-                $this->line(sprintf('  %s  (%.5f, %.5f, spacing %.2f mi)',
-                    $loc->name ?: $loc->id, (float) $loc->lat, (float) $loc->lng, $loc->gridSpacingMiles()));
+                $spacing = $radiusOpt !== null
+                    ? GeoGridGeometry::spacingForRadius((float) $radiusOpt, $gridSize)
+                    : $loc->gridSpacingMiles();
+                $radius = GeoGridGeometry::radiusForSpacing($spacing, $gridSize);
+                $this->line(sprintf('  %s  (%.5f, %.5f — radius %.1f mi / spacing %.2f mi)',
+                    $loc->name ?: $loc->id, (float) $loc->lat, (float) $loc->lng, $radius, $spacing));
             }
         }
 
