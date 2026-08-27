@@ -5,6 +5,7 @@ use App\Enums\UserRole;
 use App\Filament\Resources\CoverageScanPlanResource\Pages\CreateCoverageScanPlan;
 use App\Filament\Resources\CoverageScanPlanResource\Pages\EditCoverageScanPlan;
 use App\Filament\Resources\CoverageScanPlanResource\Pages\ListCoverageScanPlans;
+use App\Jobs\SeedSiteCoverage;
 use App\Models\CoverageArea;
 use App\Models\CoverageScanPlan;
 use App\Models\Keyword;
@@ -12,6 +13,7 @@ use App\Models\Location;
 use App\Models\Site;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -43,4 +45,13 @@ it('renders the create and edit forms', function () {
 
     Livewire::test(CreateCoverageScanPlan::class)->assertOk();
     Livewire::test(EditCoverageScanPlan::class, ['record' => $plan->getRouteKey()])->assertOk();
+});
+
+it('queues county-coverage seeding from the Seed county towns action', function () {
+    Queue::fake();
+    $plan = planFixture();
+
+    Livewire::test(ListCoverageScanPlans::class)->callTableAction('seedCounty', $plan);
+
+    Queue::assertPushed(SeedSiteCoverage::class, fn ($job): bool => $job->siteId === $plan->site_id);
 });

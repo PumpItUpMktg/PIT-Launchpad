@@ -6,6 +6,7 @@ use App\Enums\ScanCadence;
 use App\Filament\Resources\CoverageScanPlanResource\Pages\CreateCoverageScanPlan;
 use App\Filament\Resources\CoverageScanPlanResource\Pages\EditCoverageScanPlan;
 use App\Filament\Resources\CoverageScanPlanResource\Pages\ListCoverageScanPlans;
+use App\Jobs\SeedSiteCoverage;
 use App\Models\CoverageScanPlan;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -101,6 +102,16 @@ class CoverageScanPlanResource extends Resource
                         $n = app(CoveragePlanControl::class)->runNow($record);
                         Notification::make()
                             ->title($n > 0 ? "Queued {$n} coverage scan(s)" : 'No keywords on this plan')
+                            ->success()->send();
+                    }),
+                Action::make('seedCounty')->label('Seed county towns')->icon('heroicon-o-map')
+                    ->requiresConfirmation()
+                    ->modalDescription('Enumerate every municipality in this tenant\'s served counties (Census, with population) into the coverage set, so scans measure the whole county. Runs on the queue — the towns/estimate appear once it finishes.')
+                    ->action(function (CoverageScanPlan $record): void {
+                        SeedSiteCoverage::dispatch($record->site_id);
+                        Notification::make()
+                            ->title('County coverage seeding queued')
+                            ->body('Refresh in a minute — the town count and estimate will fill in. (The tenant\'s locations need a county assigned first.)')
                             ->success()->send();
                     }),
                 EditAction::make(),

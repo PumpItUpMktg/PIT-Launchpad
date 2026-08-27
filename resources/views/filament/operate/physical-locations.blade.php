@@ -230,6 +230,13 @@
                                 @if ($card['home_resolved'])
                                     <span class="pl-chip {{ $card['serves_home_county'] ? 'good' : 'warn' }}">{{ $card['serves_home_county'] ? 'serves home county' : 'home county unserved' }}</span>
                                 @endif
+                                {{-- Geo coverage: the area-visibility score pill + a link to the full Coverage Progress view. --}}
+                                @if ($card['coverage_score'] !== null)
+                                    <span class="pl-chip" style="color:{{ $card['coverage_score'] >= 70 ? '#15803d' : ($card['coverage_score'] >= 40 ? '#b45309' : '#c0392b') }};border-color:currentColor;font-weight:700;">Area score {{ round($card['coverage_score']) }}</span>
+                                @else
+                                    <span class="pl-chip">Coverage: no scan yet</span>
+                                @endif
+                                <a class="pl-chip" href="{{ \App\Filament\Pages\LocationCoverage::getUrl(['siteId' => $this->siteId, 'locationId' => $card['id']]) }}" wire:navigate>View coverage →</a>
                             </div>
                         </div>
                         <div class="pl-body">
