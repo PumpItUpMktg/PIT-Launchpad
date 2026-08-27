@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\GeoGrid\GeoGridGeometry;
 use App\Models\Concerns\BelongsToSite;
 use App\Models\Scopes\ActiveLocationScope;
 use Database\Factories\LocationFactory;
@@ -26,7 +27,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property list<string>|null $county_geoids owner-selected counties served (5-digit GEOIDs)
  * @property string|null $address
  * @property string|null $place_id GBP/Places identifier — the hard key geo-grid ranks are matched by
- * @property float|null $grid_spacing_miles per-location geo-grid point spacing (miles); null → {@see Location::DEFAULT_GRID_SPACING_MILES}
+ * @property float|null $grid_spacing_miles per-location geo-grid point spacing (miles); null → derived from config geo_grid.radius_miles (see {@see Location::gridSpacingMiles()})
  * @property array<int, array<string, mixed>>|null $served_towns GBP service-area towns {name, state, lat, lng, geocoded} — one location owns a town per site
  * @property string|null $market_notes operator free-text market context, fed VERBATIM to the location-page drafter
  * @property array<string, mixed>|null $grounding_cache cached local facts {facts, sources, fetched_at} (90-day staleness)
@@ -58,9 +59,6 @@ class Location extends Model
             'grid_spacing_miles' => 'decimal:2',
         ];
     }
-
-    /** Default grid point spacing (miles) when a location carries no per-location override — the Local Falcon parity value. */
-    public const DEFAULT_GRID_SPACING_MILES = 1.5;
 
     /**
      * GBP-BACKED locations only: those with an attached Google Business Profile (a `gbp_url`), never a
@@ -105,12 +103,20 @@ class Location extends Model
             ->whereNotNull('place_id')->whereNotNull('lat')->whereNotNull('lng');
     }
 
-    /** The grid point spacing (miles) to scan this location at — its override, else the default. */
+    /**
+     * The grid point spacing (miles) to scan this location at — its per-location override, else the default
+     * derived from the configured grid RADIUS (Local Falcon's knob): spacing = radius ÷ ((grid_size−1)/2).
+     */
     public function gridSpacingMiles(): float
     {
-        return $this->grid_spacing_miles !== null
-            ? (float) $this->grid_spacing_miles
-            : self::DEFAULT_GRID_SPACING_MILES;
+        if ($this->grid_spacing_miles !== null) {
+            return (float) $this->grid_spacing_miles;
+        }
+
+        return GeoGridGeometry::spacingForRadius(
+            (float) config('launchpad.geo_grid.radius_miles', 10),
+            (int) config('launchpad.geo_grid.grid_size', 7),
+        );
     }
 
     /**

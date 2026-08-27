@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\GeoGrid\GeoGridGeometry;
 use App\GeoGrid\GeoGridMetrics;
 use App\GeoGrid\GeoGridScanner;
 use App\Models\Keyword;
@@ -23,6 +24,7 @@ class GeoGridScanCommand extends Command
     protected $signature = 'launchpad:geo-grid-scan {site : Site id, brand name, or domain (partial ok)}
         {--location= : Limit to one location (id or name substring)}
         {--keyword= : Limit to one keyword (id or query substring)}
+        {--radius= : Grid RADIUS in miles (Local Falcon-style, center→edge) — overrides per-location spacing for this run}
         {--dry-run : Report the plan (requests + cost) and spend nothing}';
 
     protected $description = 'Run DataForSEO Google-Maps geo-grid scans for a site (place_id-matched); dry-run + hard-ceiling cost-braked.';
@@ -49,6 +51,10 @@ class GeoGridScanCommand extends Command
         $costPer = (float) config('launchpad.geo_grid.cost_per_request', 0.002);
         $pointsPerScan = $gridSize * $gridSize;
 
+        // --radius overrides pin spacing the Local-Falcon way (center→edge). Null = each location's own spacing.
+        $radiusOpt = $this->option('radius');
+        $spacingOverride = $radiusOpt !== null ? GeoGridGeometry::spacingForRadius((float) $radiusOpt, $gridSize) : null;
+
         $locations = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->gridReady()
             ->when($this->option('location'), fn ($q, $v) => $q->where(fn ($w) => $w->where('id', $v)->orWhere('name', 'like', "%{$v}%")))
@@ -62,11 +68,17 @@ class GeoGridScanCommand extends Command
         $requests = $scans * $pointsPerScan;
         $cost = $requests * $costPer;
 
+        $defaultRadius = (float) config('launchpad.geo_grid.radius_miles', 10);
+        $geometry = $spacingOverride !== null
+            ? "radius {$radiusOpt} mi → spacing ".number_format($spacingOverride, 2).' mi (override, all locations)'
+            : 'per-location spacing (default radius '.number_format($defaultRadius, 1).' mi)';
+
         $this->info($site->brand_name ?: (string) $site->id);
         $this->table(['Metric', 'Value'], [
             ['Grid-ready locations', (string) $locations->count()],
             ['Grid keywords', (string) $keywords->count()],
             ['Scans', (string) $scans],
+            ['Geometry', "{$gridSize}×{$gridSize} · {$geometry}"],
             ['Total DataForSEO requests', number_format($requests)." ({$pointsPerScan}/scan)"],
             ['Estimated cost', '$'.number_format($cost, 2)],
             ['Hard request ceiling', number_format($ceiling)],
@@ -102,7 +114,7 @@ class GeoGridScanCommand extends Command
         foreach ($locations as $location) {
             foreach ($keywords as $keyword) {
                 try {
-                    $scan = $scanner->scan($location, $keyword);
+                    $scan = $scanner->scan($location, $keyword, $spacingOverride);
                     $metrics->recompute($scan);   // derive found_rate/ARP/ATRP/SoLV + trend ATRP immediately
                     $found = $scan->points()->whereNotNull('rank')->count();
                     $done++;

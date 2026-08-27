@@ -40,3 +40,15 @@ it('rejects an even grid size and non-positive spacing', function () {
 it('counts points per scan as the square of the grid size', function () {
     expect(app(GeoGridGeometry::class)->pointCount(7))->toBe(49);
 });
+
+it('converts a Local Falcon RADIUS to pin spacing and back (the footgun guard)', function () {
+    // 7×7 = 3 steps center→edge. A 10mi radius ⇒ 10/3 spacing; a 1.5mi radius ⇒ 0.5 spacing.
+    expect(GeoGridGeometry::spacingForRadius(10, 7))->toBe(10 / 3)
+        ->and(GeoGridGeometry::spacingForRadius(1.5, 7))->toBe(0.5)
+        ->and(GeoGridGeometry::radiusForSpacing(3.33, 7))->toBe(3.33 * 3)
+        // Round-trips: radius → spacing → radius.
+        ->and(GeoGridGeometry::radiusForSpacing(GeoGridGeometry::spacingForRadius(10, 7), 7))->toBe(10.0);
+
+    // 3×3 = 1 step to the edge, so radius == spacing.
+    expect(GeoGridGeometry::spacingForRadius(2.0, 3))->toBe(2.0);
+});

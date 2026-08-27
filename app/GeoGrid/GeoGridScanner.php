@@ -34,14 +34,14 @@ final class GeoGridScanner
         private readonly GeoGridGeometry $geometry,
     ) {}
 
-    public function scan(Location $location, Keyword $keyword): GeoGridScan
+    public function scan(Location $location, Keyword $keyword, ?float $spacingMilesOverride = null): GeoGridScan
     {
         $gridSize = max(1, (int) config('launchpad.geo_grid.grid_size', 7));
         $zoom = (int) config('launchpad.geo_grid.zoom', 13);
         $depthCap = (int) config('launchpad.geo_grid.depth_cap', 20);
         $device = (string) config('launchpad.geo_grid.device', 'desktop');
         $language = (string) config('services.dataforseo.language_code', 'en');
-        $spacing = $location->gridSpacingMiles();
+        $spacing = $spacingMilesOverride ?? $location->gridSpacingMiles();
         $centerLat = (float) $location->lat;
         $centerLng = (float) $location->lng;
 

@@ -271,7 +271,11 @@ return [
 
     'geo_grid' => [
         'grid_size' => (int) env('LAUNCHPAD_GEO_GRID_SIZE', 7),          // odd; 7×7 = the Local Falcon parity size
-        'spacing_miles' => (float) env('LAUNCHPAD_GEO_GRID_SPACING_MILES', 1.5),
+        // Grid RADIUS in miles — center→edge, the way Local Falcon expresses a grid (NOT pin-to-pin spacing).
+        // Pin spacing is DERIVED: spacing = radius ÷ ((grid_size−1)/2). 10mi/7×7 ⇒ 3.33mi spacing, the
+        // footprint calibrated point-for-point against Local Falcon (Aug 2026). Per-location override lives
+        // on locations.grid_spacing_miles.
+        'radius_miles' => (float) env('LAUNCHPAD_GEO_GRID_RADIUS_MILES', 10),
         'zoom' => (int) env('LAUNCHPAD_GEO_GRID_ZOOM', 13),             // calibration constant (matches Local Falcon) — hold across scans
         'depth_cap' => (int) env('LAUNCHPAD_GEO_GRID_DEPTH', 20),       // rank depth; beyond it = not found
         'request_ceiling' => (int) env('LAUNCHPAD_GEO_GRID_REQUEST_CEILING', 5000),  // hard per-run abort (§7)

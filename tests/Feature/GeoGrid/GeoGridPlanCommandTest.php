@@ -29,6 +29,19 @@ it('reports locations × grid keywords × points and the total request count, no
         ->assertExitCode(0);
 });
 
+it('previews a Local Falcon-style --radius by converting it to pin spacing', function () {
+    config(['launchpad.geo_grid.grid_size' => 7]);
+    $site = Site::factory()->create();
+    // A location whose own spacing is 5.0 — proving --radius=10 overrides it to 3.33, not just echoing the default.
+    gridLocation($site, ['name' => 'Montclair', 'grid_spacing_miles' => 5.0]);
+    Keyword::factory()->create(['site_id' => $site->id, 'is_grid_keyword' => true]);
+
+    $this->artisan('launchpad:geo-grid-plan', ['site' => $site->id, '--radius' => 10])
+        ->expectsOutputToContain('--radius override: 10.0 mi radius → 3.33 mi spacing')
+        ->expectsOutputToContain('radius 10.0 mi / spacing 3.33 mi')
+        ->assertExitCode(0);
+});
+
 it('flags a plan that exceeds the hard request ceiling', function () {
     config()->set('launchpad.geo_grid.request_ceiling', 50);   // one 49-point scan already tops it with 2 locations
     $site = Site::factory()->create();
