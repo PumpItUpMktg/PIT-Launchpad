@@ -2,6 +2,7 @@
 
 namespace App\GeoGrid;
 
+use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Location;
@@ -11,7 +12,7 @@ use Illuminate\Support\Collection;
 /**
  * Assembles the operator geo-grid "small multiples" view for one location: one card per grid keyword, each
  * carrying the latest scan's heat-map matrix plus its delta against the previous scan. Pure read-model — it
- * reads stored {@see GeoGridScan}s and their {@see \App\Models\GeoGridPoint}s (the source of truth) and
+ * reads stored {@see GeoGridScan}s and their {@see GeoGridPoint}s (the source of truth) and
  * derives nothing that a rescan would be needed for; aggregates come straight off the scan row.
  *
  * The matrix is emitted NORTH-UP: geometry row 0 is the southernmost cell ({@see GeoGridGeometry}), so it is
