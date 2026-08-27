@@ -63,6 +63,32 @@ it('resolves a location\'s served, geocoded towns population-descending', functi
         ->and($points[1]['label'])->toBe('Nutley');
 });
 
+it('scans every municipality in the location\'s counties, not just assigned/built towns', function () {
+    $site = Site::factory()->create();
+    // Downingtown, PA — Chester County = GEOID 42029. Municipalities prefix with it.
+    $loc = coverageLocation($site, ['home_county_geoid' => '42029', 'county_geoids' => ['42029']]);
+
+    // In-county, NOT assigned to the location (source_location_ids empty) — must still be scanned.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Coatesville', 'geo_id' => '4202915568', 'population' => 13000, 'lat' => 39.98, 'lng' => -75.82, 'source_location_ids' => []]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Downingtown', 'geo_id' => '4202919000', 'population' => 8000, 'lat' => 40.00, 'lng' => -75.70, 'source_location_ids' => []]);
+    // A different county (Montgomery = 42091) — excluded.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Norristown', 'geo_id' => '4209154656', 'population' => 34000, 'lat' => 40.12, 'lng' => -75.34, 'source_location_ids' => []]);
+
+    $points = app(CoverageGrid::class)->pointsFor($loc->fresh());
+
+    expect($points)->toHaveCount(2)                                 // the two Chester County towns, not Norristown
+        ->and(collect($points)->pluck('label')->all())->toContain('Coatesville')->toContain('Downingtown')
+        ->and(collect($points)->pluck('label')->all())->not->toContain('Norristown');
+});
+
+it('falls back to assigned towns when the location has no counties resolved', function () {
+    $site = Site::factory()->create();
+    $loc = coverageLocation($site);   // no county_geoids
+    servedTown($site, $loc, 'Belleville', 36000, 40.79, -74.15);
+
+    expect(app(CoverageGrid::class)->pointsFor($loc->fresh()))->toHaveCount(1);   // assignment fallback
+});
+
 it('scans a location\'s towns in coverage mode, keyed to coverage_area_id', function () {
     fakeCoverageMaps(2, [
         ['type' => 'maps_search', 'rank_absolute' => 1, 'title' => 'Impostor', 'domain' => 'x.com', 'place_id' => 'ChIJ_other', 'cid' => '999'],
