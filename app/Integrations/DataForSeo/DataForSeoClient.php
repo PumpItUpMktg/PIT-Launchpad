@@ -162,7 +162,7 @@ class DataForSeoClient
     // --- SERP API: local maps (live), one geo point ---
 
     /**
-     * @return list<array{rank: int|null, name: string, domain: string|null}>
+     * @return list<array{rank: int|null, name: string, domain: string|null, place_id: string|null, cid: string|null}>
      */
     public function liveMaps(string $keyword, string $locationCoordinate, string $language): array
     {
@@ -361,7 +361,7 @@ class DataForSeoClient
 
     /**
      * @param  array<int, mixed>  $result
-     * @return list<array{rank: int|null, name: string, domain: string|null}>
+     * @return list<array{rank: int|null, name: string, domain: string|null, place_id: string|null, cid: string|null}>
      */
     public static function parseMaps(array $result): array
     {
@@ -375,6 +375,10 @@ class DataForSeoClient
                 'rank' => isset($item['rank_absolute']) ? (int) $item['rank_absolute'] : null,
                 'name' => (string) ($item['title'] ?? ''),
                 'domain' => isset($item['domain']) ? (string) $item['domain'] : null,
+                // Kept for geo-grid place_id/CID rank matching (never business name). §5's domain-matched
+                // local grid ignores these extra keys.
+                'place_id' => isset($item['place_id']) ? (string) $item['place_id'] : null,
+                'cid' => isset($item['cid']) ? (string) $item['cid'] : null,
             ];
         }
 
