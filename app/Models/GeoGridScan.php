@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property string $location_id
  * @property string $keyword_id
  * @property string $provider
+ * @property string $mode grid | coverage
  * @property string|null $provider_scan_id
  * @property int $grid_size
  * @property float $spacing_miles
@@ -29,6 +30,8 @@ use Illuminate\Support\Carbon;
  * @property float|null $atrp
  * @property float|null $solv
  * @property float|null $found_rate
+ * @property float|null $pop_found_rate
+ * @property float|null $pop_solv
  * @property string $status
  * @property Carbon|null $scanned_at
  */
@@ -52,6 +55,8 @@ class GeoGridScan extends Model
             'atrp' => 'decimal:2',
             'solv' => 'decimal:2',
             'found_rate' => 'decimal:2',
+            'pop_found_rate' => 'decimal:2',
+            'pop_solv' => 'decimal:2',
             'scanned_at' => 'datetime',
         ];
     }

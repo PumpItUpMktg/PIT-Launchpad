@@ -20,6 +20,11 @@ use Illuminate\Support\Facades\DB;
  *
  * zoom + depth + device are held constant from config (calibration constants). The caller (scan command)
  * owns the hard per-RUN request ceiling; this scans a single grid.
+ *
+ * Two point sources share the same post → match-by-place_id → persist machinery: GRID mode ({@see scan()},
+ * an abstract square lattice, for Local Falcon parity / falloff) and COVERAGE mode ({@see scanCoverage()}, the
+ * location's actual served towns via {@see CoverageGrid}, so each point is a real town we target). The scan
+ * header's `mode` records which.
  */
 final class GeoGridScanner
 {
@@ -32,20 +37,71 @@ final class GeoGridScanner
     public function __construct(
         private readonly DataForSeoClient $client,
         private readonly GeoGridGeometry $geometry,
+        private readonly CoverageGrid $coverage,
     ) {}
 
+    /** GRID mode: scan an abstract square lattice around the location's GBP centre. */
     public function scan(Location $location, Keyword $keyword, ?float $spacingMilesOverride = null): GeoGridScan
     {
         $gridSize = max(1, (int) config('launchpad.geo_grid.grid_size', 7));
-        $zoom = (int) config('launchpad.geo_grid.zoom', 13);
-        $depthCap = (int) config('launchpad.geo_grid.depth_cap', 20);
-        $device = (string) config('launchpad.geo_grid.device', 'desktop');
-        $language = (string) config('services.dataforseo.language_code', 'en');
         $spacing = $spacingMilesOverride ?? $location->gridSpacingMiles();
         $centerLat = (float) $location->lat;
         $centerLng = (float) $location->lng;
 
         $points = $this->geometry->points($centerLat, $centerLng, $gridSize, $spacing);
+
+        return $this->runScan($location, $keyword, $points, [
+            'mode' => 'grid',
+            'grid_size' => $gridSize,
+            'spacing_miles' => $spacing,
+            'center_lat' => $centerLat,
+            'center_lng' => $centerLng,
+        ]);
+    }
+
+    /**
+     * COVERAGE mode: scan the location's served TOWNS (each municipality's centroid), so rank is keyed to a
+     * real town we target. Point count = town count (variable per location, not grid_size²).
+     */
+    public function scanCoverage(Location $location, Keyword $keyword): GeoGridScan
+    {
+        $points = [];
+        foreach ($this->coverage->pointsFor($location) as $i => $town) {
+            $points[] = [
+                // row/col are a synthetic linear index so the (scan_id,row,col) unique key holds; the town's
+                // real identity is coverage_area_id.
+                'row' => 0,
+                'col' => $i,
+                'lat' => $town['lat'],
+                'lng' => $town['lng'],
+                'coverage_area_id' => $town['coverage_area_id'],
+                'label' => $town['label'],
+            ];
+        }
+
+        return $this->runScan($location, $keyword, $points, [
+            'mode' => 'coverage',
+            'grid_size' => count($points),   // point count — towns, not a lattice dimension
+            'spacing_miles' => 0,            // n/a: towns aren't uniformly spaced
+            'center_lat' => (float) $location->lat,
+            'center_lng' => (float) $location->lng,
+        ]);
+    }
+
+    /**
+     * The shared scan machinery: post one task per point, poll to completion, match the business by
+     * place_id/CID, and persist the {@see GeoGridScan} header + one {@see GeoGridPoint} per point (carrying
+     * whatever identity the point has — grid row/col or a coverage_area_id/label).
+     *
+     * @param  list<array{row: int, col: int, lat: float, lng: float, coverage_area_id?: string, label?: string}>  $points
+     * @param  array{mode: string, grid_size: int, spacing_miles: float, center_lat: float, center_lng: float}  $header
+     */
+    private function runScan(Location $location, Keyword $keyword, array $points, array $header): GeoGridScan
+    {
+        $zoom = (int) config('launchpad.geo_grid.zoom', 13);
+        $depthCap = (int) config('launchpad.geo_grid.depth_cap', 20);
+        $device = (string) config('launchpad.geo_grid.device', 'desktop');
+        $language = (string) config('services.dataforseo.language_code', 'en');
 
         // One task per point, in point order. DataForSEO returns task ids in the order posted.
         $tasks = array_map(fn (array $p): array => [
@@ -56,7 +112,7 @@ final class GeoGridScanner
             'depth' => $depthCap,
         ], $points);
 
-        $taskIds = $this->client->taskPost(self::MAPS_POST, $tasks);
+        $taskIds = $points === [] ? [] : $this->client->taskPost(self::MAPS_POST, $tasks);
 
         // task id → point index (only the ids we got back, positionally).
         $idToIndex = [];
@@ -70,17 +126,18 @@ final class GeoGridScanner
         // Poll standard-queue tasks until ours are ready (bounded), collecting each result.
         $results = $this->collect($idToIndex, $placeId, $cid);
 
-        return DB::transaction(function () use ($location, $keyword, $points, $taskIds, $idToIndex, $results, $gridSize, $spacing, $centerLat, $centerLng, $zoom, $depthCap): GeoGridScan {
+        return DB::transaction(function () use ($location, $keyword, $points, $taskIds, $idToIndex, $results, $header, $zoom, $depthCap): GeoGridScan {
             $scan = GeoGridScan::create([
                 'site_id' => $location->site_id,
                 'location_id' => $location->id,
                 'keyword_id' => $keyword->id,
                 'provider' => 'dataforseo',
                 'provider_scan_id' => $taskIds[0] ?? null,
-                'grid_size' => $gridSize,
-                'spacing_miles' => $spacing,
-                'center_lat' => $centerLat,
-                'center_lng' => $centerLng,
+                'mode' => $header['mode'],
+                'grid_size' => $header['grid_size'],
+                'spacing_miles' => $header['spacing_miles'],
+                'center_lat' => $header['center_lat'],
+                'center_lng' => $header['center_lng'],
                 'zoom' => $zoom,
                 'depth_cap' => $depthCap,
                 'status' => count($results) >= count($points) ? 'complete' : 'partial',
@@ -100,6 +157,8 @@ final class GeoGridScanner
                     'rank' => $found['rank'] ?? null,
                     'competitors' => $found['competitors'] ?? null,
                     'provider_task_id' => $indexToTaskId[$i] ?? null,
+                    'coverage_area_id' => $p['coverage_area_id'] ?? null,
+                    'label' => $p['label'] ?? null,
                 ]);
             }
 
