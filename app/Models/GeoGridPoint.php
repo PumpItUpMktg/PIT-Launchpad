@@ -17,6 +17,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $scan_id
  * @property int $row
  * @property int $col
+ * @property string|null $coverage_area_id the town this point measures (coverage mode); null in grid mode
+ * @property string|null $label town name (coverage mode)
  * @property float $lat
  * @property float $lng
  * @property int|null $rank

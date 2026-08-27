@@ -44,6 +44,7 @@ final class GeoGridBoard
         $scans = GeoGridScan::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $location->site_id)
             ->where('location_id', $location->id)
+            ->where('mode', 'grid')   // the square small-multiples view; coverage-mode scans render elsewhere
             ->with('points')
             ->orderByDesc('scanned_at')
             ->get();

@@ -2,9 +2,11 @@
 
 namespace App\GeoGrid;
 
+use App\Models\CoverageArea;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
 use App\Models\MetricSnapshot;
+use App\Models\Scopes\SiteScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -68,6 +70,12 @@ final class GeoGridMetrics
     public function recompute(GeoGridScan $scan): GeoGridScan
     {
         $metrics = $this->compute($scan->points()->get(['rank']), (int) $scan->depth_cap);
+
+        // Coverage-mode scans get population-weighted variants — visibility where the customers actually are.
+        if ($scan->mode === 'coverage') {
+            $metrics += $this->populationWeighted($scan);
+        }
+
         $scan->forceFill($metrics)->save();
 
         if ($metrics['atrp'] !== null) {
@@ -75,6 +83,48 @@ final class GeoGridMetrics
         }
 
         return $scan;
+    }
+
+    /**
+     * Population-weighted found-rate + SoLV for a coverage scan: each town's contribution is its population,
+     * so "we're top-3 in towns holding 60% of the served population" — the metric that actually maps to
+     * revenue reach. Towns with unknown population (0) don't count toward the total.
+     *
+     * @return array{pop_found_rate: float|null, pop_solv: float|null}
+     */
+    private function populationWeighted(GeoGridScan $scan): array
+    {
+        $points = $scan->points()->get(['rank', 'coverage_area_id']);
+        $ids = $points->pluck('coverage_area_id')->filter()->unique()->all();
+        $populations = $ids === []
+            ? collect()
+            : CoverageArea::withoutGlobalScope(SiteScope::class)->whereIn('id', $ids)->pluck('population', 'id');
+
+        $total = 0;
+        $found = 0;
+        $solv = 0;
+        foreach ($points as $point) {
+            $weight = (int) ($populations[$point->coverage_area_id] ?? 0);
+            if ($weight <= 0) {
+                continue;
+            }
+            $total += $weight;
+            if ($point->rank !== null) {
+                $found += $weight;
+                if ((int) $point->rank <= 3) {
+                    $solv += $weight;
+                }
+            }
+        }
+
+        if ($total === 0) {
+            return ['pop_found_rate' => null, 'pop_solv' => null];
+        }
+
+        return [
+            'pop_found_rate' => round($found / $total * 100, 2),
+            'pop_solv' => round($solv / $total * 100, 2),
+        ];
     }
 
     /**
