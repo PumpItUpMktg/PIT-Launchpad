@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\GeoGrid\GeoGridMetrics;
 use App\GeoGrid\GeoGridScanner;
 use App\Models\Keyword;
 use App\Models\Location;
@@ -26,7 +27,7 @@ class GeoGridScanCommand extends Command
 
     protected $description = 'Run DataForSEO Google-Maps geo-grid scans for a site (place_id-matched); dry-run + hard-ceiling cost-braked.';
 
-    public function handle(GeoGridScanner $scanner): int
+    public function handle(GeoGridScanner $scanner, GeoGridMetrics $metrics): int
     {
         $needle = (string) $this->argument('site');
         $matches = SiteFinder::matches($needle);
@@ -102,6 +103,7 @@ class GeoGridScanCommand extends Command
             foreach ($keywords as $keyword) {
                 try {
                     $scan = $scanner->scan($location, $keyword);
+                    $metrics->recompute($scan);   // derive found_rate/ARP/ATRP/SoLV + trend ATRP immediately
                     $found = $scan->points()->whereNotNull('rank')->count();
                     $done++;
                     $this->line("  <info>✓</info> {$location->name} × {$keyword->query} → scan {$scan->id} ({$found}/{$pointsPerScan} found, {$scan->status})");
