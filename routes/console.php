@@ -101,3 +101,8 @@ Schedule::command('sandhog:derive-milestones')->dailyAt('05:00')->withoutOverlap
 // improvement report (PDF attached) on the 1st. Defaults to last month so a
 // complete month is reported; per-site opt-out is having no client users.
 Schedule::command('launchpad:send-monthly-reports')->monthlyOn(1, '08:00')->withoutOverlapping();
+
+// Coverage scan scheduler — dispatch the queued town-scans for every per-GBP coverage plan whose cadence has
+// come due, then advance its next run. Daily check; the plans carry the real cadence (monthly/weekly), so
+// this just fires what's due today. Cost-braked per plan. withoutOverlapping so a slow sweep can't stack.
+Schedule::command('launchpad:run-due-coverage-plans')->daily()->withoutOverlapping();

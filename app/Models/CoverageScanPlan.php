@@ -30,6 +30,22 @@ class CoverageScanPlan extends Model
 
     protected $guarded = [];
 
+    /**
+     * Keep `next_run_at` consistent with the schedule however the plan is saved (Filament form OR the control
+     * service): Off/disabled ⇒ dormant (null); newly enabled ⇒ due now (runs on the next scheduler tick). A
+     * future next_run_at set by the scheduler after a run is left untouched.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (CoverageScanPlan $plan): void {
+            if (! $plan->enabled || $plan->cadence === ScanCadence::Off) {
+                $plan->next_run_at = null;
+            } elseif ($plan->next_run_at === null) {
+                $plan->next_run_at = Carbon::now();
+            }
+        });
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {

@@ -283,6 +283,9 @@ return [
         'device' => env('LAUNCHPAD_GEO_GRID_DEVICE', 'desktop'),        // fixed device (calibration constant)
         'poll_interval_seconds' => (int) env('LAUNCHPAD_GEO_GRID_POLL_INTERVAL', 5),   // standard-mode task poll
         'poll_max_attempts' => (int) env('LAUNCHPAD_GEO_GRID_POLL_ATTEMPTS', 24),      // ~2 min ceiling per scan
+        // Queue for scheduled coverage-scan jobs. Blank ⇒ the default queue (which the managed worker watches
+        // — a named queue needs the worker's --queue list to include it, or these silently pile up).
+        'queue' => env('LAUNCHPAD_GEO_GRID_QUEUE'),
     ],
 
     /*
