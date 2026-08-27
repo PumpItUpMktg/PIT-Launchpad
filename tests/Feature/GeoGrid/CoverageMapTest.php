@@ -67,6 +67,22 @@ it('assembles a service\'s current town map, score, and history filmstrip', func
     expect($bigMarker['rank'])->toBe(1)->and($bigMarker['color'])->toBe('#15803d');   // #1 → green
 });
 
+it('computes the location area score as the mean of the latest per-service scores', function () {
+    $site = Site::factory()->create();
+    $loc = Location::factory()->create(['site_id' => $site->id]);
+    $kwA = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'a']);
+    $kwB = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'b']);
+    $town = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Big', 'population' => 100000, 'lat' => 40.8, 'lng' => -74.2, 'source_location_ids' => [$loc->id]]);
+    $t = fn (int $rank) => [['id' => $town->id, 'name' => 'Big', 'lat' => 40.8, 'lng' => -74.2, 'pop' => 100000, 'rank' => $rank]];
+
+    // Service A #1 → 100; Service B #11 (credit 0.5) → 50. Mean = 75.
+    coverageScan($site, $loc, $kwA, $t(1), '2026-08-01 10:00:00');
+    coverageScan($site, $loc, $kwB, $t(11), '2026-08-02 10:00:00');
+
+    expect(app(CoverageMap::class)->areaScore($loc->fresh()))->toBe(75.0)
+        ->and(app(CoverageMap::class)->areaScore(Location::factory()->create(['site_id' => $site->id])))->toBeNull();
+});
+
 it('lets a keyword be selected and is tenant-isolated', function () {
     $site = Site::factory()->create();
     $loc = Location::factory()->create(['site_id' => $site->id]);

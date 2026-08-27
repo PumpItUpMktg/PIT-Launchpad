@@ -5,6 +5,7 @@ namespace App\Operate;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\GeoGrid\CoverageMap;
 use App\Guided\LiveMetrics;
 use App\Models\Content;
 use App\Models\CoverageArea;
@@ -32,6 +33,7 @@ class PhysicalLocations
     public function __construct(
         private readonly LiveMetrics $metrics,
         private readonly QueueHealth $queueHealth,
+        private readonly CoverageMap $coverage,
     ) {}
 
     /**
@@ -292,6 +294,8 @@ class PhysicalLocations
             'overlaps' => $overlaps,
             'advisories' => $advisories,
             'page' => $this->pageState($landing),
+            // Geo coverage "area score" — how visible the GBP is across its whole served area (null = never scanned).
+            'coverage_score' => $this->coverage->areaScore($location),
         ];
     }
 

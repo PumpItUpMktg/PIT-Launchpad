@@ -110,6 +110,33 @@ final class CoverageMap
     }
 
     /**
+     * The location's single overall coverage "area score" — the mean of the latest Local Visibility Score per
+     * service (keyword) across the location's coverage scans, or null when it's never been scanned. This is
+     * the number the location card shows as a pill: "how visible is this GBP across its whole served area?"
+     */
+    public function areaScore(Location $location): ?float
+    {
+        $scans = GeoGridScan::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $location->site_id)
+            ->where('location_id', $location->id)
+            ->where('mode', 'coverage')
+            ->with('points')
+            ->orderByDesc('scanned_at')
+            ->get();
+
+        if ($scans->isEmpty()) {
+            return null;
+        }
+
+        $populations = $this->populations($scans);
+        $scores = $scans->groupBy('keyword_id')
+            ->map(fn (Collection $forKeyword): ?float => $this->scoreFor($forKeyword->first(), $populations))
+            ->filter(fn (?float $score): bool => $score !== null);
+
+        return $scores->isEmpty() ? null : round((float) $scores->avg(), 1);
+    }
+
+    /**
      * Town markers for a scan, normalised to the shared bounding box → x/y in [0,100], NORTH-UP.
      *
      * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $bbox

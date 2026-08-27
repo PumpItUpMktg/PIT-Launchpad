@@ -5,10 +5,14 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperatePhysicalLocations;
+use App\GeoGrid\GeoGridMetrics;
 use App\Jobs\PublishContent;
 use App\Models\Connection;
 use App\Models\Content;
 use App\Models\CoverageArea;
+use App\Models\GeoGridPoint;
+use App\Models\GeoGridScan;
+use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Site;
 use App\Models\User;
@@ -380,4 +384,28 @@ it('renders a TAB per physical location and shows one at a time', function () {
     $page->call('setLocTab', $montclair->id)
         ->assertSee('Verona')         // now Montclair active
         ->assertDontSee('Norristown');
+});
+
+it('shows the coverage area-score pill and a View coverage link on the location card', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'Downingtown', 'gbp_url' => 'https://g/?cid=1', 'place_id' => 'p',
+        'lat' => 40.0, 'lng' => -75.7, 'home_county_geoid' => '42029', 'county_geoids' => ['42029'],
+    ]);
+    $town = plArea($site, '4202919000', 'Downingtown', [$loc->id]);
+    $town->forceFill(['lat' => 40.0, 'lng' => -75.7, 'population' => 8000])->save();
+
+    $scan = GeoGridScan::create([
+        'site_id' => $site->id, 'location_id' => $loc->id, 'keyword_id' => (string) Str::ulid(), 'provider' => 'dataforseo',
+        'mode' => 'coverage', 'grid_size' => 1, 'spacing_miles' => 0, 'center_lat' => 40.0, 'center_lng' => -75.7,
+        'zoom' => 13, 'depth_cap' => 20, 'status' => 'complete', 'scanned_at' => now(),
+    ]);
+    GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'row' => 0, 'col' => 0, 'coverage_area_id' => $town->id, 'label' => 'Downingtown', 'lat' => 40.0, 'lng' => -75.7, 'rank' => 1]);
+    app(GeoGridMetrics::class)->recompute($scan);
+
+    Livewire::test(OperatePhysicalLocations::class)
+        ->assertOk()
+        ->assertSee('Area score')          // the score pill (rank 1 → 100)
+        ->assertSee('View coverage');      // the link to Coverage Progress
 });
