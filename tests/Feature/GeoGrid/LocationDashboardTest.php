@@ -18,7 +18,7 @@ use App\Support\PublicUrl;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-function gbpLocation(Site $site, array $attrs = []): Location
+function ldGbpLocation(Site $site, array $attrs = []): Location
 {
     return Location::factory()->create(array_merge([
         'site_id' => $site->id, 'name' => 'Downtown',
@@ -27,7 +27,7 @@ function gbpLocation(Site $site, array $attrs = []): Location
     ], $attrs));
 }
 
-function clusterPage(Site $site, array $attrs): Content
+function ldClusterPage(Site $site, array $attrs): Content
 {
     return Content::factory()->create(array_merge([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
@@ -35,7 +35,7 @@ function clusterPage(Site $site, array $attrs): Content
     ], $attrs));
 }
 
-function gscSnap(Site $site, string $path, string $key, int $value): void
+function ldGscSnap(Site $site, string $path, string $key, int $value): void
 {
     // Insert the way the real GSC provider does (raw builder, clean Y-m-d) — the model's `date` cast would
     // append a time component and break the string-range window query.
@@ -49,11 +49,11 @@ function gscSnap(Site $site, string $path, string $key, int $value): void
 
 it('resolves the cluster (hub + town pages) and counts live pages', function () {
     $site = Site::factory()->create();
-    $location = gbpLocation($site);
+    $location = ldGbpLocation($site);
 
-    clusterPage($site, ['location_id' => $location->id, 'title' => 'Newark, NJ']);          // hub
-    clusterPage($site, ['parent_location_id' => $location->id, 'title' => 'Belleville, NJ']); // town, live
-    clusterPage($site, ['parent_location_id' => $location->id, 'title' => 'Nutley, NJ', 'status' => ContentStatus::Drafted]); // town, not live
+    ldClusterPage($site, ['location_id' => $location->id, 'title' => 'Newark, NJ']);          // hub
+    ldClusterPage($site, ['parent_location_id' => $location->id, 'title' => 'Belleville, NJ']); // town, live
+    ldClusterPage($site, ['parent_location_id' => $location->id, 'title' => 'Nutley, NJ', 'status' => ContentStatus::Drafted]); // town, not live
 
     $d = app(LocationDashboard::class)->for($location->fresh());
 
@@ -64,12 +64,12 @@ it('resolves the cluster (hub + town pages) and counts live pages', function () 
 
 it('aggregates cluster GSC performance from the metric spine', function () {
     $site = Site::factory()->create();
-    $location = gbpLocation($site);
-    $hub = clusterPage($site, ['location_id' => $location->id, 'title' => 'Newark, NJ', 'slug' => 'newark-nj']);
+    $location = ldGbpLocation($site);
+    $hub = ldClusterPage($site, ['location_id' => $location->id, 'title' => 'Newark, NJ', 'slug' => 'newark-nj']);
 
     $path = UrlNormalizer::path(PublicUrl::forContent($site->domain_url, $hub) ?? '/newark-nj');
-    gscSnap($site, $path, 'impressions', 400);
-    gscSnap($site, $path, 'clicks', 25);
+    ldGscSnap($site, $path, 'impressions', 400);
+    ldGscSnap($site, $path, 'clicks', 25);
 
     $d = app(LocationDashboard::class)->for($location->fresh());
 
@@ -80,8 +80,8 @@ it('aggregates cluster GSC performance from the metric spine', function () {
 
 it('reports town + population coverage, crediting population to published towns', function () {
     $site = Site::factory()->create();
-    $location = gbpLocation($site);
-    clusterPage($site, ['parent_location_id' => $location->id, 'title' => 'Belleville, NJ']); // published
+    $location = ldGbpLocation($site);
+    ldClusterPage($site, ['parent_location_id' => $location->id, 'title' => 'Belleville, NJ']); // published
 
     CoverageArea::create([
         'site_id' => $site->id, 'geo_id' => '3401', 'name' => 'Belleville', 'type' => 'place', 'state' => 'NJ',
@@ -102,12 +102,12 @@ it('reports town + population coverage, crediting population to published towns'
 
 it('counts indexed pages as the honest union of impressions or a PASS verdict', function () {
     $site = Site::factory()->create();
-    $location = gbpLocation($site);
-    $a = clusterPage($site, ['parent_location_id' => $location->id, 'title' => 'A town', 'slug' => 'a-town']);
-    $b = clusterPage($site, ['parent_location_id' => $location->id, 'title' => 'B town', 'slug' => 'b-town']);
+    $location = ldGbpLocation($site);
+    $a = ldClusterPage($site, ['parent_location_id' => $location->id, 'title' => 'A town', 'slug' => 'a-town']);
+    $b = ldClusterPage($site, ['parent_location_id' => $location->id, 'title' => 'B town', 'slug' => 'b-town']);
 
     // A earns impressions; B has a URL-Inspection PASS. Both count as indexed.
-    gscSnap($site, UrlNormalizer::path(PublicUrl::forContent($site->domain_url, $a) ?? '/a-town'), 'impressions', 10);
+    ldGscSnap($site, UrlNormalizer::path(PublicUrl::forContent($site->domain_url, $a) ?? '/a-town'), 'impressions', 10);
     PageIndexState::create([
         'site_id' => $site->id, 'content_id' => $b->id,
         'url' => (string) PublicUrl::forContent($site->domain_url, $b),
@@ -124,9 +124,9 @@ it('counts indexed pages as the honest union of impressions or a PASS verdict', 
 
 it('surfaces location-scoped keyword movement via target_keyword_id', function () {
     $site = Site::factory()->create();
-    $location = gbpLocation($site);
+    $location = ldGbpLocation($site);
     $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'plumber newark']);
-    clusterPage($site, ['location_id' => $location->id, 'title' => 'Newark, NJ', 'target_keyword_id' => $kw->id]);
+    ldClusterPage($site, ['location_id' => $location->id, 'title' => 'Newark, NJ', 'target_keyword_id' => $kw->id]);
 
     PositionSnapshot::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'lane' => 'organic', 'rank' => 8, 'captured_at' => now()->subDays(20)]);
     PositionSnapshot::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'lane' => 'organic', 'rank' => 4, 'captured_at' => now()]);
@@ -141,7 +141,7 @@ it('surfaces location-scoped keyword movement via target_keyword_id', function (
 
 it('summarizes geo grids for a GBP location and deep-link availability', function () {
     $site = Site::factory()->create();
-    $location = gbpLocation($site);
+    $location = ldGbpLocation($site);
     $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'grid kw', 'is_grid_keyword' => true]);
     $scan = GeoGridScan::create([
         'site_id' => $site->id, 'location_id' => $location->id, 'keyword_id' => $kw->id, 'provider' => 'dataforseo',
@@ -161,7 +161,7 @@ it('summarizes geo grids for a GBP location and deep-link availability', functio
 
 it('marks reviews unavailable while the provider is the null seam', function () {
     $site = Site::factory()->create();
-    $location = gbpLocation($site);
+    $location = ldGbpLocation($site);
 
     $d = app(LocationDashboard::class)->for($location->fresh());
 
@@ -171,11 +171,11 @@ it('marks reviews unavailable while the provider is the null seam', function () 
 
 it('is tenant-isolated — a fresh location on another site sees nothing', function () {
     $siteA = Site::factory()->create();
-    $locA = gbpLocation($siteA);
-    clusterPage($siteA, ['location_id' => $locA->id, 'title' => 'A hub']);
+    $locA = ldGbpLocation($siteA);
+    ldClusterPage($siteA, ['location_id' => $locA->id, 'title' => 'A hub']);
 
     $siteB = Site::factory()->create();
-    $locB = gbpLocation($siteB, ['name' => 'B loc']);
+    $locB = ldGbpLocation($siteB, ['name' => 'B loc']);
 
     $d = app(LocationDashboard::class)->for($locB);
 
