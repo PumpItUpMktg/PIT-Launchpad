@@ -240,15 +240,18 @@ final class SiteProfileAssembler
      *    grouping; the cap applies to top-level items only. Every service still stays reachable from
      *    the hub ("Our services") page + the footer.
      *
-     * @return list<array{label: string, url: string, children?: list<array{label: string, url: string}>}>
+     * Every service link carries the full `title` as `label` (the footer + the GRID-001 audit read this),
+     * plus a short `nav_label` when the page has one — the header renderer prefers `nav_label`, the footer
+     * keeps the full title (grouped-nav: short menu, long-form footer).
+     *
+     * @return list<array{label: string, url: string, nav_label?: string, children?: list<array{label: string, url: string, nav_label?: string}>}>
      */
     private function services(Site $site, string $home): array
     {
-        $featured = Content::withoutGlobalScope(SiteScope::class)
+        $all = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
             ->where('status', ContentStatus::Published->value)
-            ->where('nav_featured', true)
             // Only real service/hub pages populate the services bar. A featured core/company page is
             // curation for the MAIN nav's order, not a signal to move it into the services strip.
             ->whereIn('page_type', [PageType::Service->value, PageType::Hub->value])
@@ -256,29 +259,9 @@ final class SiteProfileAssembler
             ->with('primaryService:id,silo_role')
             ->get();
 
-        if ($featured->isNotEmpty()) {
-            // Operator order first (nulls last), then importance, then age — a stable composite key.
-            // Curated selection stays FLAT: the operator picked exactly these top-level items.
-            $pages = $featured
-                ->sortBy(fn (Content $p): string => sprintf(
-                    '%010d-%d-%015d',
-                    $p->nav_order ?? 999999,
-                    $this->serviceNavRank($p),
-                    $p->created_at->getTimestamp(),
-                ))
-                ->values();
-
-            return $this->links($pages, $home);
+        if ($all->isEmpty()) {
+            return [];
         }
-
-        $all = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('kind', ContentKind::Page->value)
-            ->where('status', ContentStatus::Published->value)
-            ->whereIn('page_type', [PageType::Service->value, PageType::Hub->value])
-            ->whereNotNull('slug')
-            ->with('primaryService:id,silo_role')
-            ->get();
 
         // A page NESTED under another (SiloNesting's parent_content_id) becomes a dropdown child, not a
         // top-level item — so a hub shows its spokes beneath it instead of alongside.
@@ -287,21 +270,34 @@ final class SiteProfileAssembler
             ->filter(fn (Content $p): bool => $p->parent_content_id !== null && $ids->contains($p->parent_content_id))
             ->groupBy('parent_content_id');
 
-        $top = $all
-            ->filter(fn (Content $p): bool => $p->parent_content_id === null || ! $ids->contains($p->parent_content_id))
-            ->sortBy(fn (Content $p): string => sprintf('%d-%015d', $this->serviceNavRank($p), $p->created_at->getTimestamp()))
-            ->take(self::HEADER_SERVICE_LIMIT)
-            ->values();
+        $featured = $all->where('nav_featured', true);
+        if ($featured->isNotEmpty()) {
+            // Curated: the operator picks the top-level items + order (nav_order, then importance, then age);
+            // spokes still NEST beneath their hub, so curation controls the columns and the silo tree fills
+            // them (grouped-nav: a hub is a heading, its spokes its children).
+            $top = $featured
+                ->sortBy(fn (Content $p): string => sprintf('%010d-%d-%015d', $p->nav_order ?? 999999, $this->serviceNavRank($p), $p->created_at->getTimestamp()))
+                ->values();
+        } else {
+            // Automatic: top-level = pages not nested under another, importance-ranked, capped.
+            $top = $all
+                ->filter(fn (Content $p): bool => $p->parent_content_id === null || ! $ids->contains($p->parent_content_id))
+                ->sortBy(fn (Content $p): string => sprintf('%d-%015d', $this->serviceNavRank($p), $p->created_at->getTimestamp()))
+                ->take(self::HEADER_SERVICE_LIMIT)
+                ->values();
+        }
 
+        $topIds = $top->pluck('id')->flip();
         $out = [];
         foreach ($top as $page) {
-            $item = $this->link($page, $home);
+            $item = $this->serviceLink($page, $home);
             if ($item === null) {
                 continue;
             }
             $children = ($childrenByParent->get($page->id) ?? collect())
+                ->reject(fn (Content $c): bool => $topIds->has($c->id))   // a page already shown top-level isn't also a child
                 ->sortBy(fn (Content $c): string => sprintf('%d-%015d', $this->serviceNavRank($c), $c->created_at->getTimestamp()));
-            $kids = $this->links($children->values(), $home);
+            $kids = $children->map(fn (Content $c): ?array => $this->serviceLink($c, $home))->filter()->values()->all();
             if ($kids !== []) {
                 $item['children'] = $kids;
             }
@@ -309,6 +305,28 @@ final class SiteProfileAssembler
         }
 
         return $out;
+    }
+
+    /**
+     * A service nav link: the full title as `label`, plus the short `nav_label` when the page has one.
+     * Keeping `label` = title means the footer and the GRID-001 divergence audit stay title-based; the
+     * header renderer is the only surface that prefers `nav_label`.
+     *
+     * @return array{label: string, url: string, nav_label?: string}|null
+     */
+    private function serviceLink(Content $page, string $home): ?array
+    {
+        $link = $this->link($page, $home);
+        if ($link === null) {
+            return null;
+        }
+
+        $navLabel = trim((string) $page->nav_label);
+        if ($navLabel !== '') {
+            $link['nav_label'] = $navLabel;
+        }
+
+        return $link;
     }
 
     /**
