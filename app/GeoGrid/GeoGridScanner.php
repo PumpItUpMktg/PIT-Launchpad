@@ -7,7 +7,9 @@ use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Location;
+use App\Models\Scopes\SiteScope;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -33,6 +35,9 @@ final class GeoGridScanner
     private const MAPS_READY = '/v3/serp/google/maps/tasks_ready';
 
     private const MAPS_GET = '/v3/serp/google/maps/task_get/advanced';
+
+    /** DataForSEO accepts at most 100 tasks per task_post; a whole-county coverage scan exceeds that. */
+    private const MAX_TASKS_PER_POST = 100;
 
     public function __construct(
         private readonly DataForSeoClient $client,
@@ -100,19 +105,8 @@ final class GeoGridScanner
     {
         $zoom = (int) config('launchpad.geo_grid.zoom', 13);
         $depthCap = (int) config('launchpad.geo_grid.depth_cap', 20);
-        $device = (string) config('launchpad.geo_grid.device', 'desktop');
-        $language = (string) config('services.dataforseo.language_code', 'en');
 
-        // One task per point, in point order. DataForSEO returns task ids in the order posted.
-        $tasks = array_map(fn (array $p): array => [
-            'keyword' => (string) $keyword->query,
-            'location_coordinate' => sprintf('%.7f,%.7f,%d', $p['lat'], $p['lng'], $zoom),
-            'language_code' => $language,
-            'device' => $device,
-            'depth' => $depthCap,
-        ], $points);
-
-        $taskIds = $points === [] ? [] : $this->client->taskPost(self::MAPS_POST, $tasks);
+        $taskIds = $this->postTasks($points, $keyword);
 
         // task id → point index (only the ids we got back, positionally).
         $idToIndex = [];
@@ -164,6 +158,171 @@ final class GeoGridScanner
 
             return $scan;
         });
+    }
+
+    /**
+     * COVERAGE mode, ASYNC: post one DataForSEO task per served town and persist a PENDING scan with a point
+     * per town (rank + competitors filled in later by {@see collectPending}, driven by the IngestCoverageScans
+     * sweep). A whole-county scan is 100+ rate-limited task_get calls — far past a single job's timeout — so
+     * posting (fast) and collecting (slow, batched) are split. The synchronous {@see scanCoverage()} stays for
+     * the CLI + calibration, where blocking is fine.
+     */
+    public function postCoverageScan(Location $location, Keyword $keyword): GeoGridScan
+    {
+        $points = [];
+        foreach ($this->coverage->pointsFor($location) as $i => $town) {
+            $points[] = [
+                'row' => 0,
+                'col' => $i,
+                'lat' => $town['lat'],
+                'lng' => $town['lng'],
+                'coverage_area_id' => $town['coverage_area_id'],
+                'label' => $town['label'],
+            ];
+        }
+
+        $zoom = (int) config('launchpad.geo_grid.zoom', 13);
+        $depthCap = (int) config('launchpad.geo_grid.depth_cap', 20);
+        $taskIds = $this->postTasks($points, $keyword);
+
+        return DB::transaction(function () use ($location, $keyword, $points, $taskIds, $zoom, $depthCap): GeoGridScan {
+            $scan = GeoGridScan::create([
+                'site_id' => $location->site_id,
+                'location_id' => $location->id,
+                'keyword_id' => $keyword->id,
+                'provider' => 'dataforseo',
+                'provider_scan_id' => $taskIds[0] ?? null,
+                'mode' => 'coverage',
+                'grid_size' => count($points),   // point count — towns, not a lattice dimension
+                'spacing_miles' => 0,
+                'center_lat' => (float) $location->lat,
+                'center_lng' => (float) $location->lng,
+                'zoom' => $zoom,
+                'depth_cap' => $depthCap,
+                'status' => 'pending',           // collected + finalized by the IngestCoverageScans sweep
+                'scanned_at' => Carbon::now(),
+            ]);
+
+            foreach ($points as $i => $p) {
+                GeoGridPoint::create([
+                    'site_id' => $location->site_id,
+                    'scan_id' => $scan->id,
+                    'row' => $p['row'],
+                    'col' => $p['col'],
+                    'lat' => $p['lat'],
+                    'lng' => $p['lng'],
+                    'rank' => null,               // filled on collection
+                    'provider_task_id' => $taskIds[$i] ?? null,
+                    'collected_at' => null,       // null = still awaiting its task result
+                    'coverage_area_id' => $p['coverage_area_id'],
+                    'label' => $p['label'],
+                ]);
+            }
+
+            return $scan;
+        });
+    }
+
+    /**
+     * Collect ready results for a PENDING scan's not-yet-collected points, up to $budget task_get calls (the
+     * sweep's per-run rate budget). Each collected point gets its rank/competitors + a `collected_at` stamp;
+     * points whose task isn't ready yet are left for the next sweep. When no uncollected point remains the scan
+     * flips `pending → complete`. Returns the number of task_get calls actually spent (so the sweep can share
+     * one budget across scans). Aggregates are the caller's to recompute once the scan finalizes.
+     */
+    public function collectPending(GeoGridScan $scan, int $budget): int
+    {
+        if ($budget <= 0) {
+            return 0;
+        }
+
+        $location = Location::withoutGlobalScope(SiteScope::class)->find($scan->location_id);
+        $placeId = trim((string) $location?->place_id);
+        $cid = $this->cidFromGbpUrl((string) $location?->gbp_url);
+
+        /** @var Collection<int, GeoGridPoint> $pending */
+        $pending = $scan->points()
+            ->whereNotNull('provider_task_id')
+            ->whereNull('collected_at')
+            ->get();
+
+        $spent = 0;
+        if ($pending->isNotEmpty()) {
+            $ready = array_flip($this->client->tasksReady(self::MAPS_READY));
+
+            foreach ($pending as $point) {
+                if ($spent >= $budget) {
+                    break;
+                }
+                $taskId = (string) $point->provider_task_id;
+                if (! isset($ready[$taskId])) {
+                    continue;   // not ready yet — leave for the next sweep
+                }
+
+                $items = DataForSeoClient::parseMaps($this->client->taskGet(self::MAPS_GET, $taskId));
+                $result = $this->extract($items, $placeId, $cid);
+                $point->forceFill([
+                    'rank' => $result['rank'],
+                    'competitors' => $result['competitors'],
+                    'collected_at' => Carbon::now(),
+                ])->save();
+                $spent++;
+            }
+        }
+
+        $this->finalizeIfComplete($scan);
+
+        return $spent;
+    }
+
+    /** Flip a pending scan to `complete` once every point carrying a task id has been collected. */
+    public function finalizeIfComplete(GeoGridScan $scan): void
+    {
+        if ($scan->status !== 'pending') {
+            return;
+        }
+        $uncollected = $scan->points()
+            ->whereNotNull('provider_task_id')
+            ->whereNull('collected_at')
+            ->count();
+        if ($uncollected === 0) {
+            $scan->forceFill(['status' => 'complete'])->save();
+        }
+    }
+
+    /**
+     * Build one DataForSEO Maps task per point and post them in ≤100-task chunks (the vendor's per-POST cap),
+     * returning the created task ids in point order (task ids come back in the order posted).
+     *
+     * @param  list<array<string, mixed>>  $points
+     * @return list<string>
+     */
+    private function postTasks(array $points, Keyword $keyword): array
+    {
+        if ($points === []) {
+            return [];
+        }
+
+        $zoom = (int) config('launchpad.geo_grid.zoom', 13);
+        $depthCap = (int) config('launchpad.geo_grid.depth_cap', 20);
+        $device = (string) config('launchpad.geo_grid.device', 'desktop');
+        $language = (string) config('services.dataforseo.language_code', 'en');
+
+        // One task per point, in point order. DataForSEO returns task ids in the order posted.
+        $tasks = array_map(fn (array $p): array => [
+            'keyword' => (string) $keyword->query,
+            'location_coordinate' => sprintf('%.7f,%.7f,%d', $p['lat'], $p['lng'], $zoom),
+            'language_code' => $language,
+            'device' => $device,
+            'depth' => $depthCap,
+        ], $points);
+
+        $ids = [];
+        foreach (array_chunk($tasks, self::MAX_TASKS_PER_POST) as $chunk) {
+            $ids = array_merge($ids, $this->client->taskPost(self::MAPS_POST, $chunk));
+        }
+
+        return $ids;
     }
 
     /**

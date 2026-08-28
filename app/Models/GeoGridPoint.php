@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToSite;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * One measured grid cell (§ Geo Grid) — the business's rank at (row, col) for its scan, plus the top few
@@ -24,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int|null $rank
  * @property list<array{name: string, place_id: string|null, rank: int|null}>|null $competitors
  * @property string|null $provider_task_id
+ * @property Carbon|null $collected_at when this cell's DataForSEO task result was read (null = still pending); the async-collection marker
  */
 class GeoGridPoint extends Model
 {
@@ -41,6 +43,7 @@ class GeoGridPoint extends Model
             'lng' => 'decimal:7',
             'rank' => 'integer',
             'competitors' => 'array',
+            'collected_at' => 'datetime',
         ];
     }
 

@@ -2,6 +2,7 @@
 
 use App\Integrations\Conversions\IngestConversions;
 use App\Integrations\DataForSeo\IngestSerpTasks;
+use App\Jobs\IngestCoverageScans;
 use App\KeywordGenerator\Pipeline\RefreshKeywordPipelines;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -106,3 +107,9 @@ Schedule::command('launchpad:send-monthly-reports')->monthlyOn(1, '08:00')->with
 // come due, then advance its next run. Daily check; the plans carry the real cadence (monthly/weekly), so
 // this just fires what's due today. Cost-braked per plan. withoutOverlapping so a slow sweep can't stack.
 Schedule::command('launchpad:run-due-coverage-plans')->daily()->withoutOverlapping();
+
+// Coverage-scan collection sweep — the async half of RunCoverageScan. Coverage scans are posted fast
+// (pending) and their 100+ rate-limited town task_get calls are collected here in bounded batches, so a
+// whole-county scan never overruns a job timeout. Finalizes each scan (complete, or partial past the expiry
+// window) and recomputes its aggregates. Every five minutes; withoutOverlapping so runs can't double-collect.
+Schedule::job(new IngestCoverageScans)->everyFiveMinutes()->withoutOverlapping();
