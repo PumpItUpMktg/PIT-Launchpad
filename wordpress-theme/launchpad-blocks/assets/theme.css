@@ -1888,6 +1888,61 @@
     }
 }
 
+/* The "SERVICES" label becomes a disclosure toggle (nav.js). On desktop it just looks like the label and
+   the list is always shown; on mobile the whole services strip collapses behind it — a hamburger for the
+   services bar so it doesn't stack every service down the page. */
+.lp-services-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    /* inherit the .lp-services-label look (font-size/weight/spacing/case/opacity apply from that class) */
+}
+
+.lp-services-toggle .lp-caret {
+    display: none; /* desktop: no caret, the list is always visible */
+    width: 0;
+    height: 0;
+    border-left: 0.32em solid transparent;
+    border-right: 0.32em solid transparent;
+    border-top: 0.36em solid currentColor;
+    transition: transform 0.15s ease;
+}
+
+@media (max-width: 860px) {
+    .lp-header-services-inner {
+        flex-wrap: wrap;
+    }
+
+    /* Collapsed by default — just the SERVICES toggle row; the list unfolds on tap. */
+    .lp-header-services.lp-js .lp-services-nav {
+        display: none;
+    }
+
+    .lp-header-services.lp-js.is-open .lp-services-nav {
+        display: flex;
+        flex-basis: 100%;
+    }
+
+    .lp-header-services.lp-js .lp-services-toggle {
+        width: 100%;
+        justify-content: space-between;
+        opacity: 0.85;
+        padding: 0.15rem 0;
+    }
+
+    .lp-header-services.lp-js .lp-services-toggle .lp-caret {
+        display: inline-block;
+    }
+
+    .lp-header-services.lp-js.is-open .lp-services-toggle .lp-caret {
+        transform: rotate(180deg);
+    }
+}
+
 .lp-callbar {
     display: flex;
     flex-direction: column;
