@@ -44,6 +44,12 @@ add_action('wp_enqueue_scripts', function (): void {
     // if the minified file is somehow missing.
     $cssFile = file_exists(get_stylesheet_directory().'/assets/theme.min.css') ? 'theme.min.css' : 'theme.css';
     wp_enqueue_style('launchpad-blocks', $dir.'/assets/'.$cssFile, [], $version);
+
+    // Grouped-nav interaction — makes the header services menu click-to-open (hover fails on touch;
+    // mobile-heavy audience), keyboard + ARIA, Escape / outside-click to close. Tiny, no deps, in the
+    // footer, and pure progressive enhancement over the CSS hover/focus fallback. Minified build preferred.
+    $navJs = file_exists(get_stylesheet_directory().'/assets/nav.min.js') ? 'nav.min.js' : 'nav.js';
+    wp_enqueue_script('launchpad-nav', $dir.'/assets/'.$navJs, [], $version, true);
 });
 
 /**
