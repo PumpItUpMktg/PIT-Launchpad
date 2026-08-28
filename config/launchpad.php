@@ -293,6 +293,10 @@ return [
         // tasks never became ready, so it can't sit pending forever.
         'ingest_batch' => (int) env('LAUNCHPAD_GEO_GRID_INGEST_BATCH', 40),
         'pending_expiry_hours' => (int) env('LAUNCHPAD_GEO_GRID_PENDING_EXPIRY_HOURS', 24),
+        // The coverage-plan keyword dropdown offers each silo's buyer-intent keywords (everything except
+        // informational longtails), opportunity-ranked and capped to this many per silo — the main
+        // transactional terms customers search, not a deep longtail dump.
+        'dropdown_per_silo' => (int) env('LAUNCHPAD_GEO_GRID_DROPDOWN_PER_SILO', 10),
     ],
 
     /*
