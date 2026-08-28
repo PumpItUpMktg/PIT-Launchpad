@@ -2,8 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Console\Commands\GeoGridCoverageScanCommand;
-use App\GeoGrid\GeoGridMetrics;
 use App\GeoGrid\GeoGridScanner;
 use App\Models\Keyword;
 use App\Models\Location;
@@ -12,12 +10,14 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
 /**
- * Runs ONE coverage scan — a single (location × keyword) — on the queue: scan the location's served towns via
- * DataForSEO, then derive its aggregates. This is one pair of the {@see GeoGridCoverageScanCommand}
- * loop, extracted so a scheduled plan fans out one job per keyword (each ~a few minutes under the DataForSEO
- * rate limit) rather than one long-running job. Metered + retryable via the daily cadence, so `tries = 1`.
+ * POSTS one coverage scan — a single (location × keyword) — on the queue: create the scan and post one
+ * DataForSEO Maps task per served town, then return. The results are COLLECTED and the aggregates derived
+ * later by the {@see IngestCoverageScans} sweep. Posting is split from collection because a whole-county scan
+ * is 100+ rate-limited task_get calls — far past any single job's timeout (this job previously timed out on
+ * counties once coverage scans went county-wide). Posting is just a couple of rate-limited task_post calls.
  *
- * Jobs run outside the operator's tenant context, so models are re-loaded with {@see SiteScope} dropped.
+ * Metered + retryable via the daily cadence, so `tries = 1`. Jobs run outside the operator's tenant context,
+ * so models are re-loaded with {@see SiteScope} dropped.
  */
 class RunCoverageScan implements ShouldQueue
 {
@@ -37,7 +37,7 @@ class RunCoverageScan implements ShouldQueue
         }
     }
 
-    public function handle(GeoGridScanner $scanner, GeoGridMetrics $metrics): void
+    public function handle(GeoGridScanner $scanner): void
     {
         $location = Location::withoutGlobalScope(SiteScope::class)->find($this->locationId);
         $keyword = Keyword::withoutGlobalScope(SiteScope::class)->find($this->keywordId);
@@ -45,6 +45,6 @@ class RunCoverageScan implements ShouldQueue
             return;
         }
 
-        $metrics->recompute($scanner->scanCoverage($location, $keyword));
+        $scanner->postCoverageScan($location, $keyword);
     }
 }

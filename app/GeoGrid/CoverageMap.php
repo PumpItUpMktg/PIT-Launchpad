@@ -39,6 +39,7 @@ final class CoverageMap
             ->where('site_id', $location->site_id)
             ->where('location_id', $location->id)
             ->where('mode', 'coverage')
+            ->where('status', '!=', 'pending')   // a still-collecting scan would read as all-zero; show only finalized ones
             ->with('points')
             ->orderByDesc('scanned_at')
             ->get();
@@ -120,6 +121,7 @@ final class CoverageMap
             ->where('site_id', $location->site_id)
             ->where('location_id', $location->id)
             ->where('mode', 'coverage')
+            ->where('status', '!=', 'pending')   // a still-collecting scan would read as all-zero; show only finalized ones
             ->with('points')
             ->orderByDesc('scanned_at')
             ->get();
