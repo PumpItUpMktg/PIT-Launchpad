@@ -22,25 +22,42 @@ final class CoveragePlanControl
     public function __construct(private readonly CoveragePlanEstimator $estimator) {}
 
     /**
-     * The site's grid keywords as Filament grouped select options: `['Silo name' => [keywordId => query]]`,
-     * with a trailing "Ungrouped" bucket for silo-less keywords. Only `is_grid_keyword` keywords are offered.
+     * The site's coverage-scan keyword options as Filament grouped selects: `['Silo name' => [id => query]]`,
+     * with a trailing "Ungrouped" bucket for silo-less keywords. Offers each silo's BUYER-INTENT keywords —
+     * everything except informational longtails (a keyword already flagged `is_grid_keyword` always shows) —
+     * opportunity-ranked (flagged first, then highest opportunity) and capped per silo, so the list is the
+     * main transactional terms customers search, not a deep longtail dump. No pre-flagging needed: selecting
+     * a keyword into a plan flags it ({@see save()}). Cap is `geo_grid.dropdown_per_silo`.
      *
      * @return array<string, array<string, string>>
      */
     public function keywordOptions(string $siteId): array
     {
+        $perSilo = max(1, (int) config('launchpad.geo_grid.dropdown_per_silo', 10));
+
+        // is_grid_keyword=true OR intent is null OR intent isn't informational → drop only unflagged
+        // informational (research / blog) keywords; keep transactional/commercial/unclassified buyer terms.
+        $buyerOrFlagged = fn ($q) => $q->where(function ($w): void {
+            $w->where('is_grid_keyword', true)
+                ->orWhereNull('intent')
+                ->orWhereRaw('lower(intent) <> ?', ['informational']);
+        })
+            ->orderByDesc('is_grid_keyword')
+            ->orderByDesc('opportunity_score')
+            ->orderBy('query');
+
         $grouped = Silo::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
-            ->with(['keywords' => fn ($q) => $q->where('is_grid_keyword', true)->orderBy('query')])
+            ->with(['keywords' => $buyerOrFlagged])
             ->orderBy('name')
             ->get()
-            ->mapWithKeys(fn (Silo $silo): array => [(string) $silo->name => $silo->keywords->pluck('query', 'id')->all()])
+            ->mapWithKeys(fn (Silo $silo): array => [(string) $silo->name => $silo->keywords->take($perSilo)->pluck('query', 'id')->all()])
             ->filter(fn (array $kws): bool => $kws !== [])
             ->all();
 
-        $ungrouped = Keyword::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)->whereNull('silo_id')->where('is_grid_keyword', true)
-            ->orderBy('query')->pluck('query', 'id')->all();
+        $ungrouped = $buyerOrFlagged(
+            Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->whereNull('silo_id')
+        )->limit($perSilo)->pluck('query', 'id')->all();
         if ($ungrouped !== []) {
             $grouped['Ungrouped'] = $ungrouped;
         }
@@ -69,6 +86,16 @@ final class CoveragePlanControl
             'cadence' => $cadence,
             'enabled' => $enabled,
         ])->save();   // the model's saving hook reconciles next_run_at
+
+        // The plan's keywords ARE this GBP's grid keywords — flag them so the Grid column, the CLI coverage
+        // scan, and the cost estimate all reflect what the plan scans. Additive: it never un-flags a keyword.
+        if ($keywordIds !== []) {
+            Keyword::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $location->site_id)
+                ->whereIn('id', $keywordIds)
+                ->where('is_grid_keyword', false)
+                ->update(['is_grid_keyword' => true]);
+        }
 
         return $plan;
     }

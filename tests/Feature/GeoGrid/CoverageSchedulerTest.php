@@ -70,18 +70,47 @@ it('estimates a run as towns × keywords × cost', function () {
         ->and($e['cost'])->toBe(round(15 * (float) config('launchpad.geo_grid.cost_per_request'), 2));
 });
 
-it('offers keywords grouped by silo, with an ungrouped bucket', function () {
+it('offers each silo\'s buyer-intent keywords (no pre-flagging), excluding informational longtails', function () {
     $site = Site::factory()->create();
     $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pumps']);
-    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'sump pump repair', 'is_grid_keyword' => true]);
-    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => null, 'query' => 'loose keyword', 'is_grid_keyword' => true]);
-    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'not a grid kw', 'is_grid_keyword' => false]);  // excluded
+    // Buyer-intent keywords are offered WITHOUT is_grid_keyword, opportunity-ranked.
+    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'sump pump installation', 'intent' => 'transactional', 'opportunity_score' => 9, 'is_grid_keyword' => false]);
+    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'best sump pump', 'intent' => 'commercial', 'opportunity_score' => 4, 'is_grid_keyword' => false]);
+    // Informational longtail → excluded unless flagged.
+    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'why is my basement wet', 'intent' => 'informational', 'is_grid_keyword' => false]);
+    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => null, 'query' => 'loose keyword', 'intent' => 'transactional', 'is_grid_keyword' => false]);
 
     $opts = app(CoveragePlanControl::class)->keywordOptions($site->id);
 
     expect($opts)->toHaveKey('Sump Pumps')->toHaveKey('Ungrouped')
-        ->and(collect($opts['Sump Pumps'])->values()->all())->toBe(['sump pump repair'])
+        // Highest opportunity first; the informational one is dropped.
+        ->and(collect($opts['Sump Pumps'])->values()->all())->toBe(['sump pump installation', 'best sump pump'])
         ->and(collect($opts['Ungrouped'])->values()->all())->toBe(['loose keyword']);
+});
+
+it('still offers a flagged informational keyword, and caps per silo', function () {
+    config()->set('launchpad.geo_grid.dropdown_per_silo', 2);
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pumps']);
+    // Flagged informational stays (explicit operator choice), and sorts first (flagged-first).
+    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'flagged info kw', 'intent' => 'informational', 'is_grid_keyword' => true]);
+    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'kw a', 'intent' => 'transactional', 'opportunity_score' => 8, 'is_grid_keyword' => false]);
+    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'kw b', 'intent' => 'transactional', 'opportunity_score' => 1, 'is_grid_keyword' => false]);
+
+    $opts = app(CoveragePlanControl::class)->keywordOptions($site->id);
+
+    // Cap = 2: flagged first, then the top-opportunity buyer keyword; 'kw b' drops off.
+    expect(collect($opts['Sump Pumps'])->values()->all())->toBe(['flagged info kw', 'kw a']);
+});
+
+it('flags the plan\'s keywords as grid keywords on save (the plan is the source of truth)', function () {
+    $site = Site::factory()->create();
+    $loc = gbpLoc($site);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump installation', 'intent' => 'transactional', 'is_grid_keyword' => false]);
+
+    app(CoveragePlanControl::class)->save($loc, [$kw->id], ScanCadence::Monthly, true);
+
+    expect($kw->refresh()->is_grid_keyword)->toBeTrue();
 });
 
 it('the SeedSiteCoverage job no-ops for an unknown site', function () {
