@@ -1795,6 +1795,99 @@
     }
 }
 
+/* Grouped nav — click-to-open (nav.js). Hover fails on touch, so nav.js injects a disclosure toggle beside
+   each hub heading and opens on click; the CSS below reveals the panel on .is-open and provides the caret.
+   The hover/focus rules above stay as the no-JS fallback. */
+.lp-services-nav .lp-subnav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-left: 0.15rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.lp-services-nav .lp-subnav-toggle:hover,
+.lp-services-nav .lp-subnav-toggle:focus-visible {
+    background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.lp-services-nav .lp-subnav-toggle .lp-caret {
+    width: 0;
+    height: 0;
+    border-left: 0.32em solid transparent;
+    border-right: 0.32em solid transparent;
+    border-top: 0.36em solid currentColor;
+    opacity: 0.75;
+    transition: transform 0.15s ease;
+}
+
+.lp-services-nav .lp-has-sub.is-open .lp-subnav-toggle .lp-caret {
+    transform: rotate(180deg);
+}
+
+/* Click-opened panel. */
+.lp-services-nav .lp-has-sub.is-open .lp-subnav {
+    display: flex;
+}
+
+/* With JS active the injected toggle carries the caret — drop the CSS ::after caret so there aren't two. */
+.lp-services-nav.lp-js .lp-has-sub > a::after {
+    content: "";
+    margin: 0;
+}
+
+/* Touch has no real hover: never open on :hover there (it "sticks"); the click toggle is the way in. */
+@media (hover: none) {
+    .lp-services-nav .lp-has-sub:hover .lp-subnav {
+        display: none;
+    }
+}
+
+/* Mega mode (many services): a roomier panel that can wrap its spokes into columns. */
+.lp-services-nav--mega .lp-has-sub.is-open .lp-subnav {
+    min-width: 16rem;
+    max-height: min(70vh, 26rem);
+    flex-wrap: wrap;
+    max-width: min(90vw, 34rem);
+}
+
+/* Mobile: the toggle expands its spokes as a stacked collapsible section under the hub (a drawer row),
+   instead of a hover dropdown or an inline scroll. */
+@media (max-width: 860px) {
+    .lp-services-nav {
+        flex-wrap: wrap;
+        overflow-x: visible;
+    }
+
+    .lp-services-nav .lp-has-sub {
+        flex-wrap: wrap;
+    }
+
+    .lp-services-nav .lp-has-sub.is-open .lp-subnav {
+        flex-basis: 100%;
+        flex-direction: column;
+        gap: 0.1rem;
+        margin-top: 0.35rem;
+        padding-left: 0.75rem;
+        border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+    }
+
+    .lp-services-nav .lp-has-sub:not(.is-open) .lp-subnav {
+        display: none;
+    }
+
+    .lp-services-nav .lp-has-sub.is-open .lp-subnav a {
+        padding: 0.15rem 0;
+    }
+}
+
 .lp-callbar {
     display: flex;
     flex-direction: column;
