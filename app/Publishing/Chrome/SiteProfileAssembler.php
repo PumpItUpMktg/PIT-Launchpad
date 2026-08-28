@@ -96,6 +96,12 @@ final class SiteProfileAssembler
             // footer afterthought), in the operator's Header-menu-builder order. Legal pages stay OUT of
             // the header — they live in the footer bar.
             'nav' => $mainNav,
+            // Global grouped-nav thresholds the plugin reads to pick the header services-menu mode
+            // (flat row / grouped mega-menu / "More" overflow). Tunable in config, not per-site.
+            'nav_menu' => [
+                'flat_max' => (int) config('launchpad.nav.flat_max', 6),
+                'group_overflow' => (int) config('launchpad.nav.group_overflow', 8),
+            ],
             // Privacy / Terms for the footer bottom bar — only pages that actually exist.
             'legal_links' => $this->pagesBySlug($site, $home, ['privacy-policy', 'privacy', 'terms-of-service', 'terms']),
             // Severe-weather banner config — coords + on/off; the plugin fetches the live forecast itself.

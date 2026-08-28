@@ -60,6 +60,16 @@ it('nests spokes under a CURATED hub (curation controls columns, the silo tree f
         ->and($childNav)->toContain('Installation')->toContain('Repair');
 });
 
+it('emits the grouped-nav menu-mode thresholds from config', function () {
+    config()->set('launchpad.nav.flat_max', 5);
+    config()->set('launchpad.nav.group_overflow', 7);
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+
+    $navMenu = app(SiteProfileAssembler::class)->assemble($site->fresh())['nav_menu'];
+
+    expect($navMenu)->toBe(['flat_max' => 5, 'group_overflow' => 7]);
+});
+
 it('keeps the GRID-001 audit title-based — a short nav_label never changes the compared set', function () {
     $site = Site::factory()->create(['domain_url' => 'https://apex.example', 'brand_name' => 'SPG']);
     navPage($site, 'sump-pump-installation', 'Sump Pump Installation', ['nav_label' => 'Installation', 'wp_post_id' => 10]);
