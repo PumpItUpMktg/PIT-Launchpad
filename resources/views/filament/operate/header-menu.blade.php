@@ -17,6 +17,8 @@
         .hm-btn.danger { color:#b91c1c; border-color:rgba(185,28,28,.35); }
         .hm-btn.primary { color:#4338ca; border-color:rgba(67,56,202,.4); }
         .hm-empty { border:1px dashed rgba(148,163,184,.4); border-radius:10px; padding:12px; color:#94a3b8; font-size:12.5px; }
+        .hm-nav { display:flex; align-items:center; gap:6px; }
+        .hm-input { width:120px; font-size:12px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:3px 7px; background:transparent; }
     </style>
 
     <div class="hm-head">
@@ -51,7 +53,7 @@
         {{-- SERVICES BAR --}}
         <div class="hm-col">
             <h3>Services bar</h3>
-            <div class="sub">The slim "Services" row beneath the main menu.</div>
+            <div class="sub">The slim "Services" row beneath the main menu. The label box sets the short header text (blank = full title).</div>
             @php $services = $this->menus['services']; @endphp
             @forelse ($services as $i => $item)
                 <div class="hm-row" wire:key="svc-{{ $item['id'] }}">
@@ -60,6 +62,10 @@
                         <button class="hm-btn" wire:click="moveServiceDown('{{ $item['id'] }}')" @disabled($i === count($services) - 1)>↓</button>
                     </div>
                     <div class="lbl"><div class="t">{{ $item['title'] }}</div><div class="u">{{ $item['slug'] }}</div></div>
+                    <div class="hm-nav" x-data="{ label: @js($item['nav_label']) }">
+                        <input class="hm-input" type="text" x-model="label" placeholder="{{ $item['title'] }}" title="Short header label — blank uses the full title">
+                        <button class="hm-btn primary" @click="$wire.saveNavLabel('{{ $item['id'] }}', label)">Save</button>
+                    </div>
                     <button class="hm-btn danger" wire:click="removeService('{{ $item['id'] }}')">Remove</button>
                 </div>
             @empty

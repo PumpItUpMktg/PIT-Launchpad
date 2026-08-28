@@ -35,6 +35,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $parent_content_id the parent hub landing Content this page nests under (URL nesting; distinct from parent_location_id)
  * @property bool $nav_featured operator-pinned into the header main menu
  * @property int|null $nav_order manual sort within the header menu (ascending, nulls last)
+ * @property string|null $nav_label header-only short menu label (hub terms stripped); null = use the title
+ * @property bool $nav_label_confirmed true once an operator set nav_label — the deriver won't re-seed over it
  * @property IntakeType|null $intake_type
  * @property int|null $wp_post_id
  * @property string|null $near_dup_of_content_id
@@ -383,6 +385,7 @@ class Content extends Model
             'locally_edited' => 'boolean',
             'nav_featured' => 'boolean',
             'nav_order' => 'integer',
+            'nav_label_confirmed' => 'boolean',
         ];
     }
 
