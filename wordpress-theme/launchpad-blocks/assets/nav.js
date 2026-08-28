@@ -19,6 +19,38 @@
         for (var n = 0; n < navs.length; n++) {
             enhance(navs[n]);
         }
+        collapseServicesBar();
+    }
+
+    /**
+     * Mobile: the header services bar (the SERVICES label + the whole grouped list) takes a lot of vertical
+     * space when every service stacks. Turn the "SERVICES" label into a disclosure toggle so the bar is
+     * COLLAPSED by default on small screens (CSS hides the list until `.is-open`) and expands on tap — a
+     * hamburger for the services strip. Desktop CSS keeps the list always visible, so the toggle is a no-op
+     * there. Without JS the CSS fallback leaves the list shown (no worse than before).
+     */
+    function collapseServicesBar() {
+        var bar = document.querySelector('.lp-header-services');
+        if (!bar) { return; }
+        var label = bar.querySelector('.lp-services-label');
+        var list = bar.querySelector('.lp-services-nav');
+        if (!label || !list) { return; }
+
+        if (!list.id) { list.id = 'lp-services-list'; }
+
+        var toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'lp-services-label lp-services-toggle';
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-controls', list.id);
+        toggle.innerHTML = label.textContent + '<span class="lp-caret" aria-hidden="true"></span>';
+        label.replaceWith(toggle);
+        bar.classList.add('lp-js');
+
+        toggle.addEventListener('click', function () {
+            var open = bar.classList.toggle('is-open');
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
     }
 
     function enhance(nav) {
