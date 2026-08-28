@@ -162,6 +162,26 @@ class Test_Site_Chrome extends WP_UnitTestCase
         $this->assertStringContainsString('lp-services-nav--flat', (new SiteChrome())->header());
     }
 
+    public function test_the_same_service_is_short_in_the_header_and_long_form_in_the_footer(): void
+    {
+        // Change 4 guard: one service, two surfaces. The header takes the short nav_label; the footer keeps
+        // the full title (its keyword-rich internal-link anchor). If a future change "unifies" the two, this
+        // fails.
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'SPG',
+            'services' => [['label' => 'Sump Pump Installation', 'url' => 'https://spg.com/i', 'nav_label' => 'Installation']],
+        ]);
+
+        $chrome = new SiteChrome();
+        $header = $chrome->header();
+        $footer = $chrome->footer();
+
+        $this->assertStringContainsString('>Installation<', $header);
+        $this->assertStringNotContainsString('Sump Pump Installation', $header);
+        $this->assertStringContainsString('Sump Pump Installation', $footer);
+        $this->assertStringNotContainsString('>Installation<', $footer);
+    }
+
     public function test_services_menu_overflows_extra_groups_into_more(): void
     {
         ( new SiteProfileStore() )->save([
