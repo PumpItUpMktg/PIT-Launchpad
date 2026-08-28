@@ -206,6 +206,11 @@ final class SiteChrome
         }
         $out .= '</div>';
 
+        // The footer services column is LONG-FORM on purpose: it renders each service's full `label`
+        // (title), NOT the short header `nav_label`. The header trades keyword-rich anchor text for a
+        // clean menu; the footer keeps that internal-linking anchor text. They are intentionally
+        // different — do NOT "unify" the two to share one label. footerColumn → navList → navLink(false)
+        // keeps this (the header services menu is the only surface that passes short=true).
         $out .= $this->footerColumn('Services', $p['services'] ?? []);
         // Service Areas (curated town list) is covered by the home page's areas map + grouped cities —
         // dropped from the footer to avoid a redundant county/town list.
