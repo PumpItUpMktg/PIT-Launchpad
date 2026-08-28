@@ -10,6 +10,7 @@ use App\Models\Scopes\SiteScope;
 use App\Operator\Coverage\KeywordStandings;
 use App\Operator\Coverage\PositionTracking;
 use App\Operator\Coverage\TargetQueue;
+use App\Support\WorkingTenant;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -52,6 +53,18 @@ class KeywordResource extends Resource
             ->orderByDesc('opportunity_score');
     }
 
+    /**
+     * The tenant the Targets & gaps table opens scoped to: the operator's session working tenant, else the
+     * first tenant that has any keywords. Null (all tenants) only when nothing is selected and none exist.
+     * The Tenant filter stays switchable — this just stops the screen opening on every tenant at once.
+     */
+    private static function defaultTenantId(): ?string
+    {
+        $fallback = Keyword::query()->withoutGlobalScope(SiteScope::class)->value('site_id');
+
+        return WorkingTenant::id() ?? (is_string($fallback) ? $fallback : null);
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -79,7 +92,8 @@ class KeywordResource extends Resource
                     ->sortable(),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
+                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name')
+                    ->default(self::defaultTenantId()),
                 SiloFilter::scopedToTenant(),
                 SelectFilter::make('source')->options(self::sourceOptions()),
                 SelectFilter::make('coverage')
