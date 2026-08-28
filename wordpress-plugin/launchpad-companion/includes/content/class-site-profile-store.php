@@ -72,7 +72,28 @@ final class SiteProfileStore
             'areas' => self::links($p['areas'] ?? []),
             'company' => self::links($p['company'] ?? []),
             'legal_links' => self::links($p['legal_links'] ?? []),
+            'nav_menu' => self::navMenu($p['nav_menu'] ?? []),
             'alert' => self::alert($p['alert'] ?? []),
+        ];
+    }
+
+    /**
+     * The grouped-nav mode thresholds the header services menu reads: the max total service links that
+     * still render as a flat row, and the top-level group count above which groups overflow into "More".
+     * Clamped to sane positive integers with the control-plane defaults.
+     *
+     * @param  mixed  $raw
+     * @return array{flat_max: int, group_overflow: int}
+     */
+    private static function navMenu(mixed $raw): array
+    {
+        $raw = is_array($raw) ? $raw : [];
+        $flatMax = isset($raw['flat_max']) && is_numeric($raw['flat_max']) ? (int) $raw['flat_max'] : 6;
+        $overflow = isset($raw['group_overflow']) && is_numeric($raw['group_overflow']) ? (int) $raw['group_overflow'] : 8;
+
+        return [
+            'flat_max' => max(1, $flatMax),
+            'group_overflow' => max(1, $overflow),
         ];
     }
 
@@ -109,7 +130,7 @@ final class SiteProfileStore
      *
      * @param  mixed  $raw
      * @param  bool  $allowChildren  keep a one-level `children` list on each item (services menu only)
-     * @return list<array{label: string, url: string, children?: list<array{label: string, url: string}>}>
+     * @return list<array{label: string, url: string, nav_label?: string, children?: list<array{label: string, url: string, nav_label?: string}>}>
      */
     private static function links(mixed $raw, bool $allowChildren = false): array
     {
@@ -128,6 +149,13 @@ final class SiteProfileStore
             }
             $url = isset($item['url']) ? esc_url_raw((string) $item['url']) : '';
             $link = ['label' => $label, 'url' => is_string($url) ? $url : ''];
+
+            // The short header label (grouped nav). Kept alongside the full `label` so the header can show
+            // the short form while the footer keeps the full title. Dropped when blank.
+            $navLabel = sanitize_text_field((string) ($item['nav_label'] ?? ''));
+            if ($navLabel !== '') {
+                $link['nav_label'] = $navLabel;
+            }
 
             if ($allowChildren && isset($item['children']) && is_array($item['children'])) {
                 $children = self::links($item['children']); // one level only — never recurse children-of-children

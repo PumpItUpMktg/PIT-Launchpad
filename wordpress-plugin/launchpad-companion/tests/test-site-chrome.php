@@ -102,4 +102,81 @@ class Test_Site_Chrome extends WP_UnitTestCase
         // The footer renders services flat — no dropdown markup.
         $this->assertStringNotContainsString('lp-subnav', (new SiteChrome())->footer());
     }
+
+    public function test_header_services_use_the_short_nav_label(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'SPG',
+            'services' => [[
+                'label' => 'Sump Pumps', 'url' => 'https://spg.com/sump-pumps', 'nav_label' => 'Sump Pumps',
+                'children' => [
+                    ['label' => 'Sump Pump Installation', 'url' => 'https://spg.com/sump-pumps/installation', 'nav_label' => 'Installation'],
+                ],
+            ]],
+        ]);
+
+        $header = (new SiteChrome())->header();
+
+        // The header shows the short label; the full title never appears in the header menu.
+        $this->assertStringContainsString('>Installation<', $header);
+        $this->assertStringNotContainsString('Sump Pump Installation', $header);
+    }
+
+    public function test_footer_services_keep_the_full_title_not_the_short_label(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'SPG',
+            'services' => [['label' => 'Sump Pump Installation', 'url' => 'https://spg.com/i', 'nav_label' => 'Installation']],
+        ]);
+
+        $footer = (new SiteChrome())->footer();
+
+        // The footer keeps the keyword-rich full title, not the short header label.
+        $this->assertStringContainsString('Sump Pump Installation', $footer);
+        $this->assertStringNotContainsString('>Installation<', $footer);
+    }
+
+    public function test_services_menu_switches_to_mega_past_the_flat_threshold(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'SPG',
+            'nav_menu' => ['flat_max' => 2, 'group_overflow' => 8],
+            'services' => [
+                ['label' => 'A', 'url' => 'https://x/a'],
+                ['label' => 'B', 'url' => 'https://x/b'],
+                ['label' => 'C', 'url' => 'https://x/c'],
+            ],
+        ]);
+
+        $this->assertStringContainsString('lp-services-nav--mega', (new SiteChrome())->header());
+    }
+
+    public function test_services_menu_stays_flat_within_the_threshold(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'SPG',
+            'nav_menu' => ['flat_max' => 6, 'group_overflow' => 8],
+            'services' => [['label' => 'A', 'url' => 'https://x/a'], ['label' => 'B', 'url' => 'https://x/b']],
+        ]);
+
+        $this->assertStringContainsString('lp-services-nav--flat', (new SiteChrome())->header());
+    }
+
+    public function test_services_menu_overflows_extra_groups_into_more(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'SPG',
+            'nav_menu' => ['flat_max' => 1, 'group_overflow' => 1],
+            'services' => [
+                ['label' => 'G1', 'url' => 'https://x/g1', 'children' => [['label' => 'c1', 'url' => 'https://x/c1']]],
+                ['label' => 'G2', 'url' => 'https://x/g2', 'children' => [['label' => 'c2', 'url' => 'https://x/c2']]],
+            ],
+        ]);
+
+        $header = (new SiteChrome())->header();
+
+        // The second group folds into a trailing "More" dropdown carrying its hub link.
+        $this->assertStringContainsString('>More<', $header);
+        $this->assertStringContainsString('href="https://x/g2"', $header);
+    }
 }

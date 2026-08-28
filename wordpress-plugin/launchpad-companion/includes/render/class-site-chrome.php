@@ -66,7 +66,7 @@ final class SiteChrome
         // A slim secondary bar of the site's service pages, below the main menu — direct navigation to
         // services without cluttering the primary nav. Only when there are service pages. Inherits the
         // header tone so it reads on both a dark and a light bar.
-        $services = $this->navList($p['services'] ?? [], 'lp-services-nav', true);
+        $services = $this->servicesMenu($p);
         if ($services !== '') {
             $out .= '<div class="lp-header-services lp-tone-' . $tone . '"><div class="lp-header-services-inner">'
                 . '<span class="lp-services-label">Services</span>' . $services
@@ -74,6 +74,112 @@ final class SiteChrome
         }
 
         return $out;
+    }
+
+    /**
+     * The header services menu (grouped nav). A hub is a group — a heading that LINKS to the hub page,
+     * with its spokes as a dropdown; a standalone service is a plain link. Labels use the short `nav_label`.
+     * The rendering MODE is chosen by count from the pushed `nav_menu` thresholds and carried as a class on
+     * the <nav> for the theme to style: a flat row up to `flat_max` total links, a grouped mega-menu above
+     * it, and top-level groups beyond `group_overflow` folded into a trailing "More" group. Markup keeps the
+     * existing hover-dropdown structure (`lp-has-sub` / `lp-subnav`), so it degrades to today's behavior; the
+     * click-to-open + mobile-drawer interaction layer (theme CSS + JS) rides on these classes next.
+     *
+     * @param  array<string, mixed>  $p
+     */
+    private function servicesMenu(array $p): string
+    {
+        $services = array_values(array_filter(
+            is_array($p['services'] ?? null) ? $p['services'] : [],
+            fn ($s): bool => is_array($s) && ! empty($s['label']),
+        ));
+        if ($services === []) {
+            return '';
+        }
+
+        $cfg = is_array($p['nav_menu'] ?? null) ? $p['nav_menu'] : [];
+        $flatMax = max(1, (int) ($cfg['flat_max'] ?? 6));
+        $overflow = max(1, (int) ($cfg['group_overflow'] ?? 8));
+
+        // Total links = top-level items + all their spokes; a mega-menu once past flat_max.
+        $total = 0;
+        foreach ($services as $s) {
+            $total += 1 + count($this->childrenOf($s));
+        }
+        $mode = $total > $flatMax ? 'lp-services-nav--mega' : 'lp-services-nav--flat';
+
+        $out = '<nav class="lp-services-nav ' . $mode . '" aria-label="Services">';
+
+        $groupsShown = 0;
+        $overflowGroups = [];
+        foreach ($services as $s) {
+            $kids = $this->childrenOf($s);
+            if ($kids !== [] && $groupsShown >= $overflow) {
+                $overflowGroups[] = $s;   // fold into the trailing "More" group
+                continue;
+            }
+            $out .= $this->serviceItem($s, $kids);
+            if ($kids !== []) {
+                $groupsShown++;
+            }
+        }
+        if ($overflowGroups !== []) {
+            // "More" collapses the overflow groups' hub links into one dropdown.
+            $moreKids = array_map(fn (array $s): array => [
+                'label' => $s['label'] ?? '', 'url' => $s['url'] ?? '', 'nav_label' => $s['nav_label'] ?? '',
+            ], $overflowGroups);
+            $out .= $this->serviceItem(['label' => 'More', 'url' => ''], $moreKids);
+        }
+
+        return $out . '</nav>';
+    }
+
+    /**
+     * One services-menu item: a plain link when it has no spokes, else a group — a heading (a clickable
+     * link to the hub, or plain text for the synthetic "More") with its spokes in a `lp-subnav` dropdown.
+     * Short `nav_label`s throughout. Same structure the theme already reveals on hover/focus.
+     *
+     * @param  array<string, mixed>  $item
+     * @param  list<array<string, mixed>>  $kids
+     */
+    private function serviceItem(array $item, array $kids): string
+    {
+        if ($kids === []) {
+            return '<span class="lp-nav-item">' . $this->navLink($item, true) . '</span>';
+        }
+
+        // The heading links to the hub when it has a URL (spec: headings are clickable, not inert labels);
+        // the synthetic "More" has none, so it's plain text.
+        $heading = ! empty($item['url'])
+            ? $this->navLink($item, true)
+            : '<span class="lp-nav-head">' . esc_html($this->linkText($item, true)) . '</span>';
+
+        $out = '<span class="lp-nav-item lp-has-sub">' . $heading . '<span class="lp-subnav">';
+        foreach ($kids as $child) {
+            if (is_array($child) && ! empty($child['label'])) {
+                $out .= $this->navLink($child, true);
+            }
+        }
+
+        return $out . '</span></span>';
+    }
+
+    /**
+     * A service item's spoke links (non-empty children), or [].
+     *
+     * @param  array<string, mixed>  $item
+     * @return list<array<string, mixed>>
+     */
+    private function childrenOf(array $item): array
+    {
+        if (empty($item['children']) || ! is_array($item['children'])) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $item['children'],
+            fn ($c): bool => is_array($c) && ! empty($c['label']),
+        ));
     }
 
     public function footer(): string
@@ -209,16 +315,32 @@ final class SiteChrome
     }
 
     /**
-     * One nav link — an anchor when a URL is present, plain text otherwise.
+     * One nav link — an anchor when a URL is present, plain text otherwise. When $short is true the header's
+     * short `nav_label` is preferred over the full title (grouped nav: short menu label, long-form footer);
+     * the footer + main nav pass false and keep the full title.
      *
-     * @param  array{label?: mixed, url?: mixed}  $link
+     * @param  array{label?: mixed, url?: mixed, nav_label?: mixed}  $link
      */
-    private function navLink(array $link): string
+    private function navLink(array $link, bool $short = false): string
     {
-        $label = esc_html((string) $link['label']);
+        $label = esc_html($this->linkText($link, $short));
         $url = ! empty($link['url']) ? esc_url((string) $link['url']) : '';
 
         return $url !== '' ? '<a href="' . $url . '">' . $label . '</a>' : '<span>' . $label . '</span>';
+    }
+
+    /**
+     * The display text for a link: the short `nav_label` when asked (and present), else the full `label`.
+     *
+     * @param  array{label?: mixed, nav_label?: mixed}  $link
+     */
+    private function linkText(array $link, bool $short = false): string
+    {
+        if ($short && ! empty($link['nav_label'])) {
+            return (string) $link['nav_label'];
+        }
+
+        return (string) ($link['label'] ?? '');
     }
 
     /**

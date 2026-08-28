@@ -297,6 +297,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Header navigation menu mode (grouped nav)
+    |--------------------------------------------------------------------------
+    | Global thresholds (not per-site) the companion plugin reads from the pushed
+    | site profile to pick the header services-menu rendering: a flat row up to
+    | `flat_max` total service links, a grouped mega-menu above it, and overflow
+    | of the top-level groups into a "More" menu above `group_overflow` groups.
+    */
+    'nav' => [
+        'flat_max' => (int) env('LAUNCHPAD_NAV_FLAT_MAX', 6),              // ≤ this many total service links → flat row
+        'group_overflow' => (int) env('LAUNCHPAD_NAV_GROUP_OVERFLOW', 8), // > this many top-level groups → overflow into "More"
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Brand generation (C5 — brand intake → Elementor Global Kit)
     |--------------------------------------------------------------------------
     |
