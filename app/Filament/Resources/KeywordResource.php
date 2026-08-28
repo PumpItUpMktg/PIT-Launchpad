@@ -6,20 +6,24 @@ use App\Enums\KeywordSource;
 use App\Filament\Resources\KeywordResource\Pages\ListKeywords;
 use App\Filament\Support\SiloFilter;
 use App\Models\Keyword;
+use App\Models\Scopes\SiteScope;
 use App\Operator\Coverage\KeywordStandings;
 use App\Operator\Coverage\PositionTracking;
 use App\Operator\Coverage\TargetQueue;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 /**
  * The §7b target-queue + coverage-gaps workspace. Lists §5 keyword targets,
@@ -68,6 +72,11 @@ class KeywordResource extends Resource
                 TextColumn::make('position')
                     ->label('Position')
                     ->state(fn (Keyword $record): string => self::positionSummary($record)),
+                IconColumn::make('is_grid_keyword')
+                    ->label('Grid')
+                    ->boolean()
+                    ->tooltip('Opted into geo-grid / coverage scanning')
+                    ->sortable(),
             ])
             ->filters([
                 SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
@@ -82,16 +91,66 @@ class KeywordResource extends Resource
                             default => $query,
                         };
                     }),
+                SelectFilter::make('is_grid_keyword')
+                    ->label('Grid keyword')
+                    ->options([1 => 'On the grid', 0 => 'Not on the grid']),
             ])
             ->recordActions([
                 self::editAction(),
+                self::toggleGridAction(),
                 Action::make('promote')->icon('heroicon-o-arrow-up')->color('success')
                     ->action(fn (Keyword $record) => app(TargetQueue::class)->promote($record)),
                 Action::make('demote')->icon('heroicon-o-arrow-down')->color('gray')
                     ->action(fn (Keyword $record) => app(TargetQueue::class)->demote($record)),
                 Action::make('standings')->icon('heroicon-o-chart-bar')
                     ->action(fn (Keyword $record) => self::notifyStandings($record)),
+            ])
+            ->bulkActions([
+                self::setGridBulkAction('addToGrid', 'Add to grid', 'heroicon-o-map-pin', 'success', true),
+                self::setGridBulkAction('removeFromGrid', 'Remove from grid', 'heroicon-o-no-symbol', 'gray', false),
             ]);
+    }
+
+    /**
+     * Per-row grid opt-in: flip is_grid_keyword so the keyword is offered to (and scanned by) the geo-grid /
+     * coverage plans. There's no other panel path to set this flag, so this is the operator's affordance.
+     */
+    private static function toggleGridAction(): Action
+    {
+        return Action::make('toggleGrid')
+            ->label(fn (Keyword $record): string => $record->is_grid_keyword ? 'Remove from grid' : 'Add to grid')
+            ->icon(fn (Keyword $record): string => $record->is_grid_keyword ? 'heroicon-o-no-symbol' : 'heroicon-o-map-pin')
+            ->color(fn (Keyword $record): string => $record->is_grid_keyword ? 'gray' : 'success')
+            ->action(function (Keyword $record): void {
+                $record->forceFill(['is_grid_keyword' => ! $record->is_grid_keyword])->save();
+                Notification::make()->success()
+                    ->title($record->is_grid_keyword ? 'Added to the geo grid' : 'Removed from the geo grid')
+                    ->send();
+            });
+    }
+
+    /**
+     * Bulk grid opt-in/out — flag (or clear) is_grid_keyword across the selection in one write, so an operator
+     * can put a whole silo on the grid at once (filter by silo, select all, add). Operator context crosses
+     * tenants, so the {@see SiteScope} is dropped for the mass update.
+     */
+    private static function setGridBulkAction(string $name, string $label, string $icon, string $color, bool $value): BulkAction
+    {
+        return BulkAction::make($name)
+            ->label($label)
+            ->icon($icon)
+            ->color($color)
+            ->requiresConfirmation()
+            ->action(function (Collection $records) use ($value): void {
+                $ids = $records->pluck('id')->all();
+                $count = Keyword::withoutGlobalScope(SiteScope::class)
+                    ->whereIn('id', $ids)
+                    ->update(['is_grid_keyword' => $value]);
+
+                Notification::make()->success()
+                    ->title(($value ? 'Added ' : 'Removed ').$count.' keyword(s)'.($value ? ' to the grid' : ' from the grid'))
+                    ->send();
+            });
     }
 
     /**
