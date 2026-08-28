@@ -81,6 +81,25 @@ it('adds, reorders, and removes services in the services bar', function () {
     expect($services())->toBe(['Alpha']);
 });
 
+it('overrides a page nav label (operator-confirmed) and reverts to auto on blank', function () {
+    $site = hmSite();
+    $svc = hmPage($site, 'svc-install', 'Sump Pump Installation', ['page_type' => PageType::Service, 'nav_featured' => true]);
+
+    $page = Livewire::test(HeaderMenu::class);
+
+    // Set an override → confirmed, won't be re-derived by the seeder.
+    $page->call('saveNavLabel', $svc->id, '  Install  ');
+    $svc->refresh();
+    expect($svc->nav_label)->toBe('Install')
+        ->and($svc->nav_label_confirmed)->toBeTrue();
+
+    // Blank reverts to auto (null + unconfirmed).
+    $page->call('saveNavLabel', $svc->id, '');
+    $svc->refresh();
+    expect($svc->nav_label)->toBeNull()
+        ->and($svc->nav_label_confirmed)->toBeFalse();
+});
+
 it('shows the builder items and the Portfolio action exists', function () {
     $site = hmSite();
     hmPage($site, 'contact', 'Contact');

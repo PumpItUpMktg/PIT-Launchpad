@@ -82,7 +82,12 @@ class HeaderMenu extends OperatePage
             return ['main' => [], 'services' => [], 'available' => []];
         }
 
-        $row = fn (Content $c): array => ['id' => (string) $c->id, 'title' => (string) $c->title, 'slug' => '/'.ltrim((string) $c->slug, '/')];
+        $row = fn (Content $c): array => [
+            'id' => (string) $c->id,
+            'title' => (string) $c->title,
+            'slug' => '/'.ltrim((string) $c->slug, '/'),
+            'nav_label' => (string) ($c->nav_label ?? ''),
+        ];
 
         return [
             'main' => array_map($row, $this->mainPages()->all()),
@@ -137,6 +142,31 @@ class HeaderMenu extends OperatePage
 
         $content->forceFill(['nav_featured' => false])->save();
         Notification::make()->success()->title('Removed from the services bar')->send();
+    }
+
+    /**
+     * Override (or clear) a page's short header label. A non-blank value is an operator-confirmed override the
+     * auto-seeder won't touch; blank reverts to auto (nav_label null, unconfirmed), so the next seed re-derives
+     * it and the header falls back to the full title until then.
+     */
+    public function saveNavLabel(string $id, ?string $label): void
+    {
+        $content = $this->ownedPage($id);
+        if ($content === null) {
+            return;
+        }
+
+        $clean = trim((string) $label);
+        if ($clean === '') {
+            $content->forceFill(['nav_label' => null, 'nav_label_confirmed' => false])->save();
+            Notification::make()->success()->title('Reverted to the automatic label')->send();
+
+            return;
+        }
+
+        $content->forceFill(['nav_label' => $clean, 'nav_label_confirmed' => true])->save();
+        Notification::make()->success()->title('Header label saved')
+            ->body('Pushes live on the next "Sync header & footer".')->send();
     }
 
     /**
