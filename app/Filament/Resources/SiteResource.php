@@ -21,7 +21,6 @@ use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
-use App\Jobs\DiscoverKeywords;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -153,7 +152,6 @@ class SiteResource extends Resource
                     self::fixLinksAction(),
                     self::rebuildReconcileAction(),
                     self::readinessAction(),
-                    self::discoverKeywordsAction(),
                     self::refreshKeywordsAction(),
                     self::budgetAction(),
                     self::syncChromeAction(),
@@ -1006,8 +1004,8 @@ class SiteResource extends Resource
             ->icon('heroicon-o-arrow-path')
             ->requiresConfirmation()
             // Re-scores + position-tracks the keywords a site ALREADY has; it does not generate new ones
-            // (that's "Discover keywords"). Bypasses the cadence window and spends DataForSEO calls.
-            ->modalDescription('Re-scores and position-tracks this tenant\'s EXISTING keywords now (bypasses the cadence window). Does not generate new targets — use "Discover keywords" for that. Spends DataForSEO calls.')
+            // (discovery runs during onboarding's Silos step). Bypasses the cadence window; spends DataForSEO calls.
+            ->modalDescription('Re-scores and position-tracks this tenant\'s existing keywords now (bypasses the cadence window). Does not generate new targets — keyword discovery runs during onboarding. Spends DataForSEO calls.')
             ->action(function (Site $record): void {
                 $result = app(SitePipelineRefresher::class)->refresh($record, PipelineTrigger::Manual, force: true);
 
@@ -1020,31 +1018,6 @@ class SiteResource extends Resource
                         $result->trackingRan ? 'ran' : 'skipped',
                         $result->snapshots,
                     ))
-                    ->send();
-            });
-    }
-
-    /**
-     * Generate NEW §5 keyword targets for a tenant — pull fresh keyword ideas per silo (real DataForSEO +
-     * Claude calls) and route them into the silos. This is the seeding path outside onboarding: it dispatches
-     * the same queued {@see DiscoverKeywords} job the wizard's Silos step uses (generate: true), so a slow
-     * multi-silo external pull never times out the web request. Targets surface in "Targets & gaps" when it
-     * finishes; flag the ones to geo-scan there with "Add to grid". Needs the tenant's silos to carry
-     * rule_sets (built during onboarding) — without them discovery has nowhere to route and generates nothing.
-     */
-    private static function discoverKeywordsAction(): Action
-    {
-        return Action::make('discover_keywords')
-            ->label('Discover keywords')
-            ->icon('heroicon-o-magnifying-glass-circle')
-            ->requiresConfirmation()
-            ->modalDescription('Generates NEW keyword targets for this tenant — pulls fresh ideas per silo (real DataForSEO + Claude calls) and routes them into the silos. Runs in the background; targets appear in "Targets & gaps" when it finishes. Needs the tenant\'s silos to carry rule_sets (built during onboarding).')
-            ->action(function (Site $record): void {
-                DiscoverKeywords::dispatch($record->id);
-
-                Notification::make()->success()
-                    ->title('Keyword discovery queued')
-                    ->body('Generating keyword targets for '.($record->brand_name ?: 'this tenant').' in the background — they\'ll appear in Targets & gaps shortly.')
                     ->send();
             });
     }
