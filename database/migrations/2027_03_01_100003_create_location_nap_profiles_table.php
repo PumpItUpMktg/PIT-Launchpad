@@ -21,7 +21,8 @@ return new class extends Migration
         Schema::create('location_nap_profiles', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->foreignUlid('site_id')->constrained()->cascadeOnDelete();
-            $table->foreignUlid('location_id')->constrained()->cascadeOnDelete()->unique();
+            $table->foreignUlid('location_id')->constrained()->cascadeOnDelete();
+            $table->unique('location_id');   // one canonical NAP profile per location
 
             $table->string('business_name');
             $table->string('address_1');
