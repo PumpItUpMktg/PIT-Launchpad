@@ -41,3 +41,12 @@ test('the portfolio lists tenants most-urgent-first', function (): void {
         ->assertOk()
         ->assertSeeInOrder(['Stalled Co', 'Clean Co']);
 });
+
+test('the operator can seed the directory catalog from the page (no console access)', function (): void {
+    expect(Directory::query()->count())->toBe(0);
+
+    Livewire::test(CitationsPortfolio::class)->callAction('seedDirectories');
+
+    expect(Directory::query()->count())->toBeGreaterThanOrEqual(15)
+        ->and(Directory::query()->where('domain', 'yelp.com')->exists())->toBeTrue();
+});
