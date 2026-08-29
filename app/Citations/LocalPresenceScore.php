@@ -2,6 +2,7 @@
 
 namespace App\Citations;
 
+use App\Enums\CitationPresence;
 use App\Models\CitationStatus;
 use App\Models\Directory;
 use App\Models\Location;
@@ -14,7 +15,7 @@ use Illuminate\Support\Carbon;
  * counts for more than an obscure directory.
  *
  * Score = 100 × Σ(weight × coverage-credit) ÷ Σ(weight over applicable directories). Coverage credit is the
- * presence axis only ({@see \App\Enums\CitationPresence::coverageCredit}): a correct listing is full credit; a
+ * presence axis only ({@see CitationPresence::coverageCredit}): a correct listing is full credit; a
  * mismatch counts against coverage (0); a gap is 0. A location with nothing applicable scores 100 (vacuously
  * complete). Snapshots land on the shared metric spine so trends are free.
  */

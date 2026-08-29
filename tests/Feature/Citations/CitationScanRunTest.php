@@ -44,5 +44,5 @@ test('the scan job records a run with a coverage snapshot and score', function (
         ->and($run->trigger)->toBe('manual')
         ->and($run->finished_at)->not->toBeNull()
         ->and($run->directories_evaluated)->toBe(1)   // yelp status written by the scan
-        ->and($run->score)->toBe(50);                 // present-unconfirmed (unverified) = half credit
+        ->and($run->score)->toBe(100);                // found + ours + no detected mismatch = present_match = full credit
 });

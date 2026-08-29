@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * One (location × directory) citation status (§ Citations). Location-scoped. `attributed_location_id` +
@@ -24,6 +25,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $needs_review
  * @property array<string, array{found: mixed, expected: mixed}>|null $mismatch_fields
  * @property string|null $attributed_location_id
+ * @property Carbon|null $last_scanned_at
+ * @property int $verification_cycles
+ * @property int $work_order_count
  */
 class CitationStatus extends Model
 {

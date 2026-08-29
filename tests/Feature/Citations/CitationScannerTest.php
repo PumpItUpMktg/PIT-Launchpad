@@ -1,7 +1,7 @@
 <?php
 
 use App\Citations\CitationScanner;
-use App\Enums\CitationState;
+use App\Enums\CitationPresence;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Models\CitationFoundDomain;
 use App\Models\CitationStatus;
@@ -61,7 +61,7 @@ test('a catalog match on a single-location tenant writes a status attributed to 
     $status = CitationStatus::query()->where('location_id', $location->id)->where('directory_id', $yelp->id)->first();
     expect($status)->not->toBeNull()
         ->and($status->attributed_location_id)->toBe($location->id)
-        ->and($status->state)->toBe(CitationState::Unverified) // present + ours, no scraped NAP to confirm
+        ->and($status->presence)->toBe(CitationPresence::PresentMatch) // present + ours, no scraped NAP to fault it on
         ->and($status->attribution_confidence)->toBe(100);
 });
 
@@ -110,7 +110,7 @@ test('re-scanning is idempotent — one status and one found-domain row per (loc
         ->and(CitationFoundDomain::query()->where('location_id', $location->id)->where('domain', 'yelp.com')->count())->toBe(1);
 });
 
-test('a multi-location tenant with an organic-only result is parked as ambiguous_review', function (): void {
+test('a multi-location tenant with an organic-only result is parked for review', function (): void {
     $a = Location::factory()->for($this->site)->create();
     $b = Location::factory()->for($this->site)->create();
     LocationNapProfile::factory()->for($this->site)->create([
@@ -127,7 +127,8 @@ test('a multi-location tenant with an organic-only result is parked as ambiguous
     $scanner->scanLocation($a);
 
     $status = CitationStatus::query()->where('location_id', $a->id)->first();
-    expect($status?->state)->toBe(CitationState::AmbiguousReview);
+    expect($status?->presence)->toBe(CitationPresence::Unknown)
+        ->and($status?->needs_review)->toBeTrue();
 });
 
 test('a location with no NAP profile is skipped', function (): void {

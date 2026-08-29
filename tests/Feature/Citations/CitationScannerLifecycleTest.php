@@ -1,7 +1,8 @@
 <?php
 
 use App\Citations\CitationScanner;
-use App\Enums\CitationState;
+use App\Enums\CitationLifecycleState;
+use App\Enums\CitationPresence;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Models\CitationFoundDomain;
 use App\Models\CitationStatus;
@@ -11,16 +12,17 @@ use App\Models\LocationNapProfile;
 use App\Models\Site;
 use App\Support\CurrentSite;
 
-test('a scan never overwrites a human-owned lifecycle state', function (): void {
+test('a scan updates presence but never touches the lifecycle axis', function (): void {
     $site = Site::factory()->create();
     CurrentSite::set($site->id);
     $location = Location::factory()->for($site)->create();
     LocationNapProfile::factory()->for($site)->create(['location_id' => $location->id, 'business_name' => 'ACME', 'categories' => null]);
     $yelp = Directory::factory()->create(['domain' => 'yelp.com', 'is_active' => true]);
 
-    // The operator already submitted this citation; a scan finds it present.
+    // The operator already submitted this citation; a scan then finds it present.
     CitationStatus::factory()->for($site)->create([
-        'location_id' => $location->id, 'directory_id' => $yelp->id, 'state' => CitationState::Submitted,
+        'location_id' => $location->id, 'directory_id' => $yelp->id,
+        'presence' => CitationPresence::Absent, 'lifecycle' => CitationLifecycleState::Submitted,
     ]);
 
     $scanner = new CitationScanner(new class extends DataForSeoClient
@@ -35,9 +37,11 @@ test('a scan never overwrites a human-owned lifecycle state', function (): void 
 
     $scanner->scanLocation($location);
 
-    // The status stays Submitted (the verifier, not the scan, advances it); the found domain is still recorded.
-    expect(CitationStatus::query()->where('location_id', $location->id)->where('directory_id', $yelp->id)->first()->state)
-        ->toBe(CitationState::Submitted)
+    // Presence moves to a real listing (the two axes are independent); lifecycle stays Submitted for the
+    // verifier to advance, never clobbered by the scan. The found domain is recorded.
+    $status = CitationStatus::query()->where('location_id', $location->id)->where('directory_id', $yelp->id)->first();
+    expect($status->presence)->toBe(CitationPresence::PresentMatch)
+        ->and($status->lifecycle)->toBe(CitationLifecycleState::Submitted)
         ->and(CitationFoundDomain::query()->where('location_id', $location->id)->where('domain', 'yelp.com')->exists())
         ->toBeTrue();
 });

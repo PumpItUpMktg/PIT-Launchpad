@@ -1,7 +1,7 @@
 <?php
 
 use App\Citations\LocalPresenceScore;
-use App\Enums\CitationState;
+use App\Enums\CitationPresence;
 use App\Enums\DirectoryScope;
 use App\Models\CitationStatus;
 use App\Models\Directory;
@@ -22,26 +22,31 @@ test('a fully-listed location scores 100', function (): void {
     LocationNapProfile::factory()->for($this->site)->create(['location_id' => $location->id, 'categories' => null]);
     $dir = Directory::factory()->create(['scope' => DirectoryScope::National, 'seo_value' => 50]);
     CitationStatus::factory()->for($this->site)->create([
-        'location_id' => $location->id, 'directory_id' => $dir->id, 'state' => CitationState::ListedCorrect,
+        'location_id' => $location->id, 'directory_id' => $dir->id, 'presence' => CitationPresence::PresentMatch,
     ]);
 
     expect($this->score->forLocation($location)['score'])->toBe(100);
 });
 
-test('unverified and gap listings score partial and zero credit, weighted by value', function (): void {
+test('coverage counts only correct listings — a mismatch and a gap both score zero', function (): void {
     $location = Location::factory()->for($this->site)->create();
     LocationNapProfile::factory()->for($this->site)->create(['location_id' => $location->id, 'categories' => null]);
 
-    // Two equal-weight directories: one present-unconfirmed (0.5), one an unrecorded gap (0.0). Score = 25.
+    // Three equal-weight directories: one correct (1.0), one mismatch (0 — counts against), one gap (0).
     $a = Directory::factory()->create(['scope' => DirectoryScope::National, 'seo_value' => 40]);
     $b = Directory::factory()->create(['scope' => DirectoryScope::National, 'seo_value' => 40]);
+    $c = Directory::factory()->create(['scope' => DirectoryScope::National, 'seo_value' => 40]);
     CitationStatus::factory()->for($this->site)->create([
-        'location_id' => $location->id, 'directory_id' => $a->id, 'state' => CitationState::Unverified,
+        'location_id' => $location->id, 'directory_id' => $a->id, 'presence' => CitationPresence::PresentMatch,
     ]);
+    CitationStatus::factory()->for($this->site)->create([
+        'location_id' => $location->id, 'directory_id' => $b->id, 'presence' => CitationPresence::PresentMismatch,
+    ]);
+    // $c has no status row → an unrecorded gap.
 
     $result = $this->score->forLocation($location);
-    expect($result['applicable'])->toBe(2)
-        ->and($result['score'])->toBe(25);
+    expect($result['applicable'])->toBe(3)
+        ->and($result['score'])->toBe(33); // 1 of 3 correct
 });
 
 test('a location with nothing applicable scores 100 vacuously', function (): void {
@@ -56,7 +61,7 @@ test('snapshot writes an idempotent monthly metric row', function (): void {
     LocationNapProfile::factory()->for($this->site)->create(['location_id' => $location->id, 'categories' => null]);
     $dir = Directory::factory()->create(['scope' => DirectoryScope::National, 'seo_value' => 50]);
     CitationStatus::factory()->for($this->site)->create([
-        'location_id' => $location->id, 'directory_id' => $dir->id, 'state' => CitationState::ListedCorrect,
+        'location_id' => $location->id, 'directory_id' => $dir->id, 'presence' => CitationPresence::PresentMatch,
     ]);
 
     $this->score->snapshot($location);
