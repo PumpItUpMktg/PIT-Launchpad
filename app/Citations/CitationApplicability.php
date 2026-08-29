@@ -26,11 +26,13 @@ final class CitationApplicability
     public function __construct(private readonly TownLocationAssigner $towns = new TownLocationAssigner) {}
 
     /**
-     * The active directories that apply to one location.
+     * The active directories that apply to one location. `$applyExclusions=false` returns the full geo/trade
+     * applicable set ignoring tenant exclusions — the workspace uses it to still show excluded directories as
+     * "Not relevant" rows.
      *
      * @return Collection<int, Directory>
      */
-    public function forLocation(Location $location): Collection
+    public function forLocation(Location $location, bool $applyExclusions = true): Collection
     {
         $site = Site::query()->findOrFail($location->site_id);
         $profile = LocationNapProfile::query()->where('location_id', $location->id)->first();
@@ -45,11 +47,10 @@ final class CitationApplicability
         $categories = $this->lowerList($profile?->categories);
 
         // Tenant-level exclusions apply to every location the tenant owns — an excluded directory is never
-        // eligible anywhere for that tenant.
-        $excluded = TenantDirectoryExclusion::query()
-            ->where('site_id', $location->site_id)
-            ->pluck('directory_id')
-            ->map('strval')->flip();
+        // eligible anywhere for that tenant (unless the caller asked for the pre-exclusion universe).
+        $excluded = $applyExclusions
+            ? TenantDirectoryExclusion::query()->where('site_id', $location->site_id)->pluck('directory_id')->map('strval')->flip()
+            : collect();
 
         /** @var Collection<int, Directory> $directories */
         $directories = Directory::query()->where('is_active', true)->get();
