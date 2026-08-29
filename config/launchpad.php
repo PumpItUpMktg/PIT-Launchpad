@@ -758,6 +758,9 @@ return [
         // A paid directory is "worth paying" only when its cost per SEO-value point is at or below this
         // ceiling (dollars per point). Above it, the recommendation is skip_paid.
         'paid_value_point_ceiling' => (float) env('LAUNCHPAD_CITATIONS_PAID_VALUE_CEILING', 0.5),
+        // Default per-batch spend ceiling for PAID citations in a work order. Paid directories beyond this
+        // total are deferred to the next batch; a per-tenant override can be passed to the builder.
+        'work_order_paid_budget' => (float) env('LAUNCHPAD_CITATIONS_WORK_ORDER_BUDGET', 100.0),
     ],
 
 ];
