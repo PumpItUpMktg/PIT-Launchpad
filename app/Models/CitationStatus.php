@@ -54,6 +54,7 @@ class CitationStatus extends Model
             'source' => CitationSource::class,
             'mismatch_fields' => 'array',
             'attribution_confidence' => 'integer',
+            'unresolved_scans' => 'integer',
             'first_seen_at' => 'datetime',
             'last_scanned_at' => 'datetime',
         ];
