@@ -745,4 +745,16 @@ return [
         'agency_address' => env('LAUNCHPAD_AGENCY_ADDRESS', '377 Valley Road, Clifton, NJ 07013'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Citation Management
+    |--------------------------------------------------------------------------
+    | `stalled_scan_threshold` is how many consecutive scans a citation may stay
+    | in a work-order state (not_listed / needs_fix / submitted / pending) before
+    | the differ raises a `stalled` event for the operator to escalate.
+    */
+    'citations' => [
+        'stalled_scan_threshold' => (int) env('LAUNCHPAD_CITATIONS_STALLED_THRESHOLD', 3),
+    ],
+
 ];
