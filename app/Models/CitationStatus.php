@@ -55,6 +55,9 @@ class CitationStatus extends Model
             'mismatch_fields' => 'array',
             'attribution_confidence' => 'integer',
             'unresolved_scans' => 'integer',
+            'verification_cycles' => 'integer',
+            'work_order_count' => 'integer',
+            'submitted_at' => 'datetime',
             'first_seen_at' => 'datetime',
             'last_scanned_at' => 'datetime',
         ];

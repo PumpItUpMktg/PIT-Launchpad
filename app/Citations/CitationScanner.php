@@ -187,6 +187,17 @@ final class CitationScanner
      */
     private function writeStatus(Location $location, string $directoryId, array $result, array $siblings, array $sharedPhones): void
     {
+        // Never clobber a human-owned lifecycle state (submitted / verified / rejected / review). The
+        // found-domain row is still persisted above, so the verifier can confirm presence; the status itself
+        // is moved only by the lifecycle/operator, not a routine scan.
+        $existing = CitationStatus::query()
+            ->where('location_id', $location->id)->where('directory_id', $directoryId)->first();
+        if ($existing !== null && $existing->state->isLifecycleProtected()) {
+            $existing->forceFill(['last_scanned_at' => Carbon::now()])->save();
+
+            return;
+        }
+
         // Single-location tenants have no attribution ambiguity — the listing is theirs. Multi-location
         // tenants route through the scorer, and organic-only results (no scraped NAP) that can't be told
         // apart correctly land in ambiguous_review.

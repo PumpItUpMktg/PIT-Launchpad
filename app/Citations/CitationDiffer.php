@@ -42,8 +42,15 @@ final class CitationDiffer
         $current = CitationStatus::query()->where('location_id', $location->id)->get();
 
         foreach ($current as $status) {
-            $from = $prior[(string) $status->directory_id] ?? null;
             $to = $status->state;
+
+            // The submit→verify lifecycle (PR7) owns these states and writes its own events — the scan differ
+            // stays out so a transition isn't double-recorded and the monthly buckets stay about scan coverage.
+            if ($to->isLifecycleProtected()) {
+                continue;
+            }
+
+            $from = $prior[(string) $status->directory_id] ?? null;
 
             $type = $this->classify($from, $to);
             if ($type !== null) {
@@ -81,7 +88,7 @@ final class CitationDiffer
             CitationEventType::Fixed => 'fixed',
             CitationEventType::Regressed => 'regressed',
             CitationEventType::Lost => 'lost',
-            CitationEventType::Stalled => 'new', // unreachable — stalled is emitted separately
+            default => 'new', // unreachable — classify() only returns the four diff types above
         };
     }
 

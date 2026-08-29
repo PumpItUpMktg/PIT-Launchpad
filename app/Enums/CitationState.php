@@ -55,6 +55,24 @@ enum CitationState: string
     }
 
     /**
+     * States the submit→verify lifecycle (PR7) owns — the scan must NOT overwrite them. Once a citation is
+     * submitted, verified, rejected, or parked for review, only the lifecycle/operator moves it; a fresh scan
+     * pass would otherwise clobber the human-owned state on every run.
+     */
+    public function isLifecycleProtected(): bool
+    {
+        return in_array($this, [
+            self::Submitted, self::PendingVerification, self::Live, self::Fixed, self::Rejected, self::Unverified,
+        ], true);
+    }
+
+    /** A submitted citation waiting for a scan pass to confirm it landed. */
+    public function isAwaitingVerification(): bool
+    {
+        return in_array($this, [self::Submitted, self::PendingVerification], true);
+    }
+
+    /**
      * Graded credit toward the Local Presence Score (§ Citations, PR3): 1.0 = a confirmed correct/live listing;
      * 0.5 = present-but-unconfirmed or mid-submission (found without a verified NAP, needs-fix, submitted,
      * pending); 0.0 = no listing, or a state that isn't this location's coverage to earn (gap, duplicate,

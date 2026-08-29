@@ -2,9 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Citations\CitationLifecycle;
 use App\Citations\WorkOrder\WorkOrderBuilder;
 use App\Citations\WorkOrder\WorkOrderCsv;
 use App\Citations\WorkOrder\WorkOrderPdf;
+use App\Models\CitationStatus;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Support\CurrentSite;
@@ -18,11 +20,11 @@ use Illuminate\Support\Facades\Storage;
  */
 class CitationWorkOrderCommand extends Command
 {
-    protected $signature = 'launchpad:citation-work-order {--location= : Location id (required)} {--format=both : pdf|csv|both} {--budget= : Paid budget override for this batch}';
+    protected $signature = 'launchpad:citation-work-order {--location= : Location id (required)} {--format=both : pdf|csv|both} {--budget= : Paid budget override for this batch} {--no-record : Do not increment work-order counts (preview only)}';
 
     protected $description = 'Generate a prioritized citation work order (PDF/CSV) for a location.';
 
-    public function handle(WorkOrderBuilder $builder, WorkOrderPdf $pdf, WorkOrderCsv $csv): int
+    public function handle(WorkOrderBuilder $builder, WorkOrderPdf $pdf, WorkOrderCsv $csv, CitationLifecycle $lifecycle): int
     {
         $locationId = $this->option('location');
         if (! is_string($locationId) || $locationId === '') {
@@ -55,6 +57,16 @@ class CitationWorkOrderCommand extends Command
             $name = $dir.'/'.str_replace('.pdf', '.csv', $pdf->filename($order));
             Storage::put($name, $csv->render($order));
             $this->info("CSV: {$name}");
+        }
+
+        // Issuing the batch bumps each citation's work-order count (→ stalled after too many), unless previewing.
+        if (! $this->option('no-record')) {
+            foreach ($order->lines as $line) {
+                $status = CitationStatus::query()->find($line->statusId);
+                if ($status !== null) {
+                    $lifecycle->recordWorkOrderIssued($status);
+                }
+            }
         }
 
         $this->info("Work order: {$order->summary['total']} directories "

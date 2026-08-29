@@ -16,6 +16,12 @@ enum CitationEventType: string
     case Lost = 'lost';
     case Stalled = 'stalled';
 
+    // Submit → verify lifecycle (PR7)
+    case Submitted = 'submitted';
+    case Verified = 'verified';       // a submitted listing confirmed live/fixed on a later scan
+    case Rejected = 'rejected';
+    case Unverified = 'unverified';   // failed verification too many cycles → operator review
+
     public function label(): string
     {
         return ucfirst($this->value);
