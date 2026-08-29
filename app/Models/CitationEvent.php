@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\CitationEventType;
-use App\Enums\CitationState;
 use App\Models\Concerns\BelongsToSite;
 use Database\Factories\CitationEventFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -16,9 +15,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * History rows are never updated or deleted — they are the audit trail behind the diff buckets and regression
  * alerts. Location-scoped.
  *
+ * The `from_state`/`to_state` columns carry the raw value of whichever axis moved (a presence value for a
+ * scan-detected transition, a lifecycle value for a submit/verify/reject) — stored as plain strings since the
+ * ledger spans both axes.
+ *
  * @property CitationEventType $event_type
- * @property CitationState|null $from_state
- * @property CitationState|null $to_state
+ * @property string|null $from_state
+ * @property string|null $to_state
  */
 class CitationEvent extends Model
 {
@@ -50,8 +53,6 @@ class CitationEvent extends Model
     {
         return [
             'event_type' => CitationEventType::class,
-            'from_state' => CitationState::class,
-            'to_state' => CitationState::class,
             'occurred_at' => 'datetime',
             'meta' => 'array',
         ];

@@ -2,8 +2,8 @@
 
 namespace App\Citations;
 
+use App\Enums\CitationPresence;
 use App\Enums\CitationSource;
-use App\Enums\CitationState;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Models\CitationFoundDomain;
 use App\Models\CitationStatus;
@@ -187,20 +187,9 @@ final class CitationScanner
      */
     private function writeStatus(Location $location, string $directoryId, array $result, array $siblings, array $sharedPhones): void
     {
-        // Never clobber a human-owned lifecycle state (submitted / verified / rejected / review). The
-        // found-domain row is still persisted above, so the verifier can confirm presence; the status itself
-        // is moved only by the lifecycle/operator, not a routine scan.
-        $existing = CitationStatus::query()
-            ->where('location_id', $location->id)->where('directory_id', $directoryId)->first();
-        if ($existing !== null && $existing->state->isLifecycleProtected()) {
-            $existing->forceFill(['last_scanned_at' => Carbon::now()])->save();
-
-            return;
-        }
-
         // Single-location tenants have no attribution ambiguity — the listing is theirs. Multi-location
-        // tenants route through the scorer, and organic-only results (no scraped NAP) that can't be told
-        // apart correctly land in ambiguous_review.
+        // tenants route through the scorer; organic-only results that can't be told apart land as unknown +
+        // needs_review.
         if (count($siblings) === 1) {
             $attr = new AttributionResult((string) $location->id, 100, false);
         } else {
@@ -215,14 +204,18 @@ final class CitationScanner
         ] : null;
 
         $mismatches = [];
-        $state = $this->judge($attr, (string) $location->id, $result, $canonical, $mismatches);
+        $needsReview = false;
+        $presence = $this->judge($attr, (string) $location->id, $result, $canonical, $mismatches, $needsReview);
 
         $now = Carbon::now();
+        // Presence is written on EVERY scan (its own axis); lifecycle and covered_by_sibling are owned by
+        // CitationLifecycle / the reconciler and are left untouched — updateOrCreate only sets what's listed.
         CitationStatus::query()->updateOrCreate(
             ['location_id' => $location->id, 'directory_id' => $directoryId],
             [
                 'site_id' => $location->site_id,
-                'state' => $state,
+                'presence' => $presence,
+                'needs_review' => $needsReview,
                 'found_url' => $result['url'],
                 'found_name' => $result['name'],
                 'found_address' => $result['address'],
@@ -243,7 +236,8 @@ final class CitationScanner
     }
 
     /**
-     * Decide the citation state from attribution + NAP comparison. `$mismatches` is populated by reference.
+     * Decide the citation PRESENCE from attribution + NAP comparison. `$mismatches` and `$needsReview` are
+     * populated by reference. Presence is the scanner's axis alone — it never decides lifecycle.
      *
      * @param  array{url: string, name: ?string, address: ?string, phone: ?string}  $result
      * @param  array{business_name: string, address_1: string, address_2?: ?string}|null  $canonical
@@ -251,21 +245,24 @@ final class CitationScanner
      *
      * @param-out array<string, array{found: string, expected: string}> $mismatches
      */
-    private function judge(AttributionResult $attr, string $scannedLocationId, array $result, ?array $canonical, array &$mismatches): CitationState
+    private function judge(AttributionResult $attr, string $scannedLocationId, array $result, ?array $canonical, array &$mismatches, bool &$needsReview): CitationPresence
     {
         $mismatches = [];
+        $needsReview = false;
 
         if ($attr->ambiguous || $attr->locationId === null) {
-            return CitationState::AmbiguousReview;
+            $needsReview = true; // attribution too weak/tied to auto-decide — operator resolves
+
+            return CitationPresence::Unknown;
         }
         if ($attr->locationId !== $scannedLocationId) {
-            // A sibling owns this listing — it can NEVER become a fix/duplicate for the scanned location.
-            return CitationState::SiblingListing;
+            // This result is a sibling's listing — for the scanned location it is simply not present.
+            return CitationPresence::Absent;
         }
 
         $hasFoundNap = ($result['name'] ?? null) !== null || ($result['address'] ?? null) !== null;
         if (! $hasFoundNap || $canonical === null) {
-            return CitationState::Unverified; // Present and ours, but nothing scraped to confirm against.
+            return CitationPresence::PresentMatch; // present and ours; no scraped NAP to fault it on
         }
 
         $mismatches = $this->nap->mismatches(
@@ -273,7 +270,7 @@ final class CitationScanner
             $canonical,
         );
 
-        return $mismatches === [] ? CitationState::ListedCorrect : CitationState::NeedsFix;
+        return $mismatches === [] ? CitationPresence::PresentMatch : CitationPresence::PresentMismatch;
     }
 
     /** @return list<array{location_id: string, phone_primary: ?string, address_1: ?string, city: ?string, postal: ?string}> */

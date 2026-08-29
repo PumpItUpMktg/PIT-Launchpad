@@ -2,8 +2,9 @@
 
 namespace App\Citations;
 
+use App\Enums\CitationLifecycleState;
+use App\Enums\CitationPresence;
 use App\Enums\CitationSource;
-use App\Enums\CitationState;
 use App\Enums\MultiLocationPolicy;
 use App\Models\CitationStatus;
 use App\Models\Directory;
@@ -40,16 +41,18 @@ final class CitationReconciler
                 continue; // The scan already recorded this listing (found or otherwise).
             }
 
-            $state = ($dir->multi_location_policy === MultiLocationPolicy::OnePerBusiness && $this->siblingCovers($location, $dir))
-                ? CitationState::CoveredBySibling
-                : CitationState::NotListed;
+            // An applicable directory the scan didn't find is Absent. For a one_per_business directory a
+            // sibling already covers, mark covered_by_sibling so it's never turned into a duplicate work order.
+            $coveredBySibling = $dir->multi_location_policy === MultiLocationPolicy::OnePerBusiness
+                && $this->siblingCovers($location, $dir);
 
             CitationStatus::query()->create([
                 'site_id' => $location->site_id,
                 'location_id' => $location->id,
                 'directory_id' => $dir->id,
-                'state' => $state,
-                'attributed_location_id' => $state === CitationState::NotListed ? null : $location->id,
+                'presence' => CitationPresence::Absent,
+                'covered_by_sibling' => $coveredBySibling,
+                'attributed_location_id' => $coveredBySibling ? $location->id : null,
                 'source' => CitationSource::Unknown,
                 'first_seen_at' => $now,
                 'last_scanned_at' => $now,
@@ -67,6 +70,7 @@ final class CitationReconciler
             ->where('directory_id', $dir->id)
             ->where('location_id', '!=', $location->id)
             ->get()
-            ->contains(fn (CitationStatus $s): bool => $s->state->isCovered());
+            ->contains(fn (CitationStatus $s): bool => $s->presence === CitationPresence::PresentMatch
+                || $s->lifecycle === CitationLifecycleState::Verified);
     }
 }

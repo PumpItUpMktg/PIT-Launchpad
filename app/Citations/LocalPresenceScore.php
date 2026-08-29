@@ -42,8 +42,9 @@ final class LocalPresenceScore
             $weight = $this->weight($dir);
             $weightedApplicable += $weight;
 
+            // Coverage is presence only: a correct listing counts, a mismatch counts against (0), a gap 0.
             $status = $statuses->get($dir->id);
-            $credit = $status?->state->presenceCredit() ?? 0.0;
+            $credit = $status?->presence->coverageCredit() ?? 0.0;
             $weightedCovered += $weight * $credit;
             if ($credit >= 1.0) {
                 $coveredCount++;
