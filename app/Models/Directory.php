@@ -88,6 +88,17 @@ class Directory extends Model
             'business_value' => 'integer',
             'is_nofollow' => 'boolean',
             'is_active' => 'boolean',
+            'is_submittable' => 'boolean',
         ];
+    }
+
+    /** The high/medium/low band the UI shows for the numeric 1–5 authority_tier. */
+    public function tierLabel(): string
+    {
+        return match (true) {
+            $this->authority_tier >= 4 => 'high',
+            $this->authority_tier >= 3 => 'medium',
+            default => 'low',
+        };
     }
 }

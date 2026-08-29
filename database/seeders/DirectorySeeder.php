@@ -64,6 +64,8 @@ class DirectorySeeder extends Seeder
 
         return array_map(fn (array $r): array => [
             'domain' => $r[0],
+            'slug' => trim((string) preg_replace('/[^a-z0-9]+/', '-', mb_strtolower((string) $r[0])), '-'),
+            'homepage_url' => 'https://'.$r[0],
             'name' => $r[1],
             'scope' => $nat,
             'authority_tier' => $r[2],
@@ -72,6 +74,7 @@ class DirectorySeeder extends Seeder
             'submission_method' => $r[5],
             'multi_location_policy' => $r[6],
             'requires_client_action' => $r[7],
+            'is_submittable' => ! $r[7],
             'notes' => $r[8],
             'is_active' => true,
             'is_nofollow' => false,
