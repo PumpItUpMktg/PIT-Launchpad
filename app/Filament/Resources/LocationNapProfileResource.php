@@ -5,14 +5,17 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\LocationNapProfileResource\Pages\CreateLocationNapProfile;
 use App\Filament\Resources\LocationNapProfileResource\Pages\EditLocationNapProfile;
 use App\Filament\Resources\LocationNapProfileResource\Pages\ListLocationNapProfiles;
+use App\Jobs\RunCitationScan;
 use App\Models\LocationNapProfile;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -83,7 +86,22 @@ class LocationNapProfileResource extends Resource
                 TextColumn::make('verification_email')->label('Verify email')->placeholder('—')->color('gray'),
             ])
             ->defaultSort('business_name')
-            ->recordActions([EditAction::make()]);
+            ->recordActions([
+                Action::make('scan')
+                    ->label('Run scan')
+                    ->icon('heroicon-o-magnifying-glass')
+                    ->requiresConfirmation()
+                    ->modalDescription('Queues a citation scan for this location on the worker: it checks the directory catalog, records what changed, verifies in-flight submissions, and refreshes the Local Presence Score.')
+                    ->action(function (LocationNapProfile $record): void {
+                        RunCitationScan::dispatch((string) $record->location_id, trigger: 'manual');
+
+                        Notification::make()->success()
+                            ->title('Citation scan queued')
+                            ->body("Scanning '{$record->business_name}'. Results land as the worker completes the pass.")
+                            ->send();
+                    }),
+                EditAction::make(),
+            ]);
     }
 
     /**
