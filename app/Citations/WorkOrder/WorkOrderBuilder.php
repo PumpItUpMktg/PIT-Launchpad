@@ -3,7 +3,8 @@
 namespace App\Citations\WorkOrder;
 
 use App\Citations\DirectoryRating;
-use App\Enums\CitationState;
+use App\Enums\CitationLifecycleState;
+use App\Enums\CitationPresence;
 use App\Enums\DirectoryRecommendation;
 use App\Models\CitationStatus;
 use App\Models\Directory;
@@ -29,9 +30,14 @@ final class WorkOrderBuilder
         $profile = LocationNapProfile::query()->where('location_id', $location->id)->first();
         $nap = $profile !== null ? $this->napSnapshot($profile) : [];
 
+        // Actionable = a real gap (missing or wrong NAP) that isn't already in flight, covered by a sibling,
+        // or parked for attribution review. A mismatch on a verified listing is still actionable (re-fix).
         $statuses = CitationStatus::query()
             ->where('location_id', $location->id)
-            ->whereIn('state', [CitationState::NotListed->value, CitationState::NeedsFix->value])
+            ->whereIn('presence', [CitationPresence::Absent->value, CitationPresence::PresentMismatch->value])
+            ->where('lifecycle', '!=', CitationLifecycleState::Submitted->value)
+            ->where('covered_by_sibling', false)
+            ->where('needs_review', false)
             ->get();
 
         // Score + filter to actionable directories, then order by verdict priority, value, domain.
@@ -88,7 +94,7 @@ final class WorkOrderBuilder
                 statusId: (string) $status->id,
                 directoryName: (string) $directory->name,
                 domain: (string) $directory->domain,
-                action: $status->state,
+                action: $status->presence,
                 recommendation: $c['recommendation'],
                 seoValue: $c['value'],
                 cost: $isPaid ? $cost : null,
@@ -96,7 +102,7 @@ final class WorkOrderBuilder
                 submissionUrl: $directory->submission_url,
                 requiresClientAction: (bool) $directory->requires_client_action,
                 turnaroundDays: $directory->avg_turnaround_days,
-                mismatchFields: $status->state === CitationState::NeedsFix ? $status->mismatch_fields : null,
+                mismatchFields: $status->presence === CitationPresence::PresentMismatch ? $status->mismatch_fields : null,
             );
         }
 

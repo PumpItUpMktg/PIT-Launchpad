@@ -2,7 +2,7 @@
 
 namespace App\Citations;
 
-use App\Enums\CitationState;
+use App\Enums\CitationPresence;
 use App\Models\CitationScanRun;
 use App\Models\CitationStatus;
 use App\Models\Location;
@@ -33,9 +33,9 @@ final class ScanRunRecorder
     {
         $statuses = CitationStatus::query()->where('location_id', $location->id)->get();
 
-        $covered = $statuses->filter(fn (CitationStatus $s): bool => $s->state->isCovered())->count();
-        $needsFix = $statuses->filter(fn (CitationStatus $s): bool => $s->state === CitationState::NeedsFix)->count();
-        $notListed = $statuses->filter(fn (CitationStatus $s): bool => $s->state === CitationState::NotListed)->count();
+        $covered = $statuses->filter(fn (CitationStatus $s): bool => $s->presence === CitationPresence::PresentMatch)->count();
+        $needsFix = $statuses->filter(fn (CitationStatus $s): bool => $s->presence === CitationPresence::PresentMismatch)->count();
+        $notListed = $statuses->filter(fn (CitationStatus $s): bool => $s->presence === CitationPresence::Absent)->count();
 
         $run->forceFill([
             'finished_at' => Carbon::now(),

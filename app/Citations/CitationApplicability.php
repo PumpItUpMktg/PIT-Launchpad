@@ -8,6 +8,7 @@ use App\Models\Directory;
 use App\Models\Location;
 use App\Models\LocationNapProfile;
 use App\Models\Site;
+use App\Models\TenantDirectoryExclusion;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -43,11 +44,19 @@ final class CitationApplicability
 
         $categories = $this->lowerList($profile?->categories);
 
+        // Tenant-level exclusions apply to every location the tenant owns — an excluded directory is never
+        // eligible anywhere for that tenant.
+        $excluded = TenantDirectoryExclusion::query()
+            ->where('site_id', $location->site_id)
+            ->pluck('directory_id')
+            ->map('strval')->flip();
+
         /** @var Collection<int, Directory> $directories */
         $directories = Directory::query()->where('is_active', true)->get();
 
-        return $directories->filter(function (Directory $dir) use ($state, $countyGeoids, $ownedTowns, $isSoleLocation, $categories): bool {
-            return $this->geoApplies($dir, $state, $countyGeoids, $ownedTowns, $isSoleLocation)
+        return $directories->filter(function (Directory $dir) use ($state, $countyGeoids, $ownedTowns, $isSoleLocation, $categories, $excluded): bool {
+            return ! $excluded->has((string) $dir->id)
+                && $this->geoApplies($dir, $state, $countyGeoids, $ownedTowns, $isSoleLocation)
                 && $this->tradeApplies($dir, $categories);
         })->values();
     }

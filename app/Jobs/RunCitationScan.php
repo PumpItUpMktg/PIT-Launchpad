@@ -54,11 +54,11 @@ class RunCitationScan implements ShouldQueue
 
         CurrentSite::set((string) $location->site_id);
 
-        // Capture the pre-scan state per directory so the diff can see what actually changed.
+        // Capture the pre-scan presence per directory so the diff can see what actually changed.
         $prior = CitationStatus::query()
             ->where('location_id', $location->id)
             ->get()
-            ->mapWithKeys(fn (CitationStatus $s): array => [(string) $s->directory_id => $s->state])
+            ->mapWithKeys(fn (CitationStatus $s): array => [(string) $s->directory_id => $s->presence])
             ->all();
 
         $run = $recorder->open($location, $this->trigger);

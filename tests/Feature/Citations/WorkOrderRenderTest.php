@@ -3,7 +3,7 @@
 use App\Citations\WorkOrder\WorkOrderBuilder;
 use App\Citations\WorkOrder\WorkOrderCsv;
 use App\Citations\WorkOrder\WorkOrderPdf;
-use App\Enums\CitationState;
+use App\Enums\CitationPresence;
 use App\Models\CitationStatus;
 use App\Models\Directory;
 use App\Models\Location;
@@ -21,7 +21,7 @@ beforeEach(function (): void {
     ]);
     $dir = Directory::factory()->create(['name' => 'Yelp', 'domain' => 'yelp.com', 'domain_rank' => 80, 'cost_amount' => null]);
     CitationStatus::factory()->for($this->site)->create([
-        'location_id' => $this->location->id, 'directory_id' => $dir->id, 'state' => CitationState::NotListed,
+        'location_id' => $this->location->id, 'directory_id' => $dir->id, 'presence' => CitationPresence::Absent,
     ]);
     $this->order = (new WorkOrderBuilder)->build($this->location);
 });

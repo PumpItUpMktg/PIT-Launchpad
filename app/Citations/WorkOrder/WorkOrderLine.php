@@ -2,7 +2,7 @@
 
 namespace App\Citations\WorkOrder;
 
-use App\Enums\CitationState;
+use App\Enums\CitationPresence;
 use App\Enums\DirectoryRecommendation;
 
 /**
@@ -19,7 +19,7 @@ final readonly class WorkOrderLine
         public string $statusId,
         public string $directoryName,
         public string $domain,
-        public CitationState $action,            // not_listed (create) | needs_fix (correct)
+        public CitationPresence $action,         // absent (create) | present_mismatch (correct)
         public DirectoryRecommendation $recommendation,
         public int $seoValue,
         public ?float $cost,
@@ -33,6 +33,6 @@ final readonly class WorkOrderLine
     /** The instruction verb a VA reads: create a new listing, or correct the existing one. */
     public function actionLabel(): string
     {
-        return $this->action === CitationState::NeedsFix ? 'Correct listing' : 'Create listing';
+        return $this->action === CitationPresence::PresentMismatch ? 'Correct listing' : 'Create listing';
     }
 }

@@ -2,24 +2,32 @@
 
 namespace App\Models;
 
+use App\Enums\CitationLifecycleState;
+use App\Enums\CitationPresence;
 use App\Enums\CitationSource;
-use App\Enums\CitationState;
 use App\Models\Concerns\BelongsToSite;
 use Database\Factories\CitationStatusFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * One (location × directory) citation status (§ Citations). Location-scoped. `attributed_location_id` +
  * `attribution_confidence` carry the multi-location safety: a result attributed to a sibling is a
  * sibling_listing / covered_by_sibling and can never become a fix/duplicate/work-order item.
  *
- * @property CitationState $state
+ * @property CitationPresence $presence
+ * @property CitationLifecycleState $lifecycle
  * @property CitationSource $source
+ * @property bool $covered_by_sibling
+ * @property bool $needs_review
  * @property array<string, array{found: mixed, expected: mixed}>|null $mismatch_fields
  * @property string|null $attributed_location_id
+ * @property Carbon|null $last_scanned_at
+ * @property int $verification_cycles
+ * @property int $work_order_count
  */
 class CitationStatus extends Model
 {
@@ -50,11 +58,13 @@ class CitationStatus extends Model
     protected function casts(): array
     {
         return [
-            'state' => CitationState::class,
+            'presence' => CitationPresence::class,
+            'lifecycle' => CitationLifecycleState::class,
             'source' => CitationSource::class,
+            'covered_by_sibling' => 'boolean',
+            'needs_review' => 'boolean',
             'mismatch_fields' => 'array',
             'attribution_confidence' => 'integer',
-            'unresolved_scans' => 'integer',
             'verification_cycles' => 'integer',
             'work_order_count' => 'integer',
             'submitted_at' => 'datetime',

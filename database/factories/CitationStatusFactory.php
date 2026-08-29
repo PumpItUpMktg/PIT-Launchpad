@@ -2,8 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Enums\CitationLifecycleState;
+use App\Enums\CitationPresence;
 use App\Enums\CitationSource;
-use App\Enums\CitationState;
 use App\Models\CitationStatus;
 use App\Models\Directory;
 use App\Models\Location;
@@ -26,15 +27,21 @@ class CitationStatusFactory extends Factory
             'site_id' => $site,
             'location_id' => Location::factory()->for($site),
             'directory_id' => Directory::factory(),
-            'state' => CitationState::NotListed,
+            'presence' => CitationPresence::Absent,
+            'lifecycle' => CitationLifecycleState::None,
             'attribution_confidence' => null,
             'source' => CitationSource::Unknown,
             'last_scanned_at' => now(),
         ];
     }
 
-    public function inState(CitationState $state): static
+    public function presence(CitationPresence $presence): static
     {
-        return $this->state(fn (): array => ['state' => $state]);
+        return $this->state(fn (): array => ['presence' => $presence]);
+    }
+
+    public function lifecycle(CitationLifecycleState $lifecycle): static
+    {
+        return $this->state(fn (): array => ['lifecycle' => $lifecycle]);
     }
 }

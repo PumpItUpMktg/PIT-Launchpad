@@ -1,7 +1,7 @@
 <?php
 
 use App\Citations\WorkOrder\WorkOrderBuilder;
-use App\Enums\CitationState;
+use App\Enums\CitationPresence;
 use App\Models\CitationStatus;
 use App\Models\Directory;
 use App\Models\Location;
@@ -19,12 +19,12 @@ beforeEach(function (): void {
     $this->builder = new WorkOrderBuilder;
 });
 
-function citationGap(mixed $ctx, Directory $dir, CitationState $state = CitationState::NotListed, ?array $mismatch = null): CitationStatus
+function citationGap(mixed $ctx, Directory $dir, CitationPresence $presence = CitationPresence::Absent, ?array $mismatch = null): CitationStatus
 {
     return CitationStatus::factory()->for($ctx->site)->create([
         'location_id' => $ctx->location->id,
         'directory_id' => $dir->id,
-        'state' => $state,
+        'presence' => $presence,
         'mismatch_fields' => $mismatch,
     ]);
 }
@@ -65,13 +65,13 @@ test('paid directories beyond the budget are deferred', function (): void {
         ->and($order->summary['paid_cost'])->toBe(40.0);
 });
 
-test('a needs-fix gap carries the fields to correct and a correct-listing action', function (): void {
+test('a mismatch gap carries the fields to correct and a correct-listing action', function (): void {
     $dir = Directory::factory()->create(['domain_rank' => 70, 'cost_amount' => null]);
-    citationGap($this, $dir, CitationState::NeedsFix, ['phone' => ['found' => '111', 'expected' => '222']]);
+    citationGap($this, $dir, CitationPresence::PresentMismatch, ['phone' => ['found' => '111', 'expected' => '222']]);
 
     $line = $this->builder->build($this->location)->lines[0];
 
-    expect($line->action)->toBe(CitationState::NeedsFix)
+    expect($line->action)->toBe(CitationPresence::PresentMismatch)
         ->and($line->actionLabel())->toBe('Correct listing')
         ->and($line->mismatchFields)->toHaveKey('phone');
 });
