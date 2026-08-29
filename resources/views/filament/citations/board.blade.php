@@ -80,7 +80,9 @@
                             </p>
                         @endif
 
-                        <div style="margin-top:.9rem;display:flex;justify-content:flex-end;gap:.5rem">
+                        <div style="margin-top:.9rem;display:flex;justify-content:space-between;align-items:center;gap:.5rem">
+                            <a href="{{ \App\Filament\Pages\Citations\CitationsWorkspace::getUrl(['location' => $card->locationId]) }}"
+                               style="font-size:.82rem;color:var(--primary-600)">Open workspace →</a>
                             <x-filament::button size="sm" wire:click="launchScan('{{ $card->locationId }}')" wire:loading.attr="disabled">
                                 {{ $card->neverScanned() ? 'Launch first scan' : ($card->isScanning() ? 'Scanning…' : 'Rescan') }}
                             </x-filament::button>
