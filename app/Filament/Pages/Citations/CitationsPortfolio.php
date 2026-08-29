@@ -4,7 +4,11 @@ namespace App\Filament\Pages\Citations;
 
 use App\Citations\Ui\CitationPortfolio;
 use App\Citations\Ui\PortfolioRow;
+use App\Models\Directory;
 use BackedEnum;
+use Database\Seeders\DirectorySeeder;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 
 /**
@@ -30,6 +34,31 @@ class CitationsPortfolio extends Page
     public static function menuTag(): string
     {
         return 'unaddressed';
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('seedDirectories')
+                ->label('Seed directory catalog')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Seed the directory catalog')
+                ->modalDescription('Loads the top national citation directories (Google, Yelp, Facebook, BBB, Angi, and more) into the shared catalog. Safe to run again — existing entries are updated in place, not duplicated.')
+                ->modalSubmitActionLabel('Seed catalog')
+                ->action(function (): void {
+                    app(DirectorySeeder::class)->run();
+
+                    Notification::make()->success()
+                        ->title('Directory catalog ready')
+                        ->body(Directory::query()->count().' directories in the catalog.')
+                        ->send();
+                }),
+        ];
     }
 
     /** @return list<PortfolioRow> */
