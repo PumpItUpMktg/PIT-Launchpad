@@ -2,7 +2,6 @@
 
 namespace App\Citations;
 
-use App\Enums\CitationState;
 use App\Models\CitationStatus;
 use App\Models\Directory;
 use App\Models\Location;
@@ -14,10 +13,10 @@ use Illuminate\Support\Carbon;
  * coverage the location SHOULD have does it actually have, weighted by directory value so a Yelp listing
  * counts for more than an obscure directory.
  *
- * Score = 100 × Σ(weight × presence-credit of the location's status) ÷ Σ(weight over applicable directories).
- * Credit is graded ({@see CitationState::presenceCredit}): a confirmed correct/live listing is full
- * credit, present-but-unconfirmed / needs-fix / mid-submission is half, a gap is zero. A location with nothing
- * applicable scores 100 (vacuously complete). Snapshots land on the shared metric spine so trends are free.
+ * Score = 100 × Σ(weight × coverage-credit) ÷ Σ(weight over applicable directories). Coverage credit is the
+ * presence axis only ({@see \App\Enums\CitationPresence::coverageCredit}): a correct listing is full credit; a
+ * mismatch counts against coverage (0); a gap is 0. A location with nothing applicable scores 100 (vacuously
+ * complete). Snapshots land on the shared metric spine so trends are free.
  */
 final class LocalPresenceScore
 {

@@ -3,73 +3,69 @@
 namespace App\Citations;
 
 use App\Enums\CitationEventType;
+use App\Enums\CitationLifecycleState;
+use App\Enums\CitationPresence;
 use App\Enums\CitationSource;
-use App\Enums\CitationState;
 use App\Models\CitationEvent;
-use App\Models\CitationFoundDomain;
 use App\Models\CitationStatus;
 use App\Models\Location;
 use Illuminate\Support\Carbon;
 
 /**
- * The submit→verify lifecycle for a citation (§ Citations, PR7).
+ * Drives the lifecycle axis of a citation (§ Citations) — the "what work have we done" half, completely
+ * separate from the scanner-owned presence axis.
  *
  * A work order goes out; a VA (or an operator's manual-submit) reports the listing done → `submitted`. The next
- * scan pass looks for it: found → `live` (a new listing) or `fixed` (a correction); not found → another
- * verification cycle, and after the threshold the citation flips to `unverified` for a human to chase. A
- * citation that keeps coming back in work orders without ever resolving flips to `stalled`. Every transition is
- * written to the append-only event ledger. The scanner leaves these states alone (isLifecycleProtected) so a
- * routine scan never clobbers human-owned progress.
+ * scan updates presence independently; this verifier reads that presence: found this pass → `verified`; not
+ * found → another cycle, and past the threshold → `stalled`. A citation issued in too many work orders without
+ * resolving also `stalled`s. Because the two axes are separate columns, a scan never clobbers this progress and
+ * this never clobbers presence — a `verified` listing that later scans `present_mismatch` keeps both truths.
  */
 final class CitationLifecycle
 {
     /** Record that a VA / operator submitted the listing. Resets the verification clock. */
     public function submit(CitationStatus $status, CitationSource $source = CitationSource::Va): void
     {
-        $from = $status->state;
+        $from = $status->lifecycle;
         $status->forceFill([
-            'state' => CitationState::Submitted,
+            'lifecycle' => CitationLifecycleState::Submitted,
             'source' => $source,
             'submitted_at' => Carbon::now(),
             'verification_cycles' => 0,
         ])->save();
 
-        $this->emit($status, CitationEventType::Submitted, $from, CitationState::Submitted);
+        $this->emit($status, CitationEventType::Submitted, $from, CitationLifecycleState::Submitted);
     }
 
     /** Record that the directory / VA rejected the submission. */
     public function reject(CitationStatus $status, ?string $reason = null): void
     {
-        $from = $status->state;
-        $status->forceFill(['state' => CitationState::Rejected, 'reject_reason' => $reason])->save();
+        $from = $status->lifecycle;
+        $status->forceFill(['lifecycle' => CitationLifecycleState::Rejected, 'reject_reason' => $reason])->save();
 
-        $this->emit($status, CitationEventType::Rejected, $from, CitationState::Rejected, $reason !== null ? ['reason' => $reason] : []);
+        $this->emit($status, CitationEventType::Rejected, $from, CitationLifecycleState::Rejected, $reason !== null ? ['reason' => $reason] : []);
     }
 
     /**
-     * Verify every awaiting-verification citation at a location against this scan's found domains: present →
-     * live/fixed; absent → another cycle, or unverified at the threshold. Returns the outcome tally.
+     * Verify every awaiting-verification citation at a location against what the just-finished scan found:
+     * present this pass → verified; not found → another cycle, or stalled at the threshold.
      *
-     * @return array{verified: int, pending: int, unverified: int}
+     * @return array{verified: int, pending: int, stalled: int}
      */
     public function verify(Location $location, Carbon $scanStartedAt): array
     {
         $threshold = max(1, (int) config('launchpad.citations.verification_cycle_threshold', 3));
-        $tally = ['verified' => 0, 'pending' => 0, 'unverified' => 0];
+        $tally = ['verified' => 0, 'pending' => 0, 'stalled' => 0];
 
         $awaiting = CitationStatus::query()
             ->where('location_id', $location->id)
-            ->whereIn('state', [CitationState::Submitted->value, CitationState::PendingVerification->value])
+            ->where('lifecycle', CitationLifecycleState::Submitted->value)
             ->get();
 
         foreach ($awaiting as $status) {
-            if ($this->seenThisScan($status, $scanStartedAt)) {
-                $from = $status->state;
-                $to = ($status->mismatch_fields !== null && $status->mismatch_fields !== [])
-                    ? CitationState::Fixed
-                    : CitationState::Live;
-                $status->forceFill(['state' => $to, 'verification_cycles' => 0])->save();
-                $this->emit($status, CitationEventType::Verified, $from, $to);
+            if ($this->foundThisScan($status, $scanStartedAt)) {
+                $status->forceFill(['lifecycle' => CitationLifecycleState::Verified, 'verification_cycles' => 0])->save();
+                $this->emit($status, CitationEventType::Verified, CitationLifecycleState::Submitted, CitationLifecycleState::Verified);
                 $tally['verified']++;
 
                 continue;
@@ -77,12 +73,11 @@ final class CitationLifecycle
 
             $cycles = (int) $status->verification_cycles + 1;
             if ($cycles >= $threshold) {
-                $from = $status->state;
-                $status->forceFill(['state' => CitationState::Unverified, 'verification_cycles' => $cycles])->save();
-                $this->emit($status, CitationEventType::Unverified, $from, CitationState::Unverified, ['cycles' => $cycles]);
-                $tally['unverified']++;
+                $status->forceFill(['lifecycle' => CitationLifecycleState::Stalled, 'verification_cycles' => $cycles])->save();
+                $this->emit($status, CitationEventType::Stalled, CitationLifecycleState::Submitted, CitationLifecycleState::Stalled, ['cycles' => $cycles]);
+                $tally['stalled']++;
             } else {
-                $status->forceFill(['state' => CitationState::PendingVerification, 'verification_cycles' => $cycles])->save();
+                $status->forceFill(['verification_cycles' => $cycles])->save();
                 $tally['pending']++;
             }
         }
@@ -100,35 +95,36 @@ final class CitationLifecycle
         $count = (int) $status->work_order_count + 1;
         $status->forceFill(['work_order_count' => $count])->save();
 
-        if ($count >= $threshold && in_array($status->state, [CitationState::NotListed, CitationState::NeedsFix], true)) {
-            $from = $status->state;
-            $status->forceFill(['state' => CitationState::Stalled])->save();
-            $this->emit($status, CitationEventType::Stalled, $from, CitationState::Stalled, ['work_orders' => $count]);
+        $unresolved = $status->presence !== CitationPresence::PresentMatch
+            && ! in_array($status->lifecycle, [CitationLifecycleState::Verified, CitationLifecycleState::Rejected], true);
+
+        if ($count >= $threshold && $unresolved) {
+            $from = $status->lifecycle;
+            $status->forceFill(['lifecycle' => CitationLifecycleState::Stalled])->save();
+            $this->emit($status, CitationEventType::Stalled, $from, CitationLifecycleState::Stalled, ['work_orders' => $count]);
         }
     }
 
-    /** Presence this scan: a matched found-domain row for the directory refreshed at/after the scan start. */
-    private function seenThisScan(CitationStatus $status, Carbon $scanStartedAt): bool
+    /** The scan refreshed this citation's presence to a real listing on this pass. */
+    private function foundThisScan(CitationStatus $status, Carbon $scanStartedAt): bool
     {
-        return CitationFoundDomain::query()
-            ->where('location_id', $status->location_id)
-            ->where('directory_id', $status->directory_id)
-            ->where('last_seen_at', '>=', $scanStartedAt)
-            ->exists();
+        return $status->presence->isPresent()
+            && $status->last_scanned_at !== null
+            && $status->last_scanned_at->greaterThanOrEqualTo($scanStartedAt);
     }
 
     /**
      * @param  array<string, mixed>  $meta
      */
-    private function emit(CitationStatus $status, CitationEventType $type, CitationState $from, CitationState $to, array $meta = []): void
+    private function emit(CitationStatus $status, CitationEventType $type, CitationLifecycleState $from, CitationLifecycleState $to, array $meta = []): void
     {
         CitationEvent::query()->create([
             'site_id' => $status->site_id,
             'location_id' => $status->location_id,
             'directory_id' => $status->directory_id,
             'event_type' => $type,
-            'from_state' => $from,
-            'to_state' => $to,
+            'from_state' => $from->value,
+            'to_state' => $to->value,
             'occurred_at' => Carbon::now(),
             'meta' => $meta === [] ? null : $meta,
         ]);
