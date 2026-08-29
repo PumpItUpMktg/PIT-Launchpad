@@ -23,13 +23,11 @@ use Filament\Pages\Page;
  */
 class CitationsBoard extends Page
 {
+    protected static bool $shouldRegisterNavigation = false; // reached from the portfolio index, not the sidebar
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-map-pin';
 
-    protected static ?string $navigationLabel = 'Citations';
-
-    protected static ?string $slug = 'citations';
-
-    protected static ?int $navigationSort = 30;
+    protected static ?string $slug = 'citations/tenant';
 
     protected string $view = 'filament.citations.board';
 
