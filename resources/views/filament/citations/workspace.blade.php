@@ -6,6 +6,10 @@
     @if ($this->getLocation() === null)
         <x-filament::section><p style="color:var(--gray-500)">No location selected.</p></x-filament::section>
     @else
+        <div style="display:flex;justify-content:flex-end;margin-bottom:.5rem">
+            <a href="{{ \App\Filament\Pages\Citations\CitationsReport::getUrl(['location' => $this->getLocation()->id]) }}"
+               style="color:var(--primary-600);font-size:.85rem">View client report →</a>
+        </div>
         {{-- Stat strip --}}
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem">
             <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Live &amp; correct</div><div style="font-size:1.5rem;font-weight:600;color:#16a34a">{{ $stats['live'] ?? 0 }}</div></x-filament::section>
