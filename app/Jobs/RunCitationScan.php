@@ -2,7 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Citations\CitationReconciler;
 use App\Citations\CitationScanner;
+use App\Citations\LocalPresenceScore;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Support\CurrentSite;
@@ -28,7 +30,7 @@ class RunCitationScan implements ShouldQueue
         public readonly bool $sweepSharedNumbers = true,
     ) {}
 
-    public function handle(CitationScanner $scanner): void
+    public function handle(CitationScanner $scanner, CitationReconciler $reconciler, LocalPresenceScore $score): void
     {
         $location = Location::query()->withoutGlobalScope(SiteScope::class)->find($this->locationId);
         if ($location === null) {
@@ -42,5 +44,9 @@ class RunCitationScan implements ShouldQueue
         if ($this->sweepSharedNumbers) {
             $scanner->sweepSharedNumbers((string) $location->site_id);
         }
+
+        // Turn the applicable-but-unfound directories into tracked gaps, then snapshot the resulting score.
+        $reconciler->reconcile($location);
+        $score->snapshot($location);
     }
 }

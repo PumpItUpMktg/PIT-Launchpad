@@ -41,10 +41,7 @@ class TownLocationAssigner
 
         // town key (lowercase name) → owning location id. Coverage areas win (the intake-computed
         // GBP reach that materialized the page); served_towns fills any gap.
-        $owners = $this->servedTownOwners($locations);
-        foreach ($this->coverageOwners($site) as $key => $ownerId) {
-            $owners[$key] = $ownerId; // coverage is authoritative — overwrite the served-towns guess
-        }
+        $owners = $this->townOwners($site, $locations);
 
         $townPages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -78,6 +75,26 @@ class TownLocationAssigner
         }
 
         return ['assigned' => $assigned, 'unmatched' => $unmatched];
+    }
+
+    /**
+     * town key (lowercase name) → owning location id for a site: coverage areas (authoritative) over the
+     * served-towns fallback. Exposed so the citation module can map a town-scoped directory to the single
+     * location that owns the town (never all siblings).
+     *
+     * @param  Collection<int, Location>|null  $locations  pre-loaded locations (avoids a re-query)
+     * @return array<string, string>
+     */
+    public function townOwners(Site $site, ?Collection $locations = null): array
+    {
+        $locations ??= Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
+
+        $owners = $this->servedTownOwners($locations);
+        foreach ($this->coverageOwners($site) as $key => $ownerId) {
+            $owners[$key] = $ownerId; // coverage is authoritative — overwrite the served-towns guess
+        }
+
+        return $owners;
     }
 
     /**
