@@ -53,4 +53,19 @@ enum CitationState: string
     {
         return in_array($this, [self::SiblingListing, self::CoveredBySibling], true);
     }
+
+    /**
+     * Graded credit toward the Local Presence Score (§ Citations, PR3): 1.0 = a confirmed correct/live listing;
+     * 0.5 = present-but-unconfirmed or mid-submission (found without a verified NAP, needs-fix, submitted,
+     * pending); 0.0 = no listing, or a state that isn't this location's coverage to earn (gap, duplicate,
+     * ambiguous/sibling attribution, blocked, rejected, stalled).
+     */
+    public function presenceCredit(): float
+    {
+        return match ($this) {
+            self::ListedCorrect, self::Live, self::Fixed, self::CoveredBySibling => 1.0,
+            self::Unverified, self::NeedsFix, self::Submitted, self::PendingVerification => 0.5,
+            default => 0.0,
+        };
+    }
 }
