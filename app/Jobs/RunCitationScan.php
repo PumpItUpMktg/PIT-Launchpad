@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Citations\CitationDiffer;
+use App\Citations\CitationLifecycle;
 use App\Citations\CitationReconciler;
 use App\Citations\CitationScanner;
 use App\Citations\LocalPresenceScore;
@@ -44,6 +45,7 @@ class RunCitationScan implements ShouldQueue
         LocalPresenceScore $score,
         ScanRunRecorder $recorder,
         CitationDiffer $differ,
+        CitationLifecycle $lifecycle,
     ): void {
         $location = Location::query()->withoutGlobalScope(SiteScope::class)->find($this->locationId);
         if ($location === null) {
@@ -67,8 +69,13 @@ class RunCitationScan implements ShouldQueue
             $scanner->sweepSharedNumbers((string) $location->site_id);
         }
 
-        // Turn the applicable-but-unfound directories into tracked gaps, then snapshot the resulting score.
+        // Turn the applicable-but-unfound directories into tracked gaps.
         $reconciler->reconcile($location);
+
+        // Advance any awaiting-verification citations against what this pass actually found.
+        $lifecycle->verify($location, $run->started_at);
+
+        // Snapshot the resulting score after lifecycle + reconcile settle.
         $scoreResult = $score->snapshot($location);
 
         // Diff pre vs post, write the event ledger, and close the run with the buckets + score.

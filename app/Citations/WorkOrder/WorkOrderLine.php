@@ -16,6 +16,7 @@ final readonly class WorkOrderLine
      * @param  array<string, array{found: mixed, expected: mixed}>|null  $mismatchFields  what to correct (needs_fix only)
      */
     public function __construct(
+        public string $statusId,
         public string $directoryName,
         public string $domain,
         public CitationState $action,            // not_listed (create) | needs_fix (correct)

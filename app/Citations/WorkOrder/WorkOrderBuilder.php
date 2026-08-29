@@ -85,6 +85,7 @@ final class WorkOrderBuilder
             /** @var CitationStatus $status */
             $status = $c['status'];
             $lines[] = new WorkOrderLine(
+                statusId: (string) $status->id,
                 directoryName: (string) $directory->name,
                 domain: (string) $directory->domain,
                 action: $status->state,

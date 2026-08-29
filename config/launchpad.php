@@ -761,6 +761,10 @@ return [
         // Default per-batch spend ceiling for PAID citations in a work order. Paid directories beyond this
         // total are deferred to the next batch; a per-tenant override can be passed to the builder.
         'work_order_paid_budget' => (float) env('LAUNCHPAD_CITATIONS_WORK_ORDER_BUDGET', 100.0),
+        // A submitted citation the scan can't confirm live after this many passes flips to `unverified`
+        // (operator review). A citation issued in this many work orders without resolving flips to `stalled`.
+        'verification_cycle_threshold' => (int) env('LAUNCHPAD_CITATIONS_VERIFY_THRESHOLD', 3),
+        'work_order_stall_threshold' => (int) env('LAUNCHPAD_CITATIONS_WORK_ORDER_STALL', 3),
     ],
 
 ];
