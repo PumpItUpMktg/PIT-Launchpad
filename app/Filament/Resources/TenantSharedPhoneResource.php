@@ -35,6 +35,16 @@ class TenantSharedPhoneResource extends Resource
 
     protected static ?int $navigationSort = 3;
 
+    /**
+     * Menu-map bookkeeping (menu-reorg worksheet): the Citations module is mid-build, so its final-menu
+     * placement is a pending decision — it inventories as `unaddressed`, not a legacy retire. Does not
+     * affect the live sidebar (that comes from navigationGroup).
+     */
+    public static function menuTag(): string
+    {
+        return 'unaddressed';
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
