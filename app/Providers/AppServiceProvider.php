@@ -50,6 +50,8 @@ use App\Integrations\DataForSeo\DataForSeoLocalGridProvider;
 use App\Integrations\DataForSeo\DataForSeoLocations;
 use App\Integrations\DataForSeo\DataForSeoSerpProvider;
 use App\Integrations\DataForSeo\SerpTaskDispatcher;
+use App\Integrations\DomainAuthority\DomainAuthorityProvider;
+use App\Integrations\DomainAuthority\MockDomainAuthorityProvider;
 use App\Integrations\Embedding\EmbeddingProvider;
 use App\Integrations\Embedding\OpenAiEmbeddingProvider;
 use App\Integrations\Fal\FalClient;
@@ -162,6 +164,10 @@ class AppServiceProvider extends ServiceProvider
         // Claude voice synthesis). Real adapters bind here later.
         $this->app->bind(GbpProvider::class, MockGbpProvider::class);
         $this->app->bind(CensusProvider::class, MockCensusProvider::class);
+
+        // § Citations directory rating: domain authority is deferred — mock default (no fabricated ranks);
+        // a DataForSEO domain-analytics adapter binds here later.
+        $this->app->bind(DomainAuthorityProvider::class, MockDomainAuthorityProvider::class);
 
         // Locations layer — service-area enumeration runs on the real Census TIGERweb
         // adapter (no key needed); tests bind a Mock / Http::fake so CI makes no call.

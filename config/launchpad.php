@@ -755,6 +755,9 @@ return [
     */
     'citations' => [
         'stalled_scan_threshold' => (int) env('LAUNCHPAD_CITATIONS_STALLED_THRESHOLD', 3),
+        // A paid directory is "worth paying" only when its cost per SEO-value point is at or below this
+        // ceiling (dollars per point). Above it, the recommendation is skip_paid.
+        'paid_value_point_ceiling' => (float) env('LAUNCHPAD_CITATIONS_PAID_VALUE_CEILING', 0.5),
     ],
 
 ];
