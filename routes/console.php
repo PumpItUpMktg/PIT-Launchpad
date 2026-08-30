@@ -103,6 +103,13 @@ Schedule::command('sandhog:derive-milestones')->dailyAt('05:00')->withoutOverlap
 // complete month is reported; per-site opt-out is having no client users.
 Schedule::command('launchpad:send-monthly-reports')->monthlyOn(1, '08:00')->withoutOverlapping();
 
+// Places refresh — weekly re-pull of each GBP-backed location's Google Business Profile, so the cached
+// Location and its GBP-tracked NAP fields never drift from the live GBP (operator overrides preserved by the
+// hydrator). One Places details call per location/week (shared account); queues one job per location.
+// withoutOverlapping so a slow multi-tenant sweep can't stack. Ad-hoc refresh is the "Import from Google"
+// action on a location.
+Schedule::command('launchpad:refresh-places --all')->weekly()->withoutOverlapping();
+
 // Citation scan — monthly directory-listing sweep for every NAP-profiled location. Queues one scan per
 // location; the run records what changed (new/fixed/regressed/lost), verifies in-flight submissions, and
 // refreshes the Local Presence Score. withoutOverlapping so a slow month can't stack.
