@@ -4,6 +4,8 @@ use App\Enums\UserRole;
 use App\Filament\Resources\LocationNapProfileResource\Pages\CreateLocationNapProfile;
 use App\Filament\Resources\LocationResource\Pages\CreateLocation;
 use App\Filament\Resources\LocationResource\Pages\EditLocation;
+use App\Integrations\Places\MockPlacesProvider;
+use App\Integrations\Places\PlacesProvider;
 use App\Models\Location;
 use App\Models\LocationNapProfile;
 use App\Models\Scopes\SiteScope;
@@ -39,6 +41,7 @@ test('creating a GBP-backed location auto-fills its NAP profile', function (): v
             'name' => 'Apex Plumbing — Austin',
             'phone' => '+15125550142',
             'gbp_url' => 'https://maps.google.com/?cid=12345',
+            'website' => 'https://apexplumbing.example',
             'place_id' => 'ChIJMOCK00000000000000000000',
             'primary_category' => 'plumber',
             'address_components' => wiringComponents(),
@@ -55,7 +58,36 @@ test('creating a GBP-backed location auto-fills its NAP profile', function (): v
         ->and($nap->address_1)->toBe('500 West 2nd Street')
         ->and($nap->city)->toBe('Austin')
         ->and($nap->state)->toBe('TX')
-        ->and($nap->postal)->toBe('78701');
+        ->and($nap->postal)->toBe('78701')
+        ->and($nap->website_url)->toBe('https://apexplumbing.example');
+});
+
+test('importing from Google then saving seeds a matching NAP end to end', function (): void {
+    app()->bind(PlacesProvider::class, MockPlacesProvider::class);
+    $site = Site::factory()->create();
+
+    Livewire::test(CreateLocation::class)
+        ->callAction('importFromGoogle', data: [
+            'query' => 'Apex Plumbing',
+            'place_id' => MockPlacesProvider::PLACE_ID,
+        ])
+        ->fillForm(['site_id' => $site->id])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $location = Location::query()->withoutGlobalScope(SiteScope::class)
+        ->firstWhere('place_id', MockPlacesProvider::PLACE_ID);
+    $nap = LocationNapProfile::query()->withoutGlobalScope(SiteScope::class)
+        ->where('location_id', $location->id)->first();
+
+    expect($nap)->not->toBeNull()
+        ->and($nap->business_name)->toBe('Apex Plumbing — Austin')
+        ->and($nap->address_1)->toBe('500 West 2nd Street')
+        ->and($nap->city)->toBe('Austin')
+        ->and($nap->state)->toBe('TX')
+        ->and($nap->postal)->toBe('78701')
+        ->and($nap->phone_primary)->toBe('+15125550142')
+        ->and($nap->website_url)->toBe('https://apexplumbing.example');
 });
 
 test('creating a non-GBP location does not manufacture a NAP', function (): void {

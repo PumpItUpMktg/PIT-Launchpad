@@ -130,6 +130,50 @@ test('it fills only blank fields on an existing NAP and never overwrites', funct
         ->and($nap->postal)->toBe('78701');
 });
 
+test('it mirrors the website from the location into the NAP', function (): void {
+    $location = gbpBackedLocation(['website' => 'https://apexplumbing.example']);
+
+    app(NapProfileHydrator::class)->hydrate($location);
+
+    $nap = LocationNapProfile::query()->withoutGlobalScope(SiteScope::class)
+        ->where('location_id', $location->id)->first();
+
+    expect($nap->website_url)->toBe('https://apexplumbing.example');
+});
+
+test('a re-sync tracks a changed GBP value on a field the operator has not touched', function (): void {
+    $location = gbpBackedLocation();
+    app(NapProfileHydrator::class)->hydrate($location); // create + snapshot
+
+    // The GBP name changes (operator re-imports); the NAP field was never touched.
+    $location->update(['name' => 'Apex Plumbing — Downtown']);
+
+    $result = app(NapProfileHydrator::class)->hydrate($location->fresh());
+
+    expect($result->updated())->toBeTrue()
+        ->and($result->fields)->toContain('business_name');
+
+    $nap = LocationNapProfile::query()->withoutGlobalScope(SiteScope::class)
+        ->where('location_id', $location->id)->first();
+    expect($nap->business_name)->toBe('Apex Plumbing — Downtown');
+});
+
+test('a re-sync preserves a deliberate operator override', function (): void {
+    $location = gbpBackedLocation();
+    app(NapProfileHydrator::class)->hydrate($location); // create + snapshot
+
+    $nap = LocationNapProfile::query()->withoutGlobalScope(SiteScope::class)
+        ->where('location_id', $location->id)->first();
+    $nap->update(['business_name' => 'Apex Plumbing Co. (DBA)']); // operator override
+
+    // The GBP name later changes too — the override must still win.
+    $location->update(['name' => 'Apex Plumbing — Downtown']);
+    app(NapProfileHydrator::class)->hydrate($location->fresh());
+
+    $nap->refresh();
+    expect($nap->business_name)->toBe('Apex Plumbing Co. (DBA)');
+});
+
 test('it is a noop when the existing NAP is already complete', function (): void {
     $location = gbpBackedLocation();
     LocationNapProfile::factory()->create([

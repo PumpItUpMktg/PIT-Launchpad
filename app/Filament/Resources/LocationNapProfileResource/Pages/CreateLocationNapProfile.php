@@ -46,16 +46,11 @@ class CreateLocationNapProfile extends CreateRecord
                         return;
                     }
 
-                    // Fill only fields the operator hasn't already typed — never clobber their entries.
+                    // Explicit autofill: the GBP is canonical, so its values win. The operator reviews before
+                    // saving (never a silent save) and can still tweak any field afterward.
                     $current = is_array($this->data) ? $this->data : [];
-                    $merged = $current;
-                    foreach ($derived as $field => $value) {
-                        if (blank(data_get($current, $field))) {
-                            $merged[$field] = $value;
-                        }
-                    }
 
-                    $this->form->fill($merged);
+                    $this->form->fill(array_merge($current, $derived));
 
                     Notification::make()->success()->title('Filled from Google — review and save')->send();
                 }),

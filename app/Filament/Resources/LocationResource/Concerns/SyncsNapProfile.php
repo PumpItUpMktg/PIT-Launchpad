@@ -38,8 +38,8 @@ trait SyncsNapProfile
 
         if ($result->updated()) {
             Notification::make()->success()
-                ->title('NAP profile updated from Google')
-                ->body('Filled blank fields: '.implode(', ', $result->fields).'. Existing values were left untouched.')
+                ->title('NAP profile synced to Google')
+                ->body('Updated to match the GBP: '.implode(', ', $result->fields).'. Any fields you overrode were kept.')
                 ->send();
 
             return;

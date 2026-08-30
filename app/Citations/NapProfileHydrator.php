@@ -7,14 +7,18 @@ use App\Models\LocationNapProfile;
 use App\Models\Scopes\SiteScope;
 
 /**
- * Derives a location's canonical NAP profile from the GBP/Places data already imported onto the `Location`
- * (business name, structured `address_components`, phone, hours, primary category) — so selecting a Google
- * Business Profile fills the NAP instead of leaving the operator to re-type it.
+ * Makes the Google Business Profile the source of truth for a location's canonical NAP. The fields a directory
+ * is matched against — business name, address, phone, hours, category, website — are seeded verbatim from the
+ * GBP/Places data imported onto the `Location`, so the submission payload matches the GBP by construction and
+ * the operator verifies rather than types.
  *
- * Non-destructive by design. The NAP is "the one authoritative submission payload," so hydration NEVER
- * overwrites an operator's value: it creates the profile when none exists, and on an existing profile fills
- * ONLY fields that are currently blank. It also refuses to create a half-built row — if Google is missing any
- * of the NOT-NULL columns it skips and reports which, leaving manual entry as the path.
+ * GBP-owned-but-editable: the GBP-sourced fields keep tracking the GBP on every re-sync UNLESS the operator has
+ * deliberately overridden one, in which case their value is preserved. Override detection is snapshot-based —
+ * `LocationNapProfile.gbp_synced` records the last GBP value written per field; if the stored value still equals
+ * that snapshot the field follows the GBP, otherwise it's treated as an operator override and left alone. On a
+ * legacy row with no snapshot the first sync fills only blanks (never clobbers pre-existing manual data), then
+ * begins tracking. Fields with no GBP equivalent (verification email, secondary phone, descriptions, logo,
+ * photos) are never touched.
  */
 final class NapProfileHydrator
 {
@@ -42,26 +46,55 @@ final class NapProfileHydrator
             $profile = new LocationNapProfile($derived);
             $profile->site_id = $location->site_id;
             $profile->location_id = $location->id;
+            $profile->gbp_synced = $derived; // snapshot: these values came from the GBP
             $profile->save();
 
             return NapHydrationResult::createdWith(array_keys($derived));
         }
 
-        $filled = [];
+        return $this->syncExisting($existing, $derived);
+    }
+
+    /**
+     * Re-sync an existing NAP against the GBP, honoring operator overrides.
+     *
+     * @param  array<string, mixed>  $derived
+     */
+    private function syncExisting(LocationNapProfile $nap, array $derived): NapHydrationResult
+    {
+        $snapshot = is_array($nap->gbp_synced) ? $nap->gbp_synced : [];
+        $changed = [];
+
         foreach ($derived as $field => $value) {
-            if ($this->isBlank($existing->getAttribute($field))) {
-                $existing->setAttribute($field, $value);
-                $filled[] = $field;
+            $current = $nap->getAttribute($field);
+
+            if (! array_key_exists($field, $snapshot)) {
+                // No history for this field: fill only if blank, so a pre-existing manual value is preserved.
+                if ($this->isBlank($current)) {
+                    $nap->setAttribute($field, $value);
+                    $changed[] = $field;
+                }
+            } elseif ($this->valuesEqual($current, $snapshot[$field])) {
+                // Operator hasn't diverged from the last GBP value → keep tracking the GBP.
+                if (! $this->valuesEqual($current, $value)) {
+                    $nap->setAttribute($field, $value);
+                    $changed[] = $field;
+                }
             }
+            // else: the stored value differs from the last GBP value → operator override, preserve it.
+
+            $snapshot[$field] = $value; // snapshot always reflects what the GBP currently says
         }
 
-        if ($filled === []) {
+        $nap->gbp_synced = $snapshot;
+
+        if ($changed === [] && ! $nap->isDirty('gbp_synced')) {
             return NapHydrationResult::noop();
         }
 
-        $existing->save();
+        $nap->save();
 
-        return NapHydrationResult::updatedWith($filled);
+        return $changed === [] ? NapHydrationResult::noop() : NapHydrationResult::updatedWith($changed);
     }
 
     /**
@@ -82,6 +115,7 @@ final class NapProfileHydrator
             'state' => $parts['state'],
             'postal' => $parts['postal'],
             'phone_primary' => (string) ($location->phone ?? ''),
+            'website_url' => (string) ($location->website ?? ''),
             'hours' => is_array($location->hours) && $location->hours !== [] ? $location->hours : null,
             'categories' => $location->primary_category !== null && $location->primary_category !== ''
                 ? [(string) $location->primary_category]
@@ -126,6 +160,15 @@ final class NapProfileHydrator
             'state' => $pick(['administrative_area_level_1'], 'short_name'),
             'postal' => $pick(['postal_code']),
         ];
+    }
+
+    private function valuesEqual(mixed $a, mixed $b): bool
+    {
+        if (is_array($a) || is_array($b)) {
+            return $a == $b;
+        }
+
+        return (string) $a === (string) $b;
     }
 
     private function isBlank(mixed $value): bool

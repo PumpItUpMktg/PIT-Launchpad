@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property list<mixed>|null $hours
  * @property list<string>|null $categories
  * @property list<string>|null $photo_urls
+ * @property array<string, mixed>|null $gbp_synced per-field snapshot of the last GBP value written (override detection)
  */
 class LocationNapProfile extends Model
 {
@@ -39,6 +40,7 @@ class LocationNapProfile extends Model
             'hours' => 'array',
             'categories' => 'array',
             'photo_urls' => 'array',
+            'gbp_synced' => 'array',
         ];
     }
 }
