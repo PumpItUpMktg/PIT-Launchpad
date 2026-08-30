@@ -2,10 +2,14 @@
 
 namespace App\Filament\Pages\Citations;
 
+use App\Citations\NapHydrationResult;
+use App\Citations\NapProfileHydrator;
 use App\Citations\Ui\LocationCitationCard;
 use App\Citations\Ui\TenantCitationBoard;
 use App\Jobs\RunCitationScan;
+use App\Models\Location;
 use App\Models\LocationNapProfile;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Support\CurrentSite;
 use BackedEnum;
@@ -88,21 +92,40 @@ class CitationsBoard extends Page
         return app(TenantCitationBoard::class)->forSite($site);
     }
 
-    /** Queue a scan for one location (only when it has a NAP profile to scan against). */
+    /**
+     * Queue a scan for one location. The scan compares directories against the canonical NAP, so if the location
+     * doesn't have one yet we build it from its GBP first (the GBP is the source of truth) rather than blocking.
+     * Only a location with no usable GBP data — nothing to derive a NAP from — is refused.
+     */
     public function launchScan(string $locationId): void
     {
-        if (! LocationNapProfile::query()->where('location_id', $locationId)->exists()) {
-            Notification::make()->warning()->title('Add a NAP profile first')
-                ->body('Citations need a canonical NAP to scan against.')->send();
+        $location = Location::query()->withoutGlobalScope(SiteScope::class)->find($locationId);
+        if ($location === null) {
+            return;
+        }
+
+        $result = $this->ensureNap($location);
+        if ($result !== null && ! $result->created()) {
+            Notification::make()->warning()->title('Can’t scan yet — no canonical NAP')
+                ->body($this->missingNapBody($result))
+                ->send();
 
             return;
+        }
+
+        if ($result?->created()) {
+            Notification::make()->success()->title('Built the NAP from Google')
+                ->body('Created the canonical NAP from this location’s GBP — scanning against it now.')->send();
         }
 
         RunCitationScan::dispatch($locationId, trigger: 'manual');
         Notification::make()->success()->title('Citation scan queued')->send();
     }
 
-    /** Fan out a scan for every NAP-profiled location in the tenant. */
+    /**
+     * Fan out a scan for every location in the tenant, building a NAP from the GBP for any that lack one.
+     * Locations with no usable GBP data are counted as skipped.
+     */
     public function scanAll(): void
     {
         $site = $this->getSite();
@@ -111,13 +134,53 @@ class CitationsBoard extends Page
         }
 
         $queued = 0;
+        $skipped = 0;
         foreach ($this->board as $card) {
-            if ($card->hasNap) {
-                RunCitationScan::dispatch($card->locationId, trigger: 'manual');
-                $queued++;
+            $location = Location::query()->withoutGlobalScope(SiteScope::class)->find($card->locationId);
+            if ($location === null) {
+                continue;
             }
+
+            $result = $this->ensureNap($location);
+            if ($result !== null && ! $result->created()) {
+                $skipped++;
+
+                continue;
+            }
+
+            RunCitationScan::dispatch($card->locationId, trigger: 'manual');
+            $queued++;
         }
 
-        Notification::make()->success()->title("Queued {$queued} scan(s)")->send();
+        $note = Notification::make()->success()->title("Queued {$queued} scan(s)");
+        if ($skipped > 0) {
+            $note->body("{$skipped} skipped — no GBP data to build a NAP from.");
+        }
+        $note->send();
+    }
+
+    /**
+     * Ensure the location has a canonical NAP, deriving one from its GBP when missing. Returns null when a NAP
+     * already existed, or the hydration result when we attempted to create one (created / skipped-missing).
+     */
+    private function ensureNap(Location $location): ?NapHydrationResult
+    {
+        $exists = LocationNapProfile::query()->withoutGlobalScope(SiteScope::class)
+            ->where('location_id', $location->id)->exists();
+        if ($exists) {
+            return null;
+        }
+
+        return app(NapProfileHydrator::class)->hydrate($location);
+    }
+
+    private function missingNapBody(NapHydrationResult $result): string
+    {
+        if ($result->skipped() && $result->missing !== []) {
+            return 'Google is missing '.implode(', ', $result->missing).
+                '. Import a Google Business Profile onto this location, or add a NAP profile manually.';
+        }
+
+        return 'Import a Google Business Profile onto this location, or add a NAP profile, so there’s a canonical listing to scan against.';
     }
 }

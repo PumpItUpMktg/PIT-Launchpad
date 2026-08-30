@@ -101,6 +101,8 @@ class LocationResource extends Resource
             Toggle::make('is_storefront')->label('Storefront (walk-in) location'),
             TextInput::make('booking_url')->label('Booking URL')->url(),
             TextInput::make('gbp_url')->label('Google Business Profile URL')->url(),
+            TextInput::make('website')->label('Website')->url()
+                ->helperText('The business website (the Google import fills this); mirrored into the NAP.'),
             TextInput::make('primary_category')->label('GBP category')->maxLength(255)
                 ->helperText('The Google Business Profile primary category (the GBP import will fill this).'),
             self::servedTownsField(),
@@ -214,6 +216,7 @@ class LocationResource extends Resource
             'lat' => $details->lat,
             'lng' => $details->lng,
             'gbp_url' => $details->gbpUrl,
+            'website' => $details->website,
             'place_id' => $details->placeId,
             ...BusinessHours::toFields($details->hours),
         ], fn ($value) => $value !== null && $value !== '');

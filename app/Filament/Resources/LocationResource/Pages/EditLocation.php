@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\LocationResource\Pages;
 
 use App\Filament\Resources\LocationResource;
+use App\Filament\Resources\LocationResource\Concerns\SyncsNapProfile;
 use App\Support\BusinessHours;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -10,6 +11,8 @@ use Filament\Resources\Pages\EditRecord;
 
 class EditLocation extends EditRecord
 {
+    use SyncsNapProfile;
+
     protected static string $resource = LocationResource::class;
 
     /**
@@ -18,6 +21,12 @@ class EditLocation extends EditRecord
     protected function getHeaderActions(): array
     {
         return [DeleteAction::make()];
+    }
+
+    /** After a GBP-backed location is saved, fill any blank fields on its NAP profile from the Google data. */
+    protected function afterSave(): void
+    {
+        $this->syncNapFromGbp();
     }
 
     /**

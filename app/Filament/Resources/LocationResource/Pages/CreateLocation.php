@@ -3,13 +3,22 @@
 namespace App\Filament\Resources\LocationResource\Pages;
 
 use App\Filament\Resources\LocationResource;
+use App\Filament\Resources\LocationResource\Concerns\SyncsNapProfile;
 use App\Support\BusinessHours;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateLocation extends CreateRecord
 {
+    use SyncsNapProfile;
+
     protected static string $resource = LocationResource::class;
+
+    /** After a GBP-backed location is created, auto-fill its canonical NAP profile from the Google data. */
+    protected function afterCreate(): void
+    {
+        $this->syncNapFromGbp();
+    }
 
     /**
      * @return array<Action>

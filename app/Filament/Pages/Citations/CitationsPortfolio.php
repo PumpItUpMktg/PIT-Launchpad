@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Citations;
 
+use App\Citations\NapBackfiller;
 use App\Citations\Ui\CitationPortfolio;
 use App\Citations\Ui\PortfolioRow;
 use App\Models\Directory;
@@ -56,6 +57,22 @@ class CitationsPortfolio extends Page
                     Notification::make()->success()
                         ->title('Directory catalog ready')
                         ->body(Directory::query()->count().' directories in the catalog.')
+                        ->send();
+                }),
+            Action::make('backfillNaps')
+                ->label('Backfill NAPs from GBP')
+                ->icon('heroicon-o-identification')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Backfill NAP profiles from GBP')
+                ->modalDescription('Builds a canonical NAP from Google Business Profile data for every location that has a GBP but no NAP yet, and syncs GBP-tracked fields on the rest (your overrides are kept). Reads stored data only — no Google calls — and is safe to run again.')
+                ->modalSubmitActionLabel('Backfill NAPs')
+                ->action(function (): void {
+                    $counts = app(NapBackfiller::class)->run();
+
+                    Notification::make()->success()
+                        ->title('NAP backfill complete')
+                        ->body("{$counts['created']} created, {$counts['updated']} synced, {$counts['skipped']} skipped (no usable GBP data).")
                         ->send();
                 }),
         ];

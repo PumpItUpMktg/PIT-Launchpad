@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property array<string, mixed>|null $hours
  * @property array<int, array<string, mixed>>|null $address_components
  * @property string|null $gbp_url
+ * @property string|null $website the business website (from the GBP/Places import); mirrored into the NAP
  * @property string|null $phone
  * @property float|null $lat
  * @property float|null $lng
