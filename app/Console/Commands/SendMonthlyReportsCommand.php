@@ -94,7 +94,7 @@ class SendMonthlyReportsCommand extends Command
         $raw = $this->option('month');
         if (is_string($raw) && $raw !== '') {
             try {
-                return Carbon::createFromFormat('Y-m', $raw)->startOfMonth()->format('Y-m');
+                return Carbon::createFromFormat('!Y-m', $raw)->startOfMonth()->format('Y-m');
             } catch (InvalidFormatException) {
                 $this->error("Invalid --month '{$raw}' — expected YYYY-MM.");
 
