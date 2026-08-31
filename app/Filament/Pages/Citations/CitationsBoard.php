@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Citations;
 
+use App\Citations\CitationDiagnostics;
 use App\Citations\NapHydrationResult;
 use App\Citations\NapProfileHydrator;
 use App\Citations\Ui\LocationCitationCard;
@@ -13,8 +14,10 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Support\CurrentSite;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\HtmlString;
 
 /**
  * Citations · Tenant board (§ Citations UI, PR B) — one card per physical location with its coverage broken
@@ -44,6 +47,52 @@ class CitationsBoard extends Page
     public static function menuTag(): string
     {
         return 'unaddressed';
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('diagnoseScan')
+                ->label('Run scan diagnostics')
+                ->icon('heroicon-o-wrench-screwdriver')
+                ->color('gray')
+                ->action(function (): void {
+                    $site = $this->getSite();
+                    if ($site === null) {
+                        return;
+                    }
+                    CurrentSite::set($site->id);
+
+                    $profiledIds = LocationNapProfile::query()->pluck('location_id')->all();
+                    $location = Location::query()->whereIn('id', $profiledIds)->first()
+                        ?? Location::query()->first();
+
+                    if ($location === null) {
+                        Notification::make()->warning()->title('No locations to diagnose')
+                            ->body('Add a location (with a GBP) to this tenant first.')->send();
+
+                        return;
+                    }
+
+                    $report = app(CitationDiagnostics::class)->forLocation($location);
+
+                    $body = new HtmlString(
+                        implode('<br>', array_map(fn (string $l): string => e($l), $report->lines()))
+                        .'<br><br><strong>Likely cause:</strong> '.e($report->likelyCause())
+                    );
+
+                    $note = Notification::make()->title("Scan diagnostics — {$report->locationName}")->body($body)->persistent();
+                    match ($report->severity()) {
+                        'danger' => $note->danger(),
+                        'warning' => $note->warning(),
+                        default => $note->success(),
+                    };
+                    $note->send();
+                }),
+        ];
     }
 
     public function mount(): void
