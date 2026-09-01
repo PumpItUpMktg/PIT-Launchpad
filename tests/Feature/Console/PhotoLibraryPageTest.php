@@ -1,0 +1,111 @@
+<?php
+
+use App\Filament\Console\Pages\JobReview;
+use App\Filament\Console\Pages\PhotoLibrary;
+use App\JobCapture\Photos\LibraryPhotoUploader;
+use App\Models\Account;
+use App\Models\Job;
+use App\Models\LibraryPhoto;
+use App\Models\Site;
+use App\Models\User;
+use App\Support\CurrentSite;
+use Filament\Facades\Filament;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
+
+beforeEach(fn () => $this->actingAs(User::factory()->create())); // Operator (Super Admin) by default
+
+function pageJpeg(): string
+{
+    $img = imagecreatetruecolor(16, 16);
+    ob_start();
+    imagejpeg($img, null, 90);
+    $bytes = (string) ob_get_clean();
+    imagedestroy($img);
+
+    return $bytes;
+}
+
+it('is operator-gated', function (): void {
+    expect(PhotoLibrary::canAccess())->toBeTrue();
+
+    $this->actingAs(User::factory()->client()->create());
+    expect(PhotoLibrary::canAccess())->toBeFalse();
+})->skip(fn () => ! method_exists(User::factory(), 'client'), 'no client factory state');
+
+it('uploads photos into the account library', function (): void {
+    Storage::fake('r2');
+    Filament::setCurrentPanel('console');
+    $account = Account::factory()->create();
+    $site = Site::factory()->for($account)->create();
+
+    Livewire::test(PhotoLibrary::class)
+        ->set('siteId', $site->id)
+        ->set('uploads', [UploadedFile::fake()->image('kitchen.jpg', 24, 18)])
+        ->call('upload')
+        ->assertHasNoErrors();
+
+    $photo = LibraryPhoto::query()->where('account_id', $account->id)->first();
+    expect($photo)->not->toBeNull()
+        ->and($photo->width)->toBe(24)
+        ->and($photo->height)->toBe(18);
+    Storage::disk('r2')->assertExists($photo->r2_key);
+});
+
+it('tags, labels, and deletes a library photo', function (): void {
+    $account = Account::factory()->create();
+    $site = Site::factory()->for($account)->create();
+    $photo = LibraryPhoto::factory()->create(['account_id' => $account->id]);
+
+    $page = new PhotoLibrary;
+    $page->siteId = $site->id;
+
+    $page->startEdit($photo->id);
+    $page->editLabel = 'Kitchen reno';
+    $page->editTags = 'kitchen, plumbing, kitchen';
+    $page->saveEdit();
+
+    $photo->refresh();
+    expect($photo->label)->toBe('Kitchen reno')
+        ->and($photo->tags)->toBe(['kitchen', 'plumbing']);   // trimmed + deduped
+
+    $page->delete($photo->id);
+    expect(LibraryPhoto::query()->find($photo->id))->toBeNull(); // soft-deleted
+});
+
+it('lists only the working account\'s photos, filtered by tag', function (): void {
+    $account = Account::factory()->create();
+    $site = Site::factory()->for($account)->create();
+    LibraryPhoto::factory()->create(['account_id' => $account->id, 'tags' => ['kitchen']]);
+    LibraryPhoto::factory()->create(['account_id' => $account->id, 'tags' => ['roof']]);
+    LibraryPhoto::factory()->create(); // a different account — must never appear
+
+    $page = new PhotoLibrary;
+    $page->siteId = $site->id;
+
+    expect($page->getPhotosProperty())->toHaveCount(2);
+
+    $page->filterTag = 'kitchen';
+    expect($page->getPhotosProperty())->toHaveCount(1);
+});
+
+it('attaches a library photo to a job from the review screen', function (): void {
+    Storage::fake('r2');
+    $account = Account::factory()->create();
+    $site = Site::factory()->for($account)->create();
+    CurrentSite::set($site->id);
+    $job = Job::factory()->for($site)->create(['lat_true' => 40.1, 'lng_true' => -75.3, 'lat_jittered' => null, 'photos' => null]);
+    $photo = app(LibraryPhotoUploader::class)->upload($account, pageJpeg(), 'x.jpg');
+
+    $page = new JobReview;
+    $page->siteId = $site->id;
+    expect($page->getLibraryPhotosProperty())->toHaveCount(1); // picker sees it
+
+    $page->attachFromLibrary($job->id, $photo->id);
+
+    $job->refresh();
+    expect($job->photos)->toHaveCount(1)
+        ->and($job->photos[0]['source_library_photo_id'])->toBe((string) $photo->id)
+        ->and($job->photos[0]['geotagged'])->toBeTrue();
+});
