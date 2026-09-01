@@ -35,6 +35,8 @@ use App\Integrations\Census\GoogleGeocoder;
 use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Census\TigerwebGazetteer;
+use App\Integrations\Citations\HttpListingVerifier;
+use App\Integrations\Citations\ListingVerifier;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Claude\ClaudeClientFactory;
 use App\Integrations\Cloudflare\CloudflareClient;
@@ -164,6 +166,10 @@ class AppServiceProvider extends ServiceProvider
         // Claude voice synthesis). Real adapters bind here later.
         $this->app->bind(GbpProvider::class, MockGbpProvider::class);
         $this->app->bind(CensusProvider::class, MockCensusProvider::class);
+
+        // Citation listing NAP verification — the default reads the listing page (schema.org + phone);
+        // a DataForSEO Business Data adapter can replace it for anti-scraping majors, same interface.
+        $this->app->bind(ListingVerifier::class, HttpListingVerifier::class);
 
         // § Citations directory rating: domain authority is deferred — mock default (no fabricated ranks);
         // a DataForSEO domain-analytics adapter binds here later.
