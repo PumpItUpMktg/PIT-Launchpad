@@ -7,6 +7,7 @@ use App\Citations\CitationLifecycle;
 use App\Citations\CitationReconciler;
 use App\Citations\CitationScanner;
 use App\Citations\LocalPresenceScore;
+use App\Citations\PlatformCitationConfirmer;
 use App\Citations\ScanRunRecorder;
 use App\Models\CitationStatus;
 use App\Models\Location;
@@ -46,6 +47,7 @@ class RunCitationScan implements ShouldQueue
         ScanRunRecorder $recorder,
         CitationDiffer $differ,
         CitationLifecycle $lifecycle,
+        PlatformCitationConfirmer $confirmer,
     ): void {
         $location = Location::query()->withoutGlobalScope(SiteScope::class)->find($this->locationId);
         if ($location === null) {
@@ -71,6 +73,10 @@ class RunCitationScan implements ShouldQueue
 
         // Turn the applicable-but-unfound directories into tracked gaps.
         $reconciler->reconcile($location);
+
+        // Confirm platform-integration listings (GBP) from the location's own data — after reconcile so it
+        // wins over "unfound → gap" (the organic scan can't see the Google map listing as a result domain).
+        $confirmer->confirm($location);
 
         // Advance any awaiting-verification citations against what this pass actually found.
         $lifecycle->verify($location, $run->started_at);

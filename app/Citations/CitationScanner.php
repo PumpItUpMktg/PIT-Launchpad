@@ -4,6 +4,8 @@ namespace App\Citations;
 
 use App\Enums\CitationPresence;
 use App\Enums\CitationSource;
+use App\Integrations\Citations\ListingVerifier;
+use App\Integrations\Citations\NullListingVerifier;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Models\CitationFoundDomain;
 use App\Models\CitationStatus;
@@ -37,6 +39,7 @@ final class CitationScanner
         private readonly DataForSeoClient $dfs,
         private readonly CitationAttributor $attributor = new CitationAttributor,
         private readonly NapNormalizer $nap = new NapNormalizer,
+        private readonly ListingVerifier $verifier = new NullListingVerifier,
     ) {}
 
     /**
@@ -64,6 +67,15 @@ final class CitationScanner
 
             if ($directory === null) {
                 continue; // Unmatched candidate domain — kept for PR5/PR8 harvesting, no status row.
+            }
+
+            // Read the listing's real NAP so attribution can tell this location's listing from a sibling's,
+            // and the NAP compare can fault a mismatch. Null (blocked / no data) leaves it needs-review.
+            $verified = $this->verifier->verify($this->normalizeDomain((string) $directory->domain), $result['url']);
+            if ($verified !== null) {
+                $result['name'] = $verified->name ?? $result['name'];
+                $result['address'] = $verified->address ?? $result['address'];
+                $result['phone'] = $verified->phone ?? $result['phone'];
             }
 
             $this->writeStatus($location, $directory->id, $result, $siblings, $sharedPhones);
