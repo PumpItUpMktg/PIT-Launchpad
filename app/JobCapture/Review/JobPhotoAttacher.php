@@ -2,18 +2,19 @@
 
 namespace App\JobCapture\Review;
 
+use App\JobCapture\Photos\JobPhotoStore;
 use App\Models\Job;
-use App\Publishing\TenantStorage;
 
 /**
  * Adds photos to an EXISTING job from the review screen — the path for a CSV-imported or text-only backfill
- * job that had no photos at capture, and for a walk-in the operator photographs later. Stores each image
- * under the per-job R2 prefix (same as capture) and appends to the job's photo set, capped at the same
- * {@see Job::MAX_PHOTOS} total. New photos carry no alt text yet — a re-enhance fills them.
+ * job that had no photos at capture, and for a walk-in the operator photographs later. Stores each image via
+ * {@see JobPhotoStore} (geotagged to the job's jittered point) under the per-job R2 prefix and appends to the
+ * photo set, capped at the same {@see Job::MAX_PHOTOS} total. New photos carry no alt text yet — a re-enhance
+ * fills them.
  */
 final class JobPhotoAttacher
 {
-    public function __construct(private readonly TenantStorage $storage) {}
+    public function __construct(private readonly JobPhotoStore $photos) {}
 
     /**
      * Append photos to the job (up to the per-job cap total). Returns how many were actually added.
@@ -28,15 +29,7 @@ final class JobPhotoAttacher
             return 0;
         }
 
-        $site = $job->site;
-        $added = [];
-        foreach (array_slice($photos, 0, $room) as $i => $photo) {
-            $filename = $photo['filename'] ?? (count($existing) + $i + 1).'.jpg';
-            $added[] = [
-                'r2_key' => $this->storage->putForJob($site, $job->id, $filename, $photo['bytes']),
-                'hash' => hash('sha256', $photo['bytes']),
-            ];
-        }
+        $added = $this->photos->store($job->site, $job, $photos, $room, count($existing));
 
         $job->forceFill(['photos' => [...$existing, ...$added]])->save();
 
