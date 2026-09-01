@@ -2,6 +2,7 @@
 
 namespace App\Publishing;
 
+use App\Models\Account;
 use App\Models\Site;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -40,6 +41,20 @@ class TenantStorage
     public function putForJob(Site $site, string $jobId, string $filename, string $bytes): string
     {
         $key = $this->prefixFor($site).'/jobs/'.$jobId.'/'.$this->sanitize($filename);
+
+        Storage::disk(self::DISK)->put($key, $bytes);
+
+        return $key;
+    }
+
+    /**
+     * Store a reusable library original under the per-account library prefix
+     * (`accounts/{account}/library/{file}`). The source images the operator uploads once and attaches to many
+     * jobs; each attachment gets its own geotagged copy under a job prefix, never this original.
+     */
+    public function putForLibrary(Account $account, string $filename, string $bytes): string
+    {
+        $key = 'accounts/'.$account->id.'/library/'.$this->sanitize($filename);
 
         Storage::disk(self::DISK)->put($key, $bytes);
 
