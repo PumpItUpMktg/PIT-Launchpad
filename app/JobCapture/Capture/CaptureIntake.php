@@ -4,11 +4,11 @@ namespace App\JobCapture\Capture;
 
 use App\Enums\JobSource;
 use App\Enums\JobStatus;
+use App\JobCapture\Photos\JobPhotoStore;
 use App\Jobs\EnhanceJob;
 use App\Jobs\ResolveJobGeography;
 use App\Models\Job;
 use App\Models\TechDevice;
-use App\Publishing\TenantStorage;
 
 /**
  * Turns a tech's {@see CaptureData} submission into a persisted {@see Job} (§5). Creates the job as a
@@ -20,7 +20,7 @@ use App\Publishing\TenantStorage;
  */
 final class CaptureIntake
 {
-    public function __construct(private readonly TenantStorage $storage) {}
+    public function __construct(private readonly JobPhotoStore $photos) {}
 
     public function capture(TechDevice $device, CaptureData $data): Job
     {
@@ -63,16 +63,7 @@ final class CaptureIntake
             return;
         }
 
-        $photos = [];
-        foreach (array_slice($data->photos, 0, 3) as $i => $photo) {
-            $filename = $photo['filename'] ?? ($i + 1).'.jpg';
-            $photos[] = [
-                'r2_key' => $this->storage->putForJob($site, $job->id, $filename, $photo['bytes']),
-                'hash' => hash('sha256', $photo['bytes']),
-            ];
-        }
-
-        $job->forceFill(['photos' => $photos])->save();
+        $job->forceFill(['photos' => $this->photos->store($site, $job, $data->photos, Job::MAX_PHOTOS)])->save();
     }
 
     private function snapshotJobTypes(Job $job, CaptureData $data): void

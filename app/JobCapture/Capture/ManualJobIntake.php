@@ -5,11 +5,11 @@ namespace App\JobCapture\Capture;
 use App\Enums\JobSource;
 use App\Enums\JobStatus;
 use App\Integrations\Census\Geocoder;
+use App\JobCapture\Photos\JobPhotoStore;
 use App\Jobs\EnhanceJob;
 use App\Jobs\ResolveJobGeography;
 use App\Models\Job;
 use App\Models\Site;
-use App\Publishing\TenantStorage;
 use Illuminate\Support\Str;
 
 /**
@@ -25,7 +25,7 @@ final class ManualJobIntake
 {
     public function __construct(
         private readonly Geocoder $geocoder,
-        private readonly TenantStorage $storage,
+        private readonly JobPhotoStore $photos,
     ) {}
 
     /**
@@ -98,16 +98,7 @@ final class ManualJobIntake
             return;
         }
 
-        $stored = [];
-        foreach (array_slice($photos, 0, 3) as $i => $photo) {
-            $filename = $photo['filename'] ?? ($i + 1).'.jpg';
-            $stored[] = [
-                'r2_key' => $this->storage->putForJob($site, $job->id, $filename, $photo['bytes']),
-                'hash' => hash('sha256', $photo['bytes']),
-            ];
-        }
-
-        $job->forceFill(['photos' => $stored])->save();
+        $job->forceFill(['photos' => $this->photos->store($site, $job, $photos, Job::MAX_PHOTOS)])->save();
     }
 
     /**
