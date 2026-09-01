@@ -10,10 +10,12 @@ use App\JobCapture\Capture\CsvJobImporter;
 use App\JobCapture\Capture\ManualJobData;
 use App\JobCapture\Capture\ManualJobIntake;
 use App\JobCapture\Enhancement\DescriptionEnhancer;
+use App\JobCapture\Photos\LibraryPhotoAttacher;
 use App\JobCapture\Review\JobPhotoAttacher;
 use App\JobCapture\Review\JobReviewActions;
 use App\Models\Job;
 use App\Models\JobType;
+use App\Models\LibraryPhoto;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\TenantStorage;
@@ -449,6 +451,41 @@ class JobReview extends ConsolePage
 
         $added > 0
             ? Notification::make()->title($added.' photo'.($added === 1 ? '' : 's').' added.')->success()->send()
+            : Notification::make()->title('No room for more photos on this job (max '.Job::MAX_PHOTOS.').')->warning()->send();
+    }
+
+    /**
+     * The working account's reusable library photos, for the per-job "attach from library" picker.
+     *
+     * @return list<array{id: string, url: string, label: ?string}>
+     */
+    public function getLibraryPhotosProperty(): array
+    {
+        $account = $this->workingSite()?->account;
+        if ($account === null) {
+            return [];
+        }
+
+        return LibraryPhoto::query()->where('account_id', $account->id)->latest()->limit(24)->get()
+            ->map(fn (LibraryPhoto $p): array => ['id' => (string) $p->id, 'url' => $p->url(), 'label' => $p->label])
+            ->all();
+    }
+
+    /** Attach one library photo to a job — its own copy, geotagged to this job's point. */
+    public function attachFromLibrary(string $jobId, string $photoId): void
+    {
+        if (! $this->can(Capability::EditContent)) {
+            return;
+        }
+        $job = $this->ownedJob($jobId);
+        if ($job === null) {
+            return;
+        }
+
+        $added = app(LibraryPhotoAttacher::class)->attach($job, [$photoId]);
+
+        $added > 0
+            ? Notification::make()->title('Added from library.')->success()->send()
             : Notification::make()->title('No room for more photos on this job (max '.Job::MAX_PHOTOS.').')->warning()->send();
     }
 

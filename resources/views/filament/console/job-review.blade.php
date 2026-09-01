@@ -157,6 +157,21 @@
                         </button>
                         <span class="jr-empty">up to {{ 3 - count($job['photos']) }} more</span>
                     </div>
+
+                    @php $library = $this->libraryPhotos; @endphp
+                    @if ($library !== [])
+                        <div class="jr-lbl" style="margin-top:8px;">Or attach from the photo library</div>
+                        <div class="jr-photos" style="gap:6px;">
+                            @foreach ($library as $lib)
+                                <button type="button" class="jr-photo" style="width:64px;height:64px;padding:0;cursor:pointer;border:1px solid rgba(148,163,184,.35);"
+                                        title="{{ $lib['label'] ?? 'Attach to this job' }}"
+                                        wire:click="attachFromLibrary('{{ $job['id'] }}', '{{ $lib['id'] }}')"
+                                        wire:loading.attr="disabled">
+                                    <img src="{{ $lib['url'] }}" alt="{{ $lib['label'] }}" loading="lazy">
+                                </button>
+                            @endforeach
+                        </div>
+                    @endif
                 @endif
 
                 @if ($editingId === $job['id'])

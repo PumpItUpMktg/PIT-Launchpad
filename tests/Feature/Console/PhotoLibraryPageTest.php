@@ -1,16 +1,31 @@
 <?php
 
+use App\Filament\Console\Pages\JobReview;
 use App\Filament\Console\Pages\PhotoLibrary;
+use App\JobCapture\Photos\LibraryPhotoUploader;
 use App\Models\Account;
+use App\Models\Job;
 use App\Models\LibraryPhoto;
 use App\Models\Site;
 use App\Models\User;
+use App\Support\CurrentSite;
 use Filament\Facades\Filament;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 beforeEach(fn () => $this->actingAs(User::factory()->create())); // Operator (Super Admin) by default
+
+function pageJpeg(): string
+{
+    $img = imagecreatetruecolor(16, 16);
+    ob_start();
+    imagejpeg($img, null, 90);
+    $bytes = (string) ob_get_clean();
+    imagedestroy($img);
+
+    return $bytes;
+}
 
 it('is operator-gated', function (): void {
     expect(PhotoLibrary::canAccess())->toBeTrue();
@@ -73,4 +88,24 @@ it('lists only the working account\'s photos, filtered by tag', function (): voi
 
     $page->filterTag = 'kitchen';
     expect($page->getPhotosProperty())->toHaveCount(1);
+});
+
+it('attaches a library photo to a job from the review screen', function (): void {
+    Storage::fake('r2');
+    $account = Account::factory()->create();
+    $site = Site::factory()->for($account)->create();
+    CurrentSite::set($site->id);
+    $job = Job::factory()->for($site)->create(['lat_true' => 40.1, 'lng_true' => -75.3, 'lat_jittered' => null, 'photos' => null]);
+    $photo = app(LibraryPhotoUploader::class)->upload($account, pageJpeg(), 'x.jpg');
+
+    $page = new JobReview;
+    $page->siteId = $site->id;
+    expect($page->getLibraryPhotosProperty())->toHaveCount(1); // picker sees it
+
+    $page->attachFromLibrary($job->id, $photo->id);
+
+    $job->refresh();
+    expect($job->photos)->toHaveCount(1)
+        ->and($job->photos[0]['source_library_photo_id'])->toBe((string) $photo->id)
+        ->and($job->photos[0]['geotagged'])->toBeTrue();
 });
