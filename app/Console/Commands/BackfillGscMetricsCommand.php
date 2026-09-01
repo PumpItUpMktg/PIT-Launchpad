@@ -94,9 +94,14 @@ class BackfillGscMetricsCommand extends Command
      */
     public static function monthChunks(Carbon $now, int $months): array
     {
+        // Anchor to the first of THIS month before walking back, so day-of-month never overflows a shorter
+        // target month (e.g. on the 31st, subMonths(2) from Aug 31 would land in Jul, duplicating a chunk and
+        // skipping Jun). From day 01 every subMonths is exact.
+        $base = $now->copy()->startOfMonth();
+
         $chunks = [];
         for ($i = $months - 1; $i >= 0; $i--) {
-            $start = $now->copy()->subMonths($i)->startOfMonth();
+            $start = $base->copy()->subMonths($i);
             $end = $start->copy()->endOfMonth();
             if ($end->greaterThan($now)) {
                 $end = $now->copy()->startOfDay();

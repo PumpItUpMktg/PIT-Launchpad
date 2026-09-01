@@ -76,7 +76,7 @@ class MonthlyReport extends Page
         }
 
         $month = $this->monthKey !== null
-            ? Carbon::createFromFormat('Y-m', $this->monthKey)->startOfMonth()
+            ? Carbon::createFromFormat('!Y-m', $this->monthKey)->startOfMonth()
             : Carbon::now()->startOfMonth();
 
         $pdf = app(MonthlyReportPdf::class);
@@ -106,7 +106,7 @@ class MonthlyReport extends Page
         }
 
         $month = $this->monthKey !== null
-            ? Carbon::createFromFormat('Y-m', $this->monthKey)->startOfMonth()
+            ? Carbon::createFromFormat('!Y-m', $this->monthKey)->startOfMonth()
             : Carbon::now()->startOfMonth();
 
         return app(MonthlyKeywordReport::class)->for($site, $month);

@@ -64,7 +64,7 @@ class MonthlyReportMail extends Mailable implements ShouldQueue
 
     private function month(): Carbon
     {
-        return Carbon::createFromFormat('Y-m', $this->monthKey)->startOfMonth();
+        return Carbon::createFromFormat('!Y-m', $this->monthKey)->startOfMonth();
     }
 
     /**
