@@ -35,6 +35,10 @@ final class CitationChip
             $status->lifecycle === CitationLifecycleState::Submitted => self::chip('submitted', 'Submitted', 'info'),
             $status->presence === CitationPresence::PresentMatch => self::chip('live', 'Live', 'success'),
             $status->presence === CitationPresence::Absent => self::chip('missing', 'Missing', 'gray'),
+            // Presence is Unknown here (all other values handled above). If a listing was actually found but
+            // attribution was too weak to confirm it's this location's (common on a multi-location brand), the
+            // operator reviews it — it is NOT "not scanned".
+            $status->found_url !== null => self::chip('needs_review', 'Needs review', 'warning'),
             default => self::chip('not_scanned', 'Not scanned', 'gray'),
         };
     }

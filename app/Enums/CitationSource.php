@@ -12,6 +12,7 @@ enum CitationSource: string
     case Va = 'va';
     case BulkVendor = 'bulk_vendor';
     case ClientOwned = 'client_owned';
+    case Platform = 'platform';
     case Unknown = 'unknown';
 
     public function label(): string
