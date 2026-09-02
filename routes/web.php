@@ -3,10 +3,20 @@
 use App\Http\Controllers\GoogleConnectController;
 use App\Http\Controllers\JobCapture\CaptureController;
 use App\Http\Controllers\JobCapture\CapturePageController;
+use App\Http\Controllers\Reviews\ReviewSubmissionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
+});
+
+// Review Capture (§6) — the public, no-auth review submission surface. Reached only by a single-use signed
+// token that carries the tenant (bound from the token, not a session). Rate limited — this is the only new
+// per-route throttle in the app; anchor is the client IP + token path.
+Route::middleware('throttle:30,1')->group(function (): void {
+    Route::get('reviews/{token}/thanks', [ReviewSubmissionController::class, 'thanks'])->name('reviews.thanks');
+    Route::get('reviews/{token}', [ReviewSubmissionController::class, 'show'])->name('reviews.show');
+    Route::post('reviews/{token}', [ReviewSubmissionController::class, 'submit'])->name('reviews.submit');
 });
 
 // Platform-wide Google (GSC + GA4) OAuth connect backend — the "one email" the

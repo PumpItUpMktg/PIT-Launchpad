@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * An outbound review solicitation (Review Capture §5/§6). Carries a single-use, expiring token (stored as a
@@ -17,6 +18,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * double-issue. `review_id` is set when the customer submits; reminders bump `reminder_count` (capped at 2).
  *
  * @property array<string, mixed> $payload
+ * @property Carbon|null $sent_at
+ * @property Carbon|null $opened_at
+ * @property Carbon|null $submitted_at
+ * @property Carbon|null $expires_at
+ * @property int $reminder_count
+ * @property string $token
  */
 class ReviewRequest extends Model
 {
