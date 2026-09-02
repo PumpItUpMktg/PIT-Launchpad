@@ -22,9 +22,11 @@ use App\Models\SiteBranding;
  *    with a public address, so they gate together.
  *  - `telephone` is the LOCATION's own number (the number a local caller should dial), falling back
  *    to nothing — never a different location's line.
- *  - NO review / aggregateRating properties. TODO(reviews-live): unlock these ONLY when a real
- *    {@see LocalReviewProvider} binds — marking up ratings with no on-page review
- *    source violates Google's structured-data guidelines.
+ *  - NO review / aggregateRating properties — PERMANENT POLICY, do NOT add them (Review Capture §8). The
+ *    reviews are the business's own first-party reviews published on its own site; that is Google's
+ *    self-serving-review case, so DISPLAYING them is fine and is the point, but MARKING THEM UP is a
+ *    manual-action risk across the whole portfolio. A real {@see LocalReviewProvider} is now bound and this
+ *    stays absent by design — this is not a "wire it up when reviews land" TODO.
  */
 class LocationSchemaBuilder extends ServiceSchemaBuilder
 {

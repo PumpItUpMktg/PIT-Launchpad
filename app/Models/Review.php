@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Carbon;
 
 /**
  * A captured customer review (Review Capture §5). First-party (solicited) or imported, it moves through the
@@ -21,6 +22,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  *
  * @property ReviewSource $source
  * @property ReviewStatus $status
+ * @property int $rating
+ * @property bool $needs_location
+ * @property string $customer_name
+ * @property string $body
+ * @property Carbon $reviewed_at
+ * @property Carbon|null $submitted_at
+ * @property Carbon|null $approved_at
+ * @property Carbon|null $published_at
  */
 class Review extends Model
 {
