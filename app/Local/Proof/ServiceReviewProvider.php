@@ -9,8 +9,9 @@ use App\Models\Service;
  * location relay fixed, with a different filter: `review.service == this service` (the provider
  * owns the matching). Contract-first: not deployed yet; the section renders the moment a provider
  * binds. Empty ⇒ the section omits entirely — no headers over nothing, no placeholders.
- * TODO(reviews-live): when a real provider binds, also unlock the Service review/aggregateRating
- * schema properties (deliberately absent until then — see ServiceSchemaBuilder).
+ * DO NOT emit review/aggregateRating structured data now that a real provider is bound (Review Capture §8):
+ * first-party reviews on the business's own site are Google's self-serving-review case — display is fine,
+ * markup is a portfolio-wide manual-action risk. The schema builders deliberately stay review-free.
  *
  * @see NullServiceReviews the default binding
  */

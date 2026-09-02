@@ -109,9 +109,7 @@ use App\Listeners\SyncWireframeKitsOnMigrate;
 use App\Local\Proof\JobCaptureLocalJobs;
 use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReviewProvider;
-use App\Local\Proof\NullLocalReviews;
 use App\Local\Proof\NullServiceJobs;
-use App\Local\Proof\NullServiceReviews;
 use App\Local\Proof\ServiceJobProvider;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Locations\Dma\MetroResolver;
@@ -126,6 +124,8 @@ use App\Operator\Controls\BudgetControl;
 use App\Publishing\Seo\HeadlineKeywordFixer;
 use App\Reviews\Intake\Contracts\JobSource;
 use App\Reviews\Intake\ManualJobSource;
+use App\Reviews\Publish\DbLocalReviewProvider;
+use App\Reviews\Publish\DbServiceReviewProvider;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
@@ -507,12 +507,14 @@ class AppServiceProvider extends ServiceProvider
         // Location-page gated sections — contract-first: the review-sync and field job-capture
         // systems aren't deployed, so the null providers bind (sections omit). Real providers
         // replace these bindings with no composer changes.
-        $this->app->bind(LocalReviewProvider::class, NullLocalReviews::class);
+        // Review Capture (§8) has deployed — location + service pages surface the site's PUBLISHED first-party
+        // reviews. DISPLAY ONLY: no review/aggregateRating structured data is emitted (§8 self-serving-review policy).
+        $this->app->bind(LocalReviewProvider::class, DbLocalReviewProvider::class);
         // Job Capture has deployed — location pages surface the site's PUBLISHED jobs as recent-work
         // proof, filtered to the towns/radius the location serves. (Service-page jobs still Null until
         // the job-type ↔ service mapping is wired.)
         $this->app->bind(LocalJobProvider::class, JobCaptureLocalJobs::class);
-        $this->app->bind(ServiceReviewProvider::class, NullServiceReviews::class);
+        $this->app->bind(ServiceReviewProvider::class, DbServiceReviewProvider::class);
         $this->app->bind(ServiceJobProvider::class, NullServiceJobs::class);
         // Card-facing GSC: the real bridge onto the shared Google grant (PR-A). It reports "connected"
         // only once the grant is live AND the Site has a GSC property picked; until then connected() is
