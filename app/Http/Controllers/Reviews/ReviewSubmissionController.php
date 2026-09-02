@@ -5,9 +5,13 @@ namespace App\Http\Controllers\Reviews;
 use App\Enums\ReviewSource;
 use App\Enums\ReviewStatus;
 use App\Http\Controllers\Controller;
+use App\Mail\ReviewThankYouMail;
+use App\Models\Location;
 use App\Models\Review;
 use App\Models\ReviewRequest;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Reviews\GoogleReviewCta;
 use App\Reviews\Intake\CompletedJob;
 use App\Reviews\Requests\ReviewTokens;
 use App\Reviews\ReviewSettings;
@@ -15,6 +19,7 @@ use App\Support\CurrentSite;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
 /**
@@ -84,15 +89,30 @@ class ReviewSubmissionController extends Controller
 
         $request->forceFill(['review_id' => $review->id, 'submitted_at' => now()])->save();
 
+        // Confirmation email (queued) — carries the Google CTA, shown at every rating.
+        if ($review->customer_email !== null && $review->customer_email !== '') {
+            Mail::to($review->customer_email)->queue(new ReviewThankYouMail((string) $review->id));
+        }
+
         return redirect()->route('reviews.thanks', ['token' => $token]);
     }
 
-    public function thanks(ReviewTokens $tokens, string $token): View
+    public function thanks(ReviewTokens $tokens, GoogleReviewCta $cta, string $token): View
     {
         $request = $tokens->find($token);
 
+        $location = null;
+        if ($request !== null) {
+            CurrentSite::set((string) $request->site_id);
+            $locationId = $request->payload['location_id'] ?? null; // authoritative from the payload snapshot
+            $location = is_string($locationId)
+                ? Location::query()->withoutGlobalScope(SiteScope::class)->find($locationId)
+                : null;
+        }
+
         return view('reviews.thanks', [
             'brand' => $request !== null ? $this->brand($request) : 'us',
+            'googleUrl' => $cta->urlFor($location), // shown at every rating; null (omitted) when no place_id
         ]);
     }
 
