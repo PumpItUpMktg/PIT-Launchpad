@@ -19,6 +19,8 @@ use Illuminate\Support\Carbon;
  * @property SiteStatus $status
  * @property ProductPlan $product
  * @property int|null $budget_ceiling
+ * @property int|null $review_body_min_length per-tenant override for the review submission min body length
+ * @property bool $review_reminders_enabled per-tenant toggle for day-3/day-10 review-request reminders
  * @property int|null $silo_own_page_bar
  * @property array<string, int>|null $coverage_thresholds
  * @property string|null $domain_url
@@ -266,6 +268,8 @@ class Site extends Model
             'style_variation' => StyleVariation::class,
             'use_logo_colors' => 'boolean',
             'budget_ceiling' => 'integer',
+            'review_body_min_length' => 'integer',
+            'review_reminders_enabled' => 'boolean',
             'silo_own_page_bar' => 'integer',
             'coverage_thresholds' => 'array',
             'insured' => 'boolean',

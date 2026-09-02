@@ -125,3 +125,7 @@ Schedule::command('launchpad:run-due-coverage-plans')->daily()->withoutOverlappi
 // whole-county scan never overruns a job timeout. Finalizes each scan (complete, or partial past the expiry
 // window) and recomputes its aggregates. Every five minutes; withoutOverlapping so runs can't double-collect.
 Schedule::job(new IngestCoverageScans)->everyFiveMinutes()->withoutOverlapping();
+
+// Review Capture reminders — day-3 / day-10 nudges for unsubmitted review requests (capped at 2, per-tenant
+// toggle). Daily; the command itself decides which requests are due. Everything it sends is queued.
+Schedule::command('launchpad:send-review-reminders')->dailyAt('09:20');

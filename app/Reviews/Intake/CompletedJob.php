@@ -43,4 +43,46 @@ final class CompletedJob
 
         return trim($this->customerFirstName.$initial);
     }
+
+    /**
+     * Serialize for the review_requests.payload snapshot.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'site_id' => $this->siteId,
+            'external_ref' => $this->externalRef,
+            'customer_first_name' => $this->customerFirstName,
+            'customer_last_initial' => $this->customerLastInitial,
+            'customer_email' => $this->customerEmail,
+            'customer_phone' => $this->customerPhone,
+            'service_address' => $this->serviceAddress,
+            'location_id' => $this->locationId,
+            'service_ids' => $this->serviceIds,
+            'completed_at' => $this->completedAt->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Rebuild from a stored payload snapshot.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function fromArray(array $data): self
+    {
+        return new self(
+            siteId: (string) $data['site_id'],
+            externalRef: isset($data['external_ref']) ? (string) $data['external_ref'] : null,
+            customerFirstName: (string) ($data['customer_first_name'] ?? ''),
+            customerLastInitial: (string) ($data['customer_last_initial'] ?? ''),
+            customerEmail: (string) ($data['customer_email'] ?? ''),
+            customerPhone: isset($data['customer_phone']) ? (string) $data['customer_phone'] : null,
+            serviceAddress: (string) ($data['service_address'] ?? ''),
+            locationId: isset($data['location_id']) ? (string) $data['location_id'] : null,
+            serviceIds: array_values($data['service_ids'] ?? []),
+            completedAt: Carbon::parse((string) $data['completed_at']),
+        );
+    }
 }
