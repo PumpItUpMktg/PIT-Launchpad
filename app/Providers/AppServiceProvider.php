@@ -124,6 +124,8 @@ use App\Models\User;
 use App\Onboarding\MissionPolisher;
 use App\Operator\Controls\BudgetControl;
 use App\Publishing\Seo\HeadlineKeywordFixer;
+use App\Reviews\Intake\Contracts\JobSource;
+use App\Reviews\Intake\ManualJobSource;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
@@ -170,6 +172,10 @@ class AppServiceProvider extends ServiceProvider
         // Citation listing NAP verification — the default reads the listing page (schema.org + phone);
         // a DataForSEO Business Data adapter can replace it for anti-scraping majors, same interface.
         $this->app->bind(ListingVerifier::class, HttpListingVerifier::class);
+
+        // Review Capture (§3) — the only review intake driver in v1 is the operator ManualJobSource. A future
+        // upstream (Joby, a feed) is added by writing one JobSource and swapping this binding — nothing else.
+        $this->app->bind(JobSource::class, ManualJobSource::class);
 
         // § Citations directory rating: domain authority is deferred — mock default (no fabricated ranks);
         // a DataForSEO domain-analytics adapter binds here later.
