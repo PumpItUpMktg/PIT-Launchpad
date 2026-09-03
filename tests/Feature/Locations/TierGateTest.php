@@ -34,7 +34,10 @@ function tgTown(Site $site, string $name, ?string $tier, string $marketId, strin
     $cov = CoverageArea::factory()->create([
         'site_id' => $site->id, 'geo_id' => $geo, 'name' => $name, 'size_tier' => $tier,
         'population' => 20000, 'source' => 'county', 'source_location_ids' => [$marketId],
-        'page_selected' => $opts['selected'] ?? false,
+        // A built town is a selected town — so the drip skips it (only reserve towns are drip candidates).
+        // Without this a built tier-above town is itself a reserve the drip may graduate on its default
+        // mock score, making dripGraduate() counts non-deterministic.
+        'page_selected' => ($opts['selected'] ?? false) || ($opts['built'] ?? false),
     ]);
 
     if ($opts['built'] ?? false) {
