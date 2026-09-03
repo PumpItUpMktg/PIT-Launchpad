@@ -35,7 +35,7 @@ it('the final menu carries ONLY the newly designed surfaces, in cutover order', 
 
     // Operate: the pages boards + the internal-link audit surface (Portfolio + Dashboard are Top level).
     expect(collect($groups['Operate']['items'])->pluck('label')->all())
-        ->toBe(['Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations', 'Internal Links']);
+        ->toBe(['Blog', 'Core pages', 'Service pages', 'Location pages', 'Locations', 'Internal Links', 'Tier progression']);
 
     // No legacy label — nor any off-menu step/tool — leaks into the final sidebar.
     $menuLabels = collect($m['menu'])->flatMap(fn ($g) => collect($g['items'])->pluck('label'));
