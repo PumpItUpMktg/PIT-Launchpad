@@ -28,7 +28,10 @@ use Illuminate\Support\Collection;
  */
 final class LocalRelevance
 {
-    public function __construct(private readonly LocalSignalProvider $signals) {}
+    public function __construct(
+        private readonly LocalSignalProvider $signals,
+        private readonly TierGate $tierGate,
+    ) {}
 
     /**
      * First-run population seed. Selects the auto-select tiers into the build pool, but only while
@@ -71,6 +74,14 @@ final class LocalRelevance
         foreach ($this->countyTowns($site) as $town) {
             if ((bool) $town->page_selected) {
                 continue; // already building
+            }
+
+            // Tier gate (advisory): the drip may only graduate a town whose tier is buildable — the tier
+            // above it is indexed enough (or the time escape has fired). An operator can still override by
+            // selecting the town by hand; the gate constrains only the automatic drip. This closes the
+            // former score-only leak that let the drip select every tier at once.
+            if (! $this->tierGate->allowsTown($site, $town)) {
+                continue;
             }
 
             $signals = $this->signals->forTown($site->id, (string) $town->geo_id, $trade, $town->population);
