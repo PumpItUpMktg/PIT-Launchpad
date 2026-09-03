@@ -27,6 +27,7 @@ use Illuminate\Support\Carbon;
  * @property bool $review_reminders_enabled per-tenant toggle for day-3/day-10 review-request reminders
  * @property int|null $silo_own_page_bar
  * @property array<string, int>|null $coverage_thresholds
+ * @property array{indexed_pct?: float, stale_days?: int}|null $tier_gate
  * @property string|null $domain_url
  * @property string|null $gsc_property Search Console property to query for this tenant (from the shared Google grant)
  * @property string|null $bing_site_url Bing Webmaster Tools verified site URL to query for this tenant (agency BWT API key)
@@ -229,6 +230,23 @@ class Site extends Model
     }
 
     /**
+     * The tenant's tiered-rollout gate thresholds, merged over the platform defaults. Per-site overrides
+     * live in the `tier_gate` JSON column; any missing key falls back to config.
+     *
+     * @return array{indexed_pct: float, stale_days: int}
+     */
+    public function tierGate(): array
+    {
+        $defaults = (array) config('launchpad.tier_gate', []);
+        $override = is_array($this->tier_gate) ? $this->tier_gate : [];
+
+        return [
+            'indexed_pct' => (float) ($override['indexed_pct'] ?? $defaults['indexed_pct'] ?? 0.80),
+            'stale_days' => (int) ($override['stale_days'] ?? $defaults['stale_days'] ?? 30),
+        ];
+    }
+
+    /**
      * The silo own-page bar — the volume floor at/above which a core spoke pre-checks for its
      * own page in the prune (below it folds into the pillar). Per-site override over the single
      * platform knob (config launchpad.silo_volume.fold_threshold). Same value the volume
@@ -276,6 +294,7 @@ class Site extends Model
             'review_reminders_enabled' => 'boolean',
             'silo_own_page_bar' => 'integer',
             'coverage_thresholds' => 'array',
+            'tier_gate' => 'array',
             'insured' => 'boolean',
             'years_in_business' => 'integer',
             'review_backlog_count' => 'integer',

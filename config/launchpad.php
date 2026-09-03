@@ -101,6 +101,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tiered town rollout — the tier gate (advisory)
+    |--------------------------------------------------------------------------
+    |
+    | Towns build tier-by-tier within a market (major → large → medium → small →
+    | ungrouped). A tier is buildable once the tier ABOVE it clears an indexing
+    | threshold — build the largest tier, get it indexed, then let its links pull
+    | the next tier into the index faster. Advisory: the drip honors the gate, but
+    | an operator can still override by selecting a town by hand.
+    |
+    | `indexed_pct`: fraction of the tier-above's built pages that must be indexed
+    |   (0.80 = 80%; a single stubborn page must not hold a tier hostage).
+    | `stale_days`: time-based escape — if the last page in the tier above was
+    |   submitted this many days ago, the tier below unlocks regardless of index %.
+    | Whichever comes first. Per-tenant overrides live in the `sites.tier_gate` JSON
+    | column (see Site::tierGate()).
+    */
+    'tier_gate' => [
+        'indexed_pct' => (float) env('LAUNCHPAD_TIER_INDEXED_PCT', 0.80),
+        'stale_days' => (int) env('LAUNCHPAD_TIER_STALE_DAYS', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Local town references on blog posts
     |--------------------------------------------------------------------------
     |
