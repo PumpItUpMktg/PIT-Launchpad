@@ -26,6 +26,12 @@ use Illuminate\Support\Carbon;
  * @property bool $needs_location
  * @property string $customer_name
  * @property string $body
+ * @property string|null $service_address
+ * @property string|null $town
+ * @property string|null $state
+ * @property string|null $postal_code
+ * @property string|null $lat
+ * @property string|null $lng
  * @property Carbon $reviewed_at
  * @property Carbon|null $submitted_at
  * @property Carbon|null $approved_at
@@ -67,6 +73,8 @@ class Review extends Model
             'status' => ReviewStatus::class,
             'rating' => 'integer',
             'needs_location' => 'boolean',
+            'lat' => 'decimal:7',
+            'lng' => 'decimal:7',
             'reviewed_at' => 'datetime',
             'submitted_at' => 'datetime',
             'approved_at' => 'datetime',
