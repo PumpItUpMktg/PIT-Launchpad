@@ -2,14 +2,12 @@
 
 use App\Build\BuildManifestAssembler;
 use App\Enums\BuildSource;
-use App\Enums\ProofType;
 use App\Enums\SpokeGranularity;
 use App\Enums\SpokeStatus;
 use App\Enums\StandardPageType;
 use App\Models\BuildPage;
 use App\Models\CoverageArea;
 use App\Models\Location;
-use App\Models\ProofItem;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\Spoke;
@@ -27,20 +25,19 @@ test('assemble builds the manifest across standard, service, and location source
     // Location: one selected town.
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'state' => 'NJ', 'page_selected' => true, 'population' => 300000]);
 
-    // Standard: accept Reviews (gated on review proof).
-    ProofItem::factory()->create(['site_id' => $site->id, 'type' => ProofType::ReviewAggregate]);
-    app(StandardPages::class)->setAccepted($site, StandardPageType::Reviews, true);
+    // Standard: accept FAQ (always offerable — kit + composer; not brand-critical).
+    app(StandardPages::class)->setAccepted($site, StandardPageType::Faq, true);
 
     app(BuildManifestAssembler::class)->assemble($site->fresh());
 
     $rows = BuildPage::query()->where('site_id', $site->id)->get();
 
-    expect($rows->where('source', BuildSource::Standard)->count())->toBe(7) // 6 fixed + Reviews
+    expect($rows->where('source', BuildSource::Standard)->count())->toBe(7) // 6 fixed + FAQ
         ->and($rows->where('source', BuildSource::Service)->count())->toBe(2) // hub + own-page (folded excluded)
         ->and($rows->where('source', BuildSource::Location)->count())->toBe(1)
         ->and($rows->firstWhere('page_key', 'home')->priority)->toBe(0)
         ->and($rows->firstWhere('page_key', 'home')->review_required)->toBeTrue()       // brand-critical
-        ->and($rows->firstWhere('page_key', 'reviews')->review_required)->toBeFalse();
+        ->and($rows->firstWhere('page_key', 'faq')->review_required)->toBeFalse();       // not brand-critical
 });
 
 test('a town that is a physical location\'s own city is not planned as a duplicate town page', function () {
