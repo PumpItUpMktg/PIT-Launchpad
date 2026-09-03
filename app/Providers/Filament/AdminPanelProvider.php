@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Http\Middleware\EnsureTenantSelected;
+use App\Http\Middleware\ResolveCurrentSite;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -80,6 +81,9 @@ class AdminPanelProvider extends PanelProvider
                 Authenticate::class,
                 // Hard tenant gate: an operator with no active tenant is sent to the Portfolio picker.
                 EnsureTenantSelected::class,
+                // Bind the resolved tenant into CurrentSite so SiteScope is live in /admin — runs AFTER
+                // the gate so a single-site operator's auto-select is already in the session to read.
+                ResolveCurrentSite::class,
             ]);
     }
 }
