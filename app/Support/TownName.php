@@ -15,8 +15,12 @@ final class TownName
 {
     public static function key(string $name): string
     {
-        $name = trim((string) preg_replace('/,\s*[A-Za-z]{2}$/', '', trim($name)));
+        return mb_strtolower(self::display($name));
+    }
 
-        return mb_strtolower($name);
+    /** The bare town name with its original case (a trailing ", ST" stripped) — for a label or a Review.town match. */
+    public static function display(string $name): string
+    {
+        return trim((string) preg_replace('/,\s*[A-Za-z]{2}$/', '', trim($name)));
     }
 }
