@@ -52,7 +52,8 @@ it('assembles the /content payload for seeded content carrying a real-shaped kit
         'content_id', 'kind', 'page_type', 'kit', 'kit_version',
         'silo_id', 'slug', 'status', 'locked', 'slot_payload', 'images', 'seo',
     ]);
-    expect($payload['seo']['breadcrumbs'])->toContain(['name' => 'Plumbing', 'url' => '']);
+    // The silo has no live top page here → the intermediate crumb is dropped, never emitted unlinked.
+    expect($payload['seo']['breadcrumbs'])->not->toContain(['name' => 'Plumbing', 'url' => '']);
 
     // Rendering calls schema() unconditionally — it must not throw either.
     expect(app(RenderCoordinator::class)->render($content)->isBlocked())->toBeFalse();

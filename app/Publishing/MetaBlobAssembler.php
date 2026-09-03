@@ -5,6 +5,7 @@ namespace App\Publishing;
 use App\ContentEngine\Reconcile\PostTownTagger;
 use App\Enums\ContentKind;
 use App\Enums\ContentSource;
+use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\SlotContentType;
 use App\Enums\StandardPageType;
@@ -895,7 +896,12 @@ class MetaBlobAssembler
         // pillar_content_id), so it collapses the same way: hub = Home → {Hub}.
         if ($content->silo_id !== null && $content->silo !== null
             && ! $this->isOwnSiloPillar($content) && $content->page_type !== PageType::Hub) {
-            $crumbs[] = ['name' => (string) $content->silo->name, 'url' => $this->siloUrl($content, $home)];
+            $siloUrl = $this->siloUrl($content, $home);
+            // Never emit an intermediate crumb without a resolvable URL — drop it when the silo has
+            // no live top page rather than link an unpublished (or wrong) one.
+            if ($siloUrl !== '') {
+                $crumbs[] = ['name' => (string) $content->silo->name, 'url' => $siloUrl];
+            }
         }
 
         // A TOWN page nests under its physical-location (GBP) hub page — insert that hub as the middle
@@ -977,27 +983,52 @@ class MetaBlobAssembler
     }
 
     /**
-     * The silo crumb's link — its pillar page (the silo landing page). Empty when the
-     * silo has no pillar yet (the crumb then renders unlinked rather than broken).
+     * The silo crumb's link — the silo's LIVE top page (its published index), regardless of page
+     * type: the pinned pillar when it is published, else the top-ranked published page in the silo
+     * (a Hub — the index — before a Service). Empty when nothing in the silo is live, so the crumb
+     * is dropped rather than pointed at an unpublished (or wrong) page.
      */
     private function siloUrl(Content $content, string $home): string
     {
-        $pillar = $content->silo?->pillarContent;
-        $slug = $pillar !== null ? trim((string) $pillar->slug, '/') : '';
-
-        // Guided-flow silos carry no pillar_content_id — the silo's head is its HUB page. Resolve
-        // it directly so a spoke's breadcrumb (Home → {Hub} → {Spoke}) links the real hub.
-        if ($slug === '' && $content->silo_id !== null) {
-            $slug = trim((string) Content::withoutGlobalScope(SiteScope::class)
-                ->where('site_id', $content->site_id)
-                ->where('silo_id', $content->silo_id)
-                ->where('kind', ContentKind::Page->value)
-                ->where('page_type', PageType::Hub->value)
-                ->whereKeyNot($content->id)
-                ->value('slug'), '/');
-        }
+        $slug = $this->liveSiloTopSlug($content);
 
         return $slug !== '' ? $home.$slug.'/' : '';
+    }
+
+    /** The slug (no surrounding slashes) of the silo's live top page, or '' when none is live. */
+    private function liveSiloTopSlug(Content $content): string
+    {
+        if ($content->silo_id === null) {
+            return '';
+        }
+
+        // The designated pillar, but only when it is actually live.
+        $pillar = $content->silo?->pillarContent;
+        if ($pillar !== null && $pillar->id !== $content->id
+            && $pillar->status === ContentStatus::Published && trim((string) $pillar->slug) !== '') {
+            return trim((string) $pillar->slug, '/');
+        }
+
+        // Else the silo's top published page — a Hub (the index) before a Service, then any other.
+        $published = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('silo_id', $content->silo_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('status', ContentStatus::Published->value)
+            ->whereKeyNot($content->id)
+            ->get(['id', 'slug', 'page_type'])
+            ->filter(fn (Content $c) => trim((string) $c->slug) !== '');
+
+        foreach ([PageType::Hub, PageType::Service] as $type) {
+            $match = $published->first(fn (Content $c) => $c->page_type === $type);
+            if ($match !== null) {
+                return trim((string) $match->slug, '/');
+            }
+        }
+
+        $any = $published->first();
+
+        return $any !== null ? trim((string) $any->slug, '/') : '';
     }
 
     /**
