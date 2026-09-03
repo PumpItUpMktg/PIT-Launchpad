@@ -128,7 +128,7 @@ class GrowDashboard
     }
 
     /**
-     * Which workbench lane a page belongs to, from its page_type. Service/hub/pillar/cluster are the
+     * Which workbench lane a page belongs to, from its page_type. Service/hub/pillar are the
      * targeting body of work; location is a town page; everything else (home, utility, untyped) is a
      * core page.
      */
@@ -136,7 +136,7 @@ class GrowDashboard
     {
         return match ($type) {
             PageType::Location => 'town',
-            PageType::Service, PageType::Hub, PageType::Pillar, PageType::Cluster => 'service',
+            PageType::Service, PageType::Hub, PageType::Pillar => 'service',
             default => 'core', // home / utility / null
         };
     }

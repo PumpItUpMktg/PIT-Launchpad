@@ -101,7 +101,7 @@ class LiveBoards
     public function services(Site $site): array
     {
         return $this->published($site)
-            ->filter(fn (Content $c) => in_array($c->page_type, [PageType::Hub, PageType::Service, PageType::Pillar, PageType::Cluster], true))
+            ->filter(fn (Content $c) => in_array($c->page_type, [PageType::Hub, PageType::Service, PageType::Pillar], true))
             ->sortBy([
                 fn (Content $a, Content $b) => ($b->page_type === PageType::Hub ? 1 : 0) <=> ($a->page_type === PageType::Hub ? 1 : 0),
                 fn (Content $a, Content $b) => strcasecmp((string) $a->title, (string) $b->title),

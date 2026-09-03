@@ -72,7 +72,6 @@ class StrategyRail
             PageType::Hub, PageType::Pillar => 'pillar',
             PageType::Service => 'service page',
             PageType::Location => 'location page',
-            PageType::Cluster => 'cluster page',
             PageType::Home => 'home',
             default => 'page',
         };
@@ -90,7 +89,7 @@ class StrategyRail
         if (! $keyword instanceof Keyword) {
             // Foundation pages (home / utility) are NOT keyword-targeted by design — they rank on
             // the brand + the whole site's authority. Only the directed body of work (service /
-            // location / cluster / silo hub) expects a target, so a MISSING one there is a real
+            // location / silo hub) expects a target, so a MISSING one there is a real
             // gap the operator fixes in Structure. Distinguish the two so the honest read-out
             // ("by design") never looks like the error ("assign it").
             $note = $this->expectsTarget($page->page_type)
@@ -115,12 +114,12 @@ class StrategyRail
 
     /**
      * Which page types carry a directed keyword target — the SEO body of work. Home + utility are
-     * foundation pages (no target by design); service / location / cluster / silo-hub are directed.
+     * foundation pages (no target by design); service / location / silo-hub are directed.
      */
     private function expectsTarget(?PageType $type): bool
     {
         return match ($type) {
-            PageType::Service, PageType::Location, PageType::Cluster, PageType::Hub, PageType::Pillar => true,
+            PageType::Service, PageType::Location, PageType::Hub, PageType::Pillar => true,
             default => false, // home, utility, untyped — foundation, no directed target
         };
     }

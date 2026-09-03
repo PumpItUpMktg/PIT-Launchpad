@@ -34,7 +34,7 @@ class CoverageDashboard
     private const WINDOW_DAYS = 28;
 
     /** Page types that roll into the "Core" group (everything that isn't Service or Location). */
-    private const CORE_TYPES = [PageType::Home, PageType::Utility, PageType::Pillar, PageType::Hub, PageType::Cluster];
+    private const CORE_TYPES = [PageType::Home, PageType::Utility, PageType::Pillar, PageType::Hub];
 
     public function __construct(
         private readonly IndexCoverage $index,

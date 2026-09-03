@@ -17,7 +17,7 @@ use App\Standard\StandardPageIntake;
  * surfaces can gate generation honestly: a page generates for real only when grounded; everything
  * else shows "grounding pending" rather than faking an empty draft (DraftGuard would reject it anyway).
  *
- * - **Service-family pages** (service / hub / pillar / cluster) need ≥1 resolvable §1 Service —
+ * - **Service-family pages** (service / hub / pillar) need ≥1 resolvable §1 Service —
  *   silo-scoped when the page pins a `silo_id`, else the assembler's site-wide fallback.
  * - **Location pages** pinned to a §1 Location (`location_id`) ground on that record — its city or
  *   served towns (the generate-location guard); market-era pages need ≥1 §1 Market for the site.
@@ -44,7 +44,7 @@ class GroundingReadiness
     public function ready(Content $page): bool
     {
         return match ($page->page_type) {
-            PageType::Service, PageType::Hub, PageType::Pillar, PageType::Cluster => $this->hasServices($page),
+            PageType::Service, PageType::Hub, PageType::Pillar => $this->hasServices($page),
             PageType::Location => $this->hasLocationGrounding($page) || $this->hasMarkets($page),
             PageType::Home, PageType::Utility => $this->hasNarrativeGrounding($page),
             default => false,
