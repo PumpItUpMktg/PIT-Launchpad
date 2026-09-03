@@ -14,7 +14,7 @@ use App\Models\Service;
 use App\Models\Silo;
 use App\Models\Site;
 
-test('the pipeline scores, beatability-gates and emits quick-win-ordered briefs', function () {
+test('the pipeline scores, beatability-gates and writes scores back to the keyword rows', function () {
     $site = Site::factory()->create();
     $market = Market::factory()->priority()->create(['site_id' => $site->id]);
 
@@ -53,15 +53,10 @@ test('the pipeline scores, beatability-gates and emits quick-win-ordered briefs'
     expect($result->scored)->toHaveCount(2)
         ->and(Keyword::withoutGlobalScopes()->where('query', 'roof replacement')->value('status'))->toBe('gap');
 
-    // Scores were written back.
-    expect(Keyword::withoutGlobalScopes()->where('query', 'water heater repair')->value('opportunity_score'))->not->toBeNull();
-
-    // Briefs are quick-wins ordered (descending).
-    $briefs = $result->briefs->all();
-    expect($result->briefs->count())->toBeGreaterThanOrEqual(1);
-
-    $quickWins = array_map(fn ($b) => $b->quickWin, $briefs);
-    $sorted = $quickWins;
-    rsort($sorted);
-    expect($quickWins)->toBe($sorted);
+    // Scores are persisted back onto the keyword rows — the pipeline's durable output,
+    // independent of the removed gap-brief queue.
+    $scored = Keyword::withoutGlobalScopes()->where('query', 'water heater repair')->firstOrFail();
+    expect($scored->opportunity_score)->not->toBeNull()
+        ->and($scored->beatability)->not->toBeNull()
+        ->and($scored->status)->toBe('scored');
 });

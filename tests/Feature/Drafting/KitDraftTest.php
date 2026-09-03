@@ -1,11 +1,9 @@
 <?php
 
 use App\ContentEngine\Drafting\DraftRequest;
-use App\Enums\BeatabilityLane;
 use App\Enums\ContentKind;
 use App\Enums\DraftTrigger;
 use App\Enums\IntakeType;
-use App\KeywordGenerator\Gap\GapBrief;
 use App\Models\WireframeKit;
 use Database\Seeders\WireframeKitSeeder;
 use Tests\Support\Draft;
@@ -95,37 +93,4 @@ test('the kit-slot definitions are surfaced to the drafter prompt', function () 
         ->and($prompt)->toContain('GROUNDED')
         // image slots are spec-only, never rendered here
         ->and($prompt)->toContain('do NOT render');
-});
-
-test('forGap maps a §5 gap-brief into a directed page request', function () {
-    $brief = new GapBrief(
-        targetKeyword: 'tankless water heater repair',
-        altKeywords: ['tankless repair'],
-        opportunity: 0.8,
-        beatability: 0.6,
-        lane: BeatabilityLane::Organic,
-        intent: 'commercial',
-        siloId: '01HZSILO',
-        siloName: 'Water Heaters',
-        pageType: 'service',
-        kit: 'service-page',
-        problemFraming: ['no hot water'],
-        coverageRequirements: ['symptoms', 'cost'],
-        proofHooks: ['warranty'],
-        internalLinks: ['pillar_content_id' => null, 'sibling_silo_ids' => []],
-        differentiationAngle: 'same-day local service',
-        ctaIntent: 'book a repair',
-        priorityLane: 'quick_win',
-        seoTargets: ['title' => 'Tankless Repair'],
-        quickWin: 0.7,
-    );
-
-    $request = DraftRequest::forGap($brief, 'site-123', 'kit-abc', 'kw-9');
-
-    expect($request->kind)->toBe(ContentKind::Page)
-        ->and($request->intakeType)->toBe(IntakeType::Directed)
-        ->and($request->siloId)->toBe('01HZSILO')
-        ->and($request->wireframeKitId)->toBe('kit-abc')
-        ->and($request->targetKeywordId)->toBe('kw-9')
-        ->and($request->allowsLocalInjection())->toBeFalse();
 });

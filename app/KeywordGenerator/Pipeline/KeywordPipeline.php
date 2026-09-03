@@ -7,7 +7,6 @@ use App\Enums\MarketTier;
 use App\Integrations\Serp\SerpProvider;
 use App\KeywordGenerator\Beatability\BeatabilityEngine;
 use App\KeywordGenerator\Bucketer;
-use App\KeywordGenerator\Gap\GapAnalyzer;
 use App\KeywordGenerator\Scoring\BusinessValueResolver;
 use App\KeywordGenerator\Scoring\IntentClassifier;
 use App\KeywordGenerator\Scoring\OpportunityScorer;
@@ -33,7 +32,6 @@ class KeywordPipeline
         private readonly IntentClassifier $intentClassifier,
         private readonly BusinessValueResolver $businessValue,
         private readonly OpportunityScorer $scorer,
-        private readonly GapAnalyzer $gaps,
     ) {}
 
     public function run(Site $site): PipelineResult
@@ -92,7 +90,7 @@ class KeywordPipeline
             );
         }
 
-        return new PipelineResult($scored, $this->gaps->analyze($site, $scored));
+        return new PipelineResult($scored);
     }
 
     /**

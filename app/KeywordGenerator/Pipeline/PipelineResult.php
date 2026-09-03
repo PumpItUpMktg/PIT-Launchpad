@@ -2,11 +2,9 @@
 
 namespace App\KeywordGenerator\Pipeline;
 
-use App\KeywordGenerator\Gap\GapBriefQueue;
-
 /**
- * The directed-targeting output: every scored keyword plus the quick-wins-
- * ordered gap-brief queue that drives generation.
+ * The directed-targeting output: every scored keyword. (The scores are also
+ * written back onto the Keyword rows during the run.)
  */
 final class PipelineResult
 {
@@ -15,6 +13,5 @@ final class PipelineResult
      */
     public function __construct(
         public readonly array $scored,
-        public readonly GapBriefQueue $briefs,
     ) {}
 }
