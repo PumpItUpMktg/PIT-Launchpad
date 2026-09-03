@@ -89,6 +89,38 @@ it('accepts a bare (non-prefixed) property id', function () {
     expect(app(PageTrafficProvider::class)->sessions($site, '/x', 28))->toBe(7);
 });
 
+it('refresh() force-fetches, caches for the cache-only render read, and re-fetches every call', function () {
+    ga4TrafficGrant();
+    $site = Site::factory()->create(['ga4_property' => 'properties/123']);
+
+    $calls = 0;
+    HttpFacade::fake(['*/properties/123:runReport' => function () use (&$calls) {
+        $calls++;
+
+        return HttpFacade::response(['rows' => [['metricValues' => [['value' => (string) (40 + $calls)]]]]]);
+    }]);
+
+    $provider = app(PageTrafficProvider::class);
+
+    // First refresh fetches and writes the cache the render reads.
+    expect($provider->refresh($site, '/p', 28))->toBe(41)
+        ->and($provider->sessionsCached($site, '/p', 28))->toBe(41); // render reads it WITHOUT a fetch
+
+    // A SECOND refresh re-fetches even though the entry is still cached (force — unlike sessions()'s
+    // remember), so the weekly warm genuinely re-pulls under the long TTL.
+    expect($provider->refresh($site, '/p', 28))->toBe(42)
+        ->and($calls)->toBe(2)
+        ->and($provider->sessionsCached($site, '/p', 28))->toBe(42);
+});
+
+it('refresh() is a no-op (null) when GA4 is not connected — no fetch', function () {
+    $site = Site::factory()->create(['ga4_property' => null]); // no grant, no property
+    HttpFacade::fake();
+
+    expect(app(PageTrafficProvider::class)->refresh($site, '/p', 28))->toBeNull();
+    HttpFacade::assertNothingSent();
+});
+
 it('returns null (the collecting cell) when GA4 has no row for the page yet, and caches it', function () {
     ga4TrafficGrant();
     $site = Site::factory()->create(['ga4_property' => 'properties/123']);

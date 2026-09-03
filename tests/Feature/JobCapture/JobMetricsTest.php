@@ -140,3 +140,29 @@ it('cacheOnly render shows "Refreshing…" (not "Collecting") when connected but
     expect($m['gsc']['pending'])->toBe('Refreshing…')
         ->and($m['traffic']['pending'])->toBe('Refreshing…');
 });
+
+it('the hourly warm (cacheOnly:false, liveTraffic:false) fetches GSC live but reads GA4 from cache only', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $job = Job::factory()->create(['site_id' => $site->id])->fresh();
+    $path = $job->publicPath();
+
+    $gsc = Mockery::mock(SearchConsoleProvider::class);
+    $gsc->shouldReceive('connected')->andReturnTrue();
+    $gsc->shouldReceive('pageStats')->with(Mockery::any(), $path)->andReturn(new PageSearchStats(20, 3, 28)); // LIVE fetch
+    $gsc->shouldReceive('pageQueries')->with(Mockery::any(), $path)->andReturn([]);
+    $gsc->shouldNotReceive('pageStatsCached');
+
+    $idx = Mockery::mock(IndexInspector::class);
+    $idx->shouldReceive('connected')->andReturnTrue();
+    $idx->shouldReceive('cached')->andReturnNull();
+
+    $traffic = Mockery::mock(PageTrafficProvider::class);
+    $traffic->shouldReceive('connected')->andReturnTrue();
+    $traffic->shouldReceive('sessionsCached')->andReturn(9); // GA4 cache-only — NO live fetch
+    $traffic->shouldNotReceive('sessions');
+
+    $m = (new JobMetrics($gsc, $idx, $traffic))->for($job, cacheOnly: false, liveTraffic: false);
+
+    expect($m['gsc']['impressions'])->toBe(20)   // GSC still fetched live
+        ->and($m['traffic']['sessions'])->toBe(9); // GA4 from cache
+});

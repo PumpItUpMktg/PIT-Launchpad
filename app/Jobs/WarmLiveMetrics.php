@@ -20,7 +20,7 @@ use Throwable;
 /**
  * Warms the live-metrics caches (GSC / Bing / index / position) for one site's published content AND its
  * published Job Capture pages, OFF the web request. GA4 sessions are NOT warmed here — they are on a
- * separate WEEKLY beat ({@see \App\Jobs\WarmGa4Pages}) to keep the GA4 Data API quota bounded, so this
+ * separate WEEKLY beat ({@see WarmGa4Pages}) to keep the GA4 Data API quota bounded, so this
  * hourly pass passes `liveTraffic: false` and never pulls GA4. The content Published board and the
  * Published-Jobs board both dispatch this (sharing one throttle lock) so their render paths read warmed
  * caches only and never call a vendor inline; the worker calls {@see LiveMetrics::for()} for each live
@@ -85,7 +85,8 @@ class WarmLiveMetrics implements ShouldBeUnique, ShouldQueue
                 // Side effect only: populates the per-(property × path) vendor caches LiveMetrics reads.
                 // GA4 is warmed separately on a WEEKLY beat by WarmGa4Pages (liveTraffic:false skips it
                 // here), so this hourly pass keeps GSC/index/position/Bing warm without an hourly GA4 pull.
-                $metrics->for($page, liveTraffic: false);
+                // Positional args (defer:false, liveTraffic:false) — keeps the Mockery `->with` match simple.
+                $metrics->for($page, false, false);
             } catch (Throwable) {
                 // Warming is best-effort — one page's vendor hiccup must not fail the whole pass.
             }
@@ -109,7 +110,8 @@ class WarmLiveMetrics implements ShouldBeUnique, ShouldQueue
             try {
                 // Fetching (not cache-only) populates the GSC cache JobMetrics reads on render; GA4 is
                 // left to the weekly WarmGa4Pages pass (liveTraffic:false), so no hourly GA4 pull here.
-                $jobMetrics->for($job, liveTraffic: false);
+                // Positional args (cacheOnly:false, liveTraffic:false) — keeps the Mockery `->with` match simple.
+                $jobMetrics->for($job, false, false);
             } catch (Throwable) {
                 // Best-effort — one job's vendor hiccup must not fail the whole pass.
             }

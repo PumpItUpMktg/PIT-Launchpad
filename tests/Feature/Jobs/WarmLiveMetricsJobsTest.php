@@ -15,8 +15,9 @@ it('warms published JOBS too — their /jobs/{slug} paths the content warm never
     // No published Content exists → LiveMetrics is never invoked; JobMetrics is warmed once, for the live job.
     $liveMetrics = Mockery::mock(LiveMetrics::class);
     $jobMetrics = Mockery::mock(JobMetrics::class);
+    // The hourly warm passes (cacheOnly:false, liveTraffic:false) — GA4 is warmed weekly by WarmGa4Pages, not here.
     $jobMetrics->shouldReceive('for')->once()
-        ->with(Mockery::on(fn (Job $j): bool => $j->id === $live->id));
+        ->with(Mockery::on(fn (Job $j): bool => $j->id === $live->id), false, false);
 
     (new WarmLiveMetrics($site->id))->handle($liveMetrics, $jobMetrics);
 });

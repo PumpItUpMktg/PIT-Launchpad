@@ -208,9 +208,12 @@ return [
         // board render need not re-query every card). Default 6h.
         'gsc_cache_ttl' => (int) env('GOOGLE_GSC_CACHE_TTL', 21600),
         'ga4_data_base_url' => env('GOOGLE_GA4_DATA_BASE_URL', 'https://analyticsdata.googleapis.com/v1beta'),
-        // Per-page GA4 session totals are cached this long on the Live cards (same rationale as the
-        // GSC cache — a board render need not re-query every card). Default 6h.
+        // Site-level GA4 spine (Ga4SiteTraffic → metric_snapshots) cache TTL. Default 6h.
         'ga4_cache_ttl' => (int) env('GOOGLE_GA4_CACHE_TTL', 21600),
+        // Per-page GA4 session totals (Ga4PageTraffic) are read cache-only on render and refreshed WEEKLY
+        // off-request by WarmGa4Pages, so this TTL must span more than a week — otherwise the render's
+        // cache-only read goes cold between weekly warms. Default 8 days.
+        'ga4_page_cache_ttl' => (int) env('GOOGLE_GA4_PAGE_CACHE_TTL', 691200),
         'ga4_admin_base_url' => env('GOOGLE_GA4_ADMIN_BASE_URL', 'https://analyticsadmin.googleapis.com/v1beta'),
         'timeout' => (int) env('GOOGLE_TIMEOUT', 30),
     ],
