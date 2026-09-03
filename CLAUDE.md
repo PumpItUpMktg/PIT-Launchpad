@@ -311,11 +311,12 @@ cluster targets and tracks whether they win. It lives under
   organic gated by a coarse, self-calibrating `SiteAuthority` tier (derived from
   `PositionSnapshot` history). Below a floor a keyword is parked unless flagged a
   long-play. Output: 0–1 multiplier + lane tag + rationale.
-- **Gap analysis** (`GapAnalyzer`) compares should-cover vs covered per silo and
-  emits the prescriptive `GapBrief` (target, score/beatability/lane/intent, silo
-  + page-type/kit, problem framing, coverage requirements **reusing the SERP
-  pull**, proof hooks, internal links, differentiation, CTA, priority lane, SEO
-  targets) into a quick-wins-ordered `GapBriefQueue`.
+- **Gap coverage** surfaces uncovered keywords through the §7b `TargetQueue`
+  (keywords with no `target_content_id`); the blog lane is fed by
+  `BlogTargetQueue::sync` from the confirmed blueprint. (An earlier prescriptive
+  `GapBrief`/`GapBriefQueue` subsystem — produced by `KeywordPipeline` but never
+  consumed — was removed as dead code; the pipeline still writes opportunity /
+  beatability scores back onto the `Keyword` rows.)
 - **Position tracking** — `PositionSnapshot` time-series (organic series +
   per-market local series carrying `market_id`); `CannibalizationDetector` flags
   multiple owned URLs on one keyword.

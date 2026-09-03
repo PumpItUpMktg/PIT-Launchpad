@@ -6,7 +6,6 @@ use App\Enums\ContentKind;
 use App\Enums\DraftTrigger;
 use App\Enums\IntakeType;
 use App\Enums\RefreshTrigger;
-use App\KeywordGenerator\Gap\GapBrief;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
@@ -43,32 +42,6 @@ final class DraftRequest
         public readonly ?string $refreshOfContentId = null,
         public readonly ?RefreshTrigger $refreshTrigger = null,
     ) {}
-
-    /**
-     * Directed lane: a §5 gap-brief executed into a kit's slots (a page).
-     */
-    public static function forGap(
-        GapBrief $brief,
-        string $siteId,
-        string $wireframeKitId,
-        ?string $targetKeywordId = null,
-    ): self {
-        return new self(
-            siteId: $siteId,
-            kind: ContentKind::Page,
-            intakeType: IntakeType::Directed,
-            trigger: DraftTrigger::Gap,
-            siloId: $brief->siloId,
-            wireframeKitId: $wireframeKitId,
-            pageType: $brief->pageType,
-            targetKeywordId: $targetKeywordId,
-            title: $brief->targetKeyword,
-            angleHint: $brief->differentiationAngle,
-            brief: $brief->toArray(),
-            // Directed/evergreen pages never inject local towns.
-            localRelevance: false,
-        );
-    }
 
     /**
      * Reactive lane: a §6a candidate (news item routed to a silo) drafted into
