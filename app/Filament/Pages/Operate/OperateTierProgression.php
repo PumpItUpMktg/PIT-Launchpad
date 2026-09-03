@@ -21,7 +21,7 @@ class OperateTierProgression extends OperatePage
 
     protected static ?string $navigationLabel = 'Tier progression';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 8;
 
     protected string $view = 'filament.operate.tier-progression';
 
