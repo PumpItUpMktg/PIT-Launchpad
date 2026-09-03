@@ -461,17 +461,17 @@ it('preview shows the guarantee + certifications as labeled placeholders; publis
     expect($publish)->not->toContain('lp-guarantee')->not->toContain('lp-certs');
 });
 
-it('returns null for a page type whose block pattern has not shipped (falls back to existing render)', function () {
+it('returns null for a standard page whose block pattern has not shipped (falls back to existing render)', function () {
     $site = Site::factory()->create();
-    // Pillar pages are §4-era stubs with no block composer — still on the existing fallback.
+    // A 'reviews' standard page has no block composer branch yet — still on the existing fallback.
     // (Hub and pinned-location pages now compose; their coverage lives in HubSpokePageTest /
     // LocationPageTest.)
-    $pillar = Content::factory()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Pillar,
-        'slug' => 'services', 'title' => 'Services',
+    $page = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility,
+        'standard_type' => StandardPageType::Reviews, 'slug' => 'reviews', 'title' => 'Reviews',
     ]);
 
-    expect(app(BlockContentAssembler::class)->compose($pillar->fresh(), [], []))->toBeNull();
+    expect(app(BlockContentAssembler::class)->compose($page->fresh(), [], []))->toBeNull();
 });
 
 it('the areas section leads with the map mount + keeps the text fallback when geometry exists', function () {

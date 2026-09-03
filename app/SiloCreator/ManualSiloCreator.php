@@ -2,7 +2,6 @@
 
 namespace App\SiloCreator;
 
-use App\Enums\PageType;
 use App\Enums\SiloType;
 use App\Models\Silo;
 use App\Models\Site;
@@ -38,7 +37,6 @@ class ManualSiloCreator
             name: $name,
             ruleSet: $ruleSet,
             source: 'manual',
-            pillarPageType: $type === SiloType::ServicePillar ? PageType::Service : PageType::Pillar,
         );
 
         return $this->committer->commit($site, new SiloProposalSet([$proposal]))->firstOrFail();

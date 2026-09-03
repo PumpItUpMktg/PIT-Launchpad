@@ -11,7 +11,6 @@ enum PageType: string
     case Location = 'location';
     case Hub = 'hub';
     case Utility = 'utility';
-    case Pillar = 'pillar';
 
     /**
      * The dependency-safe PUBLISH order — lower publishes first. Pages that LINK to other pages must
@@ -19,7 +18,7 @@ enum PageType: string
      * resolve to pages that are already on WordPress (`wp_post_id` set). So it's leaves-first,
      * indexes-last:
      *
-     *   service spokes → hub/pillar (need their spokes live) → location (needs service
+     *   service spokes → hub (need their spokes live) → location (needs service
      *   pages live) → standard/utility (no page-card links) → HOME (links service + hub, so last).
      *
      * The single source of truth for {@see LaunchOrchestrator} and every bulk publish,
@@ -30,7 +29,7 @@ enum PageType: string
     {
         return match ($this) {
             self::Service => 1,
-            self::Hub, self::Pillar => 2,
+            self::Hub => 2,
             self::Location => 3,
             self::Utility => 4,
             self::Home => 5,

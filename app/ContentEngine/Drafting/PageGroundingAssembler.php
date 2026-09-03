@@ -476,7 +476,7 @@ class PageGroundingAssembler
         // locality — the drafter's markets block then explicitly instructs "do not name any town".
         // Geo belongs exclusively to location pages (and the brand-level home/utility pages keep
         // their honest coverage context).
-        if (in_array($page->page_type, [PageType::Service, PageType::Hub, PageType::Pillar], true)) {
+        if (in_array($page->page_type, [PageType::Service, PageType::Hub], true)) {
             return [];
         }
 

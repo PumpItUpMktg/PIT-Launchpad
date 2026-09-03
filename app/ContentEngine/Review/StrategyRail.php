@@ -69,7 +69,7 @@ class StrategyRail
     private function role(?PageType $type): string
     {
         return match ($type) {
-            PageType::Hub, PageType::Pillar => 'pillar',
+            PageType::Hub => 'pillar',
             PageType::Service => 'service page',
             PageType::Location => 'location page',
             PageType::Home => 'home',
@@ -119,7 +119,7 @@ class StrategyRail
     private function expectsTarget(?PageType $type): bool
     {
         return match ($type) {
-            PageType::Service, PageType::Location, PageType::Hub, PageType::Pillar => true,
+            PageType::Service, PageType::Location, PageType::Hub => true,
             default => false, // home, utility, untyped — foundation, no directed target
         };
     }

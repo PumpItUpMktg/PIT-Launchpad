@@ -52,7 +52,7 @@ use Illuminate\Support\Facades\Cache;
 class PublishedContentBoard
 {
     /** Page types that belong on the "Core Pages" tab — everything that isn't Service or Location. */
-    private const CORE_TYPES = [PageType::Home, PageType::Utility, PageType::Pillar, PageType::Hub];
+    private const CORE_TYPES = [PageType::Home, PageType::Utility, PageType::Hub];
 
     /** Default seconds of live-metrics fetching a single render may spend before deferring the rest. */
     private const METRICS_BUDGET_SECONDS = 6.0;

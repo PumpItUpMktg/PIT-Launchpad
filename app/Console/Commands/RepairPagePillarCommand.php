@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
-use App\Enums\SiloType;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
@@ -18,8 +17,8 @@ use Illuminate\Database\Eloquent\Collection;
  * pillar stub (kind=page) was drafted through the Candidates "Generate post" lane,
  * which hard-codes kind=Post and published it through the blog template.
  *
- * Resets the row to kind=page + its silo-derived page_type (service_pillar→service,
- * topical→pillar), re-pins the matching wireframe kit (the same one a fresh pillar
+ * Resets the row to kind=page + page_type=service (a pillar is a service page),
+ * re-pins the matching wireframe kit (the same one a fresh pillar
  * gets), and returns it to candidate with the post-draft artifacts cleared — so it
  * can re-generate correctly via Pages → "Generate page". Idempotent: a pillar that
  * is already kind=page is left untouched (a legitimately published page is never
@@ -54,7 +53,7 @@ class RepairPagePillarCommand extends Command
                 continue;
             }
 
-            $this->repair($pillar, $silo);
+            $this->repair($pillar);
             $repaired++;
         }
 
@@ -96,11 +95,10 @@ class RepairPagePillarCommand extends Command
         return null;
     }
 
-    private function repair(Content $pillar, Silo $silo): void
+    private function repair(Content $pillar): void
     {
-        // A service pillar renders the service kit; a topical pillar a hub/pillar kit
-        // (none seeded yet → null, surfaced). Mirrors ManualSiloCreator's mapping.
-        $pageType = $silo->type === SiloType::ServicePillar ? PageType::Service : PageType::Pillar;
+        // A pillar is a service page — it renders the seeded service-page kit.
+        $pageType = PageType::Service;
         $kit = PillarFactory::resolveKit($pageType, (string) $pillar->site_id);
 
         $meta = $pillar->meta ?? [];

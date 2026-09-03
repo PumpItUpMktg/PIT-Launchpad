@@ -2,7 +2,6 @@
 
 namespace App\SiloCreator;
 
-use App\Enums\PageType;
 use App\Enums\ServiceSiloRole;
 use App\Enums\SiloType;
 use App\Models\Scopes\SiteScope;
@@ -64,7 +63,6 @@ class DeterministicProposer
                 clusters: $clusters,
                 source: 'deterministic',
                 supportCount: count($clusters),
-                pillarPageType: PageType::Service,
             );
         }
 
