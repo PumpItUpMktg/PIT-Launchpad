@@ -10,6 +10,7 @@ use App\Models\MediaAsset;
 use App\Models\ProofItem;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\WireframeKit;
 
 /**
  * Data-gating for the optional standard pages: a toggle is offered only when the site has the
@@ -27,6 +28,14 @@ class StandardPageGate
     {
         if ($type->isFixed()) {
             return true;
+        }
+
+        // Never offer a subtype that can't be built at all — no wireframe kit AND no block
+        // composer branch — or it would only ever produce a flat, undraftable page (the stuck
+        // 'reviews' candidate is exactly this). Data-driven on the kit side: seed a
+        // `<type>-page` kit and the gate self-heals.
+        if (! $this->hasKit($type) && ! $type->hasBlockComposer()) {
+            return false;
         }
 
         return match ($type) {
@@ -51,6 +60,12 @@ class StandardPageGate
             StandardPageType::optional(),
             fn (StandardPageType $t) => $this->isAvailable($site, $t),
         ));
+    }
+
+    /** A subtype is buildable on the kit side once a library (or site) kit with its name exists. */
+    private function hasKit(StandardPageType $type): bool
+    {
+        return WireframeKit::query()->where('name', $type->kitName())->exists();
     }
 
     private function reviewCount(Site $site): int

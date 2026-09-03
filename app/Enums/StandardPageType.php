@@ -102,4 +102,22 @@ enum StandardPageType: string
     {
         return 'standard.'.$this->value;
     }
+
+    /** The library wireframe-kit name for this page type (e.g. why_choose_us → why-choose-us-page). */
+    public function kitName(): string
+    {
+        return str_replace('_', '-', $this->value).'-page';
+    }
+
+    /**
+     * Whether BlockContentAssembler has a native block-composer branch keyed on this standard_type.
+     * (Home renders by page_type, not standard_type, so it is not listed here.)
+     */
+    public function hasBlockComposer(): bool
+    {
+        return in_array($this, [
+            self::About, self::WhyChooseUs, self::Faq,
+            self::AreasWeServe, self::Contact, self::Privacy, self::Terms,
+        ], true);
+    }
 }
