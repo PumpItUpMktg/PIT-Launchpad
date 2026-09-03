@@ -271,7 +271,11 @@ class LinkPlanBuilder
             ->all();
     }
 
-    /** Does this town carry a published review or captured job (local proof an indexed page can surface)? */
+    /**
+     * Does this town carry a published review (local proof the indexed landing surfaces)? Keyed on the
+     * item-3 town-tagged reviews. Captured jobs use a different geo model (job_city / jittered coords) and
+     * are a follow-up; reviews are the proof signal here.
+     */
     private function hasLocalProof(Site $site, Content $town, Location $market): bool
     {
         return Review::withoutGlobalScope(SiteScope::class)
