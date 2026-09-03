@@ -124,6 +124,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Link plan on tier unlock
+    |--------------------------------------------------------------------------
+    |
+    | When a tier unlocks and its town pages are built, a plan of proposed inbound
+    | links is generated from five sources (market page, neighbouring indexed towns,
+    | blog mentions, job/review back-links, Areas-We-Serve). The operator approves,
+    | then links are written and IndexNow is submitted.
+    |
+    | `max_links_per_source`: cap on links ADDED to any one source page per plan, so
+    |   no page becomes a link farm (mirrors internal_linking.index_boost). Default 3.
+    | `neighbour_radius_miles`: how near an indexed town must be to propose a mesh link.
+    */
+    'link_plan' => [
+        'max_links_per_source' => (int) env('LAUNCHPAD_LINK_PLAN_MAX_PER_SOURCE', 3),
+        'neighbour_radius_miles' => (float) env('LAUNCHPAD_LINK_PLAN_NEIGHBOUR_MILES', 20.0),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Local town references on blog posts
     |--------------------------------------------------------------------------
     |
