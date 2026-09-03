@@ -39,14 +39,22 @@ class JobMetrics
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
      */
-    public function for(Job $job, bool $cacheOnly = false): array
+    /**
+     * @param  bool  $liveTraffic  false = read GA4 sessions from the warmed cache only even when
+     *                             $cacheOnly is false (the hourly {@see WarmLiveMetrics} warms GSC but
+     *                             leaves GA4 to the weekly {@see \App\Jobs\WarmGa4Pages}). GA4 is fetched
+     *                             live only when the caller both fetches ($cacheOnly false) AND allows it.
+     */
+    public function for(Job $job, bool $cacheOnly = false, bool $liveTraffic = true): array
     {
         $site = $job->site;
 
         return [
             'gsc' => $this->gscBlock($job, $site, $cacheOnly),
             'index' => $this->indexBlock($job, $site),
-            'traffic' => $this->trafficBlock($job, $site, $cacheOnly),
+            // GA4 reads the cache when the caller is a render ($cacheOnly) OR when live GA4 is disallowed
+            // (the hourly warm, which leaves GA4 to the weekly pass) — fetched live only when both permit.
+            'traffic' => $this->trafficBlock($job, $site, $cacheOnly || ! $liveTraffic),
         ];
     }
 

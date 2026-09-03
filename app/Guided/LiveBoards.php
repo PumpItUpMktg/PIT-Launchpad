@@ -152,7 +152,9 @@ class LiveBoards
             // Priority-city state for location cards: true/false when the page has a Market, null
             // otherwise (service/core pages) — drives the "Mark priority" toggle + highlight.
             'market_priority' => $this->marketPriority($content, $site),
-            'metrics' => $this->metrics->for($content),
+            // Render path: GA4 sessions read from the warmed cache only (never a live GA4 call on render);
+            // the weekly WarmGa4Pages pass keeps that cache fresh.
+            'metrics' => $this->metrics->for($content, liveTraffic: false),
         ];
     }
 
@@ -189,7 +191,7 @@ class LiveBoards
      */
     private function rollup(Collection $towns, Site $site): array
     {
-        $blocks = $towns->map(fn (Content $c) => $this->metrics->for($c));
+        $blocks = $towns->map(fn (Content $c) => $this->metrics->for($c, liveTraffic: false));
 
         $ranks = $blocks->pluck('position.rank')->filter(fn ($r) => $r !== null);
         $impressions = $blocks->pluck('gsc.impressions')->filter(fn ($i) => $i !== null);
