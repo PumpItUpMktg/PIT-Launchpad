@@ -6,85 +6,179 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
 use Illuminate\Support\Collection;
 
 /**
- * READ-ONLY verification of duplicate silo-hub pages — the "report before deleting" pass for the hub
- * cleanup (the hub analogue of {@see DuplicateTownSweeper}, which this NEVER mutates for). It changes
- * nothing; it only surfaces what a cleanup WOULD touch, so a destructive sweep is proposed and reviewed
- * with real counts before any row is removed.
+ * READ-ONLY verification of duplicate "hub" pages — the "report before deleting" pass for the hub cleanup.
+ * It changes nothing; it only surfaces what a cleanup WOULD touch, so a destructive sweep is proposed and
+ * reviewed with real counts before any row is removed.
  *
- * A silo hub is a `Content` `kind=page`, `page_type=Hub` pinned to a `silo_id`. The system assumes ONE hub
- * per silo (nesting keys hubs by `silo_id`), but nothing enforces it, and a structure rebuild can mint a
- * second one (new spoke ids → new BuildPage rows with `content_id=null` → an unguarded `Content::create`).
- * The natural dedupe key is therefore `(site_id, silo_id)` restricted to Hub pages; a hub with a NULL
- * `silo_id` has no group and is ignored.
+ * "Hub" is overloaded in this codebase, so this reports THREE hub-shaped duplications so a clean result is
+ * airtight rather than a false negative from too narrow a definition:
  *
- * For each duplicated silo it names the KEEPER (the same furthest-along-then-oldest canonical the town
- * sweeper uses), splits the rest into REMOVABLE (empty, unpublished extras a sweep could safely soft-delete)
- * vs BLOCKED (published or carrying a real draft — never auto-removable), and counts the CHILDREN currently
- * parented to a non-keeper hub via `parent_content_id`, which a cleanup would have to re-point to the keeper
- * (the child-orphaning risk that makes hubs different from towns).
+ *   1. SILO HUBS — `page_type=Hub` pinned to a `silo_id`. The system assumes one per silo (nesting keys hubs
+ *      by `silo_id`) but nothing enforces it; a structure rebuild can mint a second. Grouped by `silo_id`.
+ *   2. ORPHAN HUBS — `page_type=Hub` with a NULL `silo_id` (a hub that lost its silo pin, invisible to the
+ *      silo-keyed pass). Grouped by normalized title so same-town/name orphans still surface.
+ *   3. LOCATION LANDINGS — the OTHER "hub": a `page_type=Location` page WITH a `location_id` (the physical GBP
+ *      location's landing page, which the town-page code literally calls "the hub"). Grouped by `location_id`.
+ *      (Town pages — `page_type=Location`, NULL `location_id`, with a `parent_location_id` — are NOT landings
+ *      and are handled by {@see DuplicateTownSweeper}; they are excluded here.)
+ *
+ * For every duplicated group it names the KEEPER (furthest-along then oldest, identical to the town sweeper),
+ * splits the rest into REMOVABLE (empty + unpublished) vs BLOCKED (published or drafted — manual only), and
+ * counts CHILDREN parented to a non-keeper via `parent_content_id` (which a cleanup must re-point, since that
+ * column has no FK cascade). Nothing is mutated.
+ *
+ * @phpstan-type HubGroup array{key: string, label: string, total: int, keeper: array{id: string, slug: string, status: string}, removable: list<array{id: string, slug: string, status: string}>, blocked: list<array{id: string, slug: string, status: string}>, children_to_repoint: int}
  */
 class DuplicateHubReport
 {
     /**
-     * Duplicate-hub groups for one site (silos carrying more than one Hub page). Empty when the site is clean.
+     * Duplicate silo hubs for one site (silos carrying more than one `page_type=Hub` page).
      *
-     * @return list<array{silo_id: string, silo_name: string, total: int, keeper: array{id: string, slug: string, status: string}, removable: list<array{id: string, slug: string, status: string}>, blocked: list<array{id: string, slug: string, status: string}>, children_to_repoint: int}>
+     * @return list<HubGroup>
      */
     public function forSite(Site $site): array
     {
-        $hubs = Content::withoutGlobalScope(SiteScope::class)
+        $hubs = $this->pages($site, PageType::Hub)->whereNotNull('silo_id');
+        $names = Silo::withoutGlobalScopes()
+            ->whereIn('id', $hubs->pluck('silo_id')->unique()->all())
+            ->pluck('name', 'id');
+
+        return $this->groups(
+            $site,
+            $hubs,
+            fn (Content $c): string => (string) $c->silo_id,
+            fn (string $key): string => (string) ($names[$key] ?? '—'),
+        );
+    }
+
+    /**
+     * Orphan hubs — `page_type=Hub` with no `silo_id` — grouped by normalized title so same-name dupes surface.
+     *
+     * @return list<HubGroup>
+     */
+    public function orphanHubs(Site $site): array
+    {
+        $hubs = $this->pages($site, PageType::Hub)->whereNull('silo_id');
+
+        return $this->groups(
+            $site,
+            $hubs,
+            fn (Content $c): string => $this->titleKey((string) $c->title),
+            fn (string $key, Collection $g): string => (string) ($g->first()->title ?? $key),
+        );
+    }
+
+    /**
+     * Duplicate location landings — `page_type=Location` WITH a `location_id` — grouped by `location_id`.
+     *
+     * @return list<HubGroup>
+     */
+    public function locationLandings(Site $site): array
+    {
+        $landings = $this->pages($site, PageType::Location)->whereNotNull('location_id');
+        $names = Location::withoutGlobalScopes()
+            ->whereIn('id', $landings->pluck('location_id')->unique()->all())
+            ->pluck('name', 'id');
+
+        return $this->groups(
+            $site,
+            $landings,
+            fn (Content $c): string => (string) $c->location_id,
+            fn (string $key): string => (string) ($names[$key] ?? '—'),
+        );
+    }
+
+    /**
+     * Every site with at least one duplicated hub in ANY of the three categories, keyed by site id.
+     *
+     * @return array<string, array{site: Site, silo_hubs: list<HubGroup>, orphan_hubs: list<HubGroup>, location_landings: list<HubGroup>}>
+     */
+    public function report(): array
+    {
+        $out = [];
+        foreach (Site::withoutGlobalScopes()->get() as $site) {
+            $silo = $this->forSite($site);
+            $orphan = $this->orphanHubs($site);
+            $landings = $this->locationLandings($site);
+            if ($silo !== [] || $orphan !== [] || $landings !== []) {
+                $out[(string) $site->id] = [
+                    'site' => $site,
+                    'silo_hubs' => $silo,
+                    'orphan_hubs' => $orphan,
+                    'location_landings' => $landings,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * All Content pages of one page_type for a site, scope-free for determinism.
+     *
+     * @return Collection<int, Content>
+     */
+    private function pages(Site $site, PageType $type): Collection
+    {
+        return Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
-            ->where('page_type', PageType::Hub->value)
-            ->whereNotNull('silo_id')
+            ->where('page_type', $type->value)
             ->get();
+    }
 
-        $groups = $hubs
-            ->groupBy(fn (Content $c): string => (string) $c->silo_id)
-            ->filter(fn (Collection $g): bool => $g->count() > 1);
-
+    /**
+     * The shared grouping core: group `$rows` by `$groupKey`, keep only groups with more than one row, and
+     * for each emit keeper / removable / blocked / children-to-repoint. `$labelFor` receives the key (and the
+     * group) and returns a human label.
+     *
+     * @param  Collection<int, Content>  $rows
+     * @param  callable(Content): string  $groupKey
+     * @param  callable(string, Collection<int, Content>): string  $labelFor
+     * @return list<HubGroup>
+     */
+    private function groups(Site $site, Collection $rows, callable $groupKey, callable $labelFor): array
+    {
+        $groups = $rows->groupBy($groupKey)->filter(fn (Collection $g): bool => $g->count() > 1);
         if ($groups->isEmpty()) {
             return [];
         }
 
-        $siloNames = Silo::withoutGlobalScopes()->whereIn('id', $groups->keys())->pluck('name', 'id');
-
         $out = [];
-        foreach ($groups as $siloId => $group) {
+        foreach ($groups as $key => $group) {
             $keeper = $this->canonical($group);
 
             $removable = [];
             $blocked = [];
             $nonKeeperIds = [];
-            foreach ($group as $hub) {
-                if ((string) $hub->id === (string) $keeper->id) {
+            foreach ($group as $page) {
+                if ((string) $page->id === (string) $keeper->id) {
                     continue;
                 }
-                $nonKeeperIds[] = (string) $hub->id;
-                $row = ['id' => (string) $hub->id, 'slug' => (string) $hub->slug, 'status' => $hub->status->value];
-                if ($this->isRemovable($hub)) {
+                $nonKeeperIds[] = (string) $page->id;
+                $row = ['id' => (string) $page->id, 'slug' => (string) $page->slug, 'status' => $page->status->value];
+                if ($this->isRemovable($page)) {
                     $removable[] = $row;
                 } else {
-                    $blocked[] = $row; // published or drafted-in-review — a sweep must leave these for manual review
+                    $blocked[] = $row;
                 }
             }
 
-            // Children currently nested under a NON-keeper hub — a cleanup must re-point their
-            // parent_content_id to the keeper (no FK cascade), else they'd be orphaned.
             $childrenToRepoint = $nonKeeperIds === [] ? 0 : Content::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $site->id)
                 ->whereIn('parent_content_id', $nonKeeperIds)
                 ->count();
 
             $out[] = [
-                'silo_id' => (string) $siloId,
-                'silo_name' => (string) ($siloNames[$siloId] ?? '—'),
+                'key' => (string) $key,
+                'label' => $labelFor((string) $key, $group),
                 'total' => $group->count(),
                 'keeper' => ['id' => (string) $keeper->id, 'slug' => (string) $keeper->slug, 'status' => $keeper->status->value],
                 'removable' => $removable,
@@ -97,26 +191,8 @@ class DuplicateHubReport
     }
 
     /**
-     * Every site with at least one duplicated silo hub, keyed by site id.
-     *
-     * @return array<string, array{site: Site, groups: list<array<string, mixed>>}>
-     */
-    public function report(): array
-    {
-        $out = [];
-        foreach (Site::withoutGlobalScopes()->get() as $site) {
-            $groups = $this->forSite($site);
-            if ($groups !== []) {
-                $out[(string) $site->id] = ['site' => $site, 'groups' => $groups];
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * The keeper for a same-silo hub group: furthest-along then oldest (published > drafted > earliest) —
-     * identical to {@see DuplicateTownSweeper::canonical()} so the report matches what a sweep would keep.
+     * The keeper for a group: furthest-along then oldest (published > drafted > earliest) — identical to
+     * {@see DuplicateTownSweeper::canonical()} so the report matches what a sweep would keep.
      *
      * @param  Collection<int, Content>  $group
      */
@@ -130,10 +206,16 @@ class DuplicateHubReport
     }
 
     /** Removable only when it is an EMPTY extra: no real draft and not published/live (mirrors the town sweeper). */
-    private function isRemovable(Content $hub): bool
+    private function isRemovable(Content $page): bool
     {
-        return ! $hub->hasDraft()
-            && $hub->status !== ContentStatus::Published
-            && $hub->wp_post_id === null;
+        return ! $page->hasDraft()
+            && $page->status !== ContentStatus::Published
+            && $page->wp_post_id === null;
+    }
+
+    /** Normalize a title for matching orphan hubs (drop a trailing ", ST", lower) — mirrors the town key. */
+    private function titleKey(string $name): string
+    {
+        return mb_strtolower(trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($name))));
     }
 }
