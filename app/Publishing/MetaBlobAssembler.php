@@ -2,6 +2,7 @@
 
 namespace App\Publishing;
 
+use App\Console\Commands\RepushBreadcrumbsCommand;
 use App\ContentEngine\Reconcile\PostTownTagger;
 use App\Enums\ContentKind;
 use App\Enums\ContentSource;
@@ -917,6 +918,21 @@ class MetaBlobAssembler
         $crumbs[] = ['name' => $this->breadcrumbShortName($content), 'url' => ''];
 
         return $crumbs;
+    }
+
+    /**
+     * READ-ONLY probe for {@see RepushBreadcrumbsCommand}: would this content's silo
+     * middle crumb resolve to a live top page (→ a valid THREE-item breadcrumb), or drop (→ a valid TWO-item
+     * Home → leaf)? Mirrors the {@see breadcrumbs()} silo-crumb branch exactly; changes nothing.
+     */
+    public function resolvesSiloTop(Content $content): bool
+    {
+        if ($content->silo_id === null || $content->silo === null
+            || $this->isOwnSiloPillar($content) || $content->page_type === PageType::Hub) {
+            return false;
+        }
+
+        return $this->liveSiloTopSlug($content) !== '';
     }
 
     /**
