@@ -2,6 +2,7 @@
 
 use App\Enums\BeatabilityLane;
 use App\Enums\IntentLevel;
+use App\Enums\SiloType;
 use App\Integrations\Serp\SerpResult;
 use App\Integrations\Serp\SerpResultSet;
 use App\KeywordGenerator\Beatability\BeatabilityResult;
@@ -15,6 +16,8 @@ use App\Models\Service;
 use App\Models\ServiceProblem;
 use App\Models\Silo;
 use App\Models\Site;
+use App\Models\WireframeKit;
+use Database\Seeders\WireframeKitSeeder;
 
 function scoredKeyword(Keyword $keyword, bool $parked = false): ScoredKeyword
 {
@@ -76,4 +79,32 @@ test('covered and parked keywords produce no brief', function () {
     ]);
 
     expect($queue->count())->toBe(0);
+});
+
+// Every page type a brief can emit must resolve to a real producer + kit — no dead 'cluster'.
+test('a service-pillar gap prescribes a service page whose kit resolves to a real library kit', function () {
+    $this->seed(WireframeKitSeeder::class);
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->servicePillar()->create(['site_id' => $site->id, 'name' => 'Water Heaters']);
+    $service = Service::factory()->create(['site_id' => $site->id]);
+    $silo->services()->attach($service->id);
+    $keyword = Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'water heater installation']);
+
+    $brief = app(GapAnalyzer::class)->analyze($site, [scoredKeyword($keyword)])->first();
+
+    expect($brief->pageType)->toBe('service')                        // producer: PageMaterializer service page
+        ->and($brief->kit)->toBe('service-page')
+        ->and(WireframeKit::query()->where('name', $brief->kit)->whereNull('site_id')->exists())->toBeTrue();
+});
+
+test('a topical gap prescribes a blog post (kind=post, no kit) — never a producerless cluster/pillar type', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'type' => SiloType::Topical, 'name' => 'Home Comfort']);
+    $keyword = Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'why is my water heater rumbling']);
+
+    $brief = app(GapAnalyzer::class)->analyze($site, [scoredKeyword($keyword)])->first();
+
+    expect($brief->pageType)->toBe('post')                          // producer: the blog pipeline (kind=post)
+        ->and($brief->kit)->toBeNull()                              // a post carries no wireframe kit
+        ->and($brief->pageType)->not->toBe('cluster');
 });

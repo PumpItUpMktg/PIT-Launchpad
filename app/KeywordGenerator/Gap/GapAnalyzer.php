@@ -102,8 +102,10 @@ class GapAnalyzer
             intent: $item->intent->value,
             siloId: $silo->id,
             siloName: $silo->name,
-            pageType: 'cluster',
-            kit: $isService ? 'service-page' : 'cluster',
+            // A service-pillar silo's gap is a service page (the seeded service-page kit);
+            // a topical silo's gap is served by a blog post (kind=post, page_type=null — no kit).
+            pageType: $isService ? 'service' : 'post',
+            kit: $isService ? 'service-page' : null,
             problemFraming: $problemFraming,
             coverageRequirements: $coverage,
             proofHooks: $proofHooks,

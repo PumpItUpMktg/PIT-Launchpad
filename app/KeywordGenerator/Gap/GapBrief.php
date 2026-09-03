@@ -8,6 +8,10 @@ use App\Enums\BeatabilityLane;
  * The prescriptive directed-content contract for one gap. Generation executes
  * it into kit slots; it does not decide. Coverage requirements reuse the SERP
  * pull from beatability — no re-fetch.
+ *
+ * `pageType` is 'service' (a service page, rendered from the 'service-page' kit)
+ * or 'post' (a blog post — kind=post, page_type=null — so `kit` is null: a post
+ * carries no wireframe kit). No other value is emitted.
  */
 final class GapBrief
 {
@@ -29,7 +33,7 @@ final class GapBrief
         public readonly string $siloId,
         public readonly string $siloName,
         public readonly string $pageType,
-        public readonly string $kit,
+        public readonly ?string $kit,
         public readonly array $problemFraming,
         public readonly array $coverageRequirements,
         public readonly array $proofHooks,
