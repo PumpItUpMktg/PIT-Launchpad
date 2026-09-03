@@ -369,7 +369,7 @@ class ClientDashboard
         }
 
         return match ($c->page_type) {
-            PageType::Service, PageType::Hub, PageType::Pillar, PageType::Cluster => 'Service pages',
+            PageType::Service, PageType::Hub, PageType::Pillar => 'Service pages',
             PageType::Location => 'Location pages',
             default => 'Core pages', // Home, Utility, or unset
         };
