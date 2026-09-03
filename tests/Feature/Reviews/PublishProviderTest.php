@@ -31,7 +31,8 @@ test('the local provider returns only published reviews for the location, mapped
     $service = Service::factory()->for($site)->create(['name' => 'Sump Pumps']);
 
     $published = Review::factory()->for($site)->published()->create([
-        'location_id' => $location->id, 'customer_name' => 'John D.', 'rating' => 5, 'body' => 'Great work', 'reviewed_at' => '2026-06-01',
+        'location_id' => $location->id, 'town' => 'Trooper', 'state' => 'PA', // its own town — a town the location serves
+        'customer_name' => 'John D.', 'rating' => 5, 'body' => 'Great work', 'reviewed_at' => '2026-06-01',
     ]);
     $published->services()->attach($service->id);
 

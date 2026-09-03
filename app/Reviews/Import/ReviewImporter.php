@@ -4,6 +4,7 @@ namespace App\Reviews\Import;
 
 use App\Enums\ReviewSource;
 use App\Enums\ReviewStatus;
+use App\Jobs\GeocodeReview;
 use App\Models\Review;
 use App\Models\ReviewImport;
 use App\Models\Scopes\SiteScope;
@@ -23,7 +24,7 @@ use Throwable;
 final class ReviewImporter
 {
     /** The importable fields; rating/body/reviewed_at are required. */
-    public const FIELDS = ['rating', 'body', 'reviewed_at', 'name', 'city', 'service', 'import_source'];
+    public const FIELDS = ['rating', 'body', 'reviewed_at', 'name', 'city', 'state', 'zip', 'service', 'import_source'];
 
     public function __construct(private readonly ReviewLocationResolver $locations) {}
 
@@ -59,6 +60,11 @@ final class ReviewImporter
             $seen[$key] = true;
 
             $city = trim($this->value($row, $mapping, 'city'));
+            $state = trim($this->value($row, $mapping, 'state'));
+            // A "Town, ST" city with no separate state column → split it, so town is the bare town.
+            if ($state === '' && preg_match('/^(.*),\s*([A-Za-z]{2})$/', $city, $m) === 1) {
+                [$city, $state] = [trim($m[1]), mb_strtoupper($m[2])];
+            }
             $locationId = $city !== '' ? $this->locations->resolve($site, $city) : null;
 
             $review = new Review([
@@ -70,12 +76,18 @@ final class ReviewImporter
                 'rating' => $rating,
                 'body' => $body,
                 'customer_name' => $this->displayName($this->value($row, $mapping, 'name')),
+                // The review's OWN geography, from the sheet — displayed and radius-filtered (never the
+                // owning location's city). Lat/lng are filled off-request by GeocodeReview.
+                'town' => $city !== '' ? $city : null,
+                'state' => $state !== '' ? $state : null,
+                'postal_code' => $this->value($row, $mapping, 'zip') ?: null,
                 'reviewed_at' => $date,
                 'submitted_at' => now(),
                 'needs_location' => $locationId === null,
             ]);
             $review->save();
 
+            GeocodeReview::dispatch((string) $review->id);
             $this->attachService($site, $review, trim($this->value($row, $mapping, 'service')));
             $imported++;
         }

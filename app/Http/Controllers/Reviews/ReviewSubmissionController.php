@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Reviews;
 use App\Enums\ReviewSource;
 use App\Enums\ReviewStatus;
 use App\Http\Controllers\Controller;
+use App\Jobs\GeocodeReview;
 use App\Mail\ReviewThankYouMail;
 use App\Models\Location;
 use App\Models\Review;
@@ -81,6 +82,10 @@ class ReviewSubmissionController extends Controller
             'needs_location' => $job->locationId === null,
         ]);
         $review->save();
+
+        // Geocode the review's own address to a point OFF the request path (no outbound call here) so the
+        // location-page reviews section can radius-filter it; also derives its town from the address.
+        GeocodeReview::dispatch((string) $review->id);
 
         $serviceIds = array_slice($job->serviceIds, 0, Review::MAX_SERVICES);
         if ($serviceIds !== []) {
