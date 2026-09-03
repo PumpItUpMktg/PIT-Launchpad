@@ -302,7 +302,9 @@ class PublishedContentBoard
             return $this->metrics->for($c, defer: true);
         }
 
-        return $this->metrics->for($c);
+        // Within budget: still render live GSC/Bing, but GA4 sessions read the warmed cache only — no live
+        // GA4 call fires on ANY render path (the weekly WarmGa4Pages pass owns the GA4 fetch).
+        return $this->metrics->for($c, liveTraffic: false);
     }
 
     private function budgetExceeded(): bool

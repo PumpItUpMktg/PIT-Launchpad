@@ -7,6 +7,7 @@ use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
 use App\Integrations\UrlInspection\IndexInspector;
+use App\Jobs\WarmGa4Pages;
 use App\Jobs\WarmLiveMetrics;
 use App\Models\Job;
 use App\Models\Site;
@@ -33,20 +34,26 @@ class JobMetrics
     ) {}
 
     /**
+     * @param  bool  $liveTraffic  false = read GA4 sessions from the warmed cache only even when
+     *                             $cacheOnly is false (the hourly {@see WarmLiveMetrics} warms GSC but
+     *                             leaves GA4 to the weekly {@see WarmGa4Pages}). GA4 is fetched
+     *                             live only when the caller both fetches ($cacheOnly false) AND allows it.
      * @return array{
      *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   index: array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, last_crawled_at: ?string, pending: ?string},
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
      */
-    public function for(Job $job, bool $cacheOnly = false): array
+    public function for(Job $job, bool $cacheOnly = false, bool $liveTraffic = true): array
     {
         $site = $job->site;
 
         return [
             'gsc' => $this->gscBlock($job, $site, $cacheOnly),
             'index' => $this->indexBlock($job, $site),
-            'traffic' => $this->trafficBlock($job, $site, $cacheOnly),
+            // GA4 reads the cache when the caller is a render ($cacheOnly) OR when live GA4 is disallowed
+            // (the hourly warm, which leaves GA4 to the weekly pass) — fetched live only when both permit.
+            'traffic' => $this->trafficBlock($job, $site, $cacheOnly || ! $liveTraffic),
         ];
     }
 

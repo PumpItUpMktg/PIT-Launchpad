@@ -575,7 +575,9 @@ class AppServiceProvider extends ServiceProvider
             $this->app->make(GoogleConnectionService::class),
             $this->app->make(CacheRepository::class),
             (string) config('services.google.ga4_data_base_url', 'https://analyticsdata.googleapis.com/v1beta'),
-            (int) config('services.google.ga4_cache_ttl', 21600),
+            // Long TTL: the render reads this cache-only and WarmGa4Pages refreshes it weekly, so it must
+            // outlast a warm interval (default 8 days) rather than the 6h render-cache default.
+            (int) config('services.google.ga4_page_cache_ttl', 691200),
         ));
         // Site-wide GA4 daily sessions for the metric spine (the Ga4MetricProvider slice) — same grant,
         // one report over a date range, honest no-op until the Site's GA4 property is connected.

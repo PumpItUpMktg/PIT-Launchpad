@@ -21,4 +21,9 @@ final class NullPageTraffic implements PageTrafficProvider
     {
         return null;
     }
+
+    public function refresh(Site $site, string $path, int $days = 28): ?int
+    {
+        return null;
+    }
 }

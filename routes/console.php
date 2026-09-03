@@ -53,6 +53,17 @@ Schedule::command('launchpad:ingest-feeds')->hourly()->withoutOverlapping();
 // Also prunes any benign warm-cache failure a deploy/timeout left in failed_jobs.
 Schedule::command('launchpad:warm-live-metrics')->hourly()->withoutOverlapping();
 
+// Per-page GA4 sessions warm — the GA4 half of the live-metrics cache, on a WEEKLY beat (the hourly warm
+// above skips GA4 to keep the Data API quota bounded). Force-refreshes each published page/job's cached
+// sessions into a >1-week TTL, so the Live boards' cache-only render reads stay fresh between passes.
+// withoutOverlapping so a slow multi-tenant pass can't stack.
+Schedule::command('launchpad:warm-ga4-pages')->weekly()->withoutOverlapping();
+
+// Site-level GA4 spine — daily per-site sessions into metric_snapshots (the client dashboard's traffic
+// funnel + "visits vs search clicks" trend). Trailing refresh window absorbs GA4's late data idempotently;
+// a clean no-op for a tenant with no GA4 property. withoutOverlapping so a slow sweep can't stack.
+Schedule::command('sandhog:sync-ga4')->daily()->withoutOverlapping();
+
 // GSC time-series snapshot — pull a trailing window of Search Console per
 // connected site into the never-overwritten daily store (absorbing GSC's ~3-day
 // revisions idempotently), then roll aged query-grain rows into the monthly

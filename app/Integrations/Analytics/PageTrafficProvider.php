@@ -2,7 +2,7 @@
 
 namespace App\Integrations\Analytics;
 
-use App\Jobs\WarmLiveMetrics;
+use App\Jobs\WarmGa4Pages;
 use App\Models\Site;
 
 /**
@@ -20,9 +20,17 @@ interface PageTrafficProvider
 
     /**
      * The CACHE-ONLY twin of {@see sessions()} — the warmed session count if present, else null WITHOUT
-     * ever hitting GA4. For a render path that must do zero outbound HTTP: {@see WarmLiveMetrics}
-     * populates the cache off-request, and a cache-miss here renders an honest "Refreshing…" instead of
-     * fetching inline. Null covers both "not warmed yet" and "warmed with no data".
+     * ever hitting GA4. For a render path that must do zero outbound HTTP: {@see WarmGa4Pages}
+     * populates the cache off-request (weekly), and a cache-miss here renders an honest "Refreshing…"
+     * instead of fetching inline. Null covers both "not warmed yet" and "warmed with no data".
      */
     public function sessionsCached(Site $site, string $path, int $days = 28): ?int;
+
+    /**
+     * FORCE-REFRESH the cached count: always fetch from GA4 and overwrite the cache entry (never a
+     * remember-hit), so the weekly {@see WarmGa4Pages} pass actually re-pulls even while a
+     * prior long-TTL entry is still live. This is the ONLY writer of the render cache now that
+     * {@see sessions()} is off the render/warm paths; the render reads {@see sessionsCached()}.
+     */
+    public function refresh(Site $site, string $path, int $days = 28): ?int;
 }

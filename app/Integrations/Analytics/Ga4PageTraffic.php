@@ -73,6 +73,26 @@ class Ga4PageTraffic implements PageTrafficProvider
         return $this->sessionsFromCache($this->cache->get($this->sessionsKey((string) $site->ga4_property, $pagePath, $days)));
     }
 
+    public function refresh(Site $site, string $path, int $days = 28): ?int
+    {
+        if (! $this->connected($site)) {
+            return null;
+        }
+
+        $property = (string) $site->ga4_property;
+        $pagePath = '/'.ltrim($path, '/');
+
+        // ALWAYS fetch and overwrite (put, not remember) so the weekly warm re-pulls even while the prior
+        // long-TTL entry is still live. The TTL spans a warm interval so the render's cache-only read stays
+        // fresh between passes; the no-data sentinel is cached too so a page with no rows renders "pending"
+        // (not "Refreshing…") until it earns traffic.
+        $sessions = $this->fetchSessions($property, $pagePath, $days);
+        $result = $sessions === null ? ['none' => true] : ['sessions' => $sessions];
+        $this->cache->put($this->sessionsKey($property, $pagePath, $days), $result, $this->cacheTtl);
+
+        return $this->sessionsFromCache($result);
+    }
+
     /**
      * @param  mixed  $result  the cached `['sessions' => int]`, a `['none' => true]` sentinel, or null on a miss
      */

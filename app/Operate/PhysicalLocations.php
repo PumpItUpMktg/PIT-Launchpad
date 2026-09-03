@@ -331,8 +331,9 @@ class PhysicalLocations
             'drafted' => $drafted,
             'published' => $published,
             // The same Position / GSC / GA4 tracking block every other page card shows (pending reasons
-            // when a source or datum is absent — e.g. "No target keyword — brand page" for a hub).
-            'metrics' => $this->metrics->for($landing),
+            // when a source or datum is absent — e.g. "No target keyword — brand page" for a hub). GA4
+            // reads the warmed cache only on render (WarmGa4Pages warms it weekly off-request).
+            'metrics' => $this->metrics->for($landing, liveTraffic: false),
             'can_generate' => $state !== 'generating',
             // Review opens the proof editor for any drafted page (the same target as the core board).
             'can_review' => $drafted,

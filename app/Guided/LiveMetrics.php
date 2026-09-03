@@ -8,6 +8,7 @@ use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
 use App\Integrations\UrlInspection\IndexInspector;
+use App\Jobs\WarmGa4Pages;
 use App\Jobs\WarmLiveMetrics;
 use App\Models\Content;
 use App\Models\Keyword;
@@ -69,7 +70,13 @@ class LiveMetrics
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
      */
-    public function for(Content $page, bool $defer = false): array
+    /**
+     * @param  bool  $liveTraffic  false = read GA4 sessions from the warmed cache only (never a live GA4
+     *                             call), for a render path. GA4 is fetched off-request by the weekly
+     *                             {@see WarmGa4Pages}; the other blocks are unaffected. True
+     *                             (the default) keeps the legacy live fetch for any non-render caller.
+     */
+    public function for(Content $page, bool $defer = false, bool $liveTraffic = true): array
     {
         // Over the board's live-metrics budget (or an off-screen card): return a fully-shaped, zero-cost
         // "refreshing" block — no DB, no external call. The WarmLiveMetrics worker fills the real values
@@ -94,7 +101,7 @@ class LiveMetrics
             'gsc' => $this->gscBlock($site, $page),
             'index' => $this->indexBlock($site, $page),
             'bing' => $this->bingBlock($site, $page),
-            'traffic' => $this->trafficBlock($site, $page),
+            'traffic' => $this->trafficBlock($site, $page, $liveTraffic),
         ];
     }
 
@@ -310,17 +317,21 @@ class LiveMetrics
     }
 
     /**
+     * @param  bool  $live  false = read the warmed GA4 cache only (render path — zero outbound HTTP); a
+     *                      cache-miss renders "Refreshing…" while {@see WarmGa4Pages} warms it
+     *                      weekly off-request. True fetches live (non-render callers only).
      * @return array{sessions: ?int, pending: ?string}
      */
-    private function trafficBlock(?Site $site, Content $page): array
+    private function trafficBlock(?Site $site, Content $page, bool $live = true): array
     {
         if ($site === null || ! $this->traffic->connected($site)) {
             return ['sessions' => null, 'pending' => 'Connect GA4'];
         }
 
-        $sessions = $this->traffic->sessions($site, '/'.ltrim((string) $page->slug, '/'));
+        $path = '/'.ltrim((string) $page->slug, '/');
+        $sessions = $live ? $this->traffic->sessions($site, $path) : $this->traffic->sessionsCached($site, $path);
         if ($sessions === null) {
-            return ['sessions' => null, 'pending' => 'Collecting'];
+            return ['sessions' => null, 'pending' => $live ? 'Collecting' : 'Refreshing…'];
         }
 
         return ['sessions' => $sessions, 'pending' => null];
