@@ -6,6 +6,7 @@ use App\Integrations\SearchConsole\SitemapSubmitter;
 use App\Jobs\PublishJob;
 use App\Jobs\SubmitSitemap;
 use App\Jobs\UnpublishJob;
+use App\Jobs\WarmLiveMetrics;
 use App\Models\Job;
 use App\Models\JobCounty;
 use App\Models\Location;
@@ -90,7 +91,7 @@ it('queues a metrics warm pass when rendering the live cards (so the render itse
     $page->siteId = $site->id;
     $page->getPublishedJobsProperty();
 
-    Queue::assertPushed(App\Jobs\WarmLiveMetrics::class, fn ($j): bool => $j->siteId === $site->id);
+    Queue::assertPushed(WarmLiveMetrics::class, fn ($j): bool => $j->siteId === $site->id);
 });
 
 it('does not submit the sitemap when no site is selected', function () {

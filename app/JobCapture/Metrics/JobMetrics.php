@@ -7,6 +7,7 @@ use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
 use App\Integrations\UrlInspection\IndexInspector;
+use App\Jobs\WarmLiveMetrics;
 use App\Models\Job;
 use App\Models\Site;
 
@@ -51,7 +52,7 @@ class JobMetrics
 
     /**
      * @param  bool  $cacheOnly  render path: read the warmed cache only, never fetch (zero outbound HTTP);
-     *                           a cache-miss renders "Refreshing…" while {@see \App\Jobs\WarmLiveMetrics}
+     *                           a cache-miss renders "Refreshing…" while {@see WarmLiveMetrics}
      *                           warms it off-request. False (the warm worker + CLI) fetches and caches.
      * @return array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
      */

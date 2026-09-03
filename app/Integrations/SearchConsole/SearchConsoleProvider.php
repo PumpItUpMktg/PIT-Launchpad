@@ -2,6 +2,7 @@
 
 namespace App\Integrations\SearchConsole;
 
+use App\Jobs\WarmLiveMetrics;
 use App\Models\Site;
 
 /**
@@ -29,7 +30,7 @@ interface SearchConsoleProvider
 
     /**
      * The CACHE-ONLY twin of {@see pageStats()} — returns the warmed value if present, else null WITHOUT
-     * ever hitting GSC. For a render path that must do zero outbound HTTP: the {@see \App\Jobs\WarmLiveMetrics}
+     * ever hitting GSC. For a render path that must do zero outbound HTTP: the {@see WarmLiveMetrics}
      * worker populates the cache off-request, and a cache-miss here renders an honest "Refreshing…" instead
      * of fetching inline. Null covers both "not warmed yet" and "warmed with no data".
      */
