@@ -18,6 +18,7 @@ use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
+use App\Models\Silo;
 use App\Models\Site;
 use App\Models\SiteTemplateMapping;
 use App\PageBuilder\Library\FormHeroComposer;
@@ -895,13 +896,13 @@ class MetaBlobAssembler
         // link to (and be named the same as) this very page. Collapse to Home → Leaf.
         // A HUB page is its silo's head by definition (guided silos don't pin
         // pillar_content_id), so it collapses the same way: hub = Home → {Hub}.
-        if ($content->silo_id !== null && $content->silo !== null
-            && ! $this->isOwnSiloPillar($content) && $content->page_type !== PageType::Hub) {
+        $silo = $this->crumbSilo($content);
+        if ($silo !== null && ! $this->isOwnSiloPillar($content) && $content->page_type !== PageType::Hub) {
             $siloUrl = $this->siloUrl($content, $home);
             // Never emit an intermediate crumb without a resolvable URL — drop it when the silo has
             // no live top page rather than link an unpublished (or wrong) one.
             if ($siloUrl !== '') {
-                $crumbs[] = ['name' => (string) $content->silo->name, 'url' => $siloUrl];
+                $crumbs[] = ['name' => (string) $silo->name, 'url' => $siloUrl];
             }
         }
 
@@ -927,12 +928,28 @@ class MetaBlobAssembler
      */
     public function resolvesSiloTop(Content $content): bool
     {
-        if ($content->silo_id === null || $content->silo === null
+        if ($this->crumbSilo($content) === null
             || $this->isOwnSiloPillar($content) || $content->page_type === PageType::Hub) {
             return false;
         }
 
         return $this->liveSiloTopSlug($content) !== '';
+    }
+
+    /**
+     * The silo for a breadcrumb, resolved INCLUDING soft-deleted. Content can carry a live `silo_id` whose
+     * Silo row is soft-deleted; the crumb must still render, because {@see liveSiloTopSlug} resolves the
+     * silo's live index page by the `silo_id` COLUMN (indifferent to the relation). So gate the crumb on the
+     * id + a trashed-tolerant lookup, never the soft-deletable relation — otherwise a dangling-but-live
+     * `silo_id` silently collapses a valid 3-item crumb to a 2-item one (and under-reports in the dry-run).
+     */
+    private function crumbSilo(Content $content): ?Silo
+    {
+        if ($content->silo_id === null) {
+            return null;
+        }
+
+        return $content->silo ?? Silo::withTrashed()->find($content->silo_id);
     }
 
     /**
