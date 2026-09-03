@@ -170,7 +170,7 @@ test('the breadcrumb silo crumb links to its pillar page and the leaf uses the S
 
     // A silo whose landing page is its pillar Content.
     $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heater']);
-    $pillar = Content::factory()->page()->create([
+    $pillar = Content::factory()->page()->published()->create([
         'site_id' => $site->id,
         'silo_id' => $silo->id,
         'slug' => 'water-heater',
@@ -193,17 +193,44 @@ test('the breadcrumb silo crumb links to its pillar page and the leaf uses the S
         ->and($leaf['name'])->not->toBe('STALE INTERNAL TITLE');
 });
 
-test('the silo crumb stays unlinked when the silo has no pillar page yet', function () {
+test('the silo crumb is DROPPED when the silo has no live top page (never emitted unlinked)', function () {
     PublishHarness::fakeAdapters();
     $site = PublishHarness::site();
-    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Plumbing']); // no pillar_content_id
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Plumbing']); // no pillar, nothing live
 
     $content = PublishHarness::approvedPage($site);
     $content->forceFill(['silo_id' => $silo->id])->save();
 
     $crumbs = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection)['seo']['breadcrumbs'];
 
-    expect($crumbs[1])->toBe(['name' => 'Plumbing', 'url' => '']); // unlinked, never a broken URL
+    // Home → Leaf only — no unlinked/broken intermediate crumb.
+    expect($crumbs)->toHaveCount(2)
+        ->and($crumbs[0]['name'])->toBe('Home')
+        ->and(collect($crumbs)->pluck('name'))->not->toContain('Plumbing');
+});
+
+test('the silo crumb resolves to the live top page, not a stale unpublished hub', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heaters']);
+
+    // A stale, UNPUBLISHED hub in the silo (the duplicate-hub shape) — must never be linked.
+    Content::factory()->page()->create([
+        'site_id' => $site->id, 'silo_id' => $silo->id,
+        'page_type' => PageType::Hub, 'status' => ContentStatus::Candidate, 'slug' => 'water-heaters-stale-hub',
+    ]);
+    // The silo's LIVE top page is a published Service.
+    Content::factory()->page()->published()->create([
+        'site_id' => $site->id, 'silo_id' => $silo->id,
+        'page_type' => PageType::Service, 'slug' => 'water-heaters',
+    ]);
+
+    $content = PublishHarness::approvedPage($site);
+    $content->forceFill(['silo_id' => $silo->id])->save();
+
+    $crumbs = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection)['seo']['breadcrumbs'];
+
+    expect($crumbs[1])->toBe(['name' => 'Water Heaters', 'url' => 'https://apex.example/water-heaters/']);
 });
 
 test('a pillar page collapses its own silo crumb (no self-referential crumb)', function () {
