@@ -12,8 +12,8 @@ use App\Models\WireframeKit;
 use Illuminate\Support\Str;
 
 /**
- * Assigns each committed silo a pillar: a service_pillar silo links the service
- * page; a topical silo gets an evergreen advisory-guide pillar Content stub.
+ * Assigns each committed silo a pillar page — a service page pinned to the silo
+ * (a topical silo's pillar is likewise a service page, titled as a guide).
  * Here we create/link a Content stub and pin it via Silo.pillar_content_id.
  */
 class PillarFactory
@@ -21,23 +21,23 @@ class PillarFactory
     public function ensurePillar(Silo $silo, SiloProposal $proposal): Content
     {
         $title = $proposal->isServicePillar() ? $proposal->name : 'Guide: '.$proposal->name;
-        $kit = self::resolveKit($proposal->pillarPageType, $silo->site_id);
+        $kit = self::resolveKit(PageType::Service, $silo->site_id);
 
         $content = Content::create([
             'site_id' => $silo->site_id,
             'silo_id' => $silo->id,
             'kind' => ContentKind::Page,
-            'page_type' => $proposal->pillarPageType,
+            'page_type' => PageType::Service,
             'status' => ContentStatus::Candidate,
             'title' => $title,
             'slug' => $this->uniqueSlug($silo->site_id, $proposal->name),
             'version' => 1,
             // Pin the content contract at birth so the pillar is generatable: the
             // drafter resolves slots from the kit and HARD-FAILS without one
-            // (PageGroundingAssembler::kit throws). The kit is fully determined by
-            // page_type — exactly one library kit per type — so there is nothing for
-            // an operator to choose. Null only when no kit exists for the page_type
-            // (e.g. a topical pillar before a hub kit ships); generation surfaces it.
+            // (PageGroundingAssembler::kit throws). A pillar is a service page, so its
+            // kit is the seeded service-page library kit — nothing for an operator to
+            // choose. The null-safe access is defensive only (an unseeded environment);
+            // in a migrated site the service kit always resolves.
             'wireframe_kit_id' => $kit?->id,
             'wireframe_kit_version' => $kit?->version,
         ]);

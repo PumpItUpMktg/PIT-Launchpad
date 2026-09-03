@@ -69,7 +69,7 @@ it('sweeps every flipped pillar for a --site, leaving correct pages and non-pill
 
     expect(fresh($p1->id)->kind)->toBe(ContentKind::Page)
         ->and(fresh($p2->id)->kind)->toBe(ContentKind::Page)
-        ->and(fresh($p2->id)->page_type)->toBe(PageType::Pillar)          // topical → pillar
+        ->and(fresh($p2->id)->page_type)->toBe(PageType::Service)         // topical also repairs to a service page
         ->and(fresh($okPillar->id)->kind)->toBe(ContentKind::Page)        // untouched
         ->and(fresh($okPillar->id)->status)->toBe(ContentStatus::Published) // NOT reset
         ->and(fresh($newsPost->id)->kind)->toBe(ContentKind::Post);       // untouched

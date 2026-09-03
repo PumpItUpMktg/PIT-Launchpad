@@ -2,7 +2,6 @@
 
 namespace App\SiloCreator;
 
-use App\Enums\PageType;
 use App\Enums\SiloType;
 
 /**
@@ -24,22 +23,21 @@ final class SiloProposal
         public readonly ?string $parentName = null,
         public readonly string $source = 'deterministic',
         public readonly int $supportCount = 0,
-        public readonly PageType $pillarPageType = PageType::Service,
     ) {}
 
     public function withName(string $name): self
     {
-        return new self($this->type, $name, $this->ruleSet, $this->serviceIds, $this->clusters, $this->parentName, $this->source, $this->supportCount, $this->pillarPageType);
+        return new self($this->type, $name, $this->ruleSet, $this->serviceIds, $this->clusters, $this->parentName, $this->source, $this->supportCount);
     }
 
     public function withParent(?string $parentName): self
     {
-        return new self($this->type, $this->name, $this->ruleSet, $this->serviceIds, $this->clusters, $parentName, $this->source, $this->supportCount, $this->pillarPageType);
+        return new self($this->type, $this->name, $this->ruleSet, $this->serviceIds, $this->clusters, $parentName, $this->source, $this->supportCount);
     }
 
     public function withRuleSet(RuleSet $ruleSet): self
     {
-        return new self($this->type, $this->name, $ruleSet, $this->serviceIds, $this->clusters, $this->parentName, $this->source, $this->supportCount, $this->pillarPageType);
+        return new self($this->type, $this->name, $ruleSet, $this->serviceIds, $this->clusters, $this->parentName, $this->source, $this->supportCount);
     }
 
     /**
@@ -47,7 +45,7 @@ final class SiloProposal
      */
     public function withClusters(array $clusters): self
     {
-        return new self($this->type, $this->name, $this->ruleSet, $this->serviceIds, $clusters, $this->parentName, $this->source, $this->supportCount, $this->pillarPageType);
+        return new self($this->type, $this->name, $this->ruleSet, $this->serviceIds, $clusters, $this->parentName, $this->source, $this->supportCount);
     }
 
     public function isServicePillar(): bool

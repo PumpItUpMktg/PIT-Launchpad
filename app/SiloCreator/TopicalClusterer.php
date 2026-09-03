@@ -3,7 +3,6 @@
 namespace App\SiloCreator;
 
 use App\Enums\KeywordSource;
-use App\Enums\PageType;
 use App\Enums\SiloType;
 use App\Integrations\Claude\ClaudeClient;
 use App\Models\Keyword;
@@ -68,7 +67,6 @@ class TopicalClusterer
                 ruleSet: $this->seeder->forTheme($name, $terms, $themeProblems),
                 source: 'topical',
                 supportCount: $support,
-                pillarPageType: PageType::Pillar,
             );
         }
 
