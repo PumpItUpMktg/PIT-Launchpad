@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsureTenantSelected;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\SiteBranding;
+use App\Support\CurrentSite;
 
 /**
  * The operator's currently-selected working tenant — the single session-backed "who am I working
@@ -32,11 +33,15 @@ class ActiveTenant
     public function set(string $siteId): void
     {
         session([self::SESSION_KEY => $siteId]);
+        // Drive the request-lifetime tenant holder too, so the scope is correct on THIS request
+        // (e.g. the redirect after a switch) — not only from the next request's ResolveCurrentSite pass.
+        CurrentSite::set($siteId);
     }
 
     public function clear(): void
     {
         session()->forget(self::SESSION_KEY);
+        CurrentSite::clear();
     }
 
     public function has(): bool
