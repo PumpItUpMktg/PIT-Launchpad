@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ConnectionProvider;
 use App\Enums\ContentStatus;
 use App\Models\Connection;
 use App\Models\Content;
@@ -51,13 +52,14 @@ it('drops the count on soft delete and restores it (matching the withCount soft-
 
 it('tracks compromised connections on the site counter', function () {
     $site = Site::factory()->create();
-    $conn = Connection::factory()->create(['site_id' => $site->id, 'compromised' => true]);
+    // Distinct providers — connections are unique on (site_id, provider), so a shared site needs two.
+    $conn = Connection::factory()->create(['site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword, 'compromised' => true]);
     expect(counters($site)->compromised_count)->toBe(1);
 
     $conn->forceFill(['compromised' => false, 'compromised_reason' => null])->save();
     expect(counters($site)->compromised_count)->toBe(0);
 
-    $second = Connection::factory()->create(['site_id' => $site->id, 'compromised' => true]);
+    $second = Connection::factory()->create(['site_id' => $site->id, 'provider' => ConnectionProvider::Ghl, 'compromised' => true]);
     expect(counters($site)->compromised_count)->toBe(1);
 
     $second->delete();
