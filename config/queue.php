@@ -40,10 +40,11 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            // MUST exceed the longest job $timeout (GeneratePost/GeneratePage = 600s
-            // for Sonnet 12k + fal). If retry_after < a job's runtime the worker
-            // re-reserves it mid-run and burns its attempt (MaxAttemptsExceeded).
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 630),
+            // MUST exceed the longest job $timeout AND the worker --timeout, or the worker
+            // re-reserves a job mid-run and burns its attempt (MaxAttemptsExceeded). The longest
+            // job is EnrichThinServices ($timeout=900); the Laravel Cloud worker runs --timeout=300.
+            // 930 clears both with margin. RetryAfterTest asserts this stays above every job $timeout.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 930),
             'after_commit' => false,
         ],
 
