@@ -86,3 +86,57 @@ it('shows "run index audit" / "collecting" when connected but no data is cached 
         ->and($m['gsc']['pending'])->toContain('Collecting')
         ->and($m['traffic']['pending'])->toBe('Collecting');
 });
+
+it('cacheOnly render reads the WARMED cache only — never the fetching pageStats/pageQueries/sessions', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $job = Job::factory()->create(['site_id' => $site->id, 'post_title' => 'Sump Pump Replacement'])->fresh();
+    $path = $job->publicPath();
+
+    $gsc = Mockery::mock(SearchConsoleProvider::class);
+    $gsc->shouldReceive('connected')->andReturnTrue();
+    $gsc->shouldReceive('pageStatsCached')->with(Mockery::any(), $path)->andReturn(new PageSearchStats(20, 3, 28));
+    $gsc->shouldReceive('pageQueriesCached')->with(Mockery::any(), $path)
+        ->andReturn([new PageQuery('sump pump replacement newark', 2, 15, 13.3, 8.4)]);
+    // The zero-HTTP contract: the fetching variants must NEVER be touched on the render path.
+    $gsc->shouldNotReceive('pageStats');
+    $gsc->shouldNotReceive('pageQueries');
+
+    $idx = Mockery::mock(IndexInspector::class);
+    $idx->shouldReceive('connected')->andReturnTrue();
+    $idx->shouldReceive('cached')->andReturnNull();
+
+    $traffic = Mockery::mock(PageTrafficProvider::class);
+    $traffic->shouldReceive('connected')->andReturnTrue();
+    $traffic->shouldReceive('sessionsCached')->with(Mockery::any(), $path)->andReturn(7);
+    $traffic->shouldNotReceive('sessions');
+
+    $m = (new JobMetrics($gsc, $idx, $traffic))->for($job, cacheOnly: true);
+
+    expect($m['gsc']['impressions'])->toBe(20)
+        ->and($m['gsc']['queries'][0]['query'])->toBe('sump pump replacement newark')
+        ->and($m['traffic']['sessions'])->toBe(7);
+});
+
+it('cacheOnly render shows "Refreshing…" (not "Collecting") when connected but nothing is warmed yet', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $job = Job::factory()->create(['site_id' => $site->id])->fresh();
+
+    $gsc = Mockery::mock(SearchConsoleProvider::class);
+    $gsc->shouldReceive('connected')->andReturnTrue();
+    $gsc->shouldReceive('pageStatsCached')->andReturnNull(); // cache miss
+    $gsc->shouldNotReceive('pageStats');
+
+    $idx = Mockery::mock(IndexInspector::class);
+    $idx->shouldReceive('connected')->andReturnTrue();
+    $idx->shouldReceive('cached')->andReturnNull();
+
+    $traffic = Mockery::mock(PageTrafficProvider::class);
+    $traffic->shouldReceive('connected')->andReturnTrue();
+    $traffic->shouldReceive('sessionsCached')->andReturnNull(); // cache miss
+    $traffic->shouldNotReceive('sessions');
+
+    $m = (new JobMetrics($gsc, $idx, $traffic))->for($job, cacheOnly: true);
+
+    expect($m['gsc']['pending'])->toBe('Refreshing…')
+        ->and($m['traffic']['pending'])->toBe('Refreshing…');
+});

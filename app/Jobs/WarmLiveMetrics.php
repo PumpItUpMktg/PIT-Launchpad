@@ -3,8 +3,11 @@
 namespace App\Jobs;
 
 use App\Enums\ContentStatus;
+use App\Enums\JobStatus;
 use App\Guided\LiveMetrics;
+use App\JobCapture\Metrics\JobMetrics;
 use App\Models\Content;
+use App\Models\Job;
 use App\Models\Scopes\SiteScope;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -15,10 +18,13 @@ use Illuminate\Queue\SerializesModels;
 use Throwable;
 
 /**
- * Warms the live-metrics caches (GSC / GA4 / Bing / index) for one site's published content, OFF the web
- * request. The Published board dispatches this when a render hit its metrics budget and had to defer
- * cards to a "Refreshing…" state; the worker calls {@see LiveMetrics::for()} for each live page — the
- * same cache-backed fetch, just on a queue with no FPM clock — so the next board load is warm and fast.
+ * Warms the live-metrics caches (GSC / GA4 / Bing / index) for one site's published content AND its
+ * published Job Capture pages, OFF the web request. The content Published board and the Published-Jobs
+ * board both dispatch this (sharing one throttle lock) so their render paths read warmed caches only and
+ * never call a vendor inline; the worker calls {@see LiveMetrics::for()} for each live page and
+ * {@see JobMetrics::for()} for each live job — the same cache-backed fetch, just on a queue with no FPM
+ * clock — so the next board load is warm and fast. Jobs track on /jobs/{slug}, a path the content warm
+ * does not cover, so they are warmed explicitly here.
  *
  * Best-effort and idempotent: a per-page vendor error is swallowed (that card simply stays "collecting"),
  * and {@see ShouldBeUnique} + the board's dispatch lock keep at most one warm pass per site in flight.
@@ -56,21 +62,21 @@ class WarmLiveMetrics implements ShouldBeUnique, ShouldQueue
         return $this->siteId;
     }
 
-    public function handle(LiveMetrics $metrics): void
+    public function handle(LiveMetrics $metrics, JobMetrics $jobMetrics): void
     {
+        $deadline = microtime(true) + self::SOFT_BUDGET_SECONDS;
+
         $live = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $this->siteId)
             ->where('status', ContentStatus::Published->value)
             ->with(['site', 'targetKeyword.targetContent'])
             ->get();
 
-        $deadline = microtime(true) + self::SOFT_BUDGET_SECONDS;
-
         foreach ($live as $page) {
             // Stop before the queue timeout: the remaining pages warm on the next dispatch (already-warmed
             // pages are cheap cache-hits then), so this converges without ever failing the job.
             if (microtime(true) >= $deadline) {
-                break;
+                return;
             }
 
             try {
@@ -78,6 +84,29 @@ class WarmLiveMetrics implements ShouldBeUnique, ShouldQueue
                 $metrics->for($page);
             } catch (Throwable) {
                 // Warming is best-effort — one page's vendor hiccup must not fail the whole pass.
+            }
+        }
+
+        // Job Capture pages track on a DIFFERENT path (/jobs/{slug}) than any Content slug, so the content
+        // warm above does NOT cover them — the Published-Jobs board reads its own warmed caches. Warm the
+        // site's published jobs within the SAME budget; already-warmed jobs are cache-hits on the next pass,
+        // so the combined set converges without ever failing the job.
+        $jobs = Job::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->siteId)
+            ->where('status', JobStatus::Published->value)
+            ->with('site')
+            ->get();
+
+        foreach ($jobs as $job) {
+            if (microtime(true) >= $deadline) {
+                return;
+            }
+
+            try {
+                // Fetching (not cache-only): populates the GSC/GA4 caches JobMetrics reads on render.
+                $jobMetrics->for($job);
+            } catch (Throwable) {
+                // Best-effort — one job's vendor hiccup must not fail the whole pass.
             }
         }
     }

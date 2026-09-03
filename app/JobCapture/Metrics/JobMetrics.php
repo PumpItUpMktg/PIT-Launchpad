@@ -7,6 +7,7 @@ use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
 use App\Integrations\UrlInspection\IndexInspector;
+use App\Jobs\WarmLiveMetrics;
 use App\Models\Job;
 use App\Models\Site;
 
@@ -22,6 +23,9 @@ use App\Models\Site;
  */
 class JobMetrics
 {
+    /** The zero-cost placeholder a cache-only (render-path) cell shows until the warm worker fills it. */
+    private const REFRESHING = 'Refreshing…';
+
     public function __construct(
         private readonly SearchConsoleProvider $searchConsole,
         private readonly IndexInspector $indexInspector,
@@ -35,34 +39,43 @@ class JobMetrics
      *   traffic: array{sessions: ?int, pending: ?string}
      * }
      */
-    public function for(Job $job): array
+    public function for(Job $job, bool $cacheOnly = false): array
     {
         $site = $job->site;
 
         return [
-            'gsc' => $this->gscBlock($job, $site),
+            'gsc' => $this->gscBlock($job, $site, $cacheOnly),
             'index' => $this->indexBlock($job, $site),
-            'traffic' => $this->trafficBlock($job, $site),
+            'traffic' => $this->trafficBlock($job, $site, $cacheOnly),
         ];
     }
 
     /**
+     * @param  bool  $cacheOnly  render path: read the warmed cache only, never fetch (zero outbound HTTP);
+     *                           a cache-miss renders "Refreshing…" while {@see WarmLiveMetrics}
+     *                           warms it off-request. False (the warm worker + CLI) fetches and caches.
      * @return array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
      */
-    private function gscBlock(Job $job, ?Site $site): array
+    private function gscBlock(Job $job, ?Site $site, bool $cacheOnly): array
     {
         if ($site === null || ! $this->searchConsole->connected($site)) {
             return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => 'Connect Search Console'];
         }
 
-        $stats = $this->searchConsole->pageStats($site, $job->publicPath());
+        $path = $job->publicPath();
+        $stats = $cacheOnly ? $this->searchConsole->pageStatsCached($site, $path) : $this->searchConsole->pageStats($site, $path);
         if ($stats === null) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => 'Collecting — first data in a few days'];
+            // On render (cacheOnly) an un-warmed cell is "Refreshing…" — the warm worker fills it off-request;
+            // in the warm/CLI path a null is a genuine no-data-yet cell.
+            $pending = $cacheOnly ? self::REFRESHING : 'Collecting — first data in a few days';
+
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => $pending];
         }
 
+        $rows = $cacheOnly ? $this->searchConsole->pageQueriesCached($site, $path) : $this->searchConsole->pageQueries($site, $path);
         $queries = array_map(fn (PageQuery $q): array => [
             'query' => $q->query, 'clicks' => $q->clicks, 'impressions' => $q->impressions, 'ctr' => $q->ctr, 'position' => $q->position,
-        ], $this->searchConsole->pageQueries($site, $job->publicPath()));
+        ], $rows);
 
         return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(), 'in_google' => $stats->impressions > 0, 'queries' => $queries, 'pending' => null];
     }
@@ -100,14 +113,19 @@ class JobMetrics
     /**
      * @return array{sessions: ?int, pending: ?string}
      */
-    private function trafficBlock(Job $job, ?Site $site): array
+    private function trafficBlock(Job $job, ?Site $site, bool $cacheOnly): array
     {
         if ($site === null || ! $this->traffic->connected($site)) {
             return ['sessions' => null, 'pending' => 'Connect GA4'];
         }
 
-        $sessions = $this->traffic->sessions($site, $job->publicPath());
+        $path = $job->publicPath();
+        $sessions = $cacheOnly ? $this->traffic->sessionsCached($site, $path) : $this->traffic->sessions($site, $path);
 
-        return $sessions === null ? ['sessions' => null, 'pending' => 'Collecting'] : ['sessions' => $sessions, 'pending' => null];
+        if ($sessions === null) {
+            return ['sessions' => null, 'pending' => $cacheOnly ? self::REFRESHING : 'Collecting'];
+        }
+
+        return ['sessions' => $sessions, 'pending' => null];
     }
 }

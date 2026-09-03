@@ -4,7 +4,9 @@ use App\Enums\JobStatus;
 use App\Filament\Console\Pages\PublishedJobs;
 use App\Integrations\SearchConsole\SitemapSubmitter;
 use App\Jobs\PublishJob;
+use App\Jobs\SubmitSitemap;
 use App\Jobs\UnpublishJob;
+use App\Jobs\WarmLiveMetrics;
 use App\Models\Job;
 use App\Models\JobCounty;
 use App\Models\Location;
@@ -27,18 +29,39 @@ it('renders the page (compiles the blade)', function () {
         ->assertSee('New pump install in Newark');
 });
 
-it('submits the sitemap index (which covers the jobs child) to Google for an operator', function () {
+it('submits the sitemap OFF the request path: preflight is HTTP-free, the submit is queued', function () {
+    Queue::fake();
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
 
+    // The synchronous preflight (connected + sitemapUrl) is HTTP-free; the outbound submit itself never
+    // runs in the request — it is dispatched to the queue.
     $submitter = Mockery::mock(SitemapSubmitter::class);
-    $submitter->shouldReceive('submit')->once()
-        ->with(Mockery::on(fn ($s): bool => $s->id === $site->id))
-        ->andReturn(['ok' => true, 'reason' => null, 'sitemap' => 'https://spg.example/sitemap.xml', 'connected' => true, 'submitted' => 12, 'pending' => false, 'errors' => 0, 'warnings' => 0]);
+    $submitter->shouldReceive('connected')->andReturnTrue();
+    $submitter->shouldReceive('sitemapUrl')->andReturn('https://spg.example/sitemap.xml');
+    $submitter->shouldNotReceive('submit'); // never called inline
     app()->instance(SitemapSubmitter::class, $submitter);
 
     $page = new PublishedJobs;
     $page->siteId = $site->id;
-    $page->submitSitemap(); // Mockery ->once() verifies the submit on teardown
+    $page->submitSitemap();
+
+    Queue::assertPushed(SubmitSitemap::class, fn (SubmitSitemap $j): bool => $j->siteId === (string) $site->id);
+});
+
+it('does not queue a sitemap submit when Search Console is not connected — warns instead', function () {
+    Queue::fake();
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+
+    $submitter = Mockery::mock(SitemapSubmitter::class);
+    $submitter->shouldReceive('connected')->andReturnFalse();
+    $submitter->shouldNotReceive('submit');
+    app()->instance(SitemapSubmitter::class, $submitter);
+
+    $page = new PublishedJobs;
+    $page->siteId = $site->id;
+    $page->submitSitemap();
+
+    Queue::assertNotPushed(SubmitSitemap::class);
 });
 
 it('attaches live tracking (index/gsc/traffic) to published cards, but not to pipeline cards', function () {
@@ -57,6 +80,18 @@ it('attaches live tracking (index/gsc/traffic) to published cards, but not to pi
         ->and($published[0]['metrics']['index']['pending'])->not->toBeNull()
         ->and($published[0]['metrics'])->toHaveKeys(['gsc', 'index', 'traffic'])
         ->and($pipeline[0]['metrics'])->toBeNull(); // pipeline jobs aren't live → no tracking computed
+});
+
+it('queues a metrics warm pass when rendering the live cards (so the render itself fetches nothing)', function () {
+    Queue::fake();
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    Job::factory()->published()->create(['site_id' => $site->id]);
+
+    $page = new PublishedJobs;
+    $page->siteId = $site->id;
+    $page->getPublishedJobsProperty();
+
+    Queue::assertPushed(WarmLiveMetrics::class, fn ($j): bool => $j->siteId === $site->id);
 });
 
 it('does not submit the sitemap when no site is selected', function () {
