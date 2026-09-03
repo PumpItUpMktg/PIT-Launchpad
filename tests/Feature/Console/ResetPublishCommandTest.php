@@ -165,3 +165,19 @@ it('--flush-failed clears the tenant\'s pending AND dead jobs', function () {
     expect(DB::table('jobs')->where('payload', 'like', '%'.$failed->id.'%')->count())->toBe(0)
         ->and(DB::table('failed_jobs')->where('payload', 'like', '%'.$failed->id.'%')->count())->toBe(0);
 });
+
+it('recomputes the persisted site health counters after the bulk reset (which bypasses the observer)', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    rpPage($site, ContentStatus::PublishFailed, 'Sump Pump Repair');
+    rpPage($site, ContentStatus::RenderFailed, 'Sump Pit Cleaning');
+
+    // The observer maintained these on create; the bulk whereIn()->update() below skips it, so the
+    // command must recompute — else they'd drift to a stale non-zero after the rows leave those statuses.
+    $before = Site::withoutGlobalScopes()->findOrFail($site->id);
+    expect($before->publish_failed_count)->toBe(1)->and($before->render_failed_count)->toBe(1);
+
+    Artisan::call('launchpad:reset-publish', ['site' => 'SPG']);
+
+    $after = Site::withoutGlobalScopes()->findOrFail($site->id);
+    expect($after->publish_failed_count)->toBe(0)->and($after->render_failed_count)->toBe(0);
+});

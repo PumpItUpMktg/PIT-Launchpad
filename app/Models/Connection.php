@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Enums\ConnectionProvider;
 use App\Models\Concerns\BelongsToSite;
+use App\Observers\ConnectionObserver;
 use Database\Factories\ConnectionFactory;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -18,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $exposed_at
  * @property Carbon|null $last_rotated_at
  */
+#[ObservedBy([ConnectionObserver::class])]
 class Connection extends Model
 {
     /** @use HasFactory<ConnectionFactory> */

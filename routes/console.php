@@ -16,6 +16,11 @@ Artisan::command('inspire', function () {
 // panel. Never auto-rotates; the pre-client launch gate is the hard requirement.
 Schedule::command('launchpad:check-stale-connections')->weekly();
 
+// Portfolio-health counter reconcile — the drift net for the incremental Content/Connection observers.
+// Bulk query updates and hard-delete prunes bypass model events, so a scheduled recompute-from-source
+// keeps the /admin/sites counters honest. Idempotent; daily is cheap (a handful of COUNTs per site).
+Schedule::command('launchpad:reconcile-site-counters')->daily()->withoutOverlapping();
+
 // §5 standard-mode DataForSEO ingest sweep — polls tasks_ready and collects
 // finished SERP/maps tasks into the cache the providers read (first-cut polling;
 // postback is an optional later swap). withoutOverlapping keeps one sweep at a

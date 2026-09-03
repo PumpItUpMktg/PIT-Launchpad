@@ -92,13 +92,15 @@ class SiteResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // review_backlog / render_failed / publish_failed / compromised are now PERSISTED columns on `sites`
+        // (maintained by the Content/Connection observers + the reconcile command) — read and sorted as
+        // plain columns instead of the correlated COUNT-per-site subqueries that made this board a 6.4s
+        // query. Only `published_week_count` remains a subquery: a rolling 7-day window can't be a static
+        // counter. It is computed page-scoped (never the sort key — see the column below), so it costs a
+        // handful of counts for the visible cards, not a full-portfolio scan.
         return parent::getEloquentQuery()->withCount([
-            'contents as review_backlog_count' => fn (Builder $q) => $q->where('status', 'needs_review'),
-            'contents as render_failed_count' => fn (Builder $q) => $q->where('status', 'render_failed'),
-            'contents as publish_failed_count' => fn (Builder $q) => $q->where('status', 'publish_failed'),
             'contents as published_week_count' => fn (Builder $q) => $q->where('status', 'published')
                 ->where('published_at', '>=', now()->startOfWeek()),
-            'connections as compromised_count' => fn (Builder $q) => $q->where('compromised', true),
         ]);
     }
 
@@ -130,7 +132,10 @@ class SiteResource extends Resource
                         TextColumn::make('review_backlog_count')->badge()->sortable()
                             ->formatStateUsing(fn (int $state): string => "{$state} awaiting review")
                             ->color(fn (int $state): string => $state > 0 ? 'info' : 'gray'),
-                        TextColumn::make('published_week_count')->sortable()->color('gray')
+                        // NOT sortable by design: it's the one remaining COUNT subquery (a rolling window
+                        // can't be a persisted counter), so sorting by it would re-introduce the full-portfolio
+                        // aggregate scan this board was fixed to avoid. The four persisted columns above sort fast.
+                        TextColumn::make('published_week_count')->color('gray')
                             ->formatStateUsing(fn (int $state): string => "{$state} published this week"),
                     ]),
                 ])->space(2),

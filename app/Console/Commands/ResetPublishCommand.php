@@ -7,6 +7,8 @@ use App\Enums\ContentStatus;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Observers\ContentObserver;
+use App\Operator\SiteHealthCounters;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -131,6 +133,8 @@ class ResetPublishCommand extends Command
                     ->update(['status' => ContentStatus::Approved->value, 'last_publish_error' => null]);
             }
 
+            $this->recomputeSiteCounters($stuck);
+
             $flushed = $this->flushJobsFor($ids);
 
             $this->line("Moved {$posts->count()} blog post(s) back to <info>candidates</info>"
@@ -149,6 +153,8 @@ class ResetPublishCommand extends Command
 
         Content::withoutGlobalScope(SiteScope::class)->whereIn('id', $ids)->update($update);
 
+        $this->recomputeSiteCounters($stuck);
+
         $this->line($reject
             ? "Rejected {$stuck->count()} item(s) — pulled out of the publish pipeline (regenerate them later if wanted)."
             : "Reset {$stuck->count()} item(s) to <info>approved</info> — re-push them with launchpad:drain-publish (or a running worker) once the cause is fixed.");
@@ -159,6 +165,23 @@ class ResetPublishCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Recompute the persisted `sites` health counters for every tenant touched by the bulk status update
+     * above. The bulk `whereIn(...)->update()` bypasses the {@see ContentObserver}, so the
+     * counters (which include render_failed / publish_failed — statuses this command clears) would drift
+     * without this. Idempotent, so recomputing is always safe.
+     *
+     * @param  Collection<int, Content>  $stuck
+     */
+    private function recomputeSiteCounters(Collection $stuck): void
+    {
+        $counters = app(SiteHealthCounters::class);
+
+        foreach ($stuck->pluck('site_id')->unique() as $siteId) {
+            $counters->recomputeContent((string) $siteId);
+        }
     }
 
     /**
