@@ -12,7 +12,9 @@ use App\Enums\StandardPageType;
 use App\Geo\GeoGapBridge;
 use App\Models\Concerns\BelongsToSite;
 use App\Models\Scopes\SiteScope;
+use App\Observers\ContentObserver;
 use Database\Factories\ContentFactory;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -49,6 +51,7 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed>|null $schema_payload
  * @property array<string, mixed>|null $verification
  */
+#[ObservedBy([ContentObserver::class])]
 class Content extends Model
 {
     /** @use HasFactory<ContentFactory> */

@@ -19,6 +19,10 @@ use Illuminate\Support\Carbon;
  * @property SiteStatus $status
  * @property ProductPlan $product
  * @property int|null $budget_ceiling
+ * @property int $review_backlog_count persisted portfolio-health counter — contents in needs_review (see SiteHealthCounters)
+ * @property int $render_failed_count persisted counter — contents in render_failed
+ * @property int $publish_failed_count persisted counter — contents in publish_failed
+ * @property int $compromised_count persisted counter — connections flagged compromised
  * @property int|null $review_body_min_length per-tenant override for the review submission min body length
  * @property bool $review_reminders_enabled per-tenant toggle for day-3/day-10 review-request reminders
  * @property int|null $silo_own_page_bar
@@ -274,6 +278,10 @@ class Site extends Model
             'coverage_thresholds' => 'array',
             'insured' => 'boolean',
             'years_in_business' => 'integer',
+            'review_backlog_count' => 'integer',
+            'render_failed_count' => 'integer',
+            'publish_failed_count' => 'integer',
+            'compromised_count' => 'integer',
         ];
     }
 
