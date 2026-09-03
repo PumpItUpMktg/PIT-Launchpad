@@ -16,4 +16,12 @@ interface PageTrafficProvider
 
     /** Sessions for one page path over the window, or null while the source has no data yet. */
     public function sessions(Site $site, string $path, int $days = 28): ?int;
+
+    /**
+     * The CACHE-ONLY twin of {@see sessions()} — the warmed session count if present, else null WITHOUT
+     * ever hitting GA4. For a render path that must do zero outbound HTTP: {@see \App\Jobs\WarmLiveMetrics}
+     * populates the cache off-request, and a cache-miss here renders an honest "Refreshing…" instead of
+     * fetching inline. Null covers both "not warmed yet" and "warmed with no data".
+     */
+    public function sessionsCached(Site $site, string $path, int $days = 28): ?int;
 }

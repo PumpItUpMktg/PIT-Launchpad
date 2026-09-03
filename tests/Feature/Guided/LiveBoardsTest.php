@@ -176,6 +176,16 @@ it('renders Search Console numbers once the provider connects (and the rollup su
         {
             return [new PageQuery('sump pump norristown', 5, 120, 4.2, 3.4)];
         }
+
+        public function pageStatsCached(Site $site, string $path, int $days = 28): ?PageSearchStats
+        {
+            return $this->pageStats($site, $path, $days);
+        }
+
+        public function pageQueriesCached(Site $site, string $path, int $days = 28, int $limit = 8): array
+        {
+            return $this->pageQueries($site, $path, $days, $limit);
+        }
     });
 
     $board = app(LiveBoards::class)->locations($site);

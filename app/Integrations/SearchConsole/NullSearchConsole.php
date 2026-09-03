@@ -24,4 +24,17 @@ final class NullSearchConsole implements SearchConsoleProvider
     {
         return [];
     }
+
+    public function pageStatsCached(Site $site, string $path, int $days = 28): ?PageSearchStats
+    {
+        return null;
+    }
+
+    /**
+     * @return list<PageQuery>
+     */
+    public function pageQueriesCached(Site $site, string $path, int $days = 28, int $limit = 8): array
+    {
+        return [];
+    }
 }

@@ -48,7 +48,7 @@ class Ga4PageTraffic implements PageTrafficProvider
 
         $property = (string) $site->ga4_property;
         $pagePath = '/'.ltrim($path, '/');
-        $key = 'ga4:sessions:'.md5($property.'|'.$pagePath.'|'.$days);
+        $key = $this->sessionsKey($property, $pagePath, $days);
 
         // Cache the count (and the no-data sentinel) so repeated card renders don't re-hit GA4.
         $result = $this->cache->remember($key, $this->cacheTtl, function () use ($property, $pagePath, $days): array {
@@ -57,11 +57,37 @@ class Ga4PageTraffic implements PageTrafficProvider
             return $sessions === null ? ['none' => true] : ['sessions' => $sessions];
         });
 
-        if (isset($result['none'])) {
+        return $this->sessionsFromCache($result);
+    }
+
+    public function sessionsCached(Site $site, string $path, int $days = 28): ?int
+    {
+        if (! $this->connected($site)) {
+            return null;
+        }
+
+        // Cache-only: return the warmed count if present, never fetch. A miss (null) is indistinguishable
+        // from a warmed no-data sentinel by design — both render as pending, never a live GA4 call.
+        $pagePath = '/'.ltrim($path, '/');
+
+        return $this->sessionsFromCache($this->cache->get($this->sessionsKey((string) $site->ga4_property, $pagePath, $days)));
+    }
+
+    /**
+     * @param  mixed  $result  the cached `['sessions' => int]`, a `['none' => true]` sentinel, or null on a miss
+     */
+    private function sessionsFromCache(mixed $result): ?int
+    {
+        if (! is_array($result) || isset($result['none']) || ! isset($result['sessions'])) {
             return null;
         }
 
         return (int) $result['sessions'];
+    }
+
+    private function sessionsKey(string $property, string $pagePath, int $days): string
+    {
+        return 'ga4:sessions:'.md5($property.'|'.$pagePath.'|'.$days);
     }
 
     /**

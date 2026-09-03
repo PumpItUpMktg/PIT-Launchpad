@@ -53,12 +53,36 @@ class GoogleSearchConsole implements SearchConsoleProvider
         }
 
         $property = (string) $site->gsc_property;
-        $key = 'gsc:page:'.md5($property.'|'.$pageUrl.'|'.$days);
+        $key = $this->statsKey($property, $pageUrl, $days);
 
         // Cache the totals (and the no-data sentinel) so repeated card renders don't re-hit GSC.
         $totals = $this->cache->remember($key, $this->cacheTtl, fn (): array => $this->fetchTotals($property, $pageUrl, $days) ?? ['none' => true]);
 
-        if (isset($totals['none'])) {
+        return $this->statsFromCache($totals, $days);
+    }
+
+    public function pageStatsCached(Site $site, string $path, int $days = 28): ?PageSearchStats
+    {
+        if (! $this->connected($site)) {
+            return null;
+        }
+
+        $pageUrl = $this->pageUrl($site, $path);
+        if ($pageUrl === null) {
+            return null;
+        }
+
+        // Cache-only: return the warmed value if present, never fetch. A miss (null) is indistinguishable
+        // from a warmed no-data sentinel by design — both render as pending, never a live GSC call.
+        return $this->statsFromCache($this->cache->get($this->statsKey((string) $site->gsc_property, $pageUrl, $days)), $days);
+    }
+
+    /**
+     * @param  mixed  $totals  the cached totals array, a `['none' => true]` sentinel, or null on a miss
+     */
+    private function statsFromCache(mixed $totals, int $days): ?PageSearchStats
+    {
+        if (! is_array($totals) || isset($totals['none'])) {
             return null;
         }
 
@@ -84,15 +108,53 @@ class GoogleSearchConsole implements SearchConsoleProvider
         }
 
         $property = (string) $site->gsc_property;
-        $key = 'gsc:pagequeries:'.md5($property.'|'.$pageUrl.'|'.$days.'|'.$limit);
+        $key = $this->queriesKey($property, $pageUrl, $days, $limit);
 
         /** @var list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}> $rows */
         $rows = $this->cache->remember($key, $this->cacheTtl, fn (): array => $this->fetchQueries($property, $pageUrl, $days, $limit));
+
+        return $this->queriesFromCache($rows);
+    }
+
+    public function pageQueriesCached(Site $site, string $path, int $days = 28, int $limit = 8): array
+    {
+        if (! $this->connected($site)) {
+            return [];
+        }
+
+        $pageUrl = $this->pageUrl($site, $path);
+        if ($pageUrl === null) {
+            return [];
+        }
+
+        // Cache-only: the warmed long tail if present, else an empty list — never a live GSC call.
+        return $this->queriesFromCache($this->cache->get($this->queriesKey((string) $site->gsc_property, $pageUrl, $days, $limit)));
+    }
+
+    /**
+     * @param  mixed  $rows  the cached rows, or null on a miss
+     * @return list<PageQuery>
+     */
+    private function queriesFromCache(mixed $rows): array
+    {
+        if (! is_array($rows)) {
+            return [];
+        }
 
         return array_map(
             fn (array $r): PageQuery => new PageQuery($r['query'], $r['clicks'], $r['impressions'], $r['ctr'], $r['position']),
             $rows,
         );
+    }
+
+    private function statsKey(string $property, string $pageUrl, int $days): string
+    {
+        return 'gsc:page:'.md5($property.'|'.$pageUrl.'|'.$days);
+    }
+
+    private function queriesKey(string $property, string $pageUrl, int $days, int $limit): string
+    {
+        return 'gsc:pagequeries:'.md5($property.'|'.$pageUrl.'|'.$days.'|'.$limit);
     }
 
     /**

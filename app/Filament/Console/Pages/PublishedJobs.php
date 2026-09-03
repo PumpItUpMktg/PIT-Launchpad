@@ -7,7 +7,9 @@ use App\Integrations\SearchConsole\SitemapSubmitter;
 use App\JobCapture\Metrics\JobMetrics;
 use App\JobCapture\Review\JobStorefrontResolver;
 use App\Jobs\PublishJob;
+use App\Jobs\SubmitSitemap;
 use App\Jobs\UnpublishJob;
+use App\Jobs\WarmLiveMetrics;
 use App\Models\Job;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -18,6 +20,7 @@ use BackedEnum;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -56,6 +59,10 @@ class PublishedJobs extends ConsolePage
      */
     public function getPublishedJobsProperty(): array
     {
+        // Live cards read WARMED metrics only (zero outbound HTTP in the render path); queue one throttled
+        // warm pass so the caches the next load reads are populated off-request.
+        $this->warmMetrics();
+
         return $this->cards([JobStatus::Published->value]);
     }
 
@@ -124,28 +131,46 @@ class PublishedJobs extends ConsolePage
             return;
         }
 
-        $result = app(SitemapSubmitter::class)->submit($site);
+        // Preflight is HTTP-free (a grant/property check + a domain check) so the operator gets immediate
+        // feedback; only the actual GSC submit (an outbound PUT + status read) runs off-request via the job.
+        $submitter = app(SitemapSubmitter::class);
+        if (! $submitter->connected($site)) {
+            Notification::make()->warning()->title('Could not submit sitemap')
+                ->body('Connect Search Console for this site first (Connections → Connect Google, then pick its GSC property).')
+                ->send();
 
-        if (! $result['ok']) {
-            $body = match ($result['reason']) {
-                'not_connected' => 'Connect Search Console for this site first (Connections → Connect Google, then pick its GSC property).',
-                'no_domain' => 'This site has no domain URL set.',
-                default => (string) $result['reason'],
-            };
-            Notification::make()->warning()->title('Could not submit sitemap')->body($body)->send();
+            return;
+        }
+        if ($submitter->sitemapUrl($site) === null) {
+            Notification::make()->warning()->title('Could not submit sitemap')->body('This site has no domain URL set.')->send();
 
             return;
         }
 
+        SubmitSitemap::dispatch((string) $site->id);
+
         Notification::make()->success()
-            ->title('Sitemap submitted to Google')
-            ->body(sprintf(
-                'Google is crawling %s (this includes the jobs sitemap). It reports %d URL(s)%s. Indexing can take days.',
-                (string) $result['sitemap'],
-                $result['submitted'],
-                $result['pending'] ? ' — still processing' : '',
-            ))
+            ->title('Submitting sitemap to Google')
+            ->body('Submitting /sitemap.xml (this includes the jobs sitemap) in the background — Google is told to crawl the published job pages. Indexing can take days.')
             ->send();
+    }
+
+    /**
+     * Queue one metrics warm pass for the active site, throttled to at most once per two minutes by a
+     * hold-and-expire cache lock (the {@see WarmLiveMetrics} job is also ShouldBeUnique). Shares the lock
+     * key with the content Published board so the two surfaces don't double-warm one site.
+     */
+    private function warmMetrics(): void
+    {
+        if ($this->siteId === null) {
+            return;
+        }
+
+        $lock = Cache::lock('warm-live-metrics:'.$this->siteId, 120);
+        if ($lock->get()) {
+            // Intentionally NOT released — the 120s TTL is the throttle window.
+            WarmLiveMetrics::dispatch($this->siteId);
+        }
     }
 
     public function takeDown(string $id): void
@@ -227,7 +252,8 @@ class PublishedJobs extends ConsolePage
             'when' => $job->updated_at instanceof Carbon ? $job->updated_at->diffForHumans() : null,
             // Live tracking — index / GSC / GA4 — only for jobs that are actually live on WordPress. Job
             // pages are proof content, not keyword targets, so there is deliberately no ranking block.
-            'metrics' => $job->status === JobStatus::Published ? app(JobMetrics::class)->for($job) : null,
+            // cacheOnly: the render path reads warmed values only — never an outbound GSC/GA4 call inline.
+            'metrics' => $job->status === JobStatus::Published ? app(JobMetrics::class)->for($job, cacheOnly: true) : null,
         ];
     }
 

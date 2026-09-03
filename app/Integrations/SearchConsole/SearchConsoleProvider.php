@@ -26,4 +26,20 @@ interface SearchConsoleProvider
      * @return list<PageQuery>
      */
     public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array;
+
+    /**
+     * The CACHE-ONLY twin of {@see pageStats()} — returns the warmed value if present, else null WITHOUT
+     * ever hitting GSC. For a render path that must do zero outbound HTTP: the {@see \App\Jobs\WarmLiveMetrics}
+     * worker populates the cache off-request, and a cache-miss here renders an honest "Refreshing…" instead
+     * of fetching inline. Null covers both "not warmed yet" and "warmed with no data".
+     */
+    public function pageStatsCached(Site $site, string $path, int $days = 28): ?PageSearchStats;
+
+    /**
+     * The CACHE-ONLY twin of {@see pageQueries()} — the warmed long tail if present, else an empty list
+     * WITHOUT hitting GSC. Companion to {@see pageStatsCached()} for the zero-HTTP render path.
+     *
+     * @return list<PageQuery>
+     */
+    public function pageQueriesCached(Site $site, string $path, int $days = 28, int $limit = 8): array;
 }
