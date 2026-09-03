@@ -7,6 +7,7 @@ use App\Enums\LinkPlanStatus;
 use App\Enums\LinkSourceType;
 use App\Enums\PageType;
 use App\Enums\StandardPageType;
+use App\Filament\Pages\Operate\OperateLinkPlans;
 use App\Integrations\IndexNow\IndexNowSubmitter;
 use App\Jobs\PublishContent;
 use App\Models\Content;
@@ -17,12 +18,14 @@ use App\Models\Location;
 use App\Models\PageIndexState;
 use App\Models\Review;
 use App\Models\Site;
+use App\Models\User;
 use App\Operate\LinkPlanActions;
 use App\Publishing\Links\LinkPlanBuilder;
 use App\Support\CurrentSite;
 use App\Support\TownName;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Livewire\Livewire;
 
 const LP_HOME = 'https://spg.example';
 
@@ -185,6 +188,21 @@ it('actions gate the plan: reject settles an item, apply is idempotent once appl
 
     // Re-applying an applied plan is a no-op.
     expect($actions->apply($plan->fresh()))->toBe(['applied' => 0, 'republished' => 0, 'submitted' => [], 'orphaned' => []]);
+});
+
+it('the link-plans page renders and proposes for an operator', function () {
+    $this->actingAs(User::factory()->create());
+    [$site, $market] = lpMarket();
+    lpTown($site, 'Big', $market->id);
+
+    Livewire::test(OperateLinkPlans::class)
+        ->set('siteId', $site->id)
+        ->set('proposeMarketId', $market->id)
+        ->set('proposeTier', 'large')
+        ->call('propose')
+        ->assertOk();
+
+    expect(LinkPlan::where('site_id', $site->id)->exists())->toBeTrue();
 });
 
 it('the plan-links command proposes and reports', function () {
