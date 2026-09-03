@@ -219,6 +219,7 @@ class GoogleConnectionService
         $request = $this->http
             ->withToken($accessToken)
             ->timeout($this->timeout)
+            ->connectTimeout(5)
             ->retry(3, 400, fn ($e) => $e instanceof ConnectionException
                 || ($e instanceof RequestException && in_array($e->response->status(), [429, 500, 502, 503], true)), throw: false);
 

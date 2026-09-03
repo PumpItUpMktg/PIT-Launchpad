@@ -716,6 +716,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Global outbound-HTTP defaults: a newly written Http call inherits BOTH a total timeout and a
+        // connect timeout without the author setting either, so a hung connect can never stall an FPM
+        // worker into a 504. A per-call ->timeout()/->connectTimeout() still overrides these — the
+        // justified longer clients (fal, PageSpeed, Perplexity, DataForSEO, GSC/GA4) keep their explicit
+        // total and just inherit the 5s connect. The shared Factory singleton means this one call covers
+        // every call site, facade and injected alike.
+        $this->app->make(Factory::class)->globalOptions([
+            'timeout' => 15,
+            'connect_timeout' => 5,
+        ]);
+
         // Keep the library wireframe kits in step with their JSON on every deploy: a deploy runs
         // `migrate --force`, which fires MigrationsEnded (had work) or NoPendingMigrations (none) —
         // binding both re-seeds the kits regardless. NOT bound under tests: the suite runs migrations
