@@ -125,5 +125,17 @@ cutover is an ordered epic:
   Markets, Rankings, Indexing, Brand, Users), each with its screenshot +
   verified-number queries.
 
+### Shipped: 5c — Pages consolidation
+
+One "Pages" nav item → a board with **core · service · town** tabs (town = the
+`locations` family); the three legacy per-family boards stay as off-nav routes.
+The service board's site-level "Refresh rankings" action moved to the base so the
+consolidated board carries it on every tab. **Planned display** landed here too:
+`StateChip` (candidate page → "Planned") **and** `Content::buildStateLabel` now
+read a candidate PAGE as "Planned", so the wording shows on PageResource / Grow /
+the board.
+
+![Pages board — tabs + Planned chip](img/5c-pages-tabs-planned.png)
+
 Confirm the sequence + how to fill the 6 GAP surfaces (build new vs. defer vs.
 point at nearest) before building 5c+.
