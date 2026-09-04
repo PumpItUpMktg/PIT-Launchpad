@@ -109,6 +109,26 @@ The four-column header, rendered (18 live links + the 6 greyed "soon" gaps):
 ![Console header — light](img/5b-nav-header-light.png)
 ![Console header — dark](img/5b-nav-header-dark.png)
 
+## 5e — Live consolidation (spec)
+
+**Five published boards collapse into one "Live" board with a type filter** —
+Blog, Core, Service, Town, **and Storefront** (not just the three page boards).
+It is ONE dataset with a type selector, not five views.
+
+- **Type selector (tabs, but a filter over one dataset):** All · Blog · Core ·
+  Service · Town — each with a live count. **All is the default** and is the
+  point: one place to answer "what's live and what's wrong with it."
+- **Filter row:** search · Market · Not indexed · Not ranking.
+- **One card component per row** (carries a type label, since All mixes them):
+  - **flags:** Indexed · Bing · Page one · plus any `page_index_states` problem reason
+  - **rank** with delta
+  - **impressions** · **clicks** · **sessions**
+  - **target keyword**
+  - **actions:** Repush · Take down · Open in WP
+
+Every displayed number gets its query documented + a verified value (standing
+rule). The five legacy boards retire from nav, routes kept.
+
 ## Sequencing (honoring the standing UI-PR rules)
 
 Building 6 new surfaces + 5 tab-consolidations + the regroup as one PR cannot
