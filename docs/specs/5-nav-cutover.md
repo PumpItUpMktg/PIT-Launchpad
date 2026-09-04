@@ -151,6 +151,15 @@ worker flag with the per-post `publishNowSync` escape hatch.
 
 ![Posts board — Approved tab](img/5f-posts-approved-tab.png)
 
+## 5g — Towns consolidation (spec)
+
+**Towns → its own board + Tier progression + Link plans as tabs.** The three
+per-surface pages (`LocationsSetup` "Service area", `OperateTierProgression`,
+`OperateLinkPlans`) collapse into one tabbed **Towns** surface. Per the 5e steer,
+the orphan-assignment actions **`assignLocation` / `reassign`** (currently on the
+Live Locations board) land **here** — they are served-town assignment, not
+live-page actions. The legacy per-surface pages retire from nav, routes kept.
+
 ## Sequencing (honoring the standing UI-PR rules)
 
 Building 6 new surfaces + 5 tab-consolidations + the regroup as one PR cannot
