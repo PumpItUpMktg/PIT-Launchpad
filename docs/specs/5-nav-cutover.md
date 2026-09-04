@@ -172,9 +172,13 @@ worker flag with the per-post `publishNowSync` escape hatch.
 All four tabs share the one locked tenant. Legacy per-surface pages retire from
 nav, routes kept.
 
-**Tier-gate check (must confirm):** the Service-area page-selection is the
-operator `page_selected` writer surface the tiered-rollout gate applies to — a
-locked tier must render as locked in the editor, not only in Tier progression.
+**Tier-gate check (confirmed + fixed):** the gate is enforced downstream at build
+(`LocalRelevance` → `TierGate::allowsTown`), and was NOT visible in the editor.
+5g surfaces it — `CoveragePanels` carries per-tier-band `TierGate` lock state and
+the panel renders a "Locked — {reason}" badge. Advisory (gates building, not
+selection).
+
+![Towns — tab bar + tier-lock badges](img/5g-towns-tabs.png)
 
 ## Sequencing (honoring the standing UI-PR rules)
 
