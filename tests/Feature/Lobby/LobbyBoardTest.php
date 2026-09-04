@@ -1,0 +1,164 @@
+<?php
+
+use App\Enums\CitationPresence;
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Enums\JobStatus;
+use App\Enums\LobbyBadgeTier;
+use App\Enums\LobbyCardState;
+use App\Enums\ReviewStatus;
+use App\Enums\SiteStatus;
+use App\Models\CitationStatus;
+use App\Models\Content;
+use App\Models\Job;
+use App\Models\Location;
+use App\Models\Market;
+use App\Models\Review;
+use App\Models\SetupState;
+use App\Models\Site;
+use App\Operator\Lobby\LobbyBoard;
+use App\Support\CurrentSite;
+use Illuminate\Support\Facades\DB;
+
+afterEach(fn () => CurrentSite::clear());
+
+/** Find a site's card in the board output. */
+function lobbyCard(string $siteId, string $filter = 'all')
+{
+    return app(LobbyBoard::class)->cards('', $filter)->firstWhere(fn ($c) => $c->site->id === $siteId);
+}
+
+it('assembles the lobby in a constant number of queries — no per-card query (acceptance 15)', function () {
+    // Two sites with mixed conditions.
+    foreach (range(1, 2) as $i) {
+        $s = Site::factory()->create(['status' => SiteStatus::Active]);
+        Content::factory()->create(['site_id' => $s->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview]);
+        Review::factory()->create(['site_id' => $s->id, 'status' => ReviewStatus::Pending]);
+    }
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    app(LobbyBoard::class)->cards();
+    $twoSiteQueries = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    // Six more sites, same shape.
+    foreach (range(1, 6) as $i) {
+        $s = Site::factory()->create(['status' => SiteStatus::Active]);
+        Content::factory()->create(['site_id' => $s->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview]);
+        Review::factory()->create(['site_id' => $s->id, 'status' => ReviewStatus::Pending]);
+    }
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    app(LobbyBoard::class)->cards();
+    $eightSiteQueries = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    // Constant regardless of tenant count → no per-card query.
+    expect($eightSiteQueries)->toBe($twoSiteQueries)
+        ->and($twoSiteQueries)->toBeLessThanOrEqual(12);
+});
+
+it('flips a card to Blocked on a Tier-1 condition and suppresses lower tiers into "+N more" (acceptance 12)', function () {
+    $site = Site::factory()->create(['status' => SiteStatus::Active]);
+    Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::RenderFailed]); // Tier 1
+    Review::factory()->create(['site_id' => $site->id, 'status' => ReviewStatus::Pending]);          // Tier 3
+
+    $card = lobbyCard($site->id);
+
+    expect($card->state)->toBe(LobbyCardState::Blocked)
+        ->and($card->visibleBadges())->toHaveCount(1)
+        ->and($card->visibleBadges()[0]->tier)->toBe(LobbyBadgeTier::BrokenBlocking)
+        ->and($card->moreCount())->toBe(1)
+        ->and($card->moreLabel())->toContain('none publishable until the connection is fixed');
+});
+
+it('shows up to three tier-ordered badges then "+N more"; colour is the tier, never the count (acceptance 13)', function () {
+    $site = Site::factory()->create(['status' => SiteStatus::Active]);
+    $loc = Location::factory()->for($site)->create();
+    // Four non-Tier-1 conditions across tiers 2-4.
+    Market::factory()->create(['site_id' => $site->id, 'on_hold' => true, 'release_at' => now()->subDay()]); // T2
+    CitationStatus::factory()->create(['site_id' => $site->id, 'location_id' => $loc->id, 'presence' => CitationPresence::PresentMismatch, 'covered_by_sibling' => false]); // T2
+    // Ten pending reviews (T3) — a big count that must NOT outrank a red tier.
+    Review::factory()->count(10)->create(['site_id' => $site->id, 'status' => ReviewStatus::Pending]);
+    Job::factory()->create(['site_id' => $site->id, 'status' => JobStatus::Review]); // T3
+
+    $card = lobbyCard($site->id);
+
+    expect($card->state)->toBe(LobbyCardState::ActivePending)
+        ->and($card->visibleBadges())->toHaveCount(3)
+        ->and($card->moreCount())->toBe(1)
+        ->and($card->moreLabel())->toBe('+1 more')
+        // Tier order: the two Tier-2 (danger) badges lead the Tier-3 ones, regardless of the 10-count.
+        ->and($card->visibleBadges()[0]->tier)->toBe(LobbyBadgeTier::WrongData)
+        ->and($card->visibleBadges()[0]->color())->toBe('danger');
+
+    // The 10-pending-reviews badge is amber (its tier), not escalated by its count.
+    $reviews = collect($card->badges)->firstWhere('key', 'reviews_pending');
+    expect($reviews->count)->toBe(10)->and($reviews->color())->toBe('warning');
+});
+
+it('an active site with nothing waiting is ActiveClean with no badges', function () {
+    $site = Site::factory()->create(['status' => SiteStatus::Active]);
+
+    $card = lobbyCard($site->id);
+
+    expect($card->state)->toBe(LobbyCardState::ActiveClean)
+        ->and($card->badges)->toBe([])
+        ->and($card->needsAttention())->toBeFalse();
+});
+
+it('an onboarding site is a progress card — no operational badges even with pending work', function () {
+    $site = Site::factory()->create(['status' => SiteStatus::Onboarding]);
+    SetupState::factory()->create(['site_id' => $site->id, 'current_step' => 3]);
+    Review::factory()->create(['site_id' => $site->id, 'status' => ReviewStatus::Pending]); // would badge if active
+
+    $card = lobbyCard($site->id);
+
+    expect($card->state)->toBe(LobbyCardState::Onboarding)
+        ->and($card->onboardingStep)->toBe(3)
+        ->and($card->onboardingStepCount)->toBeGreaterThan(0)
+        ->and($card->badges)->toBe([]);
+});
+
+it('counts exclude soft-deleted rows (acceptance 17)', function () {
+    $site = Site::factory()->create(['status' => SiteStatus::Active]);
+    $live = Review::factory()->create(['site_id' => $site->id, 'status' => ReviewStatus::Pending]);
+    $gone = Review::factory()->create(['site_id' => $site->id, 'status' => ReviewStatus::Pending]);
+    $gone->delete(); // soft delete
+
+    $card = lobbyCard($site->id);
+    $reviews = collect($card->badges)->firstWhere('key', 'reviews_pending');
+
+    expect($reviews->count)->toBe(1);
+});
+
+it('does not badge raw blog candidates — only posts awaiting review', function () {
+    $site = Site::factory()->create(['status' => SiteStatus::Active]);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Candidate]); // not badged
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview]); // badged
+
+    $card = lobbyCard($site->id);
+    $blog = collect($card->badges)->firstWhere('key', 'blog_review');
+
+    expect($blog)->not->toBeNull()->and($blog->count)->toBe(1);
+});
+
+it('searches brand + domain, filters, and sorts most-urgent first (acceptance 11)', function () {
+    $urgent = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://gurus.example', 'status' => SiteStatus::Active]);
+    Content::factory()->create(['site_id' => $urgent->id, 'status' => ContentStatus::RenderFailed]); // Tier 1 → top
+    $calm = Site::factory()->create(['brand_name' => 'Calm Co', 'domain_url' => 'https://calm.example', 'status' => SiteStatus::Active]);
+    Review::factory()->create(['site_id' => $calm->id, 'status' => ReviewStatus::Pending]); // Tier 3
+    Site::factory()->create(['brand_name' => 'Onb Co', 'domain_url' => 'https://onb.example', 'status' => SiteStatus::Onboarding]);
+
+    $board = app(LobbyBoard::class);
+
+    // Search by domain fragment.
+    expect($board->cards('gurus')->pluck('site.id')->all())->toBe([$urgent->id]);
+    // Search by brand fragment.
+    expect($board->cards('Calm')->pluck('site.id')->all())->toBe([$calm->id]);
+    // Attention filter drops the clean onboarding card; urgent (Tier 1) sorts before calm (Tier 3).
+    $attention = $board->cards('', 'attention')->pluck('site.id')->all();
+    expect($attention)->toBe([$urgent->id, $calm->id]);
+    // Onboarding filter keeps only the onboarding card.
+    expect($board->cards('', 'onboarding')->every(fn ($c) => $c->state === LobbyCardState::Onboarding))->toBeTrue();
+});
