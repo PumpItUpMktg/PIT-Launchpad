@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\MarketTier;
 use App\Models\Concerns\BelongsToSite;
+use Carbon\CarbonInterface;
 use Database\Factories\MarketFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * @property MarketTier $tier
+ * @property bool $on_hold advisory hold (no publish effect) — set/released by an operator
+ * @property CarbonInterface|null $release_at the target release date for a held market
  */
 class Market extends Model
 {
@@ -38,6 +41,15 @@ class Market extends Model
         return $this->belongsToMany(MediaAsset::class, 'media_asset_market');
     }
 
+    /**
+     * A held market whose target release date has passed — the operator meant to release it and hasn't
+     * (release is manual). This is what the lobby's Tier-2 "held market past its release date" badge flags.
+     */
+    public function releaseOverdue(): bool
+    {
+        return $this->on_hold && $this->release_at !== null && $this->release_at->isPast();
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -48,6 +60,8 @@ class Market extends Model
             'demographics' => 'array',
             'neighborhoods' => 'array',
             'is_covered' => 'boolean',
+            'on_hold' => 'boolean',
+            'release_at' => 'datetime',
         ];
     }
 }
