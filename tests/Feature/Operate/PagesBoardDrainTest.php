@@ -41,7 +41,8 @@ it('shows the worker-down banner with the drain button and the CLI hint', functi
 });
 
 it('reports nothing to drain when no pages are in flight', function () {
-    Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    session(['guided_site_id' => $site->id]); // the locked working tenant (the gate/switcher sets this in prod)
 
     Livewire::test(OperateServicePages::class)
         ->call('drainStuckPages')
@@ -50,6 +51,7 @@ it('reports nothing to drain when no pages are in flight', function () {
 
 it('attempts each stuck page synchronously and reports the count', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    session(['guided_site_id' => $site->id]); // the locked working tenant (the gate/switcher sets this in prod)
 
     // A page stuck at "publishing" with a draft — the exact incident shape. No verified WP connection in
     // the test env, so PostPublisher can't push; the drain still runs and honestly reports 0 published.

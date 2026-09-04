@@ -17,6 +17,7 @@ beforeEach(function (): void {
     Filament::setCurrentPanel('admin');
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $this->site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    session(['guided_site_id' => $this->site->id]); // the locked working tenant (the gate/switcher sets this in prod)
     $this->location = Location::factory()->create(['site_id' => $this->site->id, 'name' => 'Bedminster', 'gbp_url' => 'https://g/?cid=1']);
     LocationNapProfile::factory()->create(['site_id' => $this->site->id, 'location_id' => $this->location->id, 'business_name' => 'ACME', 'categories' => null]);
 });

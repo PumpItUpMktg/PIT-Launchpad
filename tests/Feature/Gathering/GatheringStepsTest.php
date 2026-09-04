@@ -254,7 +254,8 @@ it('review surfaces render populated pre-provenance records cleanly (the SPG sta
         ->assertSee('Norristown, PA')
         ->assertDontSee('from interview'); // no provenance rows → no chips
 
-    Livewire::test(BusinessStep::class)->assertOk()->assertSee('SPG Staging');
+    // The brand loads into the form field (it used to be asserted via the now-removed site-selector option).
+    Livewire::test(BusinessStep::class)->assertOk()->assertSet('brandName', 'SPG Staging');
     Livewire::test(VoiceStep::class)->assertOk();
     Livewire::test(ServicesStep::class)->assertOk();
     Livewire::test(ConnectionsStep::class)->assertOk();
