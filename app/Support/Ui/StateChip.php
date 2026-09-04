@@ -2,6 +2,7 @@
 
 namespace App\Support\Ui;
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\ReviewFlag;
 use App\Enums\SiteStatus;
@@ -20,14 +21,17 @@ use BackedEnum;
 class StateChip
 {
     /**
-     * Resolve a state to its chip label + tone.
+     * Resolve a state to its chip label + tone. An optional {@see ContentKind} refines a content
+     * state where the kind changes the wording — a `candidate` page reads "Planned" (it is a
+     * scheduled build, not a reactive news candidate); posts keep "Candidate". Display-only: the
+     * stored status is unchanged, so the kind is ignored for every other state and vocabulary.
      *
      * @return array{label: string, tone: ChipTone}
      */
-    public static function resolve(BackedEnum|string $state): array
+    public static function resolve(BackedEnum|string $state, ?ContentKind $kind = null): array
     {
         if ($state instanceof ContentStatus) {
-            return self::content($state);
+            return self::content($state, $kind);
         }
         if ($state instanceof SiteStatus) {
             return self::site($state);
@@ -40,14 +44,19 @@ class StateChip
         }
 
         // A raw string — try the two status vocabularies by value, else a neutral fallback.
-        return ContentStatus::tryFrom($state) !== null ? self::content(ContentStatus::from($state))
+        return ContentStatus::tryFrom($state) !== null ? self::content(ContentStatus::from($state), $kind)
             : (SiteStatus::tryFrom($state) !== null ? self::site(SiteStatus::from($state))
                 : ['label' => self::humanize($state), 'tone' => ChipTone::Neutral]);
     }
 
     /** @return array{label: string, tone: ChipTone} */
-    private static function content(ContentStatus $s): array
+    private static function content(ContentStatus $s, ?ContentKind $kind = null): array
     {
+        // A scheduled PAGE build in the pipeline reads "Planned", not "Candidate" (display-only).
+        if ($s === ContentStatus::Candidate && $kind === ContentKind::Page) {
+            return ['label' => 'Planned', 'tone' => ChipTone::Info];
+        }
+
         return match ($s) {
             ContentStatus::Candidate => ['label' => 'Candidate', 'tone' => ChipTone::Info],
             ContentStatus::Scored => ['label' => 'Scored', 'tone' => ChipTone::Info],

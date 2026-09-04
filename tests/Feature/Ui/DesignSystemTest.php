@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\ReviewFlag;
 use App\Enums\SiteStatus;
@@ -53,6 +54,26 @@ it('accepts a raw status string and degrades unknown values to a neutral humaniz
     $unknown = StateChip::resolve('some_made_up_state');
     expect($unknown['tone'])->toBe(ChipTone::Neutral)
         ->and($unknown['label'])->toBe('Some made up state'); // never a crash, never an unstyled leak
+});
+
+it('reads a candidate PAGE as "Planned" but a candidate post stays "Candidate" (display-only)', function () {
+    // A page candidate is a scheduled build, not a reactive news candidate — it reads "Planned".
+    expect(StateChip::resolve(ContentStatus::Candidate, ContentKind::Page)['label'])->toBe('Planned')
+        ->and(StateChip::resolve('candidate', ContentKind::Page)['label'])->toBe('Planned')
+        // A post candidate keeps the reactive-pipeline wording.
+        ->and(StateChip::resolve(ContentStatus::Candidate, ContentKind::Post)['label'])->toBe('Candidate')
+        // No kind ⇒ the original wording (backward-compatible with every existing call site).
+        ->and(StateChip::resolve(ContentStatus::Candidate)['label'])->toBe('Candidate')
+        // The kind only touches the candidate wording — every other state ignores it, tone unchanged.
+        ->and(StateChip::resolve(ContentStatus::Candidate, ContentKind::Page)['tone'])->toBe(ChipTone::Info)
+        ->and(StateChip::resolve(ContentStatus::Published, ContentKind::Page)['label'])->toBe('Published');
+});
+
+it('the chip component renders "Planned" for a page candidate via the kind prop', function () {
+    $html = Blade::render('<x-lp.chip :for="$s" :kind="$k" />', [
+        's' => ContentStatus::Candidate, 'k' => ContentKind::Page,
+    ]);
+    expect($html)->toContain('Planned')->not->toContain('Candidate');
 });
 
 // ── The chip component ───────────────────────────────────────────────────────────────────────
