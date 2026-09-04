@@ -60,10 +60,10 @@ class EnsureTenantSelected
         return redirect(SiteResource::getUrl('index'));
     }
 
-    /** The Portfolio picker + create-site + logout stay reachable with no tenant selected. */
+    /** The Lobby + Portfolio picker + create-site + logout stay reachable with no tenant selected. */
     private function allowlisted(string $routeName): bool
     {
-        foreach (['resources.sites.index', 'resources.sites.create', '.auth.logout'] as $needle) {
+        foreach (['pages.lobby', 'resources.sites.index', 'resources.sites.create', '.auth.logout'] as $needle) {
             if (str_contains($routeName, $needle)) {
                 return true;
             }

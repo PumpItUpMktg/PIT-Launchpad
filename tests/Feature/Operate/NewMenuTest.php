@@ -24,14 +24,15 @@ it('the final menu carries ONLY the newly designed surfaces, in cutover order', 
     $m = app(NewMenu::class)->build();
     $groups = collect($m['menu'])->keyBy('group');
 
-    // The FINAL IA (nav-final): Top level (Dashboard · Portfolio · Setup) → Operate (the pages boards).
-    // The nine Setup steps and the Advanced build-time tools are off-menu now (they inventory as
+    // The FINAL IA (nav-final): Top level (Dashboard · Lobby · Portfolio · Setup) → Operate (the pages
+    // boards). The nine Setup steps and the Advanced build-time tools are off-menu now (they inventory as
     // drilldowns), so the sidebar is just the two keeper groups.
     expect(collect($m['menu'])->pluck('group')->all())->toBe(['Top level', 'Operate']);
 
-    // Top level: the three entries, in cutover order (Dashboard, Portfolio, Setup).
+    // Top level: the keeper entries. The new Lobby (relay 3) is the cross-tenant home — Portfolio/Overview
+    // fold into it at the PR 5 nav cutover.
     expect(collect($groups['Top level']['items'])->pluck('label')->all())
-        ->toBe(['Dashboard', 'Portfolio', 'Setup']);
+        ->toBe(['Dashboard', 'Lobby', 'Portfolio', 'Setup']);
 
     // Operate: the pages boards + the internal-link audit surface (Portfolio + Dashboard are Top level).
     expect(collect($groups['Operate']['items'])->pluck('label')->all())

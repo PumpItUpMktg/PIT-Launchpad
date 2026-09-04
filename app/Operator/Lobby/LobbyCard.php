@@ -86,4 +86,19 @@ final class LobbyCard
     {
         return $this->badges !== [];
     }
+
+    public function isBlocked(): bool
+    {
+        return $this->state === LobbyCardState::Blocked;
+    }
+
+    public function isOnboarding(): bool
+    {
+        return $this->state === LobbyCardState::Onboarding;
+    }
+
+    public function isClean(): bool
+    {
+        return $this->state === LobbyCardState::ActiveClean;
+    }
 }
