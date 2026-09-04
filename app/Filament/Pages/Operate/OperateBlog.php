@@ -72,7 +72,7 @@ class OperateBlog extends OperatePage
         // silo filter stays sticky per session. No tenant switcher on this page.
         $this->siteFilter = app(ActiveTenant::class)->id();
         $this->siloFilter = $this->siloFilter ?? session('operate_blog_silo');
-        if (! in_array($this->tab, ['candidates', 'review', 'published'], true)) {
+        if (! in_array($this->tab, ['candidates', 'review', 'approved', 'published'], true)) {
             $this->tab = 'candidates';
         }
     }
@@ -84,7 +84,7 @@ class OperateBlog extends OperatePage
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['candidates', 'review', 'published'], true)) {
+        if (in_array($tab, ['candidates', 'review', 'approved', 'published'], true)) {
             $this->tab = $tab;
         }
     }
@@ -111,6 +111,12 @@ class OperateBlog extends OperatePage
     public function getReviewProperty(): array
     {
         return app(BlogBoard::class)->review($this->siteFilter, $this->filterSilo());
+    }
+
+    /** Approved posts queued to publish (approved → rendering → pushing), not yet live. @return list<array<string, mixed>> */
+    public function getApprovedProperty(): array
+    {
+        return app(BlogBoard::class)->approved($this->siteFilter, $this->filterSilo());
     }
 
     /** @return list<array<string, mixed>> */

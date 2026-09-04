@@ -141,6 +141,16 @@ rule). The five legacy boards retire from nav, routes kept.
 
 ![Live board — type filter + shared card](img/5e-live-board.png)
 
+### Shipped: 5f — Posts "Approved" tab
+
+The Posts (blog) board gains the missing **Approved** tab (Candidates · Review ·
+**Approved** · Published) — approved-and-queued-to-publish posts get their own
+tab, backed by the pre-existing `BlogBoard::approved()`. Each card shows its
+publish-flow state (queued / rendering image / pushing to WordPress) + a stalled-
+worker flag with the per-post `publishNowSync` escape hatch.
+
+![Posts board — Approved tab](img/5f-posts-approved-tab.png)
+
 ## Sequencing (honoring the standing UI-PR rules)
 
 Building 6 new surfaces + 5 tab-consolidations + the regroup as one PR cannot
