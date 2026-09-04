@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @include('filament.operate.partials.towns-tabs')
     <div class="lv-wrap">
         @include('filament.live.partials.shell-top', ['subtitle' => 'Every published geo surface, grouped by the physical location that serves it. Regenerating or taking a page down moves it back to the Grow board automatically.'])
 

@@ -153,12 +153,28 @@ worker flag with the per-post `publishNowSync` escape hatch.
 
 ## 5g — Towns consolidation (spec)
 
-**Towns → its own board + Tier progression + Link plans as tabs.** The three
-per-surface pages (`LocationsSetup` "Service area", `OperateTierProgression`,
-`OperateLinkPlans`) collapse into one tabbed **Towns** surface. Per the 5e steer,
-the orphan-assignment actions **`assignLocation` / `reassign`** (currently on the
-Live Locations board) land **here** — they are served-town assignment, not
-live-page actions. The legacy per-surface pages retire from nav, routes kept.
+**Towns = four tabs: Service area · Towns board · Tier progression · Link plans**
+— the same coverage lifecycle at different stages, in one place.
+
+- **Service area** — `LocationsSetup`'s coverage editor (`ManagesLocationCoverage`:
+  which towns should get pages). **Folds onto the locked `ActiveTenant`** — drops
+  its own cross-tenant site picker (`getSiteOptionsProperty`/`updatedSiteId`),
+  correcting one of the last per-page tenant selectors that contradicts the 2a-2/
+  2c lock.
+- **Towns board** — the grouped-town display from `LiveLocations`
+  (`LiveBoards::locations()`: published town pages under their location + orphans).
+  **`assignLocation` / `reassign` live on THIS tab** (ported from `LiveLocations`,
+  not Service area) — the assigner (`TownLocationAssigner`, protected) is reused
+  as-is.
+- **Tier progression** — `OperateTierProgression` (`TierProgression::forSite`).
+- **Link plans** — `OperateLinkPlans` (propose / approveAll / rejectItem / applyPlan).
+
+All four tabs share the one locked tenant. Legacy per-surface pages retire from
+nav, routes kept.
+
+**Tier-gate check (must confirm):** the Service-area page-selection is the
+operator `page_selected` writer surface the tiered-rollout gate applies to — a
+locked tier must render as locked in the editor, not only in Tier progression.
 
 ## Sequencing (honoring the standing UI-PR rules)
 

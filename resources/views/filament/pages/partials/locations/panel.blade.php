@@ -97,13 +97,19 @@
             @foreach ($tierMeta as $key => $meta)
                 @php $towns = $activePanel['groups'][$key] ?? []; @endphp
                 @if (count($towns) > 0)
-                    @php $selInTier = collect($towns)->where('page_selected', true)->count(); @endphp
+                    @php
+                        $selInTier = collect($towns)->where('page_selected', true)->count();
+                        $tierLock = $activePanel['tier_locks'][$key] ?? ['locked' => false, 'reason' => ''];
+                    @endphp
                     <div x-data="{ open: true }" class="lp-tgroup" wire:key="lp-tgroup-{{ $activeLoc->id }}-{{ $key }}">
                         <div class="lp-tgroup-head">
                             <button type="button" x-on:click="open = ! open" class="lp-tgroup-title">
                                 <span class="lp-sw" style="background: {{ $meta['color'] }}"></span>
                                 {{ $meta['label'] }}
                                 <span class="lp-tgroup-frac">{{ $selInTier }} / {{ count($towns) }}</span>
+                                @if ($tierLock['locked'])
+                                    <span title="{{ $tierLock['reason'] }}" style="font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:#B5731A;background:#FBEFD9;border-radius:20px;padding:2px 8px;margin-left:6px">🔒 Locked</span>
+                                @endif
                             </button>
                             <div class="lp-tgroup-actions">
                                 <button type="button" wire:click="selectTier('{{ $activeLoc->id }}', '{{ $key }}', true)" class="lp-link">Select all</button>

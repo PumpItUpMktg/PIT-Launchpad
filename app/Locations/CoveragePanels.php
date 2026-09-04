@@ -2,6 +2,7 @@
 
 namespace App\Locations;
 
+use App\Enums\SizeTier;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -13,17 +14,24 @@ use Illuminate\Support\Collection;
  * of truth — so the hero, tab badges, and bottom bar can never disagree) and shapes them into
  * site totals + one panel per location, with towns grouped by size tier. The page is thin over
  * this; selection toggles write straight to coverage_areas and this re-reads.
+ *
+ * Each panel also carries the {@see TierGate} lock state per tier band (5g), so a locked tier reads as
+ * locked in the Service-area editor — not only on the Tier-progression board. Advisory: the lock gates
+ * BUILDING (a locked tier's selected towns don't materialize until it unlocks), never the operator's
+ * selection, so the badge is informational.
  */
 final class CoveragePanels
 {
     /** Tier display order; 'ungrouped' (size_tier null) always last. */
     public const TIERS = ['major', 'large', 'medium', 'small', 'ungrouped'];
 
+    public function __construct(private readonly TierGate $gate) {}
+
     /**
      * @param  Collection<int, Location>  $locations
      * @return array{
      *     totals: array{covered: int, selected: int, overlap: int, tiers: array<string, int>},
-     *     panels: array<string, array{town_count: int, selected_count: int, tiers: array<string, int>, groups: array<string, list<array<string, mixed>>>}>
+     *     panels: array<string, array{town_count: int, selected_count: int, tiers: array<string, int>, groups: array<string, list<array<string, mixed>>>, tier_locks: array<string, array{locked: bool, reason: string}>}>
      * }
      */
     public function build(Site $site, Collection $locations): array
@@ -51,10 +59,27 @@ final class CoveragePanels
                 'selected_count' => $own->where('page_selected', true)->count(),
                 'tiers' => $this->tierCounts($own),
                 'groups' => $this->groups($own),
+                'tier_locks' => $this->tierLocks($site, (string) $location->id),
             ];
         }
 
         return ['totals' => $totals, 'panels' => $panels];
+    }
+
+    /**
+     * The tiered-rollout lock state for each tier band of one location (its towns' market = itself).
+     *
+     * @return array<string, array{locked: bool, reason: string}>
+     */
+    private function tierLocks(Site $site, string $locationId): array
+    {
+        $locks = [];
+        foreach (self::TIERS as $tier) {
+            $status = $this->gate->status($site, $locationId, $tier === 'ungrouped' ? null : SizeTier::from($tier));
+            $locks[$tier] = ['locked' => ! $status->buildable, 'reason' => $status->reason];
+        }
+
+        return $locks;
     }
 
     /**
