@@ -123,7 +123,9 @@ it('path: ServiceResource create form defaults referral_mode to the tenant setti
 
     Livewire::test(CreateService::class)->assertFormSet(['referral_mode' => true]);
 
-    // And with the default off, the create form is off (regression).
+    // And with the default off, the create form is off (regression). Seed the second tenant with the
+    // lock cleared — its ConversionConfig can't be created while locked into the first tenant.
+    CurrentSite::clear();
     $off = refDefaultSite(false);
     CurrentSite::set($off->id);
     Livewire::test(CreateService::class)->assertFormSet(['referral_mode' => false]);

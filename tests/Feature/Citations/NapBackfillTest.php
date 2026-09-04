@@ -57,6 +57,7 @@ test('the backfill command can scope to one site', function (): void {
     $a = backfillGbpLocation($siteA, 'A location');
     CurrentSite::set($siteB->id);
     $b = backfillGbpLocation($siteB, 'B location');
+    CurrentSite::clear(); // the command runs in a console context (no lock), like production
 
     $this->artisan('launchpad:backfill-naps', ['--site' => $siteA->id])->assertSuccessful();
 
