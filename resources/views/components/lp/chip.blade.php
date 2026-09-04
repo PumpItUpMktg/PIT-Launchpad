@@ -1,4 +1,4 @@
-@props(['for' => null, 'tone' => null, 'label' => null])
+@props(['for' => null, 'tone' => null, 'label' => null, 'kind' => null])
 {{-- The ONE state chip. Pass a known state (`:for="$content->status"` — a ContentStatus / SiteStatus
      / ReviewFlag / raw string) and it resolves label + tone through App\Support\Ui\StateChip, or pass
      an explicit `tone` + label/slot for a one-off. There is no per-page color choice — the five tones
@@ -8,7 +8,7 @@
     $__tone = null;
     $__label = $label;
     if ($for !== null) {
-        $__r = \App\Support\Ui\StateChip::resolve($for);
+        $__r = \App\Support\Ui\StateChip::resolve($for, $kind);
         $__tone = $__r['tone'];
         $__label ??= $__r['label'];
     } else {

@@ -66,7 +66,9 @@ test('a planned page with no composer (no kit) shows "composer pending", never G
         ->assertTableActionHidden('generate', $page)         // never fakes a build
         ->assertTableActionVisible('composer_pending', $page);
 
-    expect($page->buildStateLabel())->toBe('Ready to generate');
+    // A candidate page reads "Planned" (the locked candidate→planned display); the action stays
+    // composer_pending, never a fake Generate.
+    expect($page->buildStateLabel())->toBe('Planned');
 });
 
 test('an approved page shows Publish (the compose-and-push), which enqueues PublishContent', function () {

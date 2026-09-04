@@ -176,7 +176,12 @@ class Content extends Model
                 ContentStatus::RenderFailed, ContentStatus::PublishFailed => 'Publish failed',
                 default => 'Draft ready for review',
             },
-            default => 'Ready to generate', // awaiting / planned (materialized, no content)
+            // Awaiting / planned (materialized, no content). A scheduled PAGE build reads "Planned"
+            // (the locked candidate→planned display, in step with {@see \App\Support\Ui\StateChip});
+            // any other awaiting row keeps the action-oriented "Ready to generate".
+            default => $this->status === ContentStatus::Candidate && $this->kind === ContentKind::Page
+                ? 'Planned'
+                : 'Ready to generate',
         };
     }
 

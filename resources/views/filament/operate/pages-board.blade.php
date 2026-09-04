@@ -6,6 +6,22 @@
     <div class="lv-wrap">
         @include('filament.live.partials.shell-top', ['subtitle' => 'The whole '.strtolower(static::getNavigationLabel() ?? 'pages').' lifecycle on one board — work on top, live below. A page moves between the lanes by status alone.'])
 
+        {{-- Family tabs (core · service · town) — one Pages board, the active tab picks the family. --}}
+        @if (property_exists($this, 'tab'))
+            <style>
+                .lp-pgtabs { display:flex; gap:4px; margin:0 0 14px; border-bottom:1px solid var(--line,#e5e7eb); }
+                .lp-pgtab { appearance:none; background:none; border:0; border-bottom:2px solid transparent; padding:8px 14px; font-size:13.5px; font-weight:700; color:#64748b; cursor:pointer; }
+                .lp-pgtab:hover { color:#b45309; }
+                .lp-pgtab.on { color:#b45309; border-bottom-color:#f59e0b; }
+            </style>
+            <div class="lp-pgtabs" role="tablist">
+                @foreach (['core' => 'Core', 'service' => 'Service', 'town' => 'Town'] as $key => $label)
+                    <button type="button" role="tab" aria-selected="{{ $this->tab === $key ? 'true' : 'false' }}"
+                            class="lp-pgtab {{ $this->tab === $key ? 'on' : '' }}" wire:click="setTab('{{ $key }}')">{{ $label }}</button>
+                @endforeach
+            </div>
+        @endif
+
         {{-- Stalled-worker banner: publishing is async (Publish/Repush queue a job the worker runs). If the
              worker is down, approved pages sit at "publishing" forever — surface it here with the inline
              "Publish stuck pages now" drain, instead of it looking like a broken button. --}}
