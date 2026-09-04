@@ -137,5 +137,15 @@ the board.
 
 ![Pages board — tabs + Planned chip](img/5c-pages-tabs-planned.png)
 
+### Shipped: 5d — Reviews consolidation
+
+One "Reviews" surface: the review lifecycle as native `ListReviews::getTabs()` —
+**Awaiting approval** (pending) · **Needs market** (`needs_location`, the
+operator wording the Lobby shows as "reviews with no market") · **Published**.
+The bulk **Import** flow folds in as a header action linking to the dedicated
+`ReviewImportPage` (a full upload → map → preview → commit page, kept as a route).
+
+![Reviews board — tabs + import](img/5d-reviews-tabs.png)
+
 Confirm the sequence + how to fill the 6 GAP surfaces (build new vs. defer vs.
 point at nearest) before building 5c+.
