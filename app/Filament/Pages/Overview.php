@@ -66,7 +66,9 @@ class Overview extends Page
     public function getSitesProperty(): array
     {
         $metrics = app(PipelineMetrics::class);
-        $states = SetupState::query()->get()->keyBy('site_id');
+        // The operator triage board spans every tenant — drop the (now-active) SiteScope so it isn't
+        // narrowed to the locked tenant; each state is looked up against the permitted Site list below.
+        $states = SetupState::withoutGlobalScope(SiteScope::class)->get()->keyBy('site_id');
         $stepCount = count(SetupStep::setupSteps());
 
         $cards = [];

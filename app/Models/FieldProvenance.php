@@ -4,13 +4,15 @@ namespace App\Models;
 
 use App\Enums\ProvenanceState;
 use App\Gathering\Provenance;
+use App\Models\Concerns\BelongsToSite;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 
 /**
  * The provenance sidecar row (gathering relay): (model, field) → seeded|confirmed. A sidecar —
  * deliberately not columns sprinkled across every seedable table. Read/written through
- * {@see Provenance} only.
+ * {@see Provenance} only. Tenant-scoped ({@see BelongsToSite}): reads resolve a single row by
+ * model_id (always the locked tenant's model), so the context-aware SiteScope is a matching no-op.
  *
  * @property string $id
  * @property string $site_id
@@ -21,7 +23,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class FieldProvenance extends Model
 {
-    use HasUlids;
+    use BelongsToSite, HasUlids;
 
     protected $guarded = [];
 

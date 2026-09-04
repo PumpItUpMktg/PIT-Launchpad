@@ -3,16 +3,19 @@
 namespace App\Models;
 
 use App\Enums\SetupStep;
+use App\Filament\Pages\Overview;
+use App\Models\Concerns\BelongsToSite;
 use Database\Factories\SetupStateFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Per-site guided-setup progress: where the operator is (`current_step`) and the per-step
- * completion gates that unlock the next step, plus Step 4's build-config toggles. One row per
- * Site (read across tenants by the operator, so no site scope — keyed explicitly by site).
+ * completion gates that unlock the next step, plus Step 4's build-config toggles. One row per Site.
+ * Tenant-scoped ({@see BelongsToSite}): the context-aware SiteScope filters to the locked tenant in
+ * the panel; the all-sites triage board ({@see Overview}) drops the scope
+ * explicitly to read across tenants.
  *
  * @property string $id
  * @property string $site_id
@@ -37,15 +40,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SetupState extends Model
 {
     /** @use HasFactory<SetupStateFactory> */
-    use HasFactory, HasUlids;
+    use BelongsToSite, HasFactory, HasUlids;
 
     protected $guarded = [];
-
-    /** @return BelongsTo<Site, $this> */
-    public function site(): BelongsTo
-    {
-        return $this->belongsTo(Site::class);
-    }
 
     /** Whether a given step's completion gate is set. */
     public function isComplete(SetupStep $step): bool

@@ -4,14 +4,15 @@ namespace App\Models;
 
 use App\Enums\ArrangeFlagType;
 use App\Interview\Arrange\ArrangeFlag;
+use App\Models\Concerns\BelongsToSite;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 
 /**
  * A persisted auto-arrange flag (the durable twin of {@see ArrangeFlag}).
  * Written by a run (replace-on-run, per site) so the prune surface can render accept/dismiss
- * without re-running the embedding passes. Site-scoped by explicit `site_id` (operator panel
- * queries cross-tenant), not the global SiteScope.
+ * without re-running the embedding passes. Tenant-scoped ({@see BelongsToSite}): every prune/arrange
+ * read is site_id-filtered against the locked tenant, so the context-aware SiteScope matches.
  *
  * @property string $id
  * @property string $site_id
@@ -24,7 +25,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ArrangementFlag extends Model
 {
-    use HasUlids;
+    use BelongsToSite, HasUlids;
 
     protected $table = 'arrange_flags';
 

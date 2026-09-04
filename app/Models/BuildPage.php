@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\BuildSource;
 use App\Enums\BuildStatus;
+use App\Models\Concerns\BelongsToSite;
 use Database\Factories\BuildPageFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,8 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * One page in a site's build manifest — its source, content recipe, lifecycle status, build
- * priority, and review requirement. Read across tenants by the operator, so no site scope
- * (keyed explicitly by site).
+ * priority, and review requirement. Tenant-scoped ({@see BelongsToSite}): the context-aware
+ * SiteScope filters to the locked tenant in the panel and is a no-op in the cross-tenant lobby.
  *
  * @property string $id
  * @property string $site_id
@@ -30,15 +31,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class BuildPage extends Model
 {
     /** @use HasFactory<BuildPageFactory> */
-    use HasFactory, HasUlids;
+    use BelongsToSite, HasFactory, HasUlids;
 
     protected $guarded = [];
-
-    /** @return BelongsTo<Site, $this> */
-    public function site(): BelongsTo
-    {
-        return $this->belongsTo(Site::class);
-    }
 
     /** @return BelongsTo<Content, $this> */
     public function content(): BelongsTo

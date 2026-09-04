@@ -6,12 +6,14 @@ use App\Enums\EditReason;
 use App\Enums\UserRole;
 use App\Filament\Resources\ContentEditResource\Pages\ListContentEdits;
 use App\Models\ContentEdit;
+use App\Models\Scopes\SiteScope;
 use BackedEnum;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * The §7 admin tick — captured operator corrections, read-only, with a navigation count badge.
@@ -36,12 +38,21 @@ class ContentEditResource extends Resource
         return auth()->user()?->role === UserRole::Operator;
     }
 
-    /** The admin tick: how many corrections have been captured. */
+    /** The admin tick: how many corrections have been captured — across ALL tenants (read-across log). */
     public static function getNavigationBadge(): ?string
     {
-        $count = ContentEdit::query()->count();
+        $count = ContentEdit::withoutGlobalScope(SiteScope::class)->count();
 
         return $count > 0 ? (string) $count : null;
+    }
+
+    /**
+     * The §7 read-across signal log spans every tenant (it renders a Tenant column), so it drops the
+     * now-active SiteScope — otherwise it would silently collapse to the locked tenant's edits.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->withoutGlobalScope(SiteScope::class);
     }
 
     public static function table(Table $table): Table

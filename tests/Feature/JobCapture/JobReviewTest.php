@@ -12,12 +12,14 @@ use Illuminate\Support\Facades\Queue;
 
 test('the queue lists this site\'s review + captured jobs, review first, and counts only the review backlog', function () {
     $site = Site::factory()->create();
+    // Seed the other tenant's job BEFORE locking — you never create another tenant's data while locked in.
+    Job::factory()->create(['status' => JobStatus::Review, 'enhanced_description' => 'y']); // another tenant
+
     CurrentSite::set($site->id);
 
     $review = Job::factory()->create(['site_id' => $site->id, 'status' => JobStatus::Review, 'enhanced_description' => 'x']);
     Job::factory()->create(['site_id' => $site->id, 'status' => JobStatus::Captured]);
     Job::factory()->create(['site_id' => $site->id, 'status' => JobStatus::Approved]);   // decided — not queued
-    Job::factory()->create(['status' => JobStatus::Review, 'enhanced_description' => 'y']); // another tenant
 
     $queue = app(JobReviewQueue::class);
     $ids = $queue->jobs()->pluck('id');
