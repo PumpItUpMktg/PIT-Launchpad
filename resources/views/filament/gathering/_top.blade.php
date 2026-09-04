@@ -56,9 +56,5 @@
         <span class="g-chip {{ $r['state'] }}"><span class="dot"></span>{{ $r['label'] }}</span>
         <p class="g-sub">{{ $subtitle }}</p>
     </div>
-    <select class="g-select" wire:change="setSite($event.target.value)">
-        @foreach ($this->siteOptions as $id => $label)
-            <option value="{{ $id }}" @selected($id === $this->siteId)>{{ $label }}</option>
-        @endforeach
-    </select>
+    {{-- The working tenant is the locked ActiveTenant (Portfolio / topbar switcher); no per-page selector. --}}
 </div>

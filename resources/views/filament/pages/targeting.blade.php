@@ -33,13 +33,6 @@
             <div>
                 <p class="tg-sub">What the engine targets, silo by silo — each card is a silo with its keyword targets in queue order (your priority first, then opportunity). Promote/demote reorders the directed lane; a thin silo is flagged before it ever holds a lone page.</p>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <select class="tg-select" wire:change="setSite($event.target.value)">
-                    @foreach ($this->siteOptions as $id => $label)
-                        <option value="{{ $id }}" @selected($id === $this->siteId)>{{ $label }}</option>
-                    @endforeach
-                </select>
-            </div>
         </div>
 
         @php $board = $this->board; @endphp

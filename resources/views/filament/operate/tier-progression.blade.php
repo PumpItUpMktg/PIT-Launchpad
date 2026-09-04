@@ -45,11 +45,6 @@
                     <b>inbound-link count</b> on each pill is the leading signal: a town with zero inbound links
                     (shown red) won't be crawled quickly whatever its tier.</p>
             </div>
-            <select class="tp-select" wire:model.live="siteId">
-                @foreach ($this->siteOptions as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                @endforeach
-            </select>
         </div>
 
         @forelse ($this->progression as $market)

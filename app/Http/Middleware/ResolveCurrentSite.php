@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
  * auto-fill) resolve to a real tenant instead of being a no-op.
  *
  * Selection strategy: an explicit `X-Site-Id` request header wins (API/testing seam), otherwise the
- * operator's active working tenant ({@see ActiveTenant} — the `guided_site_id` session key). Registered
+ * operator's active working tenant ({@see ActiveTenant} — the active-tenant session key). Registered
  * on the admin panel AFTER {@see EnsureTenantSelected}, so the gate's single-site auto-select has already
  * chosen a tenant before this reads it. A request with neither leaves CurrentSite null (the lobby /
  * cross-tenant context), where the scopes stay no-ops by design.

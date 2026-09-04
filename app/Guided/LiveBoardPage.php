@@ -8,6 +8,7 @@ use App\Jobs\GeneratePage;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use App\Publishing\DeleteFromWordpress;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -21,8 +22,6 @@ use Illuminate\Support\Facades\Auth;
  * ReviewActions::publish, regenerate via the queued GeneratePage, take-down via
  * DeleteFromWordpress) — a page acted on here flows back to the Grow board by STATE, not by data
  * moves.
- *
- * @property-read array<string, string> $siteOptions
  */
 abstract class LiveBoardPage extends Page
 {
@@ -50,36 +49,14 @@ abstract class LiveBoardPage extends Page
 
     public function mount(): void
     {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('guided_site_id');
-
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-
-        if ($site !== null) {
-            session(['guided_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
+        // The working tenant is the locked ActiveTenant (Portfolio / topbar switcher) — Grow → Live
+        // keeps the same tenant. No per-board site selection.
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     public function getSite(): ?Site
     {
         return $this->siteId === null ? null : Site::query()->find($this->siteId);
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
-    }
-
-    /** Switch the working site (session-persisted, shared with the guided flow). */
-    public function setSite(string $siteId): void
-    {
-        if (Site::query()->whereKey($siteId)->exists()) {
-            session(['guided_site_id' => $siteId]);
-            $this->siteId = $siteId;
-        }
     }
 
     /** Re-push the live page to WordPress — §2's idempotent compose-and-push (same URL, same post). */

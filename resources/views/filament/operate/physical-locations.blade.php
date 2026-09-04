@@ -108,11 +108,6 @@
             <div>
                 <p class="pl-sub">Every location and the area it serves — the dispatch points the engine builds from. Overlap between locations is flagged per town (goal: zero). Soft rule, not a wall: a location should serve the county it sits in and that county's towns. <a href="{{ $this->serviceAreaUrl() }}" wire:navigate>Edit territory</a> · <a href="{{ $this->addLocationUrl() }}" wire:navigate>Add a location (GBP import)</a>.</p>
             </div>
-            <select class="pl-select" wire:change="setSite($event.target.value)">
-                @foreach ($this->siteOptions as $id => $label)
-                    <option value="{{ $id }}" @selected($id === $this->siteId)>{{ $label }}</option>
-                @endforeach
-            </select>
         </div>
 
         <div class="pl-tiles">

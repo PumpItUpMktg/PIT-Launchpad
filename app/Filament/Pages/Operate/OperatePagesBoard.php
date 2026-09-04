@@ -20,6 +20,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PagesBoard;
 use App\Operate\QueueHealth;
+use App\Operator\ActiveTenant;
 use App\Publishing\DeleteFromWordpress;
 use App\Publishing\Links\HubSpokeGuard;
 use App\Publishing\PostPublisher;
@@ -36,7 +37,6 @@ use Illuminate\Support\Facades\Auth;
  * lanes is state-driven. Site-scoped with the shared working-site session.
  *
  * @property-read array<string, mixed> $board
- * @property-read array<string, string> $siteOptions
  * @property-read array<string, bool> $sources
  */
 abstract class OperatePagesBoard extends OperatePage
@@ -63,16 +63,9 @@ abstract class OperatePagesBoard extends OperatePage
 
     public function mount(): void
     {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('guided_site_id');
-
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-
-        if ($site !== null) {
-            session(['guided_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
+        // The working tenant is the locked ActiveTenant (Portfolio / topbar switcher), shared with
+        // Grow / Live / Blog — never a per-board site selection.
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     /** Ceiling on one inline-drain click so a huge backlog can't time out the web request. */
@@ -181,24 +174,9 @@ abstract class OperatePagesBoard extends OperatePage
             ->send();
     }
 
-    /** Switch the working site (session-persisted, shared with Grow/Live/Blog). */
-    public function setSite(string $siteId): void
-    {
-        if (Site::query()->whereKey($siteId)->exists()) {
-            session(['guided_site_id' => $siteId]);
-            $this->siteId = $siteId;
-        }
-    }
-
     public function getSite(): ?Site
     {
         return $this->siteId === null ? null : Site::query()->find($this->siteId);
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
     }
 
     /** @return array<string, mixed> */

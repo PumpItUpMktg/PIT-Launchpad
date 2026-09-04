@@ -4,6 +4,7 @@ namespace App\Filament\Pages\Operate;
 
 use App\Models\Site;
 use App\Operate\TierProgression;
+use App\Operator\ActiveTenant;
 
 /**
  * Operate · Tier progression — the tiered-rollout board. Town pages grouped by MARKET → TIER band → town
@@ -13,7 +14,6 @@ use App\Operate\TierProgression;
  * {@see TierProgression}; selection/publish live on the Locations and Location-pages boards.
  *
  * @property-read list<array<string, mixed>> $progression
- * @property-read array<string, string> $siteOptions
  */
 class OperateTierProgression extends OperatePage
 {
@@ -29,23 +29,8 @@ class OperateTierProgression extends OperatePage
 
     public function mount(): void
     {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('guided_site_id');
-
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-
-        if ($site !== null) {
-            session(['guided_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
-    }
-
-    public function updatedSiteId(?string $value): void
-    {
-        if (is_string($value) && $value !== '') {
-            session(['guided_site_id' => $value]);
-        }
+        // The working tenant is the locked ActiveTenant (Portfolio / topbar switcher); no per-page selection.
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     /** @return list<array<string, mixed>> */
@@ -54,11 +39,5 @@ class OperateTierProgression extends OperatePage
         $site = is_string($this->siteId) ? Site::query()->find($this->siteId) : null;
 
         return $site !== null ? app(TierProgression::class)->forSite($site) : [];
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
     }
 }

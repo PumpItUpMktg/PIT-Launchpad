@@ -7,6 +7,7 @@ use App\Filament\Pages\Guided\Business;
 use App\Filament\Resources\SiteResource;
 use App\Guided\StepGate;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
 
@@ -45,7 +46,7 @@ class CreateSite extends CreateRecord
         /** @var Site $site */
         $site = $this->record;
         app(StepGate::class)->state($site);          // initialize one continuous setup_state
-        session(['guided_site_id' => $site->id]);    // the guided flow resolves the working site
+        app(ActiveTenant::class)->set($site->id);    // lock the new tenant as the working tenant (the one writer)
     }
 
     protected function getRedirectUrl(): string

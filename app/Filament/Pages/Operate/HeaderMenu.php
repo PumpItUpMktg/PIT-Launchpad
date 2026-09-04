@@ -7,6 +7,7 @@ use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use App\Publishing\Chrome\SiteProfileAssembler;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
@@ -42,35 +43,13 @@ class HeaderMenu extends OperatePage
 
     public function mount(): void
     {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('guided_site_id');
-
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-
-        if ($site !== null) {
-            session(['guided_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
+        // The working tenant is the locked ActiveTenant (Portfolio / topbar switcher); no per-page selection.
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     public function getSite(): ?Site
     {
         return $this->siteId === null ? null : Site::query()->find($this->siteId);
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
-    }
-
-    public function setSite(string $siteId): void
-    {
-        if (Site::query()->whereKey($siteId)->exists()) {
-            session(['guided_site_id' => $siteId]);
-            $this->siteId = $siteId;
-        }
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\LinkPlanActions;
+use App\Operator\ActiveTenant;
 use App\Publishing\Links\LinkPlanBuilder;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
@@ -20,7 +21,6 @@ use Illuminate\Support\Facades\Auth;
  * {@see LinkPlanActions}.
  *
  * @property-read Collection<int, LinkPlan> $plans
- * @property-read array<string, string> $siteOptions
  * @property-read array<string, string> $marketOptions
  */
 class OperateLinkPlans extends OperatePage
@@ -41,20 +41,8 @@ class OperateLinkPlans extends OperatePage
 
     public function mount(): void
     {
-        $candidate = request()->query('site') ?? session('guided_site_id');
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-        if ($site !== null) {
-            session(['guided_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
-    }
-
-    public function updatedSiteId(?string $value): void
-    {
-        if (is_string($value) && $value !== '') {
-            session(['guided_site_id' => $value]);
-        }
+        // The working tenant is the locked ActiveTenant (Portfolio / topbar switcher); no per-page selection.
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     public function propose(): void
@@ -115,12 +103,6 @@ class OperateLinkPlans extends OperatePage
             ->with(['items.target', 'marketLocation'])
             ->latest()
             ->get();
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
     }
 
     /** @return array<string, string> */

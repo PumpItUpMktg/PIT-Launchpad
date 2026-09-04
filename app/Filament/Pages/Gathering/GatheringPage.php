@@ -6,6 +6,7 @@ use App\Enums\ProvenanceState;
 use App\Gathering\Provenance;
 use App\Gathering\SetupProgress;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 use Illuminate\Database\Eloquent\Model;
@@ -82,16 +83,9 @@ abstract class GatheringPage extends Page
 
     public function mount(): void
     {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('guided_site_id');
-
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-
-        if ($site !== null) {
-            session(['guided_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
+        // The working tenant is the locked ActiveTenant (Portfolio / topbar switcher), shared across
+        // Setup / Grow / Live / Targeting — never a per-page selection.
+        $this->siteId = app(ActiveTenant::class)->id();
 
         $this->afterSiteResolved();
     }
@@ -99,25 +93,9 @@ abstract class GatheringPage extends Page
     /** Hook for steps that load state once the working site is known. */
     protected function afterSiteResolved(): void {}
 
-    /** Switch the working site (session-persisted, shared with Grow/Live/Targeting). */
-    public function setSite(string $siteId): void
-    {
-        if (Site::query()->whereKey($siteId)->exists()) {
-            session(['guided_site_id' => $siteId]);
-            $this->siteId = $siteId;
-            $this->afterSiteResolved();
-        }
-    }
-
     public function getSite(): ?Site
     {
         return $this->siteId === null ? null : Site::query()->find($this->siteId);
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
     }
 
     /**

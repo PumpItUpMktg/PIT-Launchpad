@@ -5,6 +5,7 @@ namespace App\Guided;
 use App\Enums\SetupStep;
 use App\Models\SetupState;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 
@@ -17,7 +18,6 @@ use Filament\Pages\Page;
  * House pattern: lp- inline styles in the blade, no theme build.
  *
  * @property-read array<int, array{step: SetupStep, active: bool, done: bool, locked: bool, url: string|null}> $steps
- * @property-read array<string, string> $siteOptions
  */
 abstract class GuidedPage extends Page
 {
@@ -39,19 +39,9 @@ abstract class GuidedPage extends Page
         // Setup is a step process between tabs, not a gated wizard: every step is freely
         // reachable (each renders an honest empty state without its inputs). The StepGate still
         // TRACKS completion — the rail's done markers and SetupHome's landing read it — it just
-        // no longer redirects.
-        $this->resolveSite();
-    }
-
-    /** Switch the working site (session-persisted) and re-enter the flow at its current step. */
-    public function setSite(string $siteId): void
-    {
-        if (Site::query()->whereKey($siteId)->exists()) {
-            session(['guided_site_id' => $siteId]);
-            $this->siteId = $siteId;
-            $state = app(StepGate::class)->state(Site::query()->findOrFail($siteId));
-            $this->redirect($state->step()->pageClass()::getUrl());
-        }
+        // no longer redirects. The working tenant is the locked ActiveTenant (chosen in the
+        // Portfolio / topbar switcher), never a per-page selection.
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     public function getTitle(): string
@@ -69,14 +59,6 @@ abstract class GuidedPage extends Page
         $site = $this->getSite();
 
         return $site === null ? null : app(StepGate::class)->state($site);
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
     }
 
     /**
@@ -104,21 +86,5 @@ abstract class GuidedPage extends Page
         }
 
         return $rows;
-    }
-
-    private function resolveSite(): ?Site
-    {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('guided_site_id');
-
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-
-        if ($site !== null) {
-            session(['guided_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
-
-        return $site;
     }
 }
