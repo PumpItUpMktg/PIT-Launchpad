@@ -1,0 +1,96 @@
+<?php
+
+namespace App\Filament\Pages\Operate;
+
+use App\Filament\Pages\GeoActivityConsole;
+use App\Filament\Pages\GeoCoverageBoard;
+use App\Filament\Pages\LocationDashboard;
+use App\Filament\Pages\SetupHome;
+use App\Filament\Resources\ConnectionsResource;
+use App\Filament\Resources\ContentReviewResource;
+use App\Filament\Resources\KeywordResource;
+use App\Filament\Resources\PageResource;
+use App\Filament\Resources\PublishedContentResource;
+use App\Http\Middleware\EnsureTenantSelected;
+use App\Models\Site;
+use App\Operator\ActiveTenant;
+use App\Operator\SiteDashboard;
+use BackedEnum;
+use Filament\Pages\Page;
+
+/**
+ * The per-tenant operator dashboard (Relay 3 · PR 4) — the working home for the LOCKED tenant. Two
+ * grids: eight metric cards (Search + speed + index + rankings, every one a persisted read via
+ * {@see SiteDashboard} — zero live provider calls at render, acceptance 16), and eleven area cards
+ * that navigate to the tenant's working surfaces.
+ *
+ * Scoped to the {@see ActiveTenant} lock — it renders for whichever tenant the operator selected in the
+ * Lobby; there is no in-page site picker (the lock is the selection). Registered as a drill-down for now
+ * (reached by URL); the nav cutover (PR 5) makes it the post-Lobby landing and reconciles the Dashboard
+ * label with the cross-tenant {@see OperateDashboard}.
+ *
+ * @property-read array<string, mixed> $metrics
+ * @property-read list<array{label: string, url: string, desc: string, provisional?: bool}> $areas
+ */
+class TenantDashboard extends Page
+{
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-squares-2x2';
+
+    protected static bool $shouldRegisterNavigation = false; // drill-down until the PR 5 nav cutover
+
+    protected static ?string $slug = 'tenant-dashboard';
+
+    protected string $view = 'filament.operate.tenant-dashboard';
+
+    public function getTitle(): string
+    {
+        $site = app(ActiveTenant::class)->site();
+
+        return $site !== null ? (string) $site->brand_name : 'Dashboard';
+    }
+
+    public function getSite(): ?Site
+    {
+        return app(ActiveTenant::class)->site();
+    }
+
+    /**
+     * The metric cards for the locked tenant — persisted reads only. Null (empty grid) when no tenant is
+     * locked, which the hard gate ({@see EnsureTenantSelected}) normally prevents.
+     *
+     * @return array<string, mixed>
+     */
+    public function getMetricsProperty(): array
+    {
+        $site = $this->getSite();
+
+        return $site === null ? [] : app(SiteDashboard::class)->metrics($site);
+    }
+
+    /**
+     * The eleven area cards — the tenant's working surfaces. Site-scoped pages carry `?site=`; resources
+     * resolve the working tenant via the request site scope. Four targets are PROVISIONAL (marked): their
+     * definitive homes land with the nav IA (PR 5, the 4-group / 24-surface cutover) — Jobs, Markets,
+     * Measure, and Recover have no dedicated admin surface yet, so each points at its nearest neighbour.
+     *
+     * @return list<array{label: string, url: string, desc: string, provisional?: bool}>
+     */
+    public function getAreasProperty(): array
+    {
+        $site = app(ActiveTenant::class)->id();
+
+        return [
+            ['label' => 'Setup', 'url' => SetupHome::getUrl(['site' => $site]), 'desc' => 'Intake, brand & launch steps'],
+            ['label' => 'Posts', 'url' => OperateBlog::getUrl(['site' => $site]), 'desc' => 'The blog / news pipeline'],
+            ['label' => 'Pages', 'url' => PageResource::getUrl(), 'desc' => 'Service, location & core pages'],
+            ['label' => 'Jobs', 'url' => LocationDashboard::getUrl(['site' => $site]), 'desc' => 'Job-capture content', 'provisional' => true],
+            ['label' => 'Reviews', 'url' => ContentReviewResource::getUrl(), 'desc' => 'The review & approve queue'],
+            ['label' => 'Live', 'url' => PublishedContentResource::getUrl(), 'desc' => 'Published body of work'],
+            ['label' => 'Markets', 'url' => GeoCoverageBoard::getUrl(['site' => $site]), 'desc' => 'Territory & geo coverage', 'provisional' => true],
+            ['label' => 'Targeting', 'url' => KeywordResource::getUrl(), 'desc' => 'Keyword targets & gaps'],
+            ['label' => 'Measure', 'url' => GeoActivityConsole::getUrl(['site' => $site]), 'desc' => 'Visibility & analytics', 'provisional' => true],
+            ['label' => 'Settings', 'url' => ConnectionsResource::getUrl(), 'desc' => 'Connections & credentials'],
+            ['label' => 'Recover', 'url' => RebuildReadiness::getUrl(['site' => $site]), 'desc' => 'Rebuild & recovery readiness', 'provisional' => true],
+        ];
+    }
+}
