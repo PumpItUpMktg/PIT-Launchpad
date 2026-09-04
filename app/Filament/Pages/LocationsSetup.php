@@ -3,17 +3,19 @@
 namespace App\Filament\Pages;
 
 use App\Locations\Concerns\ManagesLocationCoverage;
-use App\Models\Site;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 
 /**
- * Locations (Settings) — the post-setup locations editor. The whole workspace (base locations,
- * counties served, tiered towns, coverage map) lives in {@see ManagesLocationCoverage}, shared
- * verbatim with the guided WhereYouWork step; this page adds the operator's cross-tenant site
- * picker around it.
+ * Locations (Settings) — the post-setup locations editor, and the "Service area" tab of the Towns
+ * surface (Relay 3 · PR 5g). The whole workspace (base locations, counties served, tiered towns,
+ * coverage map) lives in {@see ManagesLocationCoverage}, shared verbatim with the guided
+ * WhereYouWork step.
  *
- * @property-read array<string, string> $siteOptions
+ * Tenancy (5g): this reads the LOCKED {@see ActiveTenant} like every other console surface — the old
+ * per-page cross-tenant site picker is gone (it contradicted the 2a-2/2c lock). All Towns tabs share
+ * the one working tenant.
  */
 class LocationsSetup extends Page
 {
@@ -44,17 +46,21 @@ class LocationsSetup extends Page
 
     public ?string $siteId = null;
 
-    public function updatedSiteId(): void
+    public function mount(): void
     {
-        $this->reset(['manualLat', 'manualLng', 'computed', 'adding', 'addName', 'addAddress', 'addQuery', 'placeResults', 'activeTab']);
+        // The locked working tenant (Lobby / topbar), shared with every Towns tab — no per-page picker.
+        $this->siteId = app(ActiveTenant::class)->id();
         $this->enterCoverageWorkspace();
     }
 
     /**
-     * @return array<string, string>
+     * Re-initialise the workspace if the working tenant changes under the component (the operator
+     * relocks a different tenant). There is no in-page site picker any more — the tenant comes from
+     * {@see ActiveTenant} — this is just the reactive re-init hook.
      */
-    public function getSiteOptionsProperty(): array
+    public function updatedSiteId(): void
     {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
+        $this->reset(['manualLat', 'manualLng', 'computed', 'adding', 'addName', 'addAddress', 'addQuery', 'placeResults', 'activeTab']);
+        $this->enterCoverageWorkspace();
     }
 }

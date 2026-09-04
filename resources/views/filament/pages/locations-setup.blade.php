@@ -14,18 +14,8 @@
     @endphp
 
     <div class="lp-wrap">
-        <div class="lp-card">
-            <p class="lp-muted" style="margin:0 0 14px">Tell us where each location is and which counties you serve — then pick the towns you want location pages for.</p>
-            <label>
-                <span class="lp-label">Site</span>
-                <select wire:model.live="siteId" class="lp-select">
-                    <option value="">Select a site…</option>
-                    @foreach ($this->siteOptions as $id => $name)
-                        <option value="{{ $id }}">{{ $name }}</option>
-                    @endforeach
-                </select>
-            </label>
-        </div>
+        @include('filament.operate.partials.towns-tabs')
+        <p class="lp-muted" style="margin:0 0 14px">Tell us where each location is and which counties you serve — then pick the towns you want location pages for.</p>
 
         @if ($this->geocoderWarning)
             <div class="lp-warn">⚠ {{ $this->geocoderWarning }}</div>

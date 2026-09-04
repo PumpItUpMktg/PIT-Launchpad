@@ -151,6 +151,35 @@ worker flag with the per-post `publishNowSync` escape hatch.
 
 ![Posts board — Approved tab](img/5f-posts-approved-tab.png)
 
+## 5g — Towns consolidation (spec)
+
+**Towns = four tabs: Service area · Towns board · Tier progression · Link plans**
+— the same coverage lifecycle at different stages, in one place.
+
+- **Service area** — `LocationsSetup`'s coverage editor (`ManagesLocationCoverage`:
+  which towns should get pages). **Folds onto the locked `ActiveTenant`** — drops
+  its own cross-tenant site picker (`getSiteOptionsProperty`/`updatedSiteId`),
+  correcting one of the last per-page tenant selectors that contradicts the 2a-2/
+  2c lock.
+- **Towns board** — the grouped-town display from `LiveLocations`
+  (`LiveBoards::locations()`: published town pages under their location + orphans).
+  **`assignLocation` / `reassign` live on THIS tab** (ported from `LiveLocations`,
+  not Service area) — the assigner (`TownLocationAssigner`, protected) is reused
+  as-is.
+- **Tier progression** — `OperateTierProgression` (`TierProgression::forSite`).
+- **Link plans** — `OperateLinkPlans` (propose / approveAll / rejectItem / applyPlan).
+
+All four tabs share the one locked tenant. Legacy per-surface pages retire from
+nav, routes kept.
+
+**Tier-gate check (confirmed + fixed):** the gate is enforced downstream at build
+(`LocalRelevance` → `TierGate::allowsTown`), and was NOT visible in the editor.
+5g surfaces it — `CoveragePanels` carries per-tier-band `TierGate` lock state and
+the panel renders a "Locked — {reason}" badge. Advisory (gates building, not
+selection).
+
+![Towns — tab bar + tier-lock badges](img/5g-towns-tabs.png)
+
 ## Sequencing (honoring the standing UI-PR rules)
 
 Building 6 new surfaces + 5 tab-consolidations + the regroup as one PR cannot
