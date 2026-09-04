@@ -11,7 +11,7 @@ use App\Filament\Pages\LocationGeoGrid;
 use App\Filament\Pages\LocationsSetup;
 use App\Filament\Pages\Operate\InternalLinks;
 use App\Filament\Pages\Operate\OperateBlog;
-use App\Filament\Pages\Operate\OperateCorePages;
+use App\Filament\Pages\Operate\OperatePages;
 use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Resources\ConnectionsResource;
@@ -51,7 +51,7 @@ class ConsoleNav
                 ['label' => 'Dashboard', 'surface' => TenantDashboard::class, 'soon' => false],
                 ['label' => 'Setup', 'surface' => SetupEntry::class, 'soon' => false],
                 ['label' => 'Posts', 'surface' => OperateBlog::class, 'soon' => false],
-                ['label' => 'Pages', 'surface' => OperateCorePages::class, 'soon' => false],
+                ['label' => 'Pages', 'surface' => OperatePages::class, 'soon' => false],
                 ['label' => 'Jobs', 'surface' => null, 'soon' => true],
                 ['label' => 'Reviews', 'surface' => ReviewCaptureResource::class, 'soon' => false],
                 ['label' => 'Live', 'surface' => LiveServices::class, 'soon' => false],

@@ -288,7 +288,7 @@
                                             wire:confirm="Publish this location's stuck town pages right now, synchronously (no worker)?"
                                             wire:loading.attr="disabled" wire:target="drainNow('{{ $card['id'] }}')">Drain now</button>
                                     @endif
-                                    <a class="pl-btn" href="{{ \App\Filament\Pages\Operate\OperateLocationPages::getUrl() }}" wire:navigate>✨ Generate on Location pages →</a>
+                                    <a class="pl-btn" href="{{ \App\Filament\Pages\Operate\OperatePages::getUrl(['tab' => 'town']) }}" wire:navigate>✨ Generate on Location pages →</a>
                                 </div>
 
                                 {{-- Per-town review gate: each drafted, selected town — eyeball it in the
@@ -381,7 +381,7 @@
                                     wire:loading.attr="disabled" wire:target="takeDown('{{ $pg['content_id'] }}')">Take down</button>
                             @else
                                 {{-- No landing page yet — drafting lives on Location pages. --}}
-                                <a class="pl-btn primary" href="{{ \App\Filament\Pages\Operate\OperateLocationPages::getUrl() }}" wire:navigate>Generate on Location pages →</a>
+                                <a class="pl-btn primary" href="{{ \App\Filament\Pages\Operate\OperatePages::getUrl(['tab' => 'town']) }}" wire:navigate>Generate on Location pages →</a>
                             @endif
                         </div>
                     </div>
