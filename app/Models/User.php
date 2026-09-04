@@ -8,18 +8,21 @@ use App\Security\Capability;
 use App\Security\RoleCapabilities;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
+use Filament\Models\Contracts\HasTenants;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 
 /**
  * @property UserRole $role
  */
-class User extends Authenticatable implements FilamentUser
+class User extends Authenticatable implements FilamentUser, HasTenants
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasUlids, Notifiable;
@@ -126,6 +129,28 @@ class User extends Authenticatable implements FilamentUser
         }
 
         return in_array($site instanceof Site ? $site->id : $site, $permitted, true);
+    }
+
+    /**
+     * Filament tenancy adapter (2b): the operator "belongs to" the Sites they may see, so Filament's
+     * routing can scope the panel to /admin/{tenant}. This is a THIN adapter over the existing
+     * visibility model — {@see ActiveTenant} + {@see CurrentSite} remain the source of truth for the
+     * locked working tenant; Filament's tenant is only the URL segment, verified against the lock.
+     *
+     * @return Collection<int, Site>
+     */
+    public function getTenants(Panel $panel): Collection
+    {
+        $permitted = $this->permittedSiteIds();
+
+        return $permitted === null
+            ? Site::query()->get()
+            : Site::query()->whereIn('id', $permitted)->get();
+    }
+
+    public function canAccessTenant(Model $tenant): bool
+    {
+        return $tenant instanceof Site && $this->canSeeSite($tenant);
     }
 
     /**
