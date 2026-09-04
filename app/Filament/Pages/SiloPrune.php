@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Filament\Concerns\ManagesPruneSurface;
 use App\Filament\Pages\Gathering\SilosStep;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 
@@ -51,12 +52,9 @@ class SiloPrune extends Page
 
     public ?string $siteId = null;
 
-    /**
-     * @return array<string, string>
-     */
-    public function getSiteOptionsProperty(): array
+    public function mount(): void
     {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     protected function pruneSite(): ?Site

@@ -33,13 +33,6 @@
 
 <div class="gc">
     <div class="gc-controls">
-        @if (count($this->sites) > 1)
-            <select class="gc-select" wire:model.live="siteId" aria-label="Tenant">
-                @foreach ($this->sites as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                @endforeach
-            </select>
-        @endif
         @if (count($this->locations) > 1)
             <select class="gc-select" wire:model.live="locationId" aria-label="Brick-and-mortar location">
                 <option value="">All shops</option>

@@ -11,6 +11,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 
@@ -28,6 +29,8 @@ it('renders the GEO coverage board with the matrix + gap list for an operator', 
 
     $absent = GeoPrompt::create(['site_id' => $site->id, 'service_id' => $svc->id, 'coverage_area_id' => $town->id, 'size_tier' => 'major', 'intent' => GeoIntent::Cost->value, 'prompt' => 'repair cost in union', 'active' => true]);
     GeoSnapshot::create(['site_id' => $site->id, 'geo_prompt_id' => $absent->id, 'engine' => 'claude', 'cited' => false, 'competitors' => ['Rival Plumbing'], 'checked_at' => now()]);
+
+    app(ActiveTenant::class)->set($site->id);
 
     Livewire::test(GeoCoverageBoard::class)
         ->assertOk()

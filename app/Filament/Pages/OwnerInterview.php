@@ -14,6 +14,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\VoiceProfile;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -56,6 +57,11 @@ class OwnerInterview extends Page
 
     public ?string $siteId = null;
 
+    public function mount(): void
+    {
+        $this->siteId = app(ActiveTenant::class)->id();
+    }
+
     /** @var list<array{role: string, text: string}> */
     public array $messages = [];
 
@@ -80,14 +86,6 @@ class OwnerInterview extends Page
     public array $voice = [];
 
     public bool $persisted = false;
-
-    /**
-     * @return array<string, string>
-     */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
-    }
 
     public function getHasSavedProperty(): bool
     {

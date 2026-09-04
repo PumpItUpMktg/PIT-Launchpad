@@ -139,7 +139,7 @@ it('the Portfolio page is framed by the board shell + the standard header', func
 it('the Site Cockpit is framed by the board shell and shows its status chip', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]));
     $site = Site::factory()->create(['brand_name' => 'Drain Kings']);
-    session(['cockpit_site_id' => $site->id]);
+    app(ActiveTenant::class)->set($site->id);
 
     Livewire::test(SiteCockpit::class)
         ->assertOk()
