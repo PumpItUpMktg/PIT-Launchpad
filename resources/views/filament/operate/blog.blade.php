@@ -48,6 +48,7 @@
             <div class="ob-tabs">
                 <button class="ob-tab {{ $tab === 'candidates' ? 'on' : '' }}" wire:click="setTab('candidates')">Candidates</button>
                 <button class="ob-tab {{ $tab === 'review' ? 'on' : '' }}" wire:click="setTab('review')">Review</button>
+                <button class="ob-tab {{ $tab === 'approved' ? 'on' : '' }}" wire:click="setTab('approved')">Approved</button>
                 <button class="ob-tab {{ $tab === 'published' ? 'on' : '' }}" wire:click="setTab('published')">Published</button>
             </div>
             <select class="ob-select" wire:model.live="siloFilter">
@@ -208,6 +209,37 @@
                     </div>
                 @empty
                     <div class="ob-empty">Review queue is clear in this scope.</div>
+                @endforelse
+            </div>
+        @endif
+
+        {{-- ─── Approved — accepted, queued to publish (approved → rendering → pushing), not yet live.
+             They move to Published automatically as the worker finishes; a stalled one flags a down worker. --}}
+        @if ($tab === 'approved')
+            @php $approvedCards = $this->approved; $inflight = collect($approvedCards)->where('stalled', false)->isNotEmpty(); @endphp
+            <div class="ob-grid" @if ($inflight) wire:poll.visible.10s @endif>
+                @forelse ($approvedCards as $a)
+                    <div class="ob-card" wire:key="oba-{{ $a['id'] }}">
+                        <div class="ob-chips">
+                            <span class="ob-chip {{ $a['stalled'] ? 'danger' : '' }}">{{ $a['stalled'] ? 'stalled — worker down' : $a['state'] }}</span>
+                            <span class="ob-chip kw">{{ $a['keyword'] ?? 'reactive' }}</span>
+                            @if ($a['silo'])<span class="ob-chip">{{ $a['silo'] }}</span>@endif
+                            @if (! $siteFilter && $a['tenant'])<span class="ob-chip warn">{{ $a['tenant'] }}</span>@endif
+                        </div>
+                        <h3>{{ $a['title'] }}</h3>
+                        <div class="ob-excerpt">{{ $a['excerpt'] !== '' ? $a['excerpt'] : 'Queued — the worker renders the image and pushes to WordPress, then this moves to Published.' }}</div>
+                        @if ($a['stalled'])
+                            <div class="ob-actions">
+                                <button class="ob-btn primary" wire:click="publishNowSync('{{ $a['id'] }}')" wire:loading.attr="disabled" wire:target="publishNowSync('{{ $a['id'] }}')"
+                                        wire:confirm="Publish this stuck post now (synchronously)? Use only if the worker is down.">
+                                    <span wire:loading.remove wire:target="publishNowSync('{{ $a['id'] }}')">Publish now</span>
+                                    <span wire:loading wire:target="publishNowSync('{{ $a['id'] }}')"><span class="ob-spinner"></span> Publishing…</span>
+                                </button>
+                            </div>
+                        @endif
+                    </div>
+                @empty
+                    <div class="ob-empty">No posts are waiting to publish in this scope.</div>
                 @endforelse
             </div>
         @endif
