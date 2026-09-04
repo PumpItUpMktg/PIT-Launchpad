@@ -5,12 +5,12 @@ namespace App\Operator\Nav;
 use App\Filament\Pages\Citations\CitationsPortfolio;
 use App\Filament\Pages\Gathering\SetupEntry;
 use App\Filament\Pages\GeoActivityConsole;
-use App\Filament\Pages\Live\LiveServices;
 use App\Filament\Pages\LocationCoverage;
 use App\Filament\Pages\LocationGeoGrid;
 use App\Filament\Pages\LocationsSetup;
 use App\Filament\Pages\Operate\InternalLinks;
 use App\Filament\Pages\Operate\OperateBlog;
+use App\Filament\Pages\Operate\OperateLive;
 use App\Filament\Pages\Operate\OperatePages;
 use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
@@ -54,7 +54,7 @@ class ConsoleNav
                 ['label' => 'Pages', 'surface' => OperatePages::class, 'soon' => false],
                 ['label' => 'Jobs', 'surface' => null, 'soon' => true],
                 ['label' => 'Reviews', 'surface' => ReviewCaptureResource::class, 'soon' => false],
-                ['label' => 'Live', 'surface' => LiveServices::class, 'soon' => false],
+                ['label' => 'Live', 'surface' => OperateLive::class, 'soon' => false],
             ]],
             ['group' => 'Territory', 'items' => [
                 ['label' => 'Markets', 'surface' => null, 'soon' => true],
