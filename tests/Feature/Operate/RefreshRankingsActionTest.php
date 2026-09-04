@@ -19,6 +19,7 @@ beforeEach(function () {
 
 it('dispatches a one-time positions pull for the current site', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    session(['guided_site_id' => $site->id]); // the locked working tenant (the gate/switcher sets this in prod)
     Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair', 'status' => 'scored']);
 
     Livewire::test(OperateServicePages::class)
@@ -29,7 +30,8 @@ it('dispatches a one-time positions pull for the current site', function () {
 });
 
 it('does not dispatch when the site has no tracked keywords to pull', function () {
-    Site::factory()->create(['brand_name' => 'Empty', 'domain_url' => 'https://empty.example']);
+    $site = Site::factory()->create(['brand_name' => 'Empty', 'domain_url' => 'https://empty.example']);
+    session(['guided_site_id' => $site->id]); // the locked working tenant (the gate/switcher sets this in prod)
 
     Livewire::test(OperateServicePages::class)
         ->callAction('refreshRankings');

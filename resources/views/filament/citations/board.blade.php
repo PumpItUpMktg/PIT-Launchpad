@@ -1,16 +1,7 @@
 <x-filament-panels::page>
     @php($cards = $this->board)
 
-    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
-        <label style="display:flex;gap:8px;align-items:center;font-size:.875rem">
-            <span style="color:var(--gray-500)">Tenant</span>
-            <select wire:model="siteId" wire:change="setSite($event.target.value)"
-                    style="border:1px solid var(--gray-300);border-radius:.5rem;padding:.4rem .6rem;background:var(--gray-50)">
-                @foreach ($this->siteOptions as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                @endforeach
-            </select>
-        </label>
+    <div style="display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
         <x-filament::button wire:click="scanAll" icon="heroicon-o-magnifying-glass" wire:loading.attr="disabled">
             Scan all listings
         </x-filament::button>

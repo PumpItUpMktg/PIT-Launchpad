@@ -12,6 +12,7 @@ use App\Models\Location;
 use App\Models\LocationNapProfile;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use App\Support\CurrentSite;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -26,7 +27,6 @@ use Illuminate\Support\HtmlString;
  * moves in step with the rest of the admin. Cards launch a scan (per location, or all at once) on the worker.
  *
  * @property-read list<LocationCitationCard> $board
- * @property-read array<string, string> $siteOptions
  */
 class CitationsBoard extends Page
 {
@@ -97,36 +97,13 @@ class CitationsBoard extends Page
 
     public function mount(): void
     {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('guided_site_id');
-
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-
-        if ($site !== null) {
-            session(['guided_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
-    }
-
-    /** Switch the working tenant (session-persisted, shared with the rest of the admin). */
-    public function setSite(string $siteId): void
-    {
-        if (Site::query()->whereKey($siteId)->exists()) {
-            session(['guided_site_id' => $siteId]);
-            $this->siteId = $siteId;
-        }
+        // The working tenant is the locked ActiveTenant (Portfolio / topbar switcher); no per-page selection.
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     public function getSite(): ?Site
     {
         return $this->siteId === null ? null : Site::query()->find($this->siteId);
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
     }
 
     /** @return list<LocationCitationCard> */

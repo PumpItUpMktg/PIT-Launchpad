@@ -68,13 +68,7 @@
     <div>
         <p class="lv-sub">{{ $subtitle }}</p>
     </div>
-    <div style="display:flex; gap:10px; align-items:center;">
-        <select class="lv-select" wire:change="setSite($event.target.value)">
-            @foreach ($this->siteOptions as $id => $label)
-                <option value="{{ $id }}" @selected($id === $this->siteId)>{{ $label }}</option>
-            @endforeach
-        </select>
-    </div>
+    {{-- The working tenant is the locked ActiveTenant (Portfolio / topbar switcher); no per-board selector. --}}
 </div>
 
 @php $sources = $this->sources; @endphp

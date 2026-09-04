@@ -36,6 +36,7 @@ function cptCityPage(Site $site, Market $market): Content
 
 it('promotes a city to priority from the card and assigns its tracking keywords', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    session(['guided_site_id' => $site->id]); // the locked working tenant (the gate/switcher sets this in prod)
     Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Repair', 'silo_role' => ServiceSiloRole::Pillar->value]);
     $market = Market::factory()->create(['site_id' => $site->id, 'name' => 'Norristown', 'tier' => MarketTier::Coverage->value]);
     $page = cptCityPage($site, $market);
@@ -48,6 +49,7 @@ it('promotes a city to priority from the card and assigns its tracking keywords'
 
 it('demotes back to coverage and prunes the city keywords', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    session(['guided_site_id' => $site->id]); // the locked working tenant (the gate/switcher sets this in prod)
     Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Repair', 'silo_role' => ServiceSiloRole::Pillar->value]);
     $market = Market::factory()->create(['site_id' => $site->id, 'name' => 'Norristown', 'tier' => MarketTier::Priority->value]);
     $page = cptCityPage($site, $market);
@@ -63,6 +65,7 @@ it('demotes back to coverage and prunes the city keywords', function () {
 
 it('is a no-op for a page with no market (service/core pages)', function () {
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    session(['guided_site_id' => $site->id]); // the locked working tenant (the gate/switcher sets this in prod)
     $page = Content::factory()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page->value, 'page_type' => PageType::Service->value,
         'status' => ContentStatus::Published->value, 'market_id' => null, 'title' => 'Sump Pump Repair', 'slug' => 'sump-pump-repair',

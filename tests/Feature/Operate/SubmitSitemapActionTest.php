@@ -20,7 +20,8 @@ it('submits the sitemap to Google from the board header action', function () {
         'credentials' => ['access_token' => 'tok', 'refresh_token' => 'r', 'expires_at' => (new DateTimeImmutable('+1 hour'))->format(DATE_ATOM)],
         'status' => 'connected',
     ]);
-    Site::factory()->create(['brand_name' => 'SPG', 'gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+    session(['guided_site_id' => $site->id]); // the locked working tenant (the gate/switcher sets this in prod)
 
     Http::fake([
         '*/sitemaps/*' => Http::response('', 200),
@@ -33,7 +34,8 @@ it('submits the sitemap to Google from the board header action', function () {
 });
 
 it('warns instead of calling Google when Search Console is not connected', function () {
-    Site::factory()->create(['brand_name' => 'SPG', 'gsc_property' => null, 'domain_url' => 'https://spg.example']);
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'gsc_property' => null, 'domain_url' => 'https://spg.example']);
+    session(['guided_site_id' => $site->id]); // the locked working tenant (the gate/switcher sets this in prod)
     Http::fake();
 
     Livewire::test(OperateLocationPages::class)

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Guided\StepGate;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 
@@ -39,17 +40,13 @@ class SetupHome extends Page
 
     public function mount(): void
     {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('guided_site_id');
-
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
+        // The working tenant is the locked ActiveTenant (Portfolio / topbar switcher).
+        $id = app(ActiveTenant::class)->id();
+        $site = $id === null ? null : Site::query()->find($id);
 
         if ($site === null) {
-            return; // no sites yet — render the empty state
+            return; // no tenant selected — render the empty state
         }
-
-        session(['guided_site_id' => $site->id]);
 
         $step = app(StepGate::class)->state($site)->step();
         $this->redirect($step->pageClass()::getUrl());

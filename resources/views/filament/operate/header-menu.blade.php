@@ -21,14 +21,6 @@
         .hm-input { width:120px; font-size:12px; border:1px solid rgba(148,163,184,.4); border-radius:7px; padding:3px 7px; background:transparent; }
     </style>
 
-    <div class="hm-head">
-        <label style="font-size:13px;color:#64748b">Tenant</label>
-        <select class="hm-sel" wire:change="setSite($event.target.value)">
-            @foreach ($this->siteOptions as $id => $label)
-                <option value="{{ $id }}" @selected($id === $siteId)>{{ $label }}</option>
-            @endforeach
-        </select>
-    </div>
     <div class="hm-note">Move items with the arrows. Changes go live on the next <b>Sync header &amp; footer</b> push (Portfolio → ⋯).</div>
 
     <div class="hm-grid">

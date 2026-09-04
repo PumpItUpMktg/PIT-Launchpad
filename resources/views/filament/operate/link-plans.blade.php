@@ -35,11 +35,6 @@
                 five sources (job/review back-link, market page, neighbouring towns, blog mentions, Areas We
                 Serve), approve, then apply — links are written and the new towns submitted to IndexNow. No
                 town with zero inbound links is ever submitted.</p>
-            <select class="lp-sel" wire:model.live="siteId">
-                @foreach ($this->siteOptions as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                @endforeach
-            </select>
         </div>
 
         <div class="lp-propose">

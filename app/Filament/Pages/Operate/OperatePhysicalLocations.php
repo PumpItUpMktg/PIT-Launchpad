@@ -15,6 +15,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\PhysicalLocations;
 use App\Operate\QueueHealth;
+use App\Operator\ActiveTenant;
 use App\Publishing\DeleteFromWordpress;
 use App\Publishing\PostPublisher;
 use Filament\Notifications\Notification;
@@ -29,7 +30,6 @@ use Illuminate\Support\Facades\Auth;
  * selects, publishes, and tracks. Territory is edited in the Service area workspace.
  *
  * @property-read array{summary: array<string, int>, cards: list<array<string, mixed>>} $board
- * @property-read array<string, string> $siteOptions
  */
 class OperatePhysicalLocations extends OperatePage
 {
@@ -48,25 +48,8 @@ class OperatePhysicalLocations extends OperatePage
 
     public function mount(): void
     {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('guided_site_id');
-
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-
-        if ($site !== null) {
-            session(['guided_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
-    }
-
-    /** Switch the working site (session-persisted, shared with the rest of Operate). */
-    public function setSite(string $siteId): void
-    {
-        if (Site::query()->whereKey($siteId)->exists()) {
-            session(['guided_site_id' => $siteId]);
-            $this->siteId = $siteId;
-        }
+        // The working tenant is the locked ActiveTenant (Portfolio / topbar switcher); no per-page selection.
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     public function getSite(): ?Site
@@ -78,12 +61,6 @@ class OperatePhysicalLocations extends OperatePage
     public function setLocTab(string $tab): void
     {
         $this->locTab = $tab;
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
     }
 
     /**

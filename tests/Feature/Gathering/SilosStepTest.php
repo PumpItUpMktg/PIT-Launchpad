@@ -212,19 +212,6 @@ it('will not move a keyword into another tenant\'s silo', function () {
     expect($mine->fresh()->silo_id)->toBeNull(); // rejected — cross-tenant silo isn't a valid target
 });
 
-it('switching the working site drops out of prune mode with a clean decision-set', function () {
-    $site = silosStepSite();
-    $other = Site::factory()->create(['brand_name' => 'Other Tenant']);
-
-    Livewire::test(SilosStep::class)
-        ->call('openPrune')
-        ->assertSet('pruneMode', true)
-        ->call('setSite', $other->id)
-        ->assertSet('pruneMode', false)
-        ->assertSet('started', false)
-        ->assertSet('spokeDecisions', []);
-});
-
 it('the generated tree is VISIBLE on the main view right after generate — no prune mode needed', function () {
     $site = silosStepSite(); // blueprint + pillar 'Sump Pumps' + core 'Sump Pump Installation' (vol 300)
 

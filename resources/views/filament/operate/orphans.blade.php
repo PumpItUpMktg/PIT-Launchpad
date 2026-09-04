@@ -20,12 +20,6 @@
     </style>
 
     <div class="orph-head">
-        <label style="font-size:13px;color:#64748b">Tenant</label>
-        <select class="orph-sel" wire:change="setSite($event.target.value)">
-            @foreach ($this->siteOptions as $id => $label)
-                <option value="{{ $id }}" @selected($id === $siteId)>{{ $label }}</option>
-            @endforeach
-        </select>
         <button type="button" class="orph-btn" wire:click="rescan" wire:loading.attr="disabled">Rescan</button>
         <span style="margin-left:auto;font-size:13px;color:#64748b">{{ count($this->findings) }} issue(s)</span>
     </div>
