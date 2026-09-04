@@ -40,13 +40,6 @@
     </style>
 
     <div class="gac-controls">
-        @if (count($this->sites) > 1)
-            <select class="gac-select" wire:model.live="siteId" aria-label="Tenant">
-                @foreach ($this->sites as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                @endforeach
-            </select>
-        @endif
         @if ($this->console !== null)
             <span class="gac-status">
                 <span class="gac-dot {{ $this->console['running'] ? 'gac-live' : 'gac-idle' }}"></span>

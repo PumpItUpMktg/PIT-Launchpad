@@ -49,13 +49,6 @@
 
 <div class="lgg" x-data="{ mode:'absolute', comps:false, open:null }" :class="{ 'mode-delta': mode==='delta' }">
     <div class="lgg-controls">
-        @if (count($this->sites) > 1)
-            <select class="lgg-select" wire:model.live="siteId" aria-label="Tenant">
-                @foreach ($this->sites as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                @endforeach
-            </select>
-        @endif
         <select class="lgg-select" wire:model.live="locationId" aria-label="Location">
             @forelse ($this->locations as $id => $name)
                 <option value="{{ $id }}">{{ $name }}</option>

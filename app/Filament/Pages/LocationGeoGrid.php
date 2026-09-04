@@ -7,7 +7,7 @@ use App\GeoGrid\GeoGridBoard;
 use App\Models\GeoGridScan;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
-use App\Models\Site;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
@@ -43,7 +43,6 @@ class LocationGeoGrid extends Page
 
     protected string $view = 'filament.pages.location-geo-grid';
 
-    #[Url]
     public ?string $siteId = null;
 
     #[Url]
@@ -63,33 +62,15 @@ class LocationGeoGrid extends Page
 
     public function mount(): void
     {
-        // Default to a tenant + location that actually has geo-grid scans, so the board isn't empty on open.
-        if ($this->siteId === null) {
-            $seed = GeoGridScan::withoutGlobalScope(SiteScope::class)
-                ->orderByDesc('scanned_at')->first(['site_id', 'location_id']);
-            $this->siteId = (string) ($seed->site_id ?? Site::query()->orderBy('brand_name')->value('id')) ?: null;
-            $this->locationId = $seed->location_id ?? null;
-        }
-
+        $this->siteId = app(ActiveTenant::class)->id();
         if ($this->locationId === null) {
             $this->locationId = $this->firstScannedLocationId() ?? array_key_first($this->locations);
         }
     }
 
     /** Switching tenant clears the location focus — the prior tenant's locations aren't the new one's. */
-    public function updatedSiteId(): void
-    {
-        $this->locationId = $this->firstScannedLocationId() ?? array_key_first($this->locations);
-    }
 
     /** @return array<string, string> */
-    public function getSitesProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')
-            ->pluck('brand_name', 'id')
-            ->map(fn ($name, $id): string => (string) ($name ?: $id))
-            ->all();
-    }
 
     /**
      * The tenant's GBP-backed locations (the dashboard-eligible set) for the selector.
