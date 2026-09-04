@@ -102,6 +102,13 @@ exists anywhere in the admin panel today; only `OperateBlog` has a custom
 (Filament v5). No `getTabs()` infra, no `UserResource`, no `MarketResource`
 exist today.
 
+## Shipped shell (5b)
+
+The four-column header, rendered (18 live links + the 6 greyed "soon" gaps):
+
+![Console header — light](img/5b-nav-header-light.png)
+![Console header — dark](img/5b-nav-header-dark.png)
+
 ## Sequencing (honoring the standing UI-PR rules)
 
 Building 6 new surfaces + 5 tab-consolidations + the regroup as one PR cannot
