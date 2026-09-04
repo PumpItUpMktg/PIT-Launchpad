@@ -8,7 +8,6 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Navigation\NavigationGroup;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
@@ -29,21 +28,15 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('admin')
-            // The menu (reorg relay): ungrouped items float on top by sort — Overview, Portfolio,
-            // Setup, Grow (the pages workbench, kept clear of the blog pipeline) — then the
-            // daily-loop groups: Local Blog (the news/relevance pipeline) → Live (published cards)
-            // → Targeting → Settings, with the deep structure tools in a collapsed Advanced group.
-            ->navigationGroups([
-                // The final IA (flags on): Setup steps 1-9, then Operate, then Advanced.
-                // Legacy groups below only render while their items still register (flags off).
-                NavigationGroup::make('Setup'),
-                NavigationGroup::make('Operate'),
-                NavigationGroup::make('Local Blog'),
-                NavigationGroup::make('Live Pages'),
-                NavigationGroup::make('Targeting'),
-                NavigationGroup::make('Settings'),
-                NavigationGroup::make('Advanced')->collapsed(),
-            ])
+            // Nav cutover (PR 5b): the sidebar and Filament's auto-registered nav are retired in
+            // favour of a bespoke FOUR-COLUMN header (Build · Territory · Results · System, 24 items,
+            // no dropdowns) rendered from App\Operator\Nav\ConsoleNav via the TOPBAR_AFTER hook.
+            // `topNavigation()` drops the sidebar; `navigation(false)` empties Filament's own nav so
+            // only our header shows. Per-surface $navigationGroup props are now vestigial (the header
+            // is the single source of the IA); every surface's ROUTE stays registered (discovery),
+            // so retired items keep working URLs — they are simply not in the header.
+            ->topNavigation()
+            ->navigation(false)
             ->path('admin')
             ->login()
             ->colors([
@@ -54,6 +47,11 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(
                 PanelsRenderHook::TOPBAR_START,
                 fn (): View => view('filament.operator.tenant-banner'),
+            )
+            // The four-column console header — the operator IA (App\Operator\Nav\ConsoleNav).
+            ->renderHook(
+                PanelsRenderHook::TOPBAR_AFTER,
+                fn (): View => view('filament.operator.console-nav'),
             )
             // Global button/control interaction feedback (hover/press/focus/busy) for every custom
             // control across the panel — one sheet, prefix-based, fills every family. See the view.

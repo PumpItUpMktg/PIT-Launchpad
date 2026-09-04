@@ -4,6 +4,7 @@ use App\Enums\UserRole;
 use App\Models\User;
 use App\Operator\Nav\ConsoleNav;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\View;
 
 beforeEach(function () {
     Filament::setCurrentPanel('admin');
@@ -48,4 +49,20 @@ it('marks exactly the six gap items "soon" and gives them no URL', function () {
             }
         }
     }
+});
+
+it('renders the four-column header — group titles, live links, and greyed "soon" items', function () {
+    $html = View::make('filament.operator.console-nav')->render();
+
+    // The four group columns, each titled.
+    expect($html)->toContain('Build')->toContain('Territory')->toContain('Results')->toContain('System')
+        // A live item is an anchor; a gap item is a greyed non-link with a "soon" tag.
+        ->toContain('Dashboard')
+        ->toContain('>Markets<') // soon item present as plain text, not a link
+        ->toContain('lp-cn-soon')
+        ->toContain('soon');
+
+    // The six soon items render as non-clickable spans (no href), the 18 live ones as links.
+    expect(substr_count($html, 'class="lp-cn-soon"'))->toBe(6)
+        ->and(substr_count($html, 'wire:navigate'))->toBe(18); // exactly the 18 live links
 });
