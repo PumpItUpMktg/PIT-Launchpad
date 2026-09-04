@@ -3,11 +3,11 @@
 namespace App\Models;
 
 use App\Enums\InterviewStatus;
+use App\Models\Concerns\BelongsToSite;
 use Database\Factories\InterviewFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
@@ -15,7 +15,8 @@ use Illuminate\Support\Carbon;
  * An adaptive owner interview (gathering relay). The transcript ({@see InterviewTurn}) is the
  * permanent source of truth — extraction re-runs against it at any time, at any status. The
  * `coverage` map is the live per-section self-assessment (filled/thin/empty) driving the
- * operator's coverage meter. Operator-read across tenants, keyed explicitly by site — no scope.
+ * operator's coverage meter. Tenant-scoped ({@see BelongsToSite}): the context-aware SiteScope
+ * filters to the locked tenant in the panel and is a no-op in the cross-tenant lobby.
  *
  * @property string $id
  * @property string $site_id
@@ -27,15 +28,9 @@ use Illuminate\Support\Carbon;
 class Interview extends Model
 {
     /** @use HasFactory<InterviewFactory> */
-    use HasFactory, HasUlids;
+    use BelongsToSite, HasFactory, HasUlids;
 
     protected $guarded = [];
-
-    /** @return BelongsTo<Site, $this> */
-    public function site(): BelongsTo
-    {
-        return $this->belongsTo(Site::class);
-    }
 
     /** @return HasMany<InterviewTurn, $this> */
     public function turns(): HasMany

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSite;
 use Database\Factories\PageConfigFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,8 +14,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * authors (hero variant, form embed, phone/image overrides, market binding). The
  * composer reads this on every compose and re-injects it, so a repush preserves
  * these verbatim while the generated content (H1/body/FAQ) refreshes. One row per
- * page (content_id). Not site-scoped at the model level — the publish path reads it
- * by content_id directly (operator/job context).
+ * page (content_id). Tenant-scoped ({@see BelongsToSite}): reads key on content_id, and the
+ * context-aware SiteScope is a no-op in the publish job (no lock) while guarding operator writes.
  *
  * @property string $site_id
  * @property string $content_id
@@ -27,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PageConfig extends Model
 {
     /** @use HasFactory<PageConfigFactory> */
-    use HasFactory, HasUlids;
+    use BelongsToSite, HasFactory, HasUlids;
 
     protected $guarded = [];
 
