@@ -5,6 +5,7 @@ namespace App\Operator\Nav;
 use App\Filament\Pages\Citations\CitationsPortfolio;
 use App\Filament\Pages\Gathering\SetupEntry;
 use App\Filament\Pages\GeoActivityConsole;
+use App\Filament\Pages\JobsBoard;
 use App\Filament\Pages\LocationCoverage;
 use App\Filament\Pages\LocationGeoGrid;
 use App\Filament\Pages\LocationsSetup;
@@ -53,7 +54,7 @@ class ConsoleNav
                 ['label' => 'Setup', 'surface' => SetupEntry::class, 'soon' => false],
                 ['label' => 'Posts', 'surface' => OperateBlog::class, 'soon' => false],
                 ['label' => 'Pages', 'surface' => OperatePages::class, 'soon' => false],
-                ['label' => 'Jobs', 'surface' => null, 'soon' => true],
+                ['label' => 'Jobs', 'surface' => JobsBoard::class, 'soon' => false],
                 ['label' => 'Reviews', 'surface' => ReviewCaptureResource::class, 'soon' => false],
                 ['label' => 'Live', 'surface' => OperateLive::class, 'soon' => false],
             ]],
