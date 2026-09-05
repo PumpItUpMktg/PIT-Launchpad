@@ -202,7 +202,12 @@ return [
         // 2,000/day + 600/min per property, so an audit is BATCHED + CACHED (results change ~daily) and
         // capped per day; cards read the cached result, never fire a live inspection on render.
         'gsc_inspection_base_url' => env('GOOGLE_GSC_INSPECTION_BASE_URL', 'https://searchconsole.googleapis.com/v1'),
-        'url_inspection_cache_ttl' => (int) env('GOOGLE_URL_INSPECTION_CACHE_TTL', 259200), // 3 days
+        // 14 days. At ~60-120 live inspections/run (daily) and ~474 known URLs, a 3-day TTL forced
+        // ~158 re-inspections/day — above throughput — so the budget re-chewed the head and never
+        // reached the tail. 14 days drops re-inspection demand to ~34/day (474/14), leaving ≥26/day
+        // headroom even at the low end of throughput; combined with uninspected-first ordering
+        // (IndexCoverage) the backlog drains instead of widening.
+        'url_inspection_cache_ttl' => (int) env('GOOGLE_URL_INSPECTION_CACHE_TTL', 1209600), // 14 days
         'url_inspection_daily_cap' => (int) env('GOOGLE_URL_INSPECTION_DAILY_CAP', 1800),    // under the 2,000/day quota
         // Per-page GSC totals are cached this long on the Live cards (GSC data lags ~2-3 days, so a
         // board render need not re-query every card). Default 6h.
