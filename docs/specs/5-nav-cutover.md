@@ -36,6 +36,11 @@ Build 7 · Territory 6 · Results 5 · System 6 = **24**.
 1. **Header-only** — `->topNavigation()`, no sidebar. No dropdowns.
 2. **Lobby is outside the panel entirely** (the 2b decision) — NOT a top-level
    nav item. The panel opens on a locked tenant; Lobby is the standalone picker.
+   **No site switcher in the locked chrome** (tenant-lock remediation): the topbar
+   shows the CURRENT tenant only (logo + name) plus **Exit site**; there is no
+   dropdown of other tenants on any page. Changing tenant is Exit site → Lobby →
+   enter — deliberate friction, and the reason no page carries another tenant's
+   name in its chrome.
 3. **Live is Build, not Results.** Results is measurement only — no queues, no
    publishing surfaces live there.
 4. **Targeting is not an item.** It splits into **Silos**, **Keywords**, and

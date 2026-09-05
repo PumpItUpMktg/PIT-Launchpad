@@ -91,14 +91,22 @@ beforeEach(function () {
     Service::factory()->create(['site_id' => $b, 'name' => 'FOREIGN-MARKER-CO service']);
     ContentEdit::create(['site_id' => $b, 'content_id' => $this->foreignContent->id, 'field' => 'body', 'reason' => 'off_base', 'original' => 'x', 'edited' => 'y']);
 
-    // A real Launchpad operator manages MANY tenants — membership in BOTH accounts, so both are visible
-    // through VisibleSiteScope. The lock ({@see ActiveTenant}) must still constrain every surface to A.
-    // (Membership in A alone would hide B behind VisibleSiteScope and the test would never reach the breach
-    // — the exact "green while never reaching the path" trap the prior sweeps fell into.)
+    // Production operator shape: a real Launchpad operator manages MANY tenants via ACCOUNT-WIDE
+    // memberships (account_id, null site_id) — which User::resolvePermittedSiteIds expands to every site in
+    // those accounts. So both A and B are visible through VisibleSiteScope, and the lock ({@see ActiveTenant})
+    // must still constrain every surface to A. (Membership in A alone hid B and the test never reached the
+    // breach — the original false-green. Account-wide-across-all-sites is the faithful reproduction.)
     $op = User::factory()->create(['role' => UserRole::Operator]);
-    Membership::create(['user_id' => $op->id, 'account_id' => $accountA->id, 'role' => UserRole::Operator]);
-    Membership::create(['user_id' => $op->id, 'account_id' => $accountB->id, 'role' => UserRole::Operator]);
+    Membership::create(['user_id' => $op->id, 'account_id' => $accountA->id, 'role' => UserRole::Operator]); // account-wide (no site_id)
+    Membership::create(['user_id' => $op->id, 'account_id' => $accountB->id, 'role' => UserRole::Operator]); // account-wide (no site_id)
     $this->actingAs($op);
+
+    // Fixture self-guard (standing rule — prove the test can detect presence): the operator MUST be able
+    // to see foreign tenant B by production's own visibility mechanism. If a future edit narrows the
+    // fixture, this fails loudly here rather than letting the leak test silently go green without ever
+    // reaching the breach path.
+    expect($op->permittedSiteIds())->toContain($this->siteB->id);
+
     app(ActiveTenant::class)->set($this->siteA->id);
 });
 

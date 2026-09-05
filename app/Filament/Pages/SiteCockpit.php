@@ -92,17 +92,16 @@ class SiteCockpit extends Page
      */
     public function getManageLinksProperty(): array
     {
-        $site = $this->siteId;
-
+        // No ?site= — every target resolves the working tenant from the lock (ActiveTenant).
         return [
             ['label' => 'Services', 'url' => ServiceResource::getUrl(), 'desc' => 'Service catalog + enrichment'],
-            ['label' => 'Service area', 'url' => LocationsSetup::getUrl(['site' => $site]), 'desc' => 'Territory, towns & coverage map'],
+            ['label' => 'Service area', 'url' => LocationsSetup::getUrl(), 'desc' => 'Territory, towns & coverage map'],
             ['label' => 'Locations', 'url' => LocationResource::getUrl(), 'desc' => 'Physical NAP locations'],
             ['label' => 'Voice', 'url' => VoiceProfileResource::getUrl(), 'desc' => 'Brand voice profiles'],
             ['label' => 'Feeds', 'url' => SourceResource::getUrl(), 'desc' => 'News & signal sources'],
             ['label' => 'Connections', 'url' => ConnectionsResource::getUrl(), 'desc' => 'WordPress & vendor credentials'],
-            ['label' => 'Header menu', 'url' => HeaderMenu::getUrl(['site' => $site]), 'desc' => 'Reorder the site nav menus'],
-            ['label' => 'Orphans', 'url' => OrphanScan::getUrl(['site' => $site]), 'desc' => 'Unlinked pages to fix'],
+            ['label' => 'Header menu', 'url' => HeaderMenu::getUrl(), 'desc' => 'Reorder the site nav menus'],
+            ['label' => 'Orphans', 'url' => OrphanScan::getUrl(), 'desc' => 'Unlinked pages to fix'],
         ];
     }
 }

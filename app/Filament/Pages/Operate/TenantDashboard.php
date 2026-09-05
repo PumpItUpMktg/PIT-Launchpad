@@ -81,20 +81,20 @@ class TenantDashboard extends Page
      */
     public function getAreasProperty(): array
     {
-        $site = app(ActiveTenant::class)->id();
-
+        // No ?site= on any link — every target resolves the working tenant from the lock (ActiveTenant).
+        // A ?site= arg is a dead reader and a live vector (a stale bookmark under a different lock).
         return [
-            ['label' => 'Setup', 'url' => SetupHome::getUrl(['site' => $site]), 'desc' => 'Intake, brand & launch steps'],
-            ['label' => 'Posts', 'url' => OperateBlog::getUrl(['site' => $site]), 'desc' => 'The blog / news pipeline'],
+            ['label' => 'Setup', 'url' => SetupHome::getUrl(), 'desc' => 'Intake, brand & launch steps'],
+            ['label' => 'Posts', 'url' => OperateBlog::getUrl(), 'desc' => 'The blog / news pipeline'],
             ['label' => 'Pages', 'url' => PageResource::getUrl(), 'desc' => 'Service, location & core pages'],
-            ['label' => 'Jobs', 'url' => LocationDashboard::getUrl(['site' => $site]), 'desc' => 'Job-capture content', 'provisional' => true],
+            ['label' => 'Jobs', 'url' => LocationDashboard::getUrl(), 'desc' => 'Job-capture content', 'provisional' => true],
             ['label' => 'Reviews', 'url' => ContentReviewResource::getUrl(), 'desc' => 'The review & approve queue'],
             ['label' => 'Live', 'url' => PublishedContentResource::getUrl(), 'desc' => 'Published body of work'],
-            ['label' => 'Markets', 'url' => GeoCoverageBoard::getUrl(['site' => $site]), 'desc' => 'Territory & geo coverage', 'provisional' => true],
+            ['label' => 'Markets', 'url' => GeoCoverageBoard::getUrl(), 'desc' => 'Territory & geo coverage', 'provisional' => true],
             ['label' => 'Targeting', 'url' => KeywordResource::getUrl(), 'desc' => 'Keyword targets & gaps'],
-            ['label' => 'Measure', 'url' => GeoActivityConsole::getUrl(['site' => $site]), 'desc' => 'Visibility & analytics', 'provisional' => true],
+            ['label' => 'Measure', 'url' => GeoActivityConsole::getUrl(), 'desc' => 'Visibility & analytics', 'provisional' => true],
             ['label' => 'Settings', 'url' => ConnectionsResource::getUrl(), 'desc' => 'Connections & credentials'],
-            ['label' => 'Recover', 'url' => RebuildReadiness::getUrl(['site' => $site]), 'desc' => 'Rebuild & recovery readiness', 'provisional' => true],
+            ['label' => 'Recover', 'url' => RebuildReadiness::getUrl(), 'desc' => 'Rebuild & recovery readiness', 'provisional' => true],
         ];
     }
 }

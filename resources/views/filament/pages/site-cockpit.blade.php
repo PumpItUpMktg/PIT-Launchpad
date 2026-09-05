@@ -59,7 +59,7 @@
                 @forelse ($this->perSilo as $silo)
                     <div class="lp-srow"><span>{{ $silo['silo_name'] }}</span><span class="lp-progtxt">{{ $silo['total'] }}</span></div>
                 @empty
-                    <x-lp.empty title="No content yet" action="Go to Blog" :href="\App\Filament\Pages\Operate\OperateBlog::getUrl(['site' => $site->id])">
+                    <x-lp.empty title="No content yet" action="Go to Blog" :href="\App\Filament\Pages\Operate\OperateBlog::getUrl()">
                         Generate posts and pages from the Blog board — they'll appear here per silo.
                     </x-lp.empty>
                 @endforelse

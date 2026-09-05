@@ -108,6 +108,8 @@ class LocationDashboard extends Page
     /** Deep-link to the geo-grid small-multiples board for the current location. */
     public function geoGridUrl(): string
     {
-        return LocationGeoGrid::getUrl(['siteId' => $this->siteId, 'locationId' => $this->locationId]);
+        // No ?siteId= — LocationGeoGrid resolves the working tenant from the lock; only the in-tenant
+        // locationId deep-link is carried.
+        return LocationGeoGrid::getUrl(['locationId' => $this->locationId]);
     }
 }
