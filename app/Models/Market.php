@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * @property MarketTier $tier
+ * @property array<string, mixed>|null $demographics Census ACS payload (keyed, e.g. `population`)
+ * @property list<string>|null $neighborhoods
  * @property bool $on_hold advisory hold (no publish effect) — set/released by an operator
  * @property CarbonInterface|null $release_at the target release date for a held market
  */
