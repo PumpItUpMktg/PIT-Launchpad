@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Filament\Pages\GeoActivityConsole;
+use App\Filament\Pages\IndexingBoard;
 use App\Filament\Pages\JobsBoard;
 use App\Filament\Pages\MarketsBoard;
 use App\Filament\Pages\Operate\TenantDashboard;
@@ -35,6 +36,7 @@ dataset('adminNavGroupSurfaces', [
     'Build · Jobs' => [JobsBoard::class],
     'Territory · Markets' => [MarketsBoard::class],
     'Results · Rankings' => [RankingsBoard::class],
+    'Results · Indexing' => [IndexingBoard::class],
     'Results · AI visibility' => [GeoActivityConsole::class],
     'System · Voice' => [VoiceProfileResource::class],
 ]);
