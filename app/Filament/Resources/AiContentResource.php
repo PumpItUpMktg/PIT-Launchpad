@@ -83,8 +83,9 @@ class AiContentResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Tenant-locked: SiteScope (keyed on the ActiveTenant-resolved CurrentSite) constrains this to the
+        // locked tenant — the cross-tenant scope-drop was the shape-D breach (tenant-lock remediation).
         return parent::getEloquentQuery()
-            ->withoutGlobalScope(SiteScope::class)
             ->where('draft_lane', Content::GEO_LANE)
             ->whereIn('status', self::statuses())
             // Blocked (render/publish failed) first, then review, then fresh candidates; newest within a band.

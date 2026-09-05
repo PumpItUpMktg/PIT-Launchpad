@@ -61,8 +61,10 @@ class ReviewCaptureResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Tenant-locked: SiteScope constrains this to the locked tenant. This carries imported reviews, so a
+        // cross-tenant row here risks a wrong-tenant approval publishing a customer's words on another
+        // company's site — the shape-D scope-drop is removed (tenant-lock remediation).
         return parent::getEloquentQuery()
-            ->withoutGlobalScope(SiteScope::class)
             ->with(['location', 'site'])
             ->withCount('services')
             // Needs-location first, then pending, then the rest; newest within each.

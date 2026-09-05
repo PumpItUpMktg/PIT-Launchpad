@@ -7,7 +7,6 @@ use App\Enums\ContentStatus;
 use App\Filament\Resources\CandidateResource\Pages\ListCandidates;
 use App\Jobs\GeneratePost;
 use App\Models\Content;
-use App\Models\Scopes\SiteScope;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -51,8 +50,8 @@ class CandidateResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Tenant-locked: SiteScope constrains this to the locked tenant (shape-D scope-drop removed).
         return parent::getEloquentQuery()
-            ->withoutGlobalScope(SiteScope::class)
             // POST lane only. §4 pillar stubs are kind=page + status=candidate; without
             // this filter they leaked in here and "Generate post" flipped them to posts
             // (DraftRequest::forCandidate hard-codes kind=Post), so a service pillar

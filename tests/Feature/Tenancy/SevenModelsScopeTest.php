@@ -62,17 +62,20 @@ it('auto-fills site_id from the locked tenant on create', function () {
 // The cross-tenant Overview is deleted (its triage function is the Lobby's, which reads the permitted set,
 // not "every tenant"). The SetupState global-scope opt-out remains covered by the model + Lobby tests.
 
-it('the ContentEdit read-across badge counts corrections across ALL tenants under a lock', function () {
+it('the ContentEdit badge counts corrections for the LOCKED tenant only (scoped, not read-across)', function () {
+    // Tenant-lock remediation (rule 3): this test used to assert the badge counted corrections across ALL
+    // tenants — it codified the shape-D breach. ContentEditResource is now SiteScope-locked (per-tenant
+    // audit detail, scoped not allowlisted), so the badge counts only the locked tenant's edits.
     $a = Site::factory()->create();
     $b = Site::factory()->create();
     $ca = Content::factory()->create(['site_id' => $a->id]);
     $cb = Content::factory()->create(['site_id' => $b->id]);
-    // Created with no lock (guard would block the cross-tenant one otherwise).
+    // Created with no lock (the write-guard would block the cross-tenant one otherwise).
     ContentEdit::create(['site_id' => $a->id, 'content_id' => $ca->id, 'field' => 'title', 'reason' => EditReason::OffBase, 'original' => 'x', 'edited' => 'y']);
     ContentEdit::create(['site_id' => $b->id, 'content_id' => $cb->id, 'field' => 'title', 'reason' => EditReason::OffBase, 'original' => 'x', 'edited' => 'y']);
 
-    CurrentSite::set($a->id);
+    CurrentSite::set($a->id); // locked into Alpha
 
-    // The nav badge is the operator-wide signal log — it must span tenants, not collapse to Alpha.
-    expect(ContentEditResource::getNavigationBadge())->toBe('2');
+    // Scoped to the lock: Alpha's one correction, never Beta's.
+    expect(ContentEditResource::getNavigationBadge())->toBe('1');
 });

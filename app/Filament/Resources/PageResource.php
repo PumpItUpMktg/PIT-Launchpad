@@ -13,7 +13,6 @@ use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\ContentEdit;
 use App\Models\PageConfig;
-use App\Models\Scopes\SiteScope;
 use App\Publishing\DeleteFromWordpress;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -61,8 +60,8 @@ class PageResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Tenant-locked: SiteScope constrains this to the locked tenant (shape-D scope-drop removed).
         return parent::getEloquentQuery()
-            ->withoutGlobalScope(SiteScope::class)
             ->where('kind', ContentKind::Page->value)
             ->orderByDesc('created_at');
     }

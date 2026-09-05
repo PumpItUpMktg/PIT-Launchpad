@@ -7,7 +7,6 @@ use App\Enums\UserRole;
 use App\Filament\Resources\PublishedContentResource\Pages\ListPublishedContent;
 use App\Jobs\PublishContent;
 use App\Models\Content;
-use App\Models\Scopes\SiteScope;
 use App\Publishing\ConnectionGate;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -50,8 +49,8 @@ class PublishedContentResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Tenant-locked: SiteScope constrains this to the locked tenant (shape-D scope-drop removed).
         return parent::getEloquentQuery()
-            ->withoutGlobalScope(SiteScope::class)
             ->where('status', ContentStatus::Published->value)
             ->orderByDesc('published_at');
     }
