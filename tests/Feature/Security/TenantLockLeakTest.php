@@ -2,6 +2,7 @@
 
 use App\Enums\ContentStatus;
 use App\Enums\UserRole;
+use App\Filament\Pages\BrandBoard;
 use App\Filament\Pages\Citations\CitationsReport;
 use App\Filament\Pages\Citations\CitationsWorkspace;
 use App\Filament\Pages\Gathering\SetupEntry;
@@ -21,6 +22,7 @@ use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Pages\ProofEditor;
 use App\Filament\Pages\RankingsBoard;
+use App\Filament\Pages\UsersBoard;
 use App\Filament\Resources\AiContentResource;
 use App\Filament\Resources\CandidateResource;
 use App\Filament\Resources\ConnectionsResource;
@@ -45,6 +47,7 @@ use App\Models\Review;
 use App\Models\Service;
 use App\Models\Silo;
 use App\Models\Site;
+use App\Models\SiteBranding;
 use App\Models\User;
 use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
@@ -90,6 +93,16 @@ beforeEach(function () {
     Silo::factory()->create(['site_id' => $b, 'name' => 'FOREIGN-MARKER-CO silo']);
     Service::factory()->create(['site_id' => $b, 'name' => 'FOREIGN-MARKER-CO service']);
     ContentEdit::create(['site_id' => $b, 'content_id' => $this->foreignContent->id, 'field' => 'body', 'reason' => 'off_base', 'original' => 'x', 'edited' => 'y']);
+    SiteBranding::create(['site_id' => $b, 'logo_set' => ['url' => 'https://foreign-marker-b.example/logo.png']]); // Brand surface data for B
+
+    // A foreign user with a grant to B — so if the Users surface listed users globally (the console shape),
+    // B's member would surface. This makes the Users guard row genuinely capable of detecting a leak.
+    $foreignUser = User::factory()->create([
+        'name' => 'FOREIGN-MARKER-CO client',
+        'email' => 'client@foreign-marker-b.example',
+        'role' => UserRole::Client,
+    ]);
+    Membership::create(['user_id' => $foreignUser->id, 'account_id' => $accountB->id, 'site_id' => $b, 'role' => UserRole::Client]);
 
     // Production operator shape: a real Launchpad operator manages MANY tenants via ACCOUNT-WIDE
     // memberships (account_id, null site_id) — which User::resolvePermittedSiteIds expands to every site in
@@ -152,6 +165,8 @@ dataset('lockedSurfaces', [
     'Results · Geo grid' => [fn () => LocationGeoGrid::getUrl()],
     'Results · Coverage' => [fn () => LocationCoverage::getUrl()],
     'Results · AI visibility' => [fn () => GeoActivityConsole::getUrl()],
+    'System · Brand' => [fn () => BrandBoard::getUrl()],
+    'System · Users' => [fn () => UsersBoard::getUrl()],
     'System · Recover' => [fn () => RebuildReadiness::getUrl()],
     // Every resource index (URL-reachable regardless of nav).
     'Resource · Reviews (capture)' => [fn () => ReviewCaptureResource::getUrl('index')],

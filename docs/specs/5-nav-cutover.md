@@ -68,6 +68,14 @@ Build 7 · Territory 6 · Results 5 · System 6 = **24**.
 4. **Restate the spec's design decisions in the PR body and confirm each.**
 5. **Shared card and badge components — one implementation**, used by Lobby,
    Dashboard, and boards.
+6. **Every new admin surface is added to the tenant-lock guard as part of
+   building it** — never as a follow-up. `TenantLockLeakTest`'s dataset is
+   per-surface: a nav item (or any URL-reachable page/resource) that is not in
+   the dataset is unguarded by default, so a tenant leak on it would pass CI
+   unnoticed. When you add a surface, add its `getUrl()` to `lockedSurfaces`
+   (and, if it renders a model foreign tenant B doesn't already carry, seed a
+   B-marked row so the guard is capable of detecting a leak — the standing
+   "prove it can detect presence" rule).
 
 ## Item → surface mapping
 
@@ -98,9 +106,9 @@ exists anywhere in the admin panel today; only `OperateBlog` has a custom
 | 18 | AI visibility | Results | `Pages\GeoActivityConsole` (`geo-activity`) | REGROUP (relabel) |
 | 19 | Connections | System | `Resources\ConnectionsResource` | REGROUP |
 | 20 | Feeds | System | `Resources\SourceResource` (Feeds) | REGROUP |
-| 21 | Brand | System | only `Gathering\BrandStep`/`Guided\Brand` steps; service `Branding\BrandStudio` | **GAP** (standalone) |
+| 21 | Brand | System | `Pages\BrandBoard` + `Operator\Brand\BrandProfile` (theme.json / `StyleActivator`; Elementor `BrandStudio` left alone) | **SHIPPED** (5h) |
 | 22 | Voice | System | `Resources\VoiceProfileResource` | REGROUP |
-| 23 | Users | System | no `UserResource`; console `Console\Pages\UsersAccess` only | **GAP** |
+| 23 | Users | System | `Pages\UsersBoard` + `Operator\Access\TenantUsers` (memberships-for-the-locked-site; console `UsersAccess` stays for the whole-user view) | **SHIPPED** (5h) |
 | 24 | Recover | System | `Operate\RebuildReadiness` (`operate/readiness`, "Readiness") | REGROUP (relabel) |
 
 **Totals: 13 REGROUP · 5 TABS · 6 GAP.** `topNavigation()` is supported
@@ -225,3 +233,27 @@ The bulk **Import** flow folds in as a header action linking to the dedicated
 
 Confirm the sequence + how to fill the 6 GAP surfaces (build new vs. defer vs.
 point at nearest) before building 5c+.
+
+### Shipped: 5h — Brand + Users (the final two GAP surfaces)
+
+The last two System-group gaps close, so the header IA is **24/24 live** — no
+"soon" items remain.
+
+- **Brand** (`Pages\BrandBoard` + `Operator\Brand\BrandProfile`) — the locked
+  tenant's visual identity: brand name + logo, the resolved look, and the
+  style-variation picker (logo-derived brand colors, the AI/voice pick, then the
+  curated variations). "Push brand" applies the chosen variation to WordPress as
+  a `theme.json` style (`StyleActivator` → `/style`). Built on the **supported
+  block path only** — the legacy Elementor Global Kit flow (`BrandStudio` →
+  `/brand-kit`) is left untouched per the Gutenberg-only output contract. Chrome
+  (header/footer) stays a separate deliberate push (Recover), not bundled here.
+- **Users** (`Pages\UsersBoard` + `Operator\Access\TenantUsers`) —
+  **memberships-for-the-locked-site**, never a global user list (that would leak
+  other tenants' membership). Lists who can reach this site (site-level +
+  account-wide grants on this account); grant/revoke targets the locked tenant
+  with no site picker; a global-role change is allowed only for a single-tenant
+  site-level user (multi-tenant users are deflected to the Console). The console
+  `UsersAccess` stays for the Super-Admin whole-user view.
+
+Both are operator-only, tenant-locked (`ActiveTenant`, no per-page picker), and
+added to `TenantLockLeakTest`'s per-surface dataset (standing rule 6).

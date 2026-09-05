@@ -2,6 +2,7 @@
 
 namespace App\Operator\Nav;
 
+use App\Filament\Pages\BrandBoard;
 use App\Filament\Pages\Citations\CitationsBoard;
 use App\Filament\Pages\Gathering\SetupEntry;
 use App\Filament\Pages\GeoActivityConsole;
@@ -18,6 +19,7 @@ use App\Filament\Pages\Operate\OperatePages;
 use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Pages\RankingsBoard;
+use App\Filament\Pages\UsersBoard;
 use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\KeywordResource;
 use App\Filament\Resources\ReviewCaptureResource;
@@ -78,9 +80,9 @@ class ConsoleNav
             ['group' => 'System', 'items' => [
                 ['label' => 'Connections', 'surface' => ConnectionsResource::class, 'soon' => false],
                 ['label' => 'Feeds', 'surface' => SourceResource::class, 'soon' => false],
-                ['label' => 'Brand', 'surface' => null, 'soon' => true],
+                ['label' => 'Brand', 'surface' => BrandBoard::class, 'soon' => false],
                 ['label' => 'Voice', 'surface' => VoiceProfileResource::class, 'soon' => false],
-                ['label' => 'Users', 'surface' => null, 'soon' => true],
+                ['label' => 'Users', 'surface' => UsersBoard::class, 'soon' => false],
                 ['label' => 'Recover', 'surface' => RebuildReadiness::class, 'soon' => false],
             ]],
         ];
