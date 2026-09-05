@@ -53,6 +53,15 @@ return [
         'refresh_window_days' => (int) env('LAUNCHPAD_METRICS_REFRESH_DAYS', 90),
     ],
 
+    'indexing' => [
+        // Whether Launchpad ingests EVERY URL Google knows (its Index-Coverage list — WP archives, feeds,
+        // param URLs it discovered on its own), not just the pages Launchpad published. Until that capture
+        // path is wired, `page_index_states` holds only published URLs, so the Indexing surface shows the
+        // "all-known" panel as NOT YET ENABLED rather than a panel that silently mirrors the published set.
+        // The all-known capture item flips this on when it ships. Default OFF (honest for production today).
+        'all_known_capture' => (bool) env('LAUNCHPAD_ALL_KNOWN_CAPTURE', false),
+    ],
+
     'geo' => [
         // AI-search visibility (GEO) audit. Each active prompt is one web-search answer + a Haiku judge,
         // so a run measures prompts until this wall-clock budget is spent; the weekly sweep + a per-prompt

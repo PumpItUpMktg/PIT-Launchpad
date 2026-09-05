@@ -33,15 +33,21 @@ class IndexStandings
      * @return array{
      *     published: array{total: int, indexed: int, not_indexed: int, excluded: int, reasons: list<array{state: string, label: string, count: int}>},
      *     all_known: array{total: int, indexed: int, not_indexed: int, excluded: int, reasons: list<array{state: string, label: string, count: int}>},
-     *     discovered_only: int
+     *     discovered_only: int,
+     *     all_known_available: bool
      * }
      */
     public function for(?string $siteId): array
     {
+        // Whether the all-known capture path is wired. Until it is, `page_index_states` holds only the
+        // URLs Launchpad published — so the surface must SAY the all-known view is off, not silently show
+        // a panel that mirrors the published set (a fixture can supply the data production can't).
+        $allKnownAvailable = (bool) config('launchpad.indexing.all_known_capture', false);
+
         if ($siteId === null) {
             $empty = ['total' => 0, 'indexed' => 0, 'not_indexed' => 0, 'excluded' => 0, 'reasons' => []];
 
-            return ['published' => $empty, 'all_known' => $empty, 'discovered_only' => 0];
+            return ['published' => $empty, 'all_known' => $empty, 'discovered_only' => 0, 'all_known_available' => $allKnownAvailable];
         }
 
         /** @var Collection<int, PageIndexState> $rows */
@@ -56,6 +62,7 @@ class IndexStandings
             'published' => $published,
             'all_known' => $allKnown,
             'discovered_only' => $allKnown['total'] - $published['total'],
+            'all_known_available' => $allKnownAvailable,
         ];
     }
 
