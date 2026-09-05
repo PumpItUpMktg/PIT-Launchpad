@@ -34,13 +34,17 @@ class ReportDuplicateLocationsCommand extends Command
         }
 
         $removed = 0;
+        $crossTenant = 0;
         foreach ($rows as $dup) {
+            $tag = $dup['cross_tenant'] ? 'CROSS-TENANT stray' : 'duplicate';
+            $crossTenant += $dup['cross_tenant'] ? 1 : 0;
             $this->newLine();
-            $this->warn("● duplicate: {$dup['duplicate']}  (site {$dup['site_id']}, location {$dup['duplicate_id']})");
+            $this->warn("● {$tag}: {$dup['duplicate']}  (site {$dup['site_id']}, location {$dup['duplicate_id']})");
             $this->line("  address:  {$dup['address']}");
-            $this->line('  survivor: '.($dup['survivor'] !== null ? "{$dup['survivor']} ({$dup['survivor_id']})" : '(none found — verify before removing)'));
+            $this->line('  survivor: '.($dup['survivor'] !== null
+                ? "{$dup['survivor']} ({$dup['survivor_id']})".($dup['cross_tenant'] ? "  on DIFFERENT tenant {$dup['survivor_site_id']}" : '')
+                : '(none found — verify before removing)'));
             $this->line("  why:      {$dup['reason']}");
-            $this->line('  likely created by: a two-step import (skeleton insert) that never completed county selection — the GBP/Places import path (BusinessStep::importResolved / addFromPlace) creates the skeleton first.');
 
             if ($execute) {
                 $removed += $audit->removeDuplicate($dup['duplicate_id']) ? 1 : 0;
@@ -49,9 +53,9 @@ class ReportDuplicateLocationsCommand extends Command
 
         $this->newLine();
         if ($execute) {
-            $this->warn("Removed {$removed} partial-insert duplicate(s).");
+            $this->warn("Removed {$removed} stray/duplicate location(s).");
         } else {
-            $this->warn(count($rows).' partial-insert duplicate(s). Re-run with --execute to remove them.');
+            $this->warn(count($rows).' stray/duplicate location(s)'.($crossTenant > 0 ? " ({$crossTenant} cross-tenant)" : '').'. Re-run with --execute to remove them.');
         }
 
         return self::SUCCESS;

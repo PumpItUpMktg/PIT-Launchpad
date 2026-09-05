@@ -37,6 +37,9 @@ class LocationAudit
     /** @var array<string, InternalLinkGraph> per-site link graph, built once */
     private array $graphs = [];
 
+    /** @var array<string, string> location id → display label, resolved once */
+    private array $labels = [];
+
     /**
      * Item 2 — Spring City shape: locations serving counties that don't include their OWN (home) county,
      * with the published town pages that sit under them and where each would move.
@@ -151,11 +154,14 @@ class LocationAudit
      * Item 3 — partial-insert duplicate locations: a second row at the same address carrying no county
      * data and not a storefront, with zero pages of its own (the abandoned half of a two-step insert).
      *
-     * @return list<array{site_id: string, duplicate_id: string, duplicate: string, address: string, survivor_id: ?string, survivor: ?string, reason: string}>
+     * @return list<array{site_id: string, duplicate_id: string, duplicate: string, address: string, survivor_id: ?string, survivor: ?string, survivor_site_id: ?string, cross_tenant: bool, reason: string}>
      */
     public function duplicateLocations(): array
     {
         $out = [];
+        // Grouping drops SiteScope, so a same-address pair spanning two tenants is caught too — that's the
+        // wrong-tenant-import shape (a GBP import run against the wrong site before the lock existed), which
+        // is a DIFFERENT cause from an intra-site duplicate and is labelled cross_tenant below.
         foreach ($this->liveLocations()->groupBy(fn (Location $l): string => $this->addressKey($l)) as $addressKey => $group) {
             if ($addressKey === '' || $group->count() < 2) {
                 continue;
@@ -166,8 +172,9 @@ class LocationAudit
                     continue;
                 }
                 // The survivor: another row at this address that is NOT a partial insert (has county data
-                // or pages) — the real record this stub should have merged into.
+                // or pages) — the real record this stub should have merged into (or belongs on).
                 $survivor = $group->first(fn (Location $l): bool => $l->id !== $candidate->id && ! $this->looksLikePartialInsert($l));
+                $crossTenant = $survivor !== null && (string) $survivor->site_id !== (string) $candidate->site_id;
 
                 $out[] = [
                     'site_id' => (string) $candidate->site_id,
@@ -176,7 +183,11 @@ class LocationAudit
                     'address' => (string) $candidate->address,
                     'survivor_id' => $survivor !== null ? (string) $survivor->id : null,
                     'survivor' => $survivor !== null ? (string) $survivor->name : null,
-                    'reason' => 'same address, no county data, not a storefront, zero pages — an abandoned two-step insert',
+                    'survivor_site_id' => $survivor !== null ? (string) $survivor->site_id : null,
+                    'cross_tenant' => $crossTenant,
+                    'reason' => $crossTenant
+                        ? 'same address on a DIFFERENT tenant — a location created on the wrong site (a GBP import run against the wrong tenant before the lock existed), not an intra-site duplicate'
+                        : 'same address, no county data, not a storefront, zero pages — an abandoned two-step insert',
                 ];
             }
         }
@@ -201,22 +212,64 @@ class LocationAudit
     private function planRow(Content $page, Location $currentParent): array
     {
         $county = $this->townCountyGeoid($page);
-        $correct = $county !== null ? $this->locationServingCounty((string) $page->site_id, $county, (string) $currentParent->id) : null;
+        // Does the CURRENT parent already serve the town's county? If so the page is correctly parented —
+        // don't search for an alternative (which excludes the current parent and would falsely report
+        // "no location serves this county"). Only look for a different owner when the current one is wrong.
+        $currentServes = $county !== null && in_array($county, $this->countyGeoids($currentParent), true);
+        $correct = ($county !== null && ! $currentServes)
+            ? $this->locationServingCounty((string) $page->site_id, $county, (string) $currentParent->id)
+            : null;
+
+        $parenting = match (true) {
+            $county === null => 'county_unknown',   // no CoverageArea match → no confident claim
+            $currentServes => 'correct',            // current parent serves the county → already correctly parented
+            $correct !== null => 'move',            // another location serves it → re-parent (a real move)
+            default => 'no_server',                 // county resolved but no live location serves it
+        };
 
         return [
             'content_id' => (string) $page->id,
             'site_id' => (string) $page->site_id,
             'town' => (string) $page->title,
             'town_county_geoid' => $county,
-            'current_parent' => (string) $currentParent->name,
+            'parenting' => $parenting,
+            'current_parent' => $this->locationLabel($currentParent),
             'current_parent_counties' => $this->countyGeoids($currentParent),
-            'correct_parent' => $correct !== null ? (string) $correct->name : null,
+            'correct_parent' => $correct !== null ? $this->locationLabel($correct) : null,
             'correct_parent_id' => $correct !== null ? (string) $correct->id : null,
             'current_url' => $this->url($page->site_id, (string) $page->slug),
-            'proposed_url' => $correct !== null ? $this->proposedUrl($page, $correct) : null,
+            'proposed_url' => $parenting === 'move' ? $this->proposedUrl($page, $correct) : null,
             'indexed' => $this->indexStatus($page),
             'inbound_links' => $this->inboundCount($page),
         ];
+    }
+
+    /**
+     * The label the URL uses for a location — its hub landing title ("{City}, {ST}"), which is distinctive,
+     * NOT `Location.name` (the brand name, shared across a tenant's locations, so several rows would read
+     * "Sump Pump Gurus"). Falls back to the geocoded city/state, then the bare name. Cached per location.
+     */
+    private function locationLabel(Location $location): string
+    {
+        $id = (string) $location->id;
+        if (isset($this->labels[$id])) {
+            return $this->labels[$id];
+        }
+
+        $hubTitle = trim((string) Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $location->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->where('location_id', $location->id)
+            ->whereNotNull('title')
+            ->value('title'));
+
+        if ($hubTitle === '') {
+            $cs = $location->cityState();
+            $hubTitle = trim(trim((string) $cs['city']).', '.trim((string) $cs['state']), ', ');
+        }
+
+        return $this->labels[$id] = ($hubTitle !== '' ? $hubTitle : (string) $location->name);
     }
 
     /** The town's census county GEOID: match its (name, state) — parsed from the "{City}, {ST}" title — to a CoverageArea. */

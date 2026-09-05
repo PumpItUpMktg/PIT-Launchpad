@@ -41,8 +41,7 @@ class ReportCountyMismatchCommand extends Command
             foreach ($loc['pages'] as $p) {
                 $this->line("    - {$p['town']}  [county {$p['town_county_geoid']}]");
                 $this->line('        now:      '.$p['current_url'].'  '.$this->costTag($p));
-                $this->line('        move to:  '.($p['proposed_url'] ?? '(no location serves this county — nothing to re-parent to)')
-                    .($p['correct_parent'] !== null ? "   → parent: {$p['correct_parent']}" : ''));
+                $this->line('        '.$this->fixLine($p));
             }
         }
 
@@ -58,5 +57,16 @@ class ReportCountyMismatchCommand extends Command
         $idx = $p['indexed']['indexed'] ? 'INDEXED' : ($p['indexed']['coverage_state'] ?? 'not indexed');
 
         return "[{$idx} · {$p['inbound_links']} inbound link(s)]";
+    }
+
+    /** @param  array<string, mixed>  $p */
+    private function fixLine(array $p): string
+    {
+        return match ($p['parenting']) {
+            'correct' => '✓ already correctly parented (its parent serves this county)',
+            'move' => "move to:  {$p['proposed_url']}   → parent: {$p['correct_parent']}",
+            'no_server' => 'no live location serves this county — nothing to re-parent to',
+            default => 'town county unresolved (no matching coverage area)',
+        };
     }
 }

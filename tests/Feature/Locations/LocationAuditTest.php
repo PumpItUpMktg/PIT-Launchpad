@@ -50,8 +50,9 @@ it('flags a town page whose parent does not serve its county, and names the corr
     $row = $drift[0];
     expect($row['town'])->toBe('Montgomery, NJ')
         ->and($row['town_county_geoid'])->toBe('34035')
-        ->and($row['current_parent'])->toBe('Trooper')
-        ->and($row['correct_parent'])->toBe('Bedminster')                       // the location that serves Somerset
+        ->and($row['parenting'])->toBe('move')
+        ->and($row['current_parent'])->toBe('Trooper, PA')                       // the hub LABEL the URL uses, not the brand name
+        ->and($row['correct_parent'])->toBe('Bedminster, NJ')                    // the location that serves Somerset
         ->and($row['current_url'])->toBe('https://spg.test/trooper-pa/montgomery-nj')
         ->and($row['proposed_url'])->toBe('https://spg.test/bedminster-nj/montgomery-nj') // re-nested under the right hub
         ->and($row)->toHaveKeys(['indexed', 'inbound_links']);
@@ -72,7 +73,10 @@ it('reports a location whose served counties exclude its home county, with the p
         ->and($rows[0]['home_county_geoid'])->toBe('42029')
         ->and($rows[0]['served_county_geoids'])->toBe(['42077'])
         ->and($rows[0]['pages'])->toHaveCount(1)
-        ->and($rows[0]['pages'][0]['town'])->toBe('Allentown, PA');
+        ->and($rows[0]['pages'][0]['town'])->toBe('Allentown, PA')
+        // The town's parent (Spring City) DOES serve its county (42077) — it's the location's HOME county
+        // that's the oddity, not the page's parenting. So the page reads "correct", not "no location serves".
+        ->and($rows[0]['pages'][0]['parenting'])->toBe('correct');
 });
 
 it('does not flag a location that serves its own home county', function () {
@@ -93,6 +97,20 @@ it('flags town names that exist in more than one state', function () {
     expect($rows)->toHaveCount(1)
         ->and($rows[0]['name'])->toBe('Montgomery')
         ->and($rows[0]['states'])->toEqualCanonicalizing(['NJ', 'PA']);
+});
+
+it('labels a same-address stub on a different tenant as cross-tenant, naming the survivor tenant', function () {
+    $siteA = Site::factory()->create();
+    $siteB = Site::factory()->create();
+    $survivor = Location::factory()->create(['site_id' => $siteA->id, 'name' => 'Hackensack', 'address' => '9 Main St', 'county_geoids' => ['34003']]);
+    $stub = Location::factory()->create(['site_id' => $siteB->id, 'name' => 'Hackensack', 'address' => '9 Main St', 'county_geoids' => [], 'is_storefront' => false]);
+
+    $row = collect(app(LocationAudit::class)->duplicateLocations())->firstWhere('duplicate_id', (string) $stub->id);
+
+    expect($row)->not->toBeNull()
+        ->and($row['cross_tenant'])->toBeTrue()
+        ->and($row['survivor_id'])->toBe((string) $survivor->id)
+        ->and($row['survivor_site_id'])->toBe((string) $siteA->id);
 });
 
 it('reports a partial-insert duplicate and removes it only via removeDuplicate — never a real row', function () {
