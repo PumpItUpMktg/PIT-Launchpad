@@ -16,7 +16,6 @@ use App\Filament\Pages\LocationsSetup;
 use App\Filament\Pages\MarketsBoard;
 use App\Filament\Pages\Operate\InternalLinks;
 use App\Filament\Pages\Operate\OperateBlog;
-use App\Filament\Pages\Operate\OperateDashboard;
 use App\Filament\Pages\Operate\OperateLive;
 use App\Filament\Pages\Operate\OperatePages;
 use App\Filament\Pages\Operate\RebuildReadiness;
@@ -148,9 +147,8 @@ dataset('lockedSurfaces', [
     'Results · Coverage' => [fn () => LocationCoverage::getUrl()],
     'Results · AI visibility' => [fn () => GeoActivityConsole::getUrl()],
     'System · Recover' => [fn () => RebuildReadiness::getUrl()],
-    // Cross-tenant surfaces in tenant nav / the locked landing (expected RED until fixed).
+    // Cross-tenant surfaces in tenant nav / the locked landing (expected RED until retired).
     'Territory · Citations (portfolio)' => [fn () => CitationsPortfolio::getUrl()],
-    'Landing · OperateDashboard' => [fn () => OperateDashboard::getUrl()],
     'Landing · Overview' => [fn () => Overview::getUrl()],
     // Every resource index (URL-reachable regardless of nav).
     'Resource · Reviews (capture)' => [fn () => ReviewCaptureResource::getUrl('index')],

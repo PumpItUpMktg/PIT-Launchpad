@@ -25,9 +25,9 @@ use Filament\Pages\Page;
  * that navigate to the tenant's working surfaces.
  *
  * Scoped to the {@see ActiveTenant} lock — it renders for whichever tenant the operator selected in the
- * Lobby; there is no in-page site picker (the lock is the selection). Registered as a drill-down for now
- * (reached by URL); the nav cutover (PR 5) makes it the post-Lobby landing and reconciles the Dashboard
- * label with the cross-tenant {@see OperateDashboard}.
+ * Lobby; there is no in-page site picker (the lock is the selection). This IS the operator's post-Lobby
+ * landing: the cross-tenant OperateDashboard was retired into the Lobby (tenant-lock remediation), so the
+ * only "Dashboard" is this per-tenant one.
  *
  * @property-read array<string, mixed> $metrics
  * @property-read list<array{label: string, url: string, desc: string, provisional?: bool}> $areas

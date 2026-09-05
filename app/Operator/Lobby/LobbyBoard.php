@@ -2,6 +2,7 @@
 
 namespace App\Operator\Lobby;
 
+use App\Enums\BlogTargetStatus;
 use App\Enums\CitationPresence;
 use App\Enums\ConnectionProvider;
 use App\Enums\ContentKind;
@@ -12,20 +13,26 @@ use App\Enums\LobbyCardState;
 use App\Enums\ReviewStatus;
 use App\Enums\SetupStep;
 use App\Enums\SiteStatus;
+use App\Models\BlogTarget;
 use App\Models\CitationStatus;
 use App\Models\Connection;
 use App\Models\Content;
 use App\Models\CoverageScanPlan;
 use App\Models\Job;
+use App\Models\Location;
 use App\Models\Market;
 use App\Models\Review;
 use App\Models\Scopes\SiteScope;
+use App\Models\Service;
 use App\Models\SetupState;
 use App\Models\Site;
 use App\Models\Source;
+use App\Models\VoiceProfile;
+use App\Operate\BlogBoard;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Assembles the operator lobby in a SINGLE aggregated pass: one `Site` query plus a fixed set of
@@ -129,6 +136,23 @@ class LobbyBoard
             ->get();
 
         return [
+            // Tier 4 — starved blog queues: silos that have held a blog target but whose Queued queue has
+            // run dry (≤ near-empty). One grouped subquery (count-per-silo → count starved silos per site),
+            // so the pass stays constant regardless of tenant count. (Absorbed from the retired AttentionBoard.)
+            'starved_queues' => DB::query()->fromSub(
+                BlogTarget::withoutGlobalScope(SiteScope::class)
+                    ->whereIn('site_id', $ids)
+                    ->groupBy('site_id', 'silo_id')
+                    ->selectRaw('site_id, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as queued', [BlogTargetStatus::Queued->value]),
+                'q'
+            )->where('queued', '<=', BlogBoard::NEAR_EMPTY)
+                ->groupBy('site_id')
+                ->selectRaw('site_id, count(*) as aggregate')
+                ->pluck('aggregate', 'site_id')->map(fn ($v) => (int) $v)->all(),
+
+            // Tier 2 — live-site setup gaps: a launched tenant missing a service / served towns / active
+            // voice / WP connection (publishing while incomplete). Only badged on non-onboarding cards.
+            'setup_gaps' => $this->setupGaps($ids),
             'wp_broken' => $this->countMap(
                 Connection::withoutGlobalScope(SiteScope::class)
                     ->whereIn('site_id', $ids)
@@ -182,6 +206,52 @@ class LobbyBoard
             ->pluck('aggregate', 'site_id')
             ->map(fn ($v) => (int) $v)
             ->all();
+    }
+
+    /**
+     * Per-site readiness-gap count for LIVE tenants: no service / has locations but none serve towns / no
+     * active voice / no WP connection. A fixed set of grouped queries (constant, tenant-count-independent);
+     * served_towns is a JSON column, so the "serves towns" test is grouped in PHP from a single pluck rather
+     * than a non-portable JSON SQL predicate. Only non-onboarding cards read this (onboarding shows progress).
+     *
+     * @param  list<string>  $ids
+     * @return array<string, int> site_id => gap count (sites with zero gaps are omitted)
+     */
+    private function setupGaps(array $ids): array
+    {
+        $hasService = $this->countMap(Service::withoutGlobalScope(SiteScope::class)->whereIn('site_id', $ids));
+        $hasVoice = $this->countMap(VoiceProfile::withoutGlobalScope(SiteScope::class)
+            ->whereIn('site_id', $ids)->where('status', 'active'));
+        $hasWp = $this->countMap(Connection::withoutGlobalScope(SiteScope::class)
+            ->whereIn('site_id', $ids)->where('provider', ConnectionProvider::WpAppPassword->value));
+
+        // One query for the towns test (served_towns is JSON → grouped in PHP, not in SQL).
+        $locationsBySite = Location::withoutGlobalScope(SiteScope::class)
+            ->whereIn('site_id', $ids)->get(['site_id', 'served_towns'])->groupBy('site_id');
+
+        $gaps = [];
+        foreach ($ids as $id) {
+            $count = 0;
+            if (! isset($hasService[$id])) {
+                $count++;
+            }
+            $locations = $locationsBySite->get($id);
+            if ($locations !== null && $locations->isNotEmpty()
+                && $locations->every(fn (Location $l): bool => collect($l->served_towns ?? [])->isEmpty())) {
+                $count++;
+            }
+            if (! isset($hasVoice[$id])) {
+                $count++;
+            }
+            if (! isset($hasWp[$id])) {
+                $count++;
+            }
+            if ($count > 0) {
+                $gaps[$id] = $count;
+            }
+        }
+
+        return $gaps;
     }
 
     /**
@@ -262,6 +332,9 @@ class LobbyBoard
         if ($at('reviews_no_market') > 0) {
             $badges[] = new LobbyBadge('reviews_no_market', $t2, 'Reviews with no market', $at('reviews_no_market'));
         }
+        if ($at('setup_gaps') > 0) {
+            $badges[] = new LobbyBadge('setup_gaps', $t2, 'Live site missing setup', $at('setup_gaps'));
+        }
 
         // Tier 3 — work waiting on a person.
         if ($at('reviews_pending') > 0) {
@@ -283,6 +356,9 @@ class LobbyBoard
         }
         if ($at('coverage_overdue') > 0) {
             $badges[] = new LobbyBadge('coverage_overdue', $t4, 'Overdue coverage scans', $at('coverage_overdue'));
+        }
+        if ($at('starved_queues') > 0) {
+            $badges[] = new LobbyBadge('starved_queues', $t4, 'Blog queues run dry', $at('starved_queues'));
         }
 
         usort($badges, fn (LobbyBadge $a, LobbyBadge $b) => $a->tier->rank() <=> $b->tier->rank());

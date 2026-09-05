@@ -128,3 +128,17 @@ green-on-broken-base guard) is closed, not repurposed.
 6. **`?site=` link removal** — delete the 20 `getUrl(['site'=>...])` args (dead readers, live vectors — a bookmarked `?site=X` under a lock on Y silently mis-scopes, and becomes real ambiguity under URL-path tenancy); route the `?content=`/`?location=` drill links through the now-scoped resolvers.
 
 When steps 1–6 land, `TenantLockLeakTest` is fully green — every surface asserted clean, whole-page.
+
+## Lobby badge tiers — authoritative (15 conditions)
+
+The cross-tenant OperateDashboard is deleted; the Lobby is the sole cross-tenant surface. Its per-card
+attention badges are the authoritative portfolio-level signal, in a single aggregated pass (no per-card
+query). Two conditions were absorbed from the retired dashboard (marked ← dashboard); raw blog candidates
+stay deliberately unbadged (Review-stage only; a bare candidate count would swamp everything).
+
+- **Tier 1 — BrokenBlocking (publishing blocked, red):** `wp_connection` (WP compromised) · `publish_failed` · `render_failed`.
+- **Tier 2 — WrongData (wrong data reaching the public, red):** `wrong_nap` · `held_market` · `reviews_no_market` · `setup_gaps` (live site missing service / served towns / active voice / WP — ← dashboard).
+- **Tier 3 — WorkWaiting (work waiting on a person, amber):** `reviews_pending` · `jobs_review` · `pages_review` · `blog_review`.
+- **Tier 4 — Degrading (degrading quietly, grey):** `feeds_bad` · `coverage_overdue` · `starved_queues` (silo blog queue run dry — ← dashboard).
+
+15 conditions (was 13). Onboarding tenants show a progress card, never operational badges.

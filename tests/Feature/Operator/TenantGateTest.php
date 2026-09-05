@@ -1,7 +1,7 @@
 <?php
 
 use App\Enums\UserRole;
-use App\Filament\Pages\Operate\OperateDashboard;
+use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
 use App\Http\Middleware\EnsureTenantSelected;
 use App\Models\Site;
@@ -34,7 +34,7 @@ function runGate(Request $request): Response
 }
 
 it('redirects an operator with no active tenant to the Portfolio', function () {
-    $res = runGate(gateRequest('filament.admin.pages.operate-dashboard'));
+    $res = runGate(gateRequest('filament.admin.pages.tenant-dashboard'));
 
     expect($res->getStatusCode())->toBe(302)
         ->and($res->headers->get('Location'))->toContain('/sites'); // the Portfolio (SiteResource index)
@@ -53,11 +53,11 @@ it('lets the Portfolio, create-site, and logout through without a tenant (no tra
 it('lets every page through once a tenant is selected', function () {
     app(ActiveTenant::class)->set(Site::factory()->create()->id);
 
-    expect(runGate(gateRequest('filament.admin.pages.operate-dashboard'))->getContent())->toBe('passed');
+    expect(runGate(gateRequest('filament.admin.pages.tenant-dashboard'))->getContent())->toBe('passed');
 });
 
 it('never gates a non-GET request (form posts / livewire updates pass)', function () {
-    expect(runGate(gateRequest('filament.admin.pages.operate-dashboard', 'POST'))->getContent())->toBe('passed');
+    expect(runGate(gateRequest('filament.admin.pages.tenant-dashboard', 'POST'))->getContent())->toBe('passed');
 });
 
 it('Portfolio "Work on this" selects the tenant and enters its Dashboard', function () {
@@ -66,7 +66,7 @@ it('Portfolio "Work on this" selects the tenant and enters its Dashboard', funct
     Livewire::test(ListSites::class)
         ->assertTableActionExists('selectTenant')
         ->callTableAction('selectTenant', $site)
-        ->assertRedirect(OperateDashboard::getUrl());
+        ->assertRedirect(TenantDashboard::getUrl());
 
     expect(app(ActiveTenant::class)->id())->toBe($site->id);
 });

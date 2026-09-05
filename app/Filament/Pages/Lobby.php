@@ -4,7 +4,9 @@ namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
 use App\Filament\Pages\Citations\CitationsBoard;
-use App\Filament\Pages\Operate\OperateDashboard;
+use App\Filament\Pages\Gathering\SetupEntry;
+use App\Filament\Pages\Operate\OperateBlog;
+use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\ContentReviewResource;
 use App\Filament\Resources\ReviewCaptureResource;
@@ -73,7 +75,7 @@ class Lobby extends Page
     public function enter(string $siteId): void
     {
         app(ActiveTenant::class)->set($siteId);
-        $this->redirect(OperateDashboard::getUrl());
+        $this->redirect(TenantDashboard::getUrl());
     }
 
     /** Enter a tenant AT the surface a badge points to — lock it and open the filtered surface. */
@@ -95,7 +97,9 @@ class Lobby extends Page
             'feeds_bad' => SourceResource::getUrl('index'),
             'reviews_pending', 'reviews_no_market' => ReviewCaptureResource::getUrl('index'),
             'publish_failed', 'render_failed', 'pages_review', 'blog_review' => ContentReviewResource::getUrl('index'),
-            default => OperateDashboard::getUrl(), // held_market (Markets → PR 5), jobs_review (console), coverage_overdue
+            'starved_queues' => OperateBlog::getUrl(),
+            'setup_gaps' => SetupEntry::getUrl(),
+            default => TenantDashboard::getUrl(), // held_market (Markets → PR 5), jobs_review (console), coverage_overdue
         };
     }
 }

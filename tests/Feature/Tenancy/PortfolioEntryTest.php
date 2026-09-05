@@ -1,7 +1,7 @@
 <?php
 
 use App\Enums\UserRole;
-use App\Filament\Pages\Operate\OperateDashboard;
+use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
 use App\Models\Site;
 use App\Models\User;
@@ -27,7 +27,7 @@ it('the Portfolio "Work on this" action locks the tenant via ActiveTenant and la
 
     Livewire::test(ListSites::class)
         ->callTableAction('selectTenant', $site)
-        ->assertRedirect(OperateDashboard::getUrl());
+        ->assertRedirect(TenantDashboard::getUrl());
 
     // The one writer set the session key AND drove CurrentSite (so the scope is live immediately).
     expect(session(ActiveTenant::SESSION_KEY))->toBe($site->id)

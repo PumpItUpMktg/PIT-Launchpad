@@ -2,7 +2,7 @@
 
 namespace App\Livewire;
 
-use App\Filament\Pages\Operate\OperateDashboard;
+use App\Filament\Pages\Operate\TenantDashboard;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\ActiveTenant;
@@ -35,7 +35,7 @@ class TenantSwitcher extends Component
         }
 
         app(ActiveTenant::class)->set($siteId);
-        $this->redirect(OperateDashboard::getUrl(), navigate: false);
+        $this->redirect(TenantDashboard::getUrl(), navigate: false);
     }
 
     /**

@@ -1,32 +1,25 @@
 <?php
 
 use App\Enums\BlogTargetStatus;
-use App\Enums\ConnectionProvider;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\KeywordSource;
 use App\Enums\RenderStatus;
 use App\Enums\UserRole;
-use App\Enums\VoiceStatus;
 use App\Filament\Pages\Guided\Grow;
 use App\Filament\Pages\Live\LiveLocations;
 use App\Filament\Pages\Operate\OperateBlog;
 use App\Filament\Pages\Operate\OperateCorePages;
-use App\Filament\Pages\Operate\OperateDashboard;
 use App\Filament\Pages\Operate\OperateLocationPages;
 use App\Filament\Pages\Operate\OperateServicePages;
 use App\Jobs\GeneratePost;
 use App\Jobs\PublishContent;
 use App\Models\BlogTarget;
-use App\Models\Connection;
 use App\Models\Content;
 use App\Models\Keyword;
-use App\Models\Service;
 use App\Models\Silo;
 use App\Models\Site;
 use App\Models\User;
-use App\Models\VoiceProfile;
-use App\Operate\AttentionBoard;
 use App\Operate\BlogBoard;
 use App\Publishing\TenantStorage;
 use Filament\Facades\Filament;
@@ -65,14 +58,13 @@ function opKeyword(Site $site, Silo $silo, string $query): Keyword
     ]);
 }
 
-it('flag off ⇒ Operate hidden; on ⇒ Dashboard · Blog · the three pages boards (Grow/Live untouched)', function () {
+it('flag off ⇒ Operate hidden; on ⇒ Blog · the three pages boards (Grow/Live untouched)', function () {
     config()->set('launchpad.new_operate_enabled', false);
-    expect(OperateDashboard::shouldRegisterNavigation())->toBeFalse()
-        ->and(OperateBlog::shouldRegisterNavigation())->toBeFalse()
+    expect(OperateBlog::shouldRegisterNavigation())->toBeFalse()
         ->and(OperateCorePages::shouldRegisterNavigation())->toBeFalse();
 
     config()->set('launchpad.new_operate_enabled', true);
-    expect(OperateDashboard::shouldRegisterNavigation())->toBeTrue()
+    expect(OperateBlog::shouldRegisterNavigation())->toBeTrue()
         ->and(OperateBlog::getNavigationGroup())->toBe('Operate')
         // The pages boards ARE the Operate page surfaces — Core / Service / Location, full lifecycle.
         ->and(OperateCorePages::getNavigationGroup())->toBe('Operate')
@@ -83,42 +75,11 @@ it('flag off ⇒ Operate hidden; on ⇒ Dashboard · Blog · the three pages boa
         ->and(LiveLocations::getNavigationGroup())->toBe('Live Pages');
 });
 
-it('the dashboard rolls up attention across tenants and hides clean ones', function () {
-    $busy = opSite('BusyCo');
-    $silo = opSilo($busy);
-
-    // A GENUINELY clean tenant: setup complete (services, active voice, WP wired), no pipeline
-    // work. Setup gaps on a bare tenant are attention by design, so clean means finished.
-    $clean = opSite('CleanCo');
-    Service::factory()->create(['site_id' => $clean->id]);
-    VoiceProfile::factory()->create(['site_id' => $clean->id, 'status' => VoiceStatus::Active]);
-    Connection::factory()->create(['site_id' => $clean->id, 'provider' => ConnectionProvider::WpAppPassword]);
-
-    Content::factory()->create(['site_id' => $busy->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview, 'body' => 'draft']);
-    Content::factory()->create(['site_id' => $busy->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Candidate]);
-    Content::factory()->create(['site_id' => $busy->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::PublishFailed, 'last_publish_error' => 'WP 401']);
-    // A participating silo with an empty queue → starved.
-    BlogTarget::withoutGlobalScopes()->create([
-        'site_id' => $busy->id, 'silo_id' => $silo->id,
-        'keyword_id' => opKeyword($busy, $silo, 'consumed one')->id,
-        'status' => BlogTargetStatus::Published, 'queued_at' => now()->subDays(9),
-    ]);
-
-    $board = app(AttentionBoard::class)->build();
-
-    $tenants = collect($board['rows'])->pluck('tenant');
-    expect($tenants)->toContain('BusyCo')
-        ->and($tenants)->not->toContain('CleanCo')             // zero attention items ⇒ absent
-        ->and($board['totals']['review'])->toBe(1)
-        ->and($board['totals']['candidates'])->toBe(1)
-        ->and($board['totals']['failures'])->toBe(1)
-        ->and($board['totals']['starved_queues'])->toBe(1);
-
-    // Every chip resolves to a click-through URL on the right surface.
-    $page = Livewire::test(OperateDashboard::class)->assertOk()->assertSee('BusyCo')->assertDontSee('CleanCo');
-    expect($page->instance()->urlFor('review', $busy->id))->toContain('operate/blog')->toContain('tab=review')
-        ->and($page->instance()->urlFor('setup_gaps', $busy->id))->toContain('setup2/business');
-});
+// NOTE (tenant-lock remediation, rule 3): the former "dashboard rolls up attention across tenants and
+// hides clean ones" test asserted a CROSS-TENANT render (BusyCo present, CleanCo absent) — i.e. it was
+// asserting the very lock breach. It is deleted with the cross-tenant OperateDashboard + AttentionBoard.
+// The cross-tenant attention function is the Lobby's; its starved-queues and live-setup-gaps coverage
+// moved to LobbyBoardTest (the two new lobby badges).
 
 it('candidates sort directed-first and carry the keyword + the page it will support', function () {
     $site = opSite();
