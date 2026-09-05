@@ -5,6 +5,7 @@ namespace App\Operator\Nav;
 use App\Filament\Pages\Citations\CitationsPortfolio;
 use App\Filament\Pages\Gathering\SetupEntry;
 use App\Filament\Pages\GeoActivityConsole;
+use App\Filament\Pages\IndexingBoard;
 use App\Filament\Pages\JobsBoard;
 use App\Filament\Pages\LocationCoverage;
 use App\Filament\Pages\LocationGeoGrid;
@@ -69,7 +70,7 @@ class ConsoleNav
             ]],
             ['group' => 'Results', 'items' => [
                 ['label' => 'Rankings', 'surface' => RankingsBoard::class, 'soon' => false],
-                ['label' => 'Indexing', 'surface' => null, 'soon' => true],
+                ['label' => 'Indexing', 'surface' => IndexingBoard::class, 'soon' => false],
                 ['label' => 'Geo grid', 'surface' => LocationGeoGrid::class, 'soon' => false],
                 ['label' => 'Coverage', 'surface' => LocationCoverage::class, 'soon' => false],
                 ['label' => 'AI visibility', 'surface' => GeoActivityConsole::class, 'soon' => false],

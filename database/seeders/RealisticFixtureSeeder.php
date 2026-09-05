@@ -3,11 +3,13 @@
 namespace Database\Seeders;
 
 use App\Enums\ContentStatus;
+use App\Enums\IndexCoverageState;
 use App\Enums\JobStatus;
 use App\Enums\MarketTier;
 use App\Enums\PageType;
 use App\Enums\SizeTier;
 use App\Enums\UserRole;
+use App\Metrics\UrlNormalizer;
 use App\Models\Account;
 use App\Models\Connection;
 use App\Models\Content;
@@ -21,6 +23,7 @@ use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Membership;
+use App\Models\PageIndexState;
 use App\Models\PositionSnapshot;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
@@ -241,6 +244,60 @@ class RealisticFixtureSeeder extends Seeder
 
         $this->seedJobs($site);
         $this->seedPositions($site);
+        $this->seedIndexStates($site);
+    }
+
+    /**
+     * Index coverage the way it actually looks: the pages Launchpad published (in the sitemap) are almost
+     * all indexed — only a couple aren't — while Google separately knows a pile of WordPress archive URLs
+     * it found on its own, spread across the not-indexed reasons. Reproduces the "1,350 not-indexed looks
+     * alarming until you see only 2 sitemap URLs are the problem" shape the Indexing surface exists to
+     * make honest. `content_id` set = published/in-sitemap; null = discovered-only.
+     */
+    private function seedIndexStates(Site $site): void
+    {
+        $domain = rtrim((string) $site->domain_url, '/');
+        $now = now();
+        $rows = [];
+        $add = function (?string $contentId, string $url, string $verdict) use (&$rows, $site, $now): void {
+            $rows[] = [
+                'id' => (string) Str::ulid(), 'site_id' => $site->id, 'content_id' => $contentId,
+                'url' => $url, 'url_normalized' => UrlNormalizer::url($url),
+                // Both columns carry the enum value (the reliable reason key is index_verdict; PASS = indexed).
+                'coverage_state' => $verdict === 'PASS' ? IndexCoverageState::Indexed->value : $verdict,
+                'index_verdict' => $verdict, 'robots_state' => null, 'canonical_url' => null,
+                'last_crawled_at' => $now->copy()->subDays(fake()->numberBetween(1, 20)), 'last_inspected_at' => $now,
+                'created_at' => $now, 'updated_at' => $now,
+            ];
+        };
+
+        // Published pages (town + service) — nearly all indexed; two aren't.
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('kind', 'page')->get(['id', 'slug']);
+        foreach ($pages as $i => $page) {
+            $url = "{$domain}/".ltrim((string) $page->slug, '/').'/';
+            $add($page->id, $url, $i < 2 ? IndexCoverageState::CrawledNotIndexed->value : 'PASS');
+        }
+
+        // Discovered-only WordPress archive URLs Google found (outside the sitemap), across the reasons.
+        $reasonPool = array_merge(
+            array_fill(0, 90, IndexCoverageState::DiscoveredNotIndexed->value),
+            array_fill(0, 68, IndexCoverageState::CrawledNotIndexed->value),
+            array_fill(0, 60, IndexCoverageState::ExcludedCanonical->value),
+            array_fill(0, 45, IndexCoverageState::ExcludedRedirect->value),
+            array_fill(0, 18, IndexCoverageState::ExcludedBlocked->value),
+            array_fill(0, 12, IndexCoverageState::NotIndexedOther->value),
+            array_fill(0, 5, IndexCoverageState::Unknown->value),
+            array_fill(0, 3, IndexCoverageState::Error->value),
+        );
+        $archives = ['category/plumbing', 'category/hvac', 'category/news', 'tag/water-heater', 'tag/emergency', 'author/admin', '2019/07', '2020/03', '2021/11', 'feed', 'page/2', 'wp-json'];
+        foreach ($reasonPool as $k => $verdict) {
+            $add(null, "{$domain}/".$archives[$k % count($archives)]."-{$k}/", $verdict);
+        }
+
+        foreach (array_chunk($rows, 300) as $chunk) {
+            PageIndexState::insert($chunk);
+        }
     }
 
     /**
