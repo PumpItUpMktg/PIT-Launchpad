@@ -754,6 +754,14 @@ return [
         // a different trade needs its own list (or this off) — move to a per-tenant setting when that lands.
         // Pinned OFF in phpunit.xml so the generic funnel tests keep their pre-gate behavior.
         'enabled' => (bool) env('LAUNCHPAD_REACTIVE_GATE', true),
+
+        // Per-silo backpressure: once a silo already holds this many UNREVIEWED candidates
+        // (status candidate/in_review — the operator's un-triaged backlog), the funnel stops routing
+        // NEW candidates into it. Prevents a firehose feed from burying one silo in thousands of
+        // un-triaged rows (the 3,074-candidate / 258-published backlog) while the operator can only
+        // work a few per day. Per silo — a saturated silo pauses while the rest keep ingesting.
+        // 0 disables the gate.
+        'candidate_backpressure_per_silo' => (int) env('LAUNCHPAD_CANDIDATE_BACKPRESSURE', 10),
         'allow' => [
             'flood', 'flooding', 'flooded', 'floodwater', 'flash flood', 'groundwater', 'ground water',
             'storm', 'stormwater', 'hurricane', 'nor\'easter', 'heavy rain', 'rainfall', 'snowmelt',

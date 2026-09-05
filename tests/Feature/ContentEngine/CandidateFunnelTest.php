@@ -238,3 +238,82 @@ test('first-run backfill yields a discovery corpus for old items and drafts only
     // No Content was created from the archive items.
     expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1);
 });
+
+test('backpressure: a silo at the unreviewed cap ingests no new candidates', function () {
+    config(['launchpad.reactive.candidate_backpressure_per_silo' => 2]);
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heaters', 'rule_set' => ['include_patterns' => ['water heater'], 'exclude_patterns' => []]]);
+
+    // Two unreviewed candidates already sitting in the silo = at the cap.
+    Content::factory()->post()->count(2)->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'status' => ContentStatus::Candidate]);
+
+    $claude = (new ScriptedClaudeClient)->fallback(relevanceJson(0.85, 'Water Heaters'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    $result = app(CandidateFunnel::class)->process($site, [News::item('Fresh water heater advisory', summary: 'A timely homeowner tip.')]);
+
+    expect($result->created)->toHaveCount(0)
+        ->and(collect($result->dropped)->pluck('reason'))->toContain('silo_backpressure')
+        ->and(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(2); // nothing added
+});
+
+test('backpressure is per silo — a saturated silo pauses while others keep ingesting', function () {
+    config(['launchpad.reactive.candidate_backpressure_per_silo' => 1]);
+    $site = Site::factory()->create();
+    $full = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Full Silo', 'rule_set' => ['include_patterns' => ['alpha'], 'exclude_patterns' => []]]);
+    $open = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Open Silo', 'rule_set' => ['include_patterns' => ['beta'], 'exclude_patterns' => []]]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'silo_id' => $full->id, 'status' => ContentStatus::Candidate]); // Full is at cap
+
+    $claude = (new ScriptedClaudeClient)
+        ->on('Alpha story', relevanceJson(0.85, 'Full Silo'))
+        ->on('Beta story', relevanceJson(0.85, 'Open Silo'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    $result = app(CandidateFunnel::class)->process($site, [
+        News::item('Alpha story', summary: 'Routes to the full silo.'),
+        News::item('Beta story', summary: 'Routes to the open silo.'),
+    ]);
+
+    expect($result->created)->toHaveCount(1)
+        ->and($result->created[0]->silo_id)->toBe($open->id)
+        ->and(collect($result->dropped)->pluck('reason'))->toContain('silo_backpressure');
+});
+
+test('backpressure counts candidates created earlier in the same run', function () {
+    config(['launchpad.reactive.candidate_backpressure_per_silo' => 1]);
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heaters', 'rule_set' => ['include_patterns' => ['water heater'], 'exclude_patterns' => []]]);
+
+    $claude = (new ScriptedClaudeClient)
+        ->on('Story one', relevanceJson(0.85, 'Water Heaters'))
+        ->on('Story two', relevanceJson(0.85, 'Water Heaters'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    // Silo starts empty; cap is 1. The first item fills it this run, the second must hit backpressure.
+    $result = app(CandidateFunnel::class)->process($site, [
+        News::item('Story one', summary: 'First homeowner water heater tip.'),
+        News::item('Story two', summary: 'Second, unrelated water heater angle entirely.'),
+    ]);
+
+    expect($result->created)->toHaveCount(1)
+        ->and(collect($result->dropped)->pluck('reason'))->toContain('silo_backpressure');
+});
+
+test('backpressure disabled (0) never blocks ingestion', function () {
+    config(['launchpad.reactive.candidate_backpressure_per_silo' => 0]);
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heaters', 'rule_set' => ['include_patterns' => ['water heater'], 'exclude_patterns' => []]]);
+    Content::factory()->post()->count(5)->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'status' => ContentStatus::Candidate]);
+
+    $claude = (new ScriptedClaudeClient)->fallback(relevanceJson(0.85, 'Water Heaters'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    $result = app(CandidateFunnel::class)->process($site, [News::item('Fresh water heater advisory', summary: 'A timely homeowner tip.')]);
+
+    expect($result->created)->toHaveCount(1)
+        ->and(collect($result->dropped)->pluck('reason'))->not->toContain('silo_backpressure');
+});

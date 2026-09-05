@@ -16,6 +16,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
 use DateTimeImmutable;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -117,6 +118,13 @@ class CandidateFunnel
         $refreshMarked = [];
         $alerts = [];
 
+        // Per-silo backpressure: seed each silo's current UNREVIEWED backlog once, then decrement headroom
+        // as we route into it this run — so a single run can't blow past the cap either. A silo at the cap
+        // ingests nothing more until the operator works the backlog down (per silo; others keep flowing).
+        $backpressure = (int) config('launchpad.reactive.candidate_backpressure_per_silo', 10);
+        $backlog = $backpressure > 0 ? $this->unreviewedBacklog($site) : [];
+        $backpressureLogged = [];
+
         foreach ($this->clusterer->cluster($filtered) as $cluster) {
             $item = $cluster->representative;
             $relevance = $this->scorer->score($item, $silos, $routingHint);
@@ -125,6 +133,23 @@ class CandidateFunnel
                 $dropped[] = ['title' => $item->title, 'reason' => $this->dropReason($relevance)];
                 if (! $relevance->brandSafe) {
                     $alerts[] = new OperatorAlert(AlertType::BrandSafetyRejected, null, "Rejected (brand safety): {$item->title}");
+                }
+
+                continue;
+            }
+
+            // Backpressure gate — checked here (after scoring routes the item, the earliest the target silo
+            // is known) and BEFORE the near-dup fetch + candidate create, so a saturated silo costs nothing
+            // more. Counts unreviewed rows created earlier this run too (the seeded backlog is decremented).
+            $siloId = (string) $relevance->matchedSiloId;
+            $siloBacklog = array_key_exists($siloId, $backlog) ? $backlog[$siloId] : 0;
+            if ($backpressure > 0 && $siloBacklog >= $backpressure) {
+                $dropped[] = ['title' => $item->title, 'reason' => 'silo_backpressure'];
+                if (! isset($backpressureLogged[$siloId])) {
+                    Log::info('candidate.backpressure.skipped', [
+                        'site_id' => $site->id, 'silo_id' => $siloId, 'unreviewed' => $siloBacklog, 'cap' => $backpressure,
+                    ]);
+                    $backpressureLogged[$siloId] = true;
                 }
 
                 continue;
@@ -151,6 +176,8 @@ class CandidateFunnel
 
             $status = $relevance->band === RelevanceBand::Borderline ? ContentStatus::InReview : ContentStatus::Candidate;
             $content = $this->createCandidate($site, $item, $relevance, $status);
+            // Both candidate + in_review are "unreviewed" — count this new row toward the silo's backlog.
+            $backlog[$siloId] = $siloBacklog + 1;
 
             if ($relevance->band === RelevanceBand::Borderline) {
                 $parked[] = $content;
@@ -246,6 +273,26 @@ class CandidateFunnel
             ->all();
 
         return array_fill_keys(array_map('strval', $existing), true);
+    }
+
+    /**
+     * The current UNREVIEWED candidate count per silo for this site — status candidate/in_review, the
+     * operator's un-triaged backlog (drafted/published rows have moved on and don't count). One grouped
+     * query; the funnel decrements headroom in-memory as it routes new candidates this run.
+     *
+     * @return array<string, int> silo_id => unreviewed count
+     */
+    private function unreviewedBacklog(Site $site): array
+    {
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereIn('status', [ContentStatus::Candidate->value, ContentStatus::InReview->value])
+            ->whereNotNull('silo_id')
+            ->selectRaw('silo_id, count(*) as aggregate')
+            ->groupBy('silo_id')
+            ->pluck('aggregate', 'silo_id')
+            ->map(fn ($n): int => (int) $n)
+            ->all();
     }
 
     private function dropReason(RelevanceResult $relevance): string
