@@ -109,8 +109,47 @@ it('labels a same-address stub on a different tenant as cross-tenant, naming the
 
     expect($row)->not->toBeNull()
         ->and($row['cross_tenant'])->toBeTrue()
+        ->and($row['removable'])->toBeTrue()               // ∅ ⊂ survivor's counties → provably redundant
         ->and($row['survivor_id'])->toBe((string) $survivor->id)
         ->and($row['survivor_site_id'])->toBe((string) $siteA->id);
+});
+
+it('removes a strict-subset 0-page row (Roslyn) and keeps the superset survivor', function () {
+    $site = Site::factory()->create();
+    // Roslyn: two 0-page rows, same address; row2's counties are a strict subset of row1's.
+    $keeper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Roslyn', 'address' => '1405 Old Northern Blvd', 'county_geoids' => ['36059', '36081', '36103', '36047'], 'is_storefront' => false]);
+    $subset = Location::factory()->create(['site_id' => $site->id, 'name' => 'Roslyn', 'address' => '1405 Old Northern Blvd', 'county_geoids' => ['36059'], 'is_storefront' => false]);
+
+    $audit = app(LocationAudit::class);
+    $rows = $audit->duplicateLocations();
+
+    // Only the subset row is flagged (the keeper dominates it, so the keeper isn't reported).
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['duplicate_id'])->toBe((string) $subset->id)
+        ->and($rows[0]['removable'])->toBeTrue()
+        ->and($rows[0]['survivor_id'])->toBe((string) $keeper->id);
+
+    expect($audit->removeDuplicate((string) $keeper->id))->toBeFalse() // no strictly-more-complete sibling → refused
+        ->and($audit->removeDuplicate((string) $subset->id))->toBeTrue()
+        ->and(Location::find($subset->id))->toBeNull()
+        ->and(Location::find($keeper->id))->not->toBeNull();
+});
+
+it('reports disjoint same-address 0-page rows as ambiguous and refuses to auto-remove them', function () {
+    $site = Site::factory()->create();
+    $a = Location::factory()->create(['site_id' => $site->id, 'name' => 'Shared', 'address' => '5 Shared Way', 'county_geoids' => ['36059']]);
+    $b = Location::factory()->create(['site_id' => $site->id, 'name' => 'Shared', 'address' => '5 Shared Way', 'county_geoids' => ['42091']]);
+
+    $audit = app(LocationAudit::class);
+    $rows = collect($audit->duplicateLocations());
+
+    // Both flagged (neither strict-supersets the other), both ambiguous, neither removable.
+    expect($rows)->toHaveCount(2)
+        ->and($rows->every(fn (array $r): bool => $r['removable'] === false))->toBeTrue();
+    expect($audit->removeDuplicate((string) $a->id))->toBeFalse()
+        ->and($audit->removeDuplicate((string) $b->id))->toBeFalse()
+        ->and(Location::find($a->id))->not->toBeNull()
+        ->and(Location::find($b->id))->not->toBeNull();
 });
 
 it('reports a partial-insert duplicate and removes it only via removeDuplicate — never a real row', function () {

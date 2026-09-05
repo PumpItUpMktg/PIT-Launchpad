@@ -154,7 +154,7 @@ class LocationAudit
      * Item 3 — partial-insert duplicate locations: a second row at the same address carrying no county
      * data and not a storefront, with zero pages of its own (the abandoned half of a two-step insert).
      *
-     * @return list<array{site_id: string, duplicate_id: string, duplicate: string, address: string, survivor_id: ?string, survivor: ?string, survivor_site_id: ?string, cross_tenant: bool, reason: string}>
+     * @return list<array{site_id: string, duplicate_id: string, duplicate: string, address: string, candidate_counties: list<string>, survivor_id: ?string, survivor: ?string, survivor_site_id: ?string, survivor_counties: list<string>, removable: bool, cross_tenant: bool, reason: string}>
      */
     public function duplicateLocations(): array
     {
@@ -167,13 +167,25 @@ class LocationAudit
                 continue;
             }
 
+            // Flag every ZERO-PAGE row in a same-address group (a row with pages is always a survivor,
+            // never flagged). Removable ONLY when a sibling's counties are a strict superset — that row
+            // provably adds nothing (Roslyn: [36059] ⊂ [36059,36081,36103,36047]; the empty-county stub is
+            // the ∅ ⊂ anything case). A 0-page row with no such sibling (disjoint/equal counties, or a
+            // storefront) is AMBIGUOUS: reported, never auto-removed — a human picks.
             foreach ($group as $candidate) {
-                if (! $this->looksLikePartialInsert($candidate)) {
+                if ($this->pageCount($candidate) > 0) {
+                    continue; // a row with pages is always a survivor — never flagged
+                }
+
+                $survivor = $this->strictSupersetSibling($candidate, $group);
+
+                // The dominating survivor: a 0-page row that strictly-supersets a sibling and is itself
+                // superseded by none (Roslyn row 1) is the keeper — not a problem, don't flag it.
+                if ($survivor === null && $this->strictlySupersetsAnySibling($candidate, $group)) {
                     continue;
                 }
-                // The survivor: another row at this address that is NOT a partial insert (has county data
-                // or pages) — the real record this stub should have merged into (or belongs on).
-                $survivor = $group->first(fn (Location $l): bool => $l->id !== $candidate->id && ! $this->looksLikePartialInsert($l));
+
+                $removable = $survivor !== null && ! $candidate->is_storefront;
                 $crossTenant = $survivor !== null && (string) $survivor->site_id !== (string) $candidate->site_id;
 
                 $out[] = [
@@ -181,13 +193,14 @@ class LocationAudit
                     'duplicate_id' => (string) $candidate->id,
                     'duplicate' => (string) $candidate->name,
                     'address' => (string) $candidate->address,
+                    'candidate_counties' => $this->countyGeoids($candidate),
                     'survivor_id' => $survivor !== null ? (string) $survivor->id : null,
                     'survivor' => $survivor !== null ? (string) $survivor->name : null,
                     'survivor_site_id' => $survivor !== null ? (string) $survivor->site_id : null,
+                    'survivor_counties' => $survivor !== null ? $this->countyGeoids($survivor) : [],
+                    'removable' => $removable,
                     'cross_tenant' => $crossTenant,
-                    'reason' => $crossTenant
-                        ? 'same address on a DIFFERENT tenant — a location created on the wrong site (a GBP import run against the wrong tenant before the lock existed), not an intra-site duplicate'
-                        : 'same address, no county data, not a storefront, zero pages — an abandoned two-step insert',
+                    'reason' => $this->duplicateReason($candidate, $survivor, $removable, $crossTenant),
                 ];
             }
         }
@@ -195,15 +208,80 @@ class LocationAudit
         return $out;
     }
 
-    /** Remove one partial-insert duplicate by id (the ONLY write in the relay; the command gates it behind --execute). */
+    /**
+     * Remove one duplicate by id — the ONLY write in the relay (the command gates it behind --execute).
+     * Re-verifies removability against the SAME rule at delete time: 0 pages, not a storefront, and a
+     * same-address sibling whose counties strictly superset this row's. Never deletes an ambiguous row.
+     */
     public function removeDuplicate(string $locationId): bool
     {
         $location = $this->location($locationId);
-        if ($location === null || ! $this->looksLikePartialInsert($location)) {
-            return false; // never delete a row that carries data or pages
+        if ($location === null || $location->is_storefront || $this->pageCount($location) > 0) {
+            return false; // a storefront or a row with pages is never removable
+        }
+
+        $group = $this->liveLocations()->filter(fn (Location $l): bool => $this->addressKey($l) === $this->addressKey($location));
+        if ($this->strictSupersetSibling($location, $group) === null) {
+            return false; // no provably-more-complete sibling → ambiguous → refuse
         }
 
         return (bool) $location->delete();
+    }
+
+    /**
+     * The same-address sibling whose county set is a STRICT superset of $candidate's (contains all of the
+     * candidate's counties and at least one more) — so removing the candidate provably loses no coverage.
+     * The most-complete such sibling is the survivor. Null when none exists (ambiguous).
+     *
+     * @param  Collection<int, Location>  $group
+     */
+    private function strictSupersetSibling(Location $candidate, Collection $group): ?Location
+    {
+        $cand = $this->countyGeoids($candidate);
+
+        return $group
+            ->reject(fn (Location $l): bool => (string) $l->id === (string) $candidate->id)
+            ->filter(function (Location $sibling) use ($cand): bool {
+                $sib = $this->countyGeoids($sibling);
+
+                return array_diff($cand, $sib) === []   // candidate ⊆ sibling
+                    && array_diff($sib, $cand) !== [];  // sibling has ≥1 more → strict
+            })
+            ->sortByDesc(fn (Location $l): int => count($this->countyGeoids($l)))
+            ->first();
+    }
+
+    /**
+     * True when $candidate's counties are a strict superset of at least one same-address sibling's — i.e.
+     * $candidate is a "keeper" that dominates a redundant row, so it shouldn't itself be flagged.
+     *
+     * @param  Collection<int, Location>  $group
+     */
+    private function strictlySupersetsAnySibling(Location $candidate, Collection $group): bool
+    {
+        $cand = $this->countyGeoids($candidate);
+
+        return $group->contains(function (Location $sibling) use ($candidate, $cand): bool {
+            if ((string) $sibling->id === (string) $candidate->id) {
+                return false;
+            }
+            $sib = $this->countyGeoids($sibling);
+
+            return array_diff($sib, $cand) === []    // sibling ⊆ candidate
+                && array_diff($cand, $sib) !== [];   // candidate has ≥1 more → strict
+        });
+    }
+
+    private function duplicateReason(Location $candidate, ?Location $survivor, bool $removable, bool $crossTenant): string
+    {
+        if (! $removable) {
+            return 'same-address 0-page row with no strictly-more-complete sibling (disjoint/equal counties, or a storefront) — AMBIGUOUS, a human picks; never auto-removed';
+        }
+        if ($crossTenant) {
+            return 'same address on a DIFFERENT tenant, 0 pages, coverage a subset of the survivor — a location created on the wrong site (a GBP import against the wrong tenant before the lock existed)';
+        }
+
+        return 'same address, 0 pages, coverage a strict subset of the survivor — a redundant duplicate that provably adds nothing';
     }
 
     // ── plan row (the cost of a correction) ────────────────────────────────────────────────────────
@@ -403,19 +481,13 @@ class LocationAudit
             : [];
     }
 
-    /** A partial-insert stub: no county data, not a storefront, and zero pages of its own. */
-    private function looksLikePartialInsert(Location $location): bool
+    /** The number of pages (hub + towns) this location owns — a row with any is always a survivor. */
+    private function pageCount(Location $location): int
     {
-        if ($this->countyGeoids($location) !== [] || $location->is_storefront) {
-            return false;
-        }
-
-        $pages = Content::withoutGlobalScope(SiteScope::class)
+        return Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $location->site_id)
             ->where(fn ($q) => $q->where('location_id', $location->id)->orWhere('parent_location_id', $location->id))
             ->count();
-
-        return $pages === 0;
     }
 
     private function addressKey(Location $location): string
