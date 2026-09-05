@@ -14,6 +14,7 @@
         .lb-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
         .lb-name { font-size:14.5px; font-weight:650; margin:0; }
         .lb-domain { font-size:12px; color:#94a3b8; margin:2px 0 0; }
+        .lb-id { font-size:10.5px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:#94a3b8; margin:3px 0 0; user-select:all; cursor:text; }
         .lb-pill { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:3px 9px; border-radius:999px; white-space:nowrap; }
         .lb-pill.blocked { background:rgba(220,38,38,.12); color:#dc2626; }
         .lb-pill.active { background:rgba(22,163,74,.12); color:#16a34a; }
@@ -60,6 +61,9 @@
                     <div>
                         <p class="lb-name">{{ $card->brandName() }}</p>
                         <p class="lb-domain">{{ $card->domain() ?: '—' }}</p>
+                        {{-- Site id — click to select (whole id), for the CLI (launchpad:sync-site-profile) + support.
+                             stopPropagation so selecting the id doesn't enter the tenant. --}}
+                        <p class="lb-id" onclick="event.stopPropagation()" title="Site id">{{ $card->site->id }}</p>
                     </div>
                     @if ($card->isBlocked())
                         <span class="lb-pill blocked">Blocked</span>

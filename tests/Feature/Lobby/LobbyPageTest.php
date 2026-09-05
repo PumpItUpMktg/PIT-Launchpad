@@ -27,15 +27,16 @@ beforeEach(function () {
 
 afterEach(fn () => CurrentSite::clear());
 
-it('renders the lobby with a card per tenant, brand + domain', function () {
-    Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://gurus.example', 'status' => SiteStatus::Active]);
+it('renders the lobby with a card per tenant, brand + domain + site id', function () {
+    $gurus = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://gurus.example', 'status' => SiteStatus::Active]);
     Site::factory()->create(['brand_name' => 'Sump Pump Today', 'domain_url' => 'https://today.example', 'status' => SiteStatus::Active]);
 
     Livewire::test(Lobby::class)
         ->assertOk()
         ->assertSee('Sump Pump Gurus')
         ->assertSee('gurus.example')
-        ->assertSee('Sump Pump Today'); // near-identical brands disambiguated by domain
+        ->assertSee('Sump Pump Today')   // near-identical brands disambiguated by domain
+        ->assertSee($gurus->id);         // the card shows the site id (for the CLI / support)
 });
 
 it('is reachable with NO tenant selected — the gate allowlists it (acceptance 5 companion)', function () {
