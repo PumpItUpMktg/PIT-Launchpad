@@ -13,8 +13,6 @@ use App\Filament\Support\SiloFilter;
 use App\Filament\Widgets\GeoContentSummaryWidget;
 use App\Geo\GeoGapBridge;
 use App\Models\Content;
-use App\Models\Scopes\SiteScope;
-use App\Support\WorkingTenant;
 use BackedEnum;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
@@ -98,25 +96,11 @@ class AiContentResource extends Resource
             ->orderByDesc('created_at');
     }
 
-    /**
-     * The tenant the page opens scoped to: the operator's session working site, else the first tenant
-     * that already has GEO-lane content. Null (all tenants) only when nothing is selected and none exist.
-     */
-    private static function defaultTenantId(): ?string
-    {
-        $fallback = Content::withoutGlobalScope(SiteScope::class)
-            ->where('draft_lane', Content::GEO_LANE)
-            ->value('site_id');
-
-        return WorkingTenant::id() ?? (is_string($fallback) ? $fallback : null);
-    }
-
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
                 TextColumn::make('title')->searchable()->limit(48)->wrap(),
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('silo.name')->label('Silo')->placeholder('—'),
                 TextColumn::make('gap')
                     ->label('AI gap')
@@ -143,8 +127,6 @@ class AiContentResource extends Resource
                 TextColumn::make('created_at')->label('Age')->since()->sortable(),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name')
-                    ->default(self::defaultTenantId()),
                 SiloFilter::scopedToTenant(),
                 SelectFilter::make('status')->options(self::enumOptions(ContentStatus::cases())),
             ], layout: FiltersLayout::AboveContent)

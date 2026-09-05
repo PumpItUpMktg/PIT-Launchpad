@@ -14,7 +14,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
@@ -60,7 +59,6 @@ class PublishedContentResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('id')->label('ID')->copyable()->fontFamily('mono')->size('xs')->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('title')->searchable()->wrap()->limit(60),
                 TextColumn::make('kind')->badge(),
                 TextColumn::make('silo.name')->label('Silo')->placeholder('—'),
@@ -72,7 +70,6 @@ class PublishedContentResource extends Resource
                 TextColumn::make('last_publish_error')->label('Note')->placeholder('—')->limit(40)->wrap()->color('warning'),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
             ])
             ->recordActions([
                 self::repushAction(),

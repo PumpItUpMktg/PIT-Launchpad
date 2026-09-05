@@ -13,7 +13,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
@@ -68,7 +67,6 @@ class CandidateResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('title')->searchable()->wrap()->limit(70),
                 TextColumn::make('source_name')->label('Source')->placeholder('—'),
                 TextColumn::make('relevance_score')->label('Score')->numeric(2)->sortable(),
@@ -89,7 +87,6 @@ class CandidateResource extends Resource
             ])
             ->defaultSort('relevance_score', 'desc')
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
             ])
             ->recordActions([
                 Action::make('generate')

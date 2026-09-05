@@ -52,7 +52,6 @@ class SiloManagementResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')->searchable()->sortable(),
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('type')->badge(),
                 TextColumn::make('keywords_count')->label('Keywords')->sortable(),
                 TextColumn::make('contents_count')->label('Content')->sortable(),
@@ -63,7 +62,6 @@ class SiloManagementResource extends Resource
                     ->color(fn (string $state): string => $state === 'viable' ? 'success' : 'warning'),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SelectFilter::make('type')->options(self::typeOptions()),
             ]);
     }

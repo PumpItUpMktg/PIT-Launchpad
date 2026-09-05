@@ -49,7 +49,6 @@ class BlogTargetResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('silo.name')->label('Silo')->sortable(),
                 TextColumn::make('keyword.query')->label('Keyword')->searchable(),
                 TextColumn::make('keyword.intent')->label('Intent')->badge()->placeholder('—'),
@@ -65,7 +64,6 @@ class BlogTargetResource extends Resource
             ])
             ->defaultSort('queued_at')
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SiloFilter::scopedToTenant(),
                 SelectFilter::make('status')->options(
                     collect(BlogTargetStatus::cases())->mapWithKeys(fn (BlogTargetStatus $s) => [$s->value => $s->label()])->all()

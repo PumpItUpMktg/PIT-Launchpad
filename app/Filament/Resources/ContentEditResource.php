@@ -62,7 +62,6 @@ class ContentEditResource extends Resource
         return $table
             ->defaultSort('created_at', 'desc')
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('content.title')->label('Page')->limit(40)->placeholder('—'),
                 TextColumn::make('field')->badge()->color('gray'),
                 TextColumn::make('reason')

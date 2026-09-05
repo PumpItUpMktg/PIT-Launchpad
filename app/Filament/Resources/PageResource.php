@@ -26,7 +26,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -70,7 +69,6 @@ class PageResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('title')->searchable()->wrap()->limit(60),
                 TextColumn::make('slug')->label('Permalink')->placeholder('—')
                     ->formatStateUsing(fn (?string $state): string => $state === null ? '—' : '/'.ltrim($state, '/'))
@@ -91,7 +89,6 @@ class PageResource extends Resource
                     }),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
             ])
             ->recordActions([
                 // The lifecycle primary — one clear "next step" per row.

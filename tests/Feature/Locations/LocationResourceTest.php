@@ -7,6 +7,7 @@ use App\Filament\Resources\LocationResource\Pages\ListLocations;
 use App\Models\Location;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 
@@ -25,10 +26,10 @@ it('renders the locations list and create form for an operator', function () {
 
 it('creates a location, normalizing the phone to E.164', function () {
     $site = Site::factory()->create();
+    app(ActiveTenant::class)->set($site->id); // site_id auto-fills from the lock (no form picker)
 
     Livewire::test(CreateLocation::class)
         ->fillForm([
-            'site_id' => $site->id,
             'name' => 'Apex Plumbing — Austin',
             'phone' => '(512) 555-0142',
             'is_storefront' => true,

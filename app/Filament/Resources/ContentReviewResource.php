@@ -81,7 +81,6 @@ class ContentReviewResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('title')->searchable()->limit(40)->wrap(),
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('silo.name')->label('Silo')->placeholder('—'),
                 TextColumn::make('kind')->badge(),
                 TextColumn::make('draft_state')
@@ -105,7 +104,6 @@ class ContentReviewResource extends Resource
                 TextColumn::make('created_at')->label('Age')->since()->sortable(),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SiloFilter::scopedToTenant(),
                 SelectFilter::make('kind')->options(self::enumOptions(ContentKind::cases())),
                 SelectFilter::make('draft_trigger')->label('Lane')->options(self::enumOptions(DraftTrigger::cases())),

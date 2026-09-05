@@ -26,7 +26,6 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 /**
@@ -65,7 +64,6 @@ class ServiceResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('short_description')->label('Card line')->limit(48)->placeholder('—'),
                 IconColumn::make('has_range')->label('Price range')->boolean()
@@ -75,7 +73,6 @@ class ServiceResource extends Resource
                 IconColumn::make('warranty_applicable')->label('Warranty')->boolean(),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
             ])
             ->recordActions([
                 ActionGroup::make([
@@ -88,7 +85,6 @@ class ServiceResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Select::make('site_id')->relationship('site', 'brand_name')->searchable()->preload()->required(),
             ...self::enrichmentComponents(),
         ]);
     }

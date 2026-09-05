@@ -11,6 +11,7 @@ use App\Models\LocationNapProfile;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use App\Support\CurrentSite;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -34,10 +35,10 @@ function wiringComponents(): array
 
 test('creating a GBP-backed location auto-fills its NAP profile', function (): void {
     $site = Site::factory()->create();
+    app(ActiveTenant::class)->set($site->id); // site_id auto-fills from the lock (no form picker)
 
     Livewire::test(CreateLocation::class)
         ->fillForm([
-            'site_id' => $site->id,
             'name' => 'Apex Plumbing — Austin',
             'phone' => '+15125550142',
             'gbp_url' => 'https://maps.google.com/?cid=12345',
@@ -65,13 +66,13 @@ test('creating a GBP-backed location auto-fills its NAP profile', function (): v
 test('importing from Google then saving seeds a matching NAP end to end', function (): void {
     app()->bind(PlacesProvider::class, MockPlacesProvider::class);
     $site = Site::factory()->create();
+    app(ActiveTenant::class)->set($site->id); // site_id auto-fills from the lock (no form picker)
 
     Livewire::test(CreateLocation::class)
         ->callAction('importFromGoogle', data: [
             'query' => 'Apex Plumbing',
             'place_id' => MockPlacesProvider::PLACE_ID,
         ])
-        ->fillForm(['site_id' => $site->id])
         ->call('create')
         ->assertHasNoFormErrors();
 
@@ -92,9 +93,10 @@ test('importing from Google then saving seeds a matching NAP end to end', functi
 
 test('creating a non-GBP location does not manufacture a NAP', function (): void {
     $site = Site::factory()->create();
+    app(ActiveTenant::class)->set($site->id); // site_id auto-fills from the lock (no form picker)
 
     Livewire::test(CreateLocation::class)
-        ->fillForm(['site_id' => $site->id, 'name' => 'Manual Co'])
+        ->fillForm(['name' => 'Manual Co'])
         ->call('create')
         ->assertHasNoFormErrors();
 

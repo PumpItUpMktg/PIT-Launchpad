@@ -31,7 +31,6 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
@@ -68,7 +67,6 @@ class LocationResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('id')->label('ID')->copyable()->fontFamily('mono')->size('xs')->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('city')->state(fn (Location $record): string => self::city($record))->placeholder('—'),
                 TextColumn::make('phone')->state(fn (Location $record): string => Phone::format($record->phone))->placeholder('—'),
@@ -76,7 +74,6 @@ class LocationResource extends Resource
                 IconColumn::make('has_gbp')->label('GBP')->boolean()->state(fn (Location $record): bool => filled($record->gbp_url)),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 TernaryFilter::make('is_storefront')->label('Storefront'),
             ])
             ->recordActions([
@@ -90,7 +87,6 @@ class LocationResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Select::make('site_id')->relationship('site', 'brand_name')->searchable()->preload()->required(),
             TextInput::make('name')->required()->maxLength(255),
             TextInput::make('address')->label('Address')->maxLength(255)
                 ->helperText('The formatted display address (Google import fills this).'),

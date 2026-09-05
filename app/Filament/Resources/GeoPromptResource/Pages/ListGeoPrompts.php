@@ -15,6 +15,7 @@ use App\Models\GeoSnapshot;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
@@ -37,15 +38,14 @@ class ListGeoPrompts extends ListRecords
     }
 
     /**
-     * The tenant selected in the table's "Tenant" filter, or null when the operator has chosen "All".
-     * Every header action scopes to it so a GEO run/seed/bridge fires only for the tenant on screen,
-     * never fanning out across the whole portfolio.
+     * The working tenant — the {@see ActiveTenant} lock (tenant-lock remediation). Every header action
+     * scopes to it so a GEO run/seed/bridge fires only for the locked tenant, never fanning out across the
+     * portfolio. The old all-tenant "Tenant" filter (and its "All" mode) is gone; changing tenant is
+     * Exit site → Lobby → enter.
      */
     private function selectedTenantId(): ?string
     {
-        $value = data_get($this->getTableFilterState('site_id'), 'value');
-
-        return is_string($value) && $value !== '' ? $value : null;
+        return app(ActiveTenant::class)->id();
     }
 
     /** Human label for the scope, for confirmation copy and notifications. */

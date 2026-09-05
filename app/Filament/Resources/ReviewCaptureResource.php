@@ -90,13 +90,11 @@ class ReviewCaptureResource extends Resource
                 TextColumn::make('customer_name')->label('Customer')->searchable(),
                 TextColumn::make('location.name')->label('Location')
                     ->placeholder('⚠ needs location')->color(fn (Review $record): string => $record->needs_location ? 'danger' : 'gray'),
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('body')->limit(60)->wrap(),
                 TextColumn::make('reviewed_at')->date()->sortable(),
             ])
             ->filters([
                 SelectFilter::make('status')->options(collect(ReviewStatus::cases())->mapWithKeys(fn (ReviewStatus $s): array => [$s->value => $s->label()])->all()),
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SelectFilter::make('source')->options(collect(ReviewSource::cases())->mapWithKeys(fn (ReviewSource $s): array => [$s->value => $s->label()])->all()),
                 SelectFilter::make('rating')->options([1 => '1★', 2 => '2★', 3 => '3★', 4 => '4★', 5 => '5★']),
                 TernaryFilter::make('needs_location')->label('Needs location'),
