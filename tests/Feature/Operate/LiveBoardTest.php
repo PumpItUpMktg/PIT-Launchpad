@@ -69,6 +69,29 @@ it('"Not indexed" excludes pages Google confirms via page_index_states', functio
     expect(collect($rows)->pluck('id')->all())->toBe([(string) $notIndexed->id]);
 });
 
+it('renders three index states — indexed / not indexed / not yet checked — never inferring negative from an absent verdict', function () {
+    $site = Site::factory()->create();
+    $indexed = lbContent($site, ContentKind::Page, PageType::Service, ['slug' => 'in']);
+    $notIndexed = lbContent($site, ContentKind::Page, PageType::Service, ['slug' => 'out']);
+    $unchecked = lbContent($site, ContentKind::Page, PageType::Service, ['slug' => 'new']); // no page_index_states row
+
+    PageIndexState::create(['site_id' => $site->id, 'content_id' => $indexed->id, 'url' => 'https://x/in', 'url_normalized' => '/in', 'index_verdict' => 'PASS']);
+    PageIndexState::create(['site_id' => $site->id, 'content_id' => $notIndexed->id, 'url' => 'https://x/out', 'url_normalized' => '/out', 'index_verdict' => 'crawled_not_indexed']);
+
+    $rows = collect(app(LiveBoard::class)->rows($site, 'all'))->keyBy('id');
+
+    expect($rows[(string) $indexed->id]['index_state'])->toBe('indexed')
+        ->and($rows[(string) $indexed->id]['index_label'])->toBe('Indexed')
+        ->and($rows[(string) $indexed->id]['index_tone'])->toBe('good');
+    expect($rows[(string) $notIndexed->id]['index_state'])->toBe('not_indexed')
+        ->and($rows[(string) $notIndexed->id]['index_label'])->toBe('Not indexed')
+        ->and($rows[(string) $notIndexed->id]['index_tone'])->toBe('neutral');
+    // The regression: a published page with NO verdict row must read "Not yet checked", not "Not indexed".
+    expect($rows[(string) $unchecked->id]['index_state'])->toBe('unchecked')
+        ->and($rows[(string) $unchecked->id]['index_label'])->toBe('Not yet checked')
+        ->and($rows[(string) $unchecked->id]['index_tone'])->toBe('neutral');
+});
+
 it('"Not ranking" excludes pages whose target keyword has an organic rank', function () {
     $site = Site::factory()->create();
     $ranking = lbContent($site, ContentKind::Page, PageType::Service, ['slug' => 'r']);
