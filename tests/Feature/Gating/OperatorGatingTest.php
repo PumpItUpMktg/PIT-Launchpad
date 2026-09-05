@@ -50,6 +50,7 @@ it('an account-wide membership grants every site under the account', function ()
     Site::factory()->create(); // a third, different account
 
     $user = operatorFor(accountWide: $account->id);
+    $this->actingAs($user); // authenticate so the resolution runs THROUGH the visibility scope, not around it
 
     expect($user->permittedSiteIds())->toHaveCount(2)
         ->and($user->canSeeSite($a))->toBeTrue()
