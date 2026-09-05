@@ -27,9 +27,35 @@ each step lands, its surfaces move from red to asserted-clean and the whole-page
 2. **A skip list is a hiding place.** Parked assertions tagged "un-skip at step N" are how a green suite
    carries a known live breach — the FOURTH hiding place found here (the old guard on #730 skipped its
    breaching surfaces to stay green). Guards assert every surface directly; a breach is red, never skipped.
+3. **When a fix breaks existing tests, the first question is whether those tests were asserting the bug.**
+   A test that only passes with the vulnerability present is documenting the vulnerability as intended
+   behaviour. The FIFTH instance found this session: `ProofEditorTest`, `CitationsWorkspaceTest`, and
+   `CitationsReportTest` all passed because **no test ever established a tenant lock** — they exercised the
+   scope-drop (`withoutGlobalScope(SiteScope)->find`) as though cross-tenant resolution were the feature.
+   The step-B fix (resolve within the lock) correctly broke them; the right response was to make them
+   establish the lock (the real locked-operator path), not to weaken the fix. Catch this deliberately: a
+   red existing test after a security fix is a signal to check what that test was really asserting.
+
+The five false-greens this session, in one line each — same shape every time (green while never reaching
+the real condition): the `?site=` sweep (wrong mechanism) · the account-wide membership test (never
+exercised an account-wide operator) · the skip list (breaches parked, not asserted) · the single-account
+fixture (VisibleSiteScope hid B) · the three test files above (no lock ever set).
 
 The guard asserts **whole-page** output (not a content region): the acceptance baseline is **0 green** —
 nothing is currently compliant, and that is the honest starting point. Each step turns its surfaces green.
+
+## 404 vs redirect — reasoned per surface (not incidental)
+
+Two distinct denials, chosen by *what* is out of the lock:
+- **404 — a RECORD outside the lock.** A foreign `?content=`/`?location=`/`?siteId=` is indistinguishable
+  from "doesn't exist" for this operator, which is the correct signal. Shape B uses 404 (ProofEditor,
+  CitationsWorkspace, CitationsReport).
+- **Redirect — a ROUTE that doesn't fit the locked context.** A cross-tenant surface reached under a lock
+  is not a missing record; it's the wrong surface for a locked operator, so it redirects to the surface
+  that *does* fit — the locked tenant's equivalent (OperateDashboard/Overview → TenantDashboard;
+  CitationsPortfolio → CitationsBoard), keeping the lock rather than dropping it. Redirect-to-Lobby is
+  reserved for the no-lock case the `EnsureTenantSelected` gate already handles (a locked-only route with
+  no tenant selected → pick one).
 
 ## `discoverResources` — off-nav is not a mitigation
 The panel disables Filament's auto-nav and renders a bespoke header, BUT `discoverResources` /
