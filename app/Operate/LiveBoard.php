@@ -16,6 +16,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Support\PublicUrl;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -44,7 +45,17 @@ class LiveBoard
 
     private bool $warmDispatched = false;
 
-    public function __construct(private readonly LiveMetrics $metrics) {}
+    /** @var Collection<string, int> content ids Google confirms indexed (PASS verdict) */
+    private Collection $indexedIds;
+
+    /** @var Collection<string, int> content ids with ANY durable index verdict (inspected) */
+    private Collection $verdictIds;
+
+    public function __construct(private readonly LiveMetrics $metrics)
+    {
+        $this->indexedIds = collect();
+        $this->verdictIds = collect();
+    }
 
     /** The type each tab counts — a live count beside every selector. @return array<string, int> */
     public function counts(Site $site): array
@@ -88,6 +99,14 @@ class LiveBoard
         $indexedIds = PageIndexState::query()->withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->where('index_verdict', 'PASS')
             ->pluck('content_id')->filter()->flip();
+        // Every content with ANY durable verdict row = "inspected". A published content NOT in this set has
+        // never been inspected → its card must read "Not yet checked", never "Not indexed" (the finding-1
+        // fix: never infer a negative from an absent verdict). Same durable source as the filter + panel.
+        $verdictIds = PageIndexState::query()->withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereNotNull('content_id')
+            ->pluck('content_id')->filter()->flip();
+        $this->indexedIds = $indexedIds;
+        $this->verdictIds = $verdictIds;
         $targetKeywordIds = $content->pluck('target_keyword_id')->filter()->unique()->values();
         $rankedKeywordIds = $targetKeywordIds->isEmpty()
             ? collect()
@@ -152,8 +171,17 @@ class LiveBoard
         $index = is_array($m['index'] ?? null) ? $m['index'] : [];
         $gsc = is_array($m['gsc'] ?? null) ? $m['gsc'] : [];
         $position = is_array($m['position'] ?? null) ? $m['position'] : [];
-        $indexed = ($index['indexed'] ?? false) || ($gsc['in_google'] ?? false);
         $rank = $position['rank'] ?? null;
+
+        // Three-state index verdict, from the DURABLE page_index_states (the filter + Indexing-panel source),
+        // OR'd with the live GSC "in Google" signal — NEVER inferred from an absent verdict. A published page
+        // with no verdict row has simply not been inspected yet; it reads "Not yet checked", not "Not indexed"
+        // (many such pages are in fact indexed per GSC). Mirrors IndexStandings + ClientDashboard::awaitingIndexing.
+        $id = (string) $c->id;
+        $indexed = $this->indexedIds->has($id) || ($gsc['in_google'] ?? false);
+        $hasVerdict = $this->verdictIds->has($id);
+        $indexState = $indexed ? 'indexed' : ($hasVerdict ? 'not_indexed' : 'unchecked');
+        $indexLabel = ['indexed' => 'Indexed', 'not_indexed' => 'Not indexed', 'unchecked' => 'Not yet checked'][$indexState];
 
         return [
             'id' => (string) $c->id,
@@ -168,6 +196,9 @@ class LiveBoard
             'published_at' => $c->published_at?->toDateString(),
             // Flags row.
             'indexed' => (bool) $indexed,
+            'index_state' => $indexState,          // indexed | not_indexed | unchecked
+            'index_label' => $indexLabel,          // the chip text (three states)
+            'index_tone' => $indexed ? 'good' : 'neutral',
             'in_bing' => (bool) (is_array($m['bing'] ?? null) ? ($m['bing']['in_bing'] ?? false) : false),
             'page_one' => $rank !== null && (int) $rank <= 10,
             'problem' => ! $indexed && ! empty($index['label']) ? (string) $index['label'] : null,

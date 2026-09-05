@@ -27,7 +27,9 @@
             @if (! empty($row['locked'])) <x-lp.chip tone="neutral" label="🔒 Locked" /> @endif
         </div>
         <div class="lp-cc-flags">
-            <x-lp.chip :tone="! empty($row['indexed']) ? 'good' : 'neutral'" :label="! empty($row['indexed']) ? 'Indexed' : 'Not indexed'" />
+            {{-- Three-state index verdict when the row carries it (Live board): Indexed / Not indexed /
+                 Not yet checked. Falls back to the binary for any board that only sets `indexed`. --}}
+            <x-lp.chip :tone="$row['index_tone'] ?? (! empty($row['indexed']) ? 'good' : 'neutral')" :label="$row['index_label'] ?? (! empty($row['indexed']) ? 'Indexed' : 'Not indexed')" />
             @if (! empty($row['in_bing'])) <x-lp.chip tone="info" label="Bing" /> @endif
             @if (! empty($row['page_one'])) <x-lp.chip tone="good" label="Page one" /> @endif
             @if (! empty($row['problem'])) <x-lp.chip tone="warn" :label="$row['problem']" /> @endif
