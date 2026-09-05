@@ -259,6 +259,13 @@ return [
         'fetch_timeout' => (int) env('LAUNCHPAD_FEED_TIMEOUT', 30),
         'fetch_max_items' => (int) env('LAUNCHPAD_FEED_MAX_ITEMS', 100),
 
+        // Per-run wall-clock budget (seconds) for the hourly ingest. The run processes feeds stalest-first
+        // (last_fetched_at asc) across all tenants until this is spent, then stops cleanly — the untouched
+        // feeds lead the next tick. Kept well under the hourly beat so a large keyword×geo fan-out can't
+        // overrun the hour and get its next tick skipped by withoutOverlapping (the stall this fixes). 40m
+        // budget under a 55m lock expiry (see routes/console.php) leaves ~20m headroom.
+        'ingest_budget_seconds' => (float) env('LAUNCHPAD_FEED_INGEST_BUDGET_SECONDS', 2400),
+
         'generated' => [
             'base_url' => env('GOOGLE_NEWS_BASE_URL', 'https://news.google.com'),
             'hl' => env('GOOGLE_NEWS_HL', 'en-US'),

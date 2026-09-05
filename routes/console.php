@@ -49,9 +49,12 @@ Schedule::job(new RefreshKeywordPipelines)->daily()->withoutOverlapping();
 Schedule::command('launchpad:reconcile-generated-feeds')->daily()->withoutOverlapping();
 
 // §6a feed ingest — fetch every active feed (generated + client) and route items
-// through the candidate funnel. Hourly; withoutOverlapping so the keyword×geo
-// fan-out can't stack runs.
-Schedule::command('launchpad:ingest-feeds')->hourly()->withoutOverlapping();
+// through the candidate funnel. Hourly; the run is budget-bounded (40m) and
+// processes feeds stalest-first, so it finishes inside the hour and the untouched
+// feeds lead the next tick. withoutOverlapping(55) so a crashed run's lock
+// auto-expires before the tick-after-next instead of wedging the schedule for a
+// day (Laravel's default lock expiry) — 55m > the 40m budget, < the 60m beat.
+Schedule::command('launchpad:ingest-feeds')->hourly()->withoutOverlapping(55);
 
 // Published-board live-metrics warm — keep the GSC/index/position/GA4 caches populated for every
 // engine-eligible site so an operator opens a board that's already warm, instead of a cold render
