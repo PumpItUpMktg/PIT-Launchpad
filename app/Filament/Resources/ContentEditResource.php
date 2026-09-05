@@ -6,7 +6,7 @@ use App\Enums\EditReason;
 use App\Enums\UserRole;
 use App\Filament\Resources\ContentEditResource\Pages\ListContentEdits;
 use App\Models\ContentEdit;
-use App\Models\Scopes\SiteScope;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
@@ -38,21 +38,23 @@ class ContentEditResource extends Resource
         return auth()->user()?->role === UserRole::Operator;
     }
 
-    /** The admin tick: how many corrections have been captured — across ALL tenants (read-across log). */
+    /** The admin tick: how many corrections have been captured for the LOCKED tenant. */
     public static function getNavigationBadge(): ?string
     {
-        $count = ContentEdit::withoutGlobalScope(SiteScope::class)->count();
+        $count = ContentEdit::query()->count();
 
         return $count > 0 ? (string) $count : null;
     }
 
     /**
-     * The §7 read-across signal log spans every tenant (it renders a Tenant column), so it drops the
-     * now-active SiteScope — otherwise it would silently collapse to the locked tenant's edits.
+     * Per-tenant operator-correction audit log, scoped to the locked {@see ActiveTenant} via
+     * SiteScope. It is per-tenant detail that happens to be stored globally — NOT a portfolio-wide surface —
+     * so it is scoped, not allowlisted (tenant-lock remediation). A cross-tenant read, if ever needed,
+     * belongs in the Lobby, never here.
      */
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->withoutGlobalScope(SiteScope::class);
+        return parent::getEloquentQuery();
     }
 
     public static function table(Table $table): Table
@@ -60,7 +62,6 @@ class ContentEditResource extends Resource
         return $table
             ->defaultSort('created_at', 'desc')
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('content.title')->label('Page')->limit(40)->placeholder('—'),
                 TextColumn::make('field')->badge()->color('gray'),
                 TextColumn::make('reason')

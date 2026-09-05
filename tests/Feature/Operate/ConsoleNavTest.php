@@ -41,12 +41,13 @@ it('marks exactly the two remaining gap items "soon" and gives them no URL', fun
     expect($soon->all())->toBe(['Brand', 'Users']);
 
     // Every soon item is non-clickable (null url); every live item resolves to a real /admin URL.
+    // (Dashboard is now the panel landing at '/admin' — no trailing path — so match '/admin', not '/admin/'.)
     foreach (app(ConsoleNav::class)->columns() as $col) {
         foreach ($col['items'] as $item) {
             if ($item['soon']) {
                 expect($item['url'])->toBeNull();
             } else {
-                expect($item['url'])->toBeString()->toContain('/admin/');
+                expect($item['url'])->toBeString()->toContain('/admin');
             }
         }
     }

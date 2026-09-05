@@ -3,11 +3,13 @@
 namespace App\Filament\Pages\Citations;
 
 use App\Citations\CitationDiagnostics;
+use App\Citations\NapBackfiller;
 use App\Citations\NapHydrationResult;
 use App\Citations\NapProfileHydrator;
 use App\Citations\Ui\LocationCitationCard;
 use App\Citations\Ui\TenantCitationBoard;
 use App\Jobs\RunCitationScan;
+use App\Models\Directory;
 use App\Models\Location;
 use App\Models\LocationNapProfile;
 use App\Models\Scopes\SiteScope;
@@ -15,6 +17,7 @@ use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\Support\CurrentSite;
 use BackedEnum;
+use Database\Seeders\DirectorySeeder;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -55,6 +58,45 @@ class CitationsBoard extends Page
     protected function getHeaderActions(): array
     {
         return [
+            // Portfolio maintenance, rehomed here from the retired cross-tenant CitationsPortfolio
+            // (tenant-lock remediation). Seeding the shared directory catalog is global; NAP backfill is
+            // scoped to the LOCKED tenant (run($site->id)) — one tenant at a time, never cross-tenant.
+            Action::make('seedDirectories')
+                ->label('Seed directory catalog')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Seed the directory catalog')
+                ->modalDescription('Loads the top national citation directories (Google, Yelp, Facebook, BBB, Angi, and more) into the shared catalog. Safe to run again — existing entries are updated in place, not duplicated.')
+                ->modalSubmitActionLabel('Seed catalog')
+                ->action(function (): void {
+                    app(DirectorySeeder::class)->run();
+
+                    Notification::make()->success()
+                        ->title('Directory catalog ready')
+                        ->body(Directory::query()->count().' directories in the catalog.')
+                        ->send();
+                }),
+            Action::make('backfillNaps')
+                ->label('Backfill NAPs from GBP')
+                ->icon('heroicon-o-identification')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Backfill NAP profiles from GBP')
+                ->modalDescription('Builds a canonical NAP from Google Business Profile data for every location in THIS tenant that has a GBP but no NAP yet, and syncs GBP-tracked fields on the rest (your overrides are kept). Reads stored data only — no Google calls — and is safe to run again.')
+                ->modalSubmitActionLabel('Backfill NAPs')
+                ->action(function (): void {
+                    $site = $this->getSite();
+                    if ($site === null) {
+                        return;
+                    }
+                    $counts = app(NapBackfiller::class)->run($site->id);
+
+                    Notification::make()->success()
+                        ->title('NAP backfill complete')
+                        ->body("{$counts['created']} created, {$counts['updated']} synced, {$counts['skipped']} skipped (no usable GBP data).")
+                        ->send();
+                }),
             Action::make('diagnoseScan')
                 ->label('Run scan diagnostics')
                 ->icon('heroicon-o-wrench-screwdriver')

@@ -9,6 +9,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 
@@ -28,10 +29,10 @@ it('offers a New silo action on the Silos list', function () {
 
 it('commits a manual silo through SiloCommitter — pillar stub + seeded rule_set', function () {
     $site = Site::factory()->create();
+    app(ActiveTenant::class)->set($site->id); // the silo is created in the LOCKED tenant, not a form-picked one
 
     Livewire::test(CreateSilo::class)
         ->fillForm([
-            'site_id' => $site->id,
             'name' => 'Water Heaters',
             'type' => SiloType::ServicePillar->value,
             'seed_terms' => ['water heater repair', 'tankless water heater'],
@@ -54,10 +55,10 @@ it('commits a manual silo through SiloCommitter — pillar stub + seeded rule_se
 
 it('halts a geo-tainted silo — nothing is written', function () {
     $site = Site::factory()->create();
+    app(ActiveTenant::class)->set($site->id);
 
     Livewire::test(CreateSilo::class)
         ->fillForm([
-            'site_id' => $site->id,
             'name' => 'Texas Plumbing', // "texas" is a geo term — the §4 hard rule
             'type' => SiloType::ServicePillar->value,
             'seed_terms' => ['plumbing'],
@@ -68,9 +69,11 @@ it('halts a geo-tainted silo — nothing is written', function () {
         ->and(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0);
 });
 
-it('requires a tenant, name and at least one seed term', function () {
+it('requires a name and at least one seed term (the tenant is the lock, not a form field)', function () {
+    app(ActiveTenant::class)->set(Site::factory()->create()->id);
+
     Livewire::test(CreateSilo::class)
-        ->fillForm(['site_id' => null, 'name' => null, 'seed_terms' => []])
+        ->fillForm(['name' => null, 'seed_terms' => []])
         ->call('create')
-        ->assertHasFormErrors(['site_id', 'name', 'seed_terms']);
+        ->assertHasFormErrors(['name', 'seed_terms']);
 });

@@ -1,15 +1,20 @@
 <?php
 
+use App\Enums\ConnectionProvider;
 use App\Enums\ContentStatus;
 use App\Enums\SiteStatus;
 use App\Enums\UserRole;
+use App\Enums\VoiceStatus;
 use App\Filament\Pages\Citations\CitationsBoard;
 use App\Filament\Pages\Lobby;
-use App\Filament\Pages\Operate\OperateDashboard;
+use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Resources\ConnectionsResource;
+use App\Models\Connection;
 use App\Models\Content;
+use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VoiceProfile;
 use App\Operator\ActiveTenant;
 use App\Support\CurrentSite;
 use Filament\Facades\Filament;
@@ -22,15 +27,16 @@ beforeEach(function () {
 
 afterEach(fn () => CurrentSite::clear());
 
-it('renders the lobby with a card per tenant, brand + domain', function () {
-    Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://gurus.example', 'status' => SiteStatus::Active]);
+it('renders the lobby with a card per tenant, brand + domain + site id', function () {
+    $gurus = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://gurus.example', 'status' => SiteStatus::Active]);
     Site::factory()->create(['brand_name' => 'Sump Pump Today', 'domain_url' => 'https://today.example', 'status' => SiteStatus::Active]);
 
     Livewire::test(Lobby::class)
         ->assertOk()
         ->assertSee('Sump Pump Gurus')
         ->assertSee('gurus.example')
-        ->assertSee('Sump Pump Today'); // near-identical brands disambiguated by domain
+        ->assertSee('Sump Pump Today')   // near-identical brands disambiguated by domain
+        ->assertSee($gurus->id);         // the card shows the site id (for the CLI / support)
 });
 
 it('is reachable with NO tenant selected — the gate allowlists it (acceptance 5 companion)', function () {
@@ -55,7 +61,7 @@ it('entering a card locks the tenant and opens its dashboard, in one action (acc
 
     Livewire::test(Lobby::class)
         ->call('enter', $site->id)
-        ->assertRedirect(OperateDashboard::getUrl());
+        ->assertRedirect(TenantDashboard::getUrl());
 
     expect(app(ActiveTenant::class)->id())->toBe($site->id); // locked in the same action
 });
@@ -77,11 +83,16 @@ it('clicking a badge locks the tenant and opens the badge\'s filtered surface (a
     // An unmapped/not-yet-built target falls back to the dashboard — still one click into the locked tenant.
     Livewire::test(Lobby::class)
         ->call('enterBadge', $site->id, 'held_market')
-        ->assertRedirect(OperateDashboard::getUrl());
+        ->assertRedirect(TenantDashboard::getUrl());
 });
 
 it('search and filter are server-side and reactive', function () {
-    Site::factory()->create(['brand_name' => 'Alpha Plumbing', 'status' => SiteStatus::Active]);
+    // Alpha is genuinely clean: setup-complete (service + active voice + a live WP connection), so the
+    // tier-2 setup_gaps badge never fires and it stays out of "needs attention".
+    $alpha = Site::factory()->create(['brand_name' => 'Alpha Plumbing', 'status' => SiteStatus::Active]);
+    Service::factory()->create(['site_id' => $alpha->id]);
+    VoiceProfile::factory()->create(['site_id' => $alpha->id, 'status' => VoiceStatus::Active]);
+    Connection::factory()->create(['site_id' => $alpha->id, 'provider' => ConnectionProvider::WpAppPassword, 'compromised' => false]);
     $beta = Site::factory()->create(['brand_name' => 'Beta Rooter', 'status' => SiteStatus::Active]);
     Content::factory()->create(['site_id' => $beta->id, 'status' => ContentStatus::RenderFailed]); // Beta needs attention
 

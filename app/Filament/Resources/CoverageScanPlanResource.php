@@ -10,6 +10,7 @@ use App\Jobs\SeedSiteCoverage;
 use App\Models\CoverageScanPlan;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use App\Operator\ActiveTenant;
 use App\Operator\Controls\CoveragePlanControl;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -53,14 +54,15 @@ class CoverageScanPlanResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
+        // No tenant picker: the plan is created in the LOCKED tenant (ActiveTenant auto-fills site_id via
+        // BelongsToSite); the location + keyword options read that lock, not a form-selected site.
         return $schema->components([
-            Select::make('site_id')->label('Tenant')->relationship('site', 'brand_name')
-                ->searchable()->preload()->required()->live(),
             Select::make('location_id')->label('GBP location')
-                ->options(fn (Get $get): array => self::locationOptions($get('site_id')))
+                ->options(fn (): array => self::locationOptions(app(ActiveTenant::class)->id()))
                 ->searchable()->required()->live(),
             Select::make('keyword_ids')->label('Keywords (grouped by silo)')->multiple()
-                ->options(fn (Get $get): array => $get('site_id') ? app(CoveragePlanControl::class)->keywordOptions((string) $get('site_id')) : [])
+                ->options(fn (): array => ($sid = app(ActiveTenant::class)->id()) !== null
+                    ? app(CoveragePlanControl::class)->keywordOptions($sid) : [])
                 ->searchable()->live()
                 ->helperText('Only keywords flagged is_grid_keyword are offered.'),
             Select::make('cadence')->options(ScanCadence::options())->default(ScanCadence::Monthly->value)->required(),
@@ -74,7 +76,6 @@ class CoverageScanPlanResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('location_id')->label('Location')
                     ->formatStateUsing(function ($state): string {
                         $location = self::location((string) $state);
@@ -91,7 +92,6 @@ class CoverageScanPlanResource extends Resource
                 IconColumn::make('enabled')->boolean(),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SelectFilter::make('enabled')->options([1 => 'Enabled', 0 => 'Disabled']),
             ])
             ->recordActions([

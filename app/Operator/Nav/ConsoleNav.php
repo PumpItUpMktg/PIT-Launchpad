@@ -2,7 +2,7 @@
 
 namespace App\Operator\Nav;
 
-use App\Filament\Pages\Citations\CitationsPortfolio;
+use App\Filament\Pages\Citations\CitationsBoard;
 use App\Filament\Pages\Gathering\SetupEntry;
 use App\Filament\Pages\GeoActivityConsole;
 use App\Filament\Pages\IndexingBoard;
@@ -63,7 +63,7 @@ class ConsoleNav
             ['group' => 'Territory', 'items' => [
                 ['label' => 'Markets', 'surface' => MarketsBoard::class, 'soon' => false],
                 ['label' => 'Towns', 'surface' => LocationsSetup::class, 'soon' => false],
-                ['label' => 'Citations', 'surface' => CitationsPortfolio::class, 'soon' => false],
+                ['label' => 'Citations', 'surface' => CitationsBoard::class, 'soon' => false],
                 ['label' => 'Silos', 'surface' => SiloManagementResource::class, 'soon' => false],
                 ['label' => 'Keywords', 'surface' => KeywordResource::class, 'soon' => false],
                 ['label' => 'Internal links', 'surface' => InternalLinks::class, 'soon' => false],

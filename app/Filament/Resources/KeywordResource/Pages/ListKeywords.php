@@ -5,6 +5,7 @@ namespace App\Filament\Resources\KeywordResource\Pages;
 use App\Filament\Resources\KeywordResource;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use App\Operator\Coverage\GridKeywordSelector;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -15,14 +16,13 @@ class ListKeywords extends ListRecords
     protected static string $resource = KeywordResource::class;
 
     /**
-     * The tenant selected in the table's "Tenant" filter (defaults to the operator working tenant). The
-     * grid-select action scopes to it, so it flags one tenant's services, never fans out across the portfolio.
+     * The working tenant — the {@see ActiveTenant} lock (tenant-lock remediation). The grid-select action
+     * scopes to it, so it flags the locked tenant's services and never fans out across the portfolio. The
+     * old all-tenant "Tenant" filter is gone; changing tenant is Exit site → Lobby → enter.
      */
     private function selectedTenantId(): ?string
     {
-        $value = data_get($this->getTableFilterState('site_id'), 'value');
-
-        return is_string($value) && $value !== '' ? $value : null;
+        return app(ActiveTenant::class)->id();
     }
 
     private function scopeLabel(?string $tenantId): string

@@ -13,7 +13,6 @@ use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\ContentEdit;
 use App\Models\PageConfig;
-use App\Models\Scopes\SiteScope;
 use App\Publishing\DeleteFromWordpress;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -27,7 +26,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -61,8 +59,8 @@ class PageResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Tenant-locked: SiteScope constrains this to the locked tenant (shape-D scope-drop removed).
         return parent::getEloquentQuery()
-            ->withoutGlobalScope(SiteScope::class)
             ->where('kind', ContentKind::Page->value)
             ->orderByDesc('created_at');
     }
@@ -71,7 +69,6 @@ class PageResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('title')->searchable()->wrap()->limit(60),
                 TextColumn::make('slug')->label('Permalink')->placeholder('—')
                     ->formatStateUsing(fn (?string $state): string => $state === null ? '—' : '/'.ltrim($state, '/'))
@@ -92,7 +89,6 @@ class PageResource extends Resource
                     }),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
             ])
             ->recordActions([
                 // The lifecycle primary — one clear "next step" per row.

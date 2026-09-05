@@ -13,7 +13,6 @@ use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
 use App\Filament\Resources\ContentReviewResource\Pages\ListContentReviews;
 use App\Filament\Support\SiloFilter;
 use App\Models\Content;
-use App\Models\Scopes\SiteScope;
 use BackedEnum;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
@@ -67,8 +66,8 @@ class ContentReviewResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Tenant-locked: SiteScope constrains this to the locked tenant (shape-D scope-drop removed).
         return parent::getEloquentQuery()
-            ->withoutGlobalScope(SiteScope::class)
             ->whereIn('status', ReviewQueue::statusValues())
             // GEO-lane drafts are reviewed in the AI section (AI → AI Content), not the blog review queue.
             // SQL `!=` drops NULLs, so OR the null lane back in.
@@ -82,7 +81,6 @@ class ContentReviewResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('title')->searchable()->limit(40)->wrap(),
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('silo.name')->label('Silo')->placeholder('—'),
                 TextColumn::make('kind')->badge(),
                 TextColumn::make('draft_state')
@@ -106,7 +104,6 @@ class ContentReviewResource extends Resource
                 TextColumn::make('created_at')->label('Age')->since()->sortable(),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SiloFilter::scopedToTenant(),
                 SelectFilter::make('kind')->options(self::enumOptions(ContentKind::cases())),
                 SelectFilter::make('draft_trigger')->label('Lane')->options(self::enumOptions(DraftTrigger::cases())),

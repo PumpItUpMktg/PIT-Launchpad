@@ -5,6 +5,7 @@ use App\Filament\Resources\KeywordResource\Pages\ListKeywords;
 use App\Models\Keyword;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 
@@ -19,22 +20,13 @@ it('opens Targets & gaps scoped to the operator working tenant, not every tenant
     $mineKw = Keyword::factory()->create(['site_id' => $mine->id, 'query' => 'sump pump installation']);
     $otherKw = Keyword::factory()->create(['site_id' => $other->id, 'query' => 'water heater repair']);
 
-    session(['guided_site_id' => $mine->id]);      // the working tenant WorkingTenant reads
+    app(ActiveTenant::class)->set($mine->id);      // the lock (→ SiteScope) scopes the board to $mine
 
     Livewire::test(ListKeywords::class)
-        ->assertCanSeeTableRecords(Keyword::whereKey($mineKw->id)->get())
-        ->assertCanNotSeeTableRecords(Keyword::whereKey($otherKw->id)->get());
+        ->assertCanSeeTableRecords([$mineKw])
+        ->assertCanNotSeeTableRecords([$otherKw]);
 });
 
-it('the Tenant filter is still switchable to another tenant', function () {
-    $mine = Site::factory()->create();
-    $other = Site::factory()->create();
-    $mineKw = Keyword::factory()->create(['site_id' => $mine->id, 'query' => 'a']);
-    $otherKw = Keyword::factory()->create(['site_id' => $other->id, 'query' => 'b']);
-    session(['guided_site_id' => $mine->id]);
-
-    Livewire::test(ListKeywords::class)
-        ->filterTable('site_id', $other->id)
-        ->assertCanSeeTableRecords(Keyword::whereKey($otherKw->id)->get())
-        ->assertCanNotSeeTableRecords(Keyword::whereKey($mineKw->id)->get());
-});
+// REMOVED (tenant-lock remediation, rule 3): "the Tenant filter is still switchable to another tenant"
+// asserted the all-tenant SelectFilter that let an operator view another tenant's keywords under a lock —
+// the shape-A breach itself. The filter is gone; changing tenant is Exit site → Lobby → enter.

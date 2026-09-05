@@ -1,6 +1,8 @@
 <?php
 
+use App\Enums\BlogTargetStatus;
 use App\Enums\CitationPresence;
+use App\Enums\ConnectionProvider;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\JobStatus;
@@ -8,14 +10,21 @@ use App\Enums\LobbyBadgeTier;
 use App\Enums\LobbyCardState;
 use App\Enums\ReviewStatus;
 use App\Enums\SiteStatus;
+use App\Enums\VoiceStatus;
+use App\Models\BlogTarget;
 use App\Models\CitationStatus;
+use App\Models\Connection;
 use App\Models\Content;
 use App\Models\Job;
+use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Review;
+use App\Models\Service;
 use App\Models\SetupState;
+use App\Models\Silo;
 use App\Models\Site;
+use App\Models\VoiceProfile;
 use App\Operator\Lobby\LobbyBoard;
 use App\Support\CurrentSite;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +35,15 @@ afterEach(fn () => CurrentSite::clear());
 function lobbyCard(string $siteId, string $filter = 'all')
 {
     return app(LobbyBoard::class)->cards('', $filter)->firstWhere(fn ($c) => $c->site->id === $siteId);
+}
+
+/** Make a live site setup-complete so the tier-2 setup_gaps badge does not fire (isolates other conditions). */
+function completeSetup(Site $site): void
+{
+    Service::factory()->create(['site_id' => $site->id]);
+    VoiceProfile::factory()->create(['site_id' => $site->id, 'status' => VoiceStatus::Active]);
+    // compromised defaults true (§9) — a broken WP connection is its own tier-1 badge, so keep it clean here.
+    Connection::factory()->create(['site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword, 'compromised' => false]);
 }
 
 it('assembles the lobby in a constant number of queries — no per-card query (acceptance 15)', function () {
@@ -53,13 +71,15 @@ it('assembles the lobby in a constant number of queries — no per-card query (a
     $eightSiteQueries = count(DB::getQueryLog());
     DB::disableQueryLog();
 
-    // Constant regardless of tenant count → no per-card query.
+    // Constant regardless of tenant count → no per-card query. (The bound rose from 12 to 16 when the
+    // starved-queues subquery + the four setup-gap aggregates were absorbed from the retired dashboard.)
     expect($eightSiteQueries)->toBe($twoSiteQueries)
-        ->and($twoSiteQueries)->toBeLessThanOrEqual(12);
+        ->and($twoSiteQueries)->toBeLessThanOrEqual(16);
 });
 
 it('flips a card to Blocked on a Tier-1 condition and suppresses lower tiers into "+N more" (acceptance 12)', function () {
     $site = Site::factory()->create(['status' => SiteStatus::Active]);
+    completeSetup($site); // isolate the tiering scenario from the tier-2 setup_gaps badge
     Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::RenderFailed]); // Tier 1
     Review::factory()->create(['site_id' => $site->id, 'status' => ReviewStatus::Pending]);          // Tier 3
 
@@ -74,7 +94,8 @@ it('flips a card to Blocked on a Tier-1 condition and suppresses lower tiers int
 
 it('shows up to three tier-ordered badges then "+N more"; colour is the tier, never the count (acceptance 13)', function () {
     $site = Site::factory()->create(['status' => SiteStatus::Active]);
-    $loc = Location::factory()->for($site)->create();
+    completeSetup($site); // no setup_gaps badge — this test is about tier ordering, not setup
+    $loc = Location::factory()->for($site)->create(['served_towns' => [['name' => 'Trenton', 'state' => 'NJ']]]);
     // Four non-Tier-1 conditions across tiers 2-4.
     Market::factory()->create(['site_id' => $site->id, 'on_hold' => true, 'release_at' => now()->subDay()]); // T2
     CitationStatus::factory()->create(['site_id' => $site->id, 'location_id' => $loc->id, 'presence' => CitationPresence::PresentMismatch, 'covered_by_sibling' => false]); // T2
@@ -99,6 +120,7 @@ it('shows up to three tier-ordered badges then "+N more"; colour is the tier, ne
 
 it('an active site with nothing waiting is ActiveClean with no badges', function () {
     $site = Site::factory()->create(['status' => SiteStatus::Active]);
+    completeSetup($site); // a genuinely clean live site is setup-complete (no setup_gaps badge)
 
     $card = lobbyCard($site->id);
 
@@ -141,6 +163,46 @@ it('does not badge raw blog candidates — only posts awaiting review', function
     $blog = collect($card->badges)->firstWhere('key', 'blog_review');
 
     expect($blog)->not->toBeNull()->and($blog->count)->toBe(1);
+});
+
+// The two badges absorbed from the retired cross-tenant OperateDashboard (tenant-lock remediation).
+
+it('badges a live site whose blog queue has run dry — tier 4, degrading (from the retired dashboard)', function () {
+    $site = Site::factory()->create(['status' => SiteStatus::Active]);
+    completeSetup($site); // isolate the starved-queue badge from setup_gaps
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id]);
+    // A participating silo (has held a target) whose queue is empty (0 queued ≤ near-empty) → starved.
+    BlogTarget::factory()->create([
+        'site_id' => $site->id, 'silo_id' => $silo->id, 'keyword_id' => $kw->id,
+        'status' => BlogTargetStatus::Published,
+    ]);
+
+    $card = lobbyCard($site->id);
+    $badge = collect($card->badges)->firstWhere('key', 'starved_queues');
+
+    expect($badge)->not->toBeNull()
+        ->and($badge->tier)->toBe(LobbyBadgeTier::Degrading)
+        ->and($badge->count)->toBe(1);
+});
+
+it('badges a live site missing setup — tier 2, wrong data reaching the public (from the retired dashboard)', function () {
+    // A launched tenant with NO service, NO active voice, NO WP connection, and a location that serves no
+    // towns → four readiness gaps. This is "publishing while incomplete", not onboarding progress.
+    $live = Site::factory()->create(['status' => SiteStatus::Active]);
+    Location::factory()->for($live)->create(['served_towns' => []]);
+
+    $card = lobbyCard($live->id);
+    $badge = collect($card->badges)->firstWhere('key', 'setup_gaps');
+
+    expect($badge)->not->toBeNull()
+        ->and($badge->tier)->toBe(LobbyBadgeTier::WrongData)
+        ->and($badge->count)->toBe(4);
+
+    // An ONBOARDING tenant with the same gaps is a progress card, never a setup_gaps badge.
+    $onboarding = Site::factory()->create(['status' => SiteStatus::Onboarding]);
+    SetupState::factory()->create(['site_id' => $onboarding->id, 'current_step' => 2]);
+    expect(collect(lobbyCard($onboarding->id)->badges)->firstWhere('key', 'setup_gaps'))->toBeNull();
 });
 
 it('searches brand + domain, filters, and sorts most-urgent first (acceptance 11)', function () {

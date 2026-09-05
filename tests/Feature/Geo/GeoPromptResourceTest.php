@@ -14,6 +14,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -30,15 +31,14 @@ it('lists GEO prompts with their latest result for an operator', function () {
         ->assertCanSeeTableRecords([$prompt]);
 });
 
-it('defaults the tenant filter to the operator\'s session working site', function () {
+it('scopes the list to the locked tenant (no all-tenant filter)', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $a = Site::factory()->create();
     $b = Site::factory()->create();
     $promptA = GeoPrompt::create(['site_id' => $a->id, 'prompt' => 'a', 'active' => true]);
     $promptB = GeoPrompt::create(['site_id' => $b->id, 'prompt' => 'b', 'active' => true]);
-    session(['guided_site_id' => $a->id]);
+    app(ActiveTenant::class)->set($a->id); // the lock (→ SiteScope) scopes the board; B is never shown
 
-    // The page opens scoped to the working tenant — B's prompts are filtered out until the operator changes it.
     Livewire::test(ListGeoPrompts::class)
         ->assertCanSeeTableRecords([$promptA])
         ->assertCanNotSeeTableRecords([$promptB]);
@@ -82,7 +82,7 @@ it('queues a gap→content bridge per site that has snapshots', function () {
     Queue::assertPushed(BridgeSiteGeoGaps::class, 1);
 });
 
-it('runs the GEO check only for the tenant selected in the filter', function () {
+it('runs the GEO check only for the locked tenant', function () {
     Queue::fake();
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $a = Site::factory()->create();
@@ -90,29 +90,14 @@ it('runs the GEO check only for the tenant selected in the filter', function () 
     GeoPrompt::create(['site_id' => $a->id, 'prompt' => 'p', 'active' => true]);
     GeoPrompt::create(['site_id' => $b->id, 'prompt' => 'q', 'active' => true]);
     GeoPrompt::create(['site_id' => $b->id, 'prompt' => 'r', 'active' => false]);
+    app(ActiveTenant::class)->set($b->id); // locked into B; the run must not fan out to A
 
-    Livewire::test(ListGeoPrompts::class)
-        ->filterTable('site_id', $b->id)
-        ->callAction('run');
+    Livewire::test(ListGeoPrompts::class)->callAction('run');
 
-    // Isolated to B — A is not touched even though it also has an active prompt.
+    // Isolated to B — A is not touched even though it also has an active prompt. (The old "All tenants"
+    // run is gone: changing tenant is Exit site → Lobby → enter, not a filter — tenant-lock remediation.)
     Queue::assertPushed(SyncSiteGeo::class, 1);
     Queue::assertPushed(SyncSiteGeo::class, fn (SyncSiteGeo $job): bool => $job->siteId === (string) $b->id);
-});
-
-it('runs the GEO check for all tenants when the filter is cleared to "All"', function () {
-    Queue::fake();
-    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
-    $a = Site::factory()->create();
-    $b = Site::factory()->create();
-    GeoPrompt::create(['site_id' => $a->id, 'prompt' => 'p', 'active' => true]);
-    GeoPrompt::create(['site_id' => $b->id, 'prompt' => 'q', 'active' => true]);
-
-    Livewire::test(ListGeoPrompts::class)
-        ->filterTable('site_id', null)   // "All" — no tenant scope
-        ->callAction('run');
-
-    Queue::assertPushed(SyncSiteGeo::class, 2);   // a + b (distinct sites with an active prompt)
 });
 
 it('filters the prompt list to one brick-and-mortar shop', function () {

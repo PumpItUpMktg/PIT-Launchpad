@@ -3,6 +3,7 @@
 use App\Enums\UserRole;
 use App\Filament\Pages\Citations\CitationsBoard;
 use App\Jobs\RunCitationScan;
+use App\Models\Directory;
 use App\Models\Location;
 use App\Models\LocationNapProfile;
 use App\Models\Scopes\SiteScope;
@@ -70,4 +71,12 @@ test('scan all fans out to every NAP-profiled location', function (): void {
     Livewire::test(CitationsBoard::class)->call('scanAll');
 
     Queue::assertPushed(RunCitationScan::class, 1);
+});
+
+test('the operator can seed the shared directory catalog from the board (rehomed from the retired portfolio)', function (): void {
+    expect(Directory::query()->count())->toBe(0);
+
+    Livewire::test(CitationsBoard::class)->callAction('seedDirectories');
+
+    expect(Directory::query()->count())->toBeGreaterThan(0);
 });

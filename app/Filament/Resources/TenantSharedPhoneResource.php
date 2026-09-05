@@ -48,7 +48,6 @@ class TenantSharedPhoneResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Select::make('site_id')->relationship('site', 'brand_name')->required()->searchable()->label('Tenant'),
             TextInput::make('phone')->required(),
             Select::make('purpose')->options(SharedPhonePurpose::options())->default(SharedPhonePurpose::Corporate->value)->required(),
             Select::make('owning_location_id')->relationship('owningLocation', 'name')->searchable()->label('Owning location (GBP primary)')
@@ -60,7 +59,6 @@ class TenantSharedPhoneResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->searchable()->sortable(),
                 TextColumn::make('phone')->searchable(),
                 TextColumn::make('purpose')->badge()->sortable(),
                 TextColumn::make('owningLocation.name')->label('Owns (GBP primary)')->placeholder('— (shared, no attribution)'),

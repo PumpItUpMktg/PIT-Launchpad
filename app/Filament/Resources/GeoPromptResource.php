@@ -79,7 +79,6 @@ class GeoPromptResource extends Resource
             // Refresh live so the "Checked" times + cited badges update as a running GEO check measures.
             ->poll('15s')
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('kind')->label('Lane')->badge()
                     ->formatStateUsing(fn (GeoPromptKind $state): string => $state->label())
                     ->color(fn (GeoPromptKind $state): string => $state === GeoPromptKind::Coverage ? 'warning' : 'gray'),
@@ -107,8 +106,6 @@ class GeoPromptResource extends Resource
                 IconColumn::make('active')->boolean(),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name')
-                    ->default(self::defaultTenantId()),
                 // View one brick-and-mortar shop's prompts at a time (its towns, via source_location_ids).
                 SelectFilter::make('location')->label('Brick & mortar')
                     ->options(fn (): array => self::locationOptions())
@@ -182,7 +179,6 @@ class GeoPromptResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Select::make('site_id')->relationship('site', 'brand_name')->required()->searchable(),
             Textarea::make('prompt')->required()->rows(3)
                 ->helperText('The question to test in AI search — e.g. "best sump pump repair in Union, NJ".'),
             TextInput::make('label')->helperText('Optional short label for the board.'),

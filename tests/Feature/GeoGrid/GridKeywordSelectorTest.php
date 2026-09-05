@@ -8,6 +8,7 @@ use App\Models\Content;
 use App\Models\Keyword;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use App\Operator\Coverage\GridKeywordSelector;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -67,10 +68,9 @@ it('adds top-level services to the grid from the Targets & gaps header action, s
     $otherKw = Keyword::factory()->create(['site_id' => $other->id, 'query' => 'b', 'is_grid_keyword' => false]);
     topLevelPage($mine, $mineKw);
     topLevelPage($other, $otherKw);
-    session(['guided_site_id' => $mine->id]);
+    app(ActiveTenant::class)->set($mine->id); // the action scopes to the lock, not a Tenant filter
 
     Livewire::test(ListKeywords::class)
-        ->filterTable('site_id', $mine->id)
         ->callAction('addTopLevelToGrid');
 
     expect($mineKw->refresh()->is_grid_keyword)->toBeTrue()

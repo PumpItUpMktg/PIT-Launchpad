@@ -13,9 +13,9 @@ use App\Enums\LaunchRunStatus;
 use App\Enums\PipelineTrigger;
 use App\Enums\SiteStatus;
 use App\Filament\Pages\Operate\HeaderMenu;
-use App\Filament\Pages\Operate\OperateDashboard;
 use App\Filament\Pages\Operate\OrphanScan;
 use App\Filament\Pages\Operate\RebuildReadiness;
+use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Pages\SiteCockpit;
 use App\Filament\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Resources\SiteResource\Pages\ListSites;
@@ -185,7 +185,7 @@ class SiteResource extends Resource
             ->action(function (Site $record) {
                 app(ActiveTenant::class)->set($record->id);
 
-                return redirect(OperateDashboard::getUrl());
+                return redirect(TenantDashboard::getUrl());
             });
     }
 
@@ -746,7 +746,7 @@ class SiteResource extends Resource
             ->action(function (Site $record) {
                 app(ActiveTenant::class)->set($record->id);
 
-                return redirect(RebuildReadiness::getUrl(['site' => $record->id]));
+                return redirect(RebuildReadiness::getUrl());
             });
     }
 
@@ -1041,7 +1041,13 @@ class SiteResource extends Resource
         return Action::make('cockpit')
             ->label('Pipeline cockpit')
             ->icon('heroicon-o-chart-bar')
-            ->url(fn (Site $record): string => SiteCockpit::getUrl(['site' => $record->id]));
+            // Lock the tenant, then open its cockpit — SiteCockpit resolves the tenant from the lock, never
+            // a ?site= param (tenant-lock remediation). From the Portfolio this enters the tenant first.
+            ->action(function (Site $record) {
+                app(ActiveTenant::class)->set($record->id);
+
+                return redirect(SiteCockpit::getUrl());
+            });
     }
 
     /**

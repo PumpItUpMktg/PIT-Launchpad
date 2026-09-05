@@ -51,7 +51,6 @@ class VoiceProfileResource extends Resource
         return $table
             ->defaultSort('version', 'desc')
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('version')->badge()->sortable(),
                 TextColumn::make('status')->badge(),
                 TextColumn::make('framing_model')->placeholder('—'),
@@ -66,7 +65,6 @@ class VoiceProfileResource extends Resource
                     }),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SelectFilter::make('status')->options(self::statusOptions()),
             ])
             ->recordActions([

@@ -64,9 +64,9 @@ it('the banner prefers the site logo, then the account logo, then name-only', fu
         ->and(activeTenant()->banner()['name'])->toBe('Sump Pump Gurus');
 });
 
-it('renders the topbar switcher with the tenant name, logo, and a way to switch', function () {
+it('renders the topbar chip with the tenant name, logo, and Exit site (no in-chrome switcher)', function () {
     $site = Site::factory()->create(['brand_name' => 'Basement Guard']);
-    Site::factory()->create(); // a second accessible tenant → real switcher, not static
+    Site::factory()->create(); // a second accessible tenant — still never named in the chrome
     SiteBranding::withoutGlobalScope(SiteScope::class)->create([
         'site_id' => $site->id, 'logo_set' => ['url' => 'https://cdn/bg.png'],
     ]);
@@ -76,6 +76,6 @@ it('renders the topbar switcher with the tenant name, logo, and a way to switch'
     Livewire::test(TenantSwitcher::class)
         ->assertSee('Basement Guard')
         ->assertSee('Working on')
-        ->assertSee('Go to Portfolio')
+        ->assertSee('Exit site')  // the only way to change tenant — Exit → Lobby → enter (tenant-lock)
         ->assertSeeHtml('https://cdn/bg.png');
 });

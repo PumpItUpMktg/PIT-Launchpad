@@ -18,6 +18,7 @@ use App\Models\MediaAsset;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use App\Publishing\PagePreviewService;
 use App\Publishing\TenantStorage;
 use BackedEnum;
@@ -369,14 +370,21 @@ class ProofEditor extends Page
             ->body($result->warnings !== [] ? implode(' ', $result->warnings) : null)->send();
     }
 
-    /** The page being reviewed, operator-scoped (cross-tenant read is fine for an operator). */
+    /**
+     * The page being reviewed, resolved ONLY within the locked tenant ({@see ActiveTenant}). A foreign
+     * `?content=` returns null → mount 404s. The operator is locked to a tenant; a review/approve/publish
+     * surface must never resolve another tenant's content from a URL param (tenant-lock, shape B).
+     */
     public function record(): ?Content
     {
-        if ($this->contentId === null) {
+        $siteId = app(ActiveTenant::class)->id();
+        if ($this->contentId === null || $siteId === null) {
             return null;
         }
 
-        return Content::withoutGlobalScope(SiteScope::class)->find($this->contentId);
+        return Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->find($this->contentId);
     }
 
     /** Whether the morphing primary should offer Publish (drafted + approved) vs Approve. */

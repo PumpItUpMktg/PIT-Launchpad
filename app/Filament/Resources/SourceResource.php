@@ -59,7 +59,6 @@ class SourceResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('origin')->badge(),
                 TextColumn::make('url')->label('Feed URL')->limit(44)->color('gray')->toggleable(),
                 TextColumn::make('health')
@@ -75,7 +74,6 @@ class SourceResource extends Resource
                 IconColumn::make('enabled')->boolean(),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SelectFilter::make('origin')->options([FeedOrigin::Generated->value => 'Generated', FeedOrigin::Client->value => 'Client']),
                 SelectFilter::make('enabled')->options([1 => 'Enabled', 0 => 'Disabled']),
             ])
@@ -94,7 +92,6 @@ class SourceResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Select::make('site_id')->relationship('site', 'brand_name')->required(),
             Select::make('type')->options(self::typeOptions())->required(),
             TextInput::make('schedule')->helperText('e.g. hourly, daily'),
             KeyValue::make('config')->helperText('Backfill window / freshness cutoff and feed settings.'),

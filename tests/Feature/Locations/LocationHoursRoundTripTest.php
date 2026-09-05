@@ -6,6 +6,7 @@ use App\Filament\Resources\LocationResource\Pages\EditLocation;
 use App\Models\Location;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use App\Support\BusinessHours;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -17,6 +18,7 @@ beforeEach(function () {
 
 it('persists hours as the DAY-KEYED map through create (24h / open-close / closed)', function () {
     $site = Site::factory()->create();
+    app(ActiveTenant::class)->set($site->id); // site_id auto-fills from the lock (no form picker)
     $fields = BusinessHours::toFields([
         'mon' => '24h',
         'tue' => ['open' => '08:00', 'close' => '17:00'],
@@ -24,7 +26,7 @@ it('persists hours as the DAY-KEYED map through create (24h / open-close / close
     ]);
 
     Livewire::test(CreateLocation::class)
-        ->fillForm(['site_id' => $site->id, 'name' => 'Round Trip Co', ...$fields])
+        ->fillForm(['name' => 'Round Trip Co', ...$fields])
         ->call('create')
         ->assertHasNoFormErrors();
 

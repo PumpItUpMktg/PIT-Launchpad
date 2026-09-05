@@ -7,7 +7,6 @@ use App\Enums\UserRole;
 use App\Filament\Resources\PublishedContentResource\Pages\ListPublishedContent;
 use App\Jobs\PublishContent;
 use App\Models\Content;
-use App\Models\Scopes\SiteScope;
 use App\Publishing\ConnectionGate;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -15,7 +14,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
@@ -50,8 +48,8 @@ class PublishedContentResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Tenant-locked: SiteScope constrains this to the locked tenant (shape-D scope-drop removed).
         return parent::getEloquentQuery()
-            ->withoutGlobalScope(SiteScope::class)
             ->where('status', ContentStatus::Published->value)
             ->orderByDesc('published_at');
     }
@@ -61,7 +59,6 @@ class PublishedContentResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('id')->label('ID')->copyable()->fontFamily('mono')->size('xs')->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('title')->searchable()->wrap()->limit(60),
                 TextColumn::make('kind')->badge(),
                 TextColumn::make('silo.name')->label('Silo')->placeholder('—'),
@@ -73,7 +70,6 @@ class PublishedContentResource extends Resource
                 TextColumn::make('last_publish_error')->label('Note')->placeholder('—')->limit(40)->wrap()->color('warning'),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
             ])
             ->recordActions([
                 self::repushAction(),

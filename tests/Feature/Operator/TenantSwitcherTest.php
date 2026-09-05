@@ -1,52 +1,46 @@
 <?php
 
 use App\Enums\UserRole;
+use App\Filament\Pages\Lobby;
 use App\Livewire\TenantSwitcher;
+use App\Models\Account;
 use App\Models\Membership;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\ActiveTenant;
 use Livewire\Livewire;
 
-it('lists the accessible tenants and switching sets the session tenant', function () {
-    $a = Site::factory()->create(['brand_name' => 'Alpha']);
-    $b = Site::factory()->create(['brand_name' => 'Bravo']);
-    $this->actingAs(User::factory()->create(['role' => UserRole::Admin]));
-    app(ActiveTenant::class)->set($a->id);
+// Tenant-lock remediation (shape E): the topbar has NO in-chrome switcher. Under a lock it shows the
+// CURRENT tenant only, plus "Exit site" → Lobby. The old dropdown-of-every-tenant tests asserted the
+// breach itself (other tenants' names in the chrome of every page) and are replaced by these.
 
-    Livewire::test(TenantSwitcher::class)
-        ->assertSet('single', false)                 // >1 tenant → real switcher
-        ->assertSee('Alpha')->assertSee('Bravo')
-        ->assertSee('Go to Portfolio')
-        ->call('switchTenant', $b->id)
-        ->assertRedirect();
+it('shows the working tenant as a static chip — never another tenant the operator can reach', function () {
+    // An operator who is a member of BOTH accounts (the real multi-tenant operator) still sees only the
+    // LOCKED tenant in the chrome — Bravo never appears.
+    $accountA = Account::factory()->create();
+    $accountB = Account::factory()->create();
+    $a = Site::factory()->for($accountA)->create(['brand_name' => 'Alpha']);
+    $b = Site::factory()->for($accountB)->create(['brand_name' => 'Bravo']);
 
-    expect(session(ActiveTenant::SESSION_KEY))->toBe($b->id);
-});
-
-it('is a static chip for a single-site operator (no dropdown)', function () {
-    $a = Site::factory()->create(['brand_name' => 'Solo']);
     $operator = User::factory()->create(['role' => UserRole::Operator]);
-    Membership::create(['user_id' => $operator->id, 'account_id' => $a->account_id, 'site_id' => $a->id, 'role' => 'operator']);
+    Membership::create(['user_id' => $operator->id, 'account_id' => $accountA->id, 'role' => UserRole::Operator]);
+    Membership::create(['user_id' => $operator->id, 'account_id' => $accountB->id, 'role' => UserRole::Operator]);
     $this->actingAs($operator);
     app(ActiveTenant::class)->set($a->id);
 
     Livewire::test(TenantSwitcher::class)
-        ->assertSet('single', true)                  // one accessible tenant → static
-        ->assertDontSee('Go to Portfolio')
-        ->assertSee('Solo');
+        ->assertSee('Working on')
+        ->assertSee('Alpha')
+        ->assertDontSee('Bravo')     // no dropdown → the other tenant is never named in the chrome
+        ->assertSee('Exit site');
 });
 
-it('refuses to switch to a tenant the operator cannot see', function () {
-    $a = Site::factory()->create();
-    $b = Site::factory()->create(); // non-member
-    $operator = User::factory()->create(['role' => UserRole::Operator]);
-    Membership::create(['user_id' => $operator->id, 'account_id' => $a->account_id, 'site_id' => $a->id, 'role' => 'operator']);
-    $this->actingAs($operator);
-    app(ActiveTenant::class)->set($a->id);
+it('Exit site returns to the Lobby (changing tenant is Exit → Lobby → enter)', function () {
+    $site = Site::factory()->create(['brand_name' => 'Solo']);
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    app(ActiveTenant::class)->set($site->id);
 
-    // Even calling the action directly with a non-member id is refused.
-    Livewire::test(TenantSwitcher::class)->call('switchTenant', $b->id);
-
-    expect(session(ActiveTenant::SESSION_KEY))->toBe($a->id); // unchanged — non-member refused
+    Livewire::test(TenantSwitcher::class)
+        ->call('exitSite')
+        ->assertRedirect(Lobby::getUrl());
 });

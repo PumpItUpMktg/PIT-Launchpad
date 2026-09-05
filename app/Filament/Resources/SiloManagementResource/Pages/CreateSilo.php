@@ -7,6 +7,7 @@ use App\Filament\Resources\SiloManagementResource;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use App\SiloCreator\GeoNeutralViolationException;
 use App\SiloCreator\ManualSiloCreator;
 use Filament\Forms\Components\Select;
@@ -30,12 +31,9 @@ class CreateSilo extends CreateRecord
 
     public function form(Schema $schema): Schema
     {
+        // No tenant picker: the silo is created in the LOCKED tenant (ActiveTenant), sourced in
+        // handleRecordCreation — an all-tenant dropdown here was a shape-A name leak + cross-tenant vector.
         return $schema->components([
-            Select::make('site_id')
-                ->label('Tenant')
-                ->options(fn (): array => Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all())
-                ->searchable()
-                ->required(),
             TextInput::make('name')
                 ->label('Silo name')
                 ->required()
@@ -62,7 +60,10 @@ class CreateSilo extends CreateRecord
      */
     protected function handleRecordCreation(array $data): Model
     {
-        $site = Site::query()->findOrFail($data['site_id']);
+        // The working tenant is the lock, never a form field (tenant-lock remediation).
+        $siteId = app(ActiveTenant::class)->id();
+        abort_if($siteId === null, 403);
+        $site = Site::query()->findOrFail($siteId);
         $seedTerms = array_values(array_map('strval', (array) ($data['seed_terms'] ?? [])));
 
         try {

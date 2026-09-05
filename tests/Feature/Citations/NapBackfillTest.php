@@ -1,12 +1,13 @@
 <?php
 
 use App\Enums\UserRole;
-use App\Filament\Pages\Citations\CitationsPortfolio;
+use App\Filament\Pages\Citations\CitationsBoard;
 use App\Models\Location;
 use App\Models\LocationNapProfile;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use App\Support\CurrentSite;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -76,16 +77,21 @@ test('the backfill is idempotent — a second run creates nothing new', function
         ->assertSuccessful();
 });
 
-test('the operator can backfill NAPs from the portfolio page', function (): void {
+test('the operator can backfill NAPs from the tenant citations board (scoped to the locked tenant)', function (): void {
     Filament::setCurrentPanel('admin');
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    // Seed both tenants BEFORE locking — the §9 write-guard refuses a cross-tenant write once locked.
     $site = Site::factory()->create();
-    CurrentSite::set($site->id);
     $gbp = backfillGbpLocation($site, 'Bedminster');
+    $other = Site::factory()->create();
+    $otherLoc = backfillGbpLocation($other, 'Other town');
+
+    app(ActiveTenant::class)->set($site->id); // the board backfills for the LOCKED tenant only
 
     expect(napExists($gbp))->toBeFalse();
 
-    Livewire::test(CitationsPortfolio::class)->callAction('backfillNaps');
+    Livewire::test(CitationsBoard::class)->callAction('backfillNaps');
 
-    expect(napExists($gbp))->toBeTrue();
+    expect(napExists($gbp))->toBeTrue()
+        ->and(napExists($otherLoc))->toBeFalse(); // tenant-scoped, not cross-tenant
 });

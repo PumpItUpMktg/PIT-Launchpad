@@ -61,8 +61,10 @@ class ReviewCaptureResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Tenant-locked: SiteScope constrains this to the locked tenant. This carries imported reviews, so a
+        // cross-tenant row here risks a wrong-tenant approval publishing a customer's words on another
+        // company's site — the shape-D scope-drop is removed (tenant-lock remediation).
         return parent::getEloquentQuery()
-            ->withoutGlobalScope(SiteScope::class)
             ->with(['location', 'site'])
             ->withCount('services')
             // Needs-location first, then pending, then the rest; newest within each.
@@ -88,13 +90,11 @@ class ReviewCaptureResource extends Resource
                 TextColumn::make('customer_name')->label('Customer')->searchable(),
                 TextColumn::make('location.name')->label('Location')
                     ->placeholder('⚠ needs location')->color(fn (Review $record): string => $record->needs_location ? 'danger' : 'gray'),
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('body')->limit(60)->wrap(),
                 TextColumn::make('reviewed_at')->date()->sortable(),
             ])
             ->filters([
                 SelectFilter::make('status')->options(collect(ReviewStatus::cases())->mapWithKeys(fn (ReviewStatus $s): array => [$s->value => $s->label()])->all()),
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SelectFilter::make('source')->options(collect(ReviewSource::cases())->mapWithKeys(fn (ReviewSource $s): array => [$s->value => $s->label()])->all()),
                 SelectFilter::make('rating')->options([1 => '1★', 2 => '2★', 3 => '3★', 4 => '4★', 5 => '5★']),
                 TernaryFilter::make('needs_location')->label('Needs location'),

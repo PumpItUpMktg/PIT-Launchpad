@@ -8,8 +8,8 @@ use App\Integrations\Google\GoogleConnectionService;
 use App\Integrations\Google\GoogleException;
 use App\Models\Connection;
 use App\Models\GoogleAccount;
-use App\Models\Site;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use App\Operator\Controls\WordpressConnector;
 use App\Policies\ConnectionPolicy;
 use App\Security\Audit;
@@ -68,7 +68,6 @@ class ConnectionsResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('site.brand_name')->label('Tenant')->sortable(),
                 TextColumn::make('provider')->badge(),
                 TextColumn::make('credentials')
                     ->label('Credential (masked)')
@@ -83,7 +82,6 @@ class ConnectionsResource extends Resource
                     ->color(fn (string $state): string => $state === 'clean' ? 'success' : 'warning'),
             ])
             ->filters([
-                SelectFilter::make('site_id')->label('Tenant')->relationship('site', 'brand_name'),
                 SelectFilter::make('compromised')->options([1 => 'Compromised', 0 => 'Clean']),
             ])
             ->recordActions([
@@ -133,11 +131,7 @@ class ConnectionsResource extends Resource
             ->modalSubmitActionLabel('Verify & connect')
             ->modalDescription('Verifies against live WordPress before saving. If the site is behind Cloudflare, first allow /wp-json/launchpad/* (a WAF "Skip" rule, or turn off Bot Fight Mode) — otherwise the edge blocks the request before WordPress and it looks like an auth failure. Connect as the launchpad-sync user.')
             ->schema([
-                Select::make('site_id')
-                    ->label('Tenant')
-                    ->options(fn (): array => Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all())
-                    ->searchable()
-                    ->required(),
+                // No tenant picker — this connects the LOCKED tenant (tenant-lock remediation).
                 TextInput::make('base_url')
                     ->label('WordPress base URL')
                     ->url()
@@ -156,8 +150,15 @@ class ConnectionsResource extends Resource
                     ->helperText('Generated for the launchpad-sync user (provider = WordPress).'),
             ])
             ->action(function (array $data): void {
+                $siteId = app(ActiveTenant::class)->id();
+                if ($siteId === null) {
+                    Notification::make()->danger()->title('No tenant selected')
+                        ->body('Enter a tenant from the Lobby before connecting WordPress.')->send();
+
+                    return;
+                }
                 try {
-                    $connection = app(WordpressConnector::class)->connect((string) $data['site_id'], [
+                    $connection = app(WordpressConnector::class)->connect($siteId, [
                         'base_url' => (string) $data['base_url'],
                         'username' => (string) $data['username'],
                         'app_password' => (string) $data['app_password'],
@@ -215,32 +216,24 @@ class ConnectionsResource extends Resource
             ->disabled(fn (): bool => GoogleAccount::current() === null)
             ->modalDescription('Choose which Search Console + GA4 property this tenant reads from the shared Google account. The account must already be added as a user on each property in Google.')
             ->schema([
-                Select::make('site_id')
-                    ->label('Tenant')
-                    ->options(fn (): array => Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all())
-                    ->searchable()
-                    ->required()
-                    ->live()
-                    ->afterStateUpdated(function ($state, callable $set): void {
-                        $site = is_string($state) ? Site::query()->find($state) : null;
-                        $set('gsc_property', $site?->gsc_property);
-                        $set('ga4_property', $site?->ga4_property);
-                    }),
+                // No tenant picker — the LOCKED tenant; its current picks prefill the fields below.
                 Select::make('gsc_property')
                     ->label('Search Console property')
                     ->options(fn (): array => self::gscPropertyOptions())
+                    ->default(fn (): ?string => app(ActiveTenant::class)->site()?->gsc_property)
                     ->searchable()
                     ->placeholder('— not connected —')
                     ->helperText('The GSC property the shared account can see for this client.'),
                 Select::make('ga4_property')
                     ->label('GA4 property')
                     ->options(fn (): array => self::ga4PropertyOptions())
+                    ->default(fn (): ?string => app(ActiveTenant::class)->site()?->ga4_property)
                     ->searchable()
                     ->placeholder('— not connected —')
                     ->helperText('The GA4 property the shared account can see for this client.'),
             ])
             ->action(function (array $data): void {
-                $site = Site::query()->find((string) $data['site_id']);
+                $site = app(ActiveTenant::class)->site();
                 if ($site === null) {
                     return;
                 }
@@ -278,24 +271,20 @@ class ConnectionsResource extends Resource
                 ? 'Set BING_WEBMASTER_API_KEY (Settings → API access in Bing Webmaster Tools) to enable this. The seam stays mock until then.'
                 : 'Enter this tenant\'s verified Bing Webmaster Tools site URL. Verify the site in BWT first — easiest is "Import from Google Search Console". Once impressions arrive, the card\'s "Submitted to Bing" pill becomes "In Bing".')
             ->schema([
-                Select::make('site_id')
-                    ->label('Tenant')
-                    ->options(fn (): array => Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all())
-                    ->searchable()
-                    ->required()
-                    ->live()
-                    ->afterStateUpdated(function ($state, callable $set): void {
-                        $site = is_string($state) ? Site::query()->find($state) : null;
-                        $set('bing_site_url', $site?->bing_site_url ?: ($site !== null ? rtrim((string) $site->domain_url, '/') : null));
-                    }),
+                // No tenant picker — the LOCKED tenant; its current Bing URL (or domain) prefills below.
                 TextInput::make('bing_site_url')
                     ->label('Bing Webmaster site URL')
                     ->url()
+                    ->default(function (): ?string {
+                        $site = app(ActiveTenant::class)->site();
+
+                        return $site?->bing_site_url ?: ($site !== null ? rtrim((string) $site->domain_url, '/') : null);
+                    })
                     ->placeholder('https://example.com')
                     ->helperText('The verified BWT site URL — usually the tenant\'s domain. Leave blank to clear (Bing goes back to mock for this tenant).'),
             ])
             ->action(function (array $data): void {
-                $site = Site::query()->find((string) $data['site_id']);
+                $site = app(ActiveTenant::class)->site();
                 if ($site === null) {
                     return;
                 }

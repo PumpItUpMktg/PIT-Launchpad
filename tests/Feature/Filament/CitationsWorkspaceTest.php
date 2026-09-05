@@ -10,6 +10,7 @@ use App\Models\LocationNapProfile;
 use App\Models\Site;
 use App\Models\TenantDirectoryExclusion;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 
@@ -17,6 +18,7 @@ beforeEach(function (): void {
     Filament::setCurrentPanel('admin');
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $this->site = Site::factory()->create();
+    app(ActiveTenant::class)->set($this->site->id); // the operator works under a tenant lock
     $this->location = Location::factory()->create(['site_id' => $this->site->id, 'name' => 'Bedminster']);
     LocationNapProfile::factory()->create(['site_id' => $this->site->id, 'location_id' => $this->location->id, 'categories' => null]);
     $this->dir = Directory::factory()->create(['name' => 'Yelp', 'domain' => 'yelp.com', 'is_submittable' => true]);
