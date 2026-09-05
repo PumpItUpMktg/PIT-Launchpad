@@ -17,3 +17,13 @@ for new breakage (and the reflex doesn't become "probably the flake").
   it's this flake before spending time on it.
 - **Fix:** isolate the shared state / fake (likely a Storage or fal fake leaking across tests) so
   the test is order-independent. Not yet scheduled.
+
+## Dead code / cleanup
+
+Columns/enums that exist but are never written or read — safe to drop, same class as the removed
+GapBrief/cluster-enum dead code.
+
+- **`page_index_states.robots_state`** — declared in the migration but **never written** by
+  `IndexMetricProvider` and **never read** by `IndexStandings`/the Indexing board. The index verdict
+  lives entirely in `index_verdict`; `robots_state` plays no part in any bucketing. Drop the column
+  (and its migration reference) in a cleanup pass.
