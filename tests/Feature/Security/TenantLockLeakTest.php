@@ -2,7 +2,6 @@
 
 use App\Enums\ContentStatus;
 use App\Enums\UserRole;
-use App\Filament\Pages\Citations\CitationsPortfolio;
 use App\Filament\Pages\Citations\CitationsReport;
 use App\Filament\Pages\Citations\CitationsWorkspace;
 use App\Filament\Pages\Gathering\SetupEntry;
@@ -147,8 +146,7 @@ dataset('lockedSurfaces', [
     'Results · Coverage' => [fn () => LocationCoverage::getUrl()],
     'Results · AI visibility' => [fn () => GeoActivityConsole::getUrl()],
     'System · Recover' => [fn () => RebuildReadiness::getUrl()],
-    // Cross-tenant surfaces in tenant nav / the locked landing (expected RED until retired).
-    'Territory · Citations (portfolio)' => [fn () => CitationsPortfolio::getUrl()],
+    // Cross-tenant surfaces in the locked landing (expected RED until retired).
     'Landing · Overview' => [fn () => Overview::getUrl()],
     // Every resource index (URL-reachable regardless of nav).
     'Resource · Reviews (capture)' => [fn () => ReviewCaptureResource::getUrl('index')],
