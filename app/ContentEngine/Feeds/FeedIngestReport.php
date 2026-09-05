@@ -25,11 +25,21 @@ final class FeedIngestReport
         public readonly int $parked,
         public readonly int $refreshMarked,
         public readonly ?string $error = null,
+        public readonly int $durationMs = 0,
     ) {}
 
     public static function unfetched(string $feedId, string $label, ?string $error): self
     {
         return new self($feedId, $label, 0, 0, 0, 0, 0, 0, 0, $error);
+    }
+
+    /** Stamp the wall-clock this feed took (set by FeedIngestor once fetch+route completes). */
+    public function withDuration(int $ms): self
+    {
+        return new self(
+            $this->feedId, $this->label, $this->fetched, $this->prefilteredOut, $this->deduped,
+            $this->scoreRejected, $this->routed, $this->parked, $this->refreshMarked, $this->error, $ms,
+        );
     }
 
     public static function fromFunnel(string $feedId, string $label, int $fetched, FunnelResult $funnel): self
@@ -66,18 +76,19 @@ final class FeedIngestReport
             'parked' => $this->parked,
             'refresh_marked' => $this->refreshMarked,
             'error' => $this->error,
+            'duration_ms' => $this->durationMs,
         ];
     }
 
     public function line(): string
     {
         if ($this->error !== null) {
-            return "unfetched — {$this->error}";
+            return "unfetched — {$this->error} ({$this->durationMs}ms)";
         }
 
         return sprintf(
-            'fetched %d → prefiltered-out %d → deduped %d → score-rejected %d → routed %d (parked %d, refresh %d)',
-            $this->fetched, $this->prefilteredOut, $this->deduped, $this->scoreRejected, $this->routed, $this->parked, $this->refreshMarked,
+            'fetched %d → prefiltered-out %d → deduped %d → score-rejected %d → routed %d (parked %d, refresh %d) [%dms]',
+            $this->fetched, $this->prefilteredOut, $this->deduped, $this->scoreRejected, $this->routed, $this->parked, $this->refreshMarked, $this->durationMs,
         );
     }
 }
