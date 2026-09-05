@@ -2,28 +2,15 @@
 
 use App\Enums\ContentStatus;
 use App\Enums\UserRole;
-use App\Filament\Pages\Citations\CitationsReport;
-use App\Filament\Pages\Citations\CitationsWorkspace;
-use App\Filament\Pages\Gathering\SetupEntry;
-use App\Filament\Pages\GeoActivityConsole;
-use App\Filament\Pages\IndexingBoard;
-use App\Filament\Pages\JobsBoard;
-use App\Filament\Pages\LocationCoverage;
-use App\Filament\Pages\LocationGeoGrid;
-use App\Filament\Pages\LocationsSetup;
-use App\Filament\Pages\Operate\InternalLinks;
-use App\Filament\Pages\Operate\OperateBlog;
-use App\Filament\Pages\Operate\OperateLive;
-use App\Filament\Pages\Operate\OperatePages;
-use App\Filament\Pages\Operate\RebuildReadiness;
-use App\Filament\Pages\Operate\TenantDashboard;
-use App\Filament\Pages\ProofEditor;
-use App\Filament\Pages\RankingsBoard;
 use App\Models\Account;
 use App\Models\Content;
+use App\Models\ContentEdit;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Membership;
+use App\Models\Review;
+use App\Models\Service;
+use App\Models\Silo;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\ActiveTenant;
@@ -34,109 +21,114 @@ use Filament\Facades\Filament;
  *
  * THE CRITERION: no /admin surface may resolve or display a site other than the locked {@see ActiveTenant}
  * — not via a picker, a second session key, a query param, a cross-tenant listing, or a dropped SiteScope.
- * Concretely: a page rendered under a lock on tenant A must contain NO other tenant's brand_name, id, or
- * domain anywhere in its output, and a foreign `?site=`/`?content=`/`?location=` must not resolve B's data.
+ * A page rendered under a lock on tenant A must contain NO other tenant's brand_name, id, or domain
+ * anywhere in its output, and a foreign `?content=`/`?location=` must not resolve that tenant's data.
  *
- * Three prior sweeps each found a different SHAPE of this bug and each was "reported complete". This test
- * is the ratchet that ends that: every admin surface is enumerated here. Surfaces already correct are
- * asserted clean now. Surfaces that still breach are listed in KNOWN_LEAKS with their shape + the
- * remediation step that fixes them, and skipped — each fix REMOVES its entry (moving the surface into the
- * asserted-clean set), so the guarantee only ever tightens. KNOWN_LEAKS must reach empty.
+ * Its first job is to FAIL on today's base — three prior sweeps were "reported complete" while never
+ * reaching the path. So every URL-reachable admin surface is ASSERTED here (not skipped), and the foreign
+ * tenant B is seeded with a row of every model each surface renders, so a leak actually surfaces B's
+ * marker. Surfaces that currently breach go RED now; each remediation step turns its surfaces green.
  */
 beforeEach(function () {
     Filament::setCurrentPanel('admin');
 
-    // Seed BOTH tenants BEFORE locking — the §9 write-guard (correctly) refuses a cross-tenant write once
-    // a lock is set, so all seeding happens with no lock active.
+    // Seed BOTH tenants BEFORE locking — the §9 write-guard refuses a cross-tenant write once a lock is set.
     $accountA = Account::factory()->create(['name' => 'Locked Tenant A']);
     $this->siteA = Site::factory()->for($accountA)->create(['brand_name' => 'Locked Tenant A', 'status' => 'active']);
 
-    // A FOREIGN tenant (B) with unmistakable markers + one row of the cross-tenant models, so any surface
-    // that leaks across the lock surfaces B's marker. If B never appears, the lock held.
+    // Foreign tenant B — unmistakable markers + a visible row of every model the surfaces render, so any
+    // cross-tenant leak actually shows B. (forSite/portfolio surfaces skip a site with no rows, so "exists"
+    // is not enough — B must be VISIBLE on each surface.)
     $accountB = Account::factory()->create(['name' => 'FOREIGN-MARKER-CO']);
     $this->siteB = Site::factory()->for($accountB)->create([
         'brand_name' => 'FOREIGN-MARKER-CO',
         'domain_url' => 'https://foreign-marker-b.example',
         'status' => 'active',
     ]);
-    $this->foreignMarkers = ['FOREIGN-MARKER-CO', 'foreign-marker-b.example', (string) $this->siteB->id];
-    $this->foreignContent = Content::factory()->create(['site_id' => $this->siteB->id, 'title' => 'FOREIGN-MARKER-CO page', 'status' => ContentStatus::Published]);
-    $this->foreignLocation = Location::factory()->create(['site_id' => $this->siteB->id, 'name' => 'FOREIGN-MARKER-CO location']);
-    Keyword::factory()->create(['site_id' => $this->siteB->id, 'query' => 'foreign-marker-co keyword']);
+    $this->markers = ['FOREIGN-MARKER-CO', 'foreign-marker-b.example', (string) $this->siteB->id];
 
-    // Operator with an account-wide membership on A, then lock to A LAST.
+    $b = $this->siteB->id;
+    $this->foreignLocation = Location::factory()->create(['site_id' => $b, 'name' => 'FOREIGN-MARKER-CO location']);
+    $this->foreignContent = Content::factory()->create(['site_id' => $b, 'title' => 'FOREIGN-MARKER-CO published', 'status' => ContentStatus::Published]);
+    Content::factory()->create(['site_id' => $b, 'title' => 'FOREIGN-MARKER-CO review', 'status' => ContentStatus::NeedsReview]);
+    Content::factory()->create(['site_id' => $b, 'title' => 'FOREIGN-MARKER-CO candidate', 'status' => ContentStatus::Candidate]);
+    Review::factory()->create(['site_id' => $b, 'customer_name' => 'FOREIGN-MARKER-CO reviewer']);
+    Keyword::factory()->create(['site_id' => $b, 'query' => 'foreign-marker-co keyword']);
+    Silo::factory()->create(['site_id' => $b, 'name' => 'FOREIGN-MARKER-CO silo']);
+    Service::factory()->create(['site_id' => $b, 'name' => 'FOREIGN-MARKER-CO service']);
+    ContentEdit::create(['site_id' => $b, 'content_id' => $this->foreignContent->id, 'field' => 'body', 'reason' => 'off_base', 'original' => 'x', 'edited' => 'y']);
+
+    // A real Launchpad operator manages MANY tenants — membership in BOTH accounts, so both are visible
+    // through VisibleSiteScope. The lock ({@see ActiveTenant}) must still constrain every surface to A.
+    // (Membership in A alone would hide B behind VisibleSiteScope and the test would never reach the breach
+    // — the exact "green while never reaching the path" trap the prior sweeps fell into.)
     $op = User::factory()->create(['role' => UserRole::Operator]);
     Membership::create(['user_id' => $op->id, 'account_id' => $accountA->id, 'role' => UserRole::Operator]);
+    Membership::create(['user_id' => $op->id, 'account_id' => $accountB->id, 'role' => UserRole::Operator]);
     $this->actingAs($op);
     app(ActiveTenant::class)->set($this->siteA->id);
 });
 
-/**
- * Surfaces that MUST already be clean — every ActiveTenant-scoped nav page. A full authenticated HTTP GET
- * under the lock on A must render (200) and contain none of B's markers.
- */
-dataset('cleanLockedSurfaces', [
-    'Build · Dashboard' => [TenantDashboard::class],
-    'Build · Setup' => [SetupEntry::class],
-    'Build · Posts' => [OperateBlog::class],
-    'Build · Pages' => [OperatePages::class],
-    'Build · Jobs' => [JobsBoard::class],
-    'Build · Live' => [OperateLive::class],
-    'Territory · Towns' => [LocationsSetup::class],
-    'Territory · Internal links' => [InternalLinks::class],
-    'Results · Rankings' => [RankingsBoard::class],
-    'Results · Indexing' => [IndexingBoard::class],
-    'Results · Geo grid' => [LocationGeoGrid::class],
-    'Results · Coverage' => [LocationCoverage::class],
-    'Results · AI visibility' => [GeoActivityConsole::class],
-    'System · Recover' => [RebuildReadiness::class],
+/** Assert a locked surface renders (200 after redirects) and contains none of tenant B's markers. */
+function assertNoForeignLeak($test, string $url): void
+{
+    $response = $test->followingRedirects()->get($url);
+    $response->assertOk();
+    foreach ($test->markers as $marker) {
+        expect($response->getContent())->not->toContain($marker);
+    }
+}
+
+// EVERY URL-reachable admin surface that must be tenant-locked. Nav pages + portfolio/overview surfaces +
+// every resource index (all URL-reachable via discoverResources — off-nav is not a mitigation).
+dataset('lockedSurfaces', [
+    // Nav pages expected correct today.
+    'Build · Dashboard' => [fn () => \App\Filament\Pages\Operate\TenantDashboard::getUrl()],
+    'Build · Setup' => [fn () => \App\Filament\Pages\Gathering\SetupEntry::getUrl()],
+    'Build · Posts' => [fn () => \App\Filament\Pages\Operate\OperateBlog::getUrl()],
+    'Build · Pages' => [fn () => \App\Filament\Pages\Operate\OperatePages::getUrl()],
+    'Build · Jobs' => [fn () => \App\Filament\Pages\JobsBoard::getUrl()],
+    'Build · Live' => [fn () => \App\Filament\Pages\Operate\OperateLive::getUrl()],
+    'Territory · Markets' => [fn () => \App\Filament\Pages\MarketsBoard::getUrl()],
+    'Territory · Towns' => [fn () => \App\Filament\Pages\LocationsSetup::getUrl()],
+    'Territory · Internal links' => [fn () => \App\Filament\Pages\Operate\InternalLinks::getUrl()],
+    'Results · Rankings' => [fn () => \App\Filament\Pages\RankingsBoard::getUrl()],
+    'Results · Indexing' => [fn () => \App\Filament\Pages\IndexingBoard::getUrl()],
+    'Results · Geo grid' => [fn () => \App\Filament\Pages\LocationGeoGrid::getUrl()],
+    'Results · Coverage' => [fn () => \App\Filament\Pages\LocationCoverage::getUrl()],
+    'Results · AI visibility' => [fn () => \App\Filament\Pages\GeoActivityConsole::getUrl()],
+    'System · Recover' => [fn () => \App\Filament\Pages\Operate\RebuildReadiness::getUrl()],
+    // Cross-tenant surfaces in tenant nav / the locked landing (expected RED until fixed).
+    'Territory · Citations (portfolio)' => [fn () => \App\Filament\Pages\Citations\CitationsPortfolio::getUrl()],
+    'Landing · OperateDashboard' => [fn () => \App\Filament\Pages\Operate\OperateDashboard::getUrl()],
+    'Landing · Overview' => [fn () => \App\Filament\Pages\Overview::getUrl()],
+    // Every resource index (URL-reachable regardless of nav).
+    'Resource · Reviews (capture)' => [fn () => \App\Filament\Resources\ReviewCaptureResource::getUrl('index')],
+    'Resource · Pages' => [fn () => \App\Filament\Resources\PageResource::getUrl('index')],
+    'Resource · Published content' => [fn () => \App\Filament\Resources\PublishedContentResource::getUrl('index')],
+    'Resource · Content review' => [fn () => \App\Filament\Resources\ContentReviewResource::getUrl('index')],
+    'Resource · AI content' => [fn () => \App\Filament\Resources\AiContentResource::getUrl('index')],
+    'Resource · Candidates' => [fn () => \App\Filament\Resources\CandidateResource::getUrl('index')],
+    'Resource · Content edits' => [fn () => \App\Filament\Resources\ContentEditResource::getUrl('index')],
+    'Resource · Keywords' => [fn () => \App\Filament\Resources\KeywordResource::getUrl('index')],
+    'Resource · Silos' => [fn () => \App\Filament\Resources\SiloManagementResource::getUrl('index')],
+    'Resource · Connections' => [fn () => \App\Filament\Resources\ConnectionsResource::getUrl('index')],
+    'Resource · Feeds' => [fn () => \App\Filament\Resources\SourceResource::getUrl('index')],
+    'Resource · Voice' => [fn () => \App\Filament\Resources\VoiceProfileResource::getUrl('index')],
+    'Resource · Services' => [fn () => \App\Filament\Resources\ServiceResource::getUrl('index')],
+    'Resource · Locations' => [fn () => \App\Filament\Resources\LocationResource::getUrl('index')],
 ]);
 
-it('renders no foreign tenant identifier under a lock', function (string $class) {
-    // Follow redirects so redirector entrypoints (e.g. Setup → current step) land on their real page.
-    $response = $this->followingRedirects()->get($class::getUrl());
+it('renders no foreign tenant identifier under a lock', function (Closure $url) {
+    assertNoForeignLeak($this, $url());
+})->with('lockedSurfaces');
 
-    $response->assertOk();
-    foreach ($this->foreignMarkers as $marker) {
-        expect($response->getContent())->not->toContain($marker);
-    }
-})->with('cleanLockedSurfaces');
-
-/**
- * KNOWN LEAKS — the audited breaches, each pending its remediation step. Skipped so CI stays green while
- * the fixes land in sequence; as each ships, its rows move UP into cleanLockedSurfaces (or a param-case
- * assertion below) and the skip is deleted. This list must reach empty.
- *
- *   Shape B (URL param overrides the lock — most severe): ProofEditor (?content=), CitationsWorkspace /
- *     CitationsReport (?location= → CurrentSite::set), LocationDashboard (#[Url] $siteId).  → step 2
- *   Shape C repoints: OperateDashboard, CitationsPortfolio (nav), Overview landing.          → step 3
- *   Shape D scope-drop resources: ReviewCaptureResource, PageResource, PublishedContentResource,
- *     ContentReviewResource, AiContentResource, CandidateResource, ContentEditResource.       → step 4
- *   Shape A name-leak resources: Keyword, SiloManagement, Connections, Source, Voice, Service,
- *     Location, GeoPrompt, CoverageScanPlan, BlogTarget, TenantSharedPhone, LocationNapProfile. → step 5
- */
-// Foreign-param cases — a query string must NOT override the lock. These are the shape-B breaches; they
-// currently resolve B's data, so they're skipped until step 2, then un-skipped (they must pass).
+// Foreign-param cases — a query string must NOT override the lock (shape B, the most severe).
 it('a foreign ?content= does not resolve another tenant\'s content (ProofEditor)', function () {
-    $response = $this->followingRedirects()->get(ProofEditor::getUrl(['content' => $this->foreignContent->id]));
-    foreach ($this->foreignMarkers as $marker) {
-        expect($response->getContent())->not->toContain($marker);
-    }
-})->skip('shape B — step 2: ProofEditor reads ?content= withoutGlobalScope, no ActiveTenant check.');
+    assertNoForeignLeak($this, \App\Filament\Pages\ProofEditor::getUrl(['content' => $this->foreignContent->id]));
+});
 
 it('a foreign ?location= does not rebind the lock (CitationsWorkspace / CitationsReport)', function () {
-    foreach ([CitationsWorkspace::class, CitationsReport::class] as $page) {
-        $response = $this->followingRedirects()->get($page::getUrl(['location' => $this->foreignLocation->id]));
-        foreach ($this->foreignMarkers as $marker) {
-            expect($response->getContent())->not->toContain($marker);
-        }
-    }
-})->skip('shape B — step 2: reads ?location= then CurrentSite::set(location.site_id), rebinding the lock.');
-
-it('KNOWN LEAKS remain, tracked to their remediation step (remove as each fix lands)', function () {
-    // Placeholder guard: the breach inventory is codified in this test's docblock + dataset comments and
-    // in docs/specs/tenant-lock-remediation.md. Each remediation PR promotes its surfaces into the
-    // asserted sets above/below and trims the inventory here. When every shape is fixed this test is
-    // deleted. (Kept as an explicit, searchable marker so the remediation can't be silently declared done.)
-    expect(true)->toBeTrue();
-})->skip('Tenant-lock remediation in progress — shapes B/C/D/A tracked to steps 2–5.');
+    assertNoForeignLeak($this, \App\Filament\Pages\Citations\CitationsWorkspace::getUrl(['location' => $this->foreignLocation->id]));
+    assertNoForeignLeak($this, \App\Filament\Pages\Citations\CitationsReport::getUrl(['location' => $this->foreignLocation->id]));
+});
