@@ -11,6 +11,7 @@ use App\Jobs\GeocodeLocation;
 use App\Locations\CountyCoverage;
 use App\Locations\CoveragePanels;
 use App\Locations\CoverageWriter;
+use App\Locations\LocationPublishHold;
 use App\Locations\ManualCoverage;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -193,6 +194,49 @@ trait ManagesLocationCoverage
         $this->buildCoverage(notify: false);
 
         Notification::make()->title("Locating {$location->name}…")->send();
+    }
+
+    /**
+     * Toggle this location's publish-hold — the operator's explicit review-then-release action, surfaced
+     * where the location appears. Holding blocks publishing new pages (and defers IndexNow discovery);
+     * releasing lets its reviewed pages publish. Already-live pages are untouched either way.
+     */
+    public function togglePublishHold(string $locationId): void
+    {
+        $location = $this->coverageLocation($locationId);
+        if ($location === null) {
+            return;
+        }
+
+        $svc = app(LocationPublishHold::class);
+        if ($location->publish_held) {
+            $svc->release($location);
+            Notification::make()->title("{$location->name} released for publishing")->success()->send();
+        } else {
+            $svc->hold($location);
+            Notification::make()->title("{$location->name} held — new pages won’t publish")->success()->send();
+        }
+    }
+
+    /**
+     * Take DOWN a held location's already-live pages from WordPress — the deliberate bulk action (never
+     * automatic on hold), the operator's cue being the "held · N pages still live" state.
+     */
+    public function takeDownLocationLivePages(string $locationId): void
+    {
+        $location = $this->coverageLocation($locationId);
+        if ($location === null) {
+            return;
+        }
+
+        $count = app(LocationPublishHold::class)->takeDownLivePages($location);
+        Notification::make()->title("Took down {$count} live page(s) for {$location->name}")->success()->send();
+    }
+
+    /** The live-page count for a location — the "N still live" the surfaces show on a held row. */
+    public function livePageCount(Location $location): int
+    {
+        return app(LocationPublishHold::class)->liveCount($location);
     }
 
     /** Manual override, surfaced only when background geocoding failed. */

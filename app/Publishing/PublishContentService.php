@@ -102,6 +102,19 @@ class PublishContentService
             );
         }
 
+        // Publish-hold (location-integrity): a page whose owning Location is publish-held is drafted and
+        // reviewed normally but never pushed — the hold defers publishing (and IndexNow discovery); it does
+        // NOT unpublish what is already live. No status mutation (PublishResult::skipped is a pure no-op),
+        // so the row stays approved and a later release re-publishes it. This is the convergent chokepoint
+        // for all content push (every dispatcher funnels here) and the on-publish IndexNow ping (dispatched
+        // below, so it never fires for a held page).
+        if ($content->isPublishHeld()) {
+            return PublishResult::skipped(
+                $content,
+                'Owning location is on publish-hold; publish deferred until the location is released.'
+            );
+        }
+
         // §3a review gate: a LOCATION page must know its market (fail closed) and
         // have ≥1 market-scoped/site-wide review; a service page publishes without
         // a review gate (its testimonial slot is conditional). A failing page is

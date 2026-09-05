@@ -34,6 +34,17 @@ class LocationFactory extends Factory
             ],
             'is_storefront' => fake()->boolean(),
             'booking_url' => fake()->optional()->url(),
+            // Follow PRODUCTION: a newly created location is held until reviewed (the model's creating
+            // hook). A test that publishes a location page opts in explicitly — `->released()` (below) or
+            // `['publish_held' => false]` — so the held path is the default a test must consciously leave,
+            // not a condition a fixture quietly arranges.
+            'publish_held' => true,
         ];
+    }
+
+    /** A location reviewed and released for publishing — the explicit opt-in for tests that publish its pages. */
+    public function released(): static
+    {
+        return $this->state(fn (array $attributes): array => ['publish_held' => false]);
     }
 }

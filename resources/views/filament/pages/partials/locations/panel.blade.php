@@ -29,6 +29,30 @@
         <span class="lp-status {{ $statusClass }}">{{ $statusText }}</span>
     </div>
 
+    {{-- Publish-hold: a held location's pages generate/draft/review but don't publish. "Held · N pages
+         still live" is the honest state a location held after going live shows — the cue to take those
+         down deliberately (never automatic). Releasing is the explicit operator action. --}}
+    @php $liveCount = $this->livePageCount($activeLoc); @endphp
+    <div class="lp-hold-row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 4px">
+        @if ($activeLoc->publish_held)
+            <x-lp.chip tone="warn">{{ $liveCount > 0 ? "Held · {$liveCount} live" : 'Held' }}</x-lp.chip>
+            <span class="lp-muted" style="font-size:12px">New pages won’t publish; already-live pages stay live.</span>
+            <button type="button" class="lp-btn ghost" style="margin-left:auto"
+                wire:click="togglePublishHold('{{ $activeLoc->id }}')"
+                wire:confirm="Release {{ $activeLoc->name }} for publishing?">Release for publishing</button>
+            @if ($liveCount > 0)
+                <button type="button" class="lp-btn ghost" style="color:#B5341A"
+                    wire:click="takeDownLocationLivePages('{{ $activeLoc->id }}')"
+                    wire:confirm="Take down {{ $liveCount }} live page(s) for {{ $activeLoc->name }} from WordPress? Deliberate and not auto-reversed.">Take down {{ $liveCount }} live</button>
+            @endif
+        @else
+            <x-lp.chip tone="good">Publishable</x-lp.chip>
+            <button type="button" class="lp-btn ghost" style="margin-left:auto"
+                wire:click="togglePublishHold('{{ $activeLoc->id }}')"
+                wire:confirm="Hold {{ $activeLoc->name }}? New pages won’t publish until released.">Hold publishing</button>
+        @endif
+    </div>
+
     {{-- Counties served — compact searchable multi-select (sends the whole array,
          so adds accumulate natively; home is the initial seed, never a floor) --}}
     @if ($located)

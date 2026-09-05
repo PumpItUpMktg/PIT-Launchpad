@@ -51,7 +51,7 @@ function lpMarket(): array
 {
     $site = Site::factory()->create(['domain_url' => LP_HOME]);
     CurrentSite::set($site->id);
-    $market = Location::factory()->for($site)->create(['name' => 'Newark']);
+    $market = Location::factory()->released()->for($site)->create(['name' => 'Newark']); // publishing market → released (held-market IndexNow exclusion is covered separately)
     $landing = Content::factory()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
         'location_id' => $market->id, 'status' => ContentStatus::Published, 'title' => 'Newark', 'slug' => 'newark', 'wp_post_id' => 1,
@@ -141,6 +141,38 @@ it('commits an approved plan: writes links, republishes sources, submits only no
         ->and($result['orphaned'])->toBe([])
         ->and($plan->fresh()->status)->toBe(LinkPlanStatus::Applied)
         ->and($plan->items()->where('status', LinkPlanItemStatus::Applied->value)->count())->toBeGreaterThan(0);
+});
+
+it('does not announce a held location\'s town URLs to IndexNow, even when non-orphan', function () {
+    Queue::fake();
+    $indexNow = Mockery::mock(IndexNowSubmitter::class);
+    $submitted = [];
+    $indexNow->shouldReceive('submit')->andReturnUsing(function (Site $s, array $urls) use (&$submitted) {
+        $submitted = $urls;
+
+        return ['ok' => true, 'submitted' => count($urls), 'status' => 200, 'reason' => null];
+    });
+    app()->instance(IndexNowSubmitter::class, $indexNow);
+
+    // Same wiring as the commit test, but the market (Location) is HELD (the factory default). Big is
+    // non-orphan (the market landing grids to it) yet must NOT be announced — its page hasn't shipped.
+    $site = Site::factory()->create(['domain_url' => LP_HOME]);
+    CurrentSite::set($site->id);
+    $market = Location::factory()->for($site)->create(['name' => 'Newark']); // held
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => $market->id, 'status' => ContentStatus::Published, 'title' => 'Newark', 'slug' => 'newark', 'wp_post_id' => 1,
+    ]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => 'B1', 'name' => 'Big', 'size_tier' => 'large', 'population' => 35000, 'lat' => 40.70, 'lng' => -74.10, 'source_location_ids' => [$market->id], 'source' => 'county']);
+    lpTown($site, 'Big', $market->id);
+    $post = Content::factory()->post()->published()->create(['site_id' => $site->id, 'body' => 'Story.', 'slug' => 'story', 'wp_post_id' => 7]);
+    ContentTown::create(['site_id' => $site->id, 'content_id' => $post->id, 'town' => TownName::key('Big'), 'town_display' => 'Big']);
+
+    $plan = app(LinkPlanBuilder::class)->propose($site, $market, 'large');
+    app(LinkPlanActions::class)->approveAll($plan);
+    app(LinkPlanActions::class)->apply($plan->fresh(['items']));
+
+    expect($submitted)->not->toContain(LP_HOME.'/big'); // held market → its town URL is never announced
 });
 
 it('never submits a zero-inbound town to IndexNow (the no-orphan guard)', function () {

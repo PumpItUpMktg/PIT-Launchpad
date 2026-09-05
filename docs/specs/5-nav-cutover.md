@@ -59,6 +59,22 @@ Build 7 · Territory 6 · Results 5 · System 6 = **24**.
     (no entry) but their routes stay reachable. Nothing is deleted.
 11. Portfolio (`SiteResource` nav entry) and Overview fold into the Lobby.
 
+## Open item — Territory naming vs. model (found during publish-hold)
+
+The two Territory items are named the **opposite** of what they render:
+
+- **Territory → Markets** (`MarketsBoard`) renders **`Market`-model** rows — a name-matched
+  *targeting/coverage* concept with **no FK to `Location`**.
+- The thing an operator actually means by "market" — the **GBP-anchored service area with an
+  address** — is a **`Location`**, and it lives under **Territory → Towns** (`LocationsSetup`).
+
+So a per-`Location` concern (e.g. the publish-hold) surfaces under **Towns**, not **Markets**,
+and cannot be shown on `MarketsBoard` without re-introducing the fragile Market↔Location
+name-match that caused the Spring City / Trooper-Montgomery defects. The nav cutover settled
+these names before it was known there were two models. **To resolve later:** one of the two
+items needs renaming, and `Market`-with-no-FK-to-`Location` is a data-model question worth its
+own look. Recorded here so it isn't re-litigated as a routing decision.
+
 ## Standing rules for every UI PR (from here on)
 
 1. **Screenshot in the PR body — not a description.**

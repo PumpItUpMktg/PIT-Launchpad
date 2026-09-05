@@ -229,7 +229,7 @@ test('publishing a town page re-publishes its already-live parent hub (fresh "ar
     $site = PublishHarness::site();
 
     // The physical location + its already-published hub page (carries the baked town-links grid).
-    $location = Location::factory()->create(['site_id' => $site->id]);
+    $location = Location::factory()->released()->create(['site_id' => $site->id]); // published location pages → released for publishing
     $hub = Content::factory()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
         'location_id' => $location->id, 'status' => ContentStatus::Published, 'wp_post_id' => 99, 'slug' => 'trooper',
@@ -258,7 +258,7 @@ test('publishing the hub itself never re-triggers a hub republish (no loop)', fu
     fakeContentEndpoint(wpPostId: 100);
     $site = PublishHarness::site();
 
-    $location = Location::factory()->create(['site_id' => $site->id]);
+    $location = Location::factory()->released()->create(['site_id' => $site->id]); // published location pages → released for publishing
     // A real, publishable hub (market + tagged review) so the success hook actually runs — the loop
     // guard is what keeps it from re-dispatching, not a failed gate short-circuiting earlier.
     $market = Market::factory()->create(['site_id' => $site->id]);
