@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\UserRole;
+use App\Models\Scopes\VisibleSiteScope;
 use App\Security\Capability;
 use App\Security\RoleCapabilities;
 use Database\Factories\UserFactory;
@@ -26,6 +27,16 @@ class User extends Authenticatable implements FilamentUser, HasTenants
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasUlids, Notifiable;
+
+    /**
+     * Request-scoped memo for {@see permittedSiteIds()} (the visibility scopes hit it on every query).
+     * Not an attribute — lives only on the in-memory instance, so it never persists or serializes.
+     *
+     * @var list<string>|null
+     */
+    private ?array $permittedSiteIdsCache = null;
+
+    private bool $permittedSiteIdsResolved = false;
 
     /**
      * Panel access by role: the §7b operator cockpit is operator-only; the §7c
@@ -94,6 +105,23 @@ class User extends Authenticatable implements FilamentUser, HasTenants
      */
     public function permittedSiteIds(): ?array
     {
+        // Memoized per request: {@see VisibleSiteScope}/{@see VisibleTenantScope} consult this on EVERY
+        // Site/site-scoped query, so without the cache a page issuing many such queries re-runs the
+        // membership lookup (and the account expansion) each time — the un-memoized N-query cost behind
+        // the /admin/sites slowness. The cache lives on the (request-scoped) authenticated User instance.
+        if ($this->permittedSiteIdsResolved) {
+            return $this->permittedSiteIdsCache;
+        }
+
+        $this->permittedSiteIdsCache = $this->resolvePermittedSiteIds();
+        $this->permittedSiteIdsResolved = true;
+
+        return $this->permittedSiteIdsCache;
+    }
+
+    /** @return list<string>|null */
+    private function resolvePermittedSiteIds(): ?array
+    {
         if ($this->isAdmin()) {
             return null;
         }
@@ -110,7 +138,13 @@ class User extends Authenticatable implements FilamentUser, HasTenants
         $accountWide = $memberships->whereNull('site_id')->pluck('account_id')->filter()->values();
         if ($accountWide->isNotEmpty()) {
             $siteIds = $siteIds->merge(
-                Site::query()->whereIn('account_id', $accountWide->all())->pluck('id'),
+                // withoutGlobalScope(VisibleSiteScope) is REQUIRED, not an optimization: VisibleSiteScope
+                // resolves the permitted set by calling back into THIS method, so a scoped Site::query()
+                // here recurses infinitely (→ OOM) whenever the account-wide member is the auth user.
+                Site::query()
+                    ->withoutGlobalScope(VisibleSiteScope::class)
+                    ->whereIn('account_id', $accountWide->all())
+                    ->pluck('id'),
             );
         }
 

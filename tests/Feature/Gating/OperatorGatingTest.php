@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 function operatorFor(array $siteIds = [], ?string $accountWide = null): User
 {
@@ -53,6 +54,43 @@ it('an account-wide membership grants every site under the account', function ()
     expect($user->permittedSiteIds())->toHaveCount(2)
         ->and($user->canSeeSite($a))->toBeTrue()
         ->and($user->canSeeSite($b))->toBeTrue();
+});
+
+it('does not recurse when the account-wide operator is the authenticated user (regression)', function () {
+    // Before the fix: under auth, VisibleSiteScope resolves the permitted set via permittedSiteIds(),
+    // whose account-wide expansion itself ran a *scoped* Site::query() → back into VisibleSiteScope →
+    // infinite recursion → ~1.6GB OOM on every /admin page. This is the exact untested interaction:
+    // the account-wide member must BE the auth user for the scope to fire during the expansion.
+    $account = Account::factory()->create();
+    $a = Site::factory()->create(['account_id' => $account->id]);
+    $b = Site::factory()->create(['account_id' => $account->id]);
+
+    $this->actingAs(operatorFor(accountWide: $account->id));
+
+    expect(Site::query()->pluck('id')->sort()->values()->all())
+        ->toBe(collect([$a->id, $b->id])->sort()->values()->all());
+});
+
+it('memoizes permittedSiteIds so the visibility scope resolves memberships once per request', function () {
+    $account = Account::factory()->create();
+    Site::factory()->count(2)->create(['account_id' => $account->id]);
+
+    $this->actingAs(operatorFor(accountWide: $account->id));
+
+    $membershipQueries = 0;
+    DB::listen(function ($q) use (&$membershipQueries) {
+        if (str_contains($q->sql, 'memberships')) {
+            $membershipQueries++;
+        }
+    });
+
+    // Several Site queries in one request: the membership lookup must resolve ONCE (the un-memoized
+    // re-run on every Site query is part of the /admin/sites slowness).
+    Site::query()->count();
+    Site::query()->pluck('id');
+    Site::query()->get();
+
+    expect($membershipQueries)->toBe(1);
 });
 
 it('layer 1: the visibility scope limits Site queries to the permitted set', function () {
