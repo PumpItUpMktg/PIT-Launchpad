@@ -287,6 +287,7 @@ class Site extends Model
             'offers_emergency' => 'boolean',
             'weather_alert' => 'boolean',
             'chrome_synced_at' => 'datetime',
+            'chrome_stale' => 'boolean',
             'style_variation' => StyleVariation::class,
             'use_logo_colors' => 'boolean',
             'budget_ceiling' => 'integer',
@@ -313,6 +314,7 @@ class Site extends Model
         $this->forceFill([
             'chrome_synced_at' => now(),
             'chrome_synced_hash' => $fingerprint,
+            'chrome_stale' => false, // a successful push makes the live chrome match the assembled profile
         ])->save();
     }
 }

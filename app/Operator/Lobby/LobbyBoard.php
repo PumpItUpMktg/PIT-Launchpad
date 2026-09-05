@@ -159,6 +159,13 @@ class LobbyBoard
                     ->where('provider', ConnectionProvider::WpAppPassword->value)
                     ->where('compromised', true)
             ),
+            // Any WordPress connection — gates the "chrome never pushed" badge (a site with no WP can't
+            // have chrome; never-synced is only meaningful once it's connected).
+            'has_wp' => $this->countMap(
+                Connection::withoutGlobalScope(SiteScope::class)
+                    ->whereIn('site_id', $ids)
+                    ->where('provider', ConnectionProvider::WpAppPassword->value)
+            ),
             'wrong_nap' => $this->countMap(
                 CitationStatus::withoutGlobalScope(SiteScope::class)
                     ->whereIn('site_id', $ids)
@@ -334,6 +341,14 @@ class LobbyBoard
         }
         if ($at('setup_gaps') > 0) {
             $badges[] = new LobbyBadge('setup_gaps', $t2, 'Live site missing setup', $at('setup_gaps'));
+        }
+        // Chrome: the live header/footer is wrong-facing data. Never-synced (connected but never pushed) and
+        // drifted (pushed, but the assembled profile has since changed) are reported SEPARATELY. chrome_stale
+        // is the persisted drift flag (ContentObserver on page publish + the weekly check-stale-chrome sweep).
+        if ($at('has_wp') > 0 && $site->chrome_synced_at === null) {
+            $badges[] = new LobbyBadge('chrome_never_synced', $t2, 'Chrome never pushed');
+        } elseif ((bool) $site->chrome_stale) {
+            $badges[] = new LobbyBadge('chrome_stale', $t2, 'Site chrome stale');
         }
 
         // Tier 3 — work waiting on a person.

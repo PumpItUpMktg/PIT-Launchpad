@@ -16,6 +16,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\VoiceProfile;
 use App\Operator\ActiveTenant;
+use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Support\CurrentSite;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -87,12 +88,13 @@ it('clicking a badge locks the tenant and opens the badge\'s filtered surface (a
 });
 
 it('search and filter are server-side and reactive', function () {
-    // Alpha is genuinely clean: setup-complete (service + active voice + a live WP connection), so the
-    // tier-2 setup_gaps badge never fires and it stays out of "needs attention".
+    // Alpha is genuinely clean: setup-complete (service + active voice + a live WP connection) AND its chrome
+    // is synced, so neither the tier-2 setup_gaps nor the chrome badges fire and it stays out of "needs attention".
     $alpha = Site::factory()->create(['brand_name' => 'Alpha Plumbing', 'status' => SiteStatus::Active]);
     Service::factory()->create(['site_id' => $alpha->id]);
     VoiceProfile::factory()->create(['site_id' => $alpha->id, 'status' => VoiceStatus::Active]);
     Connection::factory()->create(['site_id' => $alpha->id, 'provider' => ConnectionProvider::WpAppPassword, 'compromised' => false]);
+    $alpha->markChromeSynced(SiteProfileAssembler::fingerprint(app(SiteProfileAssembler::class)->assemble($alpha->fresh())));
     $beta = Site::factory()->create(['brand_name' => 'Beta Rooter', 'status' => SiteStatus::Active]);
     Content::factory()->create(['site_id' => $beta->id, 'status' => ContentStatus::RenderFailed]); // Beta needs attention
 

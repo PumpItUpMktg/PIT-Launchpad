@@ -7,6 +7,7 @@ use App\ContentEngine\Reconcile\RebuildReconciler;
 use App\Models\Site;
 use App\Operator\ActiveTenant;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Artisan;
 
 /**
  * Operate · Readiness (§B slice 5) — the per-tenant build-stage checklist. Shows, in dependency order,
@@ -72,5 +73,32 @@ class RebuildReadiness extends OperatePage
             ->body($report->summary());
 
         ($report->ok() ? $notification->success() : $notification->warning())->send();
+    }
+
+    /**
+     * Re-push the site-wide header/footer chrome for the locked tenant — the reachable-from-a-locked-surface
+     * home for the sync the cutover otherwise stranded on the Portfolio. Reuses {@see SyncSiteProfileCommand}
+     * verbatim (assemble → push → markChromeSynced, which clears the drift flag). Advisory: operator-invoked,
+     * never automatic.
+     */
+    public function syncChrome(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $code = Artisan::call('launchpad:sync-site-profile', ['site' => $site->id]);
+        $notification = Notification::make();
+
+        if ($code === 0) {
+            $notification->title('Header & footer synced')
+                ->body('The site-wide chrome (brand, NAP, nav menu, footer) was re-pushed to WordPress.')->success();
+        } else {
+            $notification->title('Chrome push failed')
+                ->body(trim(Artisan::output()) ?: 'The push did not complete.')->warning();
+        }
+
+        $notification->send();
     }
 }
