@@ -123,11 +123,13 @@ green-on-broken-base guard) is closed, not repurposed.
 2. **Repoints** — `Lobby::enter`/`badgeUrl`, `TenantSwitcher`, `SiteResource::selectTenant` → `TenantDashboard`; `ConsoleNav` Territory·Citations → `CitationsBoard`; panel landing → `TenantDashboard`. Retire `operate/dashboard` + `citations` portfolio to the Lobby. → OperateDashboard, Citations-portfolio, Overview off the tenant path.
 3. **Shape D / Build·Reviews** — keep `SiteScope` on the 7 scope-dropping resources (default the tenant filter where a genuine cross-tenant read is still wanted, in the Lobby only); add `SiteScope` to `ContentEditResource`. → the 7 resources green.
 4. **Shape A** — strip the "Tenant" column + all-tenant `SelectFilter('site_id')` from the locked resources; pre-set create-form `site_id` to `ActiveTenant::id()`. → the 7 shape-A resources green.
-5. **Shape E — the switcher** — remove the tenant dropdown from the locked chrome; header shows the current
-   tenant only + **Exit site** (→ lobby → enter). → the 14 nav pages (and the whole 37) go green.
-6. **`?site=` link removal** — delete the 20 `getUrl(['site'=>...])` args (dead readers, live vectors — a bookmarked `?site=X` under a lock on Y silently mis-scopes, and becomes real ambiguity under URL-path tenancy); route the `?content=`/`?location=` drill links through the now-scoped resolvers.
+5. **Shape E — the switcher** ✅ — the tenant dropdown is removed from the locked chrome; the header shows
+   the current tenant only + **Exit site** (→ Lobby → enter). With this, `TenantLockLeakTest` is **fully
+   green** — every URL-reachable admin surface renders under a lock with zero foreign-tenant markers, and
+   every foreign `?content=`/`?location=`/`?siteId=` is 404-denied.
+6. **`?site=` link removal** — delete the `getUrl(['site'=>...])` args (dead readers, live vectors — a bookmarked `?site=X` under a lock on Y silently mis-scopes, and becomes real ambiguity under URL-path tenancy); route the `?content=`/`?location=` drill links through the now-scoped resolvers. Hardening only — the guard is already green; this closes latent vectors before URL-path tenancy.
 
-When steps 1–6 land, `TenantLockLeakTest` is fully green — every surface asserted clean, whole-page.
+**Status: steps 1–5 landed; the acceptance guard is green.** Step 6 is latent-vector hardening.
 
 ## Lobby badge tiers — authoritative (15 conditions)
 
