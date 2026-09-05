@@ -16,6 +16,7 @@ use App\Filament\Pages\Operate\OperateLive;
 use App\Filament\Pages\Operate\OperatePages;
 use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
+use App\Filament\Pages\RankingsBoard;
 use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\KeywordResource;
 use App\Filament\Resources\ReviewCaptureResource;
@@ -67,7 +68,7 @@ class ConsoleNav
                 ['label' => 'Internal links', 'surface' => InternalLinks::class, 'soon' => false],
             ]],
             ['group' => 'Results', 'items' => [
-                ['label' => 'Rankings', 'surface' => null, 'soon' => true],
+                ['label' => 'Rankings', 'surface' => RankingsBoard::class, 'soon' => false],
                 ['label' => 'Indexing', 'surface' => null, 'soon' => true],
                 ['label' => 'Geo grid', 'surface' => LocationGeoGrid::class, 'soon' => false],
                 ['label' => 'Coverage', 'surface' => LocationCoverage::class, 'soon' => false],

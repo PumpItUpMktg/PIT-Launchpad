@@ -20,6 +20,8 @@ use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Membership;
+use App\Models\PositionSnapshot;
+use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Silo;
 use App\Models\Site;
@@ -232,6 +234,63 @@ class RealisticFixtureSeeder extends Seeder
         }
 
         $this->seedJobs($site);
+        $this->seedPositions($site);
+    }
+
+    /**
+     * Two-lane position snapshots so the Rankings surface has real movement: an earlier + a latest
+     * organic capture per keyword (→ improved / newly-ranked movers), latest local-pack captures per
+     * market, and a few cannibalization cases (two owned URLs in one latest capture).
+     */
+    private function seedPositions(Site $site): void
+    {
+        $keywords = Keyword::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereNotNull('market_id')
+            ->orderBy('id')->limit(90)->get(['id', 'market_id']);
+
+        $then = now()->subDays(35);
+        $latest = now()->startOfHour();
+        $rows = [];
+        $snap = function (string $kwId, ?string $marketId, string $lane, ?int $rank, ?string $url, $at) use (&$rows, $site): void {
+            $rows[] = [
+                'id' => (string) Str::ulid(), 'site_id' => $site->id, 'keyword_id' => $kwId, 'market_id' => $marketId,
+                'lane' => $lane, 'rank' => $rank, 'ranking_url' => $url, 'captured_at' => $at,
+                'created_at' => $at, 'updated_at' => $at,
+            ];
+        };
+
+        foreach ($keywords as $i => $kw) {
+            $url = "https://keystoneplumbing.example/p/{$i}";
+            $mod = $i % 5;
+            if ($mod === 0) {
+                // newly ranked: nothing earlier, ranks now.
+                $snap($kw->id, null, 'organic', null, null, $then);
+                $snap($kw->id, null, 'organic', fake()->numberBetween(4, 18), $url, $latest);
+            } elseif ($mod === 4) {
+                // slipped / flat — not a mover.
+                $snap($kw->id, null, 'organic', fake()->numberBetween(6, 20), $url, $then);
+                $snap($kw->id, null, 'organic', fake()->numberBetween(21, 40), $url, $latest);
+            } else {
+                // improved: worse earlier → better now.
+                $from = fake()->numberBetween(14, 40);
+                $snap($kw->id, null, 'organic', $from, $url, $then);
+                $snap($kw->id, null, 'organic', fake()->numberBetween(1, $from - 3), $url, $latest);
+            }
+
+            // A local-pack standing for the keyword's market (every other keyword).
+            if ($i % 2 === 0) {
+                $snap($kw->id, $kw->market_id, 'local_pack', fake()->numberBetween(1, 12), $url, $latest);
+            }
+
+            // A handful of cannibalization cases: a second owned URL in the same latest capture.
+            if ($i % 23 === 0) {
+                $snap($kw->id, null, 'organic', fake()->numberBetween(5, 15), "https://keystoneplumbing.example/alt/{$i}", $latest);
+            }
+        }
+
+        foreach (array_chunk($rows, 300) as $chunk) {
+            PositionSnapshot::insert($chunk);
+        }
     }
 
     /** Field jobs across the lifecycle: a review backlog, the publish pipeline, and a published body. */

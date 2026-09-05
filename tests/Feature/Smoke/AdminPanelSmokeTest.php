@@ -5,6 +5,7 @@ use App\Filament\Pages\GeoActivityConsole;
 use App\Filament\Pages\JobsBoard;
 use App\Filament\Pages\MarketsBoard;
 use App\Filament\Pages\Operate\TenantDashboard;
+use App\Filament\Pages\RankingsBoard;
 use App\Filament\Resources\VoiceProfileResource;
 use App\Models\Account;
 use App\Models\Membership;
@@ -33,6 +34,7 @@ dataset('adminNavGroupSurfaces', [
     'Build · Dashboard' => [TenantDashboard::class],
     'Build · Jobs' => [JobsBoard::class],
     'Territory · Markets' => [MarketsBoard::class],
+    'Results · Rankings' => [RankingsBoard::class],
     'Results · AI visibility' => [GeoActivityConsole::class],
     'System · Voice' => [VoiceProfileResource::class],
 ]);
