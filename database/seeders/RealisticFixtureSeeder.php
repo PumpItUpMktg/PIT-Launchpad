@@ -6,6 +6,7 @@ use App\Enums\ContentStatus;
 use App\Enums\JobStatus;
 use App\Enums\MarketTier;
 use App\Enums\PageType;
+use App\Enums\SizeTier;
 use App\Enums\UserRole;
 use App\Models\Account;
 use App\Models\Connection;
@@ -156,10 +157,15 @@ class RealisticFixtureSeeder extends Seeder
                 $slug = isset($slugSeen[$base]) ? $base.'-'.substr((string) Str::ulid(), -4) : $base;
                 $slugSeen[$slug] = true;
                 $areaId = (string) Str::ulid();
+                // Realistic population spread → size_tier derived by the SAME canonical logic the real
+                // pipeline uses (SizeTier::forPopulation), so the tier-progression / gate axis is populated
+                // realistically (major/large/medium/small), NOT flat. This is a DIFFERENT axis from the
+                // market's MarketTier (Priority/Coverage) — both are seeded on purpose.
+                $population = $this->townPopulation();
                 $areaRows[] = [
                     'id' => $areaId, 'site_id' => $site->id, 'geo_id' => (string) fake()->unique()->numerify('34######'),
                     'name' => $town, 'type' => 'place', 'state' => $m->region,
-                    'population' => fake()->numberBetween(1500, 45000), 'size_tier' => 'medium',
+                    'population' => $population, 'size_tier' => SizeTier::forPopulation($population)?->value,
                     'page_selected' => true, 'source' => 'radius', 'created_at' => $now, 'updated_at' => $now,
                 ];
                 $townRows[] = [
@@ -346,6 +352,23 @@ class RealisticFixtureSeeder extends Seeder
         $make(JobStatus::Approved, 2);      // in the publish pipeline
         $make(JobStatus::PublishFailed, 1); // a stuck one
         $make(JobStatus::Published, 24);    // the published body of work
+    }
+
+    /**
+     * A covered town's population, skewed like a real suburban service area — mostly small/medium with a
+     * few larger towns — so SizeTier::forPopulation() yields a realistic major/large/medium/small mix
+     * (thresholds 50k / 30k / 15k). Weighted: ~55% small, ~25% medium, ~15% large, ~5% major.
+     */
+    private function townPopulation(): int
+    {
+        $roll = fake()->numberBetween(1, 100);
+
+        return match (true) {
+            $roll <= 55 => fake()->numberBetween(1_800, 14_999),   // small  (~55%)
+            $roll <= 80 => fake()->numberBetween(15_000, 29_999),  // medium (~25%)
+            $roll <= 92 => fake()->numberBetween(30_000, 49_999),  // large  (~12%)
+            default => fake()->numberBetween(50_000, 95_000),      // major  (~8%)
+        };
     }
 
     /** @return list<string> */
