@@ -41,12 +41,23 @@ dataset('adminNavGroupSurfaces', [
     'System · Voice' => [VoiceProfileResource::class],
 ]);
 
-it('renders a live surface in every nav group over a full authenticated route', function (string $class) {
+it('renders a live surface AND the four-group console nav in every group over a full authenticated route', function (string $class) {
     $site = Site::factory()->create(['status' => 'active']);
     $this->actingAs(smokeOperator($site));
     app(ActiveTenant::class)->set($site->id);
 
-    $this->get($class::getUrl())->assertOk();
+    $response = $this->get($class::getUrl())->assertOk();
+
+    // The header IA must actually RENDER on every page — a 200 that dropped the nav is the "green suite
+    // over a page that doesn't work" gap. Assert the console-nav frame, all four group labels, and a known
+    // live nav item are in the output (the render hook fired and columns() resolved).
+    $response->assertSee('lp-console-nav', escape: false)
+        ->assertSee('lp-cn-group">Build', escape: false)
+        ->assertSee('lp-cn-group">Territory', escape: false)
+        ->assertSee('lp-cn-group">Results', escape: false)
+        ->assertSee('lp-cn-group">System', escape: false)
+        ->assertSee('lp-cn-item', escape: false)   // at least one live (clickable) item link
+        ->assertSee('>Markets<', escape: false);   // a known live item, by label
 })->with('adminNavGroupSurfaces');
 
 it('a full /admin route renders for an operator with an account-wide membership (recursion regression)', function () {
