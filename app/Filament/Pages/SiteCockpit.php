@@ -11,6 +11,7 @@ use App\Filament\Resources\ServiceResource;
 use App\Filament\Resources\SourceResource;
 use App\Filament\Resources\VoiceProfileResource;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use App\Operator\PipelineMetrics;
 use BackedEnum;
 use Filament\Pages\Page;
@@ -42,15 +43,7 @@ class SiteCockpit extends Page
 
     public function mount(): void
     {
-        $requested = request()->query('site');
-        $candidate = is_string($requested) ? $requested : session('cockpit_site_id');
-        $site = is_string($candidate) ? Site::query()->find($candidate) : null;
-        $site ??= Site::query()->orderBy('brand_name')->first();
-
-        if ($site !== null) {
-            session(['cockpit_site_id' => $site->id]);
-            $this->siteId = $site->id;
-        }
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     public function getTitle(): string
@@ -63,17 +56,6 @@ class SiteCockpit extends Page
     public function getSite(): ?Site
     {
         return $this->siteId === null ? null : Site::query()->find($this->siteId);
-    }
-
-    /** @return array<string, string> */
-    public function getSiteOptionsProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')->pluck('brand_name', 'id')->all();
-    }
-
-    public function updatedSiteId(): void
-    {
-        session(['cockpit_site_id' => $this->siteId]);
     }
 
     /** @return array<string, int> */

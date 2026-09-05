@@ -10,7 +10,7 @@ use App\Models\GeoCheckEvent;
 use App\Models\GeoPrompt;
 use App\Models\GeoSnapshot;
 use App\Models\Scopes\SiteScope;
-use App\Models\Site;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
@@ -54,20 +54,10 @@ class GeoActivityConsole extends Page
 
     public function mount(): void
     {
-        // Default to a tenant that has GEO prompts, else the first tenant.
-        $this->siteId = (string) (GeoPrompt::query()->distinct()->value('site_id')
-            ?? Site::query()->orderBy('brand_name')->value('id'))
-            ?: null;
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     /** @return array<string, string> */
-    public function getSitesProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')
-            ->pluck('brand_name', 'id')
-            ->map(fn ($name, $id): string => (string) ($name ?: $id))
-            ->all();
-    }
 
     /** @return array<string, mixed>|null */
     public function getConsoleProperty(): ?array

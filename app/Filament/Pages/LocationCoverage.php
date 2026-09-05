@@ -8,7 +8,7 @@ use App\GeoGrid\GeoGridScanner;
 use App\Models\GeoGridScan;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
-use App\Models\Site;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
@@ -39,7 +39,6 @@ class LocationCoverage extends Page
 
     protected string $view = 'filament.pages.location-coverage';
 
-    #[Url]
     public ?string $siteId = null;
 
     #[Url]
@@ -60,19 +59,8 @@ class LocationCoverage extends Page
 
     public function mount(): void
     {
-        if ($this->siteId === null) {
-            $seed = GeoGridScan::withoutGlobalScope(SiteScope::class)
-                ->where('mode', 'coverage')->orderByDesc('scanned_at')->first(['site_id', 'location_id']);
-            $this->siteId = (string) ($seed->site_id ?? Site::query()->orderBy('brand_name')->value('id')) ?: null;
-            $this->locationId ??= $seed->location_id ?? null;
-        }
+        $this->siteId = app(ActiveTenant::class)->id();
         $this->locationId ??= $this->firstCoverageLocationId() ?? array_key_first($this->locations);
-    }
-
-    public function updatedSiteId(): void
-    {
-        $this->locationId = $this->firstCoverageLocationId() ?? array_key_first($this->locations);
-        $this->keywordId = null;
     }
 
     public function updatedLocationId(): void
@@ -81,13 +69,6 @@ class LocationCoverage extends Page
     }
 
     /** @return array<string, string> */
-    public function getSitesProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')
-            ->pluck('brand_name', 'id')
-            ->map(fn ($name, $id): string => (string) ($name ?: $id))
-            ->all();
-    }
 
     /** @return array<string, string> */
     public function getLocationsProperty(): array

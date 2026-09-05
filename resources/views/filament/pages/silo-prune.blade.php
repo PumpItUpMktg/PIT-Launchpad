@@ -20,15 +20,6 @@
                 until you finalize — un-reviewed candidates are dropped.
             </p>
             <div style="display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px">
-                <label style="flex:1; min-width:220px">
-                    <span class="lps-label">Site</span>
-                    <select wire:model.live="siteId" class="lps-select">
-                        <option value="">Select a site…</option>
-                        @foreach ($this->siteOptions as $id => $name)
-                            <option value="{{ $id }}">{{ $name }}</option>
-                        @endforeach
-                    </select>
-                </label>
                 @if ($this->hasCandidates)
                     <button type="button" wire:click="runAutoArrange" class="lps-btn ghost">⚙ Run auto-arrange</button>
                     <button type="button" wire:click="start" class="lps-btn">✂ Open prune</button>

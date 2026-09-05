@@ -29,15 +29,6 @@
                 <x-slot:meta>
                     <x-lp.chip :for="$site->status" />
                 </x-slot:meta>
-                @if (count($this->siteOptions) > 1)
-                    <x-slot:action>
-                        <select wire:model.live="siteId" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;background:#fff">
-                            @foreach ($this->siteOptions as $id => $name)
-                                <option value="{{ $id }}">{{ $name }}</option>
-                            @endforeach
-                        </select>
-                    </x-slot:action>
-                @endif
             </x-lp.page-header>
 
             {{-- Stat cards — counts link through to the actionable work items --}}

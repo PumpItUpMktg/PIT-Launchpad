@@ -6,10 +6,10 @@ use App\Geo\GeoCoverage;
 use App\Geo\GeoCoveragePromptSeeder;
 use App\Geo\GeoCoverageVerification;
 use App\Geo\GeoPromptSeeder;
-use App\Models\GeoPrompt;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -51,11 +51,6 @@ class GeoCoverageBoard extends Page
     }
 
     /** Switching tenant clears the shop focus — the prior tenant's locations don't belong to the new one. */
-    public function updatedSiteId(): void
-    {
-        $this->locationId = null;
-    }
-
     /**
      * Seed GEO prompts for the SELECTED area only — the operator picks a tenant + brick-and-mortar shop
      * above, and seeding scopes to that shop's towns (so you target one area at a time instead of the
@@ -106,19 +101,7 @@ class GeoCoverageBoard extends Page
 
     public function mount(): void
     {
-        // Default to a tenant that already has GEO prompts, else the first tenant.
-        $this->siteId = (string) (GeoPrompt::query()->distinct()->value('site_id')
-            ?? Site::query()->orderBy('brand_name')->value('id'))
-            ?: null;
-    }
-
-    /** @return array<string, string> */
-    public function getSitesProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')
-            ->pluck('brand_name', 'id')
-            ->map(fn ($name, $id): string => (string) ($name ?: $id))
-            ->all();
+        $this->siteId = app(ActiveTenant::class)->id();
     }
 
     /**

@@ -52,11 +52,6 @@
 
 <div class="lcov">
     <div class="l-controls">
-        @if (count($this->sites) > 1)
-            <select class="l-select" wire:model.live="siteId" aria-label="Tenant">
-                @foreach ($this->sites as $id => $name)<option value="{{ $id }}">{{ $name }}</option>@endforeach
-            </select>
-        @endif
         <select class="l-select" wire:model.live="locationId" aria-label="Location">
             @forelse ($this->locations as $id => $name)<option value="{{ $id }}">{{ $name }}</option>
             @empty<option value="">No GBP-backed locations</option>@endforelse

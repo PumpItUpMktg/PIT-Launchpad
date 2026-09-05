@@ -5,8 +5,8 @@ namespace App\Filament\Pages;
 use App\Enums\UserRole;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
-use App\Models\Site;
 use App\Operate\LocationDashboard as LocationDashboardReader;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
@@ -59,27 +59,10 @@ class LocationDashboard extends Page
 
     public function mount(): void
     {
-        if ($this->siteId === null) {
-            $this->siteId = (string) Site::query()->orderBy('brand_name')->value('id') ?: null;
-        }
+        $this->siteId = app(ActiveTenant::class)->id();
         if ($this->locationId === null) {
             $this->locationId = array_key_first($this->locations);
         }
-    }
-
-    /** Switching tenant clears the location focus. */
-    public function updatedSiteId(): void
-    {
-        $this->locationId = array_key_first($this->locations);
-    }
-
-    /** @return array<string, string> */
-    public function getSitesProperty(): array
-    {
-        return Site::query()->orderBy('brand_name')
-            ->pluck('brand_name', 'id')
-            ->map(fn ($name, $id): string => (string) ($name ?: $id))
-            ->all();
     }
 
     /**

@@ -7,18 +7,6 @@
             </p>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <label class="flex-1">
-                    <span class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Site</span>
-                    <select
-                        wire:model.live="siteId"
-                        class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5"
-                    >
-                        <option value="">Select a site…</option>
-                        @foreach ($this->siteOptions as $id => $name)
-                            <option value="{{ $id }}">{{ $name }}</option>
-                        @endforeach
-                    </select>
-                </label>
 
                 <x-filament::button wire:click="start" icon="heroicon-m-play">
                     Start interview
