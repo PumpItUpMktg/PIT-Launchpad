@@ -8,7 +8,28 @@ and a foreign `?site=` / `?content=` / `?location=` must not resolve B's data.
 
 Three prior sweeps each found a different SHAPE of this bug and each was reported complete. This is the
 full inventory, classified by shape, with the remediation type per surface. The test is the ratchet: as
-each step lands, its surfaces move into the asserted-clean set and out of the skip/known-leak list.
+each step lands, its surfaces move from red to asserted-clean and the whole-page failure count drops.
+
+## Standing rules (learned here — apply to every guard from now on)
+
+1. **A test proving absence must first be proven capable of detecting presence.** Seed the exact thing
+   you assert isn't there, watch the test go RED, *then* write the fix that turns it green. A guard that
+   is green on a broken base is worse than no guard. This bug hid four times because each check was green
+   while never reaching the leak path:
+   - **The `?site=` sweep** keyed on the wrong mechanism (looked for `?site=` producers, missed the
+     `?content=`/`?location=` param shape and the dropped-scope shape entirely).
+   - **The account-wide membership test** passed while never exercising an account-wide operator.
+   - **The first version of THIS guard** seeded the foreign tenant B but made the operator a member of
+     tenant A only — so `VisibleSiteScope` hid B from the very `Site::query()` loops that leak
+     (`CitationPortfolio`, `AttentionBoard`, `Overview`). The fixture made the breach invisible: the page
+     rendered a one-tenant list and B could not appear. Fixed by making the operator a member of BOTH
+     accounts (the real multi-tenant operator shape). This is the same shape as the two failures above.
+2. **A skip list is a hiding place.** Parked assertions tagged "un-skip at step N" are how a green suite
+   carries a known live breach — the FOURTH hiding place found here (the old guard on #730 skipped its
+   breaching surfaces to stay green). Guards assert every surface directly; a breach is red, never skipped.
+
+The guard asserts **whole-page** output (not a content region): the acceptance baseline is **0 green** —
+nothing is currently compliant, and that is the honest starting point. Each step turns its surfaces green.
 
 ## `discoverResources` — off-nav is not a mitigation
 The panel disables Filament's auto-nav and renders a bespoke header, BUT `discoverResources` /
@@ -40,6 +61,22 @@ its URL. Confirmed by auditing every resource's `getEloquentQuery`:
   - `Overview` (`/`, panel landing) — loops `Site::query()->get()`.
   - `ReviewCaptureResource` (**Build·Reviews nav**) — drops `SiteScope`, no default tenant filter. Fix in place (about to carry ~1,290 imported reviews; a wrong-tenant approval publishes a customer's words on another company's site).
 - **D — `withoutGlobalScope(SiteScope)` list reads not constrained to ActiveTenant:** the 7 scope-dropping resources above.
+- **E — the site switcher in the locked chrome.** `resources/views/livewire/tenant-switcher.blade.php`
+  renders a dropdown of EVERY tenant the operator can switch to, on EVERY page via the `TOPBAR_AFTER`
+  render hook. The page data region is clean, but the picker chrome carries other tenants' names lock-wide.
+  The relay is explicit: **no site switcher in the locked chrome** — "Changing site is Exit site → lobby →
+  enter. Deliberate friction; it is the feature." This affordance was supposed to be removed with the
+  sweep and survived as chrome. Under a lock the header shows the CURRENT tenant only, plus **Exit site**.
+
+## Observed baseline (measured under a lock on A, operator member of A+B)
+
+Whole-page assertion, 37 surface checks, all RED. Data-region leaks vs switcher-only chrome:
+- **Data-region leaks (22):** Citations portfolio · OperateDashboard · Overview; the 7 SiteScope-dropping
+  resources (Reviews-capture, Pages, Published, Content-review, AI-content, Candidates, Content-edits); the
+  7 shape-A resources (Keywords, Silos, Connections, Feeds, Voice, Services, Locations); shape-B
+  `ProofEditor?content=` and `CitationsReport?location=`.
+- **Switcher-only, data clean (15):** the 14 ActiveTenant-scoped nav pages + `CitationsWorkspace?location=`
+  (Workspace already declines the foreign `?location=`; only its sibling Report leaks — confirm in step B).
 
 ## Legitimately cross-tenant (leave — already declared lobby-scope)
 `Lobby` (clears ActiveTenant on mount; allowlisted in `EnsureTenantSelected`) and `SiteResource` index /
@@ -47,16 +84,21 @@ Portfolio (the tenant picker; allowlisted). These are the ONLY surfaces that ans
 question. `ContentEditResource` is **not** one of these — it's per-tenant audit detail stored globally, so
 it gets `SiteScope`, not an allowlist (if a cross-tenant view is ever needed it belongs in the Lobby).
 
-## Remediation sequence (each step is a PR; each turns the test greener)
+## Remediation sequence (ONE branch, red guard first; commit per step; merge when green)
 
-1. **The test** (this PR) — the acceptance guard; asserts the 14 correct nav pages clean, codifies the
-   breaches as skipped/known-leak with their step. Lands first.
-2. **Shape B** — the lock overrides. Route `ProofEditor` / `CitationsWorkspace` / `CitationsReport` through
+The guard is pushed RED (0 green). Steps land as commits on the same branch so the whole-page failure
+count drops visibly at each one — the red→green transition is the review artifact. `#730` (the flawed
+green-on-broken-base guard) is closed, not repurposed.
+
+0. **The guard** (pushed) — whole-page acceptance test, every surface asserted directly, 0 green baseline.
+1. **Shape B** — the lock overrides. Route `ProofEditor` / `CitationsWorkspace` / `CitationsReport` through
    `ActiveTenant` (resolve the record scoped to the locked site; 404/redirect a foreign id); strip the
-   `#[Url]` from `LocationDashboard`. Un-skip the two param-case tests.
-3. **Repoints** — `Lobby::enter`/`badgeUrl`, `TenantSwitcher`, `SiteResource::selectTenant` → `TenantDashboard`; `ConsoleNav` Territory·Citations → `CitationsBoard`; panel landing → `TenantDashboard`. Retire `operate/dashboard` + `citations` portfolio to the Lobby.
-4. **Shape D / Build·Reviews** — default the tenant filter to `WorkingTenant::id()` or keep `SiteScope` on the 7 scope-dropping resources; add `SiteScope` to `ContentEditResource`.
-5. **Shape A** — strip the "Tenant" column + all-tenant `SelectFilter('site_id')` from the locked resources; pre-set create-form `site_id` to `ActiveTenant::id()`.
+   `#[Url]` from `LocationDashboard`. → `ProofEditor?content=`, `CitationsReport?location=` green.
+2. **Repoints** — `Lobby::enter`/`badgeUrl`, `TenantSwitcher`, `SiteResource::selectTenant` → `TenantDashboard`; `ConsoleNav` Territory·Citations → `CitationsBoard`; panel landing → `TenantDashboard`. Retire `operate/dashboard` + `citations` portfolio to the Lobby. → OperateDashboard, Citations-portfolio, Overview off the tenant path.
+3. **Shape D / Build·Reviews** — keep `SiteScope` on the 7 scope-dropping resources (default the tenant filter where a genuine cross-tenant read is still wanted, in the Lobby only); add `SiteScope` to `ContentEditResource`. → the 7 resources green.
+4. **Shape A** — strip the "Tenant" column + all-tenant `SelectFilter('site_id')` from the locked resources; pre-set create-form `site_id` to `ActiveTenant::id()`. → the 7 shape-A resources green.
+5. **Shape E — the switcher** — remove the tenant dropdown from the locked chrome; header shows the current
+   tenant only + **Exit site** (→ lobby → enter). → the 14 nav pages (and the whole 37) go green.
 6. **`?site=` link removal** — delete the 20 `getUrl(['site'=>...])` args (dead readers, live vectors — a bookmarked `?site=X` under a lock on Y silently mis-scopes, and becomes real ambiguity under URL-path tenancy); route the `?content=`/`?location=` drill links through the now-scoped resolvers.
 
-When steps 2–6 land, `TenantLockLeakTest` asserts every surface clean and the known-leak list is empty.
+When steps 1–6 land, `TenantLockLeakTest` is fully green — every surface asserted clean, whole-page.
