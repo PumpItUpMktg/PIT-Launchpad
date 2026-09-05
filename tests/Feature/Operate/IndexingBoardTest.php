@@ -95,7 +95,36 @@ it('scopes index coverage to the locked tenant', function () {
     expect(app(IndexStandings::class)->for($a->id)['all_known']['total'])->toBe(1);
 });
 
-it('renders tenant-locked with the reason breakdown and no per-page site picker', function () {
+it('reports whether the all-known capture path is enabled (config-driven)', function () {
+    $site = Site::factory()->create();
+    indexRow($site, null, 'PASS', 'https://x/1');
+
+    config()->set('launchpad.indexing.all_known_capture', false);
+    expect(app(IndexStandings::class)->for($site->id)['all_known_available'])->toBeFalse();
+
+    config()->set('launchpad.indexing.all_known_capture', true);
+    expect(app(IndexStandings::class)->for($site->id)['all_known_available'])->toBeTrue();
+});
+
+it('shows an honest "not yet enabled" state for all-known by default — never a silent empty panel', function () {
+    config()->set('launchpad.indexing.all_known_capture', false);
+    $site = Site::factory()->create();
+    $p = Content::factory()->create(['site_id' => $site->id]);
+    indexRow($site, $p, 'PASS', 'https://x/p');
+    indexRow($site, null, IndexCoverageState::DiscoveredNotIndexed->value, 'https://x/category/1');
+    app(ActiveTenant::class)->set($site->id);
+
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+
+    // Published side renders for real; the all-known side declares it's off rather than showing archives.
+    expect($html)->toContain('Pages you published')
+        ->and($html)->toContain('All-known capture not yet enabled')
+        ->and($html)->not->toContain('Discovered — not indexed') // gated off
+        ->and($html)->not->toContain('<select');
+});
+
+it('renders the all-known reason breakdown once the capture is enabled', function () {
+    config()->set('launchpad.indexing.all_known_capture', true);
     $site = Site::factory()->create();
     $p = Content::factory()->create(['site_id' => $site->id]);
     indexRow($site, $p, 'PASS', 'https://x/p');
@@ -105,6 +134,6 @@ it('renders tenant-locked with the reason breakdown and no per-page site picker'
     $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
 
     expect($html)->toContain('Discovered — not indexed')
-        ->and($html)->toContain('Pages you published')
+        ->and($html)->not->toContain('All-known capture not yet enabled')
         ->and($html)->not->toContain('<select');
 });

@@ -26,6 +26,9 @@
         .ix-reasons td.num { text-align:right; font-variant-numeric:tabular-nums; font-weight:700; }
         .ix-reasons tr:first-child td { border-top:1px solid var(--line); }
         .ix-none { padding:14px 16px; color:var(--ink-soft); font-size:12.5px; }
+        .ix-notenabled { padding:20px 16px; }
+        .ix-notenabled .ne-title { font-family:'Archivo',sans-serif; font-weight:700; font-size:13px; color:var(--ink); margin-bottom:6px; }
+        .ix-notenabled .ne-body { font-size:12.5px; color:var(--ink-soft); max-width:460px; line-height:1.5; }
         .ix-note { font-size:12.5px; color:var(--ink-soft); background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:12px 16px; margin-top:16px; }
     </style>
 
@@ -66,33 +69,56 @@
                 @endif
             </div>
 
-            {{-- All known to Google — the context --}}
-            @php($at = max(1, $all['total']))
+            {{-- All known to Google — the context. Gated: until the all-known capture path is wired,
+                 page_index_states holds only published URLs, so we SAY it's off rather than show a panel
+                 that silently mirrors the published set. --}}
             <div class="ix-card">
                 <div class="ix-head">
                     <div class="t">All URLs Google knows <span style="color:var(--ink-soft);font-weight:600">— incl. found outside your sitemap</span></div>
-                    <div class="d"><b>{{ number_format($board['discovered_only']) }}</b> are URLs Google found on its own (WordPress archives, params) — not pages you published.</div>
+                    <div class="d">Every URL in Google's index for this site, not just the pages Launchpad published.</div>
                 </div>
-                <div class="ix-nums">
-                    <div class="ix-num"><div class="n good">{{ number_format($all['indexed']) }}</div><div class="l">Indexed</div></div>
-                    <div class="ix-num"><div class="n {{ $all['not_indexed'] ? 'warn' : 'neutral' }}">{{ number_format($all['not_indexed']) }}</div><div class="l">Not indexed</div></div>
-                    <div class="ix-num"><div class="n neutral">{{ number_format($all['excluded']) }}</div><div class="l">Excluded (correct)</div></div>
-                    <div class="ix-num"><div class="n neutral">{{ number_format($all['total']) }}</div><div class="l">All known</div></div>
-                </div>
-                <div class="ix-bar"><i class="ok" style="width:{{ round($all['indexed'] / $at * 100) }}%"></i><i class="ex" style="width:{{ round($all['excluded'] / $at * 100) }}%"></i><i class="no" style="width:{{ round($all['not_indexed'] / $at * 100) }}%"></i></div>
-                @if (empty($all['reasons']))
-                    <div class="ix-none">Nothing pending across all known URLs.</div>
+                @if (! $board['all_known_available'])
+                    <div class="ix-notenabled">
+                        <div class="ne-title">All-known capture not yet enabled</div>
+                        <div class="ne-body">
+                            Launchpad tracks the URLs it published (left). The rest of what Google holds for this site
+                            is mostly WordPress archives — category, tag, author and date pages, feeds — that it found
+                            by crawling; those should be noindexed at the WordPress level, not ranked. Google exposes
+                            no API for its full known-URL list, so this panel stays off rather than mixing those URLs
+                            into a number that would look alarming and mean nothing.
+                        </div>
+                    </div>
                 @else
-                    <table class="ix-reasons">
-                        <thead><tr><th>Why a URL isn't indexed</th><th style="text-align:right">URLs</th></tr></thead>
-                        <tbody>@foreach ($all['reasons'] as $r)<tr><td>{{ $r['label'] }}</td><td class="num">{{ number_format($r['count']) }}</td></tr>@endforeach</tbody>
-                    </table>
+                    @php($at = max(1, $all['total']))
+                    <div class="ix-head" style="border-top:1px solid var(--line);border-bottom:0;padding-top:10px">
+                        <div class="d"><b>{{ number_format($board['discovered_only']) }}</b> are URLs Google found on its own (WordPress archives, params) — not pages you published.</div>
+                    </div>
+                    <div class="ix-nums">
+                        <div class="ix-num"><div class="n good">{{ number_format($all['indexed']) }}</div><div class="l">Indexed</div></div>
+                        <div class="ix-num"><div class="n {{ $all['not_indexed'] ? 'warn' : 'neutral' }}">{{ number_format($all['not_indexed']) }}</div><div class="l">Not indexed</div></div>
+                        <div class="ix-num"><div class="n neutral">{{ number_format($all['excluded']) }}</div><div class="l">Excluded (correct)</div></div>
+                        <div class="ix-num"><div class="n neutral">{{ number_format($all['total']) }}</div><div class="l">All known</div></div>
+                    </div>
+                    <div class="ix-bar"><i class="ok" style="width:{{ round($all['indexed'] / $at * 100) }}%"></i><i class="ex" style="width:{{ round($all['excluded'] / $at * 100) }}%"></i><i class="no" style="width:{{ round($all['not_indexed'] / $at * 100) }}%"></i></div>
+                    @if (empty($all['reasons']))
+                        <div class="ix-none">Nothing pending across all known URLs.</div>
+                    @else
+                        <table class="ix-reasons">
+                            <thead><tr><th>Why a URL isn't indexed</th><th style="text-align:right">URLs</th></tr></thead>
+                            <tbody>@foreach ($all['reasons'] as $r)<tr><td>{{ $r['label'] }}</td><td class="num">{{ number_format($r['count']) }}</td></tr>@endforeach</tbody>
+                        </table>
+                    @endif
                 @endif
             </div>
         </div>
 
         <div class="ix-note">
-            A big "not indexed" number is usually the URLs on the right — archives and parameter pages Google discovered that were never meant to rank. What matters is the left: of your <b>{{ number_format($pub['total']) }}</b> published pages, <b>{{ number_format($pub['not_indexed']) }}</b> aren't indexed. Indexed = a URL-Inspection <code>PASS</code>; a redirect or canonical is a correct exclusion, not pending.
+            @if ($board['all_known_available'])
+                A big "not indexed" number is usually the URLs on the right — archives and parameter pages Google discovered that were never meant to rank. What matters is the left: of your <b>{{ number_format($pub['total']) }}</b> published pages, <b>{{ number_format($pub['not_indexed']) }}</b> aren't indexed.
+            @else
+                What matters is your published pages: of <b>{{ number_format($pub['total']) }}</b>, <b>{{ number_format($pub['not_indexed']) }}</b> aren't indexed. The URLs Google finds on its own (WordPress archives) aren't tracked yet — see the panel on the right.
+            @endif
+            Indexed = a URL-Inspection <code>PASS</code>; a redirect or canonical is a correct exclusion, not pending.
         </div>
     @endif
 </x-lp.shell>
