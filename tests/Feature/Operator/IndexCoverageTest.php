@@ -3,6 +3,7 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\IndexCoverageState;
+use App\Enums\PageType;
 use App\Integrations\UrlInspection\IndexInspector;
 use App\Integrations\UrlInspection\IndexStatus;
 use App\Models\Content;
@@ -54,6 +55,23 @@ it('includes published jobs in the audit so job pages get a real index verdict',
     expect($finding)->not->toBeNull()
         ->and($finding['kind'])->toBe('job')
         ->and($finding['url'])->toBe($url)      // {domain}/jobs/{slug}/ — the trailing-slash form the cards read
+        ->and($finding['indexed'])->toBeTrue();
+});
+
+it('inspects the home page at the site root, not /home/ (which 301-redirects)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Home,
+        'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'home', 'title' => 'Home',
+    ]);
+
+    // Only the root URL has a verdict. If audit built /home/ (the bug), it would return null → not_inspected.
+    bindFakeInspector(['https://spg.example/' => status('https://spg.example/', IndexCoverageState::Indexed)]);
+
+    $finding = collect(app(IndexCoverage::class)->audit($site)['findings'])->firstWhere('kind', 'page');
+
+    expect($finding)->not->toBeNull()
+        ->and($finding['url'])->toBe('https://spg.example/')
         ->and($finding['indexed'])->toBeTrue();
 });
 

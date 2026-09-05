@@ -9,6 +9,7 @@ use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\LinkPlan;
 use App\Models\Scopes\SiteScope;
+use App\Support\PublicUrl;
 
 /**
  * Applies an approved {@see LinkPlan}: writes each approved link into its source page ({@see LinkInjector} —
@@ -66,7 +67,6 @@ class LinkPlanCommitter
         // No-orphan guard: rebuild the graph (reads the just-saved stored content) and submit to IndexNow
         // ONLY the target towns that now have an inbound link — never a zero-inbound page.
         $graph = $this->graph->build($site);
-        $home = rtrim((string) $site->domain_url, '/');
         $submitted = [];
         $orphaned = [];
         foreach ($items->pluck('target_content_id')->unique() as $targetId) {
@@ -84,7 +84,10 @@ class LinkPlanCommitter
             if ($target->isPublishHeld()) {
                 continue;
             }
-            $submitted[] = $home.'/'.ltrim((string) $target->slug, '/');
+            $url = PublicUrl::forContent($site->domain_url, $target); // canonical (home → root, never /home/)
+            if ($url !== null) {
+                $submitted[] = $url;
+            }
         }
 
         if ($submitted !== []) {

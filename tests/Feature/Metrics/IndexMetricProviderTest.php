@@ -20,6 +20,7 @@ use App\Support\CurrentSite;
 use App\Support\PublicUrl;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 
 afterEach(function () {
     CurrentSite::clear();
@@ -140,6 +141,42 @@ it('does not clear a prior verdict when a URL is not inspected this run (quota)'
     providerWith($inspector)->sync($site, CarbonPeriod::create('2026-08-11', '2026-08-11'));
 
     expect(PageIndexState::withoutGlobalScopes()->where('content_id', $page->id)->first()->index_verdict)->toBe('PASS');
+});
+
+it('prunes a stale orphan row when a content re-inspects at a new canonical URL', function () {
+    // A home page's URL canonicalizes /home/ → root; the old row would otherwise linger at /home/ with a
+    // frozen excluded_redirect verdict and double-count the content. Prune-on-sync must heal it.
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    $home = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Home, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'home', 'title' => 'Home']);
+
+    $canonical = PublicUrl::forContent($site->domain_url, $home); // → https://apex.example/ (root, not /home/)
+    $staleUrl = 'https://apex.example/home/';
+
+    // Seed the stale orphan row at /home/ (what a prior, pre-fix sync recorded).
+    DB::table('page_index_states')->insert([
+        'id' => (string) Str::ulid(),
+        'site_id' => $site->id,
+        'content_id' => $home->id,
+        'url' => $staleUrl,
+        'url_normalized' => UrlNormalizer::url($staleUrl),
+        'coverage_state' => 'Page with redirect',
+        'index_verdict' => 'excluded_redirect',
+        'canonical_url' => null,
+        'last_inspected_at' => now()->subDays(3),
+        'created_at' => now()->subDays(3),
+        'updated_at' => now()->subDays(3),
+    ]);
+
+    $inspector = fakeInspector();
+    $inspector->verdicts = [$canonical => indexStatus($canonical, IndexCoverageState::Indexed)];
+    providerWith($inspector)->sync($site, CarbonPeriod::create('2026-08-12', '2026-08-12'));
+
+    // Exactly one row for the content — its canonical URL — and the stale /home/ orphan is gone.
+    $rows = PageIndexState::withoutGlobalScopes()->where('content_id', $home->id)->get();
+    expect($rows)->toHaveCount(1)
+        ->and($rows->first()->url_normalized)->toBe(UrlNormalizer::url($canonical))
+        ->and($rows->first()->index_verdict)->toBe('PASS')
+        ->and(PageIndexState::withoutGlobalScopes()->where('url_normalized', UrlNormalizer::url($staleUrl))->exists())->toBeFalse();
 });
 
 it('is a clean no-op when Search Console is not connected', function () {

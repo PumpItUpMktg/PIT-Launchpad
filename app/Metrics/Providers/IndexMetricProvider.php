@@ -94,9 +94,40 @@ class IndexMetricProvider implements MetricProvider
             );
         }
 
+        $this->pruneOrphanRows($site, $rows);
+
         $this->writeDailySnapshot($site, $now);
 
         return SyncResult::success(count($rows));
+    }
+
+    /**
+     * Keep exactly ONE page_index_states row per inspected content — its current canonical URL. A content's
+     * URL can change (a slug edit, or the home page canonicalizing /home/→/), leaving a stale row at the OLD
+     * url_normalized that nothing re-inspects; it would otherwise show a dead URL's verdict (a home page
+     * stuck at excluded_redirect on /home/) and double-count the content on the panel. Prunes only the
+     * contents touched this run — orphans for other contents heal as they're re-inspected (+ the one-time
+     * launchpad:report-orphan-index-states sweep for the existing backlog).
+     *
+     * @param  array<string, array<string, mixed>>  $rows  the rows just upserted, keyed by url_normalized
+     */
+    private function pruneOrphanRows(Site $site, array $rows): void
+    {
+        $current = []; // content_id => its current url_normalized (one per content this run)
+        foreach ($rows as $urlNormalized => $row) {
+            if ($row['content_id'] !== null) {
+                $current[(string) $row['content_id']] = $urlNormalized;
+            }
+        }
+        if ($current === []) {
+            return;
+        }
+
+        DB::table('page_index_states')
+            ->where('site_id', $site->id)
+            ->whereIn('content_id', array_keys($current))
+            ->whereNotIn('url_normalized', array_values($current))
+            ->delete();
     }
 
     /** The two site-level daily counts the dashboard trends, read from the durable page_index_states table. */
