@@ -10,7 +10,7 @@ use App\Models\Location;
 use App\Models\Site;
 
 /** A published location page. Town = parent_location_id set; hub = location_id set. */
-function auditPage(Site $site, array $attrs): Content
+function locAuditPage(Site $site, array $attrs): Content
 {
     return Content::factory()->create(array_merge([
         'site_id' => $site->id,
@@ -21,7 +21,7 @@ function auditPage(Site $site, array $attrs): Content
     ], $attrs));
 }
 
-function auditCoverage(Site $site, string $name, string $state, string $geoId, array $sourceIds): CoverageArea
+function locAuditCoverage(Site $site, string $name, string $state, string $geoId, array $sourceIds): CoverageArea
 {
     return CoverageArea::factory()->create([
         'site_id' => $site->id, 'name' => $name, 'state' => $state, 'geo_id' => $geoId,
@@ -33,16 +33,16 @@ it('flags a town page whose parent does not serve its county, and names the corr
     $site = Site::factory()->create(['domain_url' => 'https://spg.test']);
 
     $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'county_geoids' => ['42091'], 'home_county_geoid' => '42091']);
-    auditPage($site, ['location_id' => $trooper->id, 'title' => 'Trooper, PA', 'slug' => 'trooper-pa']); // Trooper's hub
+    locAuditPage($site, ['location_id' => $trooper->id, 'title' => 'Trooper, PA', 'slug' => 'trooper-pa']); // Trooper's hub
     $bedminster = Location::factory()->create(['site_id' => $site->id, 'name' => 'Bedminster', 'county_geoids' => ['34035'], 'home_county_geoid' => '34035']);
-    auditPage($site, ['location_id' => $bedminster->id, 'title' => 'Bedminster, NJ', 'slug' => 'bedminster-nj']); // Bedminster's hub
+    locAuditPage($site, ['location_id' => $bedminster->id, 'title' => 'Bedminster, NJ', 'slug' => 'bedminster-nj']); // Bedminster's hub
 
     // The cross-state collision: Montgomery NJ (Somerset 34035) nested under Trooper (Montgomery PA 42091).
-    auditPage($site, ['parent_location_id' => $trooper->id, 'title' => 'Montgomery, NJ', 'slug' => 'trooper-pa/montgomery-nj']);
-    auditCoverage($site, 'Montgomery', 'NJ', '3403545660', [$trooper->id]);
+    locAuditPage($site, ['parent_location_id' => $trooper->id, 'title' => 'Montgomery, NJ', 'slug' => 'trooper-pa/montgomery-nj']);
+    locAuditCoverage($site, 'Montgomery', 'NJ', '3403545660', [$trooper->id]);
     // A correctly-parented town under Trooper (Montgomery PA, actually in 42091) — must NOT be flagged.
-    auditPage($site, ['parent_location_id' => $trooper->id, 'title' => 'Norristown, PA', 'slug' => 'trooper-pa/norristown-pa']);
-    auditCoverage($site, 'Norristown', 'PA', '4209154656', [$trooper->id]);
+    locAuditPage($site, ['parent_location_id' => $trooper->id, 'title' => 'Norristown, PA', 'slug' => 'trooper-pa/norristown-pa']);
+    locAuditCoverage($site, 'Norristown', 'PA', '4209154656', [$trooper->id]);
 
     $drift = app(LocationAudit::class)->townAssignmentDrift();
 
@@ -62,8 +62,8 @@ it('reports a location whose served counties exclude its home county, with the p
 
     // Spring City: physically Chester (42029) but serving Lehigh (42077) — its town pages came from the wrong county.
     $springCity = Location::factory()->create(['site_id' => $site->id, 'name' => 'Spring City', 'home_county_geoid' => '42029', 'county_geoids' => ['42077']]);
-    auditPage($site, ['parent_location_id' => $springCity->id, 'title' => 'Allentown, PA', 'slug' => 'spring-city-pa/allentown-pa']);
-    auditCoverage($site, 'Allentown', 'PA', '4207702000', [$springCity->id]);
+    locAuditPage($site, ['parent_location_id' => $springCity->id, 'title' => 'Allentown, PA', 'slug' => 'spring-city-pa/allentown-pa']);
+    locAuditCoverage($site, 'Allentown', 'PA', '4207702000', [$springCity->id]);
 
     $rows = app(LocationAudit::class)->countyMismatches();
 
@@ -84,9 +84,9 @@ it('does not flag a location that serves its own home county', function () {
 
 it('flags town names that exist in more than one state', function () {
     $site = Site::factory()->create();
-    auditCoverage($site, 'Montgomery', 'NJ', '3403545660', []);
-    auditCoverage($site, 'Montgomery', 'PA', '4209154660', []);
-    auditCoverage($site, 'Allentown', 'PA', '4207702000', []); // single-state → not flagged
+    locAuditCoverage($site, 'Montgomery', 'NJ', '3403545660', []);
+    locAuditCoverage($site, 'Montgomery', 'PA', '4209154660', []);
+    locAuditCoverage($site, 'Allentown', 'PA', '4207702000', []); // single-state → not flagged
 
     $rows = app(LocationAudit::class)->sameNameAcrossStates();
 
