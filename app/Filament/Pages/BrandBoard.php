@@ -2,14 +2,16 @@
 
 namespace App\Filament\Pages;
 
+use App\Branding\BrandStudio;
+use App\Branding\BrandVariationBuilder;
 use App\Enums\ConnectionProvider;
 use App\Enums\UserRole;
+use App\Filament\Concerns\ManagesBrandKit;
 use App\Guided\StepGate;
 use App\Models\Connection;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operator\ActiveTenant;
-use App\Branding\BrandVariationBuilder;
 use App\Operator\Brand\BrandProfile;
 use App\Styling\StyleActivator;
 use App\Styling\StyleVariation;
@@ -26,7 +28,7 @@ use Illuminate\Support\Facades\Auth;
  * "Push brand" action applies it to WordPress as a `theme.json` style variation.
  *
  * The block-theme brand surface. Styling is theme.json via {@see StyleActivator} (→ `/style`); this page
- * deliberately does NOT surface the legacy Elementor Global Kit flow ({@see \App\Branding\BrandStudio} →
+ * deliberately does NOT surface the legacy Elementor Global Kit flow ({@see BrandStudio} →
  * `/brand-kit`), which is quarantined under the Gutenberg-only output contract. Chrome (header/footer) is
  * its own deliberate push (Recover → Push chrome), not bundled here.
  *
@@ -95,7 +97,7 @@ class BrandBoard extends Page
      * Choose a style variation for the LOCKED tenant. `brand_colors` flips the logo-derived flag; a
      * variation slug sets the override (and clears the logo flag); the write always targets
      * {@see ActiveTenant} — there is no id parameter that could name another tenant. Mirrors
-     * {@see \App\Filament\Concerns\ManagesBrandKit::chooseStyle()}.
+     * {@see ManagesBrandKit::chooseStyle()}.
      */
     public function chooseStyle(string $variation): void
     {

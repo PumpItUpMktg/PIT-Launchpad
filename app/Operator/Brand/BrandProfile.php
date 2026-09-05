@@ -2,12 +2,17 @@
 
 namespace App\Operator\Brand;
 
+use App\Branding\BrandStudio;
 use App\Branding\BrandVariationBuilder;
+use App\Filament\Concerns\ManagesBrandKit;
 use App\Filament\Pages\BrandBoard;
 use App\Guided\StepGate;
 use App\Models\Scopes\SiteScope;
+use App\Models\Scopes\VisibleSiteScope;
 use App\Models\Site;
 use App\Models\SiteBranding;
+use App\Operator\ActiveTenant;
+use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Publishing\ConnectionGate;
 use App\Styling\StyleActivator;
 use App\Styling\StyleVariation;
@@ -20,12 +25,12 @@ use App\Styling\StyleVariation;
  *
  * This is the **block-theme** brand surface: styling is a `theme.json` style variation pushed through
  * {@see StyleActivator} (→ `/style`). It deliberately does NOT surface the legacy Elementor Global Kit
- * flow ({@see \App\Branding\BrandStudio} → `/brand-kit`), which is quarantined per the Gutenberg-only
+ * flow ({@see BrandStudio} → `/brand-kit`), which is quarantined per the Gutenberg-only
  * output contract — Elementor is not part of the system going forward.
  *
- * The style-option list mirrors the wizard's LOOK step ({@see \App\Filament\Concerns\ManagesBrandKit})
+ * The style-option list mirrors the wizard's LOOK step ({@see ManagesBrandKit})
  * so the operator and the client see the exact same picker; the difference is only the tenant source —
- * here it is the locked {@see \App\Operator\ActiveTenant}, never a per-page picker.
+ * here it is the locked {@see ActiveTenant}, never a per-page picker.
  */
 class BrandProfile
 {
@@ -51,7 +56,7 @@ class BrandProfile
             return null;
         }
 
-        $site = Site::query()->withoutGlobalScope(\App\Models\Scopes\VisibleSiteScope::class)->find($siteId);
+        $site = Site::query()->withoutGlobalScope(VisibleSiteScope::class)->find($siteId);
         if ($site === null) {
             return null;
         }
@@ -79,7 +84,7 @@ class BrandProfile
         ];
     }
 
-    /** Operator override → the logo's own header tone → light. Mirrors {@see \App\Publishing\Chrome\SiteProfileAssembler}. */
+    /** Operator override → the logo's own header tone → light. Mirrors {@see SiteProfileAssembler}. */
     private function headerTone(Site $site, array $logoSet): string
     {
         if (is_string($site->header_tone_override) && $site->header_tone_override !== '') {
@@ -95,7 +100,7 @@ class BrandProfile
      * The style-picker options, in choose order: the logo-derived palette first (when the logo yields
      * one), then the AI/voice recommendation, then the remaining curated variations in declaration order.
      * Each option carries its six-role swatches so the picker previews the whole look, not two colors.
-     * Ported from {@see \App\Filament\Concerns\ManagesBrandKit::getStyleOptionsProperty()} against a
+     * Ported from {@see ManagesBrandKit::getStyleOptionsProperty()} against a
      * passed Site rather than a wizard-resolved one.
      *
      * @return list<array{key: string, label: string, blurb: string, swatches: list<string>, recommended: bool, chosen: bool, dark: bool, badge: ?string}>
