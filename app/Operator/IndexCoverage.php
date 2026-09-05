@@ -55,7 +55,9 @@ class IndexCoverage
             ->where('status', ContentStatus::Published->value)
             ->whereNotNull('slug')
             ->orderBy('published_at') // stable base tiebreak within an equal-freshness bucket
-            ->get(['id', 'kind', 'title', 'slug']);
+            // page_type is REQUIRED: PublicUrl::forContent reads it to canonicalize the home page to "/".
+            // Omitting it left the home page inspected at "/home/" (a 301) → a permanent excluded_redirect.
+            ->get(['id', 'kind', 'title', 'slug', 'page_type']);
 
         // Inspect UNINSPECTED pages first, then the STALEST verdicts — so the daily, budget-capped run
         // reaches the newest and most out-of-date URLs before it runs out, instead of always re-chewing

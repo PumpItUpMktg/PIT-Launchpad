@@ -136,8 +136,9 @@ it('commits an approved plan: writes links, republishes sources, submits only no
     // The blog post gained an inbound anchor to Big and was queued for re-publish.
     expect($post->fresh()->body)->toContain('/big');
     Queue::assertPushed(PublishContent::class, fn (PublishContent $j) => $j->contentId === (string) $post->id);
-    // Big is non-orphan (the market landing grids to it) → its URL was submitted to IndexNow.
-    expect($submitted)->toContain(LP_HOME.'/big')
+    // Big is non-orphan (the market landing grids to it) → its canonical URL was submitted to IndexNow
+    // (trailing-slash form via PublicUrl, not the slug-only variant that 301-redirects).
+    expect($submitted)->toContain(LP_HOME.'/big/')
         ->and($result['orphaned'])->toBe([])
         ->and($plan->fresh()->status)->toBe(LinkPlanStatus::Applied)
         ->and($plan->items()->where('status', LinkPlanItemStatus::Applied->value)->count())->toBeGreaterThan(0);
@@ -172,7 +173,7 @@ it('does not announce a held location\'s town URLs to IndexNow, even when non-or
     app(LinkPlanActions::class)->approveAll($plan);
     app(LinkPlanActions::class)->apply($plan->fresh(['items']));
 
-    expect($submitted)->not->toContain(LP_HOME.'/big'); // held market → its town URL is never announced
+    expect($submitted)->not->toContain(LP_HOME.'/big/'); // held market → its town URL is never announced
 });
 
 it('never submits a zero-inbound town to IndexNow (the no-orphan guard)', function () {

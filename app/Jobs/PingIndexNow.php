@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Integrations\IndexNow\IndexNowSubmitter;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
+use App\Support\PublicUrl;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -31,12 +32,13 @@ class PingIndexNow implements ShouldQueue
             return;
         }
 
-        $home = rtrim((string) $site->domain_url, '/');
-        if ($home === '') {
+        // Canonical URL via PublicUrl — a home page resolves to the site root, NOT /home/ (which 301s to /),
+        // so we never announce a redirecting URL to IndexNow.
+        $url = PublicUrl::forContent($site->domain_url, $content);
+        if ($url === null) {
             return;
         }
 
-        $url = $home.'/'.ltrim((string) $content->slug, '/');
         $result = $submitter->submitUrl($site, $url);
 
         if ($result['ok']) {

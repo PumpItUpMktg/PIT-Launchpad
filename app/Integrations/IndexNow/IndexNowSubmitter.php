@@ -8,6 +8,7 @@ use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\Links\LinkPlanCommitter;
+use App\Support\PublicUrl;
 use Illuminate\Http\Client\Factory as Http;
 use Throwable;
 
@@ -110,13 +111,17 @@ class IndexNowSubmitter
             ->where('status', ContentStatus::Published->value)
             ->whereNotNull('wp_post_id')
             ->whereNotPublishHeld() // publish-hold: never announce a held location's URLs (defers discovery)
-            ->get(['id', 'slug']);
+            ->get(['id', 'slug', 'page_type']);
 
+        // Canonical URL per content via PublicUrl — a home page resolves to the site root, NOT /home/
+        // (which 301s to /), so we never announce a redirecting URL to IndexNow.
         $urls = $published
-            ->map(fn (Content $c): string => $home.'/'.ltrim((string) $c->slug, '/'))
+            ->map(fn (Content $c): ?string => PublicUrl::forContent($site->domain_url, $c))
+            ->filter()
+            ->values()
             ->all();
 
-        // The homepage itself (empty slug maps to the root).
+        // The homepage root, in case no home Content row carries it (submit() dedupes any overlap).
         array_unshift($urls, $home.'/');
 
         $result = $this->submit($site, $urls, redeploy: true);
