@@ -5,7 +5,6 @@ namespace App\Publishing\Blocks;
 use App\Enums\ContentKind;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
-use App\Enums\StandardPageType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\Content;
@@ -61,7 +60,6 @@ final class ServiceAreaResolver
 
         $polygons = $this->countyPolygons(array_keys($names)); // geoId => rings
         $urls = $this->locationUrls($siteId);
-        $fallbackUrl = $this->areasPageUrl($siteId); // "see all areas we serve" — a real page or ''
 
         $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
@@ -89,9 +87,10 @@ final class ServiceAreaResolver
             }
             $buckets[$geoId][] = [
                 'name' => $name,
-                // Its own town page if one exists; else the "Areas we serve" page as a fallback so a served
-                // town without a dedicated page still links somewhere real (never a plain, dead label).
-                'url' => ($urls[$this->key($name)] ?? '') !== '' ? $urls[$this->key($name)] : $fallbackUrl,
+                // Its own town page if one is built, else PLAIN TEXT (empty url) — an unbuilt town is not a
+                // self-referencing link to the Areas page; the list fills in as tiers get built, and the
+                // link plan has a real target to attach to. (The renderer shows empty-url as plain text.)
+                'url' => $urls[$this->key($name)] ?? '',
                 'type' => $area->type,
                 'key' => [self::TIER_RANK[(string) $area->size_tier] ?? 4, -1 * (int) ($area->population ?? 0), $name],
             ];
@@ -168,26 +167,6 @@ final class ServiceAreaResolver
         }
 
         return $groups;
-    }
-
-    /**
-     * The site's published "Areas we serve" page URL, or '' when it has none. The fallback target for a
-     * served town that has no dedicated location page of its own.
-     */
-    private function areasPageUrl(string $siteId): string
-    {
-        $domain = Site::find($siteId)?->domain_url;
-        $home = is_string($domain) && trim($domain) !== '' ? rtrim($domain, '/').'/' : '/';
-
-        $slug = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)
-            ->where('standard_type', StandardPageType::AreasWeServe->value)
-            ->whereNotNull('slug')
-            ->value('slug');
-
-        $slug = trim((string) $slug);
-
-        return $slug === '' ? '' : $home.ltrim($slug, '/');
     }
 
     /**
