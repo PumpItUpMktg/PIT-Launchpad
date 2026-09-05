@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Integrations\IndexNow\IndexNowSubmitter;
 use App\Integrations\Wordpress\WordpressClient;
 use App\Integrations\Wordpress\WordpressClientFactory;
@@ -93,4 +96,27 @@ it('stamps indexnow_submitted_at on each published page after a successful site 
 
     expect($result['ok'])->toBeTrue()
         ->and($c->fresh()->indexnow_submitted_at)->not->toBeNull();
+});
+
+it('announces the home page at the site root, never /home/ (which 301s)', function () {
+    Http::fake(['*api.indexnow.org*' => Http::response('', 200)]);
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example', 'indexnow_key' => 'abcdef1234567890']);
+
+    $wp = Mockery::mock(WordpressClient::class);
+    $wp->shouldReceive('pushIndexNowKey')->andReturn(['stored' => true]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($wp);
+
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Home, 'status' => ContentStatus::Published, 'wp_post_id' => 7, 'slug' => 'home', 'title' => 'Home']);
+
+    $result = inSubmitter($factory)->submitSite($site);
+
+    expect($result['ok'])->toBeTrue();
+    Http::assertSent(function ($r) {
+        $urls = $r['urlList'];
+
+        return in_array('https://spg.example/', $urls, true)
+            && ! in_array('https://spg.example/home/', $urls, true)
+            && ! in_array('https://spg.example/home', $urls, true);
+    });
 });

@@ -108,9 +108,10 @@ it('IndexNowSubmitter::submitSite excludes a held location\'s live pages', funct
 
     $submitter->submitSite($site);
 
+    // Canonical trailing-slash form (PublicUrl) — never the slug-only variant that 301-redirects.
     Http::assertSent(fn ($r) => str_contains($r->url(), 'api.indexnow.org')
-        && ! in_array('https://spg.example/held-town', $r['urlList'], true)  // held live page → excluded
-        && in_array('https://spg.example/free-town', $r['urlList'], true));  // released → announced
+        && ! in_array('https://spg.example/held-town/', $r['urlList'], true)  // held live page → excluded
+        && in_array('https://spg.example/free-town/', $r['urlList'], true));  // released → announced
 });
 
 // ── The service: state + deliberate take-down ─────────────────────────────────────────────────────
