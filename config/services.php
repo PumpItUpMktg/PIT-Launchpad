@@ -202,12 +202,14 @@ return [
         // 2,000/day + 600/min per property, so an audit is BATCHED + CACHED (results change ~daily) and
         // capped per day; cards read the cached result, never fire a live inspection on render.
         'gsc_inspection_base_url' => env('GOOGLE_GSC_INSPECTION_BASE_URL', 'https://searchconsole.googleapis.com/v1'),
-        // 14 days. At ~60-120 live inspections/run (daily) and ~474 known URLs, a 3-day TTL forced
-        // ~158 re-inspections/day — above throughput — so the budget re-chewed the head and never
-        // reached the tail. 14 days drops re-inspection demand to ~34/day (474/14), leaving ≥26/day
-        // headroom even at the low end of throughput; combined with uninspected-first ordering
-        // (IndexCoverage) the backlog drains instead of widening.
-        'url_inspection_cache_ttl' => (int) env('GOOGLE_URL_INSPECTION_CACHE_TTL', 1209600), // 14 days
+        // TIERED TTL (see GoogleIndexInspector). Confirmed-indexed (PASS) verdicts rarely flip, so they
+        // hold 14 days — re-confirming hundreds of PASS pages every 3 days is where the budget was wasted.
+        // Not-yet-indexed verdicts are actively changing (a fresh page Google hasn't crawled reads "not
+        // indexed"), so they're re-checked in 3 days rather than standing wrong for two weeks. Demand at
+        // ~354 PASS / 14 + ~8 non-PASS / 3 ≈ 28/day — under throughput, with fast confirmation where it
+        // matters. (A flat 14-day TTL would leave a just-published page reported not-indexed for 2 weeks.)
+        'url_inspection_cache_ttl' => (int) env('GOOGLE_URL_INSPECTION_CACHE_TTL', 1209600),         // 14 days (PASS)
+        'url_inspection_pending_ttl' => (int) env('GOOGLE_URL_INSPECTION_PENDING_TTL', 259200),      // 3 days (non-PASS)
         'url_inspection_daily_cap' => (int) env('GOOGLE_URL_INSPECTION_DAILY_CAP', 1800),    // under the 2,000/day quota
         // Per-page GSC totals are cached this long on the Live cards (GSC data lags ~2-3 days, so a
         // board render need not re-query every card). Default 6h.

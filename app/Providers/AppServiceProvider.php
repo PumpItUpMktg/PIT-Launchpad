@@ -532,8 +532,9 @@ class AppServiceProvider extends ServiceProvider
             $this->app->make(GoogleConnectionService::class),
             $this->app->make(CacheRepository::class),
             (string) config('services.google.gsc_inspection_base_url', 'https://searchconsole.googleapis.com/v1'),
-            (int) config('services.google.url_inspection_cache_ttl', 259200),
+            (int) config('services.google.url_inspection_cache_ttl', 1209600),
             (int) config('services.google.url_inspection_daily_cap', 1800),
+            (int) config('services.google.url_inspection_pending_ttl', 259200),
         ));
 
         // Bing Webmaster Tools — the Bing analog of the GSC seam. Mock-first: the real adapter binds
