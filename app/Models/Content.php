@@ -16,6 +16,7 @@ use App\Models\Scopes\SiteScope;
 use App\Observers\ContentObserver;
 use Database\Factories\ContentFactory;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -281,6 +282,31 @@ class Content extends Model
             ->whereIn('id', $ids)
             ->where('publish_held', true)
             ->exists();
+    }
+
+    /**
+     * Exclude pages whose owning Location (own hub `location_id`, or parent hub `parent_location_id`) is on
+     * publish-hold — so the IndexNow announce paths never announce a held location's URL. NULL-safe: a page
+     * with no location pin (a service page / post) is kept.
+     *
+     * @param  Builder<Content>  $query
+     * @return Builder<Content>
+     */
+    public function scopeWhereNotPublishHeld(Builder $query): Builder
+    {
+        $held = Location::withoutGlobalScope(ActiveLocationScope::class)
+            ->withoutGlobalScope(SiteScope::class)
+            ->where('publish_held', true)
+            ->pluck('id')
+            ->all();
+
+        if ($held === []) {
+            return $query;
+        }
+
+        return $query
+            ->where(fn (Builder $q) => $q->whereNull('location_id')->orWhereNotIn('location_id', $held))
+            ->where(fn (Builder $q) => $q->whereNull('parent_location_id')->orWhereNotIn('parent_location_id', $held));
     }
 
     /**

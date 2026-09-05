@@ -8,6 +8,7 @@ use App\Filament\Resources\LocationResource\Pages\ListLocations;
 use App\Integrations\Places\PlaceCandidate;
 use App\Integrations\Places\PlaceDetails;
 use App\Integrations\Places\PlacesProvider;
+use App\Locations\LocationPublishHold;
 use App\Locations\ServedTowns;
 use App\Models\Location;
 use App\Support\BusinessHours;
@@ -72,13 +73,58 @@ class LocationResource extends Resource
                 TextColumn::make('phone')->state(fn (Location $record): string => Phone::format($record->phone))->placeholder('—'),
                 IconColumn::make('is_storefront')->label('Storefront')->boolean(),
                 IconColumn::make('has_gbp')->label('GBP')->boolean()->state(fn (Location $record): bool => filled($record->gbp_url)),
+                // Publish-hold state, made visible where the location appears — a held location with pages
+                // still live is a real, non-silent state ("Held · N live"), the operator's cue to take them
+                // down if that was the intent.
+                TextColumn::make('publish_status')->label('Publishing')->badge()
+                    ->state(function (Location $record): string {
+                        if (! $record->publish_held) {
+                            return 'Publishable';
+                        }
+                        $live = app(LocationPublishHold::class)->liveCount($record);
+
+                        return $live > 0 ? "Held · {$live} live" : 'Held';
+                    })
+                    ->color(fn (Location $record): string => $record->publish_held ? 'warning' : 'success'),
             ])
             ->filters([
                 TernaryFilter::make('is_storefront')->label('Storefront'),
+                TernaryFilter::make('publish_held')->label('Publish-held'),
             ])
             ->recordActions([
                 ActionGroup::make([
                     EditAction::make(),
+                    Action::make('togglePublishHold')
+                        ->label(fn (Location $record): string => $record->publish_held ? 'Release for publishing' : 'Hold publishing')
+                        ->icon(fn (Location $record): string => $record->publish_held ? 'heroicon-o-play-circle' : 'heroicon-o-pause-circle')
+                        ->requiresConfirmation()
+                        ->modalDescription(fn (Location $record): string => $record->publish_held
+                            ? "Release {$record->name} — its reviewed pages can publish again."
+                            : "Hold {$record->name} — new pages won't publish and its URLs won't be announced. Already-live pages stay live until taken down.")
+                        ->action(function (Location $record): void {
+                            $svc = app(LocationPublishHold::class);
+                            if ($record->publish_held) {
+                                $svc->release($record);
+                                Notification::make()->title("{$record->name} released for publishing")->success()->send();
+                            } else {
+                                $svc->hold($record);
+                                Notification::make()->title("{$record->name} held")->success()->send();
+                            }
+                        }),
+                    // Deliberate bulk take-down of a held location's live pages — never automatic on hold.
+                    Action::make('takeDownLivePages')
+                        ->label('Take down live pages')
+                        ->icon('heroicon-o-arrow-down-on-square')
+                        ->color('danger')
+                        ->visible(fn (Location $record): bool => $record->publish_held && app(LocationPublishHold::class)->liveCount($record) > 0)
+                        ->requiresConfirmation()
+                        ->modalHeading('Take down live pages')
+                        ->modalDescription(fn (Location $record): string => 'Remove '.app(LocationPublishHold::class)->liveCount($record)." live page(s) for {$record->name} from WordPress. Deliberate and not auto-reversed — a later release + publish re-creates them.")
+                        ->modalSubmitActionLabel('Take down')
+                        ->action(function (Location $record): void {
+                            $n = app(LocationPublishHold::class)->takeDownLivePages($record);
+                            Notification::make()->title("Took down {$n} page(s) for {$record->name}")->success()->send();
+                        }),
                     DeleteAction::make(),
                 ]),
             ]);

@@ -7,6 +7,7 @@ use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Publishing\Links\LinkPlanCommitter;
 use Illuminate\Http\Client\Factory as Http;
 use Throwable;
 
@@ -35,6 +36,16 @@ class IndexNowSubmitter
 
     /**
      * Submit an explicit URL list.
+     *
+     * PUBLISH-HOLD: this method does NOT filter held-location URLs — it only has raw strings, and
+     * reverse-matching a URL back to a Content to resolve its location is fail-open (a trailing-slash
+     * mismatch would silently let a held page through). **Callers MUST exclude held pages via the FK,
+     * before building URLs.** Current callers, all of which do: {@see submitSite()} (via the
+     * `Content::whereNotPublishHeld()` query scope); {@see submitUrl()} → the on-publish `PingIndexNow`
+     * ping, which is Gate-1-covered (a held page never reaches publish's ping); and
+     * {@see LinkPlanCommitter::apply()} (skips targets where `Content::isPublishHeld()`).
+     * A new caller must filter the same way. (A structurally-safe `iterable<Content>` signature is viable
+     * as a future refactor — every caller holds Content — but is out of this method's current contract.)
      *
      * @param  list<string>  $urls
      * @return array{ok: bool, submitted: int, status: ?int, reason: ?string}
@@ -98,6 +109,7 @@ class IndexNowSubmitter
             ->where('site_id', $site->id)
             ->where('status', ContentStatus::Published->value)
             ->whereNotNull('wp_post_id')
+            ->whereNotPublishHeld() // publish-hold: never announce a held location's URLs (defers discovery)
             ->get(['id', 'slug']);
 
         $urls = $published

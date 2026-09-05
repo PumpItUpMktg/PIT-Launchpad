@@ -93,7 +93,7 @@ test('a TOWN page grounds on its parent GBP location and publishes with NO revie
     reviewEndpoint();
     $site = PublishHarness::site();
     // The physical GBP location the town nests under (a real, grounded Location).
-    $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'lat' => 40.1, 'lng' => -75.4]);
+    $parent = Location::factory()->released()->create(['site_id' => $site->id, 'name' => 'Trooper', 'lat' => 40.1, 'lng' => -75.4]); // released so publish() reaches the review gate under test
     // A town page: no location_id (that's the hub), pinned via parent_location_id. Even with a market
     // set, the market-review gate no longer applies — it grounds on the parent location instead.
     $market = Market::factory()->create(['site_id' => $site->id]);
