@@ -22,12 +22,20 @@ use Throwable;
  */
 final class GoogleIndexInspector implements IndexInspector
 {
+    /**
+     * TIERED TTL: a confirmed-indexed (PASS) verdict rarely flips, so it's cached long ($cacheTtl, 14d)
+     * — re-confirming hundreds of PASS pages every few days is where the budget was wasted. A non-PASS
+     * verdict (a newly-published page Google hasn't crawled yet reads "not indexed") is the answer that
+     * is actively changing, so it's cached briefly ($pendingTtl, 3d) and re-checked soon — otherwise the
+     * panel would report a page as not-indexed for two weeks after it was actually indexed.
+     */
     public function __construct(
         private readonly GoogleConnectionService $connections,
         private readonly CacheRepository $cache,
         private readonly string $baseUrl,
-        private readonly int $cacheTtl = 259200,
+        private readonly int $cacheTtl = 1209600,
         private readonly int $dailyCap = 1800,
+        private readonly int $pendingTtl = 259200,
     ) {}
 
     public function connected(Site $site): bool
@@ -73,7 +81,9 @@ final class GoogleIndexInspector implements IndexInspector
             return null; // transient error — not cached, so a later audit retries
         }
 
-        $this->cache->put($this->key($property, $url), $status->toArray(), $this->cacheTtl);
+        // Tiered: a confirmed PASS holds for $cacheTtl; anything not-yet-indexed is re-checked in $pendingTtl.
+        $ttl = $status->indexed() ? $this->cacheTtl : $this->pendingTtl;
+        $this->cache->put($this->key($property, $url), $status->toArray(), $ttl);
         $this->bumpDailyCount($property);
 
         return $status;

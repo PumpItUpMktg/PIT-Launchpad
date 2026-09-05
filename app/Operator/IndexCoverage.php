@@ -8,6 +8,8 @@ use App\Enums\JobStatus;
 use App\Integrations\UrlInspection\IndexInspector;
 use App\Models\Content;
 use App\Models\Job;
+use App\Models\PageIndexState;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Support\PublicUrl;
 
@@ -52,9 +54,26 @@ class IndexCoverage
             ->where('site_id', $site->id)
             ->where('status', ContentStatus::Published->value)
             ->whereNotNull('slug')
-            ->orderBy('kind')
-            ->orderBy('published_at')
+            ->orderBy('published_at') // stable base tiebreak within an equal-freshness bucket
             ->get(['id', 'kind', 'title', 'slug']);
+
+        // Inspect UNINSPECTED pages first, then the STALEST verdicts — so the daily, budget-capped run
+        // reaches the newest and most out-of-date URLs before it runs out, instead of always re-chewing
+        // the oldest-published head (which, at a short cache TTL, starved the newest pages forever). One
+        // grouped query for the freshness map (a content can carry >1 row after a slug change → max()).
+        $freshness = PageIndexState::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereNotNull('content_id')
+            ->groupBy('content_id')
+            ->selectRaw('content_id, max(last_inspected_at) as last_inspected_at')
+            ->pluck('last_inspected_at', 'content_id');
+
+        $pages = $pages->sortBy(function (Content $content) use ($freshness): string {
+            $last = $freshness[$content->id] ?? null;
+
+            // '0…' (uninspected) sorts before '1{timestamp}' (inspected, oldest verdict first).
+            return $last === null || $last === '' ? '0' : '1'.$last;
+        })->values();
 
         $findings = [];
         $byState = [];

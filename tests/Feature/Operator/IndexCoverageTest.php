@@ -7,6 +7,7 @@ use App\Integrations\UrlInspection\IndexInspector;
 use App\Integrations\UrlInspection\IndexStatus;
 use App\Models\Content;
 use App\Models\Job;
+use App\Models\PageIndexState;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\IndexCoverage;
@@ -128,6 +129,62 @@ it('respects the live-inspection time budget, falling back to cached verdicts on
     // No budget → live inspection runs.
     $full = app(IndexCoverage::class)->audit($site, live: true);
     expect($full['inspected'])->toBe(1)->and($full['indexed'])->toBe(1);
+});
+
+it('inspects uninspected pages first, then the stalest verdicts (not oldest-published)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $mk = fn (string $slug, $publishedAt) => Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published,
+        'wp_post_id' => 1, 'slug' => $slug, 'title' => $slug, 'published_at' => $publishedAt,
+    ]);
+    // Published oldest→newest: a, b, c. Under the OLD published_at order the run would hit a, b, c.
+    $a = $mk('a', now()->subDays(10));  // inspected recently (fresh)
+    $b = $mk('b', now()->subDays(5));   // inspected long ago (stalest)
+    $c = $mk('c', now()->subDay());     // never inspected (newest, the starved tail)
+
+    $fresh = fn (Content $ct, $when) => PageIndexState::create([
+        'site_id' => $site->id, 'content_id' => $ct->id,
+        'url' => "https://spg.example/{$ct->slug}/", 'url_normalized' => "https://spg.example/{$ct->slug}",
+        'index_verdict' => 'PASS', 'coverage_state' => 'indexed', 'last_inspected_at' => $when,
+    ]);
+    $fresh($a, now()->subDay());
+    $fresh($b, now()->subDays(20));
+    // c: no page_index_states row → uninspected.
+
+    $rec = new class implements IndexInspector
+    {
+        /** @var list<string> */
+        public array $order = [];
+
+        public function connected(Site $site): bool
+        {
+            return true;
+        }
+
+        public function inspect(Site $site, string $url): ?IndexStatus
+        {
+            $this->order[] = $url;
+
+            return new IndexStatus(url: $url, state: IndexCoverageState::Indexed, coverageState: 'Indexed');
+        }
+
+        public function cached(Site $site, string $url): ?IndexStatus
+        {
+            $this->order[] = $url;
+
+            return new IndexStatus(url: $url, state: IndexCoverageState::Indexed, coverageState: 'Indexed');
+        }
+    };
+    app()->instance(IndexInspector::class, $rec);
+
+    app(IndexCoverage::class)->audit($site, live: true);
+
+    // Uninspected (c) first, then the stalest verdict (b, 20d), then the fresh one (a, 1d) — NOT a,b,c.
+    expect($rec->order)->toBe([
+        'https://spg.example/c/',
+        'https://spg.example/b/',
+        'https://spg.example/a/',
+    ]);
 });
 
 it('reports nothing fabricated when not connected', function () {

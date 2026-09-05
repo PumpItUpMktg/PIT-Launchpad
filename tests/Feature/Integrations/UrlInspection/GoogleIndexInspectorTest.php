@@ -6,6 +6,7 @@ use App\Integrations\UrlInspection\GoogleIndexInspector;
 use App\Integrations\UrlInspection\IndexInspector;
 use App\Models\GoogleAccount;
 use App\Models\Site;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http as HttpFacade;
 
@@ -63,6 +64,40 @@ it('inspects a URL, maps coverageState, and caches the result', function () {
     // Second call is served from cache — no second HTTP request.
     app(IndexInspector::class)->inspect($site, 'https://spg.example/hoboken-nj');
     HttpFacade::assertSentCount(1);
+});
+
+it('caches a PASS verdict for 14 days and a non-PASS verdict for 3 days (tiered TTL)', function () {
+    inspectGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+
+    $ttls = [];
+    $cache = Mockery::mock(Repository::class);
+    $cache->shouldIgnoreMissing();                 // daily-counter get/increment etc. → no-op
+    $cache->shouldReceive('get')->andReturn(null); // nothing cached → always fetch
+    $cache->shouldReceive('put')->andReturnUsing(function ($key, $val, $ttl = null) use (&$ttls) {
+        if (is_array($val)) {                      // the verdict put (a status array), not the int counter
+            $ttls[] = $ttl;
+        }
+
+        return true;
+    });
+
+    $inspector = new GoogleIndexInspector(
+        app(GoogleConnectionService::class), $cache,
+        'https://searchconsole.googleapis.com/v1', cacheTtl: 1209600, dailyCap: 1800, pendingTtl: 259200,
+    );
+
+    HttpFacade::fake(['*/urlInspection/index:inspect' => HttpFacade::sequence()
+        ->push(inspectResponse('Submitted and indexed', 'PASS'))
+        ->push(inspectResponse('Crawled - currently not indexed', 'NEUTRAL')),
+    ]);
+
+    $indexed = $inspector->inspect($site, 'https://spg.example/indexed');
+    $pending = $inspector->inspect($site, 'https://spg.example/pending');
+
+    expect($indexed->indexed())->toBeTrue()
+        ->and($pending->indexed())->toBeFalse()
+        ->and($ttls)->toBe([1209600, 259200]); // PASS → 14d, non-PASS → 3d
 });
 
 it('cached() never makes an API call and returns null before an inspection', function () {
