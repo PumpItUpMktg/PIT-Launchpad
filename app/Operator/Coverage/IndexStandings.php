@@ -2,10 +2,13 @@
 
 namespace App\Operator\Coverage;
 
+use App\Enums\ContentStatus;
 use App\Enums\IndexCoverageState;
 use App\Filament\Pages\IndexingBoard;
+use App\Models\Content;
 use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -34,7 +37,11 @@ class IndexStandings
      *     published: array{total: int, indexed: int, not_indexed: int, excluded: int, reasons: list<array{state: string, label: string, count: int}>},
      *     all_known: array{total: int, indexed: int, not_indexed: int, excluded: int, reasons: list<array{state: string, label: string, count: int}>},
      *     discovered_only: int,
-     *     all_known_available: bool
+     *     all_known_available: bool,
+     *     inspected_count: int,
+     *     published_content_count: int,
+     *     coverage_gap: int,
+     *     data_through: ?string
      * }
      */
     public function for(?string $siteId): array
@@ -47,7 +54,11 @@ class IndexStandings
         if ($siteId === null) {
             $empty = ['total' => 0, 'indexed' => 0, 'not_indexed' => 0, 'excluded' => 0, 'reasons' => []];
 
-            return ['published' => $empty, 'all_known' => $empty, 'discovered_only' => 0, 'all_known_available' => $allKnownAvailable];
+            return [
+                'published' => $empty, 'all_known' => $empty, 'discovered_only' => 0,
+                'all_known_available' => $allKnownAvailable,
+                'inspected_count' => 0, 'published_content_count' => 0, 'coverage_gap' => 0, 'data_through' => null,
+            ];
         }
 
         /** @var Collection<int, PageIndexState> $rows */
@@ -58,11 +69,30 @@ class IndexStandings
         $published = $this->summarize($rows->filter(fn (PageIndexState $r): bool => $r->content_id !== null));
         $allKnown = $this->summarize($rows);
 
+        // Coverage lag made visible: the inspector is daily and budget-capped, so it reaches only part of
+        // the published set each run. "inspected of published" (362 of 474) is a real fact about how much
+        // of the site the panel actually describes — never let the inspected count read as the whole site.
+        $inspected = $published['total'];
+        $publishedContent = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->where('status', ContentStatus::Published->value)
+            ->count();
+
+        // Freshness: a daily sync that fails silently would leave the panel confidently showing week-old
+        // verdicts. Stamp the panel with the newest verdict's as-of date so staleness is visible.
+        $lastInspected = PageIndexState::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->max('last_inspected_at');
+
         return [
             'published' => $published,
             'all_known' => $allKnown,
             'discovered_only' => $allKnown['total'] - $published['total'],
             'all_known_available' => $allKnownAvailable,
+            'inspected_count' => $inspected,
+            'published_content_count' => $publishedContent,
+            'coverage_gap' => max(0, $publishedContent - $inspected),
+            'data_through' => $lastInspected !== null ? Carbon::parse($lastInspected)->toDateString() : null,
         ];
     }
 

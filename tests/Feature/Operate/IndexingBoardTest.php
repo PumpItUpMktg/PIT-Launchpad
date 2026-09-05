@@ -1,10 +1,12 @@
 <?php
 
+use App\Enums\ContentStatus;
 use App\Enums\IndexCoverageState;
 use App\Enums\UserRole;
 use App\Filament\Pages\IndexingBoard;
 use App\Models\Content;
 use App\Models\PageIndexState;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\ActiveTenant;
@@ -93,6 +95,39 @@ it('scopes index coverage to the locked tenant', function () {
     indexRow($b, null, 'PASS', 'https://b/1');
 
     expect(app(IndexStandings::class)->for($a->id)['all_known']['total'])->toBe(1);
+});
+
+it('reports coverage lag (inspected of published) and the data-through date', function () {
+    $site = Site::factory()->create();
+    // 3 published pages, only 2 inspected → the panel must show the gap, not read 2 as the whole site.
+    $p1 = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    $p2 = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]); // published, never inspected
+    indexRow($site, $p1, 'PASS', 'https://x/a');
+    indexRow($site, $p2, IndexCoverageState::CrawledNotIndexed->value, 'https://x/b');
+    PageIndexState::withoutGlobalScope(SiteScope::class)->update(['last_inspected_at' => '2026-08-20 10:00:00']);
+
+    $board = app(IndexStandings::class)->for($site->id);
+
+    expect($board['inspected_count'])->toBe(2)
+        ->and($board['published_content_count'])->toBe(3)
+        ->and($board['coverage_gap'])->toBe(1)          // 112 not-yet-inspected, in miniature
+        ->and($board['data_through'])->toBe('2026-08-20');
+});
+
+it('renders "inspected of published" and the data-through stamp on the board', function () {
+    $site = Site::factory()->create();
+    $p = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]); // uninspected
+    indexRow($site, $p, 'PASS', 'https://x/p');
+    PageIndexState::withoutGlobalScope(SiteScope::class)->update(['last_inspected_at' => '2026-08-20 10:00:00']);
+    app(ActiveTenant::class)->set($site->id);
+
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+
+    expect($html)->toContain('inspected of')
+        ->toContain('data through 2026-08-20')
+        ->toContain('not yet inspected'); // the 1-page gap surfaced
 });
 
 it('reports whether the all-known capture path is enabled (config-driven)', function () {
