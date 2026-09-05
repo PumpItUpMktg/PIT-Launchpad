@@ -35,6 +35,21 @@ each step lands, its surfaces move from red to asserted-clean and the whole-page
    The step-B fix (resolve within the lock) correctly broke them; the right response was to make them
    establish the lock (the real locked-operator path), not to weaken the fix. Catch this deliberately: a
    red existing test after a security fix is a signal to check what that test was really asserting.
+4. **A guard asserts its own detection precondition before the absence checks.** `TenantLockLeakTest`'s
+   `beforeEach` asserts `expect($op->permittedSiteIds())->toContain($this->siteB->id)` — the operator can
+   actually SEE the foreign tenant by production's own visibility mechanism (account-wide membership) —
+   *before* any "no foreign marker" assertion runs. This makes the original false-green mode structurally
+   impossible: a fixture that stops making B visible fails loudly at setup instead of passing every
+   absence check vacuously. This is the shape for every absence guard from here.
+
+## Lobby stays read-only — no portfolio-wide "fire everything" button
+When `ListGeoPrompts`/`ListKeywords` header actions moved from the removed all-tenant filter to the lock,
+they became per-tenant (seed/top-up/bridge/add-to-grid). They are NOT promoted to a Lobby batch: the Lobby
+is read-only by design ("every clickable element is navigation, no badge performs a mutation"), and a
+mutation that fans out across every tenant belongs on no surface — a fan-out that runs when no filter is
+set is how a bug goes portfolio-wide before anyone notices. The genuine portfolio sweep is the CLI
+(`sandhog:sync-geo` with no arg = all sites); if a per-tenant action gets tedious across many sites, the
+answer is to schedule it, not to add a fire-everything button.
 
 The five false-greens this session, in one line each — same shape every time (green while never reaching
 the real condition): the `?site=` sweep (wrong mechanism) · the account-wide membership test (never
