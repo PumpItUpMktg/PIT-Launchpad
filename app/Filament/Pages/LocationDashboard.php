@@ -39,7 +39,8 @@ class LocationDashboard extends Page
 
     protected string $view = 'filament.pages.location-dashboard';
 
-    #[Url]
+    // NOT #[Url]: the working tenant is the lock ({@see ActiveTenant}), never a URL param. mount() sets this
+    // from the lock on every request; a URL-bound siteId was the shape-B lock-override pattern (tenant-lock).
     public ?string $siteId = null;
 
     #[Url]

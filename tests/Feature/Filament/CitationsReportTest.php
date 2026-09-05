@@ -10,7 +10,7 @@ use App\Models\Location;
 use App\Models\LocationNapProfile;
 use App\Models\Site;
 use App\Models\User;
-use App\Support\CurrentSite;
+use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 
@@ -18,7 +18,7 @@ beforeEach(function (): void {
     Filament::setCurrentPanel('admin');
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $this->site = Site::factory()->create();
-    CurrentSite::set($this->site->id);
+    app(ActiveTenant::class)->set($this->site->id); // the lock also binds CurrentSite
     $this->location = Location::factory()->create(['site_id' => $this->site->id, 'name' => 'Bedminster']);
     LocationNapProfile::factory()->create(['site_id' => $this->site->id, 'location_id' => $this->location->id, 'categories' => null]);
     $dir = Directory::factory()->create(['name' => 'BBB', 'scope' => DirectoryScope::National]);

@@ -13,6 +13,7 @@ use App\Models\MediaAsset;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\User;
+use App\Operator\ActiveTenant;
 use App\Publishing\PagePreviewService;
 use App\Publishing\PreviewResult;
 use Filament\Facades\Filament;
@@ -29,11 +30,16 @@ beforeEach(function () {
 
 function draftedPage(): Content
 {
-    return PageFixture::intakePage([
+    $page = PageFixture::intakePage([
         'status' => ContentStatus::NeedsReview,
         'slot_payload' => ['hero_headline' => 'No hot water?', 'hero_subhead' => 'Same-day install.'],
         'meta' => ['seo' => ['title' => 'Tankless Install', 'meta_description' => 'Endless hot water.']],
     ]);
+
+    // The operator is always locked to a tenant; ProofEditor resolves the page within that lock.
+    app(ActiveTenant::class)->set((string) $page->site_id);
+
+    return $page;
 }
 
 it('renders the structured preview (sections, SEO, strategy rail)', function () {
@@ -181,6 +187,7 @@ it('renders rich-text body + FAQ answers as HTML (links live), not escaped marku
             ],
         ],
     ]);
+    app(ActiveTenant::class)->set((string) $page->site_id);
 
     // The read model renders the HTML (sanitized) instead of handing back raw markup to escape.
     $sections = collect(app(ProofPreview::class)->for($page->fresh())['sections'])->keyBy('key');

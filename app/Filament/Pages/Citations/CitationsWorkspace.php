@@ -10,7 +10,7 @@ use App\Models\CitationStatus;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\TenantDirectoryExclusion;
-use App\Support\CurrentSite;
+use App\Operator\ActiveTenant;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -54,17 +54,26 @@ class CitationsWorkspace extends Page
     {
         $requested = $location ?? request()->query('location');
         $this->locationId = is_string($requested) ? $requested : null;
-        $location = $this->getLocation();
-        if ($location !== null) {
-            CurrentSite::set((string) $location->site_id);
-        }
+        // A provided location id that doesn't resolve within the locked tenant is not found (foreign or
+        // stale) — 404 rather than rebind or render another tenant's board (tenant-lock, shape B).
+        abort_if($this->locationId !== null && $this->getLocation() === null, 404);
     }
 
+    /**
+     * The location being worked, resolved ONLY within the locked tenant ({@see ActiveTenant}). A foreign
+     * `?location=` returns null (empty workspace) and — crucially — never rebinds CurrentSite to another
+     * tenant. CurrentSite is already the locked tenant (bound by ResolveCurrentSite), so no set() is needed
+     * or wanted here: setting it from the record was the shape-B lock-override vector.
+     */
     public function getLocation(): ?Location
     {
-        return $this->locationId === null
-            ? null
-            : Location::query()->withoutGlobalScope(SiteScope::class)->find($this->locationId);
+        $siteId = app(ActiveTenant::class)->id();
+        if ($this->locationId === null || $siteId === null) {
+            return null;
+        }
+
+        return Location::query()->withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)->find($this->locationId);
     }
 
     /** @return array{stats: array<string, int>, rows: list<WorkspaceRow>} */
@@ -74,7 +83,6 @@ class CitationsWorkspace extends Page
         if ($location === null) {
             return ['stats' => [], 'rows' => []];
         }
-        CurrentSite::set((string) $location->site_id);
         $data = app(LocationWorkspace::class)->forLocation($location, includeNotRelevant: $this->showNotRelevant);
 
         $rows = array_values(array_filter($data['rows'], function (WorkspaceRow $r): bool {
@@ -131,9 +139,12 @@ class CitationsWorkspace extends Page
     public function createWorkOrders(array $statusIds): void
     {
         $lifecycle = app(CitationLifecycle::class);
+        $siteId = app(ActiveTenant::class)->id();
         $count = 0;
         foreach ($statusIds as $id) {
-            $status = CitationStatus::query()->withoutGlobalScope(SiteScope::class)->find($id);
+            // Lock-scoped: a status id from another tenant is ignored, never actioned.
+            $status = CitationStatus::query()->withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $siteId)->find($id);
             if ($status !== null) {
                 $lifecycle->recordWorkOrderIssued($status);
                 $count++;
