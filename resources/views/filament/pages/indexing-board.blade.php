@@ -51,12 +51,15 @@
                 <div class="ix-head">
                     <div class="t">Pages you published <span style="color:var(--ink-soft);font-weight:600">— in your sitemap</span></div>
                     <div class="d">The town + service pages Launchpad built. This is the coverage you can act on.</div>
+                    <div class="d" style="margin-top:4px">{{ $board['data_through']
+                        ? number_format($board['inspected_count']).' inspected of '.number_format($board['published_content_count']).' published'.(($board['coverage_gap'] ?? 0) > 0 ? ' · '.number_format($board['coverage_gap']).' not yet inspected' : '').' · data through '.$board['data_through']
+                        : number_format($board['published_content_count']).' published · no verdicts synced yet' }}</div>
                 </div>
                 <div class="ix-nums">
                     <div class="ix-num"><div class="n good">{{ number_format($pub['indexed']) }}</div><div class="l">Indexed</div></div>
                     <div class="ix-num"><div class="n {{ $pub['not_indexed'] ? 'warn' : 'neutral' }}">{{ number_format($pub['not_indexed']) }}</div><div class="l">Not indexed</div></div>
                     <div class="ix-num"><div class="n neutral">{{ number_format($pub['excluded']) }}</div><div class="l">Excluded (correct)</div></div>
-                    <div class="ix-num"><div class="n neutral">{{ number_format($pub['total']) }}</div><div class="l">Published</div></div>
+                    <div class="ix-num"><div class="n neutral">{{ number_format($pub['total']) }}</div><div class="l">Inspected</div></div>
                 </div>
                 <div class="ix-bar"><i class="ok" style="width:{{ round($pub['indexed'] / $pt * 100) }}%"></i><i class="ex" style="width:{{ round($pub['excluded'] / $pt * 100) }}%"></i><i class="no" style="width:{{ round($pub['not_indexed'] / $pt * 100) }}%"></i></div>
                 @if (empty($pub['reasons']))
