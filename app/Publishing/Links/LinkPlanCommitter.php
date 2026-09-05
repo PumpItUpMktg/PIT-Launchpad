@@ -79,6 +79,11 @@ class LinkPlanCommitter
 
                 continue;
             }
+            // Publish-hold (location-integrity): never announce a held location's page to IndexNow — its
+            // HTML hasn't shipped, so the URL would 404. Deferring discovery is the point of the hold.
+            if ($target->isPublishHeld()) {
+                continue;
+            }
             $submitted[] = $home.'/'.ltrim((string) $target->slug, '/');
         }
 

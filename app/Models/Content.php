@@ -11,6 +11,7 @@ use App\Enums\PageType;
 use App\Enums\StandardPageType;
 use App\Geo\GeoGapBridge;
 use App\Models\Concerns\BelongsToSite;
+use App\Models\Scopes\ActiveLocationScope;
 use App\Models\Scopes\SiteScope;
 use App\Observers\ContentObserver;
 use Database\Factories\ContentFactory;
@@ -258,6 +259,28 @@ class Content extends Model
     public function market(): BelongsTo
     {
         return $this->belongsTo(Market::class);
+    }
+
+    /**
+     * Publish-hold (location-integrity): true when this page's owning physical Location is on publish-hold.
+     * A page is owned by its own Location (a hub, `location_id`) or by its parent hub's Location (a town,
+     * `parent_location_id`); a non-location page (service / post) has neither and is never held. Resolved
+     * with the tenant + active-location scopes dropped so a held location still resolves regardless of the
+     * request context (the publish job loads content unscoped). This is the single predicate the publish
+     * gate and the IndexNow announce paths both consult.
+     */
+    public function isPublishHeld(): bool
+    {
+        $ids = array_values(array_filter([$this->location_id, $this->parent_location_id]));
+        if ($ids === []) {
+            return false;
+        }
+
+        return Location::withoutGlobalScope(ActiveLocationScope::class)
+            ->withoutGlobalScope(SiteScope::class)
+            ->whereIn('id', $ids)
+            ->where('publish_held', true)
+            ->exists();
     }
 
     /**

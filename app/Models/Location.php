@@ -43,6 +43,24 @@ class Location extends Model
 
     protected $guarded = [];
 
+    /**
+     * The single creation seam for the publish-hold default (location-integrity relay). EVERY production
+     * path that creates a Location (GBP bulk import, Places import, manual Towns add, the Filament create
+     * form, onboarding intake) goes through Eloquent, so defaulting `publish_held = true` here — rather than
+     * at each call site — guarantees a newly created location can't publish until reviewed, with no route
+     * able to miss it (the tenant-lock-writer lesson: a rule enforced at one entry point isn't enforced if
+     * there are five). A caller that has genuinely reviewed the location may pass `publish_held` explicitly
+     * to opt out; the test factory does exactly that (fixtures are publishable by default).
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Location $location): void {
+            if (! array_key_exists('publish_held', $location->getAttributes())) {
+                $location->publish_held = true;
+            }
+        });
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -52,6 +70,7 @@ class Location extends Model
             'lat' => 'decimal:7',
             'lng' => 'decimal:7',
             'is_storefront' => 'boolean',
+            'publish_held' => 'boolean',
             'geocode_failed' => 'boolean',
             'county_geoids' => 'array',
             'served_towns' => 'array',
