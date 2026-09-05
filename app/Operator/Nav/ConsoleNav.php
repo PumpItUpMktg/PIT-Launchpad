@@ -8,6 +8,7 @@ use App\Filament\Pages\GeoActivityConsole;
 use App\Filament\Pages\LocationCoverage;
 use App\Filament\Pages\LocationGeoGrid;
 use App\Filament\Pages\LocationsSetup;
+use App\Filament\Pages\MarketsBoard;
 use App\Filament\Pages\Operate\InternalLinks;
 use App\Filament\Pages\Operate\OperateBlog;
 use App\Filament\Pages\Operate\OperateLive;
@@ -57,7 +58,7 @@ class ConsoleNav
                 ['label' => 'Live', 'surface' => OperateLive::class, 'soon' => false],
             ]],
             ['group' => 'Territory', 'items' => [
-                ['label' => 'Markets', 'surface' => null, 'soon' => true],
+                ['label' => 'Markets', 'surface' => MarketsBoard::class, 'soon' => false],
                 ['label' => 'Towns', 'surface' => LocationsSetup::class, 'soon' => false],
                 ['label' => 'Citations', 'surface' => CitationsPortfolio::class, 'soon' => false],
                 ['label' => 'Silos', 'surface' => SiloManagementResource::class, 'soon' => false],

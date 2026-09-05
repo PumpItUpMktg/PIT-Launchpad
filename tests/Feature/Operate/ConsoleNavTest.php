@@ -31,13 +31,14 @@ it('places every item in its settled group and vocabulary', function () {
         ->and($byGroup['System'])->toBe(['Connections', 'Feeds', 'Brand', 'Voice', 'Users', 'Recover']);
 });
 
-it('marks exactly the six gap items "soon" and gives them no URL', function () {
+it('marks exactly the five remaining gap items "soon" and gives them no URL', function () {
     $soon = collect(app(ConsoleNav::class)->columns())
         ->flatMap(fn (array $c) => $c['items'])
         ->filter(fn (array $i): bool => $i['soon'])
         ->pluck('label');
 
-    expect($soon->all())->toBe(['Jobs', 'Markets', 'Rankings', 'Indexing', 'Brand', 'Users']);
+    // Markets shipped (Relay 3 · Markets surface) — it's a live link now, not a gap.
+    expect($soon->all())->toBe(['Jobs', 'Rankings', 'Indexing', 'Brand', 'Users']);
 
     // Every soon item is non-clickable (null url); every live item resolves to a real /admin URL.
     foreach (app(ConsoleNav::class)->columns() as $col) {
@@ -58,11 +59,12 @@ it('renders the four-column header — group titles, live links, and greyed "soo
     expect($html)->toContain('Build')->toContain('Territory')->toContain('Results')->toContain('System')
         // A live item is an anchor; a gap item is a greyed non-link with a "soon" tag.
         ->toContain('Dashboard')
-        ->toContain('>Markets<') // soon item present as plain text, not a link
+        ->toContain('>Markets<') // Markets present (now a live link)
+        ->toContain('>Jobs<')    // a remaining soon item, present as plain text
         ->toContain('lp-cn-soon')
         ->toContain('soon');
 
-    // The six soon items render as non-clickable spans (no href), the 18 live ones as links.
-    expect(substr_count($html, 'class="lp-cn-soon"'))->toBe(6)
-        ->and(substr_count($html, 'wire:navigate'))->toBe(18); // exactly the 18 live links
+    // The five soon items render as non-clickable spans (no href), the 19 live ones as links.
+    expect(substr_count($html, 'class="lp-cn-soon"'))->toBe(5)
+        ->and(substr_count($html, 'wire:navigate'))->toBe(19); // exactly the 19 live links
 });
