@@ -36,9 +36,13 @@ class TenantDashboard extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-squares-2x2';
 
-    protected static bool $shouldRegisterNavigation = false; // drill-down until the PR 5 nav cutover
+    protected static bool $shouldRegisterNavigation = false; // reached from the Lobby / console header, not the sidebar
 
-    protected static ?string $slug = 'tenant-dashboard';
+    // The panel landing (slug '/'): the operator's post-Lobby home is their locked tenant's dashboard. The
+    // cross-tenant Overview that used to hold '/' is retired into the Lobby (tenant-lock remediation). The
+    // route NAME stays `filament.admin.pages.tenant-dashboard` (Filament derives it from the class, not the
+    // slug), so deep links and the gate keep resolving.
+    protected static ?string $slug = '/';
 
     protected string $view = 'filament.operate.tenant-dashboard';
 

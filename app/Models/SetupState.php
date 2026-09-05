@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\SetupStep;
-use App\Filament\Pages\Overview;
 use App\Models\Concerns\BelongsToSite;
 use Database\Factories\SetupStateFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -14,8 +13,8 @@ use Illuminate\Database\Eloquent\Model;
  * Per-site guided-setup progress: where the operator is (`current_step`) and the per-step
  * completion gates that unlock the next step, plus Step 4's build-config toggles. One row per Site.
  * Tenant-scoped ({@see BelongsToSite}): the context-aware SiteScope filters to the locked tenant in
- * the panel; the all-sites triage board ({@see Overview}) drops the scope
- * explicitly to read across tenants.
+ * the panel. Cross-tenant reads (the Lobby's onboarding progress) drop the scope explicitly over the
+ * operator's permitted set — never "every tenant".
  *
  * @property string $id
  * @property string $site_id

@@ -5,7 +5,6 @@ use App\Enums\ContentStatus;
 use App\Enums\ReviewFlag;
 use App\Enums\SiteStatus;
 use App\Enums\UserRole;
-use App\Filament\Pages\Overview;
 use App\Filament\Pages\SiteCockpit;
 use App\Models\Site;
 use App\Models\User;
@@ -127,14 +126,8 @@ it('the empty state names a next action and links it — never a dead end', func
 // The shell wraps a Filament page (needs a Livewire page context), so it's exercised through the
 // real pages that adopt it rather than rendered standalone.
 
-it('the Portfolio page is framed by the board shell + the standard header', function () {
-    $this->actingAs(User::factory()->create(['role' => UserRole::Admin]));
-
-    Livewire::test(Overview::class)
-        ->assertOk()
-        ->assertSee('lp-shell--board', false) // the board layout frame
-        ->assertSee('What needs you');        // the standard page header
-});
+// The board-shell + standard-header coverage moved off the retired cross-tenant Overview; the Site Cockpit
+// test below exercises the same `lp-shell--board` frame (tenant-lock remediation).
 
 it('the Site Cockpit is framed by the board shell and shows its status chip', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]));

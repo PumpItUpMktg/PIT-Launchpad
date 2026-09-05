@@ -19,7 +19,6 @@ use App\Filament\Pages\Operate\OperateLive;
 use App\Filament\Pages\Operate\OperatePages;
 use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
-use App\Filament\Pages\Overview;
 use App\Filament\Pages\ProofEditor;
 use App\Filament\Pages\RankingsBoard;
 use App\Filament\Resources\AiContentResource;
@@ -146,8 +145,6 @@ dataset('lockedSurfaces', [
     'Results · Coverage' => [fn () => LocationCoverage::getUrl()],
     'Results · AI visibility' => [fn () => GeoActivityConsole::getUrl()],
     'System · Recover' => [fn () => RebuildReadiness::getUrl()],
-    // Cross-tenant surfaces in the locked landing (expected RED until retired).
-    'Landing · Overview' => [fn () => Overview::getUrl()],
     // Every resource index (URL-reachable regardless of nav).
     'Resource · Reviews (capture)' => [fn () => ReviewCaptureResource::getUrl('index')],
     'Resource · Pages' => [fn () => PageResource::getUrl('index')],

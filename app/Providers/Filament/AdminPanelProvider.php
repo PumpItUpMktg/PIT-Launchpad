@@ -61,9 +61,9 @@ class AdminPanelProvider extends PanelProvider
             )
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
-            // The landing is the per-site Overview (App\Filament\Pages\Overview, slug '/') — the
-            // old pooled-across-tenants Dashboard is retired; pipeline metrics render only per-site
-            // (App\Filament\Pages\SiteCockpit).
+            // The landing is the per-tenant TenantDashboard (App\Filament\Pages\Operate\TenantDashboard,
+            // slug '/') — the locked tenant's home. The cross-tenant Overview + Dashboard are retired into
+            // the Lobby (tenant-lock remediation); with no tenant locked, the gate sends '/' to the Lobby.
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
