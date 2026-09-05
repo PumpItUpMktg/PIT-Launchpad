@@ -19,7 +19,7 @@ beforeEach(function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
 });
 
-function organicSnap(Site $s, Keyword $k, ?int $rank, $at, string $url = 'https://x/a'): void
+function rankSnap(Site $s, Keyword $k, ?int $rank, $at, string $url = 'https://x/a'): void
 {
     PositionSnapshot::factory()->create([
         'site_id' => $s->id, 'keyword_id' => $k->id, 'market_id' => null,
@@ -39,12 +39,12 @@ it('computes improved and newly-ranked movers, excluding flat/declined', functio
     $new = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'drain cleaning reading']);
     $flat = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'plumber montclair']);
 
-    organicSnap($site, $improved, 22, now()->subMonth());
-    organicSnap($site, $improved, 6, now());
-    organicSnap($site, $new, null, now()->subMonth());
-    organicSnap($site, $new, 9, now());
-    organicSnap($site, $flat, 10, now()->subMonth());
-    organicSnap($site, $flat, 12, now()); // slipped — not a mover
+    rankSnap($site, $improved, 22, now()->subMonth());
+    rankSnap($site, $improved, 6, now());
+    rankSnap($site, $new, null, now()->subMonth());
+    rankSnap($site, $new, 9, now());
+    rankSnap($site, $flat, 10, now()->subMonth());
+    rankSnap($site, $flat, 12, now()); // slipped — not a mover
 
     $board = app(RankingStandings::class)->for($site->id);
 
@@ -63,8 +63,8 @@ it('computes improved and newly-ranked movers, excluding flat/declined', functio
 it('shares the movers kernel with the client dashboard (computed once)', function () {
     $site = Site::factory()->create();
     $k = Keyword::factory()->create(['site_id' => $site->id]);
-    organicSnap($site, $k, 30, now()->subMonth());
-    organicSnap($site, $k, 4, now());
+    rankSnap($site, $k, 30, now()->subMonth());
+    rankSnap($site, $k, 4, now());
 
     // Both the operator page's read-model and the shared kernel see the same mover.
     $viaKernel = app(OrganicMovers::class)->forSite($site->id);
@@ -78,8 +78,8 @@ it('flags cannibalization: two owned URLs in one latest capture', function () {
     $site = Site::factory()->create();
     $k = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'emergency plumber reading']);
     $at = now();
-    organicSnap($site, $k, 5, $at, 'https://site/page-a');
-    organicSnap($site, $k, 8, $at, 'https://site/page-b'); // same capture, second URL
+    rankSnap($site, $k, 5, $at, 'https://site/page-a');
+    rankSnap($site, $k, 8, $at, 'https://site/page-b'); // same capture, second URL
 
     $board = app(RankingStandings::class)->for($site->id);
 
@@ -111,10 +111,10 @@ it('scopes rankings to the locked tenant', function () {
     $b = Site::factory()->create();
     $ka = Keyword::factory()->create(['site_id' => $a->id]);
     $kb = Keyword::factory()->create(['site_id' => $b->id]);
-    organicSnap($a, $ka, 20, now()->subMonth());
-    organicSnap($a, $ka, 5, now());
-    organicSnap($b, $kb, 20, now()->subMonth());
-    organicSnap($b, $kb, 5, now());
+    rankSnap($a, $ka, 20, now()->subMonth());
+    rankSnap($a, $ka, 5, now());
+    rankSnap($b, $kb, 20, now()->subMonth());
+    rankSnap($b, $kb, 5, now());
 
     expect(app(RankingStandings::class)->for($a->id)['summary']['tracked'])->toBe(1);
 });
@@ -122,8 +122,8 @@ it('scopes rankings to the locked tenant', function () {
 it('renders tenant-locked with movers and no per-page site picker', function () {
     $site = Site::factory()->create();
     $k = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump install hoboken']);
-    organicSnap($site, $k, 25, now()->subMonth());
-    organicSnap($site, $k, 7, now());
+    rankSnap($site, $k, 25, now()->subMonth());
+    rankSnap($site, $k, 7, now());
     app(ActiveTenant::class)->set($site->id);
 
     $html = Livewire::test(RankingsBoard::class)->assertOk()->html();
