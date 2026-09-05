@@ -26,6 +26,7 @@ use App\Models\Silo;
 use App\Models\Site;
 use App\Models\VoiceProfile;
 use App\Operator\Lobby\LobbyBoard;
+use App\Publishing\Chrome\SiteProfileAssembler;
 use App\Support\CurrentSite;
 use Illuminate\Support\Facades\DB;
 
@@ -44,6 +45,9 @@ function completeSetup(Site $site): void
     VoiceProfile::factory()->create(['site_id' => $site->id, 'status' => VoiceStatus::Active]);
     // compromised defaults true (§9) — a broken WP connection is its own tier-1 badge, so keep it clean here.
     Connection::factory()->create(['site_id' => $site->id, 'provider' => ConnectionProvider::WpAppPassword, 'compromised' => false]);
+    // Chrome pushed too — a fully set-up site isn't "chrome never synced" and isn't drifted, so the tier-2
+    // chrome badges don't fire in the tiering tests.
+    $site->markChromeSynced(SiteProfileAssembler::fingerprint(app(SiteProfileAssembler::class)->assemble($site->fresh())));
 }
 
 it('assembles the lobby in a constant number of queries — no per-card query (acceptance 15)', function () {
@@ -74,7 +78,7 @@ it('assembles the lobby in a constant number of queries — no per-card query (a
     // Constant regardless of tenant count → no per-card query. (The bound rose from 12 to 16 when the
     // starved-queues subquery + the four setup-gap aggregates were absorbed from the retired dashboard.)
     expect($eightSiteQueries)->toBe($twoSiteQueries)
-        ->and($twoSiteQueries)->toBeLessThanOrEqual(16);
+        ->and($twoSiteQueries)->toBeLessThanOrEqual(18);
 });
 
 it('flips a card to Blocked on a Tier-1 condition and suppresses lower tiers into "+N more" (acceptance 12)', function () {
@@ -203,6 +207,25 @@ it('badges a live site missing setup — tier 2, wrong data reaching the public 
     $onboarding = Site::factory()->create(['status' => SiteStatus::Onboarding]);
     SetupState::factory()->create(['site_id' => $onboarding->id, 'current_step' => 2]);
     expect(collect(lobbyCard($onboarding->id)->badges)->firstWhere('key', 'setup_gaps'))->toBeNull();
+});
+
+it('badges chrome never-synced and chrome drift separately (tier 2)', function () {
+    // Never-synced: a WP-connected live site whose chrome was never pushed.
+    $never = Site::factory()->create(['status' => SiteStatus::Active]);
+    Connection::factory()->create(['site_id' => $never->id, 'provider' => ConnectionProvider::WpAppPassword, 'compromised' => false, 'last_rotated_at' => now()]);
+    $neverBadge = collect(lobbyCard($never->id)->badges)->firstWhere('key', 'chrome_never_synced');
+    expect($neverBadge)->not->toBeNull()->and($neverBadge->tier)->toBe(LobbyBadgeTier::WrongData);
+
+    // Drifted: synced once, then the persisted chrome_stale flag was set (observer / weekly sweep). Reads as
+    // 'chrome_stale', NOT never-synced — the two are separate.
+    $drift = Site::factory()->create(['status' => SiteStatus::Active]);
+    Connection::factory()->create(['site_id' => $drift->id, 'provider' => ConnectionProvider::WpAppPassword, 'compromised' => false, 'last_rotated_at' => now()]);
+    $drift->markChromeSynced('x');
+    DB::table('sites')->where('id', $drift->id)->update(['chrome_stale' => true]);
+    $badges = collect(lobbyCard($drift->id)->badges);
+    expect($badges->firstWhere('key', 'chrome_stale'))->not->toBeNull()
+        ->and($badges->firstWhere('key', 'chrome_stale')->tier)->toBe(LobbyBadgeTier::WrongData)
+        ->and($badges->firstWhere('key', 'chrome_never_synced'))->toBeNull(); // synced → not never-synced
 });
 
 it('searches brand + domain, filters, and sorts most-urgent first (acceptance 11)', function () {

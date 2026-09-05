@@ -25,6 +25,8 @@
                 wire:confirm="Re-align this tenant to its current silo tree and queue the affected republishes?">Reconcile</button>
         <button type="button" class="rdy-btn" wire:click="reconcile(true)" wire:loading.attr="disabled"
                 wire:confirm="Rewrite the silo structure from services, re-materialize pages, then reconcile? Heavier — use only when the structure changed.">Rebuild structure &amp; reconcile</button>
+        <button type="button" class="rdy-btn" wire:click="syncChrome" wire:loading.attr="disabled"
+                wire:confirm="Re-push this tenant's site-wide header &amp; footer chrome (brand, NAP, nav menu, footer) to WordPress? A page republish does NOT update the menu — this does.">Push chrome (header &amp; footer)</button>
     </div>
 
     @if ($this->rows === [])

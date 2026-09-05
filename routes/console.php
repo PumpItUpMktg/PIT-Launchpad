@@ -16,6 +16,12 @@ Artisan::command('inspire', function () {
 // panel. Never auto-rotates; the pre-client launch gate is the hard requirement.
 Schedule::command('launchpad:check-stale-connections')->weekly();
 
+// Chrome-drift backstop — flag tenants whose live header/footer chrome has drifted from the assembled
+// profile (or was never synced). Page publish/unpublish marks drift event-driven (ContentObserver); this
+// weekly sweep catches the rest (NAP / nav-order edits). Advisory only — surfaced as a Lobby badge, never
+// auto-pushes. withoutOverlapping since it assembles each tenant's profile.
+Schedule::command('launchpad:check-stale-chrome')->weekly()->withoutOverlapping();
+
 // Portfolio-health counter reconcile — the drift net for the incremental Content/Connection observers.
 // Bulk query updates and hard-delete prunes bypass model events, so a scheduled recompute-from-source
 // keeps the /admin/sites counters honest. Idempotent; daily is cheap (a handful of COUNTs per site).
