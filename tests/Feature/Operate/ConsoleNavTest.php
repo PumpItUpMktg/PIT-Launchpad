@@ -31,42 +31,37 @@ it('places every item in its settled group and vocabulary', function () {
         ->and($byGroup['System'])->toBe(['Connections', 'Feeds', 'Brand', 'Voice', 'Users', 'Recover']);
 });
 
-it('marks exactly the two remaining gap items "soon" and gives them no URL', function () {
+it('has no remaining gap items — all 24 surfaces are live', function () {
     $soon = collect(app(ConsoleNav::class)->columns())
         ->flatMap(fn (array $c) => $c['items'])
         ->filter(fn (array $i): bool => $i['soon'])
         ->pluck('label');
 
-    // Markets + Jobs + Rankings + Indexing shipped (Relay 3) — live links now, not gaps.
-    expect($soon->all())->toBe(['Brand', 'Users']);
+    // Brand + Users shipped — the final two GAP surfaces of the nav cutover. No "soon" items remain.
+    expect($soon->all())->toBe([]);
 
-    // Every soon item is non-clickable (null url); every live item resolves to a real /admin URL.
-    // (Dashboard is now the panel landing at '/admin' — no trailing path — so match '/admin', not '/admin/'.)
-    foreach (app(ConsoleNav::class)->columns() as $col) {
-        foreach ($col['items'] as $item) {
-            if ($item['soon']) {
-                expect($item['url'])->toBeNull();
-            } else {
-                expect($item['url'])->toBeString()->toContain('/admin');
-            }
-        }
+    // Every one of the 24 items resolves to a real /admin URL (Dashboard lands at '/admin' with no
+    // trailing path, so match '/admin', not '/admin/').
+    $items = collect(app(ConsoleNav::class)->columns())->flatMap(fn (array $c) => $c['items']);
+    expect($items)->toHaveCount(24);
+    foreach ($items as $item) {
+        expect($item['soon'])->toBeFalse()
+            ->and($item['url'])->toBeString()->toContain('/admin');
     }
 });
 
-it('renders the four-column header — group titles, live links, and greyed "soon" items', function () {
+it('renders the four-column header — group titles and 24 live links, no greyed "soon" items', function () {
     $html = View::make('filament.operator.console-nav')->render();
 
     // The four group columns, each titled.
     expect($html)->toContain('Build')->toContain('Territory')->toContain('Results')->toContain('System')
-        // A live item is an anchor; a gap item is a greyed non-link with a "soon" tag.
         ->toContain('Dashboard')
-        ->toContain('>Rankings<') // Rankings present (a live link)
-        ->toContain('>Indexing<') // Indexing present (now a live link)
-        ->toContain('>Brand<')    // a remaining soon item, present as plain text
-        ->toContain('lp-cn-soon')
-        ->toContain('soon');
+        ->toContain('>Rankings<')
+        ->toContain('>Indexing<')
+        ->toContain('>Brand<')  // now a live link
+        ->toContain('>Users<'); // now a live link
 
-    // The two soon items render as non-clickable spans (no href), the 22 live ones as links.
-    expect(substr_count($html, 'class="lp-cn-soon"'))->toBe(2)
-        ->and(substr_count($html, 'wire:navigate'))->toBe(22); // exactly the 22 live links
+    // All 24 items render as links; no "soon" spans remain.
+    expect(substr_count($html, 'class="lp-cn-soon"'))->toBe(0)
+        ->and(substr_count($html, 'wire:navigate'))->toBe(24); // the full 24 live links
 });
