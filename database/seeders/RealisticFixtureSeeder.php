@@ -36,8 +36,8 @@ use Illuminate\Support\Str;
  * (`php artisan db:seed --class=RealisticFixtureSeeder`); standalone (its own account/site, alongside
  * any DemoSeeder tenant).
  *
- * The tenant: a Trenton-NJ / Bucks-County-PA home-services business serving Mercer County NJ + Bucks
- * County PA and the surrounding Delaware-Valley municipalities.
+ * The tenant: a multi-metro NJ/PA home-services business. Markets are named for their GBP location
+ * (the real naming convention — a market is a brick-and-mortar/service-area anchor, not a region).
  *
  *   • 12 markets — 11 across NJ & PA (4 Priority, 7 Coverage) + Fallston MD on an advisory hold.
  *   • 180 live town (location) pages, distributed across the active markets (Priority markets denser).
@@ -55,9 +55,9 @@ class RealisticFixtureSeeder extends Seeder
         $account = Account::factory()->direct()->create(['name' => 'Keystone Home Services']);
 
         $site = Site::factory()->for($account)->create([
-            'brand_name' => 'Delaware Valley Plumbing & HVAC',
-            'legal_name' => 'Delaware Valley Home Services LLC',
-            'domain_url' => 'https://dvplumbing.example',
+            'brand_name' => 'Keystone Plumbing & HVAC',
+            'legal_name' => 'Keystone Home Services LLC',
+            'domain_url' => 'https://keystoneplumbing.example',
             'status' => 'active',
         ]);
 
@@ -73,13 +73,13 @@ class RealisticFixtureSeeder extends Seeder
         Membership::create(['user_id' => $operator->id, 'account_id' => $account->id, 'role' => UserRole::Operator]);
 
         $client = User::factory()->create([
-            'name' => 'Sam Rivera', 'email' => 'client@dvplumbing.example', 'role' => UserRole::Client,
+            'name' => 'Sam Rivera', 'email' => 'client@keystoneplumbing.example', 'role' => UserRole::Client,
         ]);
         Membership::create(['user_id' => $client->id, 'account_id' => $account->id, 'site_id' => $site->id, 'role' => UserRole::Client]);
 
-        // Storefront locations (physical NAP) --------------------------------
-        Location::factory()->create(['site_id' => $site->id, 'name' => 'Trenton Shop', 'is_storefront' => true]);
-        Location::factory()->create(['site_id' => $site->id, 'name' => 'Newtown Shop', 'is_storefront' => true]);
+        // Storefront locations (physical NAP) — each a market's GBP anchor --------------------
+        Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'is_storefront' => true]);
+        Location::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown', 'is_storefront' => true]);
 
         // Silos + services ---------------------------------------------------
         $plumbing = Silo::factory()->servicePillar()->create(['site_id' => $site->id, 'name' => 'Plumbing']);
@@ -97,20 +97,20 @@ class RealisticFixtureSeeder extends Seeder
         $plumbing->services()->attach($services->slice(0, 8)->pluck('id')->all());
         $hvac->services()->attach($services->slice(8)->pluck('id')->all());
 
-        // Markets: 11 NJ/PA + Fallston MD on hold ----------------------------
+        // Markets: 11 across NJ & PA (named for their GBP location) + Fallston MD on hold ------
         // [name, state, tier, population]
         $marketDefs = [
-            ['Trenton', 'NJ', MarketTier::Priority, 90871],
-            ['Hamilton Township', 'NJ', MarketTier::Priority, 92297],
-            ['Princeton', 'NJ', MarketTier::Priority, 31249],
-            ['Newtown', 'PA', MarketTier::Priority, 22586],
-            ['Ewing', 'NJ', MarketTier::Coverage, 35790],
-            ['Lawrence', 'NJ', MarketTier::Coverage, 33472],
-            ['Hopewell', 'NJ', MarketTier::Coverage, 18565],
-            ['Yardley', 'PA', MarketTier::Coverage, 26459],
-            ['Levittown', 'PA', MarketTier::Coverage, 52983],
-            ['Morrisville', 'PA', MarketTier::Coverage, 8763],
-            ['Bristol', 'PA', MarketTier::Coverage, 9726],
+            ['Hoboken', 'NJ', MarketTier::Priority, 60419],
+            ['New Brunswick', 'NJ', MarketTier::Priority, 55676],
+            ['Montclair', 'NJ', MarketTier::Priority, 40921],
+            ['Reading', 'PA', MarketTier::Priority, 95112],
+            ['Hackensack', 'NJ', MarketTier::Coverage, 46030],
+            ['Bedminster', 'NJ', MarketTier::Coverage, 8248],
+            ['Hackettstown', 'NJ', MarketTier::Coverage, 9724],
+            ['Trooper', 'PA', MarketTier::Coverage, 6035],
+            ['Doylestown', 'PA', MarketTier::Coverage, 8280],
+            ['Downingtown', 'PA', MarketTier::Coverage, 7891],
+            ['Spring City', 'PA', MarketTier::Coverage, 3389],
         ];
 
         $markets = collect($marketDefs)->map(fn (array $d) => Market::factory()->create([
@@ -237,13 +237,21 @@ class RealisticFixtureSeeder extends Seeder
     /** Field jobs across the lifecycle: a review backlog, the publish pipeline, and a published body. */
     private function seedJobs(Site $site): void
     {
-        // JobCity / JobCounty are shared geo-reference tables (not site-scoped).
-        $mercer = JobCounty::factory()->create(['name' => 'Mercer County', 'state' => 'NJ', 'state_fips' => '34', 'county_geoid' => '34021', 'slug' => 'mercer-county-nj']);
-        $bucks = JobCounty::factory()->create(['name' => 'Bucks County', 'state' => 'PA', 'state_fips' => '42', 'county_geoid' => '42017', 'slug' => 'bucks-county-pa']);
+        // JobCity / JobCounty are shared geo-reference tables (not site-scoped). Counties match the markets.
+        $county = fn (string $name, string $st, string $fips, string $geoid) => JobCounty::factory()->create([
+            'name' => $name, 'state' => $st, 'state_fips' => $fips, 'county_geoid' => $geoid, 'slug' => Str::slug("{$name} {$st}"),
+        ]);
+        $hudson = $county('Hudson County', 'NJ', '34', '34017');
+        $middlesex = $county('Middlesex County', 'NJ', '34', '34023');
+        $essex = $county('Essex County', 'NJ', '34', '34013');
+        $bergen = $county('Bergen County', 'NJ', '34', '34003');
+        $bucks = $county('Bucks County', 'PA', '42', '42017');
+        $berks = $county('Berks County', 'PA', '42', '42011');
+        $chester = $county('Chester County', 'PA', '42', '42029');
 
         $cities = collect([
-            ['Trenton', 'NJ', $mercer], ['Princeton', 'NJ', $mercer], ['Hamilton', 'NJ', $mercer], ['Ewing', 'NJ', $mercer],
-            ['Newtown', 'PA', $bucks], ['Yardley', 'PA', $bucks], ['Levittown', 'PA', $bucks], ['Bristol', 'PA', $bucks],
+            ['Hoboken', 'NJ', $hudson], ['New Brunswick', 'NJ', $middlesex], ['Montclair', 'NJ', $essex], ['Hackensack', 'NJ', $bergen],
+            ['Doylestown', 'PA', $bucks], ['Reading', 'PA', $berks], ['Downingtown', 'PA', $chester], ['Trooper', 'PA', $chester],
         ])->map(fn (array $c) => [
             'city' => JobCity::factory()->create([
                 'name' => $c[0], 'state' => $c[1], 'slug' => Str::slug($c[0].' '.$c[1]),
@@ -285,23 +293,24 @@ class RealisticFixtureSeeder extends Seeder
     private function neighborhoods(string $market): array
     {
         return match ($market) {
-            'Trenton' => ['Chambersburg', 'Mill Hill', 'Hiltonia'],
-            'Princeton' => ['Riverside', 'Littlebrook'],
-            'Newtown' => ['Newtown Grant', 'Wiltshire Walk'],
+            'Hoboken' => ['Uptown', 'The Waterfront', 'Southwest'],
+            'Montclair' => ['Upper Montclair', 'Watchung Plaza'],
+            'Reading' => ['Centre Park', 'Riverside'],
+            'New Brunswick' => ['Fifth Ward', 'The Yard'],
             default => ['Downtown', 'North End'],
         };
     }
 
-    /** @return list<string> */
+    /** @return list<string> Surrounding municipalities in the market's state (representative). */
     private function townsFor(string $market, string $state, int $count): array
     {
         $pool = $state === 'NJ'
-            ? ['Hopewell', 'Pennington', 'Robbinsville', 'Hightstown', 'East Windsor', 'West Windsor', 'Lambertville', 'Titusville', 'Yardville', 'Groveville', 'Mercerville', 'White Horse', 'Hamilton Square', 'Washington Crossing', 'Cranbury', 'Allentown', 'Bordentown', 'Roebling', 'Florence', 'Columbus', 'Chesterfield', 'Crosswicks', 'Windsor', 'Dutch Neck']
-            : ['Langhorne', 'Richboro', 'Holland', 'Wrightstown', 'Washington Crossing', 'New Hope', 'Fairless Hills', 'Penndel', 'Feasterville', 'Southampton', 'Churchville', 'Newtown Grant', 'Buckingham', 'Doylestown', 'Warminster', 'Ivyland', 'Trevose', 'Croydon', 'Tullytown', 'Woodbourne', 'Oakford', 'Parkland', 'Village Shires', 'Penns Park'];
+            ? ['Weehawken', 'Union City', 'Secaucus', 'Bloomfield', 'Nutley', 'Belleville', 'Verona', 'Cedar Grove', 'Teaneck', 'Paramus', 'Fair Lawn', 'Ridgewood', 'Englewood', 'Fort Lee', 'Edison', 'Piscataway', 'Highland Park', 'Metuchen', 'Somerville', 'Bridgewater', 'Basking Ridge', 'Bernardsville', 'Chester', 'Long Valley', 'Washington', 'Clinton', 'Flemington', 'Cranford', 'Westfield', 'Millburn']
+            : ['Wyomissing', 'Birdsboro', 'Pottstown', 'Boyertown', 'Hamburg', 'Kutztown', 'Fleetwood', 'Warrington', 'Chalfont', 'New Britain', 'Perkasie', 'Souderton', 'Lansdale', 'King of Prussia', 'Norristown', 'Phoenixville', 'Collegeville', 'Skippack', 'Royersford', 'Exton', 'West Chester', 'Coatesville', 'Kennett Square', 'Malvern', 'Paoli', 'Devon', 'Berwyn', 'Audubon', 'Trooper', 'Eagleville'];
 
         $out = [];
         for ($i = 0; $i < $count; $i++) {
-            $out[] = $i < count($pool) ? $pool[$i] : $pool[$i % count($pool)].' '.($state === 'NJ' ? 'Heights' : 'Station');
+            $out[] = $i < count($pool) ? $pool[$i] : $pool[$i % count($pool)].' '.($state === 'NJ' ? 'Township' : 'Borough');
         }
 
         return $out;
