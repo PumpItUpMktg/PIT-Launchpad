@@ -105,12 +105,12 @@ it('leaves a unique town name exactly as it is', function () {
     expect(disambigGridLabels($site->id))->toContain('Flemington');
 });
 
-it('falls back to the Areas-We-Serve page for a served town with no location page of its own', function () {
+it('links a built town to its own page and renders an unbuilt town as plain text (no Areas-page fallback)', function () {
     $site = Site::factory()->create(['domain_url' => 'https://spg.test']);
     Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34019']]);
     disambigGazetteer(counties: ['34' => [['geoId' => '34019', 'name' => 'Hunterdon County']]]);
 
-    // A published "Areas We Serve" page is the fallback target.
+    // An Areas-We-Serve page exists — the unbuilt town must STILL render plain, not link to it.
     Content::factory()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'standard_type' => StandardPageType::AreasWeServe,
         'slug' => 'areas-we-serve', 'title' => 'Areas We Serve',
@@ -126,6 +126,6 @@ it('falls back to the Areas-We-Serve page for a served town with no location pag
 
     $cities = collect(app(ServiceAreaResolver::class)->byCounty($site->id))->flatMap(fn (array $g): array => $g['cities']);
 
-    expect($cities->firstWhere('label', 'Flemington')['url'])->toBe('https://spg.test/flemington-nj') // own page wins
-        ->and($cities->firstWhere('label', 'Clinton')['url'])->toBe('https://spg.test/areas-we-serve'); // fallback
+    expect($cities->firstWhere('label', 'Flemington')['url'])->toBe('https://spg.test/flemington-nj') // built → own page
+        ->and($cities->firstWhere('label', 'Clinton')['url'])->toBe('');                              // unbuilt → plain text
 });
