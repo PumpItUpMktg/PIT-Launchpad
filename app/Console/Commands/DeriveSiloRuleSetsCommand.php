@@ -35,26 +35,37 @@ class DeriveSiloRuleSetsCommand extends Command
         }
 
         $force = (bool) $this->option('force');
-        $total = 0;
+        $totalNew = 0;
+        $totalRepair = 0;
 
         foreach ($sites as $site) {
-            $count = $force ? $deriver->deriveForSite($site) : $deriver->previewForSite($site);
-            if ($count === 0) {
+            $r = $force ? $deriver->deriveForSite($site) : $deriver->previewForSite($site);
+            if ($r['new'] === 0 && $r['repair'] === 0) {
                 continue;
             }
 
-            $verb = $force ? 'gave rule_sets to' : 'would give rule_sets to';
-            $this->line("<info>{$site->brand_name}</info> ({$site->id}) — {$verb} {$count} silo(s).");
-            $total += $count;
+            $verb = $force ? 'gave' : 'would give';
+            $parts = [];
+            if ($r['new'] > 0) {
+                $parts[] = "{$r['new']} new";
+            }
+            if ($r['repair'] > 0) {
+                $parts[] = "{$r['repair']} repaired (empty seed_terms back-filled from spokes)";
+            }
+            $this->line("<info>{$site->brand_name}</info> ({$site->id}) — {$verb} rule_sets: ".implode(', ', $parts).'.');
+            $totalNew += $r['new'];
+            $totalRepair += $r['repair'];
         }
+
+        $total = $totalNew + $totalRepair;
 
         $this->newLine();
         if ($total === 0) {
             $this->info('No silos need a rule_set — nothing to do.');
         } elseif ($force) {
-            $this->info("Gave rule_sets to {$total} silo(s). Run discovery to fill their keyword targets.");
+            $this->info("Wrote {$total} rule_set(s): {$totalNew} new, {$totalRepair} repaired. Run discovery to fill their keyword targets.");
         } else {
-            $this->warn("[dry-run] {$total} silo(s) would get a rule_set. Re-run with --force to write.");
+            $this->warn("[dry-run] {$total} rule_set(s) would be written: {$totalNew} new, {$totalRepair} repaired. Re-run with --force.");
         }
 
         return self::SUCCESS;

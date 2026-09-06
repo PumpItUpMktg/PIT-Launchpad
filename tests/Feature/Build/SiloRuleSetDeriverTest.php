@@ -35,7 +35,7 @@ it('derives a rule_set for a guided silo from its spokes (pillar head + name bro
 
     $updated = app(SiloRuleSetDeriver::class)->deriveForSite($site);
 
-    expect($updated)->toBe(1);
+    expect($updated)->toBe(['new' => 1, 'repair' => 0]);
     $rs = $silo->fresh()->rule_set;
     expect($rs['include_patterns'])->toContain('sump pump')->toContain('sump pumps') // pillar head + silo name
         ->and($rs['seed_terms'])->toContain('sump pump installation')->toContain('sump pump repair');
@@ -59,17 +59,46 @@ it('lets the Bucketer route a discovered keyword into the silo (the whole point)
         ->and($bucketer->bucket('crawl space vapor barrier', $silos)?->id)->toBe($crawl->id);
 });
 
-it('never overwrites a silo that already carries a rule_set', function () {
+it('never overwrites a COMPLETE rule_set (one that already has seed_terms)', function () {
     $site = Site::factory()->create();
     $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
     $silo = rsSilo($site, 'Sump Pumps');
-    $silo->forceFill(['rule_set' => ['include_patterns' => ['committed'], 'seed_terms' => [], 'exclude_patterns' => []]])->save();
+    $silo->forceFill(['rule_set' => ['include_patterns' => ['committed'], 'seed_terms' => ['committed seed'], 'exclude_patterns' => ['no']]])->save();
     rsSpoke($site, $bp, 'Sump Pumps', 'Sump Pumps', 'sump pump', pillar: true);
 
     $updated = app(SiloRuleSetDeriver::class)->deriveForSite($site);
 
-    expect($updated)->toBe(0)
-        ->and($silo->fresh()->rule_set['include_patterns'])->toBe(['committed']); // untouched
+    expect($updated)->toBe(['new' => 0, 'repair' => 0])
+        ->and($silo->fresh()->rule_set['include_patterns'])->toBe(['committed']) // untouched
+        ->and($silo->fresh()->rule_set['seed_terms'])->toBe(['committed seed']);
+});
+
+it('REPAIRS a frozen rule_set with empty seed_terms — back-fills seeds from spokes, keeps excludes', function () {
+    $site = Site::factory()->create();
+    $bp = SiloBlueprint::factory()->create(['site_id' => $site->id]);
+    $silo = rsSilo($site, 'Sump Pumps');
+    // The production shape: an early include-only rule_set (empty seed_terms) that froze the deriver out.
+    $silo->forceFill(['rule_set' => ['include_patterns' => ['sump pumps'], 'seed_terms' => [], 'exclude_patterns' => ['pool']]])->save();
+    rsSpoke($site, $bp, 'Sump Pumps', 'Sump Pumps', 'sump pump', pillar: true);
+    rsSpoke($site, $bp, 'Sump Pumps', 'Sump Pump Installation', 'sump pump installation');
+
+    $updated = app(SiloRuleSetDeriver::class)->deriveForSite($site);
+
+    $rs = $silo->fresh()->rule_set;
+    expect($updated)->toBe(['new' => 0, 'repair' => 1])
+        ->and($rs['seed_terms'])->toContain('sump pump')->toContain('sump pump installation') // back-filled from spokes
+        ->and($rs['include_patterns'])->toContain('sump pumps') // existing include preserved (unioned)
+        ->and($rs['exclude_patterns'])->toBe(['pool']); // exclude preserved untouched
+});
+
+it('does not repair an empty-seed rule_set when its spokes yield no seeds (no churn)', function () {
+    $site = Site::factory()->create();
+    $silo = rsSilo($site, 'Sump Pumps');
+    $silo->forceFill(['rule_set' => ['include_patterns' => ['sump pumps'], 'seed_terms' => [], 'exclude_patterns' => []]])->save();
+    // No spokes for this silo → nothing to back-fill from.
+
+    expect(app(SiloRuleSetDeriver::class)->deriveForSite($site))->toBe(['new' => 0, 'repair' => 0])
+        ->and($silo->fresh()->rule_set['seed_terms'])->toBe([]); // left as-is
 });
 
 it('the projector gives freshly-projected silos rule_sets at materialize', function () {
@@ -95,13 +124,13 @@ it('the command dry-runs by default and writes only with --force', function () {
     rsSpoke($site, $bp, 'Sump Pumps', 'Sump Pumps', 'sump pump', pillar: true);
 
     $this->artisan('launchpad:derive-silo-rulesets', ['--site' => $site->id])
-        ->expectsOutputToContain('would give rule_sets to 1 silo')
+        ->expectsOutputToContain('would give rule_sets: 1 new')
         ->expectsOutputToContain('[dry-run]')
         ->assertSuccessful();
     expect($silo->fresh()->rule_set)->toBeNull();
 
     $this->artisan('launchpad:derive-silo-rulesets', ['--site' => $site->id, '--force' => true])
-        ->expectsOutputToContain('gave rule_sets to 1 silo')
+        ->expectsOutputToContain('gave rule_sets: 1 new')
         ->assertSuccessful();
     expect($silo->fresh()->rule_set)->not->toBeNull();
 });
