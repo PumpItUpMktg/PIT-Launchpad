@@ -8,14 +8,14 @@ use App\Operator\Coverage\MarketArtifactRenamer;
 use Illuminate\Console\Command;
 
 /**
- * Strip the leading numbered-list artifact ("4, Marshall" -> "Marshall") off a market and everything
- * coupled to it BY NAME — its source CoverageArea and its pinned town pages' titles — in lockstep, so the
- * rename is a no-op for the next build (see {@see MarketArtifactRenamer} for why the cascade is required).
+ * Strip the leading numbered-list artifact ("4, Marshall" -> "Marshall") off a market NAME and its source
+ * CoverageArea, so the rename is a no-op for the next build (see {@see MarketArtifactRenamer}). Published
+ * pages are NOT touched — the numbered markets that carry pages are runaway duplicates that get DEDUPED,
+ * not retitled. A market whose cleaned name already belongs to another market is a duplicate: skipped here
+ * (COLLISION) for the merge tool.
  *
  * REPORT-ONLY by default: prints the per-market plan and writes NOTHING. Pass --execute to apply, then it
- * re-reads and reports remaining dirty markets (write-verification). Slugs are intentionally NOT touched —
- * LocationNesting recomputes each town slug from its (now-corrected) title on the next build.
- * Live-only, all tenants (or one via --site).
+ * re-reads and reports remaining dirty markets (write-verification). Live-only, all tenants (or one via --site).
  */
 class RenameMarketArtifactsCommand extends Command
 {
@@ -23,7 +23,7 @@ class RenameMarketArtifactsCommand extends Command
         {--site= : Limit to one site id or brand name}
         {--execute : Apply the rename (default: report-only — writes nothing)}';
 
-    protected $description = 'Strip the "N, " numbered-list artifact off markets + their CoverageArea + pinned page titles (report-only by default; --execute to apply).';
+    protected $description = 'Strip the "N, " numbered-list artifact off market names + their CoverageArea source (report-only by default; --execute to apply). Published pages are not touched.';
 
     public function handle(MarketArtifactRenamer $renamer): int
     {
@@ -42,12 +42,11 @@ class RenameMarketArtifactsCommand extends Command
 
         $execute = (bool) $this->option('execute');
         $this->info($execute
-            ? 'EXECUTE · live-only · stripping the "N, " artifact off markets + coupled CoverageArea + page titles.'
+            ? 'EXECUTE · live-only · stripping the "N, " artifact off market names + their CoverageArea source.'
             : 'Read-only · live-only · market-artifact rename PLAN. Nothing is changed (pass --execute to apply).');
 
         $grandRenamable = 0;
         $grandCollisions = 0;
-        $grandPublished = 0;
         foreach ($sites as $site) {
             $plan = $renamer->plan($site);
             if ($plan === []) {
@@ -59,7 +58,7 @@ class RenameMarketArtifactsCommand extends Command
             foreach ($plan as $r) {
                 if ($r['collision']) {
                     $grandCollisions++;
-                    $this->line("  · <comment>\"{$r['old']}\"</comment>  →  \"{$r['new']}\"  <fg=red>COLLISION</> — \"{$r['new']}\" already exists; skipped (merge by hand)");
+                    $this->line("  · <comment>\"{$r['old']}\"</comment>  →  \"{$r['new']}\"  <fg=red>COLLISION</> — \"{$r['new']}\" already exists; a duplicate, skipped (use the merge tool)");
 
                     continue;
                 }
@@ -68,13 +67,7 @@ class RenameMarketArtifactsCommand extends Command
                 $area = $r['coverage_area_id'] !== null
                     ? 'CoverageArea '.($r['coverage_area_dirty'] ? 'cleaned' : 'already clean').' (matched)'
                     : 'no CoverageArea matched (market-only)';
-                $pages = count($r['pages']);
-                $this->line("  · <comment>\"{$r['old']}\"</comment>  →  \"{$r['new']}\"  · {$area} · {$pages} page title(s)");
-                foreach ($r['pages'] as $p) {
-                    $flag = $p['published'] ? ' <fg=yellow>[published — slug regenerates on next build → live URL change]</>' : '';
-                    $this->line("        title \"{$p['old_title']}\"  →  \"{$p['new_title']}\"  (slug {$p['slug']}){$flag}");
-                }
-                $grandPublished += $r['published_pages'];
+                $this->line("  · <comment>\"{$r['old']}\"</comment>  →  \"{$r['new']}\"  · {$area}");
             }
 
             if ($execute) {
@@ -89,11 +82,8 @@ class RenameMarketArtifactsCommand extends Command
             return self::SUCCESS;
         }
 
-        if ($grandPublished > 0) {
-            $this->warn("{$grandPublished} affected page(s) are PUBLISHED — their slug regenerates from the corrected title on the next build, changing a live URL. Resolve redirects (§2 PublishRedirects) before rebuilding.");
-        }
         if ($grandCollisions > 0) {
-            $this->warn("{$grandCollisions} market(s) skipped for a name COLLISION — the cleaned name already belongs to another market. Merge those by hand.");
+            $this->warn("{$grandCollisions} market(s) skipped for a name COLLISION — the cleaned name already belongs to another market (a duplicate). Merge those with launchpad:merge-markets.");
         }
 
         if (! $execute) {
