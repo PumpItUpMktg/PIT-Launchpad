@@ -122,6 +122,7 @@ it('resolves the position block from the snapshot series with an honest delta an
 
     expect($m['position']['rank'])->toBe(6)
         ->and($m['position']['delta'])->toBe(6)          // 12 → 6: improved by 6
+        ->and($m['position']['state'])->toBe('ranked')
         ->and($m['keyword'])->toBe('sump pump installation')
         ->and(count($m['series']))->toBe(2)
         // Null providers → connect prompts, never zeros.
@@ -129,13 +130,15 @@ it('resolves the position block from the snapshot series with an honest delta an
         ->and($m['gsc']['pending'])->toBe('Connect Search Console')
         ->and($m['traffic']['pending'])->toBe('Connect GA4');
 
-    // A keyword-less core page explains WHY position is empty.
+    // A keyword-less core page has nothing to rank for → not_tracked (add coverage, not improve a page).
     $about = lbPublished($site, ['page_type' => PageType::Utility, 'title' => 'About', 'slug' => 'about']);
     $core = app(LiveBoards::class)->core($site);
-    expect(collect($core)->firstWhere('id', $about->id)['metrics']['position']['pending'])->toBe('No target keyword — brand page');
+    $aboutPos = collect($core)->firstWhere('id', $about->id)['metrics']['position'];
+    expect($aboutPos['pending'])->toBe('Not tracked')
+        ->and($aboutPos['state'])->toBe('not_tracked');
 });
 
-it('distinguishes "Not yet ranking" (SERP pulled, site absent) from "First snapshot pending" (no pull yet)', function () {
+it('distinguishes tracked_not_ranking (SERP pulled, site absent) from checking (no pull yet)', function () {
     $site = lbSite();
 
     // Pulled but unranked: an organic SERP for this query has been fetched (ingested) — the site was
@@ -150,8 +153,10 @@ it('distinguishes "Not yet ranking" (SERP pulled, site absent) from "First snaps
 
     $cards = collect(app(LiveBoards::class)->services($site))->keyBy('id');
 
-    expect($cards[$pulledPage->id]['metrics']['position']['pending'])->toBe('Not yet ranking')
-        ->and($cards[$unpulledPage->id]['metrics']['position']['pending'])->toBe('First snapshot pending');
+    expect($cards[$pulledPage->id]['metrics']['position']['pending'])->toBe('Tracked — not ranking')
+        ->and($cards[$pulledPage->id]['metrics']['position']['state'])->toBe('tracked_not_ranking')
+        ->and($cards[$unpulledPage->id]['metrics']['position']['pending'])->toBe('Checking…')
+        ->and($cards[$unpulledPage->id]['metrics']['position']['state'])->toBe('checking');
 });
 
 it('renders Search Console numbers once the provider connects (and the rollup sums them)', function () {

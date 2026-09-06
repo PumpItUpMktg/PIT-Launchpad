@@ -57,7 +57,8 @@
                     #{{ $m['position']['rank'] }}
                     @if (($m['position']['delta'] ?? null)) <span class="rc-delta">({{ $m['position']['delta'] > 0 ? '▲' : '▼' }}{{ abs($m['position']['delta']) }})</span> @endif
                 @else
-                    <span class="rc-muted">{{ $m['position']['pending'] ?? 'Not yet ranking' }}</span>
+                    <span class="rc-muted lp-rank{{ ($m['position']['state'] ?? null) ? ' lp-rank--'.$m['position']['state'] : '' }}"
+                          @if ($m['position']['state'] ?? null) data-ranking-state="{{ $m['position']['state'] }}" @endif>{{ $m['position']['pending'] ?? \App\Enums\RankingState::TrackedNotRanking->label() }}</span>
                 @endif
             </div>
         </div>

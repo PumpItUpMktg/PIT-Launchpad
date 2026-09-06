@@ -49,7 +49,8 @@ it('reflects the honest pending states when nothing is connected', function () {
     // No Search Console / GA connected in the test → honest pending, never a fabricated number.
     expect($card['metrics']['gsc']['pending'])->not->toBeNull()
         ->and($card['metrics']['traffic']['pending'])->not->toBeNull()
-        ->and($card['metrics']['position']['pending'])->toBe('No target keyword — brand page')
+        ->and($card['metrics']['position']['pending'])->toBe('Not tracked')
+        ->and($card['metrics']['position']['state'])->toBe('not_tracked')
         // Index coverage is cache-only (URL Inspection): no audit run → honest pending, no crawl date.
         ->and($card['metrics']['index'])->toHaveKey('last_crawled_at')
         ->and($card['metrics']['index']['last_crawled_at'])->toBeNull()
