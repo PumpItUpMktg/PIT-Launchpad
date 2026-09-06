@@ -3,7 +3,9 @@
 namespace App\ContentEngine;
 
 use App\Enums\CandidateClassification;
+use App\Enums\CandidateScope;
 use App\Enums\RelevanceBand;
+use App\Enums\ShelfLife;
 
 /**
  * The triple-duty relevance outcome: a score + band, the routed silo, an
@@ -25,5 +27,9 @@ final class RelevanceResult
         public readonly string $rationale = '',
         public readonly CandidateClassification $classification = CandidateClassification::Evergreen,
         public readonly bool $competitorPromo = false,
+        // The two orthogonal classification axes (shelf-life × scope) — the successor to the conflated
+        // single `classification`. Derived from timeliness + local_relevance; stamped on the candidate.
+        public readonly ShelfLife $shelfLife = ShelfLife::Evergreen,
+        public readonly CandidateScope $scope = CandidateScope::General,
     ) {}
 }

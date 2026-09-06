@@ -71,6 +71,8 @@ class CandidateBackfill
 
             $meta = $candidate->meta ?? [];
             $meta['classification'] = $result->classification->value;
+            $meta['shelf_life'] = $result->shelfLife->value;   // evergreen | topical
+            $meta['scope'] = $result->scope->value;             // general | local
             $candidate->forceFill(['meta' => $meta])->save();
             $classified++;
         }

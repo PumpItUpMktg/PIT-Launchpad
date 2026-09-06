@@ -3,7 +3,9 @@
 namespace App\ContentEngine;
 
 use App\Enums\CandidateClassification;
+use App\Enums\CandidateScope;
 use App\Enums\RelevanceBand;
+use App\Enums\ShelfLife;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\News\NewsItem;
 use App\Models\Silo;
@@ -85,6 +87,10 @@ class RelevanceScorer
             rationale: (string) ($data['rationale'] ?? ''),
             classification: $classification,
             competitorPromo: $competitorPromo,
+            // Two orthogonal axes from the dedicated numeric/boolean signals — decoupled so a story can be
+            // (e.g.) local AND topical, which the single `classification` lane could not represent.
+            shelfLife: ShelfLife::fromTimeliness($timeliness),
+            scope: CandidateScope::fromLocal($localRelevance),
         );
     }
 
