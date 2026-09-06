@@ -5,7 +5,7 @@
     // cramming four page-components into one. Active tab = the current route.
     $townsTabs = [
         ['label' => 'Service area', 'url' => \App\Filament\Pages\LocationsSetup::getUrl()],
-        ['label' => 'Towns board', 'url' => \App\Filament\Pages\Live\LiveLocations::getUrl()],
+        ['label' => 'Towns board', 'url' => \App\Filament\Pages\Operate\OperateLocationPages::getUrl()],
         ['label' => 'Tier progression', 'url' => \App\Filament\Pages\Operate\OperateTierProgression::getUrl()],
         ['label' => 'Link plans', 'url' => \App\Filament\Pages\Operate\OperateLinkPlans::getUrl()],
     ];

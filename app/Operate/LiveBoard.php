@@ -178,39 +178,40 @@ class LiveBoard
         // with no verdict row has simply not been inspected yet; it reads "Not yet checked", not "Not indexed"
         // (many such pages are in fact indexed per GSC). Mirrors IndexStandings + ClientDashboard::awaitingIndexing.
         $id = (string) $c->id;
-        $indexed = $this->indexedIds->has($id) || ($gsc['in_google'] ?? false);
-        $hasVerdict = $this->verdictIds->has($id);
-        $indexState = $indexed ? 'indexed' : ($hasVerdict ? 'not_indexed' : 'unchecked');
-        $indexLabel = ['indexed' => 'Indexed', 'not_indexed' => 'Not indexed', 'unchecked' => 'Not yet checked'][$indexState];
+        [$indexed, $indexState, $indexLabel] = ContentCard::resolveIndex(
+            $this->indexedIds->has($id), $this->verdictIds->has($id), (bool) ($gsc['in_google'] ?? false),
+        );
+        $bucket = $this->bucket($c);
+        $traffic = is_array($m['traffic'] ?? null) ? $m['traffic'] : [];
 
-        return [
-            'id' => (string) $c->id,
-            'type' => $this->bucket($c),
-            'type_label' => ['blog' => 'Blog', 'core' => 'Core', 'service' => 'Service', 'town' => 'Town'][$this->bucket($c)],
-            'title' => (string) $c->title,
-            'url' => PublicUrl::forContent($domain, $c),
-            'wp_url' => $c->wp_post_id !== null && $domain !== null && $domain !== ''
+        return (new ContentCard(
+            id: $id,
+            title: (string) $c->title,
+            url: (string) (PublicUrl::forContent($domain, $c) ?? ''),
+            type: $bucket,
+            typeLabel: ['blog' => 'Blog', 'core' => 'Core', 'service' => 'Service', 'town' => 'Town'][$bucket],
+            locked: (bool) $c->locked,
+            indexed: $indexed,
+            indexState: $indexState,
+            indexLabel: $indexLabel,
+            rank: $rank !== null ? (int) $rank : null,
+            delta: $position['delta'] ?? null,
+            impressions: $gsc['impressions'] ?? null,
+            clicks: $gsc['clicks'] ?? null,
+            sessions: $traffic['sessions'] ?? null,
+            keyword: $m['keyword'] ?? null,
+            pending: ($position['pending'] ?? null) !== null,
+            publishedAt: $c->published_at?->toDateString(),
+            wpUrl: $c->wp_post_id !== null && $domain !== null && $domain !== ''
                 ? rtrim($domain, '/').'/wp-admin/post.php?post='.$c->wp_post_id.'&action=edit'
                 : null,
-            'locked' => (bool) $c->locked,
-            'published_at' => $c->published_at?->toDateString(),
-            // Flags row.
-            'indexed' => (bool) $indexed,
-            'index_state' => $indexState,          // indexed | not_indexed | unchecked
-            'index_label' => $indexLabel,          // the chip text (three states)
-            'index_tone' => $indexed ? 'good' : 'neutral',
-            'in_bing' => (bool) (is_array($m['bing'] ?? null) ? ($m['bing']['in_bing'] ?? false) : false),
-            'page_one' => $rank !== null && (int) $rank <= 10,
-            'problem' => ! $indexed && ! empty($index['label']) ? (string) $index['label'] : null,
-            // Tracking numbers (all from the cached LiveMetrics block).
-            'rank' => $rank !== null ? (int) $rank : null,
-            'delta' => $position['delta'] ?? null,
-            'impressions' => $gsc['impressions'] ?? null,
-            'clicks' => $gsc['clicks'] ?? null,
-            'sessions' => is_array($m['traffic'] ?? null) ? ($m['traffic']['sessions'] ?? null) : null,
-            'keyword' => $m['keyword'] ?? null,
-            'pending' => ($position['pending'] ?? null) !== null,
-        ];
+            inGoogle: (bool) ($gsc['in_google'] ?? false),
+            inBing: (bool) (is_array($m['bing'] ?? null) ? ($m['bing']['in_bing'] ?? false) : false),
+            pageOne: $rank !== null && (int) $rank <= 10,
+            problem: ! $indexed && ! empty($index['label']) ? (string) $index['label'] : null,
+            trafficPending: $traffic['pending'] ?? null,
+            rawMetrics: $m,
+        ))->toArray();
     }
 
     /**
