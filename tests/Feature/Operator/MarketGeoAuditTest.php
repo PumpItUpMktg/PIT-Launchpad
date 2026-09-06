@@ -98,6 +98,53 @@ it('unions HELD Locations too — a seasoning market is confirmed, not flagged',
     expect(app(MarketGeoAudit::class)->suspects($site))->toBe([]);
 });
 
+it('matches a market against a county-qualified served town ("Marshall (Harford)")', function () {
+    $site = Site::factory()->create();
+    // Fallston serves Marshall, stored county-qualified because "Marshall" duplicates across MD counties
+    // (exactly what SeedServedTownsCommand writes). Before the trailing-parenthetical strip this read
+    // "NO match" for precisely the duplicated towns where mis-assignment happens.
+    Location::factory()->create([
+        'site_id' => $site->id, 'publish_held' => true,
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Fallston', 'short_name' => 'Fallston'],
+            ['types' => ['administrative_area_level_1'], 'long_name' => 'MD', 'short_name' => 'MD'],
+        ],
+        'served_towns' => [
+            ['name' => 'Marshall (Harford)', 'state' => 'MD', 'lat' => 39.63, 'lng' => -76.49, 'geocoded' => true],
+        ],
+    ]);
+    // The market carries the bare town name and no geo_id — ONLY the served-town heuristic can confirm it.
+    geoMkt($site, 'Marshall', 'MD', 39.63, -76.49, null);
+
+    // Confirmed real via the qualified served town → not surfaced as a suspect.
+    expect(app(MarketGeoAudit::class)->suspects($site))->toBe([]);
+});
+
+it('still matches a numbered market against a county-qualified served town', function () {
+    $site = Site::factory()->create();
+    Location::factory()->create([
+        'site_id' => $site->id, 'publish_held' => true,
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Fallston', 'short_name' => 'Fallston'],
+            ['types' => ['administrative_area_level_1'], 'long_name' => 'MD', 'short_name' => 'MD'],
+        ],
+        'served_towns' => [
+            ['name' => 'Marshall (Harford)', 'state' => 'MD', 'lat' => 39.63, 'lng' => -76.49, 'geocoded' => true],
+        ],
+    ]);
+    // Both defects at once: the "N, " artifact on the market AND the county qualifier on the served town.
+    // The name is stripped on the market side and the qualifier on the Location side → they still meet.
+    $rows = app(MarketGeoAudit::class)->suspects(
+        tap($site, fn ($s) => geoMkt($s, '1, Marshall', 'MD', 39.63, -76.49, null))
+    );
+
+    // Surfaced only for the rename (artifact), and confirmed a real place via the Location match.
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['name_artifact'])->toBeTrue()
+        ->and($rows[0]['location_match'])->toBeTrue()
+        ->and($rows[0]['advisory'])->toContain('rename');
+});
+
 it('marks a market with dependents as review, never a blind delete', function () {
     $site = Site::factory()->create();
     $m = geoMkt($site, 'Ghost', 'NJ', 40.7, -74.1, null); // no geo_id, no Location, but has a pinned keyword
