@@ -115,11 +115,12 @@ it('skips a held (on_hold) market and retires nothing else', function () {
         ->and($live->first()->label)->toContain('Dallas');
 });
 
-it('excludes a market that resolves to a publish-held location (city+state match)', function () {
+it('does NOT key off a publish-held location — only the market\'s own on_hold (no Market↔Location name match)', function () {
     $site = Site::factory()->create();
     $silo = Silo::factory()->create(['site_id' => $site->id]);
     Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'sump pump repair']);
-    Market::factory()->create(['site_id' => $site->id, 'name' => 'Fallston', 'region' => 'MD']);
+    // A market that name-matches a publish-held Location, but whose OWN on_hold is false → NOT held.
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Fallston', 'region' => 'MD', 'on_hold' => false]);
     Location::factory()->create([
         'site_id' => $site->id,
         'publish_held' => true,
@@ -131,8 +132,9 @@ it('excludes a market that resolves to a publish-held location (city+state match
 
     $result = reconciler()->reconcile($site);
 
-    expect($result['held_markets_skipped'])->toBe(1)
-        ->and(generatedFeeds($site->id)->where('enabled', true))->toHaveCount(0);
+    // The feed IS generated — a held Location does not suppress it (recorded gap; no fragile name match).
+    expect($result['held_markets_skipped'])->toBe(0)
+        ->and(generatedFeeds($site->id)->where('enabled', true))->toHaveCount(1);
 });
 
 it('collapses two signatures that resolve to the same search into one enabled feed', function () {

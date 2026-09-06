@@ -5,7 +5,6 @@ namespace App\ContentEngine\Feeds;
 use App\Enums\FeedOrigin;
 use App\Enums\SourceType;
 use App\Models\Keyword;
-use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -24,12 +23,16 @@ use App\Models\Source;
  *     on (site_id, url) WHERE enabled backs this). Deactivation runs BEFORE the
  *     upsert so the live set never transiently collides with a stale duplicate.
  *
- * HELD markets are excluded: a market with its own advisory hold (Market.on_hold),
- * or one that resolves to a publish-held Location (Location.publish_held, matched
- * on city+state — no FK between the two), generates no feeds; its existing feeds
- * deactivate on the next run. Retirement is always DEACTIVATION, never deletion,
- * so already-attributed candidates keep their provenance. Keywords are geo-neutral
- * by §4 rule; the market only enters the news SEARCH query (not a silo or page).
+ * HELD markets are excluded via the market's own hold flag (Market.on_hold): such
+ * a market generates no feeds and its existing feeds deactivate on the next run.
+ * It does NOT key off a held Location (Location.publish_held): the generator runs
+ * on the Market model, which has no FK to Location, and matching the two would need
+ * a fragile city/state name match (the mechanism behind the Trooper/Montgomery +
+ * Spring City mis-assignments) — deliberately not added; see the Territory
+ * naming/model mismatch in docs/specs/5-nav-cutover.md. Retirement is always
+ * DEACTIVATION, never deletion, so already-attributed candidates keep their
+ * provenance. Keywords are geo-neutral by §4 rule; the market only enters the news
+ * SEARCH query (not a silo or page).
  */
 class GeneratedFeedReconciler
 {
@@ -50,9 +53,14 @@ class GeneratedFeedReconciler
             ->whereNotNull('silo_id')
             ->get();
 
-        $held = $this->heldCityStates($site->id);
+        // Exclude HELD markets — keyed on the market's OWN hold flag (Market.on_hold). The generator runs on
+        // the Market model, which has NO FK to Location, so it CANNOT key off a held Location's
+        // publish_held directly; matching a Market to a publish-held Location would require a city/state name
+        // match — the same fragile mechanism behind the Trooper/Montgomery + Spring City mis-assignments —
+        // which we are deliberately NOT adding. See docs/specs/5-nav-cutover.md (Territory naming/model
+        // mismatch): to suppress a held *Location's* feeds today, set on_hold on its Market.
         $allMarkets = Market::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
-        $activeMarkets = $allMarkets->reject(fn (Market $m): bool => $this->isHeld($m, $held))->values()->all();
+        $activeMarkets = $allMarkets->reject(fn (Market $m): bool => (bool) $m->on_hold)->values()->all();
         $heldSkipped = $allMarkets->count() - count($activeMarkets);
 
         // A site with NO markets at all → one national feed per keyword (market = null). But a site whose
@@ -103,47 +111,6 @@ class GeneratedFeedReconciler
             'held_markets_skipped' => $heldSkipped,
             'url_duplicates_skipped' => $urlDupsSkipped,
         ];
-    }
-
-    /**
-     * The city|state keys (lower-cased) of this site's publish-held Locations — markets resolving to one of
-     * these generate no feeds. No FK between Market and Location, so the match is on city+state.
-     *
-     * @return array<string, true>
-     */
-    private function heldCityStates(string $siteId): array
-    {
-        $held = [];
-        Location::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)
-            ->where('publish_held', true)
-            ->get()
-            ->each(function (Location $location) use (&$held): void {
-                $cs = $location->cityState();
-                $key = $this->cityStateKey((string) $cs['city'], (string) $cs['state']);
-                if ($key !== '|') {
-                    $held[$key] = true;
-                }
-            });
-
-        return $held;
-    }
-
-    /** @param  array<string, true>  $held */
-    private function isHeld(Market $market, array $held): bool
-    {
-        if ($market->on_hold) {
-            return true; // the market's own advisory hold
-        }
-
-        $region = is_string($market->region) ? $market->region : '';
-
-        return isset($held[$this->cityStateKey((string) $market->name, $region)]);
-    }
-
-    private function cityStateKey(string $city, string $state): string
-    {
-        return mb_strtolower(trim($city)).'|'.mb_strtolower(trim($state));
     }
 
     private function signature(Keyword $keyword, ?Market $market): string
