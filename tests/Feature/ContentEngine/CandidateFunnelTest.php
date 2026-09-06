@@ -376,3 +376,32 @@ test('a created candidate stores the canonical source_url_key', function () {
     $content = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
     expect($content->source_url_key)->toBe('nj.com/news/fresh');
 });
+
+test('classification: a candidate is stamped with orthogonal shelf_life and scope at ingestion', function () {
+    $site = Site::factory()->create();
+    Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heaters', 'rule_set' => ['include_patterns' => ['water heater'], 'exclude_patterns' => []]]);
+
+    // Inline scorer JSON so we control timeliness (decay) and local_relevance (place) independently.
+    $json = fn (float $timeliness, bool $local): string => json_encode([
+        'relevance' => 0.85, 'matched_silo' => 'Water Heaters', 'angle' => 'A homeowner takeaway',
+        'advisory_value' => 0.7, 'timeliness' => $timeliness, 'local_relevance' => $local, 'brand_safe' => true,
+    ]);
+
+    $claude = (new ScriptedClaudeClient)
+        ->on('Topical local water heater flooding', $json(0.9, true))     // topical × local
+        ->on('Evergreen general water heater guide', $json(0.2, false));  // evergreen × general
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    app(CandidateFunnel::class)->process($site, [
+        News::item('Topical local water heater flooding'),
+        News::item('Evergreen general water heater guide'),
+    ]);
+
+    $rows = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('title');
+
+    expect($rows['Topical local water heater flooding']->meta['shelf_life'])->toBe('topical')
+        ->and($rows['Topical local water heater flooding']->meta['scope'])->toBe('local')
+        ->and($rows['Evergreen general water heater guide']->meta['shelf_life'])->toBe('evergreen')
+        ->and($rows['Evergreen general water heater guide']->meta['scope'])->toBe('general');
+});

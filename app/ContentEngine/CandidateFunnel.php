@@ -260,6 +260,8 @@ class CandidateFunnel
             // publish date (source pubDate — distinct from ingest `created_at` and WP `published_at`).
             'meta' => [
                 'classification' => $relevance->classification->value,
+                'shelf_life' => $relevance->shelfLife->value,   // evergreen | topical (decay axis)
+                'scope' => $relevance->scope->value,             // general | local (place axis)
                 'source_published_at' => $item->publishedAt->format('Y-m-d'),
             ],
             'version' => 1,
