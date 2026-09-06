@@ -2,6 +2,7 @@
 
 namespace App\Filament\Console\Pages;
 
+use App\ContentEngine\BlogQueue\ManualCandidateIntake;
 use App\ContentEngine\Review\ReviewActions;
 use App\Jobs\GeneratePost;
 use App\Operate\BlogBoard;
@@ -31,6 +32,13 @@ class BlogCandidates extends ConsolePage
 
     protected string $view = 'filament.console.blog-candidates';
 
+    // Manual-entry form (a hand-typed idea → a candidate on the board).
+    public string $manualTitle = '';
+
+    public ?string $manualSiloId = null;
+
+    public string $manualTown = '';
+
     public function getTitle(): string
     {
         return 'Candidates';
@@ -58,6 +66,38 @@ class BlogCandidates extends ConsolePage
         $cap = (int) config('launchpad.reactive.candidate_board_group_cap', 8);
 
         return app(BlogBoard::class)->group($this->getCandidatesProperty(), $cap);
+    }
+
+    /** Add a hand-typed idea as a candidate on the board (source=manual, topical, cap-exempt). */
+    public function addManual(): void
+    {
+        if (! $this->can(Capability::EditContent)) {
+            return;
+        }
+
+        $site = $this->currentSite();
+        if ($site === null) {
+            return;
+        }
+
+        $siloId = $this->manualSiloId;
+        if (trim($this->manualTitle) === '' || $siloId === null || $siloId === '') {
+            Notification::make()->title('Give the idea a title and pick a silo.')->warning()->send();
+
+            return;
+        }
+
+        $content = app(ManualCandidateIntake::class)->create($site, $this->manualTitle, $siloId, $this->manualTown ?: null);
+        if ($content === null) {
+            Notification::make()->title('Could not add — check the silo belongs to this site.')->danger()->send();
+
+            return;
+        }
+
+        $this->manualTitle = '';
+        $this->manualSiloId = null;
+        $this->manualTown = '';
+        Notification::make()->title('Added to the board.')->success()->send();
     }
 
     /** Generate a draft from a candidate (Sonnet + fal, on the worker). */
