@@ -1,5 +1,6 @@
 <?php
 
+use App\ContentEngine\ArticleUrl;
 use App\ContentEngine\CandidateFunnel;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\AlertType;
@@ -316,4 +317,62 @@ test('backpressure disabled (0) never blocks ingestion', function () {
 
     expect($result->created)->toHaveCount(1)
         ->and(collect($result->dropped)->pluck('reason'))->not->toContain('silo_backpressure');
+});
+
+test('URL dedup: the same article under a different external_id is skipped (within a batch)', function () {
+    $site = Site::factory()->create();
+    Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heaters', 'rule_set' => ['include_patterns' => ['water heater'], 'exclude_patterns' => []]]);
+
+    $claude = (new ScriptedClaudeClient)->fallback(relevanceJson(0.85, 'Water Heaters'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    // Different titles → different external_ids (so external_id dedup can't catch them); SAME article URL,
+    // one with www + tracking params. URL dedup must collapse them to one candidate.
+    $result = app(CandidateFunnel::class)->process($site, [
+        News::item('Water heater advisory issued', url: 'https://nj.com/news/water-heater'),
+        News::item('Advisory on water heaters, restated', url: 'https://www.nj.com/news/water-heater?utm_source=nl'),
+    ]);
+
+    expect($result->created)->toHaveCount(1)
+        ->and(collect($result->dropped)->pluck('reason'))->toContain('duplicate_url')
+        ->and(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1);
+});
+
+test('URL dedup: an item matching an existing candidate URL is skipped', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heaters', 'rule_set' => ['include_patterns' => ['water heater'], 'exclude_patterns' => []]]);
+
+    // An existing candidate already holds this article (keyed).
+    Content::factory()->post()->create([
+        'site_id' => $site->id, 'silo_id' => $silo->id, 'status' => ContentStatus::Candidate,
+        'source_url' => 'https://nj.com/news/existing-water-heater',
+        'source_url_key' => ArticleUrl::key('https://nj.com/news/existing-water-heater'),
+    ]);
+
+    $claude = (new ScriptedClaudeClient)->fallback(relevanceJson(0.85, 'Water Heaters'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    $result = app(CandidateFunnel::class)->process($site, [
+        News::item('Same water heater story, re-shared', url: 'https://www.nj.com/news/existing-water-heater?ref=twitter'),
+    ]);
+
+    expect($result->created)->toHaveCount(0)
+        ->and(collect($result->dropped)->pluck('reason'))->toContain('duplicate_url')
+        ->and(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(1); // nothing added
+});
+
+test('a created candidate stores the canonical source_url_key', function () {
+    $site = Site::factory()->create();
+    Silo::factory()->create(['site_id' => $site->id, 'name' => 'Water Heaters', 'rule_set' => ['include_patterns' => ['water heater'], 'exclude_patterns' => []]]);
+
+    $claude = (new ScriptedClaudeClient)->fallback(relevanceJson(0.85, 'Water Heaters'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    app(CandidateFunnel::class)->process($site, [News::item('Fresh water heater story', url: 'https://www.nj.com/news/fresh?utm=x')]);
+
+    $content = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+    expect($content->source_url_key)->toBe('nj.com/news/fresh');
 });

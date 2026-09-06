@@ -45,10 +45,12 @@ final class FeedIngestReport
     public static function fromFunnel(string $feedId, string $label, int $fetched, FunnelResult $funnel): self
     {
         $prefilteredOut = count(array_filter($funnel->dropped, fn (array $d) => $d['reason'] === 'pre_filter'));
-        $alreadyIngested = count(array_filter($funnel->dropped, fn (array $d) => $d['reason'] === 'already_ingested'));
+        // Both external_id (already_ingested) and URL-identity (duplicate_url) skips are dedups, not score
+        // rejections — count them together and exclude from scoreRejected so the residual folds them into deduped.
+        $deduplicated = count(array_filter($funnel->dropped, fn (array $d) => in_array($d['reason'], ['already_ingested', 'duplicate_url'], true)));
         // Everything else in `dropped` is a scorer rejection (brand-safety / off-silo / competitor / below
-        // threshold). already_ingested is a dedup, not a score rejection, so it is excluded here.
-        $scoreRejected = count($funnel->dropped) - $prefilteredOut - $alreadyIngested;
+        // threshold) or a backpressure skip.
+        $scoreRejected = count($funnel->dropped) - $prefilteredOut - $deduplicated;
         $routed = count($funnel->created);
         $parked = count($funnel->parked);
         $refreshMarked = count($funnel->refreshMarked);
