@@ -178,7 +178,7 @@ it('promote queues the existing generate path; dismiss records a rejection', fun
         ->and($other->fresh()->reject_reason)->toBe('Dismissed at candidate triage');
 });
 
-it('one-click Approve runs the existing approve + publish path; Reject records the typed reason', function () {
+it('Approve stops at Approved — no WordPress push; Reject records the typed reason', function () {
     Queue::fake();
     $site = opSite();
     $draft = Content::factory()->create([
@@ -192,14 +192,36 @@ it('one-click Approve runs the existing approve + publish path; Reject records t
     $page = Livewire::test(OperateBlog::class, ['tab' => 'review'])
         ->call('approve', $draft->id);
 
-    expect($draft->fresh()->status)->not->toBe(ContentStatus::NeedsReview);
-    Queue::assertPushed(PublishContent::class);
+    // The QA gate: approve accepts the draft and STOPS. Nothing is dispatched to WordPress, and the
+    // post is NOT yet released to the publish queue — it waits on the Approved tab for a deliberate Publish.
+    expect($draft->fresh()->status)->toBe(ContentStatus::Approved)
+        ->and($draft->fresh()->isReleasedToPublish())->toBeFalse();
+    Queue::assertNotPushed(PublishContent::class);
 
     $page->call('startReject', $bad->id)
         ->set('rejectReason', 'Tone is off for this tenant')
         ->call('reject', $bad->id);
     expect($bad->fresh()->status)->toBe(ContentStatus::Rejected)
         ->and($bad->fresh()->reject_reason)->toBe('Tone is off for this tenant');
+});
+
+it('Publish is a separate, deliberate action from the Approved stage — it releases and pushes', function () {
+    Queue::fake();
+    $site = opSite();
+    $approved = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved,
+        'title' => 'Ready to go live', 'body' => 'A real drafted body.',
+    ]);
+
+    // Precondition: an approved, un-released post pushes nothing on its own.
+    expect($approved->isReleasedToPublish())->toBeFalse();
+
+    Livewire::test(OperateBlog::class, ['tab' => 'approved'])
+        ->call('publish', $approved->id);
+
+    // Publish releases the post to the publish queue AND dispatches §2's idempotent push.
+    expect($approved->fresh()->isReleasedToPublish())->toBeTrue();
+    Queue::assertPushed(PublishContent::class);
 });
 
 it('published groups by consumed keyword → pillar page, bare targets first, reactive under Freshness', function () {

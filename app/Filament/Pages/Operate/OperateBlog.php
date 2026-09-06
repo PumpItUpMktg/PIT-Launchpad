@@ -281,7 +281,11 @@ class OperateBlog extends OperatePage
 
     // ── Review actions ──────────────────────────────────────────────────────
 
-    /** One-click Approve — the existing approve + publish path, nothing bespoke. */
+    /**
+     * Approve — the QA gate. Sets status=approved and STOPS: nothing hits WordPress. The post lands in the
+     * Approved tab where an operator publishes it as a separate, deliberate action ({@see publish()}). This
+     * is the four-stage design (Candidate → Review → Approved → Publish); Approve no longer one-click-pushes.
+     */
     public function approve(string $contentId): void
     {
         $content = $this->ownedPost($contentId);
@@ -289,55 +293,76 @@ class OperateBlog extends OperatePage
             return;
         }
 
-        $actions = app(ReviewActions::class);
-        $approved = $actions->approve($content, Auth::id());
+        $approved = app(ReviewActions::class)->approve($content, Auth::id());
         if ($approved->isBlocked()) {
             Notification::make()->danger()->title('Cannot approve')->body((string) $approved->blockedReason)->send();
 
             return;
         }
 
+        Notification::make()->success()->title("'{$content->title}' approved")
+            ->body('Review it in the Approved tab, then Publish when ready — nothing has been pushed to WordPress yet.')->send();
+    }
+
+    /**
+     * Publish — the deliberate push from the Approved stage. Releases the post to the publish queue (which
+     * re-runs the publish guard) then pushes: async on a healthy worker (the worker renders the image +
+     * pushes), or INLINE when the worker is stalled so publishing still completes on the request.
+     */
+    public function publish(string $contentId): void
+    {
+        $content = $this->ownedPost($contentId);
+        if ($content === null) {
+            return;
+        }
+
+        $actions = app(ReviewActions::class);
+        $released = $actions->release($content, Auth::id()); // re-checks the publish guard + marks released
+        if ($released->isBlocked()) {
+            Notification::make()->danger()->title('Cannot publish')->body((string) $released->blockedReason)->send();
+
+            return;
+        }
+
         $content = $content->refresh();
 
-        // When the background worker is STALLED, handing the publish to a queue that isn't draining just
-        // hangs the post at "queued to publish" forever. Publish INLINE instead (same PostPublisher path
-        // as "Publish now") so approve actually completes. A healthy worker keeps the async path — approve
-        // returns instantly and the worker renders + pushes.
+        // Worker down → publish INLINE (same PostPublisher path) so it doesn't hang at "queued to publish".
         if (app(QueueHealth::class)->snapshot()['stalled']) {
-            $this->publishInlineOnApprove($content);
+            $this->publishInline($content);
 
             return;
         }
 
         $published = $actions->publish($content, Auth::id());
         if ($published->isBlocked()) {
-            Notification::make()->warning()->title('Approved — publish blocked')->body((string) $published->blockedReason)->send();
+            Notification::make()->warning()->title('Publish blocked')->body((string) $published->blockedReason)->send();
 
             return;
         }
 
-        Notification::make()->success()->title("'{$content->title}' approved — publishing now.")->send();
+        Notification::make()->success()->title("'{$content->title}' — publishing now.")
+            ->body('The worker is rendering the image and pushing to WordPress; it moves to Published when done.')->send();
     }
 
-    /** Approve fell back to an inline publish because the worker is down — render + push here and now. */
-    private function publishInlineOnApprove(Content $content): void
+    /** Publish fell back to inline because the worker is down — render + push here and now. */
+    private function publishInline(Content $content): void
     {
         $result = app(PostPublisher::class)->publish($content, Auth::id());
 
         if ($result->isPublished()) {
-            Notification::make()->success()->title('Approved &amp; published')
+            Notification::make()->success()->title('Published')
                 ->body("'{$content->title}' was published inline (the background worker is down).")->send();
 
             return;
         }
 
         if ($result->wasSkipped()) {
-            Notification::make()->warning()->title('Approved — publish skipped')->body((string) $result->message)->send();
+            Notification::make()->warning()->title('Publish skipped')->body((string) $result->message)->send();
 
             return;
         }
 
-        Notification::make()->danger()->title('Approved — publish failed')->body((string) $result->message)->send();
+        Notification::make()->danger()->title('Publish failed')->body((string) $result->message)->send();
     }
 
     /**

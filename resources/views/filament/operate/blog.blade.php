@@ -213,33 +213,39 @@
             </div>
         @endif
 
-        {{-- ─── Approved — accepted, queued to publish (approved → rendering → pushing), not yet live.
-             They move to Published automatically as the worker finishes; a stalled one flags a down worker. --}}
+        {{-- ─── Approved — the QA / preview gate. Accepted posts wait here, fully drafted (image + body +
+             SEO), with NOTHING pushed to WordPress. Publish is a separate, deliberate action: the operator
+             clicks Publish to send the post to the Publish queue, where the worker renders + pushes. --}}
         @if ($tab === 'approved')
-            @php $approvedCards = $this->approved; $inflight = collect($approvedCards)->where('stalled', false)->isNotEmpty(); @endphp
-            <div class="ob-grid" @if ($inflight) wire:poll.visible.10s @endif>
-                @forelse ($approvedCards as $a)
+            <div class="ob-grid">
+                @forelse ($this->approved as $a)
                     <div class="ob-card" wire:key="oba-{{ $a['id'] }}">
                         <div class="ob-chips">
-                            <span class="ob-chip {{ $a['stalled'] ? 'danger' : '' }}">{{ $a['stalled'] ? 'stalled — worker down' : $a['state'] }}</span>
+                            <span class="ob-chip">approved · not published</span>
                             <span class="ob-chip kw">{{ $a['keyword'] ?? 'reactive' }}</span>
                             @if ($a['silo'])<span class="ob-chip">{{ $a['silo'] }}</span>@endif
                             @if (! $siteFilter && $a['tenant'])<span class="ob-chip warn">{{ $a['tenant'] }}</span>@endif
                         </div>
                         <h3>{{ $a['title'] }}</h3>
-                        <div class="ob-excerpt">{{ $a['excerpt'] !== '' ? $a['excerpt'] : 'Queued — the worker renders the image and pushes to WordPress, then this moves to Published.' }}</div>
-                        @if ($a['stalled'])
-                            <div class="ob-actions">
-                                <button class="ob-btn primary" wire:click="publishNowSync('{{ $a['id'] }}')" wire:loading.attr="disabled" wire:target="publishNowSync('{{ $a['id'] }}')"
-                                        wire:confirm="Publish this stuck post now (synchronously)? Use only if the worker is down.">
-                                    <span wire:loading.remove wire:target="publishNowSync('{{ $a['id'] }}')">Publish now</span>
-                                    <span wire:loading wire:target="publishNowSync('{{ $a['id'] }}')"><span class="ob-spinner"></span> Publishing…</span>
-                                </button>
+                        <div class="ob-excerpt">{{ $a['excerpt'] !== '' ? $a['excerpt'] : 'Reviewed and approved — click Publish to render the image and push it to WordPress.' }}</div>
+                        <div class="ob-actions">
+                            <button class="ob-btn primary" wire:click="publish('{{ $a['id'] }}')" wire:loading.attr="disabled" wire:target="publish('{{ $a['id'] }}')"
+                                    wire:confirm="Publish '{{ $a['title'] }}'? This renders the image and pushes the post live to WordPress.">
+                                <span wire:loading.remove wire:target="publish('{{ $a['id'] }}')">Publish</span>
+                                <span wire:loading wire:target="publish('{{ $a['id'] }}')"><span class="ob-spinner"></span> Publishing…</span>
+                            </button>
+                            <a class="ob-btn" href="{{ $this->editUrl($a['id']) }}" wire:navigate>Edit</a>
+                            <button class="ob-btn danger" wire:click="startReject('{{ $a['id'] }}')">Reject</button>
+                        </div>
+                        @if ($rejecting === $a['id'])
+                            <div class="ob-reject">
+                                <input type="text" placeholder="Reason (optional)" wire:model="rejectReason" wire:keydown.enter="reject('{{ $a['id'] }}')">
+                                <button class="ob-btn danger" wire:click="reject('{{ $a['id'] }}')">Confirm</button>
                             </div>
                         @endif
                     </div>
                 @empty
-                    <div class="ob-empty">No posts are waiting to publish in this scope.</div>
+                    <div class="ob-empty">No approved posts waiting to publish in this scope.</div>
                 @endforelse
             </div>
         @endif
