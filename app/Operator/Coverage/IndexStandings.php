@@ -41,7 +41,8 @@ class IndexStandings
      *     inspected_count: int,
      *     published_content_count: int,
      *     coverage_gap: int,
-     *     data_through: ?string
+     *     data_through: ?string,
+     *     last_inspected_at: ?string
      * }
      */
     public function for(?string $siteId): array
@@ -58,6 +59,7 @@ class IndexStandings
                 'published' => $empty, 'all_known' => $empty, 'discovered_only' => 0,
                 'all_known_available' => $allKnownAvailable,
                 'inspected_count' => 0, 'published_content_count' => 0, 'coverage_gap' => 0, 'data_through' => null,
+                'last_inspected_at' => null,
             ];
         }
 
@@ -93,6 +95,7 @@ class IndexStandings
             'published_content_count' => $publishedContent,
             'coverage_gap' => max(0, $publishedContent - $inspected),
             'data_through' => $lastInspected !== null ? Carbon::parse($lastInspected)->toDateString() : null,
+            'last_inspected_at' => $lastInspected !== null ? (string) $lastInspected : null,
         ];
     }
 

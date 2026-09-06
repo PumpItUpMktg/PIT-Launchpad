@@ -40,6 +40,8 @@
             Pick a working tenant from the topbar to see its index coverage.
         </x-lp.empty>
     @elseif ($all['total'] === 0)
+        {{-- Honest never-checked as a real semantic state (the shared stamp), not just prose. --}}
+        <div style="margin-bottom:10px"><x-lp.freshness-stamp :last-checked="null" :interval="\App\Support\Cadence::intervalSeconds('index')" noun="index data" /></div>
         <x-lp.empty title="No index data yet" action="Open Pages" :href="\App\Filament\Pages\Operate\OperatePages::getUrl()">
             Index coverage appears once <code>sandhog:sync-index</code> has inspected this tenant's URLs against Google Search Console. Nothing has been synced yet.
         </x-lp.empty>
@@ -51,9 +53,13 @@
                 <div class="ix-head">
                     <div class="t">Pages you published <span style="color:var(--ink-soft);font-weight:600">— in your sitemap</span></div>
                     <div class="d">The town + service pages Launchpad built. This is the coverage you can act on.</div>
-                    <div class="d" style="margin-top:4px">{{ $board['data_through']
-                        ? number_format($board['inspected_count']).' inspected of '.number_format($board['published_content_count']).' published'.(($board['coverage_gap'] ?? 0) > 0 ? ' · '.number_format($board['coverage_gap']).' not yet inspected' : '').' · data through '.$board['data_through']
-                        : number_format($board['published_content_count']).' published · no verdicts synced yet' }}</div>
+                    <div class="d" style="margin-top:4px">{{ number_format($board['inspected_count']).' inspected of '.number_format($board['published_content_count']).' published'.(($board['coverage_gap'] ?? 0) > 0 ? ' · '.number_format($board['coverage_gap']).' not yet inspected' : '') }}</div>
+                    {{-- Freshness via the ONE shared stamp (App\Support\FreshnessStamp): "as of {date}" when
+                         verdicts exist, an honest quiet "never checked" when none — same treatment + escalation
+                         as every other panel, on the daily index cadence. --}}
+                    <div class="d" style="margin-top:2px"><x-lp.freshness-stamp
+                        :last-checked="$board['last_inspected_at'] ? \Illuminate\Support\Carbon::parse($board['last_inspected_at']) : null"
+                        :interval="\App\Support\Cadence::intervalSeconds('index')" noun="index data" /></div>
                 </div>
                 <div class="ix-nums">
                     <div class="ix-num"><div class="n good">{{ number_format($pub['indexed']) }}</div><div class="l">Indexed</div></div>
