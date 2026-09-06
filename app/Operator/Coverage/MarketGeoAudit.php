@@ -2,6 +2,7 @@
 
 namespace App\Operator\Coverage;
 
+use App\Console\Commands\SeedServedTownsCommand;
 use App\Models\Content;
 use App\Models\Keyword;
 use App\Models\Location;
@@ -189,10 +190,22 @@ final class MarketGeoAudit
         return isset($places[$this->key($name, $region)]) || isset($places[$this->key($name, '')]);
     }
 
-    /** Strip a leading numbering artifact ("1, Abingdon" → "Abingdon"), lower + trim. */
+    /**
+     * Normalize a place name to a comparison key: strip a leading numbering artifact ("1, Abingdon" →
+     * "Abingdon") AND a trailing county-disambiguation parenthetical ("Marshall (Harford)" → "Marshall"),
+     * then lower + trim. The trailing strip is essential to the Location heuristic: {@see SeedServedTownsCommand}
+     * qualifies duplicate town names with their county ("Marshall (Harford)", "Washington Twp (Morris)"), and
+     * those duplicated names are EXACTLY the towns where mis-assignment happens — without this strip the market
+     * "Marshall" could never match its own served town "Marshall (Harford)" and the lens would cry "NO match"
+     * on every future run for precisely the places that need it.
+     */
     private function cleanName(string $value): string
     {
-        return mb_strtolower(trim((string) preg_replace('/^\s*\d+\s*,\s*/', '', trim($value))));
+        $value = trim($value);
+        $value = (string) preg_replace('/^\s*\d+\s*,\s*/', '', $value);   // leading "N, " numbering artifact
+        $value = (string) preg_replace('/\s*\([^)]*\)\s*$/', '', $value); // trailing " (County)" disambiguation
+
+        return mb_strtolower(trim($value));
     }
 
     private function key(string $city, string $state): string

@@ -85,6 +85,24 @@ the `Market` row (holding the `Location` alone does not). **To resolve later:** 
 real link to `Location` (or propagate `publish_held` → `Market.on_hold`), at which point the
 generator can key off the held Location directly.
 
+**Fourth instance (found during the market-geo artifact rename, 2026-09):** page→market
+resolution is name-keyed too. `GuidedEntityProjector::marketForCoverageArea()` (the projector's
+`resolveMarket`) loads a page's source `CoverageArea` by **id** (the manifest `page_key`), then
+matches its `Market` by **`Market.name === CoverageArea.name`**; `projectTerritories()` likewise
+mints markets with `firstOrCreate(['name' => $coverageArea->name])`. So renaming a `Market` out of
+step with its `CoverageArea` desyncs the pair — the next build's `projectTerritories` re-mints the
+old name as a **duplicate** market. (Existing pages do **not** orphan: they are re-linked by
+`build_pages.content_id` — an id — and skipped in `PageMaterializer`, so their pinned `market_id`
+FK survives; the name-match only re-runs for *new* pages and for the `firstOrCreate`.) This is why
+the artifact rename must strip `CoverageArea.name` **and** `Market.name` in lockstep. **Not fixed
+here** — `Market` still has no FK to `CoverageArea`; on the list.
+
+**Generalized (the pattern behind all four):** *any place a relationship is resolved by matching a
+name rather than following a foreign key is a latent defect.* Trooper/Montgomery, Spring City's
+county mismatch, the `served_towns` county-qualification miss, and `resolveMarket` are four faces
+of the same missing FK. New code resolves relationships by id; a name-match is a bug waiting for a
+rename — or a duplicate/qualified name — to trigger it.
+
 ## Standing rules for every UI PR (from here on)
 
 1. **Screenshot in the PR body — not a description.**
