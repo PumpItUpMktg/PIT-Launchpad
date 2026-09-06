@@ -763,6 +763,10 @@ return [
         // 0 disables the gate.
         'candidate_backpressure_per_silo' => (int) env('LAUNCHPAD_CANDIDATE_BACKPRESSURE', 10),
 
+        // Candidates board: max cards shown per silo group before a "+N more" tail (the board groups
+        // candidates by silo, local-first). Keeps a firehose silo from rendering a wall of cards. 0 = show all.
+        'candidate_board_group_cap' => (int) env('LAUNCHPAD_CANDIDATE_BOARD_CAP', 8),
+
         // Topical-candidate expiry (days). A TOPICAL hook (meta.shelf_life=topical) decays; once its article
         // is older than this it is no longer worth drafting, so the daily launchpad:expire-candidates sweep
         // rejects it (reason=expired) to keep the review backlog to live, actionable work. Aged from the

@@ -2,58 +2,40 @@
     @include('filament.console.partials.blog-filters')
     @include('filament.console.partials.blog-card-styles')
 
-    @php $candidates = $this->candidates; @endphp
+    <style>
+        .bc-group { margin-top: 18px; }
+        .bc-group:first-of-type { margin-top: 4px; }
+        .bc-group-head { display:flex; align-items:baseline; gap:10px; padding:6px 2px; border-bottom:1px solid var(--line,#e5e7eb); margin-bottom:10px; }
+        .bc-group-silo { font-size:14px; font-weight:800; color:#0f172a; }
+        .bc-group-meta { font-size:12px; color:#64748b; }
+        .bc-group-meta .local { color:#2E7D6B; font-weight:700; }
+        .bc-more { font-size:12.5px; color:#64748b; padding:8px 2px 2px; font-style:italic; }
+        @media (prefers-color-scheme: dark) { .bc-group-silo { color:#f1f5f9; } }
+    </style>
 
-    <div class="bc-list">
-        @forelse ($candidates as $c)
-            <div class="bc-card" wire:key="cand-{{ $c['id'] }}">
-                {{-- Top line: silo · source · classification pill · date --}}
-                <div class="bc-top">
-                    @if (! empty($c['silo'])) <span class="bc-chip silo">{{ $c['silo'] }}</span> @endif
-                    @if (! empty($c['source'])) <span class="bc-chip source">{{ $c['source'] }}</span> @endif
-                    @if (! empty($c['classification'])) <span class="bc-chip pill-{{ $c['classification_kind'] }}">{{ $c['classification'] }}</span> @endif
-                    @if (! empty($c['date'])) <span class="bc-chip date">🗓 {{ $c['date'] }}</span> @endif
-                </div>
+    @php $groups = $this->candidateGroups; @endphp
 
-                {{-- Title --}}
-                <p class="bc-title">{{ $c['title'] ?: 'Untitled candidate' }}</p>
-
-                {{-- Longtail keyword (+ provenance flags) --}}
-                @if (! empty($c['keyword']) || ($c['directed'] ?? false) || ($c['revived'] ?? false))
-                    <div class="bc-kw">
-                        @if (! empty($c['keyword'])) <span class="k">Target:</span> {{ $c['keyword'] }} @endif
-                        @if ($c['directed'] ?? false) <span class="bc-tag directed">Directed</span> @endif
-                        @if ($c['revived'] ?? false) <span class="bc-tag revived">Revival · {{ number_format($c['revived_impressions'] ?? 0) }} impr</span> @endif
-                    </div>
-                @endif
-
-                {{-- Excerpt --}}
-                @if (! empty($c['excerpt'])) <div class="bc-excerpt">{{ $c['excerpt'] }}</div> @endif
-
-                {{-- Footer: Generate / Dismiss + prominent score --}}
-                <div class="bc-foot">
-                    <div class="bc-actions">
-                        @if ($this->can(\App\Security\Capability::GenerateContent))
-                            <button class="bc-btn primary" wire:click="promote('{{ $c['id'] }}')" wire:loading.attr="disabled" wire:target="promote('{{ $c['id'] }}')">
-                                <span wire:loading.remove wire:target="promote('{{ $c['id'] }}')">Generate</span>
-                                <span wire:loading wire:target="promote('{{ $c['id'] }}')">Working…</span>
-                            </button>
-                        @endif
-                        @if ($this->can(\App\Security\Capability::EditContent))
-                            <button class="bc-btn" wire:click="dismiss('{{ $c['id'] }}')" wire:confirm="Dismiss this candidate?">Dismiss</button>
-                        @endif
-                    </div>
-                    @if (($c['score'] ?? null) !== null)
-                        @php $s = (float) $c['score']; @endphp
-                        <div class="bc-score {{ $s >= 0.7 ? '' : ($s >= 0.4 ? 'mid' : 'low') }}">
-                            <span class="n">{{ number_format($s, 2) }}</span>
-                            <span class="l">Score</span>
-                        </div>
-                    @endif
-                </div>
+    @forelse ($groups as $g)
+        <div class="bc-group" wire:key="grp-{{ $loop->index }}">
+            <div class="bc-group-head">
+                <span class="bc-group-silo">{{ $g['silo'] }}</span>
+                <span class="bc-group-meta">
+                    {{ $g['total'] }} {{ \Illuminate\Support\Str::plural('candidate', $g['total']) }}
+                    @if ($g['local'] > 0) · <span class="local">{{ $g['local'] }} local</span> @endif
+                </span>
             </div>
-        @empty
-            <div class="bc-empty">No candidates waiting. New ones arrive as feeds are ingested.</div>
-        @endforelse
-    </div>
+
+            <div class="bc-list">
+                @foreach ($g['visible'] as $c)
+                    @include('filament.console.partials.blog-candidate-card', ['c' => $c])
+                @endforeach
+            </div>
+
+            @if ($g['overflow'] > 0)
+                <div class="bc-more">+{{ $g['overflow'] }} more in this silo — narrow with the score filter or open the silo to triage them.</div>
+            @endif
+        </div>
+    @empty
+        <div class="bc-empty">No candidates waiting. New ones arrive as feeds are ingested.</div>
+    @endforelse
 </x-filament-panels::page>

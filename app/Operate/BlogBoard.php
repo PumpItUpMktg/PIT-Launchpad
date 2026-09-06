@@ -73,6 +73,8 @@ class BlogBoard
                 'target_page' => $c->matchedSilo?->pillarContent?->title,
                 'source' => $c->target_keyword_id !== null ? 'directed' : (string) ($c->source_name ?? 'feed'),
                 'silo' => $c->matchedSilo?->name,
+                // §6a two-axis classification (PR 4): scope drives the silo→local grouping on the board.
+                'scope' => $c->meta['scope'] ?? null,
                 // The article's real publish date (source pubDate) when captured at ingest, else the ingest date.
                 'date' => $c->meta['source_published_at'] ?? $c->created_at?->toDateString(),
                 'classification' => $this->classificationOf($c)?->label(),
@@ -85,6 +87,38 @@ class BlogBoard
                 'revived_impressions' => $this->revivedImpressions($c),
                 'revived_urls' => count($this->revivedUrls($c)),
             ])
+            ->all();
+    }
+
+    /**
+     * Group flat candidate rows (from {@see candidates()}) by silo, then LOCAL-FIRST within each silo, and
+     * cap the visible rows per group — so a firehose silo shows its top few with a "+N more" tail instead of
+     * a wall of cards. Pure over the row arrays (the page filters by score first, then groups). Groups are
+     * ordered biggest-backlog-first. A row's incoming score/priority order is preserved within each scope
+     * (a stable sort on the local-first key). `$cap` of 0 shows every row.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array{silo: string, total: int, local: int, visible: list<array<string, mixed>>, overflow: int}>
+     */
+    public function group(array $rows, int $cap = 8): array
+    {
+        return collect($rows)
+            ->groupBy(fn (array $r): string => is_string($r['silo'] ?? null) && $r['silo'] !== '' ? $r['silo'] : '— No silo —')
+            ->map(function ($group, string $silo) use ($cap): array {
+                // Stable sort (PHP 8 sort is stable): local before general/unknown, score order kept within each.
+                $ordered = $group->sortBy(fn (array $r): int => ($r['scope'] ?? null) === 'local' ? 0 : 1)->values();
+                $visible = $cap > 0 ? $ordered->take($cap) : $ordered;
+
+                return [
+                    'silo' => $silo,
+                    'total' => $ordered->count(),
+                    'local' => $ordered->where('scope', 'local')->count(),
+                    'visible' => $visible->all(),
+                    'overflow' => max(0, $ordered->count() - $visible->count()),
+                ];
+            })
+            ->sortByDesc('total')
+            ->values()
             ->all();
     }
 
