@@ -127,12 +127,20 @@ class JobMetrics
         }
 
         $path = $job->publicPath();
-        $sessions = $cacheOnly ? $this->traffic->sessionsCached($site, $path) : $this->traffic->sessions($site, $path);
 
-        if ($sessions === null) {
-            return ['sessions' => null, 'pending' => $cacheOnly ? self::REFRESHING : 'Collecting'];
+        if (! $cacheOnly) {
+            $sessions = $this->traffic->sessions($site, $path);
+
+            return ['sessions' => $sessions, 'pending' => $sessions === null ? 'Collecting' : null];
         }
 
-        return ['sessions' => $sessions, 'pending' => null];
+        // Cache-only render: a warmed-but-empty page reads "No traffic yet"; only a page the warm hasn't
+        // reached reads "Refreshing…" (a metric that never resolves must not look identical to a broken one).
+        $state = $this->traffic->sessionsCachedState($site, $path);
+        if ($state['sessions'] !== null) {
+            return ['sessions' => $state['sessions'], 'pending' => null];
+        }
+
+        return ['sessions' => null, 'pending' => $state['warmed'] ? 'No traffic yet' : self::REFRESHING];
     }
 }

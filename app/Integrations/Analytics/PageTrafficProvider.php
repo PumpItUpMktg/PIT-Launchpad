@@ -22,9 +22,20 @@ interface PageTrafficProvider
      * The CACHE-ONLY twin of {@see sessions()} — the warmed session count if present, else null WITHOUT
      * ever hitting GA4. For a render path that must do zero outbound HTTP: {@see WarmGa4Pages}
      * populates the cache off-request (weekly), and a cache-miss here renders an honest "Refreshing…"
-     * instead of fetching inline. Null covers both "not warmed yet" and "warmed with no data".
+     * instead of fetching inline. Null covers both "not warmed yet" and "warmed with no data" — use
+     * {@see sessionsCachedState()} when the render must tell those two apart.
      */
     public function sessionsCached(Site $site, string $path, int $days = 28): ?int;
+
+    /**
+     * The cache-only read WITH the warmed/not-warmed distinction {@see sessionsCached()} collapses.
+     * `warmed` is true when the cache holds an entry — a real count OR a warmed "no data" sentinel — and
+     * false on a genuine miss (never warmed). This lets a card show an honest terminal "No traffic yet"
+     * for a warmed-but-empty page instead of a permanent "Refreshing…" indistinguishable from a cold miss.
+     *
+     * @return array{sessions: ?int, warmed: bool}
+     */
+    public function sessionsCachedState(Site $site, string $path, int $days = 28): array;
 
     /**
      * FORCE-REFRESH the cached count: always fetch from GA4 and overwrite the cache entry (never a

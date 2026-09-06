@@ -107,7 +107,7 @@ it('cacheOnly render reads the WARMED cache only — never the fetching pageStat
 
     $traffic = Mockery::mock(PageTrafficProvider::class);
     $traffic->shouldReceive('connected')->andReturnTrue();
-    $traffic->shouldReceive('sessionsCached')->with(Mockery::any(), $path)->andReturn(7);
+    $traffic->shouldReceive('sessionsCachedState')->with(Mockery::any(), $path)->andReturn(['sessions' => 7, 'warmed' => true]);
     $traffic->shouldNotReceive('sessions');
 
     $m = (new JobMetrics($gsc, $idx, $traffic))->for($job, cacheOnly: true);
@@ -132,7 +132,7 @@ it('cacheOnly render shows "Refreshing…" (not "Collecting") when connected but
 
     $traffic = Mockery::mock(PageTrafficProvider::class);
     $traffic->shouldReceive('connected')->andReturnTrue();
-    $traffic->shouldReceive('sessionsCached')->andReturnNull(); // cache miss
+    $traffic->shouldReceive('sessionsCachedState')->andReturn(['sessions' => null, 'warmed' => false]); // cold miss → never warmed
     $traffic->shouldNotReceive('sessions');
 
     $m = (new JobMetrics($gsc, $idx, $traffic))->for($job, cacheOnly: true);
@@ -158,7 +158,7 @@ it('the hourly warm (cacheOnly:false, liveTraffic:false) fetches GSC live but re
 
     $traffic = Mockery::mock(PageTrafficProvider::class);
     $traffic->shouldReceive('connected')->andReturnTrue();
-    $traffic->shouldReceive('sessionsCached')->andReturn(9); // GA4 cache-only — NO live fetch
+    $traffic->shouldReceive('sessionsCachedState')->andReturn(['sessions' => 9, 'warmed' => true]); // GA4 cache-only — NO live fetch
     $traffic->shouldNotReceive('sessions');
 
     $m = (new JobMetrics($gsc, $idx, $traffic))->for($job, cacheOnly: false, liveTraffic: false);

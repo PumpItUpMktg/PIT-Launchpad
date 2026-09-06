@@ -218,9 +218,11 @@ return [
         // Site-level GA4 spine (Ga4SiteTraffic → metric_snapshots) cache TTL. Default 6h.
         'ga4_cache_ttl' => (int) env('GOOGLE_GA4_CACHE_TTL', 21600),
         // Per-page GA4 session totals (Ga4PageTraffic) are read cache-only on render and refreshed WEEKLY
-        // off-request by WarmGa4Pages, so this TTL must span more than a week — otherwise the render's
-        // cache-only read goes cold between weekly warms. Default 8 days.
-        'ga4_page_cache_ttl' => (int) env('GOOGLE_GA4_PAGE_CACHE_TTL', 691200),
+        // off-request by WarmGa4Pages, so this TTL MUST exceed the warm interval — otherwise the render's
+        // cache-only read goes cold between warms and every card reads a permanent "Refreshing…". Default
+        // 14 days = TWO warm intervals, so a single missed weekly pass still leaves the cache warm (an 8-day
+        // TTL left only a 1-day margin). The TtlExceedsWarmIntervalTest guards this invariant.
+        'ga4_page_cache_ttl' => (int) env('GOOGLE_GA4_PAGE_CACHE_TTL', 1209600),
         'ga4_admin_base_url' => env('GOOGLE_GA4_ADMIN_BASE_URL', 'https://analyticsadmin.googleapis.com/v1beta'),
         'timeout' => (int) env('GOOGLE_TIMEOUT', 30),
     ],
