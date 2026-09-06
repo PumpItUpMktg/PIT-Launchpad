@@ -14,7 +14,7 @@ function dirtyMarket(Site $s, string $name, ?string $geoId = null): Market
     return Market::factory()->create(['site_id' => $s->id, 'name' => $name, 'region' => 'MD', 'tier' => 'coverage', 'geo_id' => $geoId]);
 }
 
-function townPage(Site $s, Market $m, string $title, string $slug, ?int $wpPostId = null): Content
+function renamerTownPage(Site $s, Market $m, string $title, string $slug, ?int $wpPostId = null): Content
 {
     return Content::factory()->create([
         'site_id' => $s->id, 'page_type' => PageType::Location, 'market_id' => $m->id,
@@ -27,7 +27,7 @@ it('plans a rename for a dirty market, its CoverageArea, and its pinned town pag
     // CoverageArea stores clean (its write mutator strips the artifact); the market predates the mutator.
     $area = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD']);
     $market = dirtyMarket($site, '4, Marshall', '2451234');
-    townPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
+    renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
 
     $plan = app(MarketArtifactRenamer::class)->plan($site);
 
@@ -53,7 +53,7 @@ it('applies the cascade — market, CoverageArea, and page title all land on the
     $area = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD']);
     CoverageArea::withoutGlobalScopes()->whereKey($area->id)->update(['name' => '4, Marshall']); // simulate a legacy dirty row
     $market = dirtyMarket($site, '4, Marshall', '2451234');
-    $page = townPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
+    $page = renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
 
     $renamed = app(MarketArtifactRenamer::class)->apply($site);
 
@@ -67,7 +67,7 @@ it('leaves the slug untouched — LocationNesting regenerates it from the correc
     $site = Site::factory()->create();
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD']);
     $market = dirtyMarket($site, '4, Marshall', '2451234');
-    $page = townPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
+    $page = renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
 
     app(MarketArtifactRenamer::class)->apply($site);
 
@@ -78,7 +78,7 @@ it('is a no-op for the next build — projectTerritories re-resolves the renamed
     $site = Site::factory()->create();
     $area = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD', 'page_selected' => true]);
     $market = dirtyMarket($site, '4, Marshall', '2451234');
-    townPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
+    renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
 
     app(MarketArtifactRenamer::class)->apply($site);
     $countAfterRename = Market::withoutGlobalScopes()->where('site_id', $site->id)->count();
@@ -112,7 +112,7 @@ it('flags a published page (its slug becomes a live-URL change on the next build
     $site = Site::factory()->create();
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD']);
     $market = dirtyMarket($site, '4, Marshall', '2451234');
-    townPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md', wpPostId: 8821);
+    renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md', wpPostId: 8821);
 
     $plan = app(MarketArtifactRenamer::class)->plan($site);
 
