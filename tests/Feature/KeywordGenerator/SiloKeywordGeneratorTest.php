@@ -49,6 +49,20 @@ it('generates deduped, silo-pinned keyword candidates from each silo\'s seeds, d
         ->and($rows->pluck('query'))->toContain('sump pump cost', 'sump pit installation');
 });
 
+it('preview reports what discovery would create per silo, writing nothing', function () {
+    $site = Site::factory()->create();
+    skgSilo($site, 'Sump Pumps', ['sump pump', 'sump pit']);
+
+    $preview = app(SiloKeywordGenerator::class)->preview($site);
+
+    // Same selection as generate() (2 seeds × 2 non-geo ideas = 4), but zero rows written.
+    expect(Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0)
+        ->and($preview)->toHaveCount(1)
+        ->and($preview[0]['silo'])->toBe('Sump Pumps')
+        ->and($preview[0]['would_create'])->toBe(4)
+        ->and($preview[0]['samples'])->toContain('sump pump cost');
+});
+
 it('does not duplicate a keyword the site already has', function () {
     $site = Site::factory()->create();
     $silo = skgSilo($site, 'Sump Pumps', ['sump pump']);
