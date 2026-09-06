@@ -100,6 +100,30 @@ it('marks a task failed (and retains the error) when collection errors — never
         ->and($task->error)->not->toBeNull();
 });
 
+it('marks a 40102 task no_results (not failed) so the dead query is never re-posted', function () {
+    $task = SerpTask::factory()->create([
+        'function' => 'organic',
+        'task_id' => 'task-40102',
+        'cache_key' => organicCacheKey('Kitchen Plumbing'),
+        'query' => 'Kitchen Plumbing', // a silo/service label — DataForSEO runs it, Google returns nothing
+        'state' => SerpTaskState::Pending,
+    ]);
+
+    HttpFacade::fake([
+        '*/serp/google/organic/tasks_ready' => HttpFacade::response([
+            'status_code' => 20000,
+            'tasks' => [['result' => [['id' => 'task-40102']]]],
+        ]),
+        '*/serp/google/organic/task_get/advanced/*' => HttpFacade::response(dfsEnvelope([], taskStatus: 40102)),
+    ]);
+
+    (new IngestSerpTasks)->handle(app(DataForSeoClient::class), app(Cache::class));
+
+    // Terminal no_results, distinct from failed — the query isn't searchable, not a broken pull.
+    expect($task->refresh()->state)->toBe(SerpTaskState::NoResults)
+        ->and($task->error)->toContain('40102');
+});
+
 it('expires a stale pending task that never produced a result', function () {
     SerpTask::factory()->create([
         'function' => 'organic',
