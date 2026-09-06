@@ -762,6 +762,13 @@ return [
         // work a few per day. Per silo — a saturated silo pauses while the rest keep ingesting.
         // 0 disables the gate.
         'candidate_backpressure_per_silo' => (int) env('LAUNCHPAD_CANDIDATE_BACKPRESSURE', 10),
+
+        // Topical-candidate expiry (days). A TOPICAL hook (meta.shelf_life=topical) decays; once its article
+        // is older than this it is no longer worth drafting, so the daily launchpad:expire-candidates sweep
+        // rejects it (reason=expired) to keep the review backlog to live, actionable work. Aged from the
+        // article's publish date (meta.source_published_at) when known, else the ingest date. Evergreen
+        // candidates never expire.
+        'topical_expiry_days' => (int) env('LAUNCHPAD_TOPICAL_EXPIRY_DAYS', 30),
         'allow' => [
             'flood', 'flooding', 'flooded', 'floodwater', 'flash flood', 'groundwater', 'ground water',
             'storm', 'stormwater', 'hurricane', 'nor\'easter', 'heavy rain', 'rainfall', 'snowmelt',
