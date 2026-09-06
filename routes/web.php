@@ -10,6 +10,13 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// Legacy per-family Live boards (retired at the card consolidation, PR #769) → their replacement Pages
+// boards. Kept as redirects, not live pages (nav-cutover rule 10): an old bookmark lands on the right board
+// instead of 404-ing, and a retired route can't quietly accumulate stale references or stay URL-reachable.
+Route::redirect('/admin/live-core-pages', '/admin/operate/pages/core');
+Route::redirect('/admin/live-services', '/admin/operate/pages/services');
+Route::redirect('/admin/live-locations', '/admin/operate/pages/locations');
+
 // Review Capture (§6) — the public, no-auth review submission surface. Reached only by a single-use signed
 // token that carries the tenant (bound from the token, not a session). Rate limited — this is the only new
 // per-route throttle in the app; anchor is the client IP + token path.
