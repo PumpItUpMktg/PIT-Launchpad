@@ -259,6 +259,15 @@ return [
         'fetch_timeout' => (int) env('LAUNCHPAD_FEED_TIMEOUT', 30),
         'fetch_max_items' => (int) env('LAUNCHPAD_FEED_MAX_ITEMS', 100),
 
+        // Dead-feed pruning (launchpad:prune-dead-feeds). The per-keyword×market feed cross-product mints
+        // thousands of feeds Google News has no results for; most of every run is spent fetching feeds that
+        // produce nothing. A feed is DEAD when it has been fetched but never returned an item and has had a
+        // fair chance (older than prune_grace_days — days-since-creation is the retroactive proxy for "N
+        // fetch attempts" on the hourly schedule); SILENT when it once produced but nothing in
+        // prune_silence_days. Both are DISABLED (never deleted) so a prune is reversible.
+        'prune_grace_days' => (int) env('LAUNCHPAD_FEED_PRUNE_GRACE_DAYS', 14),
+        'prune_silence_days' => (int) env('LAUNCHPAD_FEED_PRUNE_SILENCE_DAYS', 30),
+
         // Per-run wall-clock budget (seconds) for the hourly ingest. The run processes feeds stalest-first
         // (last_fetched_at asc) across all tenants until this is spent, then stops cleanly — the untouched
         // feeds lead the next tick. Kept well under the hourly beat so a large keyword×geo fan-out can't
