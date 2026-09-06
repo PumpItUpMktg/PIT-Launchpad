@@ -12,6 +12,7 @@ use App\Operator\ActiveTenant;
 use App\Operator\Coverage\RankingStandings;
 use App\Ranking\OrganicMovers;
 use Filament\Facades\Filament;
+use Illuminate\Support\Carbon;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -117,6 +118,41 @@ it('scopes rankings to the locked tenant', function () {
     rankSnap($b, $kb, 5, now());
 
     expect(app(RankingStandings::class)->for($a->id)['summary']['tracked'])->toBe(1);
+});
+
+it('exposes last_captured_at — null when never checked, the newest capture when present', function () {
+    $site = Site::factory()->create();
+    expect(app(RankingStandings::class)->for($site->id)['last_captured_at'])->toBeNull();
+
+    $k = Keyword::factory()->create(['site_id' => $site->id]);
+    rankSnap($site, $k, 5, now()->subDays(2));
+
+    $last = app(RankingStandings::class)->for($site->id)['last_captured_at'];
+    expect($last)->not->toBeNull()
+        ->and(Carbon::parse($last)->isSameDay(now()->subDays(2)))->toBeTrue();
+});
+
+it('renders an honest never-checked freshness stamp when nothing has been sampled, not a blank board', function () {
+    $site = Site::factory()->create();
+    Keyword::factory()->create(['site_id' => $site->id]); // a keyword exists, but no snapshots captured
+    app(ActiveTenant::class)->set($site->id);
+
+    $html = Livewire::test(RankingsBoard::class)->assertOk()->html();
+
+    expect($html)->toContain('never checked')
+        ->and($html)->toContain('data-fresh-state="never_checked"');
+});
+
+it('renders a dated freshness stamp once positions have been captured', function () {
+    $site = Site::factory()->create();
+    $k = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump install hoboken']);
+    rankSnap($site, $k, 25, now()->subMonth());
+    rankSnap($site, $k, 7, now()->subDay());
+    app(ActiveTenant::class)->set($site->id);
+
+    $html = Livewire::test(RankingsBoard::class)->assertOk()->html();
+
+    expect($html)->toContain('Rankings as of'); // dated stamp, not "never checked"
 });
 
 it('renders tenant-locked with movers and no per-page site picker', function () {

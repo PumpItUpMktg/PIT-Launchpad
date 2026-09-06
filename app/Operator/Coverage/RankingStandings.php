@@ -29,14 +29,21 @@ class RankingStandings
      *     summary: array{tracked: int, improved: int, newly_ranked: int, cannibalized: int, markets_tracked: int},
      *     movers: list<array{keyword_id: string, query: string, from: int|null, to: int|null, delta: int|null, improved: bool, is_new: bool}>,
      *     cannibalized: list<array{keyword_id: string, query: string, urls: int}>,
-     *     local: list<array{market_id: string|null, market_name: string, keywords: int, avg_rank: float|null, in_top3: int}>
+     *     local: list<array{market_id: string|null, market_name: string, keywords: int, avg_rank: float|null, in_top3: int}>,
+     *     last_captured_at: string|null
      * }
      */
     public function for(?string $siteId): array
     {
         if ($siteId === null) {
-            return ['summary' => ['tracked' => 0, 'improved' => 0, 'newly_ranked' => 0, 'cannibalized' => 0, 'markets_tracked' => 0], 'movers' => [], 'cannibalized' => [], 'local' => []];
+            return ['summary' => ['tracked' => 0, 'improved' => 0, 'newly_ranked' => 0, 'cannibalized' => 0, 'markets_tracked' => 0], 'movers' => [], 'cannibalized' => [], 'local' => [], 'last_captured_at' => null];
         }
+
+        // The freshness anchor: the newest capture across BOTH lanes. Null → never checked (a real state,
+        // rendered as a quiet "never checked" stamp), distinct from "checked, nothing moved".
+        $lastCaptured = PositionSnapshot::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->max('captured_at');
 
         // Organic snapshots, newest-first, grouped per keyword — the source for tracked-count + cannibalization.
         $organic = PositionSnapshot::withoutGlobalScope(SiteScope::class)
@@ -84,6 +91,7 @@ class RankingStandings
             'movers' => $movers,
             'cannibalized' => $cannibalized,
             'local' => $local,
+            'last_captured_at' => $lastCaptured !== null ? (string) $lastCaptured : null,
         ];
     }
 

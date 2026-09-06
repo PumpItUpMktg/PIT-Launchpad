@@ -6,6 +6,7 @@
 
     @php($board = $this->board)
     @php($s = $board['summary'])
+    @php($rankStamp = $board['last_captured_at'] ? \Illuminate\Support\Carbon::parse($board['last_captured_at']) : null)
 
     <style>
         .rk-stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
@@ -36,10 +37,17 @@
             Pick a working tenant from the topbar to see its rankings.
         </x-lp.empty>
     @elseif ($s['tracked'] === 0)
+        {{-- Panel freshness: an honest "never checked" (a real state, quiet) rather than a blank board. --}}
+        <div style="margin-bottom:12px">
+            <x-lp.freshness-stamp :last-checked="$rankStamp" :interval="\App\Support\Cadence::intervalSeconds('serp')" noun="rankings" />
+        </div>
         <x-lp.empty title="No tracked positions yet" action="Open Keywords" :href="\App\Filament\Resources\KeywordResource::getUrl('index')">
             Rankings appear once the position tracker has captured snapshots for this tenant's keywords. Nothing has been sampled yet.
         </x-lp.empty>
     @else
+        <div style="margin-bottom:12px">
+            <x-lp.freshness-stamp :last-checked="$rankStamp" :interval="\App\Support\Cadence::intervalSeconds('serp')" noun="rankings" />
+        </div>
         <div class="rk-stats">
             <div class="rk-stat"><div class="n">{{ number_format($s['tracked']) }}</div><div class="l">Keywords tracked</div></div>
             <div class="rk-stat"><div class="n good">{{ number_format($s['improved']) }}</div><div class="l">Improved</div></div>
