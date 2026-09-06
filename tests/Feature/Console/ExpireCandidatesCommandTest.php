@@ -1,8 +1,10 @@
 <?php
 
+use App\ContentEngine\BlogQueue\ManualCandidateIntake;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
+use App\Models\Silo;
 use App\Models\Site;
 
 /** A candidate Content with a shelf_life + an article publish date N days ago (null date → uses created_at). */
@@ -85,6 +87,19 @@ it('never auto-rejects a drafted candidate', function () {
         ->expectsOutputToContain('No stale topical candidates');
 
     expect($drafted->fresh()->status)->toBe(ContentStatus::InReview);
+});
+
+it('expires a manual candidate by its created_at (no article date)', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $manual = app(ManualCandidateIntake::class)->create($site, 'Idea nobody wrote', $silo->id, null);
+    $manual->forceFill(['created_at' => now()->subDays(45)])->save();
+
+    $this->artisan('launchpad:expire-candidates --execute')->assertSuccessful();
+
+    $fresh = $manual->fresh();
+    expect($fresh->status)->toBe(ContentStatus::Rejected)
+        ->and($fresh->reject_reason)->toBe('expired');
 });
 
 it('honors a custom --days window', function () {

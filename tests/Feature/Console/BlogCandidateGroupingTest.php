@@ -46,6 +46,23 @@ it('caps the visible rows per group and reports the overflow', function () {
         ->and(array_column($groups[0]['visible'], 'id'))->toBe(['1', '2']); // local first, then next by order
 });
 
+it('shows manual candidates cap-exempt (always visible, beyond the cap)', function () {
+    $rows = [
+        grpRow('m', 'Sump Pumps', 'local') + ['manual' => true],
+        grpRow('1', 'Sump Pumps', 'general'),
+        grpRow('2', 'Sump Pumps', 'general'),
+        grpRow('3', 'Sump Pumps', 'general'),
+    ];
+
+    $groups = app(BlogBoard::class)->group($rows, cap: 1);
+
+    $ids = array_column($groups[0]['visible'], 'id');
+    expect($ids)->toContain('m')          // the manual card is always shown…
+        ->and(count($ids))->toBe(2)        // …plus one non-manual under the cap of 1
+        ->and($groups[0]['total'])->toBe(4)
+        ->and($groups[0]['overflow'])->toBe(2); // 3 non-manual − 1 cap
+});
+
 it('cap 0 shows every row (no overflow)', function () {
     $rows = [grpRow('1', 'A', 'local'), grpRow('2', 'A', 'general'), grpRow('3', 'A', 'general')];
 

@@ -57,6 +57,45 @@ it('groups candidates by silo (local-first) on the board', function () {
         ->and($groups[0]['visible'][0]['title'])->toBe('Local story'); // local first
 });
 
+it('adds a hand-typed manual candidate to the board', function () {
+    $super = User::factory()->create();
+    $this->actingAs($super);
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+
+    $page = new BlogCandidates;
+    $page->siteId = $site->id;
+    $page->manualTitle = 'Polk high-water-table job writeup';
+    $page->manualSiloId = $silo->id;
+    $page->manualTown = 'Polk';
+    $page->addManual();
+
+    $c = Content::withoutGlobalScopes()->where('site_id', $site->id)->where('source_name', 'manual')->first();
+    expect($c)->not->toBeNull()
+        ->and($c->status)->toBe(ContentStatus::Candidate)
+        ->and($c->meta['scope'])->toBe('local')
+        ->and($c->meta['shelf_life'])->toBe('topical');
+
+    // Form reset, and it shows on the board.
+    expect($page->manualTitle)->toBe('')
+        ->and(collect($page->getCandidatesProperty())->pluck('id'))->toContain($c->id);
+});
+
+it('will not add a manual candidate under a silo outside the active site', function () {
+    $super = User::factory()->create();
+    $this->actingAs($super);
+    $site = Site::factory()->create();
+    $foreignSilo = Silo::factory()->create(['site_id' => Site::factory()->create()->id]);
+
+    $page = new BlogCandidates;
+    $page->siteId = $site->id;
+    $page->manualTitle = 'Cross-tenant attempt';
+    $page->manualSiloId = $foreignSilo->id;
+    $page->addManual();
+
+    expect(Content::withoutGlobalScopes()->where('source_name', 'manual')->count())->toBe(0);
+});
+
 it('dismisses a candidate out of the funnel', function () {
     $super = User::factory()->create();
     $this->actingAs($super);

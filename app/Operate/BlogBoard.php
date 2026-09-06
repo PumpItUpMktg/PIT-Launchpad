@@ -75,6 +75,8 @@ class BlogBoard
                 'silo' => $c->matchedSilo?->name,
                 // §6a two-axis classification (PR 4): scope drives the silo→local grouping on the board.
                 'scope' => $c->meta['scope'] ?? null,
+                // A hand-typed operator idea (PR 7) — shown cap-exempt in the group (never hidden by the cap).
+                'manual' => $c->source_name === 'manual',
                 // The article's real publish date (source pubDate) when captured at ingest, else the ingest date.
                 'date' => $c->meta['source_published_at'] ?? $c->created_at?->toDateString(),
                 'classification' => $this->classificationOf($c)?->label(),
@@ -107,14 +109,19 @@ class BlogBoard
             ->map(function ($group, string $silo) use ($cap): array {
                 // Stable sort (PHP 8 sort is stable): local before general/unknown, score order kept within each.
                 $ordered = $group->sortBy(fn (array $r): int => ($r['scope'] ?? null) === 'local' ? 0 : 1)->values();
-                $visible = $cap > 0 ? $ordered->take($cap) : $ordered;
+
+                // Manual (hand-typed) candidates are CAP-EXEMPT — an operator's explicit ask is never hidden
+                // behind a silo's ingestion backlog. Show all of them, then fill the rest up to the cap.
+                $manual = $ordered->filter(fn (array $r): bool => (bool) ($r['manual'] ?? false))->values();
+                $rest = $ordered->reject(fn (array $r): bool => (bool) ($r['manual'] ?? false))->values();
+                $visibleRest = $cap > 0 ? $rest->take($cap) : $rest;
 
                 return [
                     'silo' => $silo,
                     'total' => $ordered->count(),
                     'local' => $ordered->where('scope', 'local')->count(),
-                    'visible' => $visible->all(),
-                    'overflow' => max(0, $ordered->count() - $visible->count()),
+                    'visible' => $manual->concat($visibleRest)->all(),
+                    'overflow' => max(0, $rest->count() - $visibleRest->count()),
                 ];
             })
             ->sortByDesc('total')
