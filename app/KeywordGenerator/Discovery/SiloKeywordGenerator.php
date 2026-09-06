@@ -2,6 +2,7 @@
 
 namespace App\KeywordGenerator\Discovery;
 
+use App\Integrations\DataForSeo\KeywordIdea;
 use App\Integrations\Keywords\KeywordIdeaProvider;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\Models\Keyword;
@@ -40,9 +41,62 @@ class SiloKeywordGenerator
      */
     public function generate(Site $site, int $seedsPerSilo = self::SEEDS_PER_SILO, int $ideasPerSeed = self::IDEAS_PER_SEED): int
     {
+        $created = 0;
+        foreach ($this->collect($site, $seedsPerSilo, $ideasPerSeed) as $plan) {
+            foreach ($plan['new'] as $candidate) {
+                Keyword::withoutGlobalScope(SiteScope::class)->forceCreate([
+                    'site_id' => $site->id,
+                    'silo_id' => $plan['silo']->id,
+                    'query' => $candidate['query'],
+                    'volume' => $candidate['idea']->volume,
+                    'difficulty' => $candidate['idea']->difficulty,
+                    'source' => 'generated',
+                    'status' => 'candidate',
+                ]);
+                $created++;
+            }
+        }
+
+        return $created;
+    }
+
+    /**
+     * DRY-RUN preview: run the exact same idea pull + dedup as {@see generate()} but WRITE NOTHING —
+     * report what discovery WOULD create per silo. The go/no-go check for reviving generation: it proves
+     * (or disproves) that the idea provider actually returns ideas, without persisting or spending on
+     * task submission (idea lookups are cheap read calls). Sample queries are included for eyeballing.
+     *
+     * @return list<array{silo: string, silo_id: string, seeds: list<string>, would_create: int, samples: list<string>}>
+     */
+    public function preview(Site $site, int $seedsPerSilo = self::SEEDS_PER_SILO, int $ideasPerSeed = self::IDEAS_PER_SEED): array
+    {
+        $out = [];
+        foreach ($this->collect($site, $seedsPerSilo, $ideasPerSeed) as $plan) {
+            $queries = array_map(fn (array $c): string => $c['query'], $plan['new']);
+            $out[] = [
+                'silo' => (string) $plan['silo']->name,
+                'silo_id' => (string) $plan['silo']->id,
+                'seeds' => $this->seedsFor($plan['silo'], $seedsPerSilo),
+                'would_create' => count($plan['new']),
+                'samples' => array_slice($queries, 0, 5),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * The shared core: for each silo, pull ideas from its seeds and keep the NEW, non-geo, deduped ones
+     * (deduped against the site's existing keywords AND across silos within this run — first silo wins).
+     * Persist-free, so both {@see generate()} and {@see preview()} see identical selection.
+     *
+     * @return list<array{silo: Silo, new: list<array{query: string, idea: KeywordIdea}>}>
+     */
+    private function collect(Site $site, int $seedsPerSilo, int $ideasPerSeed): array
+    {
         $silos = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
         if ($silos->isEmpty()) {
-            return 0;
+            return [];
         }
 
         // Dedup against everything the site already has (case-insensitive query), and within this run.
@@ -53,8 +107,9 @@ class SiloKeywordGenerator
             ->flip()
             ->all();
 
-        $created = 0;
+        $out = [];
         foreach ($silos as $silo) {
+            $new = [];
             foreach ($this->seedsFor($silo, $seedsPerSilo) as $seed) {
                 foreach ($this->ideas->ideas($site, $seed, $ideasPerSeed) as $idea) {
                     $query = $this->norm($idea->keyword);
@@ -62,22 +117,13 @@ class SiloKeywordGenerator
                         continue;
                     }
                     $seen[$query] = true;
-
-                    Keyword::withoutGlobalScope(SiteScope::class)->forceCreate([
-                        'site_id' => $site->id,
-                        'silo_id' => $silo->id,
-                        'query' => $query,
-                        'volume' => $idea->volume,
-                        'difficulty' => $idea->difficulty,
-                        'source' => 'generated',
-                        'status' => 'candidate',
-                    ]);
-                    $created++;
+                    $new[] = ['query' => $query, 'idea' => $idea];
                 }
             }
+            $out[] = ['silo' => $silo, 'new' => $new];
         }
 
-        return $created;
+        return $out;
     }
 
     /**
