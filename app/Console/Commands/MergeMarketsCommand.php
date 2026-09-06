@@ -67,7 +67,11 @@ class MergeMarketsCommand extends Command
 
                 if ($r['collision']) {
                     $grandCollisions++;
-                    $this->line("  · <fg=red>PAGE COLLISION</> geo_id {$r['geo_id']} — <comment>\"{$r['loser_name']}\"</comment> and <info>\"{$r['winner_name']}\"</info> both hold a PUBLISHED/drafted page for the same town ({$r['hard_collisions']} page(s)); merge REFUSED — resolve the live-page duplicate by hand (Operate → Locations, then launchpad:dedupe-town-pages) first.");
+                    $n = count($r['hard_collisions']);
+                    $this->line("  · <fg=red>PAGE COLLISION</> geo_id {$r['geo_id']} — <comment>\"{$r['loser_name']}\"</comment> and <info>\"{$r['winner_name']}\"</info> both hold a live/real page for {$n} same town(s); merge REFUSED — resolve the duplicate by hand (Operate → Locations, then launchpad:dedupe-town-pages) first.");
+                    foreach ($r['hard_collisions'] as $h) {
+                        $this->line("        <comment>{$h['title']}</comment> [{$h['reason']}] — loser index: <options=bold>{$h['loser_index']}</>  ·  survivor index: <options=bold>{$h['winner_index']}</>");
+                    }
 
                     continue;
                 }
@@ -78,6 +82,9 @@ class MergeMarketsCommand extends Command
                 $area = ($r['area_id'] !== null && $r['area_dirty']) ? ' + clean its CoverageArea name' : '';
                 $soft = $r['colliding_page_ids'] !== [] ? ' + soft-delete '.count($r['colliding_page_ids']).' empty duplicate town page(s)' : '';
                 $this->line("  · merge <comment>\"{$r['loser_name']}\"</comment> → <info>\"{$r['winner_name']}\"</info> (geo_id {$r['geo_id']}); reassign [{$deps}]{$area}{$soft}, then delete the duplicate.");
+                foreach ($r['soft_collisions'] as $s) {
+                    $this->line("        drop empty <comment>\"{$s['title']}\"</comment> (index: {$s['loser_index']}) — survivor keeps its page (index: {$s['winner_index']})");
+                }
             }
 
             if ($execute) {

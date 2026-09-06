@@ -6,6 +6,7 @@ use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Market;
+use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
@@ -119,23 +120,50 @@ it('soft-deletes an EMPTY duplicate town page rather than reassigning it into a 
     expect($abingdon)->toBe(1);
 });
 
-it('REFUSES the merge when both markets hold a PUBLISHED/drafted page for the same town', function () {
+it('REFUSES the merge on a live-page collision and reports the index verdict of BOTH sides', function () {
     $site = Site::factory()->create();
     $winner = mkt($site, 'Abingdon', '2402590048');
     $loser = mkt($site, '1, Abingdon', '2402590048');
 
     // Both Abingdon pages are PUBLISHED — taking one down is a human decision, so the merge must refuse.
-    Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $winner->id, 'title' => 'Abingdon, MD', 'slug' => 'abingdon-md', 'status' => 'published', 'wp_post_id' => 8821]);
+    $winnerPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $winner->id, 'title' => 'Abingdon, MD', 'slug' => 'abingdon-md', 'status' => 'published', 'wp_post_id' => 8821]);
     $loserPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $loser->id, 'title' => '1, Abingdon, MD', 'slug' => 'abingdon-md-2', 'status' => 'published', 'wp_post_id' => 9002]);
+
+    // The LOSER's page is indexed; the SURVIVOR's is not. "Winner" was picked by name cleanliness, so the
+    // report must surface both verdicts — discarding the loser here would lose ranking.
+    PageIndexState::create(['site_id' => $site->id, 'content_id' => $loserPage->id, 'url' => 'https://x/abingdon-md-2/', 'url_normalized' => '/abingdon-md-2', 'index_verdict' => 'PASS']);
+    PageIndexState::create(['site_id' => $site->id, 'content_id' => $winnerPage->id, 'url' => 'https://x/abingdon-md/', 'url_normalized' => '/abingdon-md', 'index_verdict' => 'NEUTRAL']);
 
     $plan = app(MarketMerger::class)->plan($site);
     expect($plan[0]['collision'])->toBeTrue()
-        ->and($plan[0]['hard_collisions'])->toBe(1);
+        ->and($plan[0]['hard_collisions'])->toHaveCount(1)
+        ->and($plan[0]['hard_collisions'][0]['reason'])->toBe('published')
+        ->and($plan[0]['hard_collisions'][0]['loser_index'])->toBe('indexed')
+        ->and($plan[0]['hard_collisions'][0]['winner_index'])->toContain('not indexed');
 
     // Refused: nothing merged, both markets and both pages remain.
     expect(app(MarketMerger::class)->apply($site))->toBe(0)
         ->and(Market::withoutGlobalScopes()->find($loser->id))->not->toBeNull()
-        ->and(Content::withoutGlobalScopes()->find($loserPage->id)->market_id)->toBe($loser->id);
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($loserPage->id)->market_id)->toBe($loser->id);
+});
+
+it('never soft-deletes a page that was already pushed to WP — an undrafted row with a wp_post_id is a HARD collision', function () {
+    $site = Site::factory()->create();
+    $winner = mkt($site, 'Abingdon', '2402590048');
+    $loser = mkt($site, '1, Abingdon', '2402590048');
+
+    Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $winner->id, 'title' => 'Abingdon, MD', 'slug' => 'abingdon-md', 'status' => 'published', 'wp_post_id' => 8821]);
+    // Undrafted (empty slot payload) and NOT "published" status — but it carries a wp_post_id from an earlier
+    // push, so it has a LIVE URL. Soft-deleting it would orphan that URL, so it must be HARD, never soft.
+    $loserPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $loser->id, 'title' => '1, Abingdon, MD', 'slug' => 'abingdon-md-2', 'status' => 'candidate', 'slot_payload' => [], 'wp_post_id' => 9100]);
+
+    $plan = app(MarketMerger::class)->plan($site);
+    expect($plan[0]['collision'])->toBeTrue()
+        ->and($plan[0]['colliding_page_ids'])->toBe([])                                    // NOT queued for soft-delete
+        ->and($plan[0]['hard_collisions'][0]['reason'])->toBe('pushed to WP (live URL)');
+
+    expect(app(MarketMerger::class)->apply($site))->toBe(0)                                 // refused
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($loserPage->id))->not->toBeNull(); // live page kept
 });
 
 it('scopes the merge to one site — never touches another tenant', function () {

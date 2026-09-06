@@ -11,6 +11,7 @@ use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Market;
+use App\Models\PageIndexState;
 use App\Models\PositionSnapshot;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -43,10 +44,12 @@ use Illuminate\Support\Facades\DB;
  * it accumulated its own copy of that town's pages). A blind reassign would leave the survivor with TWO pages
  * for one town — the very Buckingham-style duplicate this whole line of work is retiring, self-inflicted. So a
  * loser page whose (page_type, service, cleaned town key) matches a survivor page is NOT reassigned:
- *   - an EMPTY extra (unpublished, undrafted, never pushed to WP) is soft-deleted — the survivor keeps its
- *     canonical page (mirrors {@see DuplicateTownSweeper}'s conservative rule);
- *   - a PUBLISHED or drafted collision is a live/real page whose take-down is a human decision, so its
- *     presence flags the whole group COLLISION and refuses the merge (reported, never auto-removed).
+ *   - an EMPTY extra (unpublished, undrafted, AND never pushed to WP — no wp_post_id, so no live URL) is
+ *     soft-deleted — the survivor keeps its canonical page (mirrors {@see DuplicateTownSweeper}'s rule);
+ *   - a PUBLISHED, drafted, or already-pushed-to-WP collision is a live/real page whose take-down is a human
+ *     decision, so its presence flags the whole group COLLISION and refuses the merge (reported, never
+ *     auto-removed). The collision report shows the index verdict of BOTH pages, because the survivor was
+ *     chosen by name cleanliness, not by which page ranks — the operator must see what would be dropped.
  * The loser's non-colliding pages reassign as before (they are the survivor's only page for those towns).
  */
 final class MarketMerger
@@ -56,7 +59,9 @@ final class MarketMerger
      *   geo_id: string, ambiguous: bool, collision: bool, names: list<string>,
      *   winner_id: ?string, winner_name: ?string, loser_id: ?string, loser_name: ?string,
      *   area_id: ?string, area_dirty: bool,
-     *   colliding_page_ids: list<string>, page_collisions: int, hard_collisions: int,
+     *   colliding_page_ids: list<string>, page_collisions: int,
+     *   soft_collisions: list<array{loser_id:string,title:string,loser_index:string,winner_index:string}>,
+     *   hard_collisions: list<array{loser_id:string,winner_id:string,title:string,reason:string,loser_index:string,winner_index:string}>,
      *   dependents: array{keywords:int,content:int,snapshots:int,geo_prompts:int,services:int,proof:int,media:int}
      * }>
      */
@@ -83,7 +88,8 @@ final class MarketMerger
                     'names' => $group->map(fn (Market $m): string => (string) $m->name)->all(),
                     'winner_id' => null, 'winner_name' => null, 'loser_id' => null, 'loser_name' => null,
                     'area_id' => null, 'area_dirty' => false,
-                    'colliding_page_ids' => [], 'page_collisions' => 0, 'hard_collisions' => 0,
+                    'colliding_page_ids' => [], 'page_collisions' => 0,
+                    'soft_collisions' => [], 'hard_collisions' => [],
                     'dependents' => $this->zeroDeps(),
                 ];
 
@@ -95,13 +101,14 @@ final class MarketMerger
             foreach ($dirty as $loser) {
                 $collisions = $this->pageCollisions($site, (string) $winner->id, (string) $loser->id);
                 $rows[] = [
-                    'geo_id' => (string) $geoId, 'ambiguous' => false, 'collision' => $collisions['hard'] > 0,
+                    'geo_id' => (string) $geoId, 'ambiguous' => false, 'collision' => $collisions['hard'] !== [],
                     'names' => $group->map(fn (Market $m): string => (string) $m->name)->all(),
                     'winner_id' => (string) $winner->id, 'winner_name' => (string) $winner->name,
                     'loser_id' => (string) $loser->id, 'loser_name' => (string) $loser->name,
                     'area_id' => $areaId, 'area_dirty' => $areaDirty,
-                    'colliding_page_ids' => $collisions['soft'],
-                    'page_collisions' => count($collisions['soft']) + $collisions['hard'],
+                    'colliding_page_ids' => array_map(fn (array $s): string => $s['loser_id'], $collisions['soft']),
+                    'page_collisions' => count($collisions['soft']) + count($collisions['hard']),
+                    'soft_collisions' => $collisions['soft'],
                     'hard_collisions' => $collisions['hard'],
                     'dependents' => $this->deps($site, (string) $loser->id),
                 ];
@@ -191,31 +198,66 @@ final class MarketMerger
      * CLEANED title): the loser's title is dirty ("1, Abingdon, MD"), the survivor's clean ("Abingdon, MD") —
      * the same town once the numbered artifact is stripped, so both are normalized before comparison.
      *
-     * A colliding loser page that is an EMPTY extra (unpublished, undrafted, never pushed to WP) is SOFT — safe
-     * to soft-delete, keeping the survivor's canonical page. A colliding page that is PUBLISHED or drafted is
-     * HARD — a human take-down decision, so it refuses the whole merge (never auto-removed).
+     * A colliding loser page is SOFT — safe to soft-delete, keeping the survivor's canonical page — ONLY when
+     * it is a truly empty extra: undrafted, unpublished, AND never pushed to WP (`wp_post_id === null`, so it
+     * has no live URL). Anything else is HARD: a live/real page whose take-down is a human call, so it refuses
+     * the whole merge. The wp_post_id check matters on its own — an "unpublished, undrafted" row can still carry
+     * a wp_post_id from an earlier push, and soft-deleting that would orphan a live URL (the row leaves the
+     * panel while the page keeps serving).
      *
-     * @return array{soft: list<string>, hard: int}
+     * Each entry carries the index verdict of BOTH the loser and the surviving page: "winner" was chosen by
+     * name cleanliness, not by which page ranks, so the operator must see whether discarding the loser drops an
+     * indexed page in favour of an un-indexed one.
+     *
+     * @return array{
+     *   soft: list<array{loser_id:string,title:string,loser_index:string,winner_index:string}>,
+     *   hard: list<array{loser_id:string,winner_id:string,title:string,reason:string,loser_index:string,winner_index:string}>
+     * }
      */
     private function pageCollisions(Site $site, string $winnerId, string $loserId): array
     {
-        $winnerKeys = Content::withoutGlobalScopes()->where('site_id', $site->id)->where('market_id', $winnerId)->get()
-            ->map(fn (Content $c): string => $this->pageKey($c))->flip();
+        /** @var array<string, Content> $winnerByKey */
+        $winnerByKey = [];
+        foreach (Content::withoutGlobalScopes()->where('site_id', $site->id)->where('market_id', $winnerId)->get() as $wp) {
+            $winnerByKey[$this->pageKey($wp)] ??= $wp;
+        }
 
         $soft = [];
-        $hard = 0;
+        $hard = [];
         foreach (Content::withoutGlobalScopes()->where('site_id', $site->id)->where('market_id', $loserId)->get() as $page) {
-            if (! $winnerKeys->has($this->pageKey($page))) {
+            $match = $winnerByKey[$this->pageKey($page)] ?? null;
+            if ($match === null) {
                 continue;
             }
+
+            $title = (string) $page->title;
+            $loserIndex = $this->indexVerdict((string) $page->id);
+            $winnerIndex = $this->indexVerdict((string) $match->id);
+
             if (! $page->hasDraft() && $page->status !== ContentStatus::Published && $page->wp_post_id === null) {
-                $soft[] = (string) $page->id;
+                $soft[] = ['loser_id' => (string) $page->id, 'title' => $title, 'loser_index' => $loserIndex, 'winner_index' => $winnerIndex];
             } else {
-                $hard++;
+                $reason = $page->status === ContentStatus::Published
+                    ? 'published'
+                    : ($page->wp_post_id !== null ? 'pushed to WP (live URL)' : 'drafted');
+                $hard[] = ['loser_id' => (string) $page->id, 'winner_id' => (string) $match->id, 'title' => $title, 'reason' => $reason, 'loser_index' => $loserIndex, 'winner_index' => $winnerIndex];
             }
         }
 
         return ['soft' => $soft, 'hard' => $hard];
+    }
+
+    /** Three-state index verdict from the durable table (mirrors the Live board + duplicate-town report). */
+    private function indexVerdict(string $contentId): string
+    {
+        $row = PageIndexState::withoutGlobalScope(SiteScope::class)->where('content_id', $contentId)->first();
+        if ($row === null) {
+            return 'not checked';
+        }
+
+        return $row->isIndexed()
+            ? 'indexed'
+            : ($row->coverage_state !== null && $row->coverage_state !== '' ? "not indexed ({$row->coverage_state})" : 'not indexed');
     }
 
     /** The town-page identity used to spot a survivor/loser collision: type + service + cleaned town key. */
