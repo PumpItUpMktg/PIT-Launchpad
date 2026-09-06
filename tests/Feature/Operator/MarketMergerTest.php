@@ -6,6 +6,7 @@ use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Market;
+use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
 use App\Operator\Coverage\MarketMerger;
@@ -86,6 +87,55 @@ it('cleans the place\'s one CoverageArea name so the next build cannot re-mint t
     // The next build's territory projection reads the now-clean area → resolves the survivor, mints nothing.
     app(GuidedEntityProjector::class)->project($site);
     expect(Market::withoutGlobalScopes()->where('site_id', $site->id)->where('geo_id', '2402590048')->count())->toBe(1);
+});
+
+it('soft-deletes an EMPTY duplicate town page rather than reassigning it into a self-inflicted duplicate', function () {
+    $site = Site::factory()->create();
+    $winner = mkt($site, 'Abingdon', '2402590048');
+    $loser = mkt($site, '1, Abingdon', '2402590048');
+
+    // Both markets hold a page for the SAME town (Abingdon). The survivor's is canonical (published, clean
+    // title); the loser's is an EMPTY extra (candidate, dirty title) — a blind reassign would give the
+    // survivor two Abingdon pages. It must be soft-deleted instead, keeping the survivor's page.
+    $winnerPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $winner->id, 'title' => 'Abingdon, MD', 'slug' => 'abingdon-md', 'status' => 'published', 'wp_post_id' => 8821]);
+    // The loser's Abingdon page is a genuine EMPTY extra: candidate, no slot payload (undrafted), never pushed.
+    $loserPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $loser->id, 'title' => '1, Abingdon, MD', 'slug' => 'abingdon-md-2', 'status' => 'candidate', 'slot_payload' => [], 'wp_post_id' => null]);
+    // A NON-colliding loser page (a different town) still reassigns to the survivor.
+    $otherPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $loser->id, 'title' => 'Churchville, MD', 'slug' => 'churchville-md', 'status' => 'candidate', 'slot_payload' => []]);
+
+    $plan = app(MarketMerger::class)->plan($site);
+    expect($plan[0]['collision'])->toBeFalse()
+        ->and($plan[0]['colliding_page_ids'])->toBe([$loserPage->id]);
+
+    expect(app(MarketMerger::class)->apply($site))->toBe(1)
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($loserPage->id))->toBeNull()                       // dup soft-deleted (excluded)
+        ->and(Content::withoutGlobalScope(SiteScope::class)->withTrashed()->find($loserPage->id)->trashed())->toBeTrue()
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($winnerPage->id)->market_id)->toBe($winner->id)     // survivor's page kept
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($otherPage->id)->market_id)->toBe($winner->id);     // other town reassigned
+
+    // The survivor is left with exactly ONE (live) page for Abingdon — no self-inflicted duplicate.
+    $abingdon = Content::withoutGlobalScope(SiteScope::class)->where('market_id', $winner->id)
+        ->where('title', 'like', '%Abingdon%')->count();
+    expect($abingdon)->toBe(1);
+});
+
+it('REFUSES the merge when both markets hold a PUBLISHED/drafted page for the same town', function () {
+    $site = Site::factory()->create();
+    $winner = mkt($site, 'Abingdon', '2402590048');
+    $loser = mkt($site, '1, Abingdon', '2402590048');
+
+    // Both Abingdon pages are PUBLISHED — taking one down is a human decision, so the merge must refuse.
+    Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $winner->id, 'title' => 'Abingdon, MD', 'slug' => 'abingdon-md', 'status' => 'published', 'wp_post_id' => 8821]);
+    $loserPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $loser->id, 'title' => '1, Abingdon, MD', 'slug' => 'abingdon-md-2', 'status' => 'published', 'wp_post_id' => 9002]);
+
+    $plan = app(MarketMerger::class)->plan($site);
+    expect($plan[0]['collision'])->toBeTrue()
+        ->and($plan[0]['hard_collisions'])->toBe(1);
+
+    // Refused: nothing merged, both markets and both pages remain.
+    expect(app(MarketMerger::class)->apply($site))->toBe(0)
+        ->and(Market::withoutGlobalScopes()->find($loser->id))->not->toBeNull()
+        ->and(Content::withoutGlobalScopes()->find($loserPage->id)->market_id)->toBe($loser->id);
 });
 
 it('scopes the merge to one site — never touches another tenant', function () {

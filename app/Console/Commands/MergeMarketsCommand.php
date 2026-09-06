@@ -13,8 +13,10 @@ use Illuminate\Console\Command;
  * media pivots) and cleaning the place's one CoverageArea name so the next build can't re-mint the duplicate.
  *
  * REPORT-ONLY by default: prints the per-group plan and writes NOTHING. Pass --execute to apply. An AMBIGUOUS
- * group (no single clean survivor) is reported and left for a human — never auto-merged. Live-only, all
- * tenants (or one via --site). geo_id is the authoritative "same market" signal — the name check can't see it.
+ * group (no single clean survivor) is reported and left for a human — never auto-merged. A group where both
+ * markets hold a PUBLISHED/drafted page for the same town is a PAGE COLLISION — refused (a live take-down is a
+ * human call); an EMPTY duplicate town page is soft-deleted so the survivor never ends up with two. Live-only,
+ * all tenants (or one via --site). geo_id is the authoritative "same market" signal — the name check can't see it.
  */
 class MergeMarketsCommand extends Command
 {
@@ -46,6 +48,7 @@ class MergeMarketsCommand extends Command
 
         $grandMerges = 0;
         $grandAmbiguous = 0;
+        $grandCollisions = 0;
         foreach ($sites as $site) {
             $plan = $merger->plan($site);
             if ($plan === []) {
@@ -62,11 +65,19 @@ class MergeMarketsCommand extends Command
                     continue;
                 }
 
+                if ($r['collision']) {
+                    $grandCollisions++;
+                    $this->line("  · <fg=red>PAGE COLLISION</> geo_id {$r['geo_id']} — <comment>\"{$r['loser_name']}\"</comment> and <info>\"{$r['winner_name']}\"</info> both hold a PUBLISHED/drafted page for the same town ({$r['hard_collisions']} page(s)); merge REFUSED — resolve the live-page duplicate by hand (Operate → Locations, then launchpad:dedupe-town-pages) first.");
+
+                    continue;
+                }
+
                 $grandMerges++;
                 $d = $r['dependents'];
                 $deps = "kw {$d['keywords']}, pages {$d['content']}, snaps {$d['snapshots']}, geo {$d['geo_prompts']}, svc {$d['services']}, proof {$d['proof']}, media {$d['media']}";
                 $area = ($r['area_id'] !== null && $r['area_dirty']) ? ' + clean its CoverageArea name' : '';
-                $this->line("  · merge <comment>\"{$r['loser_name']}\"</comment> → <info>\"{$r['winner_name']}\"</info> (geo_id {$r['geo_id']}); reassign [{$deps}]{$area}, then delete the duplicate.");
+                $soft = $r['colliding_page_ids'] !== [] ? ' + soft-delete '.count($r['colliding_page_ids']).' empty duplicate town page(s)' : '';
+                $this->line("  · merge <comment>\"{$r['loser_name']}\"</comment> → <info>\"{$r['winner_name']}\"</info> (geo_id {$r['geo_id']}); reassign [{$deps}]{$area}{$soft}, then delete the duplicate.");
             }
 
             if ($execute) {
@@ -75,13 +86,16 @@ class MergeMarketsCommand extends Command
         }
 
         $this->newLine();
-        if ($grandMerges === 0 && $grandAmbiguous === 0) {
+        if ($grandMerges === 0 && $grandAmbiguous === 0 && $grandCollisions === 0) {
             $this->info('No duplicate markets found (no geo_id carried by two rows).');
 
             return self::SUCCESS;
         }
         if ($grandAmbiguous > 0) {
             $this->warn("{$grandAmbiguous} ambiguous group(s) left for a human — no single clean survivor.");
+        }
+        if ($grandCollisions > 0) {
+            $this->warn("{$grandCollisions} group(s) refused for a PUBLISHED/drafted same-town page collision — dedupe the live pages by hand first, then re-run.");
         }
 
         if (! $execute) {
