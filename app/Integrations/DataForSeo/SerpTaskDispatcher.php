@@ -36,6 +36,19 @@ class SerpTaskDispatcher
             return $existing;
         }
 
+        // Never re-post a query DataForSEO already answered "No Search Results" (40102): it isn't a
+        // searchable term, so a resubmit only burns budget (billing is on submission) for the same empty
+        // result. Terminal by design — the query leaves the keyword set (label demotion) rather than retrying.
+        $dead = SerpTask::query()
+            ->where('function', $function)
+            ->where('cache_key', $cacheKey)
+            ->where('state', SerpTaskState::NoResults->value)
+            ->first();
+
+        if ($dead !== null) {
+            return $dead;
+        }
+
         $ids = $this->client->taskPost($postPath, [$taskPayload]);
         if ($ids === []) {
             return null;

@@ -86,6 +86,16 @@ class IngestSerpTasks implements ShouldQueue
             $cache->put($task->cache_key, $this->normalize($function, $task->query, $result), $ttl);
 
             $task->update(['state' => SerpTaskState::Ingested, 'error' => null]);
+        } catch (DataForSeoException $e) {
+            // "No Search Results" (40102) is NOT a broken pull — DataForSEO ran the query and Google returned
+            // nothing, because the query isn't a searchable term (a taxonomy label in the keyword set). Record
+            // it as TERMINAL `no_results` so the dispatcher never re-posts (and pays for) the same dead query.
+            $task->update([
+                'state' => $e->statusCode === DataForSeoException::NO_SEARCH_RESULTS
+                    ? SerpTaskState::NoResults
+                    : SerpTaskState::Failed,
+                'error' => mb_substr($e->getMessage(), 0, 1000),
+            ]);
         } catch (Throwable $e) {
             // Surface loudly on the row — never silently drop a failed pull.
             $task->update([

@@ -19,6 +19,13 @@ class DataForSeoException extends RuntimeException
     /** DataForSEO's per-minute rate-limit envelope code — transient, retried with backoff (NOT fatal). */
     public const RATE_LIMITED = 40202;
 
+    /**
+     * "No Search Results" — DataForSEO ran the query and Google returned an empty results page. Not a
+     * transport/auth/quota fault: the query simply isn't a searchable term (a taxonomy label leaked into
+     * the keyword set). The ingest sweep records it as a terminal `no_results` state and never re-posts it.
+     */
+    public const NO_SEARCH_RESULTS = 40102;
+
     public static function envelope(int $statusCode, string $message): self
     {
         // 401xx auth, 402xx payment/quota — fatal, surface loudly, do not retry. The one exception is
