@@ -85,6 +85,13 @@ class CandidateFunnel
         $known = $this->knownExternalIds($site, $items);
         $seen = [];
 
+        // URL-identity dedup (complements external_id): the SAME article can arrive under a different
+        // external_id — syndicated, re-shared, or carrying different tracking params — so a stable-id skip
+        // misses it. Key on the canonical article URL (host w/o www + path, no query/fragment). Items with
+        // no usable link (Google-News redirect tokens) have a null key and fall back to external_id alone.
+        $knownUrls = $this->knownUrlKeys($site, $items);
+        $seenUrls = [];
+
         $dropped = [];
         $filtered = [];
         foreach ($items as $item) {
@@ -96,6 +103,16 @@ class CandidateFunnel
             }
             if ($ext !== '') {
                 $seen[$ext] = true;
+            }
+
+            $urlKey = ArticleUrl::key($item->url);
+            if ($urlKey !== null && (isset($knownUrls[$urlKey]) || isset($seenUrls[$urlKey]))) {
+                $dropped[] = ['title' => $item->title, 'reason' => 'duplicate_url'];
+
+                continue;
+            }
+            if ($urlKey !== null) {
+                $seenUrls[$urlKey] = true;
             }
 
             if (! $this->preFilter->passes($item)) {
@@ -234,6 +251,7 @@ class CandidateFunnel
             'slug' => $this->uniqueSlug($site->id, $item->title),
             'source_name' => $item->sourceName,
             'source_url' => $item->url,
+            'source_url_key' => ArticleUrl::key($item->url),
             'external_id' => $item->externalId !== '' ? $item->externalId : null,
             'angle_hint' => $relevance->angleHint,
             'relevance_score' => round($relevance->score, 4),
@@ -246,6 +264,33 @@ class CandidateFunnel
             ],
             'version' => 1,
         ]);
+    }
+
+    /**
+     * The source_url_keys already present as Content for this site, restricted to the incoming batch's keys
+     * so the lookup stays a single indexed query (contents.(site_id, source_url_key)) regardless of history.
+     *
+     * @param  list<NewsItem>  $items
+     * @return array<string, true>
+     */
+    private function knownUrlKeys(Site $site, array $items): array
+    {
+        $incoming = array_values(array_unique(array_filter(array_map(
+            fn (NewsItem $i): ?string => ArticleUrl::key($i->url),
+            $items,
+        ), fn (?string $k): bool => $k !== null)));
+
+        if ($incoming === []) {
+            return [];
+        }
+
+        $existing = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereIn('source_url_key', $incoming)
+            ->pluck('source_url_key')
+            ->all();
+
+        return array_fill_keys(array_map('strval', $existing), true);
     }
 
     /**
