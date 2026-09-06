@@ -75,6 +75,16 @@ these names before it was known there were two models. **To resolve later:** one
 items needs renaming, and `Market`-with-no-FK-to-`Location` is a data-model question worth its
 own look. Recorded here so it isn't re-litigated as a routing decision.
 
+**Third instance (found during feed-prune PR 2, 2026-09):** the §6a generated-feed reconciler
+(`GeneratedFeedReconciler`) builds its feeds per **keyword × `Market`-model market**. So a
+publish-held **`Location`** (`Location.publish_held`) does **not** suppress its feeds — the
+generator has no FK from `Market` to `Location`, and we declined to add the city/state
+name-match a third time. The generator instead excludes only markets with their **own**
+`Market.on_hold` flag. **Consequence:** to stop feeds for a held market today, set `on_hold` on
+the `Market` row (holding the `Location` alone does not). **To resolve later:** give `Market` a
+real link to `Location` (or propagate `publish_held` → `Market.on_hold`), at which point the
+generator can key off the held Location directly.
+
 ## Standing rules for every UI PR (from here on)
 
 1. **Screenshot in the PR body — not a description.**
