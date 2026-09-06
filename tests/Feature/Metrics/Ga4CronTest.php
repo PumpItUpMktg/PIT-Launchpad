@@ -25,7 +25,7 @@ it('the Live-boards render reads GA4 sessions from cache only — never a live G
 
     $traffic = Mockery::mock(PageTrafficProvider::class);
     $traffic->shouldReceive('connected')->andReturnTrue();
-    $traffic->shouldReceive('sessionsCached')->once()->andReturn(9); // render reads the warmed cache
+    $traffic->shouldReceive('sessionsCachedState')->once()->andReturn(['sessions' => 9, 'warmed' => true]); // render reads the warmed cache
     $traffic->shouldNotReceive('sessions');                          // NEVER a live GA4 call on render
     app()->instance(PageTrafficProvider::class, $traffic);
 

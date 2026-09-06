@@ -22,6 +22,12 @@ final class NullPageTraffic implements PageTrafficProvider
         return null;
     }
 
+    /** @return array{sessions: ?int, warmed: bool} */
+    public function sessionsCachedState(Site $site, string $path, int $days = 28): array
+    {
+        return ['sessions' => null, 'warmed' => false];
+    }
+
     public function refresh(Site $site, string $path, int $days = 28): ?int
     {
         return null;

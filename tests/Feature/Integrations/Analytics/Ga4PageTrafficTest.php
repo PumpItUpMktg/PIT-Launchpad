@@ -121,6 +121,37 @@ it('refresh() is a no-op (null) when GA4 is not connected — no fetch', functio
     HttpFacade::assertNothingSent();
 });
 
+it('sessionsCachedState reads a cold miss as not-warmed (→ "Refreshing…")', function () {
+    ga4TrafficGrant();
+    $site = Site::factory()->create(['ga4_property' => 'properties/123']);
+    HttpFacade::fake();
+
+    expect(app(PageTrafficProvider::class)->sessionsCachedState($site, '/cold', 28))->toBe(['sessions' => null, 'warmed' => false]);
+    HttpFacade::assertNothingSent(); // cache-only, never fetches
+});
+
+it('sessionsCachedState reads a warmed count as warmed with the value', function () {
+    ga4TrafficGrant();
+    $site = Site::factory()->create(['ga4_property' => 'properties/123']);
+    HttpFacade::fake(['*/properties/123:runReport' => HttpFacade::response(['rows' => [['metricValues' => [['value' => '9']]]]])]);
+
+    $provider = app(PageTrafficProvider::class);
+    $provider->refresh($site, '/busy', 28);
+
+    expect($provider->sessionsCachedState($site, '/busy', 28))->toBe(['sessions' => 9, 'warmed' => true]);
+});
+
+it('sessionsCachedState reads a warmed no-data page as warmed with null (→ "No traffic yet", not "Refreshing…")', function () {
+    ga4TrafficGrant();
+    $site = Site::factory()->create(['ga4_property' => 'properties/123']);
+    HttpFacade::fake(['*/properties/123:runReport' => HttpFacade::response(['rows' => []])]);
+
+    $provider = app(PageTrafficProvider::class);
+    $provider->refresh($site, '/quiet', 28); // warms the no-data sentinel
+
+    expect($provider->sessionsCachedState($site, '/quiet', 28))->toBe(['sessions' => null, 'warmed' => true]);
+});
+
 it('returns null (the collecting cell) when GA4 has no row for the page yet, and caches it', function () {
     ga4TrafficGrant();
     $site = Site::factory()->create(['ga4_property' => 'properties/123']);

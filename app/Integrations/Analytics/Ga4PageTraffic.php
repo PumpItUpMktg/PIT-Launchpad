@@ -62,15 +62,23 @@ class Ga4PageTraffic implements PageTrafficProvider
 
     public function sessionsCached(Site $site, string $path, int $days = 28): ?int
     {
+        return $this->sessionsCachedState($site, $path, $days)['sessions'];
+    }
+
+    public function sessionsCachedState(Site $site, string $path, int $days = 28): array
+    {
         if (! $this->connected($site)) {
-            return null;
+            return ['sessions' => null, 'warmed' => false];
         }
 
-        // Cache-only: return the warmed count if present, never fetch. A miss (null) is indistinguishable
-        // from a warmed no-data sentinel by design — both render as pending, never a live GA4 call.
+        // Cache-only: read the warmed entry, never fetch. `refresh()` writes ['sessions'=>N] for a count
+        // and ['none'=>true] for a warmed no-data page — both are arrays, so a present entry (warmed) is
+        // distinguishable from a genuine miss (null), which lets the card separate "no traffic yet" from
+        // "not warmed yet".
         $pagePath = '/'.ltrim($path, '/');
+        $result = $this->cache->get($this->sessionsKey((string) $site->ga4_property, $pagePath, $days));
 
-        return $this->sessionsFromCache($this->cache->get($this->sessionsKey((string) $site->ga4_property, $pagePath, $days)));
+        return ['sessions' => $this->sessionsFromCache($result), 'warmed' => is_array($result)];
     }
 
     public function refresh(Site $site, string $path, int $days = 28): ?int

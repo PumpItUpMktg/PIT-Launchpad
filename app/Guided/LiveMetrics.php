@@ -341,9 +341,10 @@ class LiveMetrics
     }
 
     /**
-     * @param  bool  $live  false = read the warmed GA4 cache only (render path — zero outbound HTTP); a
-     *                      cache-miss renders "Refreshing…" while {@see WarmGa4Pages} warms it
-     *                      weekly off-request. True fetches live (non-render callers only).
+     * @param  bool  $live  false = read the warmed GA4 cache only (render path — zero outbound HTTP), where
+     *                      a page that's warmed-but-empty reads "No traffic yet" and only a genuine miss
+     *                      reads "Refreshing…" while {@see WarmGa4Pages} warms it weekly off-request. True
+     *                      fetches live (non-render callers only).
      * @return array{sessions: ?int, pending: ?string}
      */
     private function trafficBlock(?Site $site, Content $page, bool $live = true): array
@@ -353,11 +354,21 @@ class LiveMetrics
         }
 
         $path = '/'.ltrim((string) $page->slug, '/');
-        $sessions = $live ? $this->traffic->sessions($site, $path) : $this->traffic->sessionsCached($site, $path);
-        if ($sessions === null) {
-            return ['sessions' => null, 'pending' => $live ? 'Collecting' : 'Refreshing…'];
+
+        if ($live) {
+            $sessions = $this->traffic->sessions($site, $path);
+
+            return ['sessions' => $sessions, 'pending' => $sessions === null ? 'Collecting' : null];
         }
 
-        return ['sessions' => $sessions, 'pending' => null];
+        // Cache-only render: a warmed-but-empty page is a real "no traffic yet", NOT the same as a page the
+        // weekly warm hasn't reached — only the latter is "Refreshing…" (a value that never resolves is
+        // indistinguishable from a broken metric; give each an honest terminal state).
+        $state = $this->traffic->sessionsCachedState($site, $path);
+        if ($state['sessions'] !== null) {
+            return ['sessions' => $state['sessions'], 'pending' => null];
+        }
+
+        return ['sessions' => null, 'pending' => $state['warmed'] ? 'No traffic yet' : 'Refreshing…'];
     }
 }
