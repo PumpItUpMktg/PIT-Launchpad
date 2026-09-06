@@ -56,6 +56,11 @@ Schedule::command('launchpad:reconcile-generated-feeds')->daily()->withoutOverla
 // day (Laravel's default lock expiry) — 55m > the 40m budget, < the 60m beat.
 Schedule::command('launchpad:ingest-feeds')->hourly()->withoutOverlapping(55);
 
+// §6a topical-candidate expiry — reject topical candidates whose article is older than the expiry window
+// (default 30d) so the review backlog stays live, actionable work. Evergreen + drafted candidates are never
+// touched. Daily with --execute; withoutOverlapping so a slow multi-tenant sweep can't stack.
+Schedule::command('launchpad:expire-candidates --execute')->daily()->withoutOverlapping();
+
 // Published-board live-metrics warm — keep the GSC/index/position/GA4 caches populated for every
 // engine-eligible site so an operator opens a board that's already warm, instead of a cold render
 // deferring every card to "Refreshing…". Hourly (well under the vendor caches' TTL); withoutOverlapping.
