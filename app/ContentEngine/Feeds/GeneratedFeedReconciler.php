@@ -5,6 +5,7 @@ namespace App\ContentEngine\Feeds;
 use App\Enums\FeedOrigin;
 use App\Enums\SourceType;
 use App\Models\Keyword;
+use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -12,14 +13,23 @@ use App\Models\Source;
 
 /**
  * Keeps the generated feeds current as a materialized projection of the §5
- * keyword map × the site's markets. One feed per (routable keyword × market) —
- * idempotent on a (keyword, market) signature, so re-running never duplicates.
+ * keyword map × the site's markets. One feed per (routable keyword × market).
  *
- * Retirement is DEACTIVATION, never deletion: a feed whose source pair is gone is
- * flipped enabled=false so already-attributed candidates keep their provenance.
- * Keywords are geo-neutral by §4 rule; the market only enters the news SEARCH
- * query (not a silo or page), which is what makes per-market feeds distinct and
- * locally relevant.
+ * Idempotent on TWO keys, which is what stops the regeneration that ballooned the
+ * feed table (11k+ on SPG, most producing nothing):
+ *   - on the (keyword, market) SIGNATURE (derived_from), so re-running never
+ *     duplicates a combo; and
+ *   - on the resulting URL — two different signatures whose query resolves to the
+ *     SAME Google-News search collapse to ONE enabled feed (a partial unique index
+ *     on (site_id, url) WHERE enabled backs this). Deactivation runs BEFORE the
+ *     upsert so the live set never transiently collides with a stale duplicate.
+ *
+ * HELD markets are excluded: a market with its own advisory hold (Market.on_hold),
+ * or one that resolves to a publish-held Location (Location.publish_held, matched
+ * on city+state — no FK between the two), generates no feeds; its existing feeds
+ * deactivate on the next run. Retirement is always DEACTIVATION, never deletion,
+ * so already-attributed candidates keep their provenance. Keywords are geo-neutral
+ * by §4 rule; the market only enters the news SEARCH query (not a silo or page).
  */
 class GeneratedFeedReconciler
 {
@@ -31,7 +41,7 @@ class GeneratedFeedReconciler
     ) {}
 
     /**
-     * @return array{upserted: int, deactivated: int}
+     * @return array{upserted: int, deactivated: int, held_markets_skipped: int, url_duplicates_skipped: int}
      */
     public function reconcile(Site $site): array
     {
@@ -40,38 +50,100 @@ class GeneratedFeedReconciler
             ->whereNotNull('silo_id')
             ->get();
 
-        $markets = Market::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->get()
-            ->all();
+        $held = $this->heldCityStates($site->id);
+        $allMarkets = Market::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
+        $activeMarkets = $allMarkets->reject(fn (Market $m): bool => $this->isHeld($m, $held))->values()->all();
+        $heldSkipped = $allMarkets->count() - count($activeMarkets);
 
-        // No markets yet → one national feed per keyword (market = null).
-        $marketOptions = $markets !== [] ? $markets : [null];
+        // A site with NO markets at all → one national feed per keyword (market = null). But a site whose
+        // markets are ALL held generates nothing — a held market must not silently become a national feed.
+        $marketOptions = $allMarkets->isEmpty() ? [null] : $activeMarkets;
 
+        // PASS 1: compute the live set, de-duping by URL within the run so two signatures whose query
+        // resolves to the same Google-News search never both hold an enabled feed. No DB writes yet.
+        /** @var array<string, array{keyword: Keyword, market: ?Market, url: string}> $live */
         $live = [];
+        $claimedUrls = [];
+        $urlDupsSkipped = 0;
         foreach ($keywords as $keyword) {
             foreach ($marketOptions as $market) {
-                $signature = $this->signature($keyword, $market);
-                $live[$signature] = true;
+                $url = $this->feedUrl($keyword, $market);
+                if (isset($claimedUrls[$url])) {
+                    $urlDupsSkipped++;
 
-                Source::withoutGlobalScope(SiteScope::class)->updateOrCreate(
-                    ['site_id' => $site->id, 'derived_from' => $signature],
-                    [
-                        'origin' => FeedOrigin::Generated->value,
-                        'type' => SourceType::RssFeed->value,
-                        'silo_id' => $keyword->silo_id,
-                        'url' => $this->feedUrl($keyword, $market),
-                        'label' => $this->label($keyword, $market),
-                        'enabled' => true,
-                    ],
-                );
+                    continue; // another signature already owns this exact search — one feed is enough
+                }
+                $claimedUrls[$url] = true;
+                $live[$this->signature($keyword, $market)] = ['keyword' => $keyword, 'market' => $market, 'url' => $url];
             }
+        }
+
+        // Deactivate stale BEFORE upserting, so a to-be-retired duplicate never transiently shares an
+        // enabled URL with a live feed (which the partial unique index would reject).
+        $deactivated = $this->deactivateStale($site->id, array_keys($live));
+
+        // PASS 2: upsert the live set. Keyed on (site_id, derived_from); the live URLs are already distinct.
+        foreach ($live as $signature => $spec) {
+            Source::withoutGlobalScope(SiteScope::class)->updateOrCreate(
+                ['site_id' => $site->id, 'derived_from' => $signature],
+                [
+                    'origin' => FeedOrigin::Generated->value,
+                    'type' => SourceType::RssFeed->value,
+                    'silo_id' => $spec['keyword']->silo_id,
+                    'url' => $spec['url'],
+                    'label' => $this->label($spec['keyword'], $spec['market']),
+                    'enabled' => true,
+                ],
+            );
         }
 
         return [
             'upserted' => count($live),
-            'deactivated' => $this->deactivateStale($site->id, array_keys($live)),
+            'deactivated' => $deactivated,
+            'held_markets_skipped' => $heldSkipped,
+            'url_duplicates_skipped' => $urlDupsSkipped,
         ];
+    }
+
+    /**
+     * The city|state keys (lower-cased) of this site's publish-held Locations — markets resolving to one of
+     * these generate no feeds. No FK between Market and Location, so the match is on city+state.
+     *
+     * @return array<string, true>
+     */
+    private function heldCityStates(string $siteId): array
+    {
+        $held = [];
+        Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->where('publish_held', true)
+            ->get()
+            ->each(function (Location $location) use (&$held): void {
+                $cs = $location->cityState();
+                $key = $this->cityStateKey((string) $cs['city'], (string) $cs['state']);
+                if ($key !== '|') {
+                    $held[$key] = true;
+                }
+            });
+
+        return $held;
+    }
+
+    /** @param  array<string, true>  $held */
+    private function isHeld(Market $market, array $held): bool
+    {
+        if ($market->on_hold) {
+            return true; // the market's own advisory hold
+        }
+
+        $region = is_string($market->region) ? $market->region : '';
+
+        return isset($held[$this->cityStateKey((string) $market->name, $region)]);
+    }
+
+    private function cityStateKey(string $city, string $state): string
+    {
+        return mb_strtolower(trim($city)).'|'.mb_strtolower(trim($state));
     }
 
     private function signature(Keyword $keyword, ?Market $market): string
