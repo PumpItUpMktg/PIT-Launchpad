@@ -134,6 +134,20 @@ rename — or a duplicate/qualified name — to trigger it.
    stored timestamp + `App\Support\Cadence` interval). Semantic state in the
    markup, appearance from tokens — never a per-surface threshold or a hardcoded
    colour.
+8. **One card implementation, used everywhere.** A content row (a published/queued
+   page or post) is rendered by exactly ONE component — `<x-lp.content-card>`, fed
+   the typed `App\Operate\ContentCard` DTO — on every board (Live, Core, Service,
+   Town, and the retired per-family Live boards), never a per-board partial. Two
+   renderers for the same object is a divergence machine: it cost THREE separate
+   index-chip fixes on three boards, and a PASS `page_index_states` row rendered no
+   chip at all because one board's producer omitted a key a loose array let it omit.
+   The DTO closes that at the contract: core fields (identity + the index verdict +
+   tracking) have no defaults, so a producer cannot build a card without them —
+   omission is a compile error, not a silent gap. Rich board-specific blocks
+   (sparkline, GSC query terms, local-pack, IndexNow, days-live) are optional fields
+   the one component renders only when present; per-board actions ride the `actions`
+   slot. A new board consumes the component + DTO; it never hand-rolls a card array
+   or a card partial.
 
 ## Item → surface mapping
 

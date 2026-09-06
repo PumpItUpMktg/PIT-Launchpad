@@ -144,6 +144,7 @@ final class ContentCard
             'index_state' => $this->indexState,
             'index_label' => $this->indexLabel,
             'index_tone' => $this->indexTone(),
+            'index_coverage_state' => $this->indexCoverageState,
             'in_bing' => $this->inBing,
             'indexnow_at' => $this->indexnowAt,
             'page_one' => $this->pageOne,
@@ -156,6 +157,15 @@ final class ContentCard
             'clicks' => $this->clicks,
             'sessions' => $this->sessions,
             'keyword' => $this->keyword,
+            // Rich optional blocks the shared component renders only when present (absent on Live).
+            'local_rank' => $this->localRank,
+            'local_market' => $this->localMarket,
+            'series' => $this->series,
+            'refresh_count' => $this->refreshCount,
+            'queries' => $this->queries,
+            'position_pending' => $this->positionPending,
+            'gsc_pending' => $this->gscPending,
+            'traffic_pending' => $this->trafficPending,
             // Nested `metrics` view (legacy pages partial — retires with it). The raw LiveMetrics block is
             // carried through verbatim so every sub-field the partial reads survives, with ONLY `index`
             // overridden by the durable three-state verdict (the per-card block's index is the weak source

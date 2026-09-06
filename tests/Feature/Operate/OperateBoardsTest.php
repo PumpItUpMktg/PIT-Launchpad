@@ -7,7 +7,6 @@ use App\Enums\KeywordSource;
 use App\Enums\RenderStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Grow;
-use App\Filament\Pages\Live\LiveLocations;
 use App\Filament\Pages\Operate\OperateBlog;
 use App\Filament\Pages\Operate\OperateCorePages;
 use App\Filament\Pages\Operate\OperateLocationPages;
@@ -70,9 +69,9 @@ it('flag off ⇒ Operate hidden; on ⇒ Blog · the three pages boards (Grow/Liv
         ->and(OperateCorePages::getNavigationGroup())->toBe('Operate')
         ->and(OperateServicePages::getNavigationGroup())->toBe('Operate')
         ->and(OperateLocationPages::getNavigationGroup())->toBe('Operate')
-        // Grow + the old Live boards stay exactly where they were, flag on or off.
-        ->and(Grow::getNavigationGroup())->toBeNull()
-        ->and(LiveLocations::getNavigationGroup())->toBe('Live Pages');
+        // Grow stays where it was, flag on or off. (The legacy per-family Live boards were deleted at the
+        // card consolidation — superseded by the unified Live board + the Pages tabs, nav-retired + unlinked.)
+        ->and(Grow::getNavigationGroup())->toBeNull();
 });
 
 // NOTE (tenant-lock remediation, rule 3): the former "dashboard rolls up attention across tenants and

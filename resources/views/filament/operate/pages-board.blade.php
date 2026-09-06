@@ -302,13 +302,13 @@
                     </div>
                     @if ($group['location_card'] !== null)
                         <div class="lv-band">Location page</div>
-                        <div class="lv-towns">@include('filament.live.partials.card', ['card' => $group['location_card'], 'navControl' => true])</div>
+                        <div class="lv-towns"><x-lp.content-card :row="$group['location_card']" wire:key="pg-{{ $group['location_card']['id'] }}"><x-slot:actions>@include('filament.operate.partials.page-card-actions', ['card' => $group['location_card'], 'navControl' => true])</x-slot></x-lp.content-card></div>
                     @endif
                     @if ($group['towns'] !== [])
                         <div class="lv-band">Town pages</div>
                         <div class="lv-towns">
                             @foreach ($group['towns'] as $card)
-                                @include('filament.live.partials.card', ['card' => $card, 'navControl' => true])
+                                <x-lp.content-card :row="$card" wire:key="pg-{{ $card['id'] }}"><x-slot:actions>@include('filament.operate.partials.page-card-actions', ['card' => $card, 'navControl' => true])</x-slot></x-lp.content-card>
                             @endforeach
                         </div>
                     @endif
@@ -316,7 +316,7 @@
                         <div class="lv-band">City-service pages</div>
                         <div class="lv-towns">
                             @foreach ($group['city_services'] as $card)
-                                @include('filament.live.partials.card', ['card' => $card, 'navControl' => true])
+                                <x-lp.content-card :row="$card" wire:key="pg-{{ $card['id'] }}"><x-slot:actions>@include('filament.operate.partials.page-card-actions', ['card' => $card, 'navControl' => true])</x-slot></x-lp.content-card>
                             @endforeach
                         </div>
                     @endif
@@ -329,7 +329,7 @@
                     </div>
                     <div class="lv-grid" style="margin-top:8px">
                         @foreach ($activeTab['orphans'] as $card)
-                            @include('filament.live.partials.card', ['card' => $card, 'locationOptions' => $live['location_options'], 'navControl' => true])
+                            <x-lp.content-card :row="$card" wire:key="pg-{{ $card['id'] }}"><x-slot:actions>@include('filament.operate.partials.page-card-actions', ['card' => $card, 'locationOptions' => $live['location_options'], 'navControl' => true])</x-slot></x-lp.content-card>
                         @endforeach
                     </div>
                 </div>
@@ -343,7 +343,7 @@
             @else
                 <div class="lv-grid">
                     @foreach ($live as $card)
-                        @include('filament.live.partials.card', ['card' => $card, 'navControl' => true])
+                        <x-lp.content-card :row="$card" wire:key="pg-{{ $card['id'] }}"><x-slot:actions>@include('filament.operate.partials.page-card-actions', ['card' => $card, 'navControl' => true])</x-slot></x-lp.content-card>
                     @endforeach
                 </div>
             @endif
