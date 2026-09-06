@@ -332,7 +332,7 @@
                         @php $pg = $card['page']; @endphp
 
                         {{-- Tracking block — the SAME Position / GSC / GA4 metrics every page card shows,
-                             with honest pending reasons ("No target keyword — brand page", "Connect …"). --}}
+                             with honest pending reasons ("Not tracked", "Connect …"). --}}
                         @if ($pg['metrics'])
                             @php $m = $pg['metrics']; @endphp
                             <div class="pl-metrics">

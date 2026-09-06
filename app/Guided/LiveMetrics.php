@@ -2,6 +2,7 @@
 
 namespace App\Guided;
 
+use App\Enums\RankingState;
 use App\Enums\SerpTaskState;
 use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\BingWebmaster\BingWebmasterProvider;
@@ -60,7 +61,7 @@ class LiveMetrics
      *
      * @return array{
      *   keyword: ?string,
-     *   position: array{rank: ?int, delta: ?int, pending: ?string},
+     *   position: array{rank: ?int, delta: ?int, pending: ?string, state: ?string},
      *   local: array{rank: ?int, market: ?string},
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
@@ -112,7 +113,7 @@ class LiveMetrics
      *
      * @return array{
      *   keyword: ?string,
-     *   position: array{rank: ?int, delta: ?int, pending: ?string},
+     *   position: array{rank: ?int, delta: ?int, pending: ?string, state: ?string},
      *   local: array{rank: ?int, market: ?string},
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
@@ -128,7 +129,7 @@ class LiveMetrics
 
         return [
             'keyword' => null,
-            'position' => ['rank' => null, 'delta' => null, 'pending' => $refreshing],
+            'position' => ['rank' => null, 'delta' => null, 'pending' => $refreshing, 'state' => null],
             'local' => ['rank' => null, 'market' => null],
             'series' => [],
             'refresh_count' => 0,
@@ -181,19 +182,25 @@ class LiveMetrics
     private function positionBlock(Content $page, ?Keyword $keyword): array
     {
         if ($keyword === null) {
-            // Core/brand pages aren't keyword-targeted — say why, don't show a fake dash.
-            return [['rank' => null, 'delta' => null, 'pending' => 'No target keyword — brand page'], ['rank' => null, 'market' => null], [], 0];
+            // Core/brand pages aren't keyword-targeted — there's nothing to rank for → not_tracked (the
+            // action is to add coverage, not to improve a page), never a fake dash or a "not ranking".
+            return [
+                ['rank' => null, 'delta' => null, 'pending' => RankingState::NotTracked->label(), 'state' => RankingState::NotTracked->value],
+                ['rank' => null, 'market' => null], [], 0,
+            ];
         }
 
         $standings = $this->tracking->forKeyword($keyword);
 
         if ($standings->organicRank === null && $standings->localByMarket === []) {
-            // Distinguish "we haven't pulled yet" from "we pulled and you're simply not in the results
-            // yet". A completed (ingested) organic SERP for this query means the site WAS checked and
-            // wasn't found — honest for a young page — vs no pull having landed at all.
-            $pending = $this->pulledUnranked($keyword) ? 'Not yet ranking' : 'First snapshot pending';
+            // The four-state ranking vocabulary, not one catch-all string: tracked_not_ranking (we asked,
+            // the SERP returned, we weren't in it) vs checking (a task was dispatched, no snapshot yet).
+            $state = $this->organicState($keyword, null);
 
-            return [['rank' => null, 'delta' => null, 'pending' => $pending], ['rank' => null, 'market' => null], [], $standings->refreshCount];
+            return [
+                ['rank' => null, 'delta' => null, 'pending' => $state->label(), 'state' => $state->value],
+                ['rank' => null, 'market' => null], [], $standings->refreshCount,
+            ];
         }
 
         // Best (lowest-rank) local-pack standing across markets, for the local chip.
@@ -202,11 +209,14 @@ class LiveMetrics
             ->sortBy('rank')
             ->first();
 
+        $organicState = $this->organicState($keyword, $standings->organicRank);
+
         return [
             [
                 'rank' => $standings->organicRank,
                 'delta' => $this->delta($standings->organicSeries),
-                'pending' => $standings->organicRank === null ? 'No organic capture yet' : null,
+                'pending' => $organicState === RankingState::Ranked ? null : $organicState->label(),
+                'state' => $organicState->value,
             ],
             [
                 'rank' => $bestLocal['rank'] ?? null,
@@ -218,9 +228,23 @@ class LiveMetrics
     }
 
     /**
+     * The organic ranking state for the cell: ranked (a position), tracked_not_ranking (a completed SERP
+     * pull returned without us — competing and losing), or checking (a task dispatched, no snapshot yet).
+     * The not_tracked case (no keyword at all) is handled by the caller.
+     */
+    private function organicState(Keyword $keyword, ?int $rank): RankingState
+    {
+        if ($rank !== null) {
+            return RankingState::Ranked;
+        }
+
+        return $this->pulledUnranked($keyword) ? RankingState::TrackedNotRanking : RankingState::Checking;
+    }
+
+    /**
      * Has an organic SERP for this keyword actually been fetched (a completed, ingested standard-mode
      * task) while no snapshot exists? Then the site was looked up and simply isn't in the tracked
-     * results yet — "Not yet ranking" — as opposed to no pull having landed at all. Matches on the
+     * results yet — tracked_not_ranking — as opposed to no pull having landed at all. Matches on the
      * shared query (the cache/task key is per query × locale, not per tenant), so any tenant's
      * completed pull that this site was scored against counts.
      */

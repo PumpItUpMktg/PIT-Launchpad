@@ -232,7 +232,7 @@ it('each location card shows the standard Position / GSC / GA4 tracking block wi
 
     Livewire::test(OperatePhysicalLocations::class)
         ->assertSee('Position')
-        ->assertSee('No target keyword — brand page')
+        ->assertSee('Not tracked') // no target keyword → the not_tracked ranking state (add coverage)
         ->assertSee('GSC · 28d')
         ->assertSee('GA4 sessions');
 });
