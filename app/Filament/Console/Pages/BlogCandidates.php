@@ -47,6 +47,19 @@ class BlogCandidates extends ConsolePage
         return $this->filterByScore(app(BlogBoard::class)->candidates($this->siteId, $this->siloId));
     }
 
+    /**
+     * The board's candidates grouped by silo (local-first within each), each capped to a visible few with a
+     * "+N more" tail — so a firehose silo doesn't render a wall of cards. Score filter applies before grouping.
+     *
+     * @return list<array{silo: string, total: int, local: int, visible: list<array<string, mixed>>, overflow: int}>
+     */
+    public function getCandidateGroupsProperty(): array
+    {
+        $cap = (int) config('launchpad.reactive.candidate_board_group_cap', 8);
+
+        return app(BlogBoard::class)->group($this->getCandidatesProperty(), $cap);
+    }
+
     /** Generate a draft from a candidate (Sonnet + fal, on the worker). */
     public function promote(string $contentId): void
     {
