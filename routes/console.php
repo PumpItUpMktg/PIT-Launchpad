@@ -14,13 +14,13 @@ Artisan::command('inspire', function () {
 
 // §9 staleness check — advisory rotation reminders for the admin connections
 // panel. Never auto-rotates; the pre-client launch gate is the hard requirement.
-Schedule::command('launchpad:check-stale-connections')->weekly();
+Schedule::command('launchpad:check-stale-connections')->weeklyOn(6, '03:00'); // Sat — staggered (see cadence note)
 
 // Chrome-drift backstop — flag tenants whose live header/footer chrome has drifted from the assembled
 // profile (or was never synced). Page publish/unpublish marks drift event-driven (ContentObserver); this
 // weekly sweep catches the rest (NAP / nav-order edits). Advisory only — surfaced as a Lobby badge, never
 // auto-pushes. withoutOverlapping since it assembles each tenant's profile.
-Schedule::command('launchpad:check-stale-chrome')->weekly()->withoutOverlapping();
+Schedule::command('launchpad:check-stale-chrome')->weeklyOn(6, '04:00')->withoutOverlapping(); // Sat
 
 // Portfolio-health counter reconcile — the drift net for the incremental Content/Connection observers.
 // Bulk query updates and hard-delete prunes bypass model events, so a scheduled recompute-from-source
@@ -71,7 +71,7 @@ Schedule::command('launchpad:warm-live-metrics')->hourly()->withoutOverlapping()
 // above skips GA4 to keep the Data API quota bounded). Force-refreshes each published page/job's cached
 // sessions into a >1-week TTL, so the Live boards' cache-only render reads stay fresh between passes.
 // withoutOverlapping so a slow multi-tenant pass can't stack.
-Schedule::command('launchpad:warm-ga4-pages')->weekly()->withoutOverlapping();
+Schedule::command('launchpad:warm-ga4-pages')->weeklyOn(5, '02:00')->withoutOverlapping(); // Fri
 
 // Site-level GA4 spine — daily per-site sessions into metric_snapshots (the client dashboard's traffic
 // funnel + "visits vs search clicks" trend). Trailing refresh window absorbs GA4's late data idempotently;
@@ -92,7 +92,7 @@ Schedule::command('launchpad:sync-gsc')->daily()->withoutOverlapping();
 // so a weekly platform-wide sweep keeps the cards fresh without burning quota;
 // withoutOverlapping so a slow multi-tenant sweep can't stack. Ad-hoc single-site
 // refresh is the "Refresh index coverage" button on the Corrections console.
-Schedule::command('launchpad:audit-index')->weekly()->withoutOverlapping();
+Schedule::command('launchpad:audit-index')->weeklyOn(1, '02:00')->withoutOverlapping(); // Mon
 
 // Client-dashboard index spine — persist Google's per-URL verdicts into the
 // durable page_index_states table + stamp the daily pages_indexed/pages_known
@@ -106,16 +106,16 @@ Schedule::command('sandhog:sync-index')->daily()->withoutOverlapping();
 // operator-curated prompts into the durable geo_snapshots time-series. Weekly + budget-bounded +
 // freshness-cached: each prompt is a web-search answer + a Haiku judge. withoutOverlapping so a slow
 // multi-tenant sweep can't stack.
-Schedule::command('sandhog:sync-geo')->weekly()->withoutOverlapping();
+Schedule::command('sandhog:sync-geo')->weeklyOn(2, '02:00')->withoutOverlapping(); // Tue
 
 // Prune the GEO check activity log past its retention window so the append-only table stays bounded.
-Schedule::command('sandhog:prune-geo-events')->weekly();
+Schedule::command('sandhog:prune-geo-events')->weeklyOn(0, '03:00'); // Sun (cleanup)
 
 // Client-dashboard "Site speed" — measure Core Web Vitals (PageSpeed Insights) for each site's
 // published pages into the durable page_vitals table. Weekly + budget-bounded + freshness-cached: one
 // PSI call per URL is slow and quota-limited, so a weekly sweep fills coverage over time. withoutOverlapping
 // so a slow multi-tenant sweep can't stack.
-Schedule::command('sandhog:sync-vitals')->weekly()->withoutOverlapping();
+Schedule::command('sandhog:sync-vitals')->weeklyOn(3, '02:00')->withoutOverlapping(); // Wed
 
 // Client-dashboard rank spine — roll the §5 position-snapshot series up into the
 // metric spine (per-keyword rank + site standings) so the dashboard trends keyword
@@ -138,7 +138,7 @@ Schedule::command('launchpad:send-monthly-reports')->monthlyOn(1, '08:00')->with
 // hydrator). One Places details call per location/week (shared account); queues one job per location.
 // withoutOverlapping so a slow multi-tenant sweep can't stack. Ad-hoc refresh is the "Import from Google"
 // action on a location.
-Schedule::command('launchpad:refresh-places --all')->weekly()->withoutOverlapping();
+Schedule::command('launchpad:refresh-places --all')->weeklyOn(4, '02:00')->withoutOverlapping(); // Thu
 
 // Citation scan — monthly directory-listing sweep for every NAP-profiled location. Queues one scan per
 // location; the run records what changed (new/fixed/regressed/lost), verifies in-flight submissions, and
