@@ -9,10 +9,14 @@ use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
+use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operate\ContentCard;
+use App\Operate\LiveBoard;
 use App\Support\PublicUrl;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as SupportCollection;
 
 /**
  * The LIVE boards read model — published pages only, grouped the way the business is shaped.
@@ -30,6 +34,9 @@ use Illuminate\Database\Eloquent\Collection;
  */
 class LiveBoards
 {
+    /** @var array<string, array{indexed: SupportCollection<string, int>, verdict: SupportCollection<string, int>}> durable index-id sets, memoized per site */
+    private array $indexSets = [];
+
     public function __construct(private readonly LiveMetrics $metrics) {}
 
     /**
@@ -138,24 +145,103 @@ class LiveBoards
      */
     private function card(Content $content, Site $site): array
     {
-        return [
-            'id' => (string) $content->id,
-            'title' => (string) $content->title,
-            'type' => $content->page_type->value ?? 'page',
-            'url' => PublicUrl::forContent($site->domain_url, $content) ?? '/'.ltrim((string) $content->slug, '/'),
-            'published_at' => $content->published_at?->toDateString(),
-            'days_live' => $content->published_at !== null ? (int) $content->published_at->diffInDays(now()) : null,
-            'locked' => (bool) $content->locked,
-            // IndexNow: the date this page's URL was accepted by Bing/Yandex/etc (a SUBMISSION
-            // acknowledgment, not a confirmed index — distinct from the earned "In Google" signal).
-            'indexnow_at' => $content->indexnow_submitted_at?->toDateString(),
-            // Priority-city state for location cards: true/false when the page has a Market, null
-            // otherwise (service/core pages) — drives the "Mark priority" toggle + highlight.
-            'market_priority' => $this->marketPriority($content, $site),
-            // Render path: GA4 sessions read from the warmed cache only (never a live GA4 call on render);
-            // the weekly WarmGa4Pages pass keeps that cache fresh.
-            'metrics' => $this->metrics->for($content, liveTraffic: false),
+        // Render path: GA4/GSC read from the warmed cache only (never a live call on render); the warm
+        // passes keep the caches fresh.
+        $m = $this->metrics->for($content, liveTraffic: false);
+        $gsc = is_array($m['gsc'] ?? null) ? $m['gsc'] : [];
+        $position = is_array($m['position'] ?? null) ? $m['position'] : [];
+        $index = is_array($m['index'] ?? null) ? $m['index'] : [];
+        $local = is_array($m['local'] ?? null) ? $m['local'] : [];
+        $traffic = is_array($m['traffic'] ?? null) ? $m['traffic'] : [];
+        $bing = is_array($m['bing'] ?? null) ? $m['bing'] : [];
+        $rank = $position['rank'] ?? null;
+        $id = (string) $content->id;
+
+        // The index verdict comes from the DURABLE page_index_states (the same source Live and the Indexing
+        // panel use), NOT the per-card inspection cache the pages board read before — that split is why a PASS
+        // row rendered no chip here while Live showed "Indexed". One source now, via the shared resolver.
+        $sets = $this->indexSets($site);
+        [$indexed, $indexState, $indexLabel] = ContentCard::resolveIndex(
+            $sets['indexed']->has($id), $sets['verdict']->has($id), (bool) ($gsc['in_google'] ?? false),
+        );
+        $bucket = $this->bucket($content);
+
+        return (new ContentCard(
+            id: $id,
+            title: (string) $content->title,
+            url: (string) (PublicUrl::forContent($site->domain_url, $content) ?? '/'.ltrim((string) $content->slug, '/')),
+            type: $bucket,
+            typeLabel: ['blog' => 'Blog', 'core' => 'Core', 'service' => 'Service', 'town' => 'Town'][$bucket],
+            locked: (bool) $content->locked,
+            indexed: $indexed,
+            indexState: $indexState,
+            indexLabel: $indexLabel,
+            rank: $rank !== null ? (int) $rank : null,
+            delta: $position['delta'] ?? null,
+            impressions: $gsc['impressions'] ?? null,
+            clicks: $gsc['clicks'] ?? null,
+            sessions: $traffic['sessions'] ?? null,
+            keyword: $m['keyword'] ?? null,
+            pending: false, // the pages boards always render the metric grid — no whole-card defer
+            publishedAt: $content->published_at?->toDateString(),
+            daysLive: $content->published_at !== null ? (int) $content->published_at->diffInDays(now()) : null,
+            inGoogle: (bool) ($gsc['in_google'] ?? false),
+            inBing: (bool) ($bing['in_bing'] ?? false),
+            // IndexNow: the date the URL was accepted by Bing/Yandex/etc (a SUBMISSION ack, distinct from the
+            // earned "In Google"/"In Bing" signal).
+            indexnowAt: $content->indexnow_submitted_at?->toDateString(),
+            pageOne: $rank !== null && (int) $rank <= 10,
+            indexCoverageState: is_string($index['coverage_state'] ?? null) && $index['coverage_state'] !== '' ? $index['coverage_state'] : null,
+            indexCanonicalMismatch: (bool) ($index['canonical_mismatch'] ?? false),
+            positionPending: $position['pending'] ?? null,
+            positionState: $position['state'] ?? null,
+            localRank: $local['rank'] ?? null,
+            localMarket: is_string($local['market'] ?? null) ? $local['market'] : null,
+            series: is_array($m['series'] ?? null) ? $m['series'] : [],
+            refreshCount: (int) ($m['refresh_count'] ?? 0),
+            ctr: isset($gsc['ctr']) ? (float) $gsc['ctr'] : null,
+            gscPending: $gsc['pending'] ?? null,
+            queries: is_array($gsc['queries'] ?? null) ? $gsc['queries'] : [],
+            trafficPending: $traffic['pending'] ?? null,
+            // Priority-city state for location cards: true/false when the page has a Market, null otherwise —
+            // drives the "Mark priority" toggle + highlight.
+            marketPriority: $this->marketPriority($content, $site),
+            rawMetrics: $m,
+        ))->toArray();
+    }
+
+    /**
+     * The durable index-id sets for a site (indexed = a PASS verdict; verdict = any verdict row = inspected),
+     * batch-loaded once and memoized so a board of 100+ cards is two queries, not two per card.
+     *
+     * @return array{indexed: SupportCollection<string, int>, verdict: SupportCollection<string, int>}
+     */
+    private function indexSets(Site $site): array
+    {
+        return $this->indexSets[$site->id] ??= [
+            'indexed' => PageIndexState::query()->withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->where('index_verdict', 'PASS')
+                ->pluck('content_id')->filter()->flip(),
+            'verdict' => PageIndexState::query()->withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->whereNotNull('content_id')
+                ->pluck('content_id')->filter()->flip(),
         ];
+    }
+
+    /** The card bucket — the shared vocabulary (core / service / town / blog), same rule as {@see LiveBoard}. */
+    private function bucket(Content $content): string
+    {
+        if ($content->kind === ContentKind::Post) {
+            return 'blog';
+        }
+        if ($content->page_type === PageType::Service) {
+            return 'service';
+        }
+        if ($content->page_type === PageType::Location) {
+            return 'town';
+        }
+
+        return 'core';
     }
 
     /**
