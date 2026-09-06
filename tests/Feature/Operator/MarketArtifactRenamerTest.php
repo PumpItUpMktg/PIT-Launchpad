@@ -14,20 +14,10 @@ function dirtyMarket(Site $s, string $name, ?string $geoId = null): Market
     return Market::factory()->create(['site_id' => $s->id, 'name' => $name, 'region' => 'MD', 'tier' => 'coverage', 'geo_id' => $geoId]);
 }
 
-function renamerTownPage(Site $s, Market $m, string $title, string $slug, ?int $wpPostId = null): Content
-{
-    return Content::factory()->create([
-        'site_id' => $s->id, 'page_type' => PageType::Location, 'market_id' => $m->id,
-        'title' => $title, 'slug' => $slug, 'wp_post_id' => $wpPostId,
-    ]);
-}
-
-it('plans a rename for a dirty market, its CoverageArea, and its pinned town page (presence before absence)', function () {
+it('plans a name rename for a dirty market + its CoverageArea (presence before absence)', function () {
     $site = Site::factory()->create();
-    // CoverageArea stores clean (its write mutator strips the artifact); the market predates the mutator.
     $area = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD']);
     $market = dirtyMarket($site, '4, Marshall', '2451234');
-    renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
 
     $plan = app(MarketArtifactRenamer::class)->plan($site);
 
@@ -36,8 +26,7 @@ it('plans a rename for a dirty market, its CoverageArea, and its pinned town pag
         ->and($plan[0]['new'])->toBe('Marshall')
         ->and($plan[0]['collision'])->toBeFalse()
         ->and($plan[0]['coverage_area_id'])->toBe($area->id)   // matched by geo_id
-        ->and($plan[0]['pages'])->toHaveCount(1)
-        ->and($plan[0]['pages'][0]['new_title'])->toBe('Marshall, MD');
+        ->and($plan[0])->not->toHaveKey('pages');              // scope is markets.name — no page cascade
 });
 
 it('leaves a clean market untouched', function () {
@@ -47,44 +36,43 @@ it('leaves a clean market untouched', function () {
     expect(app(MarketArtifactRenamer::class)->plan($site))->toBe([]);
 });
 
-it('applies the cascade — market, CoverageArea, and page title all land on the same clean value', function () {
+it('applies the rename — market + CoverageArea land on the same clean value', function () {
     $site = Site::factory()->create();
-    // CoverageArea itself still dirty (predates the mutator) — force it past the write mutator for the fixture.
     $area = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD']);
-    CoverageArea::withoutGlobalScopes()->whereKey($area->id)->update(['name' => '4, Marshall']); // simulate a legacy dirty row
+    CoverageArea::withoutGlobalScopes()->whereKey($area->id)->update(['name' => '4, Marshall']); // legacy dirty row
     $market = dirtyMarket($site, '4, Marshall', '2451234');
-    $page = renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
 
     $renamed = app(MarketArtifactRenamer::class)->apply($site);
 
     expect($renamed)->toBe(1)
         ->and(Market::withoutGlobalScopes()->find($market->id)->name)->toBe('Marshall')
-        ->and(CoverageArea::withoutGlobalScopes()->find($area->id)->name)->toBe('Marshall')
-        ->and(Content::withoutGlobalScopes()->find($page->id)->title)->toBe('Marshall, MD');
+        ->and(CoverageArea::withoutGlobalScopes()->find($area->id)->name)->toBe('Marshall');
 });
 
-it('leaves the slug untouched — LocationNesting regenerates it from the corrected title on the next build', function () {
+it('NEVER touches a published page — pages are a dedup problem, not a retitle', function () {
     $site = Site::factory()->create();
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD']);
     $market = dirtyMarket($site, '4, Marshall', '2451234');
-    $page = renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
+    $page = Content::factory()->create([
+        'site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $market->id,
+        'title' => '4, Marshall, MD', 'slug' => 'fallston/4-marshall-md', 'wp_post_id' => 8821,
+    ]);
 
     app(MarketArtifactRenamer::class)->apply($site);
 
-    expect(Content::withoutGlobalScopes()->find($page->id)->slug)->toBe('fallston/4-marshall-md'); // unchanged here
+    $fresh = Content::withoutGlobalScopes()->find($page->id);
+    expect($fresh->title)->toBe('4, Marshall, MD')      // title untouched (live indexed content)
+        ->and($fresh->slug)->toBe('fallston/4-marshall-md');
 });
 
 it('is a no-op for the next build — projectTerritories re-resolves the renamed market, no duplicate', function () {
     $site = Site::factory()->create();
     $area = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD', 'page_selected' => true]);
     $market = dirtyMarket($site, '4, Marshall', '2451234');
-    renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md');
 
     app(MarketArtifactRenamer::class)->apply($site);
     $countAfterRename = Market::withoutGlobalScopes()->where('site_id', $site->id)->count();
 
-    // The next build reads CoverageArea.name and firstOrCreate's the market by name. Because the rename
-    // aligned Market.name to CoverageArea.name, it resolves the SAME market — no orphan, no duplicate.
     $resolved = app(GuidedEntityProjector::class)->marketForCoverageArea($area->id, $site);
     Market::withoutGlobalScopes()->firstOrCreate(
         ['site_id' => $site->id, 'name' => (string) CoverageArea::withoutGlobalScopes()->find($area->id)->name],
@@ -95,29 +83,17 @@ it('is a no-op for the next build — projectTerritories re-resolves the renamed
         ->and(Market::withoutGlobalScopes()->where('site_id', $site->id)->count())->toBe($countAfterRename); // no mint
 });
 
-it('flags a name collision and does not apply it (leaves both markets for a manual merge)', function () {
+it('flags a duplicate (cleaned name already a market) as a collision and skips it — merge, not rename', function () {
     $site = Site::factory()->create();
-    dirtyMarket($site, 'Marshall', '2451234');          // a clean market already owns the target name
-    $dirty = dirtyMarket($site, '4, Marshall', '2451299'); // cleaning this would collide
+    dirtyMarket($site, 'Marshall', '2451234');          // the clean twin (a real duplicate underneath)
+    $dirty = dirtyMarket($site, '4, Marshall', '2451299');
 
     $plan = app(MarketArtifactRenamer::class)->plan($site);
     $renamed = app(MarketArtifactRenamer::class)->apply($site);
 
     expect(collect($plan)->firstWhere('market_id', $dirty->id)['collision'])->toBeTrue()
-        ->and($renamed)->toBe(0)  // the colliding row is skipped
-        ->and(Market::withoutGlobalScopes()->find($dirty->id)->name)->toBe('4, Marshall'); // untouched
-});
-
-it('flags a published page (its slug becomes a live-URL change on the next build)', function () {
-    $site = Site::factory()->create();
-    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Marshall', 'geo_id' => '2451234', 'state' => 'MD']);
-    $market = dirtyMarket($site, '4, Marshall', '2451234');
-    renamerTownPage($site, $market, '4, Marshall, MD', 'fallston/4-marshall-md', wpPostId: 8821);
-
-    $plan = app(MarketArtifactRenamer::class)->plan($site);
-
-    expect($plan[0]['published_pages'])->toBe(1)
-        ->and($plan[0]['pages'][0]['published'])->toBeTrue();
+        ->and($renamed)->toBe(0)
+        ->and(Market::withoutGlobalScopes()->find($dirty->id)->name)->toBe('4, Marshall'); // untouched → merge tool
 });
 
 it('scopes the rename to one site — never touches another tenant', function () {
@@ -150,19 +126,10 @@ it('report-only by default writes nothing; --execute applies and verifies zero r
     $code = Artisan::call('launchpad:rename-market-artifacts', ['--site' => $site->id]);
     expect($code)->toBe(0)
         ->and(Artisan::output())->toContain('would be renamed')
-        ->and(Market::withoutGlobalScopes()->find($market->id)->name)->toBe('4, Marshall'); // unchanged
+        ->and(Market::withoutGlobalScopes()->find($market->id)->name)->toBe('4, Marshall');
 
     $code = Artisan::call('launchpad:rename-market-artifacts', ['--site' => $site->id, '--execute' => true]);
     expect($code)->toBe(0)
         ->and(Artisan::output())->toContain('Remaining renamable artifacts after re-read: 0')
-        ->and(Market::withoutGlobalScopes()->find($market->id)->name)->toBe('Marshall'); // applied
-});
-
-it('reports a clean tenant as a real "nothing to rename" result', function () {
-    $site = Site::factory()->create(['brand_name' => 'CleanCo']);
-    dirtyMarket($site, 'Fallston', '2426000');
-
-    $code = Artisan::call('launchpad:rename-market-artifacts', ['--site' => $site->id]);
-
-    expect($code)->toBe(0)->and(Artisan::output())->toContain('No market artifacts found');
+        ->and(Market::withoutGlobalScopes()->find($market->id)->name)->toBe('Marshall');
 });

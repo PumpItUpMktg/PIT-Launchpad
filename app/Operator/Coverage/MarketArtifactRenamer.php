@@ -4,46 +4,42 @@ namespace App\Operator\Coverage;
 
 use App\Console\Commands\RenameMarketArtifactsCommand;
 use App\Locations\CoverageName;
-use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Market;
 use App\Models\Site;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Strips the leading numbered-list artifact ("4, Marshall" -> "Marshall") off a market and everything
- * coupled to it BY NAME, in lockstep, so the rename is a true no-op for the next build.
+ * Strips the leading numbered-list artifact ("4, Marshall" -> "Marshall") off a market NAME — and its
+ * source CoverageArea, so the rename is a true no-op for the next build.
  *
- * Why the cascade (not just markets.name): the artifact's SOURCE is CoverageArea.name, copied at build
- * time into three places that are NOT connected by a foreign key —
- *   - Market.name        via GuidedEntityProjector::projectTerritories (firstOrCreate(['name' => area.name]))
- *   - Content.title       via BuildManifestAssembler (title = area.name . ', ' . state), baked at materialize
- *   - and re-matched      via marketForCoverageArea (Market.name === CoverageArea.name)
- * Renaming markets.name alone would desync the pair: the next build's projectTerritories re-mints the old
- * name as a DUPLICATE market. (Existing pages do not orphan — PageMaterializer re-links them by
- * build_pages.content_id, an id, and skips them, so their pinned market_id FK survives.) So the fix follows
- * the SOURCE: it aligns Market.name to the CoverageArea (the value projectTerritories reads) and cleans the
- * pages' titles. Slugs are left alone — LocationNesting recomputes each town slug from its title on every
- * build, so a corrected title yields a corrected slug on the next build (no live-URL surgery here).
+ * Scope is deliberately `markets.name` (+ its CoverageArea source), NOT the published pages. Renaming a
+ * market's town pages' TITLES was tried and pulled: the numbered markets that have published pages turned
+ * out to be RUNAWAY DUPLICATES (a town with 9 pages, `-3 -4 -5 -6` slugs) — a duplication problem the
+ * pages get DEDUPED for, never retitled (retitling 27 live indexed pages is a content change that would
+ * paper over the duplication). This tool is for the genuine numbered-only markets (a unique geo_id, no
+ * clean twin): clean the name, leave the pages to the dedup path.
  *
- * The one canonical stripper is {@see CoverageName::clean()} — the same normalizer the CoverageArea write
- * mutator uses — so every field lands on the identical cleaned value.
+ * Why the CoverageArea is still touched (it is not a page): the artifact's SOURCE is CoverageArea.name,
+ * which GuidedEntityProjector::projectTerritories reads to firstOrCreate the market BY NAME. If the market
+ * is renamed out of step with its CoverageArea, the next build re-mints the old numbered name as a
+ * duplicate. Aligning both (Market.name === CoverageArea.name, via the one canonical {@see CoverageName::clean()})
+ * keeps the rename durable. A market whose cleaned name already belongs to another market (a real duplicate,
+ * e.g. "1, Abingdon" over an existing "Abingdon") is a `collision` — skipped for the merge tool, never
+ * renamed into a second duplicate.
  *
- * Report-only by planning; {@see RenameMarketArtifactsCommand} is the thin,
- * report-only-by-default surface.
+ * Report-only by planning; {@see RenameMarketArtifactsCommand} is the thin, report-only-by-default surface.
  */
 final class MarketArtifactRenamer
 {
     /**
      * The rename plan for a site: one row per market whose name carries the artifact, with the coupled
-     * CoverageArea and the pinned town pages it will clean alongside it. A row flagged `collision` is left
-     * for a manual merge (its cleaned name already belongs to another market) and is NOT applied.
+     * CoverageArea it will align alongside it. A `collision` row (cleaned name already owned by another
+     * market — a duplicate) is left for the merge tool and is NOT applied.
      *
      * @return list<array{
      *   market_id: string, old: string, new: string, collision: bool,
-     *   coverage_area_id: ?string, coverage_area_old: ?string, coverage_area_dirty: bool,
-     *   pages: list<array{id: string, old_title: string, new_title: string, slug: string, published: bool}>,
-     *   published_pages: int
+     *   coverage_area_id: ?string, coverage_area_old: ?string, coverage_area_dirty: bool
      * }>
      */
     public function plan(Site $site): array
@@ -73,25 +69,10 @@ final class MarketArtifactRenamer
             }
 
             // Safeguard: renaming into an existing DIFFERENT market of the same clean name would create the
-            // very duplicate we are here to prevent (the latent re-mint may have already run). Flag + skip.
+            // very duplicate we are here to prevent (a numbered row over a clean twin). Flag + skip → merge tool.
             $collision = $markets->contains(
                 fn (Market $m): bool => $m->id !== $market->id && (string) $m->name === $new
             );
-
-            $pages = Content::withoutGlobalScopes()
-                ->where('site_id', $site->id)
-                ->where('market_id', $market->id)
-                ->get()
-                ->filter(fn (Content $c): bool => CoverageName::isDirty((string) $c->title))
-                ->map(fn (Content $c): array => [
-                    'id' => (string) $c->id,
-                    'old_title' => (string) $c->title,
-                    'new_title' => CoverageName::clean((string) $c->title),
-                    'slug' => (string) $c->slug,
-                    'published' => $c->wp_post_id !== null,
-                ])
-                ->values()
-                ->all();
 
             $rows[] = [
                 'market_id' => (string) $market->id,
@@ -101,8 +82,6 @@ final class MarketArtifactRenamer
                 'coverage_area_id' => $areaId,
                 'coverage_area_old' => $areaOld,
                 'coverage_area_dirty' => $areaDirty,
-                'pages' => $pages,
-                'published_pages' => count(array_filter($pages, fn (array $p): bool => $p['published'])),
             ];
         }
 
@@ -110,9 +89,9 @@ final class MarketArtifactRenamer
     }
 
     /**
-     * Apply every non-colliding row in one transaction — align the market to the CoverageArea, clean the
-     * CoverageArea itself if it predates the write mutator, and strip the pinned pages' titles. Returns the
-     * number of markets renamed. Idempotent: a second run finds nothing dirty.
+     * Apply every non-colliding row in one transaction — align the market to its CoverageArea (and clean the
+     * CoverageArea itself if it predates the write mutator). Published pages are NOT touched (dedup, not
+     * retitle). Returns the number of markets renamed. Idempotent: a second run finds nothing dirty.
      */
     public function apply(Site $site): int
     {
@@ -124,10 +103,6 @@ final class MarketArtifactRenamer
 
                 if ($r['coverage_area_id'] !== null && $r['coverage_area_dirty']) {
                     CoverageArea::withoutGlobalScopes()->whereKey($r['coverage_area_id'])->update(['name' => $r['new']]);
-                }
-
-                foreach ($r['pages'] as $p) {
-                    Content::withoutGlobalScopes()->whereKey($p['id'])->update(['title' => $p['new_title']]);
                 }
             }
         });
