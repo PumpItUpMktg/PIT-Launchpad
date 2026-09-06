@@ -55,8 +55,15 @@ Build 7 · Territory 6 · Results 5 · System 6 = **24**.
    plans** are tabs inside Towns.
 9. **Planned display** (acceptance 19, landed on this branch): a candidate PAGE
    reads "Planned" in the state chip (display-only; no enum/migration).
-10. **Legacy: retire from nav, keep routes.** Superseded surfaces leave the nav
-    (no entry) but their routes stay reachable. Nothing is deleted.
+10. **Legacy: retire from nav; keep a route ONLY with a redirect.** A superseded
+    surface leaves the nav, and its route is kept only where a redirect to the
+    replacement is added; a surface with no replacement is deleted. An unrouted,
+    unlinked, nav-retired surface is deleted — a live route with no nav entry
+    accumulates stale references (a "Towns board" tab pointed at a retired board for
+    a whole cutover) and stays URL-reachable to anyone with the link (this is what
+    left seven cross-tenant resources reachable via `discoverResources`). "Hide,
+    don't delete" is not the policy: retire the nav entry AND either redirect the
+    route or delete it.
 11. Portfolio (`SiteResource` nav entry) and Overview fold into the Lobby.
 
 ## Open item — Territory naming vs. model (found during publish-hold)
