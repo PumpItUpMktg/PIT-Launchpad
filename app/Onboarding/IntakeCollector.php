@@ -30,7 +30,9 @@ use App\Models\Site;
 use App\Models\SiteBranding;
 use App\Models\SourceDocument;
 use App\Models\VoiceProfile;
+use App\Support\GeoBounds;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Persists each onboarding bucket into the §1 entities. Vendors (GBP, Census,
@@ -166,6 +168,7 @@ class IntakeCollector
     {
         return collect($markets)->map(function (array $def) use ($site) {
             $geoId = $def['geo_id'] ?? null;
+            [$lat, $lng] = $this->validMarketGeo($def);
 
             return Market::create([
                 'site_id' => $site->id,
@@ -173,11 +176,43 @@ class IntakeCollector
                 'geo_id' => $geoId,
                 'region' => $def['region'] ?? null,
                 'tier' => MarketTier::from($def['tier'] ?? 'coverage'),
-                'lat' => $def['lat'] ?? null,
-                'lng' => $def['lng'] ?? null,
+                'lat' => $lat,
+                'lng' => $lng,
                 'demographics' => $geoId !== null ? $this->census->demographics((string) $geoId) : null,
             ]);
         });
+    }
+
+    /**
+     * Accept a market coordinate ONLY if it plausibly falls in the US service area. A pair outside it (a
+     * geocode error like the South-Pacific -29.6,-175.4 that once centred a whole local grid over open
+     * ocean) is DROPPED to null and logged — never persisted, so it can't silently break local tracking.
+     * A market that simply supplied no coordinate is left null with no log (that gap is surfaced by the
+     * geo report). Validating here (not geocoding) keeps the onboarding Livewire path HTTP-free.
+     *
+     * @param  array<string, mixed>  $def
+     * @return array{0: float|null, 1: float|null}
+     */
+    private function validMarketGeo(array $def): array
+    {
+        $lat = isset($def['lat']) && is_numeric($def['lat']) ? (float) $def['lat'] : null;
+        $lng = isset($def['lng']) && is_numeric($def['lng']) ? (float) $def['lng'] : null;
+
+        if (GeoBounds::isWithinServiceArea($lat, $lng)) {
+            return [$lat, $lng];
+        }
+
+        // Only shout when a coordinate was actually supplied but rejected — a missing one is a known gap,
+        // not corruption, and the report covers it.
+        if (($def['lat'] ?? null) !== null || ($def['lng'] ?? null) !== null) {
+            Log::warning('Market geo rejected: coordinate outside the US service area — stored null.', [
+                'market' => (string) ($def['name'] ?? ''),
+                'lat' => $def['lat'] ?? null,
+                'lng' => $def['lng'] ?? null,
+            ]);
+        }
+
+        return [null, null];
     }
 
     // Step 5 — Proof ----------------------------------------------------------

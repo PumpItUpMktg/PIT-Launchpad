@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\MarketTier;
 use App\Models\Concerns\BelongsToSite;
+use App\Support\GeoBounds;
 use Carbon\CarbonInterface;
 use Database\Factories\MarketFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -50,6 +51,19 @@ class Market extends Model
     public function releaseOverdue(): bool
     {
         return $this->on_hold && $this->release_at !== null && $this->release_at->isPast();
+    }
+
+    /**
+     * Whether this market carries a coordinate that plausibly falls in the US service area — the
+     * precondition for centring a local-pack grid on it. Null or out-of-area geo (e.g. a South-Pacific
+     * geocode error) is NOT valid: it would query open ocean. The geo report keys off this.
+     */
+    public function hasValidGeo(): bool
+    {
+        return GeoBounds::isWithinServiceArea(
+            $this->lat !== null ? (float) $this->lat : null,
+            $this->lng !== null ? (float) $this->lng : null,
+        );
     }
 
     /** @return array<string, string> */
