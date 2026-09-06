@@ -69,6 +69,17 @@ return [
         'budget_seconds' => (float) env('LAUNCHPAD_GEO_BUDGET_SECONDS', 240),
         'freshness_days' => (int) env('LAUNCHPAD_GEO_FRESHNESS_DAYS', 6),
 
+        // Plausible US service-area bounding box (CONUS + AK + HI + PR). A market coordinate outside it is
+        // corruption, not a real market — the intake guard drops such a pair to null rather than let it
+        // centre a local grid over open ocean (a South-Pacific -29.6,-175.4 pair did exactly that). Tunable
+        // if the footprint ever extends beyond the US. See App\Support\GeoBounds.
+        'service_area_bounds' => [
+            'lat_min' => (float) env('LAUNCHPAD_GEO_LAT_MIN', 17.0),
+            'lat_max' => (float) env('LAUNCHPAD_GEO_LAT_MAX', 72.0),
+            'lng_min' => (float) env('LAUNCHPAD_GEO_LNG_MIN', -180.0),
+            'lng_max' => (float) env('LAUNCHPAD_GEO_LNG_MAX', -64.0),
+        ],
+
         // Auto-seed bounding — geo prompts multiply fast (services × towns × intents × engines × cadence),
         // so cap the town fan-out (biggest published towns first) and the total prompts seeded per tenant.
         'seed' => [
