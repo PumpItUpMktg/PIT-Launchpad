@@ -6,7 +6,6 @@ use App\Console\Commands\RepushBreadcrumbsCommand;
 use App\ContentEngine\Reconcile\PostTownTagger;
 use App\Enums\ContentKind;
 use App\Enums\ContentSource;
-use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\SlotContentType;
 use App\Enums\StandardPageType;
@@ -29,6 +28,7 @@ use App\PageBuilder\Validation\PublishEligibility;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\Blocks\NapPin;
 use App\Publishing\Blocks\ServiceAreaMap;
+use App\Publishing\Breadcrumbs\SiloIndexResolver;
 use App\Publishing\Schema\LocationSchemaBuilder;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use App\Support\PublicUrl;
@@ -64,6 +64,7 @@ class MetaBlobAssembler
         private readonly BlockContentAssembler $blockContent,
         private readonly ServiceAreaMap $serviceAreaMap,
         private readonly NapPin $napPin,
+        private readonly SiloIndexResolver $siloIndex,
     ) {}
 
     /**
@@ -1028,40 +1029,16 @@ class MetaBlobAssembler
         return $slug !== '' ? $home.$slug.'/' : '';
     }
 
-    /** The slug (no surrounding slashes) of the silo's live top page, or '' when none is live. */
+    /**
+     * The slug (no surrounding slashes) of the silo's live INDEX page, or '' when none resolves. Delegates to
+     * {@see SiloIndexResolver}, which identifies the index by pillar → Hub → NAME match → similarity → none —
+     * never the first sibling by arbitrary DB order (the defect that named a crumb for the silo but linked it
+     * at a different service page). A wrong target is worse than no crumb, so an unresolved silo drops the
+     * crumb (Home → Leaf) rather than link a coin-flip sibling.
+     */
     private function liveSiloTopSlug(Content $content): string
     {
-        if ($content->silo_id === null) {
-            return '';
-        }
-
-        // The designated pillar, but only when it is actually live.
-        $pillar = $content->silo?->pillarContent;
-        if ($pillar !== null && $pillar->id !== $content->id
-            && $pillar->status === ContentStatus::Published && trim((string) $pillar->slug) !== '') {
-            return trim((string) $pillar->slug, '/');
-        }
-
-        // Else the silo's top published page — a Hub (the index) before a Service, then any other.
-        $published = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->where('silo_id', $content->silo_id)
-            ->where('kind', ContentKind::Page->value)
-            ->where('status', ContentStatus::Published->value)
-            ->whereKeyNot($content->id)
-            ->get(['id', 'slug', 'page_type'])
-            ->filter(fn (Content $c) => trim((string) $c->slug) !== '');
-
-        foreach ([PageType::Hub, PageType::Service] as $type) {
-            $match = $published->first(fn (Content $c) => $c->page_type === $type);
-            if ($match !== null) {
-                return trim((string) $match->slug, '/');
-            }
-        }
-
-        $any = $published->first();
-
-        return $any !== null ? trim((string) $any->slug, '/') : '';
+        return $this->siloIndex->topSlug($content);
     }
 
     /**
