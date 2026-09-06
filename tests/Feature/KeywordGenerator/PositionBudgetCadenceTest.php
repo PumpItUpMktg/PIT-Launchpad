@@ -13,6 +13,12 @@ use App\Models\PositionSnapshot;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 
+// These tests exercise the per-keyword TIER cadence + budget cap — not the site-level dueForTracking gate.
+// Pin that gate to daily so a site with a recent snapshot is still "due", isolating the tier behavior under
+// test regardless of the ambient tracking-cadence default (which is weekly). SitePipelineRefresher is a
+// fresh bind, so it reads this at resolution time.
+beforeEach(fn () => config()->set('content_engine.pipeline.tracking_cadence_days', 1));
+
 /** Bind a SERP mock that returns an own-domain result for each given query, plus a null local grid. */
 function pbcSerp(array $queries): void
 {

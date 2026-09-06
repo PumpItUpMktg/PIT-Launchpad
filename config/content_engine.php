@@ -28,8 +28,14 @@ return [
     // site's unit only when its newest durable artifact is older than this — so
     // position tracking refreshes on a regular beat and discovery runs slower.
     // The operator "refresh now" action bypasses both.
+    //
+    // Tracking is WEEKLY: DataForSEO bills per SERP task and organic positions
+    // don't move enough day-to-day to justify a daily spend (the daily driver
+    // still runs, but a site's tracking is skipped until a week has passed). This
+    // value is also the freshness interval the rankings stamps read
+    // (App\Support\Cadence 'serp'), so the two never drift.
     'pipeline' => [
-        'tracking_cadence_days' => (int) env('KEYWORD_TRACKING_CADENCE_DAYS', 1),
+        'tracking_cadence_days' => (int) env('KEYWORD_TRACKING_CADENCE_DAYS', 7),
         'discovery_cadence_days' => (int) env('KEYWORD_DISCOVERY_CADENCE_DAYS', 7),
     ],
 

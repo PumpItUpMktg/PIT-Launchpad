@@ -110,6 +110,25 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Data cadence — expected refresh interval per dataset (DAYS)
+    |--------------------------------------------------------------------------
+    | The single source the freshness stamps read (via App\Support\Cadence) so a
+    | panel's "as of {date}" escalation uses the REAL cadence, not a per-surface
+    | number. These match the scheduled work in routes/console.php:
+    |   - gsc / index — DAILY (free / already-daily, budget-capped)
+    |   - geo — WEEKLY (DataForSEO bills per task; geo doesn't move enough daily)
+    | SERP positions are intentionally NOT listed here — their interval is the §5
+    | tracking gate (content_engine.pipeline.tracking_cadence_days), read directly
+    | by App\Support\Cadence so the two can never drift.
+    */
+    'cadence' => [
+        'gsc' => (float) env('LAUNCHPAD_CADENCE_GSC_DAYS', 1),
+        'index' => (float) env('LAUNCHPAD_CADENCE_INDEX_DAYS', 1),
+        'geo' => (float) env('LAUNCHPAD_CADENCE_GEO_DAYS', 7),
+    ],
+
     'vitals' => [
         // Core Web Vitals (PageSpeed Insights) audit. Each URL is one PSI call (~seconds), so a run
         // measures until this wall-clock budget is spent, then leaves the rest for the next run — the
