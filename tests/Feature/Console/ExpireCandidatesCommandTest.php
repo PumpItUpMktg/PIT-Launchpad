@@ -24,14 +24,15 @@ function expiryCandidate(Site $site, string $shelfLife, ?int $publishedDaysAgo, 
     ], $extra));
 }
 
-it('report-only names stale topical candidates and changes nothing', function () {
+it('report-only names stale candidates (with a per-shelf-life split) and changes nothing', function () {
     $site = Site::factory()->create();
     $stale = expiryCandidate($site, 'topical', 40);
 
     $this->artisan('launchpad:expire-candidates')
         ->assertSuccessful()
         ->expectsOutputToContain('report-only')
-        ->expectsOutputToContain('Would reject 1 stale topical candidate');
+        ->expectsOutputToContain('Would reject 1 stale candidate')
+        ->expectsOutputToContain('by shelf-life: topical 1 · evergreen 0 · unclassified 0');
 
     expect($stale->fresh()->status)->toBe(ContentStatus::Candidate); // untouched
 });
@@ -47,15 +48,30 @@ it('--execute rejects a stale topical candidate with reason=expired', function (
         ->and($fresh->reject_reason)->toBe('expired');
 });
 
-it('never expires an evergreen candidate, however old', function () {
+it('expires an evergreen candidate too (everything expires at the window)', function () {
     $site = Site::factory()->create();
     $evergreen = expiryCandidate($site, 'evergreen', 400);
 
     $this->artisan('launchpad:expire-candidates --execute')
         ->assertSuccessful()
-        ->expectsOutputToContain('No stale topical candidates');
+        ->expectsOutputToContain('by shelf-life: topical 0 · evergreen 1 · unclassified 0');
 
-    expect($evergreen->fresh()->status)->toBe(ContentStatus::Candidate);
+    expect($evergreen->fresh()->status)->toBe(ContentStatus::Rejected)
+        ->and($evergreen->fresh()->reject_reason)->toBe('expired');
+});
+
+it('expires an UNCLASSIFIED candidate (no shelf_life) — the pre-classification backlog', function () {
+    $site = Site::factory()->create();
+    // No shelf_life in meta at all — the 3,074-candidate backlog shape the topical-only filter skipped.
+    $backlog = Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Candidate, 'body' => null, 'meta' => []]);
+    $backlog->forceFill(['created_at' => now()->subDays(60)])->save();
+
+    $this->artisan('launchpad:expire-candidates --execute')
+        ->assertSuccessful()
+        ->expectsOutputToContain('by shelf-life: topical 0 · evergreen 0 · unclassified 1');
+
+    expect($backlog->fresh()->status)->toBe(ContentStatus::Rejected)
+        ->and($backlog->fresh()->reject_reason)->toBe('expired');
 });
 
 it('keeps a topical candidate still inside the freshness window', function () {
@@ -84,7 +100,7 @@ it('never auto-rejects a drafted candidate', function () {
 
     $this->artisan('launchpad:expire-candidates --execute')
         ->assertSuccessful()
-        ->expectsOutputToContain('No stale topical candidates');
+        ->expectsOutputToContain('No stale candidates');
 
     expect($drafted->fresh()->status)->toBe(ContentStatus::InReview);
 });
