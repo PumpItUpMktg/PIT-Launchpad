@@ -102,6 +102,20 @@ generator can key off the held Location directly.
    (and, if it renders a model foreign tenant B doesn't already carry, seed a
    B-marked row so the guard is capable of detecting a leak — the standing
    "prove it can detect presence" rule).
+7. **Absent is never negative.** Any surface rendering the result of a check
+   must distinguish the verdict, the absence of a verdict, and the absence of a
+   check. A dash, a zero, or a "no" in place of "not checked" is a defect — four
+   production bugs in one session were this exact mistake (home page "not
+   indexed" when it was indexed; 112 never-checked pages shown as "not indexed";
+   a duplicate-hub reporter's confident "none found" against rows it couldn't
+   see; a tenant-lock fixture that couldn't produce the condition it asserted).
+   The shared vocabulary + primitives: `IndexCoverageState` (indexed /
+   not_indexed / not_yet_checked), `RankingState` (ranked / tracked_not_ranking
+   / checking / not_tracked), `FreshnessState` + `App\Support\FreshnessStamp` +
+   `<x-lp.freshness-stamp>` (fresh / late / stale / never_checked, derived from a
+   stored timestamp + `App\Support\Cadence` interval). Semantic state in the
+   markup, appearance from tokens — never a per-surface threshold or a hardcoded
+   colour.
 
 ## Item → surface mapping
 

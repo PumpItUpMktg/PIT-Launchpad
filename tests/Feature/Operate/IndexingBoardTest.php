@@ -112,10 +112,11 @@ it('reports coverage lag (inspected of published) and the data-through date', fu
     expect($board['inspected_count'])->toBe(2)
         ->and($board['published_content_count'])->toBe(3)
         ->and($board['coverage_gap'])->toBe(1)          // 112 not-yet-inspected, in miniature
-        ->and($board['data_through'])->toBe('2026-08-20');
+        ->and($board['data_through'])->toBe('2026-08-20')
+        ->and($board['last_inspected_at'])->toBe('2026-08-20 10:00:00'); // raw anchor for the stamp
 });
 
-it('renders "inspected of published" and the data-through stamp on the board', function () {
+it('renders "inspected of published" and the shared freshness stamp on the board', function () {
     $site = Site::factory()->create();
     $p = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
     Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]); // uninspected
@@ -126,8 +127,20 @@ it('renders "inspected of published" and the data-through stamp on the board', f
     $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
 
     expect($html)->toContain('inspected of')
-        ->toContain('data through 2026-08-20')
-        ->toContain('not yet inspected'); // the 1-page gap surfaced
+        ->toContain('Index data as of 20 Aug')   // the shared stamp, not a bespoke "data through" line
+        ->toContain('data-fresh-state=')          // semantic freshness state in the markup
+        ->toContain('not yet inspected');         // the 1-page gap surfaced
+});
+
+it('renders an honest never-checked freshness stamp when no verdicts are synced', function () {
+    $site = Site::factory()->create();
+    Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]); // published, never inspected
+    app(ActiveTenant::class)->set($site->id);
+
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+
+    expect($html)->toContain('Index data — never checked')
+        ->toContain('data-fresh-state="never_checked"');
 });
 
 it('reports whether the all-known capture path is enabled (config-driven)', function () {
