@@ -24,39 +24,57 @@ use Illuminate\Support\Collection;
  *   - `seed_terms` — every spoke head keyword (the specific known targets);
  *   - `exclude_patterns` — none (geo-neutrality is already guaranteed by the expander's head keywords).
  *
- * Idempotent + non-destructive: a silo that already carries a rule_set (e.g. a §4-committed catalog silo)
- * is never overwritten.
+ * Two jobs, both driven from the spokes that already exist:
+ *   - NEW: a silo with no rule_set at all gets one derived from its spokes.
+ *   - REPAIR: a silo whose rule_set exists but carries EMPTY `seed_terms` (an early include-only rule_set
+ *     written before its spoke head_keywords existed — the deriver's old non-clobber guard then froze it
+ *     forever) is back-filled: `seed_terms` filled from the spokes, `include_patterns` unioned, and the
+ *     existing `exclude_patterns` preserved untouched. Only fires when the spokes actually yield seeds, so
+ *     it never churns a silo it can't improve.
+ *
+ * A rule_set that is already COMPLETE (has seed_terms) is never overwritten.
  */
 class SiloRuleSetDeriver
 {
     /**
-     * Derive + persist rule_sets for a site's silos that lack one.
+     * Derive + persist rule_sets for a site's silos that need one (new or repair).
      *
-     * @return int the number of silos given a rule_set
+     * @return array{new: int, repair: int}
      */
-    public function deriveForSite(Site $site): int
+    public function deriveForSite(Site $site): array
     {
-        $updated = 0;
-        foreach ($this->plan($site) as [$silo, $ruleSet]) {
-            $silo->forceFill(['rule_set' => $ruleSet->toArray()])->save();
-            $updated++;
+        $new = 0;
+        $repair = 0;
+        foreach ($this->plan($site) as $entry) {
+            $entry['silo']->forceFill(['rule_set' => $entry['ruleSet']->toArray()])->save();
+            $entry['repair'] ? $repair++ : $new++;
         }
 
-        return $updated;
-    }
-
-    /** How many silos would get a rule_set (no writes). */
-    public function previewForSite(Site $site): int
-    {
-        return count($this->plan($site));
+        return ['new' => $new, 'repair' => $repair];
     }
 
     /**
-     * The silos that lack a rule_set and have terms to route on, each paired with the rule_set it would
-     * get. Non-destructive: a silo already carrying a rule_set (e.g. a §4-committed catalog silo) is
-     * skipped, and a silo with no derivable terms is skipped.
+     * How many silos would get a new rule_set / a repair (no writes).
      *
-     * @return list<array{0: Silo, 1: RuleSet}>
+     * @return array{new: int, repair: int}
+     */
+    public function previewForSite(Site $site): array
+    {
+        $new = 0;
+        $repair = 0;
+        foreach ($this->plan($site) as $entry) {
+            $entry['repair'] ? $repair++ : $new++;
+        }
+
+        return ['new' => $new, 'repair' => $repair];
+    }
+
+    /**
+     * The silos that need a rule_set written, each paired with the rule_set and whether it's a repair.
+     * A silo with a COMPLETE rule_set (non-empty seed_terms) is skipped; a silo with no derivable terms
+     * is skipped; a repair candidate (empty seed_terms) is skipped unless its spokes actually yield seeds.
+     *
+     * @return list<array{silo: Silo, ruleSet: RuleSet, repair: bool}>
      */
     private function plan(Site $site): array
     {
@@ -69,20 +87,56 @@ class SiloRuleSetDeriver
         $plan = [];
         $silos = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
         foreach ($silos as $silo) {
-            if (! empty($silo->rule_set)) {
-                continue; // never clobber a committed rule_set
+            $existing = is_array($silo->rule_set) ? $silo->rule_set : [];
+            $hasRuleSet = $existing !== [];
+            $seedTerms = is_array($existing['seed_terms'] ?? null) ? $existing['seed_terms'] : [];
+
+            if ($hasRuleSet && $seedTerms !== []) {
+                continue; // already complete — never clobber
             }
 
             $spokes = $spokesBySilo->get(mb_strtolower(trim((string) $silo->name))) ?? collect();
-            $ruleSet = $this->build((string) $silo->name, $spokes);
-            if ($ruleSet->isEmpty()) {
+            $derived = $this->build((string) $silo->name, $spokes);
+            if ($derived->isEmpty()) {
                 continue; // no spokes / no terms — nothing to route on
             }
 
-            $plan[] = [$silo, $ruleSet];
+            if ($hasRuleSet) {
+                // REPAIR — only when the spokes actually yield seeds (else there's nothing to back-fill).
+                if ($derived->seedTerms === []) {
+                    continue;
+                }
+                $plan[] = ['silo' => $silo, 'ruleSet' => $this->repaired($existing, $derived), 'repair' => true];
+
+                continue;
+            }
+
+            $plan[] = ['silo' => $silo, 'ruleSet' => $derived, 'repair' => false];
         }
 
         return $plan;
+    }
+
+    /**
+     * Merge a freshly-derived rule_set onto an existing (empty-seed) one: take the derived seed_terms,
+     * UNION include_patterns (existing first), and KEEP the existing exclude_patterns untouched.
+     *
+     * @param  array<string, mixed>  $existing
+     */
+    private function repaired(array $existing, RuleSet $derived): RuleSet
+    {
+        $existingInclude = is_array($existing['include_patterns'] ?? null)
+            ? array_map('strval', $existing['include_patterns'])
+            : [];
+        $existingExclude = is_array($existing['exclude_patterns'] ?? null)
+            ? array_map('strval', $existing['exclude_patterns'])
+            : [];
+
+        return new RuleSet(
+            seedTerms: $derived->seedTerms,
+            includePatterns: array_values(array_unique([...$existingInclude, ...$derived->includePatterns])),
+            excludePatterns: array_values($existingExclude),
+        );
     }
 
     /**
