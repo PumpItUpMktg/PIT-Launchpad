@@ -206,9 +206,12 @@ class BlogBoard
                 ContentStatus::Publishing => 'pushing to WordPress',
                 default => 'queued to publish',
             },
-            // "Stuck": approved (job dispatched, never started rendering) for longer than a job
-            // should ever sit unprocessed. Flags a stalled worker and offers the inline escape hatch.
+            // "Stuck": a RELEASED post (Publish was clicked, job dispatched) that never started
+            // rendering for longer than a job should ever sit unprocessed — a stalled worker, with the
+            // inline escape hatch. An approved post NOT yet released is simply waiting on the operator
+            // in the Approved (QA) queue, not stalled — so it never carries this flag.
             'stalled' => $c->status === ContentStatus::Approved
+                && $c->isReleasedToPublish()
                 && $c->updated_at !== null
                 && $c->updated_at->lt(now()->subSeconds(self::STALLED_AFTER_SECONDS)),
         ];

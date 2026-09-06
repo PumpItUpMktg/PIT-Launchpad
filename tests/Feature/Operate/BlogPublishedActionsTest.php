@@ -84,7 +84,7 @@ test('the in-flight lane flags an approved post stuck past the stall threshold',
         ->and($rows['Fresh']['stalled'])->toBeFalse();
 });
 
-test('Approve publishes INLINE when the worker is stalled (no hang at "queued to publish")', function () {
+test('Publish from the Approved stage falls back to INLINE when the worker is stalled (no hang at "queued to publish")', function () {
     Http::fake(['*/launchpad/v1/content' => Http::response(['wp_post_id' => 654, 'status' => 'publish', 'skipped' => false])]);
     $site = Site::factory()->create(['domain_url' => 'https://inline.example']);
     session(['guided_site_id' => $site->id]);
@@ -97,16 +97,17 @@ test('Approve publishes INLINE when the worker is stalled (no hang at "queued to
         'uuid' => (string) Str::uuid(), 'connection' => 'database', 'queue' => 'default',
         'payload' => '{}', 'exception' => 'boom', 'failed_at' => now(),
     ]);
-    $draft = Content::factory()->create([
-        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::NeedsReview,
+    // The two-gate flow: the post is already Approved (QA-passed); Publish is the deliberate push.
+    $approved = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Approved,
         'title' => 'Mine Drainage and Your Home', 'slug' => 'mine-drainage', 'body' => '<p>Real drafted body.</p>',
     ]);
 
-    Bus::fake(); // prove approve did NOT lean on the (dead) queue
-    Livewire::test(OperateBlog::class, ['tab' => 'review'])->call('approve', $draft->id);
+    Bus::fake(); // prove Publish did NOT lean on the (dead) queue
+    Livewire::test(OperateBlog::class, ['tab' => 'approved'])->call('publish', $approved->id);
 
-    expect($draft->fresh()->status)->toBe(ContentStatus::Published)   // published inline, not left queued
-        ->and($draft->fresh()->wp_post_id)->toBe(654);
+    expect($approved->fresh()->status)->toBe(ContentStatus::Published)   // published inline, not left queued
+        ->and($approved->fresh()->wp_post_id)->toBe(654);
     Bus::assertNotDispatched(PublishContent::class);
     Http::assertSent(fn ($r) => str_contains($r->url(), '/launchpad/v1/content'));
 });
