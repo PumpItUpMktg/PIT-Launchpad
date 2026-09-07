@@ -389,21 +389,33 @@ label — these are ops commands.
    market's **pages publish**, a **separate** step (the held-target self-heal),
    not a side effect of the cleanup below.
 
-> **Do NOT use `report-market-geo` to find the duplicates.** `MarketGeoAudit`
-> judges each row's OWN suspectness and hides any non-suspect (clean) row — it has
-> **no `geo_id`-collision detection** and will show a duplicate pair as a single
-> rename row (the clean twin dropped), under-reporting the merge case. The
-> authoritative duplicate check is **`merge-markets` report-only** (its `plan()`
-> groups by `geo_id`, count ≥ 2 — the same as a raw `group by geo_id having
-> count(*) > 1`), or that raw query directly. (A future improvement: have the
-> audit cross-reference `geo_id` and point at `merge-markets`.)
+> **`report-market-geo` now flags `geo_id` duplicates — but it is NOT the merge planner.**
+> `MarketGeoAudit` cross-references `geo_id` (added after this exact confusion): a market whose
+> `geo_id` is shared by another row on the site surfaces — **both** twins, the clean one included —
+> with a `merge — … launchpad:merge-markets` advisory. It tells you a duplicate **exists**; it does
+> **not** give you the merge **plan** — winner/loser, page-collisions, `--keep`. That is
+> **`merge-markets`** (its `plan()` groups by `geo_id`, count ≥ 2 — the same as a raw
+> `group by geo_id having count(*) > 1`). So: `report-market-geo` to SEE duplicates, `merge-markets`
+> to RESOLVE them.
+>
+> **Standing caveat (any tenant, any run) — a per-row diagnostic is only as wide as its scope.**
+> Apart from the `geo_id`-twin check above, `MarketGeoAudit` judges each row's OWN suspectness and
+> **hides rows it deems clean**. It does not detect cross-row conditions it wasn't taught to, so a
+> "clean" / "rename-only" result is not proof one doesn't exist — it is proof none was found within
+> the report's scope. Before trusting an all-clear on a cross-row question (duplicates, collisions,
+> anything relational), confirm with the tool built for that question. A per-row report that
+> silently excludes the very condition you're checking for reads as a confident all-clear — the
+> same shape as the duplicate-hub reporter's false all-clear. (This exact gap sent an operator to
+> abandon a merge case they had raw evidence for; the `geo_id` cross-reference closes it, the
+> principle stays.)
 
 Both tools are **report-only by default** (write nothing) and take `--site`.
 **Run merge before rename** (fewer rows to rename; rename never touches a row
 about to be deleted):
 
 ```bash
-# 0. Optional per-row disposition context (geo/deps/Location). NOT a dup check — see the warning above.
+# 0. Per-row disposition + the geo_id-twin flag (post-fix): SEE duplicates here, but for the merge
+#    PLAN (winner/loser, page-collisions, --keep) use step 1 — see the warning above.
 php artisan launchpad:report-market-geo --site=01kxp3910f87zpq2b2cj9trx47
 
 # 1. AUTHORITATIVE dup check + merge (Abingdon, Bel Air). Report-only lists winner/loser per geo_id;
