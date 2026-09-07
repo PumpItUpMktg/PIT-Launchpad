@@ -69,7 +69,9 @@
         </div>
         @if (! empty($row['pending']))
             <div class="lp-cc-metrics"><span>Refreshing… tracking updates shortly</span></div>
-        @else
+        {{-- A lean board (HTTP-free, e.g. Blog Published) carries no live metrics: omit the grid rather than
+             render a row of "—" dashes for data it structurally never fetched. Index chip + actions still show. --}}
+        @elseif (empty($row['lean']))
             <div class="lp-cc-metrics">
                 <span>Rank <b>{{ $row['rank'] ?? '—' }}</b>@if (($row['delta'] ?? 0) != 0)<span class="{{ $row['delta'] > 0 ? 'up' : 'down' }}"> {{ $row['delta'] > 0 ? '▲' : '▼' }}{{ abs($row['delta']) }}</span>@endif</span>
                 <span>Impressions <b>{{ $metricCell($row['impressions'] ?? null, $row['gsc_pending'] ?? null) }}</b></span>

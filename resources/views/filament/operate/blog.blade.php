@@ -291,22 +291,20 @@
                     @if ($g['articles'] === [])
                         <div class="ob-bare">No supporting article yet — {{ $g['status'] === 'queued' ? 'queued for the directed lane' : 'in flight' }}.</div>
                     @else
-                        <div class="ob-articles">
+                        {{-- The shared content-card (index chip from durable page_index_states) — the same
+                             renderer Live and Pages use, replacing this board's hand-rolled row + empty
+                             inspector-cache chip (#769 consolidation). --}}
+                        <div class="ob-articles ob-grid" style="padding:11px 14px;">
                             @foreach ($g['articles'] as $a)
-                                <div class="ob-article" wire:key="oba-{{ $a['id'] }}">
-                                    <span>{{ $a['title'] }}</span>
-                                    @if (($a['index'] ?? null) !== null)
-                                        @php $ix = $a['index']; $ixc = $ix['indexed'] ? '#166534' : (in_array($ix['state'], ['excluded_redirect','excluded_canonical']) ? '#475569' : ($ix['state'] === 'excluded_blocked' ? '#9f1239' : '#92400e')); @endphp
-                                        <span title="Google URL Inspection: {{ $ix['label'] }}"
-                                              style="margin-left:8px; font-size:10px; font-weight:700; color:{{ $ixc }}; border:1px solid {{ $ixc }}33; background:{{ $ixc }}14; padding:1px 8px; border-radius:99px;">{{ $ix['indexed'] ? '✓ Indexed' : $ix['label'] }}</span>
-                                    @endif
-                                    <span class="ob-muted" style="margin-left:auto">{{ $a['published_at'] }}</span>
-                                    @if ($a['url'])<a class="ob-btn" href="{{ $a['url'] }}" target="_blank" rel="noopener">View live ↗</a>@endif
-                                    <button class="ob-btn" wire:click="repushPost('{{ $a['id'] }}')"
-                                        title="Re-publish this post to WordPress on the same URL (re-syncs the body + silo category)">Re-push</button>
-                                    <button class="ob-btn danger" wire:click="takeDownPost('{{ $a['id'] }}')"
-                                        wire:confirm="Take this post off WordPress? Re-push recreates it on the same URL.">Take down</button>
-                                </div>
+                                <x-lp.content-card :row="$a" wire:key="oba-{{ $a['id'] }}">
+                                    <x-slot:actions>
+                                        @if ($a['url'])<a class="ob-btn" href="{{ $a['url'] }}" target="_blank" rel="noopener">View live ↗</a>@endif
+                                        <button class="ob-btn" wire:click="repushPost('{{ $a['id'] }}')"
+                                            title="Re-publish this post to WordPress on the same URL (re-syncs the body + silo category)">Re-push</button>
+                                        <button class="ob-btn danger" wire:click="takeDownPost('{{ $a['id'] }}')"
+                                            wire:confirm="Take this post off WordPress? Re-push recreates it on the same URL.">Take down</button>
+                                    </x-slot:actions>
+                                </x-lp.content-card>
                             @endforeach
                         </div>
                     @endif

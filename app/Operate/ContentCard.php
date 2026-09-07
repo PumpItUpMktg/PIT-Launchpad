@@ -56,6 +56,12 @@ final class ContentCard
         public ?string $publishedAt = null,
         public ?int $daysLive = null,
         public ?string $wpUrl = null,
+        // This surface has NO metrics BY DESIGN (HTTP-free, e.g. the Blog Published lane): the metric grid is
+        // omitted (index chip + flags + actions still render), NOT rendered as a row of "—" dashes. This is a
+        // declaration of absence, not a hide-switch: a producer that SHOULD carry metrics and doesn't must
+        // still render the honest empty state (standing rule 7), never set `lean`. The constructor enforces
+        // that — `lean` alongside any metric value throws — so the flag can't drift into silencing missing data.
+        public bool $lean = false,
         // ── Optional search-presence flags ──
         public bool $inGoogle = false,
         public bool $inBing = false,
@@ -80,7 +86,26 @@ final class ContentCard
         // unchanged during the migration (Step 1). It retires with the partial (Step 2); the flat view above
         // is the real contract. `index` is overridden with the durable verdict in toArray, never this block's.
         public array $rawMetrics = [],
-    ) {}
+    ) {
+        // `lean` DECLARES the surface has no metrics; it must therefore carry none. Passing `lean` alongside a
+        // metric value is a contradiction — it would HIDE data rather than declare its absence — so reject it.
+        // A producer with genuinely-missing metrics drops `lean` and renders the honest empty state (rule 7).
+        if ($this->lean) {
+            $carried = array_keys(array_filter([
+                'rank' => $rank, 'delta' => $delta, 'impressions' => $impressions, 'clicks' => $clicks,
+                'sessions' => $sessions, 'ctr' => $ctr, 'localRank' => $localRank, 'keyword' => $keyword,
+                'series' => $series !== [] ? true : null,
+                'queries' => $queries !== [] ? true : null,
+                'refreshCount' => $refreshCount !== 0 ? true : null,
+            ], fn ($v): bool => $v !== null));
+            if ($carried !== []) {
+                throw new \InvalidArgumentException(
+                    'A lean ContentCard carries no metrics by design; got ['.implode(', ', $carried).
+                    ']. Drop lean, or render the honest empty state (standing rule 7).'
+                );
+            }
+        }
+    }
 
     /**
      * The three-state index verdict, resolved from the DURABLE `page_index_states` (the Indexing-panel +
@@ -140,6 +165,7 @@ final class ContentCard
             'wp_url' => $this->wpUrl,
             'published_at' => $this->publishedAt,
             'days_live' => $this->daysLive,
+            'lean' => $this->lean,
             'indexed' => $this->indexed,
             'index_state' => $this->indexState,
             'index_label' => $this->indexLabel,

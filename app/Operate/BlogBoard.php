@@ -7,16 +7,17 @@ use App\Enums\CandidateClassification;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\RenderStatus;
-use App\Integrations\UrlInspection\IndexInspector;
-use App\Integrations\UrlInspection\NullIndexInspector;
+use App\Guided\LiveBoards;
 use App\Models\BlogTarget;
 use App\Models\Content;
+use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
 use App\Publishing\Redirects\LegacyContentReviver;
 use App\Publishing\TenantStorage;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -39,7 +40,8 @@ class BlogBoard
     /** An approved post older than this (seconds) with no rendering progress = a stalled publish job. */
     public const STALLED_AFTER_SECONDS = 300;
 
-    public function __construct(private readonly IndexInspector $inspector = new NullIndexInspector) {}
+    /** @var array<string, array{indexed: Collection<string, int>, verdict: Collection<string, int>}> */
+    private array $indexSets = [];
 
     /**
      * Candidates awaiting triage — directed (queued keyword targets) first, then reactive by score.
@@ -459,22 +461,65 @@ class BlogBoard
     }
 
     /**
+     * A published post as a shared {@see ContentCard} row — the same card Live and Pages render, so the
+     * index chip comes from the DURABLE page_index_states (the source that carries the PASS the A2 flush
+     * produced), NOT the per-URL inspector cache the board read before (empty for most posts → no chip).
+     * Lean by design: this board is HTTP-free, so no live GSC/traffic metrics are fetched — the card is built
+     * `lean` (metric grid omitted, never a row of "—" dashes) and the index chip + publish date carry the row.
+     *
      * @return array<string, mixed>
      */
     private function articleCard(Content $c): array
     {
         $url = $this->url($c->site, $c->slug);
-        // Authoritative index coverage (cache-only — no live API call here; populated by launchpad:audit-index).
-        $status = ($c->site !== null && $url !== null) ? $this->inspector->cached($c->site, $url) : null;
+        $sets = $c->site !== null
+            ? $this->indexSets($c->site)
+            : ['indexed' => collect(), 'verdict' => collect()];
+        [$indexed, $indexState, $indexLabel] = ContentCard::resolveIndex(
+            $sets['indexed']->has((string) $c->id),
+            $sets['verdict']->has((string) $c->id),
+            false, // HTTP-free board — no live "in Google" signal; the durable verdict is authoritative
+        );
 
-        return [
-            'id' => (string) $c->id,
-            'title' => (string) $c->title,
-            'published_at' => $c->published_at?->toDateString(),
-            'url' => $url,
-            'index' => $status !== null
-                ? ['label' => $status->state->label(), 'indexed' => $status->indexed(), 'state' => $status->state->value]
-                : null,
+        return (new ContentCard(
+            id: (string) $c->id,
+            title: (string) $c->title,
+            url: (string) ($url ?? '/'.ltrim((string) $c->slug, '/')),
+            type: 'blog',
+            typeLabel: 'Blog',
+            locked: (bool) $c->locked,
+            indexed: $indexed,
+            indexState: $indexState,
+            indexLabel: $indexLabel,
+            rank: null,
+            delta: null,
+            impressions: null,
+            clicks: null,
+            sessions: null,
+            keyword: null,
+            pending: false,
+            lean: true, // HTTP-free board: no live GSC/traffic grid — the index chip + publish date carry the row
+            publishedAt: $c->published_at?->toDateString(),
+            daysLive: $c->published_at !== null ? (int) $c->published_at->diffInDays(now()) : null,
+            indexnowAt: $c->indexnow_submitted_at?->toDateString(),
+        ))->toArray();
+    }
+
+    /**
+     * The durable index-id sets for a site (indexed = a PASS verdict; verdict = any verdict row = inspected),
+     * batch-loaded once per site — the same source {@see LiveBoards} and the Indexing panel use.
+     *
+     * @return array{indexed: Collection<string, int>, verdict: Collection<string, int>}
+     */
+    private function indexSets(Site $site): array
+    {
+        return $this->indexSets[$site->id] ??= [
+            'indexed' => PageIndexState::query()->withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->where('index_verdict', 'PASS')
+                ->pluck('content_id')->filter()->flip(),
+            'verdict' => PageIndexState::query()->withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->whereNotNull('content_id')
+                ->pluck('content_id')->filter()->flip(),
         ];
     }
 

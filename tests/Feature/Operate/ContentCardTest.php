@@ -61,6 +61,30 @@ it('omits every rich block when the row does not carry them (the Live shape) —
         ->not->toContain('Found in search for');                 // no query terms
 });
 
+it('a lean card (metrics-free surface) omits the metric grid entirely — no row of "—" dashes', function () {
+    // The Blog Published lane declares no metrics BY DESIGN: index chip + actions render, the grid does not.
+    $html = Blade::render('<x-lp.content-card :row="$row" />', ['row' => card([
+        'lean' => true,
+        'rank' => null, 'delta' => null, 'impressions' => null, 'clicks' => null, 'sessions' => null, 'keyword' => null,
+    ])]);
+
+    expect($html)->toContain('Indexed')     // the index verdict still renders
+        ->not->toContain('Rank')             // ...but the metric grid is absent, not dashed
+        ->not->toContain('Impressions')
+        ->not->toContain('Refreshing');      // and it is NOT masquerading as pending
+});
+
+it('rejects a lean card that also carries a metric value — declares absence, never hides missing data', function () {
+    // lean means "no metrics by design". Passing lean + a real metric is a contradiction: a producer whose
+    // metrics are genuinely missing must render the honest empty state (rule 7), not silence it behind lean.
+    expect(fn () => new ContentCard(
+        id: '01ID', title: 'x', url: 'https://x/y', type: 'blog', typeLabel: 'Blog', locked: false,
+        indexed: false, indexState: 'unchecked', indexLabel: 'Not yet checked',
+        rank: null, delta: null, impressions: 120, clicks: null, sessions: null, keyword: null,
+        pending: false, lean: true,
+    ))->toThrow(InvalidArgumentException::class, 'impressions');
+});
+
 it('a warmed-but-empty sessions cell reads "No traffic yet", not a bare dash (preserves the GA4 fix)', function () {
     $html = Blade::render('<x-lp.content-card :row="$row" />', ['row' => card([
         'sessions' => null, 'trafficPending' => 'No traffic yet',
