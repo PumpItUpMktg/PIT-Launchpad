@@ -26,8 +26,9 @@ final class SlugChangeRedirect
         $from = $this->path($oldSlug);
         $to = $this->path($newSlug);
 
-        // Nothing to record for a no-op or the site root (never redirect "/").
-        if ($from === $to || $from === '/' || $to === '/') {
+        // Skip a no-op, or a redirect OF the site root itself (never send "/" away). A redirect TO "/" is
+        // valid, though — the "/home" marker path 301s to the homepage — so only `from` is guarded.
+        if ($from === $to || $from === '/') {
             return;
         }
 
