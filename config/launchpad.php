@@ -883,4 +883,15 @@ return [
         'work_order_stall_threshold' => (int) env('LAUNCHPAD_CITATIONS_WORK_ORDER_STALL', 3),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Deploy lag
+    |--------------------------------------------------------------------------
+    | How many hours the deployed checkout may sit behind origin/main before the
+    | deploy-lag severity escalates from LATE (a deploy plausibly in flight) to
+    | STALE (the pipeline looks stuck) — age-driven, the freshness-stamp model.
+    | STALE is what surfaces the platform-level deploy-lag notice on the lobby.
+    */
+    'deploy_lag_stale_hours' => (int) env('LAUNCHPAD_DEPLOY_LAG_STALE_HOURS', 6),
+
 ];

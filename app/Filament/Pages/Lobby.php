@@ -14,6 +14,7 @@ use App\Filament\Resources\ReviewCaptureResource;
 use App\Filament\Resources\SourceResource;
 use App\Http\Middleware\EnsureTenantSelected;
 use App\Operator\ActiveTenant;
+use App\Operator\DeployLag;
 use App\Operator\Lobby\LobbyBoard;
 use BackedEnum;
 use Filament\Pages\Page;
@@ -70,6 +71,19 @@ class Lobby extends Page
     public function getCardsProperty(): Collection
     {
         return app(LobbyBoard::class)->cards($this->search, $this->filter);
+    }
+
+    /**
+     * The PLATFORM-level deploy-lag notice — non-null only when the deployed checkout is materially behind
+     * main (stale). A stuck deploy affects every tenant, so this is ONE lobby-level notice, never a per-card
+     * badge that would repeat across a multi-tenant lobby. Reads the hourly {@see DeployLag} snapshot — no
+     * git per request.
+     *
+     * @return array{behind: int, oldest_hours: int, deployed_short: ?string, checked_at: ?string}|null
+     */
+    public function getDeployLagNoticeProperty(): ?array
+    {
+        return app(DeployLag::class)->notice();
     }
 
     /** Enter a tenant (card body / "+N more") — lock it and open its dashboard, in one action. */

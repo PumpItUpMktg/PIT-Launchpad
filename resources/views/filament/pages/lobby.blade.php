@@ -32,7 +32,24 @@
         .lb-cleanrow { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
         .lb-chip { font-size:12px; padding:4px 11px; border-radius:999px; border:1px solid rgba(148,163,184,.35); background:transparent; cursor:pointer; }
         .lb-empty { color:#94a3b8; font-size:13px; padding:24px; text-align:center; }
+        /* Tier-4 "quiet degradation" — a PLATFORM-level notice (not a per-card badge): grey, calm, one per lobby. */
+        .lb-platform-notice { display:flex; gap:10px; align-items:flex-start; font-size:12.5px; color:#475569; background:rgba(148,163,184,.14); border:1px solid rgba(148,163,184,.3); border-radius:10px; padding:10px 14px; margin-bottom:14px; }
+        .lb-platform-notice .t { font-weight:700; }
     </style>
+
+    {{-- Platform-level deploy-lag notice: the deployed checkout is materially behind main (a stuck pipeline
+         affects every tenant, so this shows ONCE here, never on each card). Tier-4 quiet degradation. --}}
+    @if ($this->deployLagNotice)
+        @php $dl = $this->deployLagNotice; @endphp
+        <div class="lb-platform-notice" role="status">
+            <span>⚙︎</span>
+            <div>
+                <span class="t">Deployment behind main.</span>
+                Production is {{ $dl['behind'] }} commit{{ $dl['behind'] === 1 ? '' : 's' }} behind — the oldest undeployed change is {{ $dl['oldest_hours'] }}h old, longer than a deploy should take. The pipeline may be stuck; new merges (fixes included) aren't live yet.
+                @if ($dl['deployed_short']) <span class="lb-muted">Deployed {{ $dl['deployed_short'] }}@if ($dl['checked_at']) · checked {{ \Illuminate\Support\Carbon::parse($dl['checked_at'])->diffForHumans() }}@endif.</span> @endif
+            </div>
+        </div>
+    @endif
 
     @php
         $cards = $this->cards;

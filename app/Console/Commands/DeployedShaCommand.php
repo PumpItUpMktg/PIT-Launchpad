@@ -2,88 +2,80 @@
 
 namespace App\Console\Commands;
 
+use App\Operator\DeployLag;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Carbon;
 
 /**
- * Report (read-only) the DEPLOYED git revision of this checkout and how far behind `origin/main` it is —
- * so "is this change live yet?" is answerable BEFORE running a command against an environment, not
- * discovered after stale code confuses a diagnosis (a pre-deploy `report-market-geo` sent an operator in a
- * circle this way). Same principle as a freshness stamp: a surface that can't say how current it is will
- * eventually mislead confidently.
+ * Report (read-only) the DEPLOYED git revision of this checkout, how far behind `origin/main` it is, and
+ * the age-driven severity (fresh / late / stale) — so "is this change live yet?" is answerable BEFORE
+ * running a command against an environment, not discovered after stale code confuses a diagnosis. Severity
+ * and the behind-count come from the shared {@see DeployLag} (same source the lobby's platform notice uses).
  *
- * Offline by default: reads local HEAD and compares to the LAST-FETCHED `origin/main` ref (flagged as
- * possibly stale). `--fetch` refreshes `origin/main` first for a current count (a network side effect,
- * opt-in). When behind, it lists the exact undeployed commits — the answer to "which merges aren't live".
+ * Offline by default (compares to the last-fetched `origin/main`, flagged possibly stale); `--fetch`
+ * refreshes for a current count. `--behind=N` makes the command exit non-zero when at least N commits
+ * behind — a signal for external monitoring (nothing consumes it in-app yet).
  */
 class DeployedShaCommand extends Command
 {
-    protected $signature = 'launchpad:deployed-sha {--fetch : git fetch origin/main first for a CURRENT behind-count (network side effect)}';
+    protected $signature = 'launchpad:deployed-sha
+        {--fetch : git fetch origin/main first for a CURRENT count (network side effect)}
+        {--behind= : exit non-zero when at least N commits behind origin/main (for external monitoring)}';
 
-    protected $description = 'Report (read-only) the deployed git SHA + how far behind origin/main it is (and which commits are undeployed).';
+    protected $description = 'Report (read-only) the deployed git SHA, how far behind origin/main, and the fresh/late/stale severity.';
 
-    public function handle(): int
+    public function handle(DeployLag $lag): int
     {
-        $sha = $this->git(['rev-parse', 'HEAD']);
-        if ($sha === null) {
+        $snap = $lag->compute((bool) $this->option('fetch'));
+        if ($snap['deployed_sha'] === null) {
             $this->error('Not a git checkout here (no .git) — this deploy cannot self-report its SHA. Check the deploy host / pipeline directly.');
 
             return self::FAILURE;
         }
 
-        $short = $this->git(['rev-parse', '--short', 'HEAD']) ?? substr($sha, 0, 12);
-        $subject = $this->git(['show', '-s', '--format=%s', 'HEAD']) ?? '(unknown)';
-        $date = $this->git(['show', '-s', '--format=%ci', 'HEAD']) ?? '(unknown)';
-
         $this->info('Deployed revision (this checkout):');
-        $this->line("  <options=bold>{$short}</>  {$subject}");
-        $this->line("  committed {$date}");
-        $this->line("  full {$sha}");
-
-        $fetched = false;
-        if ($this->option('fetch')) {
-            $fetched = $this->git(['fetch', '--quiet', 'origin', 'main']) !== null;
-        }
-        $freshness = $fetched ? '' : ' (as last fetched — pass --fetch for the current count)';
-
-        $behind = $this->git(['rev-list', '--count', 'HEAD..origin/main']);
+        $this->line("  <options=bold>{$snap['deployed_short']}</>  ".($snap['subject'] ?? '(unknown)'));
+        $this->line('  committed '.($snap['committed_at'] ?? '(unknown)'));
+        $this->line("  full {$snap['deployed_sha']}");
         $this->newLine();
+
+        $behind = $snap['behind'];
         if ($behind === null) {
-            $this->warn("Could not compare to origin/main (no such ref locally). Compare {$short} against GitHub main by hand.");
-
-            return self::SUCCESS;
-        }
-        if ($behind === '0') {
-            $this->info("Up to date with origin/main{$freshness}.");
+            $this->warn("Could not compare to origin/main (no such ref locally). Compare {$snap['deployed_short']} against GitHub main by hand.");
 
             return self::SUCCESS;
         }
 
-        $ahead = $this->git(['rev-list', '--count', 'origin/main..HEAD']);
-        $aheadNote = ($ahead !== null && $ahead !== '0') ? " (+{$ahead} ahead)" : '';
-        $this->warn("{$behind} commit(s) BEHIND origin/main{$aheadNote}{$freshness}.");
+        $freshness = $this->option('fetch') ? '' : ' (as last fetched — pass --fetch for the current count)';
+        $age = $this->oldestAge($snap);
+        match ($snap['severity']) {
+            'stale' => $this->error("STALE — {$behind} commit(s) behind origin/main; oldest undeployed change {$age} old — the deploy pipeline looks stuck{$freshness}."),
+            'late' => $this->warn("LATE — {$behind} commit(s) behind origin/main; oldest undeployed change {$age} (a deploy may be in flight){$freshness}."),
+            default => $this->info("Up to date with origin/main{$freshness}."),
+        };
 
-        $log = $this->git(['log', '--oneline', '--no-decorate', 'HEAD..origin/main']);
-        if ($log !== null && $log !== '') {
+        if ($behind > 0) {
             $this->newLine();
             $this->line('Undeployed (on origin/main, not in this checkout):');
-            foreach (explode("\n", $log) as $line) {
+            foreach ($lag->undeployedCommits() as $line) {
                 $this->line("  {$line}");
             }
+        }
+
+        // --behind=N: a non-zero exit for external monitoring (count-based, independent of the age severity).
+        $threshold = $this->option('behind');
+        if ($threshold !== null && $behind >= max(1, (int) $threshold)) {
+            return self::FAILURE;
         }
 
         return self::SUCCESS;
     }
 
-    /** Run git in the app root; trimmed stdout, or null on failure (non-zero exit, or git/.git missing). */
-    private function git(array $args): ?string
+    /** Human age of the oldest undeployed commit, e.g. "7h", or "age unknown". */
+    private function oldestAge(array $snap): string
     {
-        try {
-            $result = Process::path(base_path())->run(array_merge(['git'], $args));
-        } catch (\Throwable) {
-            return null;
-        }
+        $at = $snap['oldest_undeployed_at'] ?? null;
 
-        return $result->successful() ? trim($result->output()) : null;
+        return is_string($at) ? ((int) Carbon::parse($at)->diffInHours(now())).'h' : 'age unknown';
     }
 }
