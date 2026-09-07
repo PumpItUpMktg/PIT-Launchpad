@@ -14,9 +14,10 @@ use Illuminate\Console\Command;
  *
  * REPORT-ONLY by default: prints the per-group plan and writes NOTHING. Pass --execute to apply. An AMBIGUOUS
  * group (no single clean survivor) is reported and left for a human — never auto-merged. A group where both
- * markets hold a PUBLISHED/drafted page for the same town is a PAGE COLLISION — refused (a live take-down is a
- * human call); an EMPTY duplicate town page is soft-deleted so the survivor never ends up with two. Live-only,
- * all tenants (or one via --site). geo_id is the authoritative "same market" signal — the name check can't see it.
+ * markets hold a LIVE or in-flight page for the same town (published, pushed-to-WP, or mid-publish) is a PAGE
+ * COLLISION — refused (a live take-down is a human call); a non-live duplicate page (drafted or an empty stub)
+ * is soft-deleted so the survivor never ends up with two. Live-only, all tenants (or one via --site). geo_id is
+ * the authoritative "same market" signal — the name check can't see it.
  */
 class MergeMarketsCommand extends Command
 {
@@ -68,7 +69,7 @@ class MergeMarketsCommand extends Command
                 if ($r['collision']) {
                     $grandCollisions++;
                     $n = count($r['hard_collisions']);
-                    $this->line("  · <fg=red>PAGE COLLISION</> geo_id {$r['geo_id']} — <comment>\"{$r['loser_name']}\"</comment> and <info>\"{$r['winner_name']}\"</info> both hold a live/real page for {$n} same town(s); merge REFUSED — resolve the duplicate by hand (Operate → Locations, then launchpad:dedupe-town-pages) first.");
+                    $this->line("  · <fg=red>PAGE COLLISION</> geo_id {$r['geo_id']} — <comment>\"{$r['loser_name']}\"</comment> and <info>\"{$r['winner_name']}\"</info> both hold a LIVE/in-flight page for {$n} same town(s); merge REFUSED — take down the redundant live page by hand first, then re-run.");
                     foreach ($r['hard_collisions'] as $h) {
                         $this->line("        <comment>{$h['title']}</comment> [{$h['reason']}] — loser index: <options=bold>{$h['loser_index']}</>  ·  survivor index: <options=bold>{$h['winner_index']}</>");
                     }
@@ -103,7 +104,7 @@ class MergeMarketsCommand extends Command
             $this->warn("{$grandAmbiguous} ambiguous group(s) left for a human — no single clean survivor.");
         }
         if ($grandCollisions > 0) {
-            $this->warn("{$grandCollisions} group(s) refused for a PUBLISHED/drafted same-town page collision — dedupe the live pages by hand first, then re-run.");
+            $this->warn("{$grandCollisions} group(s) refused for a LIVE/in-flight same-town page collision (published, pushed-to-WP, or mid-publish) — take down the redundant live page by hand first, then re-run.");
         }
 
         if (! $execute) {
