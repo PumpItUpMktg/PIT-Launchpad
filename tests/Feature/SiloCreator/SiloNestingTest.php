@@ -3,6 +3,7 @@
 use App\Enums\ContentKind;
 use App\Enums\PageType;
 use App\Models\Content;
+use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
@@ -36,6 +37,12 @@ it('nests a child service page under its silo hub — parent pinned + slug neste
     // The hub itself stays top-level.
     expect($hub->fresh()->slug)->toBe('drain-services')
         ->and($hub->fresh()->parent_content_id)->toBeNull();
+
+    // The freed old flat path 301s to the nested one, so baked links + index equity survive.
+    $redirect = Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('from_url', '/drain-cleaning')->first();
+    expect($redirect)->not->toBeNull()
+        ->and($redirect->to_url)->toBe('/drain-services/drain-cleaning')
+        ->and((int) $redirect->code)->toBe(301);
 });
 
 it('nests every child service in the silo, each under the same hub', function () {
