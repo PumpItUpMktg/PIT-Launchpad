@@ -47,11 +47,13 @@ class BackfillDeadLinkRedirectsCommand extends Command
 
         $grandResolvable = 0;
         $grandUnresolvable = 0;
+        $grandUnresolvablePages = 0;
         foreach ($sites as $site) {
             $plan = $backfill->plan($site);
             if ($plan['resolvable'] === [] && $plan['unresolvable'] === []) {
                 continue;
             }
+            $grandUnresolvablePages += $plan['unresolvable_pages'];
 
             $this->newLine();
             $this->line("<info>{$site->brand_name}</info> ({$site->id})");
@@ -65,7 +67,7 @@ class BackfillDeadLinkRedirectsCommand extends Command
             }
 
             if ($plan['unresolvable'] !== []) {
-                $this->line('  <fg=yellow>Unresolvable</> — no live target; REMOVE the href from copy (held/removed-duplicate page):');
+                $this->line("  <fg=yellow>Unresolvable</> — no live target (held/removed-duplicate page), carried by {$plan['unresolvable_pages']} published page(s):");
                 foreach ($plan['unresolvable'] as $u) {
                     $grandUnresolvable++;
                     $this->line("      {$u['from']}   [{$u['count']} link(s)]");
@@ -85,7 +87,7 @@ class BackfillDeadLinkRedirectsCommand extends Command
         }
 
         if ($grandUnresolvable > 0) {
-            $this->warn("{$grandUnresolvable} dead path(s) have no live target — reported, not redirected. Remove those hrefs from the copy (their target is a held or removed duplicate).");
+            $this->warn("{$grandUnresolvable} dead path(s) have no live target — reported, not redirected. They are carried by {$grandUnresolvablePages} published page(s); removing the hrefs repushes those pages. Their target is a held or removed duplicate — held targets self-heal once that market publishes/renames, so removing now is optional.");
         }
 
         if (! $execute) {

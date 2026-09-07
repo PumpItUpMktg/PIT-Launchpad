@@ -36,7 +36,8 @@ final class DeadLinkBackfill
     /**
      * @return array{
      *   resolvable: list<array{from: string, to: string, rule: string, count: int}>,
-     *   unresolvable: list<array{from: string, count: int}>
+     *   unresolvable: list<array{from: string, count: int}>,
+     *   unresolvable_pages: int
      * }
      */
     public function plan(Site $site): array
@@ -56,7 +57,44 @@ final class DeadLinkBackfill
             }
         }
 
-        return ['resolvable' => $resolvable, 'unresolvable' => $unresolvable];
+        return [
+            'resolvable' => $resolvable,
+            'unresolvable' => $unresolvable,
+            'unresolvable_pages' => $this->pagesCarrying($site, array_column($unresolvable, 'from')),
+        ];
+    }
+
+    /**
+     * The number of DISTINCT published pages that carry at least one of these (unresolvable) hrefs — the
+     * repush cost of removing them by hand. When it's small, remove them now; when large, leaving them to
+     * heal on the next regeneration may be the better call.
+     *
+     * @param  list<string>  $paths
+     */
+    private function pagesCarrying(Site $site, array $paths): int
+    {
+        if ($paths === []) {
+            return 0;
+        }
+        $needles = array_fill_keys($paths, true);
+
+        $pages = 0;
+        Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('status', ContentStatus::Published->value)
+            ->select(['id', 'kind', 'page_type', 'body', 'slot_payload'])
+            ->chunkById(200, function ($rows) use (&$pages, $needles): void {
+                foreach ($rows as $content) {
+                    foreach ($this->links->internalPaths($content) as $matchPath) {
+                        if (isset($needles[$matchPath])) {
+                            $pages++;
+                            break; // count each page once
+                        }
+                    }
+                }
+            });
+
+        return $pages;
     }
 
     /** Write a 301 for every confidently-resolvable dead path. Returns the number written. */
@@ -94,28 +132,61 @@ final class DeadLinkBackfill
         if ($cleanLast !== '' && $cleanLast !== $last) {
             $sibling = ($parent === '' ? '/' : $parent.'/').$cleanLast;
             if (isset($livePaths[$sibling])) {
-                $rule = 'numbered-sibling';
+                $rule = 'numbered-sibling'; // same parent — unambiguous
 
                 return $sibling;
             }
-            if ($this->uniqueLast($byLastSegment, $cleanLast) !== null) {
+            $match = $this->uniqueLast($byLastSegment, $cleanLast);
+            if ($match !== null && $this->sameMarket($parent, $match)) {
                 $rule = 'numbered-last-segment';
 
-                return $this->uniqueLast($byLastSegment, $cleanLast);
+                return $match;
             }
 
             return null;
         }
 
-        // Flat/misparented path whose last segment is a UNIQUE live nested page ("/abington-pa" → its page).
+        // A path whose last segment is a UNIQUE live page ("/abington-pa" → its nested page). Confident only
+        // when it does NOT cross into a different market — a same-name town (Washington exists in six NJ/PA
+        // counties) can't be resolved by name alone, so a genuine cross-market jump is left for a human.
         $match = $this->uniqueLast($byLastSegment, $last);
-        if ($match !== null && $match !== $path) {
+        if ($match !== null && $match !== $path && $this->sameMarket($parent, $match)) {
             $rule = 'unique-last-segment';
 
             return $match;
         }
 
         return null;
+    }
+
+    /**
+     * A last-segment match is safe only when the dead path does NOT assert a DIFFERENT market than the
+     * target: a flat dead path (no parent) carries no market claim, and a numbered-duplicate parent
+     * ("new-brunswick-nj-3") is the same market as its clean twin. A genuine different parent
+     * ("bedminster-nj" → "hackensack-nj") is a cross-market guess on a possibly-colliding town — refused.
+     */
+    private function sameMarket(string $deadParent, string $targetPath): bool
+    {
+        if ($deadParent === '') {
+            return true; // flat dead path — no market asserted
+        }
+
+        $targetSegments = explode('/', trim($targetPath, '/'));
+        array_pop($targetSegments);
+        $targetParent = $targetSegments === [] ? '' : '/'.implode('/', $targetSegments);
+
+        return $this->deNumber($deadParent) === $this->deNumber($targetParent);
+    }
+
+    /** Strip a trailing "-N" numbered-duplicate artifact from a path's last segment ("/x-nj-3" → "/x-nj"). */
+    private function deNumber(string $path): string
+    {
+        $segments = explode('/', trim($path, '/'));
+        $last = (string) array_pop($segments);
+        $last = (string) preg_replace('/-\d+$/', '', $last);
+        $segments[] = $last;
+
+        return '/'.implode('/', $segments);
     }
 
     /** The one live path ending in this segment, or null when zero or many (ambiguous → don't guess). */
