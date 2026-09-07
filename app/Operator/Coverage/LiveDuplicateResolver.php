@@ -218,7 +218,11 @@ final class LiveDuplicateResolver
             return false;
         }
 
-        $fromUrl = rtrim(trim($domain), '/').'/'.trim($fromPath, '/').'/';
+        // Cache-buster query → a guaranteed CDN cache MISS, so this confirms the ORIGIN redirect rather than
+        // a stale edge copy (a server-side request can otherwise reach origin while a cached path still serves
+        // the old 200). "Verified" therefore means origin-verified; the CDN edge may serve the old page until
+        // purged — the command flags that after --execute.
+        $fromUrl = rtrim(trim($domain), '/').'/'.trim($fromPath, '/').'/?__lpverify='.time();
         $want = $this->normalizePath($toPath);
 
         for ($attempt = 0; $attempt < 3; $attempt++) {

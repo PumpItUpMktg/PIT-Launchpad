@@ -57,6 +57,7 @@ class ResolveDuplicatePostsCommand extends Command
             : 'Read-only · live duplicate blog-post resolution PLAN. Nothing is changed (pass --execute to apply).');
 
         $seenKeep = [];   // which --keep ids actually matched a member (to warn on typos)
+        $purge = [];      // full URLs actually removed — the operator must purge these at the CDN
         $grandRedirects = 0;
         $grandBlocked = 0;
         foreach ($sites as $site) {
@@ -95,9 +96,13 @@ class ResolveDuplicatePostsCommand extends Command
             }
 
             if ($execute) {
+                $base = rtrim((string) $site->domain_url, '/');
                 foreach ($resolver->apply($site, $days, $keep) as $r) {
                     $icon = $r['removed'] ? '<fg=green>✓</>' : '<fg=red>✗</>';
                     $this->line("      {$icon} {$r['from']} → {$r['to']} — {$r['note']}");
+                    if ($r['removed'] && $base !== '') {
+                        $purge[] = $base.'/'.trim($r['from'], '/').'/';
+                    }
                 }
             }
         }
@@ -123,6 +128,16 @@ class ResolveDuplicatePostsCommand extends Command
             $this->info("{$grandRedirects} redirect(s) would be written + the redundant post(s) removed. Re-run with --execute to apply (nothing was changed).");
 
             return self::SUCCESS;
+        }
+
+        // CDN purge reminder: verification confirms the 301 at ORIGIN; a CDN edge may keep serving the old
+        // page (200) from cache until purged, so removal ≠ "visitors see the redirect" yet. Name the URLs.
+        if ($purge !== []) {
+            $this->newLine();
+            $this->warn('Verified at ORIGIN. If a CDN (e.g. Cloudflare) fronts the site, PURGE these '.count($purge).' URL(s) — the edge may serve the old page until then:');
+            foreach ($purge as $url) {
+                $this->line("    • {$url}");
+            }
         }
 
         // Write-verification: re-read and confirm no resolvable group remains unresolved.

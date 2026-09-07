@@ -89,7 +89,7 @@ it('applies: writes the 301, verifies it is SERVING, then removes the loser page
 
     // The live loser URL answers 301 → the landing (redirect is serving).
     Http::fake([
-        'spg.example/hoboken-nj/hoboken-nj/' => Http::response('', 301, ['Location' => 'https://spg.example/hoboken-nj/']),
+        'spg.example/hoboken-nj/hoboken-nj/*' => Http::response('', 301, ['Location' => 'https://spg.example/hoboken-nj/']), // trailing * matches the ?__lpverify= cache-buster
         '*' => Http::response('', 200),
     ]);
 
