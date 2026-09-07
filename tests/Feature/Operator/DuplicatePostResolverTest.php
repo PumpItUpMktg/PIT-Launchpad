@@ -118,7 +118,7 @@ it('applies: writes the 301, verifies it is SERVING, then removes the loser post
     $twin = rPost($site, 'Sump Pump Maintenance Tips', 'sump-pump-flooding-2', 200);
 
     Http::fake([
-        'spg.example/sump-pump-flooding-2/' => Http::response('', 301, ['Location' => 'https://spg.example/sump-pump-flooding/']),
+        'spg.example/sump-pump-flooding-2/*' => Http::response('', 301, ['Location' => 'https://spg.example/sump-pump-flooding/']), // trailing * matches the ?__lpverify= cache-buster
         '*' => Http::response('', 200),
     ]);
 
@@ -149,6 +149,25 @@ it('NEVER removes the post when the redirect is not confirmed serving (no 404 ga
         ->and($out[0]['removed'])->toBeFalse()
         ->and($out[0]['note'])->toContain('left live')
         ->and(Content::withoutGlobalScope(SiteScope::class)->find($twin->id))->not->toBeNull(); // post kept
+});
+
+it('command --execute confirms at ORIGIN and prints a CDN purge reminder naming the removed URLs', function () {
+    rFakeWp();
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    $clean = rPost($site, 'Sump Pump Maintenance Tips', 'sump-pump-flooding', 100);
+    $twin = rPost($site, 'Sump Pump Maintenance Tips', 'sump-pump-flooding-2', 200);
+    Http::fake([
+        'spg.example/sump-pump-flooding-2/*' => Http::response('', 301, ['Location' => 'https://spg.example/sump-pump-flooding/']),
+        '*' => Http::response('', 200),
+    ]);
+
+    $code = Artisan::call('launchpad:resolve-duplicate-posts', ['--site' => $site->id, '--days' => 3650, '--execute' => true]);
+    $out = Artisan::output();
+
+    expect($code)->toBe(0)
+        ->and($out)->toContain('PURGE')                                       // "verified" no longer overstates
+        ->and($out)->toContain('https://spg.example/sump-pump-flooding-2/')   // the exact URL to purge
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($twin->id))->toBeNull(); // and it was removed
 });
 
 it('command is report-only by default, prints blocked members with their content id, and writes nothing', function () {

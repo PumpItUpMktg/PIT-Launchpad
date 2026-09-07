@@ -47,6 +47,7 @@ class ResolveLiveDuplicatesCommand extends Command
 
         $grandRedirects = 0;
         $grandAmbiguous = 0;
+        $purge = []; // full URLs actually removed — the operator must purge these at the CDN
         foreach ($sites as $site) {
             $plan = $resolver->plan($site);
             if ($plan === []) {
@@ -72,9 +73,13 @@ class ResolveLiveDuplicatesCommand extends Command
             }
 
             if ($execute) {
+                $base = rtrim((string) $site->domain_url, '/');
                 foreach ($resolver->apply($site) as $r) {
                     $icon = $r['removed'] ? '<fg=green>✓</>' : '<fg=red>✗</>';
                     $this->line("      {$icon} {$r['from']} → {$r['to']} — {$r['note']}");
+                    if ($r['removed'] && $base !== '') {
+                        $purge[] = $base.'/'.trim($r['from'], '/').'/';
+                    }
                 }
             }
         }
@@ -93,6 +98,16 @@ class ResolveLiveDuplicatesCommand extends Command
             $this->info("{$grandRedirects} redirect(s) across all tenants would be written + the redundant page(s) removed. Re-run with --execute to apply (nothing was changed).");
 
             return self::SUCCESS;
+        }
+
+        // CDN purge reminder: verification confirms the 301 at ORIGIN; a CDN edge may keep serving the old
+        // page (200) from cache until purged, so removal ≠ "visitors see the redirect" yet. Name the URLs.
+        if ($purge !== []) {
+            $this->newLine();
+            $this->warn('Verified at ORIGIN. If a CDN (e.g. Cloudflare) fronts the site, PURGE these '.count($purge).' URL(s) — the edge may serve the old page until then:');
+            foreach ($purge as $url) {
+                $this->line("    • {$url}");
+            }
         }
 
         // Write-verification: re-read and confirm no non-ambiguous duplicate remains.
