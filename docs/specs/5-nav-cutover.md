@@ -371,37 +371,53 @@ the model rename waits for that reshape.
 
 ## Fallston remediation runbook (prod — parked, don't rediscover)
 
-The Fallston tenant has two known market-data defects (parked across sessions;
-the tools shipped but haven't been run against prod). Recording the steps so
-they don't need rediscovering a fourth time. Note: "market" here is the **model**
-name (`Market` = served town), not the UI label — these are ops commands.
+The Fallston tenant (`01kxp3910f87zpq2b2cj9trx47`) has two market-data defects
+(parked across sessions; the tools shipped but haven't been run against prod).
+Note: "market" here is the **model** name (`Market` = served town), not the UI
+label — these are ops commands.
 
-1. **Duplicate markets by `geo_id`** — **Abingdon** and **Bel Air** each exist
-   twice for one Census place. `geo_id` is the authority for "same place"; a
-   name-match is a bug. Collapse each pair into its clean twin.
-2. **Three markets carry a `"N, "` numbered-list artifact** in the name (and its
-   `CoverageArea` source) — strip it.
-3. **82 dead internal links** point into this market's pages; they resolve once
-   the market publishes (they are the held-target self-heal, not a redirect job).
+1. **Two duplicate markets by `geo_id`** — **Abingdon** (`geo_id 2402590048`) and
+   **Bel Air** (`2402590232`) each exist twice for one Census place: a clean-named
+   row plus a `"N, "`-numbered row. `geo_id` is the authority for "same place".
+   Collapse each pair into its clean twin → `merge-markets`.
+2. **Three rename-only singletons** carry the `"N, "` numbering artifact but have
+   NO twin: **Halls Cross Roads** (`2402590140`), **Marshall** (`2402590324`),
+   **Havre de Grace** (`2402590508`). Strip the artifact off the name + its
+   `CoverageArea` source → `rename-market-artifacts`.
+3. **82 dead internal links** point at these pages. Rename and merge change
+   **names/rows only — they do NOT republish** — so the links clear when the
+   market's **pages publish**, a **separate** step (the held-target self-heal),
+   not a side effect of the cleanup below.
+
+> **Do NOT use `report-market-geo` to find the duplicates.** `MarketGeoAudit`
+> judges each row's OWN suspectness and hides any non-suspect (clean) row — it has
+> **no `geo_id`-collision detection** and will show a duplicate pair as a single
+> rename row (the clean twin dropped), under-reporting the merge case. The
+> authoritative duplicate check is **`merge-markets` report-only** (its `plan()`
+> groups by `geo_id`, count ≥ 2 — the same as a raw `group by geo_id having
+> count(*) > 1`), or that raw query directly. (A future improvement: have the
+> audit cross-reference `geo_id` and point at `merge-markets`.)
 
 Both tools are **report-only by default** (write nothing) and take `--site`.
-**Run merge before rename** — fewer rows to rename, and rename never touches a row
-about to be deleted:
+**Run merge before rename** (fewer rows to rename; rename never touches a row
+about to be deleted):
 
 ```bash
-# 0. See the suspects (read-only): geo validity, dependents, Location match, per row.
-php artisan launchpad:report-market-geo --site=<fallston-tenant>
+# 0. Optional per-row disposition context (geo/deps/Location). NOT a dup check — see the warning above.
+php artisan launchpad:report-market-geo --site=01kxp3910f87zpq2b2cj9trx47
 
-# 1. Merge the same-geo_id duplicates (Abingdon, Bel Air) into the clean twin.
-php artisan launchpad:merge-markets --site=<fallston-tenant>            # preview
-php artisan launchpad:merge-markets --site=<fallston-tenant> --execute  # apply
+# 1. AUTHORITATIVE dup check + merge (Abingdon, Bel Air). Report-only lists winner/loser per geo_id;
+#    a clean twin that also holds live pages surfaces as a page-collision for a human, not an auto-merge.
+php artisan launchpad:merge-markets --site=01kxp3910f87zpq2b2cj9trx47            # preview
+php artisan launchpad:merge-markets --site=01kxp3910f87zpq2b2cj9trx47 --execute  # apply
 
-# 2. Strip the "N, " numbered-list artifact off the three names + their CoverageArea.
-php artisan launchpad:rename-market-artifacts --site=<fallston-tenant>            # preview
-php artisan launchpad:rename-market-artifacts --site=<fallston-tenant> --execute  # apply
+# 2. Strip the "N, " artifact off the three singletons (Halls Cross Roads, Marshall, Havre de Grace).
+php artisan launchpad:rename-market-artifacts --site=01kxp3910f87zpq2b2cj9trx47            # preview
+php artisan launchpad:rename-market-artifacts --site=01kxp3910f87zpq2b2cj9trx47 --execute  # apply
+
+# 3. Then PUBLISH the market's pages — that is what clears the 82 dead links (not steps 1–2).
 ```
 
-Then publishing that market clears the 82 dead links. `merge-markets` guards the
-`CoverageArea` UNIQUE `(site_id, geo_id)` and never soft-deletes a page with a
-live `wp_post_id`; `rename-market-artifacts` leaves published pages untouched
-(names + CoverageArea source only).
+`merge-markets` guards the `CoverageArea` UNIQUE `(site_id, geo_id)` and never
+soft-deletes a page with a live `wp_post_id`; `rename-market-artifacts` leaves
+published pages untouched (names + CoverageArea source only).
