@@ -44,14 +44,20 @@ final class DuplicatePostResolver
     ) {}
 
     /**
+     * `$keep` is a per-group operator override: a list of content ids, at most one per group, each PINNING
+     * that group's keeper (overriding the impression rule — this is how an `ambiguous-earner` group like a
+     * tie is settled: the operator names the winner). Two ids landing in one group is an `override-conflict`
+     * (reported, never resolved); an id in no group is ignored (surfaced by the command).
+     *
+     * @param  list<string>  $keep  content ids to pin as keepers (per group)
      * @return list<array{
      *   title: string, key: string, resolvable: bool, reason: string,
      *   keeper: ?array{content_id:string, slug:string, path:string, url:?string, impressions:int},
      *   losers: list<array{content_id:string, slug:string, from:string, to:string, url:?string, impressions:int}>,
-     *   members: list<array{slug:string, impressions:int, position:?float, numbered:bool}>
+     *   members: list<array{content_id:string, slug:string, impressions:int, position:?float, numbered:bool}>
      * }>
      */
-    public function plan(Site $site, int $days = 28): array
+    public function plan(Site $site, int $days = 28, array $keep = []): array
     {
         $rows = [];
         foreach ($this->metrics->report($site, $days) as $group) {
@@ -59,10 +65,17 @@ final class DuplicatePostResolver
             $maxImpr = max(array_map(fn (array $m): int => $m['impressions'], $members));
             $topEarners = array_values(array_filter($members, fn (array $m): bool => $m['impressions'] === $maxImpr));
 
-            [$keeperMember, $reason] = $this->selectKeeper($members, $maxImpr, $topEarners);
+            // A per-group operator override wins over the rule; two overrides in one group can't be settled.
+            $pinned = array_values(array_filter($members, fn (array $m): bool => in_array($m['content_id'], $keep, true)));
+            [$keeperMember, $reason] = match (true) {
+                count($pinned) === 1 => [$pinned[0], 'operator-override'],
+                count($pinned) > 1 => [null, 'override-conflict'],
+                default => $this->selectKeeper($members, $maxImpr, $topEarners),
+            };
 
             $memberView = array_map(fn (array $m): array => [
-                'slug' => $m['slug'], 'impressions' => $m['impressions'], 'position' => $m['position'], 'numbered' => $m['numbered'],
+                'content_id' => $m['content_id'], 'slug' => $m['slug'],
+                'impressions' => $m['impressions'], 'position' => $m['position'], 'numbered' => $m['numbered'],
             ], $members);
 
             if ($keeperMember === null) {
@@ -124,12 +137,13 @@ final class DuplicatePostResolver
      * Apply every resolvable group. Returns per-loser outcomes; a removal only ever follows a verified
      * redirect. Mirrors {@see LiveDuplicateResolver::apply()} — same verify-before-remove order.
      *
+     * @param  list<string>  $keep  content ids to pin as keepers (per group), threaded to {@see plan()}
      * @return list<array{title:string, from:string, to:string, redirected:bool, verified:bool, removed:bool, note:string}>
      */
-    public function apply(Site $site, int $days = 28): array
+    public function apply(Site $site, int $days = 28, array $keep = []): array
     {
         $out = [];
-        foreach ($this->plan($site, $days) as $group) {
+        foreach ($this->plan($site, $days, $keep) as $group) {
             if (! $group['resolvable']) {
                 continue;
             }
