@@ -8,6 +8,7 @@ use App\Locations\LocationNesting;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Publishing\Redirects\SlugChangeRedirect;
 use Illuminate\Support\Str;
 
 /**
@@ -26,6 +27,8 @@ use Illuminate\Support\Str;
  */
 final class SiloNesting
 {
+    public function __construct(private readonly SlugChangeRedirect $slugRedirect) {}
+
     public function nest(Site $site): void
     {
         // The silo hub (pillar) pages, keyed by silo — one per silo.
@@ -69,12 +72,14 @@ final class SiloNesting
             $nested = $this->uniqueNested($hubSlug, $segment, $taken, (string) $service->slug);
 
             $changed = false;
+            $slugChangedFrom = null;
             if ((string) $service->parent_content_id !== (string) $hub->id) {
                 $service->parent_content_id = $hub->id;
                 $changed = true;
             }
             if ((string) $service->slug !== $nested) {
                 // free the old slug for reuse and reserve the new one within this pass
+                $slugChangedFrom = (string) $service->slug;
                 $taken = array_values(array_filter($taken, fn (string $s): bool => $s !== (string) $service->slug));
                 $taken[] = $nested;
                 $service->slug = $nested;
@@ -83,6 +88,11 @@ final class SiloNesting
 
             if ($changed) {
                 $service->save();
+            }
+
+            // Record a 301 for the freed old path so baked links + index equity survive the nesting.
+            if ($slugChangedFrom !== null) {
+                $this->slugRedirect->record((string) $site->id, $slugChangedFrom, $nested);
             }
         }
     }

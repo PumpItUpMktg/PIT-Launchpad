@@ -7,6 +7,7 @@ use App\Enums\PageType;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Publishing\Redirects\SlugChangeRedirect;
 use Illuminate\Support\Str;
 
 /**
@@ -27,6 +28,8 @@ use Illuminate\Support\Str;
  */
 final class LocationNesting
 {
+    public function __construct(private readonly SlugChangeRedirect $slugRedirect) {}
+
     public function nest(Site $site): void
     {
         // Hub landing pages by the Location they represent (location_id → hub Content).
@@ -70,12 +73,14 @@ final class LocationNesting
             $nested = $this->uniqueNested($hubSlug, $segment, $taken, (string) $town->slug);
 
             $changed = false;
+            $slugChangedFrom = null;
             if ((string) $town->parent_content_id !== (string) $hub->id) {
                 $town->parent_content_id = $hub->id;
                 $changed = true;
             }
             if ((string) $town->slug !== $nested) {
                 // free the old slug for reuse and reserve the new one within this pass
+                $slugChangedFrom = (string) $town->slug;
                 $taken = array_values(array_filter($taken, fn (string $s): bool => $s !== (string) $town->slug));
                 $taken[] = $nested;
                 $town->slug = $nested;
@@ -84,6 +89,11 @@ final class LocationNesting
 
             if ($changed) {
                 $town->save();
+            }
+
+            // Record a 301 for the freed old path so baked links + index equity survive the nesting.
+            if ($slugChangedFrom !== null) {
+                $this->slugRedirect->record((string) $site->id, $slugChangedFrom, $nested);
             }
         }
     }

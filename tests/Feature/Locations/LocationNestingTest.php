@@ -5,6 +5,7 @@ use App\Enums\PageType;
 use App\Locations\LocationNesting;
 use App\Models\Content;
 use App\Models\Location;
+use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 
@@ -49,6 +50,12 @@ it('nests a town page under its hub — parent pinned + slug rewritten to the fu
     $town->refresh();
     expect($town->parent_content_id)->toBe($hub->id)
         ->and($town->slug)->toBe('montclair-nj/springfield');
+
+    // The freed old flat path 301s to the nested one, so baked links + index equity survive.
+    $redirect = Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('from_url', '/springfield')->first();
+    expect($redirect)->not->toBeNull()
+        ->and($redirect->to_url)->toBe('/montclair-nj/springfield')
+        ->and((int) $redirect->code)->toBe(301);
 });
 
 it('lets duplicate town names coexist under different hubs (the whole point of nesting)', function () {
