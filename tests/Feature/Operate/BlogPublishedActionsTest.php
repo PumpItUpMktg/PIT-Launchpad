@@ -8,6 +8,7 @@ use App\Filament\Pages\Operate\OperateBlog;
 use App\Jobs\PublishContent;
 use App\Models\Connection;
 use App\Models\Content;
+use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
@@ -130,6 +131,39 @@ test('Publish now runs the publish inline and pushes to WordPress without the wo
     expect($post->fresh()->status)->toBe(ContentStatus::Published)
         ->and($post->fresh()->wp_post_id)->toBe(321);
     Http::assertSent(fn ($r) => str_contains($r->url(), '/launchpad/v1/content'));
+});
+
+test('a published post renders the shared content-card row with its index chip from durable page_index_states', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $post = publishedPost($site, ['title' => 'Cranford Sewer Costs Rising', 'slug' => 'cranford-sewer-costs']);
+    // The durable PASS verdict (the A2 flush source) — NOT the per-URL inspector cache the board read before.
+    PageIndexState::create([
+        'site_id' => $site->id, 'content_id' => $post->id,
+        'url' => 'https://spg.example/cranford-sewer-costs', 'url_normalized' => '/cranford-sewer-costs',
+        'index_verdict' => 'PASS',
+    ]);
+
+    $card = collect(app(BlogBoard::class)->published($site->id))
+        ->flatMap(fn (array $g) => $g['articles'])->firstWhere('id', (string) $post->id);
+
+    expect($card)->not->toBeNull()
+        ->and($card['type_label'])->toBe('Blog')            // the shared card shape, not the old hand-rolled array
+        ->and($card['url'])->toBe('https://spg.example/cranford-sewer-costs')
+        ->and($card['indexed'])->toBeTrue()
+        ->and($card['index_label'])->toBe('Indexed')
+        ->and($card['index_tone'])->toBe('good');
+});
+
+test('a published post with no verdict row reads "Not yet checked" — never "Not indexed" from an absent verdict', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $post = publishedPost($site, ['slug' => 'no-verdict-yet']);
+
+    $card = collect(app(BlogBoard::class)->published($site->id))
+        ->flatMap(fn (array $g) => $g['articles'])->firstWhere('id', (string) $post->id);
+
+    expect($card['index_label'])->toBe('Not yet checked')
+        ->and($card['index_state'])->toBe('unchecked')
+        ->and($card['indexed'])->toBeFalse();
 });
 
 test('the publishing indicator lists posts in flight (approved / rendering / publishing)', function () {
