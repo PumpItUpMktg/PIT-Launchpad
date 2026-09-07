@@ -2,6 +2,7 @@
 
 namespace App\ContentEngine\BlogQueue;
 
+use App\ContentEngine\DuplicateGuard;
 use App\Enums\CandidateScope;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
@@ -27,6 +28,8 @@ use Illuminate\Support\Str;
  */
 class ManualCandidateIntake
 {
+    public function __construct(private readonly DuplicateGuard $guard) {}
+
     /** Create a manual candidate. Returns null when the title is empty or the silo isn't this site's. */
     public function create(Site $site, string $title, string $siloId, ?string $town = null): ?Content
     {
@@ -53,13 +56,19 @@ class ManualCandidateIntake
             $meta['manual_town'] = $town;              // the local anchor, for the drafter's local injection
         }
 
+        // Same-story guard: a hand-typed idea that duplicates a live-or-in-flight post is HELD in review
+        // (never candidate → never publishable) naming the post it duplicates, so the operator sees the
+        // overlap and rejects or keeps it — rather than a second page silently entering the pipeline.
+        $dupOf = $this->guard->duplicateOf($site, $title, $siloId);
+
         return Content::create([
             'site_id' => $site->id,
             'silo_id' => $siloId,
             'matched_silo_id' => $siloId,
             'kind' => ContentKind::Post,
             'intake_type' => IntakeType::Directed, // operator-initiated (not news-reactive)
-            'status' => ContentStatus::Candidate,
+            'status' => $dupOf !== null ? ContentStatus::InReview : ContentStatus::Candidate,
+            'near_dup_of_content_id' => $dupOf,
             'source_name' => 'manual',
             'title' => Str::ucfirst($title),
             'slug' => $this->uniqueSlug($site->id, $title),

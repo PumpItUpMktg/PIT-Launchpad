@@ -37,6 +37,7 @@ class CandidateFunnel
         private readonly NearDuplicateDetector $nearDup,
         private readonly BackfillSplitter $splitter,
         private readonly ReactiveTopicGate $topicGate,
+        private readonly DuplicateGuard $guard,
     ) {}
 
     /**
@@ -172,6 +173,24 @@ class CandidateFunnel
                 continue;
             }
 
+            // PRIMARY same-story guard (base-slug, site-wide, cross-silo): a re-reported story whose title
+            // collides with a live-or-in-flight post is HELD in review naming that post — never dropped to an
+            // invisible alert (the old Refresh path), never routed as a fresh candidate. It can't publish
+            // (in_review is out of every approve path) and expires with the 30-day un-triaged sweep.
+            $baseDupId = $this->guard->baseSlugDuplicateOf($site, $item->title);
+            if ($baseDupId !== null) {
+                $this->createCandidate($site, $item, $relevance, ContentStatus::InReview, $baseDupId);
+                $refreshMarked[] = new RefreshMark($item->title, $baseDupId, 1.0);
+                $alerts[] = new OperatorAlert(
+                    AlertType::RefreshSuggested,
+                    $baseDupId,
+                    "Held as a duplicate (same title) — refresh the existing post instead: {$item->title}",
+                    ['signal' => 'base_slug'],
+                );
+
+                continue;
+            }
+
             $existing = Content::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $site->id)
                 ->where('silo_id', $relevance->matchedSiloId)
@@ -180,11 +199,14 @@ class CandidateFunnel
             $dup = $this->nearDup->detect($item->text(), $existing);
 
             if ($dup->tier === NearDupTier::Refresh) {
+                // SECONDARY (semantic ≥0.9): same reconciliation — held in review naming the twin, not a
+                // silent drop, so the near-duplicate is visible in the §6c NearDuplicate lane.
+                $this->createCandidate($site, $item, $relevance, ContentStatus::InReview, $dup->similarToContentId);
                 $refreshMarked[] = new RefreshMark($item->title, $dup->similarToContentId, $dup->signal());
                 $alerts[] = new OperatorAlert(
                     AlertType::RefreshSuggested,
                     $dup->similarToContentId,
-                    "Refresh the existing page instead of duplicating: {$item->title}",
+                    "Held as a near-duplicate — refresh the existing post instead: {$item->title}",
                     ['similarity' => $dup->signal()],
                 );
 
@@ -237,12 +259,13 @@ class CandidateFunnel
         return $corpus;
     }
 
-    private function createCandidate(Site $site, NewsItem $item, RelevanceResult $relevance, ContentStatus $status): Content
+    private function createCandidate(Site $site, NewsItem $item, RelevanceResult $relevance, ContentStatus $status, ?string $nearDupOf = null): Content
     {
         return Content::create([
             'site_id' => $site->id,
             'silo_id' => $relevance->matchedSiloId,
             'matched_silo_id' => $relevance->matchedSiloId,
+            'near_dup_of_content_id' => $nearDupOf,
             'source_id' => $item->feedId,
             'kind' => ContentKind::Post,
             'intake_type' => IntakeType::Reactive,

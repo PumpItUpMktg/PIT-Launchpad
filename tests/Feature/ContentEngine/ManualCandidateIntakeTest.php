@@ -27,6 +27,21 @@ it('creates a manual candidate — topical, local when a town is given', functio
         ->and($c->meta['manual_town'])->toBe('Polk');
 });
 
+it('holds a manual idea that duplicates a live post IN REVIEW, naming it — never a second candidate', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $existing = Content::factory()->post()->create([
+        'site_id' => $site->id, 'silo_id' => $silo->id,
+        'title' => 'Sump Pump Maintenance Tips', 'slug' => 'sump-pump-maintenance-tips',
+        'status' => ContentStatus::Published, 'body' => '<p>x</p>',
+    ]);
+
+    $c = app(ManualCandidateIntake::class)->create($site, 'Sump Pump Maintenance Tips', $silo->id);
+
+    expect($c->status)->toBe(ContentStatus::InReview)          // held, never Candidate → out of every publish path
+        ->and($c->near_dup_of_content_id)->toBe($existing->id); // names the post it duplicates
+});
+
 it('is general scope with no town', function () {
     $site = Site::factory()->create();
     $silo = Silo::factory()->create(['site_id' => $site->id]);
