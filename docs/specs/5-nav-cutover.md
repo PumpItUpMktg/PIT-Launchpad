@@ -336,3 +336,35 @@ The last two System-group gaps close, so the header IA is **24/24 live** — no
 
 Both are operator-only, tenant-locked (`ActiveTenant`, no per-page picker), and
 added to `TenantLockLeakTest`'s per-surface dataset (standing rule 6).
+
+## Territory vocabulary — UI ↔ model mapping (labels only, models unchanged)
+
+The two Territory items were named the **opposite** of what they contain. Fixed
+at the label/copy level; the models are untouched.
+
+| UI word | Model | What it is | Territory surface |
+| ------- | ----- | ---------- | ----------------- |
+| **Market** | `Location` | the GBP-anchored **service area** | `LocationsSetup` (page heading stays "Service area" — more precise than "Markets", and the nav entry already carries the word) |
+| **Town** | `Market` | one row per **served town** (~285) | `MarketsBoard` |
+
+So in `ConsoleNav`'s Territory group the label **"Markets" → `LocationsSetup`**
+and **"Towns" → `MarketsBoard`** (the labels kept their positions; only the
+surface each points to swapped). `MarketsBoard`'s own heading + copy now read
+"Town(s)"; the `towns-tabs` sub-nav `aria-label` is "Service area". Citations,
+Silos, Keywords, Internal links are unchanged.
+
+**On the LocationsSetup surface, "town" copy stays "town"** ("pick the towns you
+want location pages for", "towns covered", "N towns") — those are the served
+towns you select, which *are* UI "Town" under this mapping, so the copy is
+already correct. That is also why the `pages/partials/locations/*` partials —
+shared with the guided `where-you-work` onboarding step — need **no** change:
+relabeling them would have been both wrong and cross-surface.
+
+### Model rename considered and DEFERRED
+
+Renaming the models (`Market` → `Town`, `Location` → `Market`/`ServiceArea`) was
+considered and **deliberately deferred**: it touches `market_id` on `contents`,
+`keywords`, and `position_snapshots`, three pivots, and the geo prompts — a wide,
+risky change — and the planned market-card work will likely reshape these
+surfaces anyway. The label swap gives correct vocabulary now at near-zero risk;
+the model rename waits for that reshape.
