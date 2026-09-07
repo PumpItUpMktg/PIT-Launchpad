@@ -12,6 +12,12 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+// Deploy-lag probe — how far the deployed checkout is behind origin/main + the oldest undeployed commit's
+// age. Stores a snapshot the lobby reads to render its platform-level deploy-lag notice (tier-4; stale =
+// pipeline stuck). HOURLY matches the "a deploy should have landed by now" horizon — a weekly sweep would
+// take days to notice a stuck pipeline (how the feeds ran 16 days). withoutOverlapping — a slow fetch can't stack.
+Schedule::command('launchpad:check-deploy-lag')->hourly()->withoutOverlapping();
+
 // §9 staleness check — advisory rotation reminders for the admin connections
 // panel. Never auto-rotates; the pre-client launch gate is the hard requirement.
 Schedule::command('launchpad:check-stale-connections')->weeklyOn(6, '03:00'); // Sat — staggered (see cadence note)
