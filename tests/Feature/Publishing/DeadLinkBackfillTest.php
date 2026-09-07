@@ -68,6 +68,41 @@ it('reports an unresolvable dead path — never invents a redirect to a wrong pa
         ->and(collect($plan['unresolvable'])->pluck('from'))->toContain('/fallston-md/3-bel-air-md');
 });
 
+it('refuses a cross-market last-segment match — a same-name town is not resolved by name alone', function () {
+    $site = Site::factory()->create();
+    bfPage($site, 'hackensack-nj/washington-nj');                     // the one LIVE Washington (Bergen)
+    bfPage($site, 'linker', '<a href="/bedminster-nj/washington-nj">x</a>'); // links a Washington under a DIFFERENT market
+
+    $plan = app(DeadLinkBackfill::class)->plan($site);
+
+    expect(bfResolvable($plan, '/bedminster-nj/washington-nj'))->toBeNull() // not guessed across markets
+        ->and(collect($plan['unresolvable'])->pluck('from'))->toContain('/bedminster-nj/washington-nj');
+});
+
+it('still resolves a numbered-duplicate PARENT to its clean twin (same market, not cross-market)', function () {
+    $site = Site::factory()->create();
+    bfPage($site, 'new-brunswick-nj/aberdeen-nj');                                  // live, clean parent
+    bfPage($site, 'linker', '<a href="/new-brunswick-nj-3/aberdeen-nj">x</a>');    // dead, numbered-dup parent
+
+    $r = bfResolvable(app(DeadLinkBackfill::class)->plan($site), '/new-brunswick-nj-3/aberdeen-nj');
+
+    expect($r)->not->toBeNull()
+        ->and($r['to'])->toBe('/new-brunswick-nj/aberdeen-nj')
+        ->and($r['rule'])->toBe('unique-last-segment');
+});
+
+it('counts the distinct published pages that carry the unresolvable hrefs', function () {
+    $site = Site::factory()->create();
+    // Two published pages link the same held/removed-duplicate target; one links it twice.
+    bfPage($site, 'why-choose-us', '<a href="/fallston-md/3-bel-air-md">a</a> <a href="/fallston-md/3-bel-air-md">b</a>');
+    bfPage($site, 'faq', '<a href="/fallston-md/3-bel-air-md">c</a>');
+
+    $plan = app(DeadLinkBackfill::class)->plan($site);
+
+    expect(collect($plan['unresolvable'])->pluck('from'))->toContain('/fallston-md/3-bel-air-md')
+        ->and($plan['unresolvable_pages'])->toBe(2); // two distinct pages, counted once each
+});
+
 it('does not resolve when the last segment is ambiguous (two live pages share it)', function () {
     $site = Site::factory()->create();
     bfPage($site, 'trooper-pa/springfield');
