@@ -44,12 +44,16 @@ use Illuminate\Support\Facades\DB;
  * it accumulated its own copy of that town's pages). A blind reassign would leave the survivor with TWO pages
  * for one town — the very Buckingham-style duplicate this whole line of work is retiring, self-inflicted. So a
  * loser page whose (page_type, service, cleaned town key) matches a survivor page is NOT reassigned:
- *   - an EMPTY extra (unpublished, undrafted, AND never pushed to WP — no wp_post_id, so no live URL) is
- *     soft-deleted — the survivor keeps its canonical page (mirrors {@see DuplicateTownSweeper}'s rule);
- *   - a PUBLISHED, drafted, or already-pushed-to-WP collision is a live/real page whose take-down is a human
- *     decision, so its presence flags the whole group COLLISION and refuses the merge (reported, never
- *     auto-removed). The collision report shows the index verdict of BOTH pages, because the survivor was
- *     chosen by name cleanliness, not by which page ranks — the operator must see what would be dropped.
+ *   - a NON-LIVE extra — not published, no wp_post_id (no live URL), and not mid-publish
+ *     (Approved/Rendering/Publishing) — is soft-deleted, so the survivor keeps its canonical page. This
+ *     includes a DRAFTED page: an unpublished, never-pushed draft has no URL and no index state, so the
+ *     load-bearing signals are "published" and "has a wp_post_id", not "has a draft" (the discarded draft is
+ *     recoverable — a soft-delete). The report marks each as drafted vs an empty stub so the operator sees a
+ *     draft is being dropped, not just a placeholder.
+ *   - a PUBLISHED, already-pushed-to-WP (wp_post_id), or mid-publish collision is a live/in-flight page whose
+ *     take-down is a human decision, so its presence flags the whole group COLLISION and refuses the merge
+ *     (reported, never auto-removed). The collision report shows the index verdict of BOTH pages, because the
+ *     survivor was chosen by name cleanliness, not by which page ranks — the operator must see what drops.
  * The loser's non-colliding pages reassign as before (they are the survivor's only page for those towns).
  */
 final class MarketMerger
@@ -60,7 +64,7 @@ final class MarketMerger
      *   winner_id: ?string, winner_name: ?string, loser_id: ?string, loser_name: ?string,
      *   area_id: ?string, area_dirty: bool,
      *   colliding_page_ids: list<string>, page_collisions: int,
-     *   soft_collisions: list<array{loser_id:string,title:string,loser_index:string,winner_index:string}>,
+     *   soft_collisions: list<array{loser_id:string,title:string,drafted:bool,loser_index:string,winner_index:string}>,
      *   hard_collisions: list<array{loser_id:string,winner_id:string,title:string,reason:string,loser_index:string,winner_index:string}>,
      *   dependents: array{keywords:int,content:int,snapshots:int,geo_prompts:int,services:int,proof:int,media:int}
      * }>
@@ -146,8 +150,9 @@ final class MarketMerger
 
                 // Content — reassign every loser page EXCEPT the ones that collide with a survivor page for the
                 // same town; reassigning those would give the survivor two pages for one town. The colliding
-                // pages here are all EMPTY extras (a published/drafted collision would have refused the merge),
-                // so they are soft-deleted, and their plan rows dropped so a materialize can't resurrect them.
+                // pages here are all NON-LIVE (unpublished, no wp_post_id, not mid-publish — drafted or empty
+                // stub; a published/pushed/in-flight collision would have refused the merge), so they are
+                // soft-deleted, and their plan rows dropped so a materialize can't resurrect them.
                 $collidingIds = $r['colliding_page_ids'];
                 Content::withoutGlobalScopes()->where('market_id', $loserId)
                     ->when($collidingIds !== [], fn ($q) => $q->whereNotIn('id', $collidingIds))
@@ -210,7 +215,7 @@ final class MarketMerger
      * indexed page in favour of an un-indexed one.
      *
      * @return array{
-     *   soft: list<array{loser_id:string,title:string,loser_index:string,winner_index:string}>,
+     *   soft: list<array{loser_id:string,title:string,drafted:bool,loser_index:string,winner_index:string}>,
      *   hard: list<array{loser_id:string,winner_id:string,title:string,reason:string,loser_index:string,winner_index:string}>
      * }
      */
@@ -234,12 +239,21 @@ final class MarketMerger
             $loserIndex = $this->indexVerdict((string) $page->id);
             $winnerIndex = $this->indexVerdict((string) $match->id);
 
-            if (! $page->hasDraft() && $page->status !== ContentStatus::Published && $page->wp_post_id === null) {
-                $soft[] = ['loser_id' => (string) $page->id, 'title' => $title, 'loser_index' => $loserIndex, 'winner_index' => $winnerIndex];
+            // SOFT (safe to soft-delete on merge): the loser page is not live and not in flight to WP — not
+            // published, no wp_post_id (no live URL), and not in the publish pipeline. A DRAFTED page still
+            // qualifies: an unpublished, never-pushed draft has no URL and no index state, so the survivor's
+            // page for the same town supersedes it and the discarded draft is recoverable (soft-delete). The
+            // load-bearing signals are "published" and "has a wp_post_id", NOT "has a draft".
+            // HARD (refuse — the take-down is a human call): published, OR carries a wp_post_id (a live URL a
+            // merge must never orphan), OR mid-publish (Approved/Rendering/Publishing — heading to WP even
+            // before a wp_post_id is stamped).
+            $inFlight = in_array($page->status, [ContentStatus::Approved, ContentStatus::Rendering, ContentStatus::Publishing], true);
+            if ($page->status !== ContentStatus::Published && $page->wp_post_id === null && ! $inFlight) {
+                $soft[] = ['loser_id' => (string) $page->id, 'title' => $title, 'drafted' => $page->hasDraft(), 'loser_index' => $loserIndex, 'winner_index' => $winnerIndex];
             } else {
                 $reason = $page->status === ContentStatus::Published
                     ? 'published'
-                    : ($page->wp_post_id !== null ? 'pushed to WP (live URL)' : 'drafted');
+                    : ($page->wp_post_id !== null ? 'pushed to WP (live URL)' : 'in publish pipeline ('.$page->status->value.')');
                 $hard[] = ['loser_id' => (string) $page->id, 'winner_id' => (string) $match->id, 'title' => $title, 'reason' => $reason, 'loser_index' => $loserIndex, 'winner_index' => $winnerIndex];
             }
         }

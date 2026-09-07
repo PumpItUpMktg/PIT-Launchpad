@@ -80,10 +80,11 @@ class MergeMarketsCommand extends Command
                 $d = $r['dependents'];
                 $deps = "kw {$d['keywords']}, pages {$d['content']}, snaps {$d['snapshots']}, geo {$d['geo_prompts']}, svc {$d['services']}, proof {$d['proof']}, media {$d['media']}";
                 $area = ($r['area_id'] !== null && $r['area_dirty']) ? ' + clean its CoverageArea name' : '';
-                $soft = $r['colliding_page_ids'] !== [] ? ' + soft-delete '.count($r['colliding_page_ids']).' empty duplicate town page(s)' : '';
+                $soft = $r['colliding_page_ids'] !== [] ? ' + soft-delete '.count($r['colliding_page_ids']).' duplicate town page(s)' : '';
                 $this->line("  · merge <comment>\"{$r['loser_name']}\"</comment> → <info>\"{$r['winner_name']}\"</info> (geo_id {$r['geo_id']}); reassign [{$deps}]{$area}{$soft}, then delete the duplicate.");
                 foreach ($r['soft_collisions'] as $s) {
-                    $this->line("        drop empty <comment>\"{$s['title']}\"</comment> (index: {$s['loser_index']}) — survivor keeps its page (index: {$s['winner_index']})");
+                    $kind = $s['drafted'] ? '<fg=yellow>drafted</> (a draft is discarded)' : 'empty stub';
+                    $this->line("        drop {$kind} <comment>\"{$s['title']}\"</comment> (index: {$s['loser_index']}) — survivor keeps its page (index: {$s['winner_index']})");
                 }
             }
 
