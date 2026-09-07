@@ -5,7 +5,17 @@ use App\Integrations\Local\LocalSignals;
 use App\Integrations\Local\MockLocalSignalProvider;
 use App\Locations\LocalRelevance;
 use App\Models\CoverageArea;
+use App\Models\Location;
 use App\Models\Site;
+
+/** A physical location whose GBP locality is $city, $state. */
+function cityLocation(Site $site, string $city, string $state): Location
+{
+    return Location::factory()->create(['site_id' => $site->id, 'address_components' => [
+        ['types' => ['locality'], 'long_name' => $city],
+        ['types' => ['administrative_area_level_1'], 'short_name' => $state],
+    ]]);
+}
 
 /** Build a covered town quickly. */
 function town(Site $site, string $geo, string $tier, ?int $pop, bool $selected = false, string $source = 'county'): CoverageArea
@@ -42,6 +52,35 @@ test('the seed is a no-op once the pool has been curated', function () {
 
     expect(app(LocalRelevance::class)->seedInitialSelection($site))->toBe(0)
         ->and(CoverageArea::where('site_id', $site->id)->where('page_selected', true)->count())->toBe(1);
+});
+
+test('the seed never selects a town that is a physical location\'s own city — its landing already covers it', function () {
+    $site = Site::factory()->create();
+    cityLocation($site, 'Downingtown', 'PA'); // this location already gets a "/downingtown-pa/" landing
+
+    // A large town that IS the location's own city — must NOT be selected (would duplicate the landing).
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => 'D1', 'name' => 'Downingtown', 'state' => 'PA', 'size_tier' => 'large', 'population' => 40000, 'page_selected' => false, 'source' => 'county']);
+    // A different large town — selected as normal.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => 'D2', 'name' => 'Exton', 'state' => 'PA', 'size_tier' => 'large', 'population' => 30000, 'page_selected' => false, 'source' => 'county']);
+
+    $seeded = app(LocalRelevance::class)->seedInitialSelection($site);
+
+    expect($seeded)->toBe(1)
+        ->and(CoverageArea::where('site_id', $site->id)->where('page_selected', true)->pluck('name')->all())->toBe(['Exton']);
+});
+
+test('the drip never graduates a town that is a physical location\'s own city, even at a passing score', function () {
+    $site = Site::factory()->create();
+    cityLocation($site, 'Downingtown', 'PA');
+    $selfCity = CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => 'D1', 'name' => 'Downingtown', 'state' => 'PA', 'size_tier' => 'medium', 'population' => 20000, 'page_selected' => false, 'source' => 'county']);
+
+    /** @var MockLocalSignalProvider $provider */
+    $provider = app(LocalSignalProvider::class);
+    // A signal profile that clears the threshold — only the self-city guard keeps it out.
+    $provider->set($site->id, 'D1', new LocalSignals('D1', 20000, competitorDensity: 0.0, marketReviewIndex: 1.0, demandIndex: 1.0));
+
+    expect(app(LocalRelevance::class)->dripGraduate($site))->toBe(0)
+        ->and($selfCity->refresh()->page_selected)->toBeFalse();
 });
 
 test('the drip graduates a reserve town that earns enough local relevance and skips a weak one', function () {

@@ -31,6 +31,7 @@ final class LocalRelevance
     public function __construct(
         private readonly LocalSignalProvider $signals,
         private readonly TierGate $tierGate,
+        private readonly PhysicalLocationCities $physicalCities,
     ) {}
 
     /**
@@ -48,9 +49,16 @@ final class LocalRelevance
         }
 
         $autoTiers = (array) config('launchpad.drip.auto_select_tiers', ['major', 'large']);
+        $locationCities = $this->physicalCities->forSite($site);
 
         $count = 0;
         foreach ($towns as $town) {
+            // A town that IS a physical location's own city already has its landing page — never select it
+            // for a duplicate town page (the "/city/" landing vs a "/city/city/" town). Guarded here, at the
+            // selection decision, so the duplicate is never planned or materialized in the first place.
+            if ($this->physicalCities->matches((string) $town->name, $town->state, $locationCities)) {
+                continue;
+            }
             if (in_array($town->size_tier, $autoTiers, true)) {
                 $town->forceFill(['page_selected' => true])->save();
                 $count++;
@@ -69,11 +77,18 @@ final class LocalRelevance
         $threshold = (float) config('launchpad.drip.drip_threshold', 0.55);
         $trade = $this->trade($site);
         $cap = $this->populationCap($site);
+        $locationCities = $this->physicalCities->forSite($site);
 
         $count = 0;
         foreach ($this->countyTowns($site) as $town) {
             if ((bool) $town->page_selected) {
                 continue; // already building
+            }
+
+            // Never graduate a town that is a physical location's own city — its landing page already IS
+            // that town's page (see seedInitialSelection).
+            if ($this->physicalCities->matches((string) $town->name, $town->state, $locationCities)) {
+                continue;
             }
 
             // Tier gate (advisory): the drip may only graduate a town whose tier is buildable — the tier
