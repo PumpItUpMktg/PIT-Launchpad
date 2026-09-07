@@ -1,8 +1,8 @@
 <x-lp.shell
     variant="table"
     eyebrow="Territory"
-    title="Markets"
-    lede="The tenant's targetable geo subjects — tier, coverage, demographics and the pages & keywords pinned to each. Place an advisory hold to defer a market; a hold is a reminder only and never affects publishing.">
+    title="Towns"
+    lede="The tenant's served towns — tier, coverage, demographics and the pages & keywords pinned to each. Place an advisory hold to defer a town; a hold is a reminder only and never affects publishing.">
 
     @php($board = $this->board)
     @php($summary = $board['summary'])
@@ -30,15 +30,15 @@
 
     @if ($this->siteId === null)
         <x-lp.empty title="No tenant selected" action="Go to Portfolio" :href="\App\Filament\Resources\SiteResource::getUrl('index')">
-            Pick a working tenant from the topbar to see its markets.
+            Pick a working tenant from the topbar to see its towns.
         </x-lp.empty>
     @elseif (empty($markets))
-        <x-lp.empty title="No markets yet" action="Open Setup" :href="\App\Filament\Pages\Onboarding::getUrl()">
-            Markets are seeded from the tenant's service area — the page-selected towns project into Priority and Coverage markets. Run Setup for this tenant first.
+        <x-lp.empty title="No towns yet" action="Open Setup" :href="\App\Filament\Pages\Onboarding::getUrl()">
+            Towns are seeded from the tenant's service area — the page-selected towns project into Priority and Coverage tiers. Run Setup for this tenant first.
         </x-lp.empty>
     @else
         <div class="mk-stats">
-            <div class="mk-stat"><div class="n">{{ number_format($summary['total']) }}</div><div class="l">Markets</div></div>
+            <div class="mk-stat"><div class="n">{{ number_format($summary['total']) }}</div><div class="l">Towns</div></div>
             <div class="mk-stat"><div class="n">{{ number_format($summary['priority']) }}</div><div class="l">Priority</div></div>
             <div class="mk-stat"><div class="n">{{ number_format($summary['covered']) }}</div><div class="l">Covered</div></div>
             <div class="mk-stat"><div class="n {{ $summary['held'] ? 'warn' : '' }}">{{ number_format($summary['held']) }}</div><div class="l">On hold</div></div>
@@ -48,7 +48,7 @@
         <table class="mk-table">
             <thead>
                 <tr>
-                    <th>Market</th>
+                    <th>Town</th>
                     <th>Status</th>
                     <th style="text-align:right">Population</th>
                     <th style="text-align:right">Pages</th>

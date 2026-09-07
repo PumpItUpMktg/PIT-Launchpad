@@ -21,7 +21,7 @@
     .lp-towns-tab:hover { color:#b45309; }
     .lp-towns-tab.on { color:#b45309; border-bottom-color:#f59e0b; }
 </style>
-<nav class="lp-towns-tabs" aria-label="Towns">
+<nav class="lp-towns-tabs" aria-label="Service area">
     @foreach ($townsTabs as $t)
         @php $p = rtrim(parse_url($t['url'], PHP_URL_PATH) ?? '', '/'); $on = $p !== '' && ($townsCurrent === $p || str_starts_with($townsCurrent, $p.'/')); @endphp
         <a href="{{ $t['url'] }}" wire:navigate class="lp-towns-tab {{ $on ? 'on' : '' }}">{{ $t['label'] }}</a>

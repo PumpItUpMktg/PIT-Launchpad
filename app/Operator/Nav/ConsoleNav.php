@@ -63,8 +63,10 @@ class ConsoleNav
                 ['label' => 'Live', 'surface' => OperateLive::class, 'soon' => false],
             ]],
             ['group' => 'Territory', 'items' => [
-                ['label' => 'Markets', 'surface' => MarketsBoard::class, 'soon' => false],
-                ['label' => 'Towns', 'surface' => LocationsSetup::class, 'soon' => false],
+                // UI "Market" = the GBP-anchored service area (Location model) → LocationsSetup;
+                // UI "Town" = the served-town list (Market model) → MarketsBoard. See docs/specs/5-nav-cutover.md.
+                ['label' => 'Markets', 'surface' => LocationsSetup::class, 'soon' => false],
+                ['label' => 'Towns', 'surface' => MarketsBoard::class, 'soon' => false],
                 ['label' => 'Citations', 'surface' => CitationsBoard::class, 'soon' => false],
                 ['label' => 'Silos', 'surface' => SiloManagementResource::class, 'soon' => false],
                 ['label' => 'Keywords', 'surface' => KeywordResource::class, 'soon' => false],

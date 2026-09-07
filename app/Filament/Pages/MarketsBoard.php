@@ -33,7 +33,7 @@ class MarketsBoard extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-globe-americas';
 
-    protected static ?string $navigationLabel = 'Markets';
+    protected static ?string $navigationLabel = 'Towns';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Territory';
 
@@ -50,7 +50,7 @@ class MarketsBoard extends Page
 
     public function getTitle(): string
     {
-        return 'Markets';
+        return 'Towns';
     }
 
     // The shared lp header (with the tenant-scope indicator) is the visible heading; suppress Filament's
@@ -89,13 +89,13 @@ class MarketsBoard extends Page
             ->visible(fn (): bool => $this->siteId !== null && $this->unheldOptions() !== [])
             ->schema([
                 Select::make('market')
-                    ->label('Market')
+                    ->label('Town')
                     ->options(fn (): array => $this->unheldOptions())
                     ->searchable()
                     ->required(),
                 DatePicker::make('release_at')
                     ->label('Target release date')
-                    ->helperText('A reminder only — a hold has no publish effect. The market shows as overdue once this date passes.')
+                    ->helperText('A reminder only — a hold has no publish effect. The town shows as overdue once this date passes.')
                     ->native(false)
                     ->minDate(today())
                     ->required(),
