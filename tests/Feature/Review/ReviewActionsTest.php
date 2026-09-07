@@ -128,6 +128,22 @@ test('a wrong-service draft warns but still approves (the operator decides)', fu
     Bus::assertNotDispatched(PublishContent::class);
 });
 
+test('a dead internal link warns but still approves (the operator decides)', function () {
+    Bus::fake();
+    $content = Content::factory()->page()->create([
+        'status' => ContentStatus::NeedsReview,
+        // A FAQ that links a path with no page and no redirect — it would 404 live.
+        'slot_payload' => ['faq' => [['a' => '<a href="/totally-made-up">nowhere</a>']]],
+    ]);
+
+    $result = reviewActions()->approve($content->fresh());
+
+    expect($result->approved)->toBeTrue()
+        ->and(collect($result->warnings)->implode(' '))->toContain('/totally-made-up')
+        ->and(collect($result->warnings)->implode(' '))->toContain('resolve to no page');
+    Bus::assertNotDispatched(PublishContent::class);
+});
+
 test('reject sets rejected with a reason', function () {
     $content = Content::factory()->create(['status' => ContentStatus::NeedsReview]);
 

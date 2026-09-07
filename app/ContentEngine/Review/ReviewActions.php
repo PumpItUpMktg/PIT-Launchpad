@@ -7,6 +7,8 @@ use App\Enums\EditReason;
 use App\Enums\ReviewFlag;
 use App\Jobs\PublishContent;
 use App\Models\Content;
+use App\Publishing\Links\ContentLinks;
+use App\Publishing\Links\InternalLinkValidator;
 use App\Publishing\SiteContact;
 
 /**
@@ -26,6 +28,7 @@ class ReviewActions
         private readonly EditCapture $editCapture = new EditCapture,
         private readonly ServiceAlignment $serviceAlignment = new ServiceAlignment,
         private readonly SiteContact $contact = new SiteContact,
+        private readonly InternalLinkValidator $linkValidator = new InternalLinkValidator(new ContentLinks),
     ) {}
 
     /**
@@ -284,6 +287,14 @@ class ReviewActions
         $site = $content->site;
         if ($site !== null && $this->contact->phone($site) === null) {
             $warnings[] = 'No business phone is set — the site header, hero and CTA will have no number to call. Add it in the setup wizard (Business step).';
+        }
+
+        // Catch a generated internal link that resolves nowhere (no page, no redirect) before it 404s live.
+        $deadLinks = $this->linkValidator->deadLinks($content);
+        if ($deadLinks !== []) {
+            $sample = implode(', ', array_slice($deadLinks, 0, 3));
+            $more = count($deadLinks) > 3 ? ' (+'.(count($deadLinks) - 3).' more)' : '';
+            $warnings[] = count($deadLinks).' internal link(s) in this draft resolve to no page and no redirect — they will 404: '.$sample.$more.'. Fix or remove them before approving.';
         }
 
         return $warnings;
