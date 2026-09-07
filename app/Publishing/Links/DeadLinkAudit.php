@@ -22,6 +22,8 @@ use App\Models\Site;
  */
 final class DeadLinkAudit
 {
+    public function __construct(private readonly ContentLinks $links) {}
+
     /**
      * @return array{
      *   scanned: int, dead: int,
@@ -44,7 +46,7 @@ final class DeadLinkAudit
             ->select(['id', 'title', 'slug', 'kind', 'page_type', 'body', 'slot_payload'])
             ->chunkById(200, function ($rows) use (&$scanned, &$dead, &$byTarget, &$samples, $resolvable, $sampleLimit): void {
                 foreach ($rows as $content) {
-                    foreach ($this->internalPaths($content) as $href => $path) {
+                    foreach ($this->links->internalPaths($content) as $href => $path) {
                         $scanned++;
                         if (isset($resolvable[$path])) {
                             continue;
@@ -79,79 +81,15 @@ final class DeadLinkAudit
             ->select(['id', 'slug', 'page_type'])
             ->chunkById(500, function ($rows) use (&$set): void {
                 foreach ($rows as $page) {
-                    $path = $page->page_type === PageType::Home ? '/' : $this->normalizePath((string) $page->slug);
+                    $path = $page->page_type === PageType::Home ? '/' : $this->links->normalizePath((string) $page->slug);
                     $set[$path] = true;
                 }
             }, 'id');
 
         foreach (Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('status', 'active')->pluck('from_url') as $from) {
-            $set[$this->normalizePath((string) $from)] = true;
+            $set[$this->links->normalizePath((string) $from)] = true;
         }
 
         return $set;
-    }
-
-    /**
-     * Every INTERNAL link in a page's rendered content, as [raw href => normalized path]. Scans the post
-     * body and the slot payload's raw string leaves, where the drafter bakes FAQ/body hrefs.
-     *
-     * @return array<string, string>
-     */
-    private function internalPaths(Content $content): array
-    {
-        $haystack = (string) ($content->body ?? '');
-        $payload = $content->slot_payload;
-        if (is_array($payload) && $payload !== []) {
-            // Walk the payload's raw string leaves — NOT json_encode, which would escape the attribute
-            // quotes (href=\") and hide every link from the regex.
-            array_walk_recursive($payload, function ($value) use (&$haystack): void {
-                if (is_string($value)) {
-                    $haystack .= ' '.$value;
-                }
-            });
-        }
-        if ($haystack === '' || ! preg_match_all('/href=["\']([^"\']+)["\']/i', $haystack, $m)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($m[1] as $href) {
-            $path = $this->internalPath($href);
-            if ($path !== null) {
-                $out[$href] = $path;
-            }
-        }
-
-        return $out;
-    }
-
-    /** Normalized path for an INTERNAL href, or null for external / anchor / mailto / tel links. */
-    private function internalPath(string $href): ?string
-    {
-        $href = trim($href);
-        if ($href === '' || str_starts_with($href, '#') || str_starts_with($href, 'mailto:') || str_starts_with($href, 'tel:')) {
-            return null;
-        }
-
-        // Absolute URL: internal only if it has a host (we can't know the tenant host cheaply here, so treat
-        // any host-bearing URL as external EXCEPT protocol-relative/site-root forms handled below). A root
-        // relative "/path" is the drafter's form and the one that goes stale.
-        if (str_starts_with($href, 'http://') || str_starts_with($href, 'https://') || str_starts_with($href, '//')) {
-            return null; // external absolute — out of scope for the baked-relative-link audit
-        }
-
-        if (! str_starts_with($href, '/')) {
-            return null; // a bare fragment / relative token we don't resolve
-        }
-
-        return $this->normalizePath($href);
-    }
-
-    /** Redirect/path form: strip query+fragment, leading slash, no trailing slash, lowercased. */
-    private function normalizePath(string $value): string
-    {
-        $path = (string) parse_url($value, PHP_URL_PATH);
-
-        return mb_strtolower('/'.trim($path, '/'));
     }
 }
