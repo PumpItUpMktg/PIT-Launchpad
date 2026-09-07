@@ -368,3 +368,40 @@ considered and **deliberately deferred**: it touches `market_id` on `contents`,
 risky change — and the planned market-card work will likely reshape these
 surfaces anyway. The label swap gives correct vocabulary now at near-zero risk;
 the model rename waits for that reshape.
+
+## Fallston remediation runbook (prod — parked, don't rediscover)
+
+The Fallston tenant has two known market-data defects (parked across sessions;
+the tools shipped but haven't been run against prod). Recording the steps so
+they don't need rediscovering a fourth time. Note: "market" here is the **model**
+name (`Market` = served town), not the UI label — these are ops commands.
+
+1. **Duplicate markets by `geo_id`** — **Abingdon** and **Bel Air** each exist
+   twice for one Census place. `geo_id` is the authority for "same place"; a
+   name-match is a bug. Collapse each pair into its clean twin.
+2. **Three markets carry a `"N, "` numbered-list artifact** in the name (and its
+   `CoverageArea` source) — strip it.
+3. **82 dead internal links** point into this market's pages; they resolve once
+   the market publishes (they are the held-target self-heal, not a redirect job).
+
+Both tools are **report-only by default** (write nothing) and take `--site`.
+**Run merge before rename** — fewer rows to rename, and rename never touches a row
+about to be deleted:
+
+```bash
+# 0. See the suspects (read-only): geo validity, dependents, Location match, per row.
+php artisan launchpad:report-market-geo --site=<fallston-tenant>
+
+# 1. Merge the same-geo_id duplicates (Abingdon, Bel Air) into the clean twin.
+php artisan launchpad:merge-markets --site=<fallston-tenant>            # preview
+php artisan launchpad:merge-markets --site=<fallston-tenant> --execute  # apply
+
+# 2. Strip the "N, " numbered-list artifact off the three names + their CoverageArea.
+php artisan launchpad:rename-market-artifacts --site=<fallston-tenant>            # preview
+php artisan launchpad:rename-market-artifacts --site=<fallston-tenant> --execute  # apply
+```
+
+Then publishing that market clears the 82 dead links. `merge-markets` guards the
+`CoverageArea` UNIQUE `(site_id, geo_id)` and never soft-deletes a page with a
+live `wp_post_id`; `rename-market-artifacts` leaves published pages untouched
+(names + CoverageArea source only).
