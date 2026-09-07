@@ -48,13 +48,17 @@ it('resolves a flat path to its unique live nested page (last-segment match)', f
         ->and($r['rule'])->toBe('unique-last-segment');
 });
 
-it('resolves the /home marker to /', function () {
+it('resolves the /home marker to / and actually WRITES that redirect on apply', function () {
     $site = Site::factory()->create();
     bfPage($site, 'about', '<a href="/home">home</a>');
 
     $r = bfResolvable(app(DeadLinkBackfill::class)->plan($site), '/home');
-
     expect($r)->not->toBeNull()->and($r['to'])->toBe('/')->and($r['rule'])->toBe('home');
+
+    // A redirect whose target is "/" must actually land — write-verification would flag it otherwise.
+    app(DeadLinkBackfill::class)->apply($site);
+    expect(Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('from_url', '/home')->first()->to_url)->toBe('/');
+    expect(app(DeadLinkBackfill::class)->plan($site)['resolvable'])->toBe([]); // /home now resolves — nothing left
 });
 
 it('reports an unresolvable dead path — never invents a redirect to a wrong page', function () {

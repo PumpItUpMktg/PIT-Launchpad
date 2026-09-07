@@ -45,13 +45,20 @@ it('flattens a chain — an existing redirect to the old path follows to the new
         ->and(redirectFrom($site, '/b')->to_url)->toBe('/c');
 });
 
-it('is a no-op for an unchanged slug or the site root', function () {
+it('is a no-op for an unchanged slug or a redirect OF the site root', function () {
     $site = Site::factory()->create();
     $svc = app(SlugChangeRedirect::class);
 
-    $svc->record($site->id, 'same', 'same');
-    $svc->record($site->id, '', 'x');   // from resolves to "/"
-    $svc->record($site->id, 'x', '');   // to resolves to "/"
+    $svc->record($site->id, 'same', 'same'); // no-op — unchanged
+    $svc->record($site->id, '', 'x');        // from resolves to "/" — never redirect the root away
 
     expect(Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0);
+});
+
+it('DOES record a redirect TO the site root (the "/home" marker → the homepage)', function () {
+    $site = Site::factory()->create();
+
+    app(SlugChangeRedirect::class)->record($site->id, 'home', ''); // new path resolves to "/"
+
+    expect(redirectFrom($site, '/home')->to_url)->toBe('/');
 });
