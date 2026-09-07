@@ -72,7 +72,7 @@ class ReportDeadInternalLinksCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->warn("{$grandDead} dead internal link(s) of {$grandScanned} scanned across all tenants. Most are likely stale SiloNesting slug rewrites — a 301-on-slug-change auto-heals them; a pre-publish validator catches new hallucinated paths.");
+        $this->warn("{$grandDead} dead internal link(s) of {$grandScanned} scanned across all tenants — a baked href whose target is neither a published page nor an active redirect. Run launchpad:backfill-dead-link-redirects to 301 the resolvable ones (numbered/flat → the live page) and list the unresolvable (target no longer exists — strip the href, or it self-heals when its market publishes).");
 
         return self::SUCCESS;
     }
