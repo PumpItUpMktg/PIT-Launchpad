@@ -120,6 +120,48 @@ it('soft-deletes an EMPTY duplicate town page rather than reassigning it into a 
     expect($abingdon)->toBe(1);
 });
 
+it('soft-deletes a DRAFTED-but-unpublished duplicate town page — no URL, nothing to lose — and merges', function () {
+    $site = Site::factory()->create();
+    $winner = mkt($site, 'Abingdon', '2402590048');
+    $loser = mkt($site, '1, Abingdon', '2402590048');
+
+    // A held market's pages: DRAFTED (real slot payload) but never published and never pushed (no wp_post_id) —
+    // no live URL, no index state. The survivor's page for the town supersedes it; the discarded draft is
+    // recoverable (soft-delete). Before the widening this refused the merge on "drafted".
+    $winnerPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $winner->id, 'title' => 'Abingdon, MD', 'slug' => 'abingdon-md', 'status' => 'needs_review', 'slot_payload' => ['hero' => ['title' => 'Abingdon']], 'wp_post_id' => null]);
+    $loserPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $loser->id, 'title' => '1, Abingdon, MD', 'slug' => 'abingdon-md-2', 'status' => 'needs_review', 'slot_payload' => ['hero' => ['title' => 'Abingdon']], 'wp_post_id' => null]);
+
+    $plan = app(MarketMerger::class)->plan($site);
+    expect($plan[0]['collision'])->toBeFalse()                                 // drafted-unpublished-no-wp is not a hard collision
+        ->and($plan[0]['soft_collisions'])->toHaveCount(1)
+        ->and($plan[0]['soft_collisions'][0]['drafted'])->toBeTrue()           // flagged: a draft is discarded, not a stub
+        ->and($plan[0]['colliding_page_ids'])->toBe([$loserPage->id]);
+
+    expect(app(MarketMerger::class)->apply($site))->toBe(1)                     // merges (clean survivor, no --keep)
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($loserPage->id))->toBeNull()                    // drafted dup soft-deleted
+        ->and(Content::withoutGlobalScope(SiteScope::class)->withTrashed()->find($loserPage->id)->trashed())->toBeTrue()
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($winnerPage->id)->market_id)->toBe($winner->id); // survivor kept
+});
+
+it('still REFUSES an in-flight (Approved) duplicate page — mid-publish, even with no wp_post_id yet', function () {
+    $site = Site::factory()->create();
+    $winner = mkt($site, 'Abingdon', '2402590048');
+    $loser = mkt($site, '1, Abingdon', '2402590048');
+
+    Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $winner->id, 'title' => 'Abingdon, MD', 'slug' => 'abingdon-md', 'status' => 'needs_review', 'slot_payload' => ['hero' => ['title' => 'x']]]);
+    // Approved = released toward WP; the wp_post_id isn't stamped until the push lands, but the page is in
+    // flight, so a merge must not soft-delete it — HARD, distinct from a parked draft.
+    $loserPage = Content::factory()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'market_id' => $loser->id, 'title' => '1, Abingdon, MD', 'slug' => 'abingdon-md-2', 'status' => 'approved', 'slot_payload' => ['hero' => ['title' => 'x']], 'wp_post_id' => null]);
+
+    $plan = app(MarketMerger::class)->plan($site);
+    expect($plan[0]['collision'])->toBeTrue()
+        ->and($plan[0]['colliding_page_ids'])->toBe([])                            // not queued for soft-delete
+        ->and($plan[0]['hard_collisions'][0]['reason'])->toBe('in publish pipeline (approved)');
+
+    expect(app(MarketMerger::class)->apply($site))->toBe(0)                         // refused
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($loserPage->id))->not->toBeNull();
+});
+
 it('REFUSES the merge on a live-page collision and reports the index verdict of BOTH sides', function () {
     $site = Site::factory()->create();
     $winner = mkt($site, 'Abingdon', '2402590048');
