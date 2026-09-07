@@ -4,6 +4,7 @@ namespace App\ContentEngine\Drafting;
 
 use App\Build\Permalinks;
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\ServiceSiloRole;
 use App\Local\Grounding\LocationGrounding;
@@ -19,6 +20,8 @@ use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use App\Models\WireframeKit;
 use App\PageBuilder\Schema\KitSchema;
+use App\Publishing\Links\LinkPlanBuilder;
+use App\Publishing\Links\PostLinkInjector;
 use App\Publishing\PhoneNumber;
 use App\Standard\StandardPageIntake;
 use App\Support\BusinessHours;
@@ -308,11 +311,12 @@ class PageGroundingAssembler
     }
 
     /**
-     * Real internal-link targets: the permalinks of the site's OTHER materialized pages. The full
-     * URL map exists from materialize, so the drafter writes links to final URLs (not placeholders)
-     * even if the target page isn't built yet — it self-heals as the inventory completes. Capped to
-     * keep the prompt bounded. (Best-effort: site-wide for now; silo-scoped ordering lands with the
-     * Spoke→§1 bridge.)
+     * Real internal-link targets: the permalinks of the site's other PUBLISHED pages. Only LIVE pages
+     * are offered — an unpublished target may never go live (a held market's towns, a numbered duplicate
+     * slated for dedup), and linking one bakes a permanent 404 into the copy. Cross-links to pages that
+     * publish later are added by the post-publish link injector ({@see LinkPlanBuilder}
+     * / {@see PostLinkInjector}) reading their live slugs — not guessed at draft time.
+     * Capped to keep the prompt bounded.
      *
      * @return list<array{anchor: string, path: string}>
      */
@@ -321,6 +325,7 @@ class PageGroundingAssembler
         return Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $page->site_id)
             ->where('kind', ContentKind::Page->value)
+            ->where('status', ContentStatus::Published->value)
             ->where('id', '!=', $page->id)
             ->orderBy('title')
             ->limit(50)

@@ -237,11 +237,10 @@ class PageDrafter
 
         $lines = array_map(fn (array $l) => "- {$l['anchor']} → {$l['path']}", $grounding->relatedLinks);
 
-        return 'INTERNAL LINKS — other pages on this site, each with its FINAL path. Weave a few relevant ones '
-            .'into the body as real links (e.g. <a href="/the-path">anchor</a>): the parent/related service, '
-            .'nearby areas, or pages a reader would go to next. Use ONLY these exact paths — never invent a URL '
-            .'or leave a placeholder. A target may not be published yet; link it anyway (it goes live as that '
-            ."page is built):\n".implode("\n", $lines);
+        return 'INTERNAL LINKS — other LIVE pages on this site, each with its final path. Weave a few relevant '
+            .'ones into the body as real links (e.g. <a href="/the-path">anchor</a>): the parent/related '
+            .'service, nearby areas, or pages a reader would go to next. Use ONLY these exact paths — never '
+            ."invent a URL or leave a placeholder:\n".implode("\n", $lines);
     }
 
     private function kitBlock(PageGrounding $grounding): string
