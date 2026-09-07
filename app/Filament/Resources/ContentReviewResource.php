@@ -98,7 +98,11 @@ class ContentReviewResource extends Resource
                     ->label('Flags')
                     ->badge()
                     ->state(fn (Content $record): array => array_map(
-                        fn (ReviewFlag $flag) => $flag->label(),
+                        // NearDuplicate names the specific live post it duplicates ("Duplicates /slug") so an
+                        // operator can judge in seconds without opening both; every other flag is its label.
+                        fn (ReviewFlag $flag) => $flag === ReviewFlag::NearDuplicate
+                            ? self::nearDuplicateLabel($record)
+                            : $flag->label(),
                         AlertFlags::for($record),
                     )),
                 TextColumn::make('created_at')->label('Age')->since()->sortable(),
@@ -127,6 +131,14 @@ class ContentReviewResource extends Resource
             ->bulkActions([
                 self::bulkApproveAction(),
             ]);
+    }
+
+    /** The NearDuplicate flag label — names the specific live post this row duplicates, not a generic "possible duplicate". */
+    private static function nearDuplicateLabel(Content $record): string
+    {
+        $slug = $record->nearDupOf?->slug;
+
+        return $slug !== null && $slug !== '' ? "Duplicates /{$slug}" : ReviewFlag::NearDuplicate->label();
     }
 
     /**

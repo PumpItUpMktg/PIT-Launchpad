@@ -2,6 +2,7 @@
 
 namespace App\ContentEngine\BlogQueue;
 
+use App\ContentEngine\DuplicateGuard;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\IntakeType;
@@ -23,7 +24,10 @@ use Illuminate\Support\Str;
  */
 class DirectedIntake
 {
-    public function __construct(private readonly BlogTargetQueue $queue) {}
+    public function __construct(
+        private readonly BlogTargetQueue $queue,
+        private readonly DuplicateGuard $guard,
+    ) {}
 
     /**
      * The top queued target as a directed candidate (idempotent per target: an existing candidate
@@ -53,13 +57,19 @@ class DirectedIntake
             return ['target' => $target, 'candidate' => $existing];
         }
 
+        // Same-story guard: a directed target whose title duplicates a live-or-in-flight post is HELD in
+        // review (never candidate → never publishable) naming the post it duplicates, rather than shipping a
+        // second page. Base-slug primary + semantic ≥0.9 secondary (title-only here — no body yet).
+        $dupOf = $this->guard->duplicateOf($site, $query, $target->silo_id);
+
         $candidate = Content::create([
             'site_id' => $site->id,
             'silo_id' => $target->silo_id,
             'matched_silo_id' => $target->silo_id,
             'kind' => ContentKind::Post,
             'intake_type' => IntakeType::Directed,
-            'status' => ContentStatus::Candidate,
+            'status' => $dupOf !== null ? ContentStatus::InReview : ContentStatus::Candidate,
+            'near_dup_of_content_id' => $dupOf,
             'title' => Str::ucfirst($query),
             'slug' => $this->uniqueSlug($site->id, $query),
             'target_keyword_id' => $target->keyword_id,

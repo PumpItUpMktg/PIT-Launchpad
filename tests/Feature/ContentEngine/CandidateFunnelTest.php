@@ -96,10 +96,16 @@ test('the funnel routes a mixed batch into candidates, parks, drops and refreshe
         ->and($alertTypes)->toContain(AlertType::BorderlineRelevance)
         ->and($alertTypes)->toContain(AlertType::RefreshSuggested);
 
-    // Exactly one post-candidate persisted beyond the seeded live page (cold snap);
-    // the borderline one is in_review, the refresh one was not duplicated.
+    // The near-dup is now HELD in review (not dropped): it exists as an in_review row naming the live page,
+    // so it's visible in the §6c NearDuplicate lane rather than vanishing into an invisible alert.
+    $held = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
+        ->where('kind', 'post')->whereNotNull('near_dup_of_content_id')->first();
+    expect($held)->not->toBeNull()
+        ->and($held->status)->toBe(ContentStatus::InReview);
+
+    // Posts persisted: live page + draft-ready candidate + borderline in_review + the held near-dup.
     expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('kind', 'post')->count())
-        ->toBe(3); // live page + draft-ready + borderline
+        ->toBe(4);
 });
 
 test('the funnel drops a competitor\'s own announcement (competitor_promo)', function () {

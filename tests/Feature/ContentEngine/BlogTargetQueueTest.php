@@ -57,6 +57,25 @@ function btQueued(Site $site, Silo $silo, string $query, int $volume = 100, ?str
     ]);
 }
 
+it('directed intake HOLDS a target whose title duplicates a live post in review, naming it', function () {
+    $site = btSite();
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pumps']);
+    // A live post the directed target's title collides with (a different keyword, same base slug).
+    $existing = Content::factory()->post()->create([
+        'site_id' => $site->id, 'silo_id' => $silo->id,
+        'title' => 'Sump Pump Battery Backup', 'slug' => 'sump-pump-battery-backup',
+        'status' => ContentStatus::Published, 'body' => '<p>x</p>',
+    ]);
+    btQueued($site, $silo, 'Sump Pump Battery Backup'); // queued target with the colliding title
+
+    $result = app(DirectedIntake::class)->pull($site);
+
+    expect($result)->not->toBeNull()
+        ->and($result['candidate']->status)->toBe(ContentStatus::InReview)      // held, not Candidate
+        ->and($result['candidate']->near_dup_of_content_id)->toBe($existing->id) // names the duplicated post
+        ->and($result['candidate']->slug)->not->toBe('sump-pump-battery-backup'); // its own slug is disambiguated
+});
+
 it('parses the classifier intent field on a candidate spoke', function () {
     $spoke = CandidateSpoke::fromArray([
         'name' => 'Why is my basement wet in spring',
