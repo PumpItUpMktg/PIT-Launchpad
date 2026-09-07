@@ -1,11 +1,15 @@
 @php
-    // The Towns sub-navigation (Relay 3 · PR 5g): the four coverage-lifecycle surfaces presented as
-    // one tabbed "Towns" item. They are heavy, divergent pages (coverage editor, grouped board, tier
-    // progression, link plans), so the tabs navigate between them (a shared sub-nav) rather than
-    // cramming four page-components into one. Active tab = the current route.
+    // The Towns sub-navigation (Relay 3 · PR 5g): the coverage-lifecycle surfaces presented as one
+    // tabbed "Towns" item. They are heavy, divergent pages (coverage editor, tier progression, link
+    // plans), so the tabs navigate between them (a shared sub-nav) rather than cramming them into one
+    // page-component. Active tab = the current route.
+    //
+    // The town/location PAGES board is NOT a tab here: it is its own routed surface
+    // (OperateLocationPages, reached via the Pages board's Town family tab). A "Towns board" entry
+    // here pointed at exactly that page — the Town tab by another name — so it was removed as a
+    // duplicate. (Territory → Towns, the coverage editor, is "Service area" below and stays.)
     $townsTabs = [
         ['label' => 'Service area', 'url' => \App\Filament\Pages\LocationsSetup::getUrl()],
-        ['label' => 'Towns board', 'url' => \App\Filament\Pages\Operate\OperateLocationPages::getUrl()],
         ['label' => 'Tier progression', 'url' => \App\Filament\Pages\Operate\OperateTierProgression::getUrl()],
         ['label' => 'Link plans', 'url' => \App\Filament\Pages\Operate\OperateLinkPlans::getUrl()],
     ];

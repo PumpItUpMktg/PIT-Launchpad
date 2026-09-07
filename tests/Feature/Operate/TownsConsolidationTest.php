@@ -26,9 +26,11 @@ it('the Service-area editor renders the Towns tab bar and no cross-tenant site p
     Livewire::test(LocationsSetup::class)
         ->assertOk()
         ->assertSee('Service area')
-        ->assertSee('Towns board')
         ->assertSee('Tier progression')
         ->assertSee('Link plans')
+        // "Towns board" is gone from this sub-nav: it duplicated the Pages board's own Town family tab
+        // (both reach OperateLocationPages). Territory → Towns (the coverage editor) stays as "Service area".
+        ->assertDontSee('Towns board')
         ->assertDontSee('Select a site…'); // the old per-page cross-tenant picker is gone
 });
 
