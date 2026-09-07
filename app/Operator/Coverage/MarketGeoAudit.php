@@ -36,7 +36,7 @@ final class MarketGeoAudit
     /**
      * @return list<array{
      *   name: string, region: string, tier: string, geo: string, lat: ?string, lng: ?string,
-     *   geo_id: ?string, name_artifact: bool, location_match: bool,
+     *   geo_id: ?string, name_artifact: bool, location_match: bool, geo_twin: bool,
      *   dependents: array{keywords:int,content:int,snapshots:int,services:int,proof:int,media:int},
      *   total_dependents: int, advisory: string
      * }>
@@ -47,6 +47,16 @@ final class MarketGeoAudit
         if ($markets->isEmpty()) {
             return [];
         }
+
+        // geo_id collision map: a geo_id carried by >1 market is a DUPLICATE (the same Census place twice) —
+        // the merge case. This is the one lens that must cross-reference rows, not judge each in isolation:
+        // without it a clean twin ("Abingdon") is never suspect and is hidden, so the pair reads as a lone
+        // rename and the duplicate is invisible here (exactly what sent an operator in a circle). The verdict
+        // is authoritative (mirrors {@see MarketMerger::plan()}'s group-by-geo_id, count ≥ 2).
+        $geoIdCounts = $markets
+            ->filter(fn (Market $m): bool => $m->geo_id !== null && trim((string) $m->geo_id) !== '')
+            ->groupBy(fn (Market $m): string => (string) $m->geo_id)
+            ->map->count();
 
         $ids = $markets->pluck('id')->all();
         $keywords = $this->modelCounts(Keyword::withoutGlobalScopes()->whereIn('market_id', $ids));
@@ -65,9 +75,11 @@ final class MarketGeoAudit
             $geoId = ($market->geo_id !== null && trim((string) $market->geo_id) !== '') ? (string) $market->geo_id : null;
             $artifact = $this->hasNumberingArtifact((string) $market->name);
             $match = $this->matchesLocation($market, $places);
+            $geoTwin = $geoId !== null && ($geoIdCounts[$geoId] ?? 0) > 1;
 
-            // Not a suspect: geo-valid, un-artifacted, and confirmed a real place (geo_id OR Location).
-            $suspect = $geo !== 'valid' || $artifact || ($geoId === null && ! $match);
+            // Not a suspect: geo-valid, un-artifacted, confirmed real (geo_id OR Location), AND not a geo_id
+            // duplicate. A twin surfaces BOTH rows (the clean one included) so the merge case is never hidden.
+            $suspect = $geo !== 'valid' || $artifact || ($geoId === null && ! $match) || $geoTwin;
             if (! $suspect && ! $includeClean) {
                 continue;
             }
@@ -92,9 +104,10 @@ final class MarketGeoAudit
                 'geo_id' => $geoId,
                 'name_artifact' => $artifact,
                 'location_match' => $match,
+                'geo_twin' => $geoTwin,
                 'dependents' => $deps,
                 'total_dependents' => $total,
-                'advisory' => $this->advisory($geo, $geoId, $artifact, $match, $total),
+                'advisory' => $this->advisory($geo, $geoId, $artifact, $match, $total, $geoTwin),
             ];
         }
 
@@ -106,7 +119,7 @@ final class MarketGeoAudit
      * real enumerated place, so such a market is NEVER a delete candidate (repair its geo, rename its
      * artifact, or keep it). Delete is reserved for a market with no geo_id, no Location, and no dependents.
      */
-    private function advisory(string $geo, ?string $geoId, bool $artifact, bool $locationMatch, int $totalDependents): string
+    private function advisory(string $geo, ?string $geoId, bool $artifact, bool $locationMatch, int $totalDependents, bool $geoTwin = false): string
     {
         $real = $geoId !== null || $locationMatch;
 
@@ -114,6 +127,9 @@ final class MarketGeoAudit
             $geo !== 'valid' => 'repair geo — '.($real
                 ? 'a real place ('.($geoId !== null ? "geo_id {$geoId}" : 'Location match').') with a bad coordinate'
                 : 'no geo_id or Location either — verify the place before repairing'),
+            // A geo_id duplicate is a MERGE, not a rename — the renamer defers to the merge tool for these, so
+            // merge takes precedence over the "N, " artifact (the dirty twin carries both).
+            $geoTwin => "merge — shares geo_id {$geoId} with another market (a duplicate of the same place); resolve with launchpad:merge-markets",
             $artifact => 'rename — "N, " numbering artifact in the name'.($geoId !== null ? " (real place, geo_id {$geoId})" : ''),
             $totalDependents > 0 => 'review — has dependents (deletion cascades; keep if this is a real market)',
             $geoId !== null => "keep — has a Census geo_id ({$geoId}); a real enumerated place",

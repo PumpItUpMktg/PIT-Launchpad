@@ -50,6 +50,30 @@ it('flags a "N, " numbering artifact as a rename (not delete) on a real geo_id m
         ->and($rows[0]['advisory'])->not->toContain('delete');
 });
 
+it('surfaces BOTH rows of a geo_id duplicate — the clean twin is no longer hidden — with a merge advisory', function () {
+    $site = Site::factory()->create();
+    // The Abingdon case: a clean survivor + a "N, " twin, same Census geo_id. Before the fix the clean row
+    // was not suspect and was dropped, so report-market-geo showed a lone rename and hid the duplicate.
+    $clean = geoMkt($site, 'Abingdon', 'MD', 39.40, -76.29, '2402590048');
+    $dirty = geoMkt($site, '1, Abingdon', 'MD', 39.40, -76.29, '2402590048');
+
+    $rows = collect(app(MarketGeoAudit::class)->suspects($site))->keyBy('name');
+
+    expect($rows)->toHaveCount(2)                                  // both twins surface, not just the dirty one
+        ->and($rows['Abingdon']['geo_twin'])->toBeTrue()
+        ->and($rows['Abingdon']['advisory'])->toContain('merge')
+        ->and($rows['Abingdon']['advisory'])->toContain('launchpad:merge-markets')
+        ->and($rows['1, Abingdon']['geo_twin'])->toBeTrue()
+        ->and($rows['1, Abingdon']['advisory'])->toContain('merge');   // merge takes precedence over the artifact rename
+});
+
+it('a lone clean market with a geo_id still stays hidden (no twin, not a duplicate)', function () {
+    $site = Site::factory()->create();
+    geoMkt($site, 'Abingdon', 'MD', 39.40, -76.29, '2402590048'); // single row, unique geo_id
+
+    expect(app(MarketGeoAudit::class)->suspects($site))->toBe([]); // geo_twin false → not surfaced
+});
+
 it('flags a market with no geo_id, no Location, and no dependents as a delete candidate', function () {
     $site = Site::factory()->create();
     geoMkt($site, 'Nowhere', 'ZZ', 40.0, -75.0, null); // valid geo, but nothing confirms it is real
