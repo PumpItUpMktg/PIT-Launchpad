@@ -114,6 +114,21 @@ final class ServiceAreaResolver
             }
             $towns = $buckets[$geoId];
             usort($towns, fn (array $a, array $b): int => $a['key'] <=> $b['key']);
+            // A9 fix: collapse same-name municipalities WITHIN a county to one row. A Census `place` and its
+            // same-named `county_subdivision` (e.g. a Bethlehem place + a Bethlehem township in the same
+            // county) are one town to a homeowner — rendering both read as a duplicate, and the old
+            // "Twp/Boro" tie-breaker leaked the data model into public copy. Keep the first after the
+            // largest-first sort (the higher tier / population), so the prominent row survives.
+            $seen = [];
+            $towns = array_values(array_filter($towns, function (array $t) use (&$seen): bool {
+                $key = $this->key($t['name']);
+                if ($key === '' || isset($seen[$key])) {
+                    return $key === '';   // keep unnamed (shouldn't happen); collapse repeats of a real name
+                }
+                $seen[$key] = true;
+
+                return true;
+            }));
             $kept = [];
             foreach (array_slice($towns, 0, self::PER_COUNTY) as $town) {
                 $kept[] = ['name' => $town['name'], 'url' => $town['url'], 'type' => $town['type'], 'label' => $town['name']];
@@ -130,11 +145,14 @@ final class ServiceAreaResolver
     }
 
     /**
-     * Give two SAME-NAME municipalities distinct labels so the areas grid never shows a bare "Bethlehem"
-     * twice. A name that appears more than once across the whole grid gets its county appended —
-     * "Bethlehem (Northampton)" — the operator-chosen format. If that STILL collides (a `place` and a
-     * `county_subdivision` of the same name in the same county), the municipal descriptor breaks the tie —
-     * "Bethlehem (Northampton, Twp/Boro)". A unique name is left exactly as it is.
+     * Qualify a town name that appears in MORE THAN ONE county with its county — "Washington (Warren
+     * County)" vs "Washington (Hunterdon County)" — so two genuinely different towns that share a name
+     * across the served counties read distinctly. A name unique across the grid is left exactly as it is.
+     *
+     * Same-name municipalities WITHIN one county are no longer disambiguated here — they are collapsed to a
+     * single row upstream in {@see byCounty()} (a place + its same-named MCD are one town to a homeowner).
+     * The old municipal-type tie-breaker ("(County, Twp/Boro)") is gone: it leaked an internal model
+     * distinction into public copy, which is never something a customer should read.
      *
      * @param  list<array{county: string, towns: list<array{name: string, url: string, type: MunicipalityType, label: string}>}>  $groups
      * @return list<array{county: string, towns: list<array{name: string, url: string, type: MunicipalityType, label: string}>}>
@@ -148,26 +166,12 @@ final class ServiceAreaResolver
             }
         }
 
-        // Pass 1 — county qualifier for any duplicated name.
+        // County qualifier for a name that appears in more than one county (after the within-county
+        // collapse, any remaining repeat of a name is necessarily in a DIFFERENT county).
         foreach ($groups as $gi => $g) {
             foreach ($g['towns'] as $ti => $t) {
                 if (($nameCounts[$this->key($t['name'])] ?? 0) > 1 && trim($g['county']) !== '') {
                     $groups[$gi]['towns'][$ti]['label'] = $t['name'].' ('.$g['county'].')';
-                }
-            }
-        }
-
-        // Pass 2 — municipal descriptor where the county qualifier still leaves two labels identical.
-        $labelCounts = [];
-        foreach ($groups as $g) {
-            foreach ($g['towns'] as $t) {
-                $labelCounts[mb_strtolower($t['label'])] = ($labelCounts[mb_strtolower($t['label'])] ?? 0) + 1;
-            }
-        }
-        foreach ($groups as $gi => $g) {
-            foreach ($g['towns'] as $ti => $t) {
-                if (($labelCounts[mb_strtolower($t['label'])] ?? 0) > 1 && ($suffix = $t['type']->disambiguator()) !== '' && trim($g['county']) !== '') {
-                    $groups[$gi]['towns'][$ti]['label'] = $t['name'].' ('.$g['county'].', '.$suffix.')';
                 }
             }
         }

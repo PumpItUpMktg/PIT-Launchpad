@@ -46,12 +46,12 @@ function disambigGridLabels(string $siteId): array
         ->all();
 }
 
-it('disambiguates two same-name municipalities in the same county by county then municipal type', function () {
+it('collapses two same-name municipalities in the same county to ONE plain entry (A9 — no duplicate, no Twp/Boro)', function () {
     $site = Site::factory()->create(['domain_url' => 'https://spg.test']);
     Location::factory()->create(['site_id' => $site->id, 'county_geoids' => ['34019']]);
 
-    // A place and a county subdivision BOTH named "Bethlehem" that both resolve to Hunterdon County —
-    // county alone can't split them, so the municipal descriptor breaks the tie.
+    // A place and a county subdivision BOTH named "Bethlehem" in Hunterdon County — to a homeowner that is
+    // ONE town, not two, and "Twp/Boro" is internal jargon. The grid must show a single, plain "Bethlehem".
     disambigGazetteer(
         counties: ['34' => [['geoId' => '34019', 'name' => 'Hunterdon County']]],
         polygons: ['34019' => [[
@@ -70,10 +70,10 @@ it('disambiguates two same-name municipalities in the same county by county then
     ]);
 
     $labels = disambigGridLabels($site->id);
+    $bethlehem = array_values(array_filter($labels, fn (string $l): bool => str_contains($l, 'Bethlehem')));
 
-    expect($labels)->toContain('Bethlehem (Hunterdon County)')            // the place keeps the plain county form
-        ->and($labels)->toContain('Bethlehem (Hunterdon County, Twp/Boro)') // the MCD gets the tie-breaking suffix
-        ->and($labels)->not->toContain('Bethlehem');                       // never a bare, ambiguous label
+    expect($bethlehem)->toBe(['Bethlehem'])                        // exactly one row, plain — collapsed, not two
+        ->and(implode(' | ', $labels))->not->toContain('Twp/Boro'); // the internal jargon never reaches public copy
 });
 
 it('disambiguates two same-name municipalities in different counties by county alone', function () {
