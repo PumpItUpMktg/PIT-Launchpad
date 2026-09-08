@@ -96,6 +96,11 @@ final class SiteProfileAssembler
             // footer afterthought), in the operator's Header-menu-builder order. Legal pages stay OUT of
             // the header — they live in the footer bar.
             'nav' => $mainNav,
+            // Secondary header CTA ("Free Assessment") for the sticky-header full state — a way through for
+            // the people who won't call. Data-driven so the label/target stay editable without a code
+            // deploy; emitted ONLY when the Contact page exists (same "never advertise a page that isn't
+            // there" rule as the rest of the chrome), so the plugin omits the button otherwise.
+            'cta' => $this->cta($site, $home),
             // Global grouped-nav thresholds the plugin reads to pick the header services-menu mode
             // (flat row / grouped mega-menu / "More" overflow). Tunable in config, not per-site.
             'nav_menu' => [
@@ -107,6 +112,22 @@ final class SiteProfileAssembler
             // Severe-weather banner config — coords + on/off; the plugin fetches the live forecast itself.
             'alert' => $this->weatherAlert($site, $location, $home),
         ];
+    }
+
+    /**
+     * The secondary header CTA — "Free Assessment", pointing at the Contact page. Null when no Contact
+     * page exists (the plugin then renders no button), so the header never shows a CTA that 404s. The
+     * label is fixed for now; kept as a {label, url} shape so it can become operator-editable later
+     * without changing the pushed contract.
+     *
+     * @return array{label: string, url: string}|null
+     */
+    private function cta(Site $site, string $home): ?array
+    {
+        $contact = $this->pagesBySlug($site, $home, ['contact', 'contact-us']);
+        $url = trim((string) ($contact[0]['url'] ?? ''));
+
+        return $url !== '' ? ['label' => 'Free Assessment', 'url' => $url] : null;
     }
 
     /**

@@ -60,6 +60,21 @@ it('assembles the site profile from real §1 data — brand, NAP, real page link
         ->and(array_column($profile['areas'], 'label'))->toBe(['Jersey City', 'Newark']);
 });
 
+it('emits the Free Assessment header CTA pointing at the Contact page, and omits it when there is none', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+
+    // No Contact page yet → no CTA (the header never shows a button that 404s).
+    expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['cta'])->toBeNull();
+
+    Content::factory()->published()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility,
+        'slug' => 'contact', 'title' => 'Contact Us',
+    ]);
+
+    expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['cta'])
+        ->toBe(['label' => 'Free Assessment', 'url' => 'https://sewergurus.com/contact']);
+});
+
 it('excludes non-published pages from the menu — a drafted or taken-down page never appears', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sg.test']);
 
