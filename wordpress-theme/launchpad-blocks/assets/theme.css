@@ -2184,6 +2184,77 @@
     }
 }
 
+/* ================================================================== *
+ * Services-first (PR 2) — Services is the PRIMARY nav, leftmost after
+ * the logo; the company links (About/Areas/Contact/FAQ) become the slim
+ * secondary strip: its own row on desktop, and the hamburger drawer AFTER
+ * Services on mobile (company reuses the existing .lp-nav drawer rules).
+ * ================================================================== */
+
+/* The primary row wraps so the company strip drops to its own line below it. */
+.lp-header-inner {
+    flex-wrap: wrap;
+}
+
+/* Brand no longer eats the row; Services sits right after it and its auto right-margin pushes the CTA +
+   callbar to the right edge (works whether or not the CTA is present). */
+.lp-header-inner > .lp-brand {
+    margin-right: 0;
+}
+
+.lp-header-inner > .lp-services-nav {
+    margin-right: auto;
+}
+
+/* Company links = the slim secondary strip on its own full-width row (desktop). */
+.lp-company {
+    order: 9;
+    flex-basis: 100%;
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+    font-size: 0.82rem;
+}
+
+.lp-company a {
+    opacity: 0.82;
+}
+
+/* Condensed: drop the secondary company strip so the sticky row tightens to ~56px; Services + phone stay. */
+.lp-header.is-scrolled .lp-company {
+    display: none;
+}
+
+@media (max-width: 860px) {
+    /* Services joins the hamburger drawer, ABOVE the company links (company already drawers via .lp-nav,
+       which is order:10 on mobile — Services takes order:9 so it stacks first). */
+    .lp-header-inner > .lp-services-nav {
+        display: none;
+        order: 9;
+        flex-basis: 100%;
+        margin: 0.4rem 0 0;
+    }
+
+    #lp-nav-toggle:checked ~ .lp-services-nav {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    #lp-nav-toggle:checked ~ .lp-services-nav a {
+        padding: 0.55rem 0.1rem;
+        font-size: 1rem;
+    }
+
+    /* The company strip loses its desktop divider inside the drawer (the drawer has its own top border). */
+    .lp-company {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: 0;
+        font-size: 1rem;
+    }
+}
+
 /* ---- Footer: NAP + service/area/company columns + no-lock-in line ---- */
 .lp-footer {
     background: var(--wp--preset--color--contrast, #081726);
