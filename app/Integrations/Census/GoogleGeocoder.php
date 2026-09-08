@@ -15,6 +15,12 @@ use Throwable;
  *
  * Falls back to the injected geocoder (Census, no key) when no key is set or Google can't
  * resolve / errors — so the seam degrades instead of dead-ending. Tests Http::fake this.
+ *
+ * Captures Google's two precision signals onto the {@see GeocodeResult}: `geometry.location_type` and
+ * `partial_match` (previously discarded). A Google result always carries a concrete `partialMatch`
+ * (false when Google omits the key, which it does on a full match) — distinct from the null a fallback
+ * result carries, which means "not assessed". No consumer gates on them yet; this is the substrate for
+ * flagging low-confidence placements (partial match, or an APPROXIMATE/GEOMETRIC_CENTER point) for review.
  */
 final class GoogleGeocoder implements Geocoder
 {
@@ -67,6 +73,16 @@ final class GoogleGeocoder implements Geocoder
             return $this->fallback?->geocode($address);
         }
 
-        return new GeocodeResult((float) $lat, (float) $lng, (string) ($result['formatted_address'] ?? $address));
+        $locationType = $result['geometry']['location_type'] ?? null;
+
+        return new GeocodeResult(
+            (float) $lat,
+            (float) $lng,
+            (string) ($result['formatted_address'] ?? $address),
+            is_string($locationType) && $locationType !== '' ? $locationType : null,
+            // Google omits partial_match on a full match — a Google result records a concrete false there,
+            // never the null a non-reporting geocoder carries (the "not assessed" vs "assessed clean" line).
+            (bool) ($result['partial_match'] ?? false),
+        );
     }
 }
