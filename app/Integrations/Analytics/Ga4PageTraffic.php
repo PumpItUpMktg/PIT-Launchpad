@@ -101,6 +101,35 @@ class Ga4PageTraffic implements PageTrafficProvider
         return $this->sessionsFromCache($result);
     }
 
+    public function lastWarmedAt(Site $site): ?Carbon
+    {
+        $property = (string) $site->ga4_property;
+        if ($property === '') {
+            return null;
+        }
+
+        $stamp = $this->cache->get($this->lastWarmKey($property));
+
+        return is_string($stamp) && $stamp !== '' ? Carbon::parse($stamp) : null;
+    }
+
+    public function markWarmed(Site $site): void
+    {
+        $property = (string) $site->ga4_property;
+        if ($property === '') {
+            return;
+        }
+
+        // forever: the marker is the cadence record, not a cache of data — it survives past any per-page
+        // TTL so the freshness stamp reads "warmed {date}" even after the entries it warmed have expired.
+        $this->cache->forever($this->lastWarmKey($property), Carbon::now()->toIso8601String());
+    }
+
+    private function lastWarmKey(string $property): string
+    {
+        return 'ga4:last_warm:'.md5($property);
+    }
+
     /**
      * @param  mixed  $result  the cached `['sessions' => int]`, a `['none' => true]` sentinel, or null on a miss
      */

@@ -68,6 +68,10 @@ class WarmGa4Pages implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        // Stamp the warm-pass time up front so the GA4 freshness stamp records the cadence even when a
+        // large site soft-budgets out mid-pass (a partial pass still refreshed what it reached).
+        $traffic->markWarmed($site);
+
         $deadline = microtime(true) + self::SOFT_BUDGET_SECONDS;
 
         $pages = Content::withoutGlobalScope(SiteScope::class)
