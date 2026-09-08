@@ -2,17 +2,20 @@
 
 namespace App\Operate;
 
+use App\Enums\FreshnessState;
 use App\Enums\RankingState;
+use App\Models\Location;
 use App\Support\FreshnessStamp;
+use App\Support\Ui;
 
 /**
- * The ONE typed shape for a MARKET card — one GBP-anchored {@see \App\Models\Location} (UI "Market"),
- * roughly a dozen per tenant, rendered by {@see \App\Operate\MarketCards} on the Markets wall. It is an
+ * The ONE typed shape for a MARKET card — one GBP-anchored {@see Location} (UI "Market"),
+ * roughly a dozen per tenant, rendered by {@see MarketCards} on the Markets wall. It is an
  * AGGREGATE card, deliberately NOT the per-page {@see ContentCard}: a market rolls up its own page plus
  * every town page beneath it (built/total tier counts, a ranking DISTRIBUTION rather than one rank, a
  * size-tier deployment grid, a proof row). Forcing that through the content-row DTO would bolt rollup
  * fields onto a per-page contract whose constructor is strict — so this is a second, honest shape that
- * REUSES the shared vocabulary (chips, tokens, {@see RankingState}/{@see \App\Enums\FreshnessState},
+ * REUSES the shared vocabulary (chips, tokens, {@see RankingState}/{@see FreshnessState},
  * {@see FreshnessStamp}) rather than a second from-scratch implementation (standing rule 8).
  *
  * The absent-state rule (rule 7) is baked in, not optional: every metric is `?int` where null means
@@ -76,7 +79,7 @@ final class MarketCard
     }
 
     /**
-     * The flat view the {@see \App\Support\Ui} market-card component reads. Every key is always present
+     * The flat view the {@see Ui} market-card component reads. Every key is always present
      * (sourced from a typed field), so the component can never silently drop a block; a null value is the
      * honest not-tracked state the template renders as such, never as 0 or a blank.
      *
