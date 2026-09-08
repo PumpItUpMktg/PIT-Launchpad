@@ -8,8 +8,8 @@ use App\Enums\LinkPlanItemStatus;
 use App\Enums\LinkPlanStatus;
 use App\Enums\LinkSourceType;
 use App\Enums\PageType;
-use App\Enums\StandardPageType;
 use App\Locations\Distance;
+use App\Metrics\UrlNormalizer;
 use App\Models\Content;
 use App\Models\ContentTown;
 use App\Models\CoverageArea;
@@ -19,18 +19,28 @@ use App\Models\PageIndexState;
 use App\Models\Review;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Publishing\Blocks\ServiceAreaResolver;
+use App\Support\PublicUrl;
 use App\Support\TownName;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Builds the "link plan on unlock" — a set of PROPOSED inbound links to the newly-built town pages of a
- * market's just-unlocked tier, drawn from the five sources (strongest first):
+ * market's just-unlocked tier, from four sources (strongest first):
  *
  *   4. Job/review back-link — the market landing (which surfaces the town's jobs/reviews) links back.
  *   1. Market page — the market landing's town spine links each town (republish).
- *   2. Neighbouring town — an INDEXED town page within the neighbour radius links across (a mesh, not a hub).
- *   3. Blog mention — a published post tagged with the town links to it.
- *   5. Areas We Serve — the directory page links every town (republish).
+ *   3. Blog mention — a published post tagged with the town links to it (topical, relevance-based).
+ *   2. Mesh — an INDEXED neighbour town links to an UNINDEXED town, CONSTRAINED: at most the target's
+ *      N nearest neighbours, never past an inbound floor, never to a top-3 page. Directional by
+ *      construction (indexed → unindexed), so no reciprocal pair can form. Proximity is not relevance —
+ *      the mesh was 82% of the spine and every reciprocal before this — so it is held hard, not dressed up.
+ *
+ * The "Areas We Serve" directory is deliberately NOT a source: that page links its towns through its own
+ * directory block ({@see ServiceAreaResolver}); proposing a per-town link there just dumped dozens of body
+ * links onto a directory page.
  *
  * It only PROPOSES (persists a Proposed {@see LinkPlan} + items); nothing is written until an operator
  * approves and {@see LinkPlanCommitter} runs. Links added to any one source page are capped
@@ -38,6 +48,17 @@ use Illuminate\Support\Collection;
  */
 class LinkPlanBuilder
 {
+    public function __construct(private readonly InternalLinkGraph $graph) {}
+
+    /** The built link graph for the current run — the source of existing inbound counts (mesh cap). */
+    private ?InternalLinkGraph $builtGraph = null;
+
+    /** @var array<string, array<string, true>> target id → set of inbound source ids (existing + proposed) */
+    private array $inbound = [];
+
+    /** @var array<string, ?float> content id → blended GSC position (for the top-3 skip); null = untracked */
+    private array $position = [];
+
     /**
      * READ-ONLY preview of the whole link-plan spine: the capped candidate edges {@see propose} WOULD
      * persist across every market × tier, WITHOUT writing anything. The per-source cap is applied PER
@@ -49,6 +70,8 @@ class LinkPlanBuilder
      */
     public function previewAll(Site $site): array
     {
+        $this->beginRun($site);
+
         $markets = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->get();
 
@@ -71,6 +94,8 @@ class LinkPlanBuilder
 
     public function propose(Site $site, Location $market, ?string $tier): LinkPlan
     {
+        $this->beginRun($site);
+
         $plan = LinkPlan::create([
             'site_id' => $site->id,
             'market_location_id' => $market->id,
@@ -101,7 +126,15 @@ class LinkPlanBuilder
     }
 
     /**
-     * Every candidate (source, target, type, anchor) tuple across the five sources, before dedupe/cap.
+     * Every candidate (source, target, type, anchor) tuple, before dedupe/cap. Four sources now — the
+     * Areas directory is NOT one: an "Areas We Serve" page links its towns through its own directory block
+     * ({@see ServiceAreaResolver}), so proposing a per-town link there just injected
+     * dozens of body links onto a directory page. Mesh is CONSTRAINED (see below) rather than "every
+     * indexed neighbour within the radius", which was 82% of the spine and every reciprocal pair.
+     *
+     * The stronger, relevance-based sources go first (market/job-review landing, blog) so they count toward
+     * a target's inbound before mesh is considered — mesh only FILLS a page the real edges left under the
+     * inbound floor, so it feeds the starved rather than circulating among the winners.
      *
      * @param  Collection<int, Content>  $targets
      * @return list<array{source: ?string, target: string, type: LinkSourceType, anchor: ?string}>
@@ -109,36 +142,44 @@ class LinkPlanBuilder
     private function candidates(Site $site, Location $market, Collection $targets): array
     {
         $landing = $this->marketLanding($site, $market);
-        $areas = $this->areasPage($site);
         $indexed = $this->indexedContentIds($site);
         $neighbourPool = $this->indexedTownCentroids($site, $indexed);
+        $meshNearest = max(1, (int) config('launchpad.link_plan.mesh_nearest', 3));
+        $maxInbound = max(1, (int) config('launchpad.link_plan.max_inbound_per_target', 3));
         $out = [];
 
         foreach ($targets as $town) {
             $townName = TownName::display((string) $town->title);
             $targetId = (string) $town->id;
 
-            // (1) Market landing → town (spine republish). Upgraded to (4) Job/review below when proof exists.
+            // (1) Market landing → town (spine). Upgraded to (4) Job/review when proof + indexed landing.
             if ($landing !== null) {
                 $type = $this->hasLocalProof($site, $town, $market) && isset($indexed[(string) $landing->id])
                     ? LinkSourceType::JobReview
                     : LinkSourceType::Market;
                 $out[] = ['source' => (string) $landing->id, 'target' => $targetId, 'type' => $type, 'anchor' => null];
+                $this->addInbound($targetId, (string) $landing->id);
             }
 
-            // (2) Neighbouring INDEXED town pages within the radius → town (a mesh).
-            foreach ($this->neighbours($town, $neighbourPool) as $neighbourId) {
-                $out[] = ['source' => $neighbourId, 'target' => $targetId, 'type' => LinkSourceType::Mesh, 'anchor' => $townName];
-            }
-
-            // (3) Published blog posts tagged with the town → town.
+            // (3) Published blog posts tagged with the town → town (topical, genuinely relevance-based).
             foreach ($this->blogMentions($site, $town) as $postId) {
                 $out[] = ['source' => $postId, 'target' => $targetId, 'type' => LinkSourceType::Blog, 'anchor' => $townName];
+                $this->addInbound($targetId, $postId);
             }
 
-            // (5) Areas We Serve → town (spine republish).
-            if ($areas !== null) {
-                $out[] = ['source' => (string) $areas->id, 'target' => $targetId, 'type' => LinkSourceType::Areas, 'anchor' => null];
+            // (2) Mesh — CONSTRAINED. Only to an UNINDEXED, non-top-3 target still under the inbound floor,
+            // from its ≤N nearest indexed neighbours. Directional by construction (indexed source → unindexed
+            // target) so a reciprocal pair can never form — an unindexed target is never an indexed source —
+            // and the inbound cap starves the wheel and feeds the pages that actually need links. Proximity
+            // is not relevance, so mesh is held hard rather than dressed up.
+            if (! isset($indexed[$targetId]) && ! $this->ranksTop3($targetId)) {
+                foreach (array_slice($this->neighbours($town, $neighbourPool), 0, $meshNearest) as $neighbourId) {
+                    if (count($this->inboundSet($targetId)) >= $maxInbound) {
+                        break;
+                    }
+                    $out[] = ['source' => $neighbourId, 'target' => $targetId, 'type' => LinkSourceType::Mesh, 'anchor' => $townName];
+                    $this->addInbound($targetId, $neighbourId);
+                }
             }
         }
 
@@ -221,14 +262,79 @@ class LinkPlanBuilder
             ->first(['id', 'slug', 'wp_post_id']);
     }
 
-    /** The site's Areas-We-Serve directory page. */
-    private function areasPage(Site $site): ?Content
+    /**
+     * Set up per-run state: the live link graph (existing inbound counts), the blended-position map (the
+     * top-3 skip), and a fresh inbound tally + centroid memo. Called once per {@see propose} (one plan) and
+     * once per {@see previewAll} (the whole site) — so the mesh inbound cap composes across a preview.
+     */
+    private function beginRun(Site $site): void
     {
-        return Content::withoutGlobalScope(SiteScope::class)
+        $this->builtGraph = $this->graph->build($site);
+        $this->position = $this->blendedPositions($site, $this->builtGraph);
+        $this->inbound = [];
+        $this->centroidCache = [];
+    }
+
+    /** The running inbound-source set for a target, seeded lazily from the live graph's existing inbound. */
+    private function inboundSet(string $targetId): array
+    {
+        if (! isset($this->inbound[$targetId])) {
+            $existing = $this->builtGraph !== null ? $this->builtGraph->inbound($targetId) : [];
+            $this->inbound[$targetId] = array_fill_keys($existing, true);
+        }
+
+        return $this->inbound[$targetId];
+    }
+
+    /** Record an inbound source for a target (deduped) — a candidate edge, or existing graph inbound. */
+    private function addInbound(string $targetId, string $sourceId): void
+    {
+        $this->inboundSet($targetId);
+        $this->inbound[$targetId][$sourceId] = true;
+    }
+
+    /** Whether a target already ranks top 3 (GSC blended position ≤ 3) — a page that needs no more links. */
+    private function ranksTop3(string $contentId): bool
+    {
+        $pos = $this->position[$contentId] ?? null;
+
+        return $pos !== null && $pos <= 3.0;
+    }
+
+    /**
+     * Blended GSC position per content id over the trailing 28 days (Σ position×impressions / Σ impressions
+     * on positioned rows), matched by normalized path — the rank source the top-3 skip reads. Null when the
+     * page has no positioned impressions.
+     *
+     * @return array<string, ?float>
+     */
+    private function blendedPositions(Site $site, InternalLinkGraph $graph): array
+    {
+        $rows = DB::table('gsc_url_daily')
             ->where('site_id', $site->id)
-            ->where('standard_type', StandardPageType::AreasWeServe->value)
-            ->where('status', ContentStatus::Published->value)
-            ->first(['id', 'slug', 'wp_post_id']);
+            ->where('date', '>=', Carbon::now()->subDays(27)->toDateString())
+            ->selectRaw('url,
+                SUM(CASE WHEN position IS NULL THEN 0 ELSE impressions END) AS impr_pos,
+                SUM(CASE WHEN position IS NULL THEN 0 ELSE position * impressions END) AS posw')
+            ->groupBy('url')
+            ->get();
+
+        $byPath = [];
+        foreach ($rows as $row) {
+            $path = UrlNormalizer::path((string) parse_url((string) $row->url, PHP_URL_PATH));
+            $byPath[$path] ??= ['impr_pos' => 0, 'posw' => 0.0];
+            $byPath[$path]['impr_pos'] += (int) $row->impr_pos;
+            $byPath[$path]['posw'] += (float) $row->posw;
+        }
+
+        $out = [];
+        foreach ($graph->pages as $id => $page) {
+            $path = UrlNormalizer::path(PublicUrl::forContent($site->domain_url, $page) ?? '/'.ltrim((string) $page->slug, '/'));
+            $stat = $byPath[$path] ?? null;
+            $out[(string) $id] = $stat !== null && $stat['impr_pos'] > 0 ? $stat['posw'] / $stat['impr_pos'] : null;
+        }
+
+        return $out;
     }
 
     /**
