@@ -19,9 +19,9 @@ use Illuminate\Support\Facades\Auth;
  * card opens the market detail page (later PRs). Read-only over {@see MarketCards} — one batched pass, no
  * per-card query and no HTTP in the render path (standing rule 2).
  *
- * Tenant-locked to the working {@see ActiveTenant} (no per-page site picker). Operator-only. Not yet wired
- * into {@see ConsoleNav} — the Territory nav placement (which entry hosts the wall) is a
- * user-facing vocabulary decision confirmed before wiring.
+ * Tenant-locked to the working {@see ActiveTenant} (no per-page site picker). Operator-only. Wired as
+ * Territory → "Markets" in {@see ConsoleNav} (a card per Location is exactly what #790 repointed that
+ * label at); the served-town list stays under "Towns" ({@see MarketsBoard}).
  *
  * @property-read list<MarketCard> $cards
  */
@@ -39,8 +39,8 @@ class MarketCardsBoard extends Page
 
     public ?string $siteId = null;
 
-    // Wired explicitly through ConsoleNav's Territory group (a render-hook header), never Filament's
-    // auto-sidebar — and only once the nav placement is settled. Keep it out of the auto-nav until then.
+    // The console nav is the explicit ConsoleNav render-hook header, never Filament's auto-sidebar — this
+    // page is linked there as Territory → "Markets", so it stays out of the auto-nav like its siblings.
     public static function shouldRegisterNavigation(): bool
     {
         return false;

@@ -1,7 +1,7 @@
 <?php
 
 use App\Enums\UserRole;
-use App\Filament\Pages\LocationsSetup;
+use App\Filament\Pages\MarketCardsBoard;
 use App\Filament\Pages\MarketsBoard;
 use App\Models\User;
 use App\Operator\Nav\ConsoleNav;
@@ -33,14 +33,15 @@ it('places every item in its settled group and vocabulary', function () {
         ->and($byGroup['System'])->toBe(['Connections', 'Feeds', 'Brand', 'Voice', 'Users', 'Recover']);
 });
 
-it('Territory vocabulary: "Markets" opens the service-area editor, "Towns" opens the served-town board', function () {
-    // UI "Market" = Location (GBP service area) = LocationsSetup; UI "Town" = Market model (served towns)
-    // = MarketsBoard. The labels keep their positions; the surface each points to is what swapped.
+it('Territory vocabulary: "Markets" opens the market-card wall, "Towns" opens the served-town board', function () {
+    // UI "Market" = Location (GBP service area): "Markets" is the wall of market cards (one per Location)
+    // = MarketCardsBoard. UI "Town" = Market model (served towns) = MarketsBoard.
     $territory = collect(app(ConsoleNav::class)->structure())->firstWhere('group', 'Territory')['items'];
     $bySurface = collect($territory)->mapWithKeys(fn (array $i): array => [$i['label'] => $i['surface']]);
 
-    expect($bySurface['Markets'])->toBe(LocationsSetup::class)
+    expect($bySurface['Markets'])->toBe(MarketCardsBoard::class)
         ->and($bySurface['Towns'])->toBe(MarketsBoard::class)
+        ->and(app(MarketCardsBoard::class)->getTitle())->toBe('Markets') // the card wall reads "Markets"
         ->and(app(MarketsBoard::class)->getTitle())->toBe('Towns'); // the served-town board reads "Towns"
 });
 
