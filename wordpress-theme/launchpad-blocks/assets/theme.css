@@ -2191,19 +2191,19 @@
  * Services on mobile (company reuses the existing .lp-nav drawer rules).
  * ================================================================== */
 
-/* The primary row wraps so the company strip drops to its own line below it. */
+/* The logo row carries the logo (left) plus the CTA + Call-now button (right); Services and the company
+   links each take their own full-width row below. The brand keeps its base `margin-right:auto`, which pins
+   the CTA + callbar to the right edge of the LOGO row — inline with the logo — whether or not the CTA is
+   present. (Earlier this rendered Services inline on the logo row, which pushed the phone onto its own line
+   once a site had a long services menu; giving Services its own row fixes that for any number of services.) */
 .lp-header-inner {
     flex-wrap: wrap;
 }
 
-/* Brand no longer eats the row; Services sits right after it and its auto right-margin pushes the CTA +
-   callbar to the right edge (works whether or not the CTA is present). */
-.lp-header-inner > .lp-brand {
-    margin-right: 0;
-}
-
 .lp-header-inner > .lp-services-nav {
-    margin-right: auto;
+    order: 8;
+    flex-basis: 100%;
+    margin-top: 0.4rem;
 }
 
 /* Company links = the slim secondary strip on its own full-width row (desktop). */
