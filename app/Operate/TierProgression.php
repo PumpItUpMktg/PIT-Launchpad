@@ -44,9 +44,12 @@ class TierProgression
      *     tiers: list<array<string, mixed>>
      * }>  most-problematic market first
      */
-    public function forSite(Site $site): array
+    public function forSite(Site $site, bool $withLinks = true): array
     {
-        $graph = $this->graph->build($site);
+        // The inbound-link count needs a full-site graph build; a caller that doesn't render it (the
+        // Markets-card wall — links live on the market detail, per the relay) passes withLinks:false to
+        // skip that scan entirely. Default true keeps every existing caller's behaviour unchanged.
+        $graph = $withLinks ? $this->graph->build($site) : null;
         $home = rtrim((string) $site->domain_url, '/');
         $coverage = $this->coverage($site);
         $townPages = $this->townPages($site);
@@ -73,7 +76,7 @@ class TierProgression
      * @param  array<string, string|null>  $verdicts
      * @return array{id: string, name: string, built: int, served: int, problem_count: int, has_problem: bool, tiers: list<array<string, mixed>>}
      */
-    private function market(Site $site, Location $location, Collection $coverage, Collection $townPages, array $tierByTown, array $verdicts, InternalLinkGraph $graph, string $home): array
+    private function market(Site $site, Location $location, Collection $coverage, Collection $townPages, array $tierByTown, array $verdicts, ?InternalLinkGraph $graph, string $home): array
     {
         $marketId = (string) $location->id;
         $served = $coverage->filter(fn (CoverageArea $a): bool => in_array($marketId, (array) $a->source_location_ids, true));
@@ -96,7 +99,7 @@ class TierProgression
                 'id' => (string) $c->id,
                 'name' => $this->townKeyDisplay((string) $c->title),
                 'index_state' => $this->indexState($verdicts, $home, (string) $c->slug),
-                'inbound_links' => count($graph->inbound((string) $c->id)),
+                'inbound_links' => $graph !== null ? count($graph->inbound((string) $c->id)) : null,
             ])->all();
 
             $builtCount = count($pills);

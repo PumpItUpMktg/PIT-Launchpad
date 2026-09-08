@@ -10,7 +10,7 @@ use App\Filament\Pages\IndexingBoard;
 use App\Filament\Pages\JobsBoard;
 use App\Filament\Pages\LocationCoverage;
 use App\Filament\Pages\LocationGeoGrid;
-use App\Filament\Pages\LocationsSetup;
+use App\Filament\Pages\MarketCardsBoard;
 use App\Filament\Pages\MarketsBoard;
 use App\Filament\Pages\Operate\InternalLinks;
 use App\Filament\Pages\Operate\OperateBlog;
@@ -63,9 +63,10 @@ class ConsoleNav
                 ['label' => 'Live', 'surface' => OperateLive::class, 'soon' => false],
             ]],
             ['group' => 'Territory', 'items' => [
-                // UI "Market" = the GBP-anchored service area (Location model) → LocationsSetup;
-                // UI "Town" = the served-town list (Market model) → MarketsBoard. See docs/specs/5-nav-cutover.md.
-                ['label' => 'Markets', 'surface' => LocationsSetup::class, 'soon' => false],
+                // UI "Market" = the GBP-anchored service area (Location model): "Markets" is the wall of
+                // market cards (one per Location), drilling into the market detail. UI "Town" = the
+                // served-town list (Market model) → MarketsBoard. See docs/specs/5-nav-cutover.md.
+                ['label' => 'Markets', 'surface' => MarketCardsBoard::class, 'soon' => false],
                 ['label' => 'Towns', 'surface' => MarketsBoard::class, 'soon' => false],
                 ['label' => 'Citations', 'surface' => CitationsBoard::class, 'soon' => false],
                 ['label' => 'Silos', 'surface' => SiloManagementResource::class, 'soon' => false],

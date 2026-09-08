@@ -4,6 +4,7 @@ namespace App\Integrations\Analytics;
 
 use App\Jobs\WarmGa4Pages;
 use App\Models\Site;
+use Illuminate\Support\Carbon;
 
 /**
  * Per-page traffic (GA4) for the Live boards — mock-first like the §7c ConversionProvider seam
@@ -44,4 +45,15 @@ interface PageTrafficProvider
      * {@see sessions()} is off the render/warm paths; the render reads {@see sessionsCached()}.
      */
     public function refresh(Site $site, string $path, int $days = 28): ?int;
+
+    /**
+     * When the per-page cache was last warmed for this site — stamped by the weekly {@see WarmGa4Pages}
+     * pass — or null if it has never run. The honest source for the GA4 freshness stamp: a stamp that
+     * says "weekly" without saying WHEN is exactly what the absent-state rule forbids. Distinct from the
+     * per-page cache TTL (which only says an entry is still live), this records the cadence itself.
+     */
+    public function lastWarmedAt(Site $site): ?Carbon;
+
+    /** Record that a warm pass ran for this site now — the write half of {@see lastWarmedAt()}. */
+    public function markWarmed(Site $site): void;
 }

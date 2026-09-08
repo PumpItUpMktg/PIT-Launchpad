@@ -3,6 +3,7 @@
 namespace App\Integrations\Analytics;
 
 use App\Models\Site;
+use Illuminate\Support\Carbon;
 
 /** No GA4 connection yet — the Live boards show the connect prompt. */
 final class NullPageTraffic implements PageTrafficProvider
@@ -32,4 +33,11 @@ final class NullPageTraffic implements PageTrafficProvider
     {
         return null;
     }
+
+    public function lastWarmedAt(Site $site): ?Carbon
+    {
+        return null;
+    }
+
+    public function markWarmed(Site $site): void {}
 }

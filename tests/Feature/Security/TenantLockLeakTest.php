@@ -13,6 +13,7 @@ use App\Filament\Pages\LocationCoverage;
 use App\Filament\Pages\LocationDashboard;
 use App\Filament\Pages\LocationGeoGrid;
 use App\Filament\Pages\LocationsSetup;
+use App\Filament\Pages\MarketCardsBoard;
 use App\Filament\Pages\MarketsBoard;
 use App\Filament\Pages\Operate\InternalLinks;
 use App\Filament\Pages\Operate\OperateBlog;
@@ -157,8 +158,9 @@ dataset('lockedSurfaces', [
     'Build · Pages' => [fn () => OperatePages::getUrl()],
     'Build · Jobs' => [fn () => JobsBoard::getUrl()],
     'Build · Live' => [fn () => OperateLive::getUrl()],
-    'Territory · Markets' => [fn () => MarketsBoard::getUrl()],
-    'Territory · Towns' => [fn () => LocationsSetup::getUrl()],
+    'Territory · Markets (card wall)' => [fn () => MarketCardsBoard::getUrl()],
+    'Territory · Towns' => [fn () => MarketsBoard::getUrl()],
+    'Territory · Service area' => [fn () => LocationsSetup::getUrl()],
     'Territory · Internal links' => [fn () => InternalLinks::getUrl()],
     'Results · Rankings' => [fn () => RankingsBoard::getUrl()],
     'Results · Indexing' => [fn () => IndexingBoard::getUrl()],

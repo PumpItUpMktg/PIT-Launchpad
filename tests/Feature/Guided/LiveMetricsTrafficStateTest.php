@@ -7,6 +7,7 @@ use App\JobCapture\Metrics\JobMetrics;
 use App\Models\Content;
 use App\Models\Job;
 use App\Models\Site;
+use Illuminate\Support\Carbon;
 
 /**
  * A configurable cache-only traffic stub: `connected` is true, and `sessionsCachedState` returns whatever
@@ -43,6 +44,13 @@ function stubTraffic(array $state): PageTrafficProvider
         {
             return $this->state['sessions'];
         }
+
+        public function lastWarmedAt(Site $site): ?Carbon
+        {
+            return null;
+        }
+
+        public function markWarmed(Site $site): void {}
     };
 
     app()->instance(PageTrafficProvider::class, $stub);
