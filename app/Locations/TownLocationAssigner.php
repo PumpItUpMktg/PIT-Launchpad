@@ -40,8 +40,13 @@ class TownLocationAssigner
             ->get();
 
         // town key (lowercase name) → owning location id. Coverage areas win (the intake-computed
-        // GBP reach that materialized the page); served_towns fills any gap.
+        // GBP reach that materialized the page); served_towns fills any gap. This NAME map is the fallback
+        // for un-anchored pages and the source of the "first coverage row for a name wins" collision that
+        // produced /trooper-pa/montgomery-nj/ — the GEOID index below is the fix (geo_id is unique, so the
+        // right coverage row is picked, not the first same-named one).
         $owners = $this->townOwners($site, $locations);
+        $ownersByGeo = $this->coverageOwnersByGeo($site);
+        $fallback = new TownGeoFallback('TownLocationAssigner', (string) $site->id);
 
         $townPages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -53,7 +58,10 @@ class TownLocationAssigner
         $assigned = 0;
         $unmatched = [];
         foreach ($townPages as $page) {
-            $ownerId = $owners[$this->townKey((string) $page->title)] ?? null;
+            // Prefer the GEOID join when the page is anchored; fall back to the name key when it isn't
+            // (the transitional dual path — see TownGeoFallback). The defect is retired for a given page
+            // when the anchor sets its geo_id, not when this ships.
+            $ownerId = $fallback->resolve($page->geo_id, $this->townKey((string) $page->title), $ownersByGeo, $owners);
 
             // A single-location site has nothing to disambiguate — every town belongs to it.
             if ($ownerId === null && $locations->count() === 1) {
@@ -74,7 +82,37 @@ class TownLocationAssigner
             }
         }
 
+        $fallback->report(); // one aggregate tripwire line per site: how many pages still resolved by name
+
         return ['assigned' => $assigned, 'unmatched' => $unmatched];
+    }
+
+    /**
+     * census geo_id → owning location id, from the intake-computed coverage areas. The GEOID-keyed twin of
+     * {@see coverageOwners}: geo_id is unique per coverage row, so — unlike the name key — a same-named town
+     * in two counties never collapses to one owner. This is the clean path an anchored page resolves on.
+     *
+     * @return array<string, string>
+     */
+    private function coverageOwnersByGeo(Site $site): array
+    {
+        $owners = [];
+        $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->get(['geo_id', 'source_location_ids']);
+
+        foreach ($areas as $area) {
+            $sources = is_array($area->source_location_ids)
+                ? array_values(array_filter(array_map('strval', $area->source_location_ids), fn (string $id): bool => $id !== ''))
+                : [];
+            $geo = (string) $area->geo_id;
+            if ($geo === '' || $sources === []) {
+                continue;
+            }
+            $owners[$geo] ??= $sources[0];
+        }
+
+        return $owners;
     }
 
     /**
