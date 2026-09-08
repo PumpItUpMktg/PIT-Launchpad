@@ -36,7 +36,12 @@ final class SiteChrome
         // The theme styles the whole bar off this class (.lp-header:has(.lp-tone-dark)); default light.
         $tone = (isset($p['header_tone']) && $p['header_tone'] === 'dark') ? 'dark' : 'light';
 
-        $out = '<div class="lp-header-inner lp-tone-' . $tone . '">';
+        // Utility bar — the slim top strip (service area + 24/7 availability). It scrolls away in the
+        // condensed sticky state (theme CSS hides it under .lp-header.is-scrolled); the header still
+        // reserves its own box because .lp-header is position:sticky, so there is no layout shift.
+        $out = $this->utilityBar($p, $tone);
+
+        $out .= '<div class="lp-header-inner lp-tone-' . $tone . '">';
 
         $out .= '<a class="lp-brand" href="' . $home . '">';
         // The uploaded logo (served from R2) replaces the text business name; no logo → text fallback.
@@ -59,6 +64,8 @@ final class SiteChrome
         }
 
         $out .= $this->navList($p['nav'] ?? [], 'lp-nav');
+        // Secondary CTA ("Free Assessment") beside the phone — a way through for the people who won't call.
+        $out .= $this->headerCta($p);
         $out .= $this->callbar($p);
 
         $out .= '</div>';
@@ -241,8 +248,56 @@ final class SiteChrome
     }
 
     /**
-     * The click-to-call bar. Emergency (opted-in) gets the pulsing 24/7 tag; a phone is required or the
-     * bar is omitted entirely.
+     * The utility bar — the slim top strip above the main header row: the service area (the brand tagline,
+     * trade · region) and, for an emergency-capable trade, a 24/7 availability note. Omitted entirely when
+     * there is nothing to show. Carries the header tone so it reads on a dark or light bar. The theme hides
+     * it in the condensed sticky state (.lp-header.is-scrolled .lp-utilitybar { display:none }).
+     *
+     * @param  array<string, mixed>  $p
+     */
+    private function utilityBar(array $p, string $tone): string
+    {
+        $area = trim((string) ($p['tagline'] ?? ''));
+        $emergency = ! empty($p['emergency']);
+        if ($area === '' && ! $emergency) {
+            return '';
+        }
+
+        $out = '<div class="lp-utilitybar lp-tone-' . $tone . '"><div class="lp-utilitybar-inner">';
+        if ($area !== '') {
+            $out .= '<span class="lp-util-area">' . esc_html($area) . '</span>';
+        }
+        if ($emergency) {
+            $out .= '<span class="lp-util-avail">24/7 Emergency Service</span>';
+        }
+
+        return $out . '</div></div>';
+    }
+
+    /**
+     * The secondary header CTA ("Free Assessment") — rendered only when the profile carries a cta with both
+     * a label and a URL (the control plane emits it only when the Contact page exists). The theme hides it
+     * in the mobile condensed state, where only the logo, tap-to-call and hamburger remain.
+     *
+     * @param  array<string, mixed>  $p
+     */
+    private function headerCta(array $p): string
+    {
+        $cta = is_array($p['cta'] ?? null) ? $p['cta'] : [];
+        $label = trim((string) ($cta['label'] ?? ''));
+        $url = trim((string) ($cta['url'] ?? ''));
+        if ($label === '' || $url === '') {
+            return '';
+        }
+
+        return '<a class="lp-header-cta" href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
+    }
+
+    /**
+     * The click-to-call bar — a `tel:` link on every viewport (the emergency audience calls from a phone).
+     * A "Call now" label sits above the number (it says the line is for right now, not enquiries); emergency
+     * (opted-in) also gets the pulsing 24/7 tag. A phone is required or the bar is omitted entirely. In the
+     * mobile condensed state the theme collapses this to the icon alone (the tap-to-call button).
      *
      * @param  array<string, mixed>  $p
      */
@@ -259,6 +314,7 @@ final class SiteChrome
         if ($emergency) {
             $out .= '<span class="lp-callbar-tag"><span class="lp-pulse" aria-hidden="true"></span> 24/7 Emergency</span>';
         }
+        $out .= '<span class="lp-callbar-label">Call now</span>';
         $out .= '<span class="lp-callbar-num">' . $this->phoneIcon() . esc_html((string) $p['phone']) . '</span>';
 
         return $out . '</a>';

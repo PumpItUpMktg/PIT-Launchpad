@@ -52,6 +52,65 @@ class Test_Site_Chrome extends WP_UnitTestCase
         $this->assertStringNotContainsString('lp-hamburger', (new SiteChrome())->header());
     }
 
+    public function test_header_utility_bar_shows_the_service_area_and_availability(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'Sewer Gurus',
+            'tagline' => 'Sump Pump Repair · Northern NJ',
+            'emergency' => true,
+        ]);
+
+        $header = (new SiteChrome())->header();
+
+        $this->assertStringContainsString('lp-utilitybar', $header);
+        $this->assertStringContainsString('Sump Pump Repair · Northern NJ', $header);
+        $this->assertStringContainsString('24/7 Emergency Service', $header);
+    }
+
+    public function test_header_utility_bar_omitted_when_there_is_no_area_and_no_emergency(): void
+    {
+        ( new SiteProfileStore() )->save(['brand_name' => 'Sewer Gurus']);
+
+        $this->assertStringNotContainsString('lp-utilitybar', (new SiteChrome())->header());
+    }
+
+    public function test_callbar_is_a_tel_link_with_a_call_now_label(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'Sewer Gurus',
+            'phone' => '(973) 555-0100',
+            'phone_tel' => 'tel:9735550100',
+        ]);
+
+        $header = (new SiteChrome())->header();
+
+        $this->assertStringContainsString('lp-callbar', $header);
+        $this->assertStringContainsString('href="tel:9735550100"', $header);   // a tel: link, not text
+        $this->assertStringContainsString('lp-callbar-label', $header);
+        $this->assertStringContainsString('Call now', $header);
+    }
+
+    public function test_header_renders_the_secondary_cta_when_the_profile_carries_one(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'Sewer Gurus',
+            'cta' => ['label' => 'Free Assessment', 'url' => 'https://sewergurus.com/contact'],
+        ]);
+
+        $header = (new SiteChrome())->header();
+
+        $this->assertStringContainsString('lp-header-cta', $header);
+        $this->assertStringContainsString('href="https://sewergurus.com/contact"', $header);
+        $this->assertStringContainsString('Free Assessment', $header);
+    }
+
+    public function test_header_omits_the_secondary_cta_when_there_is_none(): void
+    {
+        ( new SiteProfileStore() )->save(['brand_name' => 'Sewer Gurus']);
+
+        $this->assertStringNotContainsString('lp-header-cta', (new SiteChrome())->header());
+    }
+
     public function test_header_tone_survives_the_store_sanitize(): void
     {
         // Regression: the sanitize whitelist silently stripped header_tone, forcing every header light.

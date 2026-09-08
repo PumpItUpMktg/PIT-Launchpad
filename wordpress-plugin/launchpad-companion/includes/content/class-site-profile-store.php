@@ -68,6 +68,10 @@ final class SiteProfileStore
             'hours' => sanitize_text_field((string) ($p['hours'] ?? '')),
             'legal' => sanitize_text_field((string) ($p['legal'] ?? '')),
             'nav' => self::links($p['nav'] ?? []),
+            // Secondary header CTA ({label, url}) — null when the control plane sent none (no Contact page).
+            // On the whitelist so it survives the sanitize (the header_tone regression: an un-whitelisted
+            // key is silently dropped and the button would never render).
+            'cta' => self::cta($p['cta'] ?? null),
             'services' => self::links($p['services'] ?? [], true),
             'areas' => self::links($p['areas'] ?? []),
             'company' => self::links($p['company'] ?? []),
@@ -168,6 +172,28 @@ final class SiteProfileStore
         }
 
         return $out;
+    }
+
+    /**
+     * The secondary header CTA — a single { label, url }, or null when absent or malformed. URL kept only
+     * when it passes esc_url_raw; a CTA without both a label and a real URL is dropped (the header then
+     * renders no button) rather than emitting a dead one.
+     *
+     * @param  mixed  $raw
+     * @return array{label: string, url: string}|null
+     */
+    private static function cta(mixed $raw): ?array
+    {
+        if (! is_array($raw)) {
+            return null;
+        }
+        $label = sanitize_text_field((string) ($raw['label'] ?? ''));
+        $url = isset($raw['url']) ? esc_url_raw((string) $raw['url']) : '';
+        if ($label === '' || ! is_string($url) || $url === '') {
+            return null;
+        }
+
+        return ['label' => $label, 'url' => $url];
     }
 
     /** A `tel:` value reduced to a safe dialing charset. */
