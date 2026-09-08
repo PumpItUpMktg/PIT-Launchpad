@@ -80,6 +80,7 @@ it('WarmGa4Pages force-refreshes GA4 for every published page and job, keyed on 
 
     $traffic = Mockery::mock(PageTrafficProvider::class);
     $traffic->shouldReceive('connected')->andReturnTrue();
+    $traffic->shouldReceive('markWarmed')->once(); // stamps the warm-pass time for the freshness stamp
     $traffic->shouldReceive('refresh')->once()->with(Mockery::any(), '/'.$page->slug);
     $traffic->shouldReceive('refresh')->once()->with(Mockery::any(), $job->publicPath());
 
