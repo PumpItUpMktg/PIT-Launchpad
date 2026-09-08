@@ -4,11 +4,13 @@ use App\Enums\UserRole;
 use App\Filament\Pages\GeoActivityConsole;
 use App\Filament\Pages\IndexingBoard;
 use App\Filament\Pages\JobsBoard;
+use App\Filament\Pages\MarketCardsBoard;
 use App\Filament\Pages\MarketsBoard;
 use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Pages\RankingsBoard;
 use App\Filament\Resources\VoiceProfileResource;
 use App\Models\Account;
+use App\Models\Location;
 use App\Models\Membership;
 use App\Models\Site;
 use App\Models\User;
@@ -34,7 +36,13 @@ function smokeOperator(Site $site): User
 dataset('adminNavGroupSurfaces', [
     'Build · Dashboard' => [TenantDashboard::class],
     'Build · Jobs' => [JobsBoard::class],
-    'Territory · Markets' => [MarketsBoard::class],
+    // Territory · Markets is the market-cards WALL (MarketCardsBoard), the nav label "Markets" was
+    // repointed at in #790/#798 — NOT MarketsBoard, which is the served-town list ("Towns"). The card
+    // wall renders the <x-lp.market-card> component, so a full-route GET of it (with a Location seeded
+    // below) is what a component-render 500 like the #805 blade bug shows up on — the read-model tests
+    // never rendered the blade. Both surfaces are smoked, under their true nav labels.
+    'Territory · Markets' => [MarketCardsBoard::class],
+    'Territory · Towns' => [MarketsBoard::class],
     'Results · Rankings' => [RankingsBoard::class],
     'Results · Indexing' => [IndexingBoard::class],
     'Results · AI visibility' => [GeoActivityConsole::class],
@@ -43,6 +51,9 @@ dataset('adminNavGroupSurfaces', [
 
 it('renders a live surface AND the four-group console nav in every group over a full authenticated route', function (string $class) {
     $site = Site::factory()->create(['status' => 'active']);
+    // Seed at least one Location so the market-cards wall actually emits a card — an empty tenant renders
+    // the empty state, the one shape that can't reproduce a card-rendering bug (the gap that let #805 ship).
+    Location::factory()->create(['site_id' => $site->id, 'publish_held' => false]);
     $this->actingAs(smokeOperator($site));
     app(ActiveTenant::class)->set($site->id);
 
