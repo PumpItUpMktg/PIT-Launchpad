@@ -7,6 +7,7 @@ use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Locations\TownGeoFallback;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -59,7 +60,12 @@ final class ServiceAreaResolver
         }
 
         $polygons = $this->countyPolygons(array_keys($names)); // geoId => rings
-        $urls = $this->locationUrls($siteId);
+        [$byGeo, $byName] = $this->pageUrlIndexes($siteId);
+        // Coverage-driven: the coverage row carries the geo_id, the town page is the anchorable counterpart.
+        // Prefer the page found by geo_id, fall back to the name key while pages are still un-anchored. No
+        // per-render tripwire report here (render path) — the batch launchpad:coverage-page-report over the
+        // same served towns carries the trend + the geo_miss signal.
+        $geo = new TownGeoFallback('ServiceAreaResolver', $siteId);
 
         $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
@@ -90,7 +96,7 @@ final class ServiceAreaResolver
                 // Its own town page if one is built, else PLAIN TEXT (empty url) — an unbuilt town is not a
                 // self-referencing link to the Areas page; the list fills in as tiers get built, and the
                 // link plan has a real target to attach to. (The renderer shows empty-url as plain text.)
-                'url' => $urls[$this->key($name)] ?? '',
+                'url' => $geo->resolveByCoverage((string) $area->geo_id, $this->key($name), $byGeo, $byName) ?? '',
                 'type' => $area->type,
                 'key' => [self::TIER_RANK[(string) $area->size_tier] ?? 4, -1 * (int) ($area->population ?? 0), $name],
             ];
@@ -177,11 +183,17 @@ final class ServiceAreaResolver
         [$names, $more] = $this->cities($siteId);
 
         // Attach a REAL town-page link where one exists (every link resolves to a real page); a town
-        // with no location page renders as a plain pill.
-        $urls = $this->locationUrls($siteId);
+        // with no location page renders as a plain pill. Coverage-driven: the coverage carries the geo_id
+        // (looked up by name from $coverageGeo — the town names come from `cities()`, which flattens both
+        // the coverage and the market-fallback sets), the town page is the anchorable counterpart. Prefer
+        // the page found by geo_id, fall back to the name key while pages are still un-anchored. No
+        // per-render tripwire report (render path) — the batch launchpad:coverage-page-report carries it.
+        [$byGeo, $byName] = $this->pageUrlIndexes($siteId);
+        $coverageGeo = $this->coverageGeoByName($siteId);
+        $geo = new TownGeoFallback('ServiceAreaResolver', $siteId);
         $cities = array_map(fn (string $name): array => [
             'label' => $name,
-            'url' => $urls[$this->key($name)] ?? '',
+            'url' => $geo->resolveByCoverage($coverageGeo[$this->key($name)] ?? null, $this->key($name), $byGeo, $byName) ?? '',
         ], $names);
 
         return [
@@ -192,12 +204,13 @@ final class ServiceAreaResolver
     }
 
     /**
-     * town name (lower-cased) => its published location-page URL. Real pages only — a town without a
-     * location page just won't be in the map, so it links to nothing.
+     * The published location pages indexed BOTH ways for the geo-first join: by their census `geo_id` (the
+     * anchored ones only) and by the town-name key (all of them, carrying whether each is anchored). Real
+     * pages only — a town without a location page just won't be in the map, so it links to nothing.
      *
-     * @return array<string, string>
+     * @return array{0: array<string, string>, 1: array<string, array{value: string, anchored: bool}>}
      */
-    private function locationUrls(string $siteId): array
+    private function pageUrlIndexes(string $siteId): array
     {
         $domain = Site::find($siteId)?->domain_url;
         $home = is_string($domain) && trim($domain) !== '' ? rtrim($domain, '/').'/' : '/';
@@ -207,16 +220,44 @@ final class ServiceAreaResolver
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Location->value)
             ->whereNotNull('slug')
-            ->get(['title', 'slug']);
+            ->get(['title', 'slug', 'geo_id']);
 
-        $map = [];
+        $byGeo = [];
+        $byName = [];
         foreach ($pages as $page) {
             $title = trim((string) $page->title);
             $slug = trim((string) $page->slug);
             if ($title === '' || $slug === '') {
                 continue;
             }
-            $map[$this->key($title)] = $home.ltrim($slug, '/');
+            $url = $home.ltrim($slug, '/');
+            $geoId = trim((string) $page->geo_id);
+            if ($geoId !== '') {
+                $byGeo[$geoId] = $url;
+            }
+            // Name key is last-wins (matching the prior locationUrls behavior); anchored iff it has a geo_id.
+            $byName[$this->key($title)] = ['value' => $url, 'anchored' => $geoId !== ''];
+        }
+
+        return [$byGeo, $byName];
+    }
+
+    /**
+     * town-name key => the coverage row's census `geo_id`, so the name-driven {@see resolve()} can still go
+     * geo-first (the town names it carries come from `cities()`, which flattens the coverage set). First-wins
+     * per name; coverage rows with no geo_id are skipped (they resolve on the name path, as before).
+     *
+     * @return array<string, string>
+     */
+    private function coverageGeoByName(string $siteId): array
+    {
+        $map = [];
+        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->get(['name', 'geo_id']) as $area) {
+            $key = $this->key(trim((string) $area->name));
+            $geoId = trim((string) $area->geo_id);
+            if ($key !== '' && $geoId !== '' && ! isset($map[$key])) {
+                $map[$key] = $geoId;
+            }
         }
 
         return $map;
