@@ -2005,6 +2005,185 @@
     }
 }
 
+/* ================================================================== *
+ * Sticky-header states — utility bar (top strip), condense-on-scroll,
+ * the "Call now" label and the secondary CTA. Three states:
+ *   full        — utility bar + logo + nav + phone (Call now) + CTA
+ *   condensed   — .lp-header.is-scrolled: utility bar gone, logo smaller,
+ *                 a subtle shadow; nav + phone unchanged (~56px row)
+ *   mobile cond. — logo + tap-to-call + hamburger only
+ * No layout shift: .lp-header is position:sticky (its box stays in flow),
+ * so the condense never reflows the content below it — that's why it is
+ * sticky, not fixed. nav.js toggles .is-scrolled past the utility strip.
+ * ================================================================== */
+
+/* The "Call now" label above the number — it says the line is for right now, not enquiries. */
+.lp-callbar-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    opacity: 0.85;
+}
+
+/* Utility bar — the slim top strip (service area · 24/7). Scrolls away when condensed. */
+.lp-utilitybar {
+    background: color-mix(in srgb, var(--wp--preset--color--contrast, #081726) 92%, #000);
+    color: color-mix(in srgb, var(--wp--preset--color--base, #fff) 78%, transparent);
+    font-size: 0.72rem;
+}
+
+.lp-utilitybar.lp-tone-light {
+    background: var(--wp--preset--color--contrast, #0f172a);
+    color: color-mix(in srgb, var(--wp--preset--color--base, #fff) 82%, transparent);
+}
+
+.lp-utilitybar-inner {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+    max-width: var(--wp--style--global--wide-size, 1200px);
+    margin-inline: auto;
+    padding: 0.3rem clamp(1rem, 3vw, 2rem);
+}
+
+.lp-util-avail {
+    margin-left: auto;
+    font-weight: 700;
+    color: var(--wp--preset--color--base, #fff);
+}
+
+/* Secondary CTA ("Free Assessment") — a secondary-weight button beside the phone. */
+.lp-header-cta {
+    flex: none;
+    padding: 0.5rem 0.9rem;
+    border: 1px solid currentColor;
+    border-radius: var(--wp--custom--radius, 4px);
+    font-family: var(--wp--preset--font-family--heading);
+    font-weight: 700;
+    font-size: 0.82rem;
+    text-decoration: none;
+    color: inherit;
+    white-space: nowrap;
+}
+
+.lp-header-cta:hover {
+    background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* Smooth condense. Guarded so reduced-motion users get an instant switch. */
+.lp-header,
+.lp-header .lp-header-inner,
+.lp-header .lp-logo {
+    transition: padding 0.18s ease, height 0.18s ease, box-shadow 0.18s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lp-header,
+    .lp-header .lp-header-inner,
+    .lp-header .lp-logo {
+        transition: none;
+    }
+}
+
+/* ---- Condensed (scrolled) ---- */
+.lp-header.is-scrolled .lp-utilitybar {
+    display: none;                 /* utility bar scrolls away */
+}
+
+.lp-header.is-scrolled .lp-header-inner {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;       /* the primary row tightens toward ~56px */
+}
+
+.lp-header.is-scrolled .lp-logo {
+    height: 30px;                  /* logo smaller */
+}
+
+.lp-header.is-scrolled .lp-callbar-label {
+    display: none;                 /* tighten the call button in the condensed row */
+}
+
+.lp-header.is-scrolled {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);   /* subtle separation from content */
+}
+
+/* ---- Mobile: condensed shows only logo + tap-to-call + hamburger ---- */
+@media (max-width: 860px) {
+    .lp-header.is-scrolled .lp-header-cta,
+    .lp-header.is-scrolled .lp-header-services,
+    .lp-header.is-scrolled .lp-callbar-tag {
+        display: none;             /* nothing but logo, phone and the hamburger */
+    }
+}
+
+/* ---- 320px: logo, call button and hamburger coexist on ONE row without wrapping ---- */
+@media (max-width: 400px) {
+    .lp-header-inner {
+        gap: 0.4rem;
+        padding-inline: 0.6rem;
+    }
+
+    /* The brand YIELDS space (flex-shrink to zero basis, min-width:0) and truncates — so the fixed call
+       button + hamburger always keep their place on the row instead of the call button wrapping below.
+       This is what guarantees acceptance #4 regardless of how long the brand name is. */
+    .lp-brand {
+        margin-right: 0;
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .lp-brand-name {
+        font-size: 0.95rem;
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .lp-brand-tag {
+        display: none;
+    }
+
+    .lp-logo {
+        max-width: 108px;
+        height: 30px;
+    }
+
+    /* The call button and hamburger never shrink or wrap — the brand gives way to them. */
+    .lp-callbar,
+    .lp-hamburger {
+        flex: none;
+    }
+
+    /* No room for the CTA or the service-area line at 320px — the phone is what matters here. */
+    .lp-header-cta,
+    .lp-util-area {
+        display: none;
+    }
+
+    /* Compact the call button to icon + number so it sits beside the logo, not on its own line. */
+    .lp-callbar {
+        padding: 0.35rem 0.55rem;
+    }
+
+    .lp-callbar-tag,
+    .lp-callbar-label {
+        display: none;
+    }
+
+    .lp-callbar-num {
+        gap: 0.3rem;
+        font-size: 0.8rem;
+    }
+
+    .lp-hamburger {
+        width: 38px;
+        height: 38px;
+        margin-left: 0.2rem;
+    }
+}
+
 /* ---- Footer: NAP + service/area/company columns + no-lock-in line ---- */
 .lp-footer {
     background: var(--wp--preset--color--contrast, #081726);

@@ -20,6 +20,37 @@
             enhance(navs[n]);
         }
         collapseServicesBar();
+        stickyCondense();
+    }
+
+    /**
+     * Condense the sticky header on scroll. Adds `.is-scrolled` to `.lp-header` once the page has scrolled
+     * past the utility strip; theme CSS then hides the utility bar, shrinks the logo and drops a shadow. The
+     * threshold is captured ONCE (the utility bar's height while it is still shown) so hiding it can't feed
+     * back into the toggle. Passive scroll listener, rAF-throttled. No JS → the header stays full-height and
+     * sticky (still usable), just without the condense.
+     */
+    function stickyCondense() {
+        var header = document.querySelector('.lp-header');
+        if (!header) { return; }
+
+        var util = header.querySelector('.lp-utilitybar');
+        var threshold = util ? Math.max(util.offsetHeight, 8) : 8;
+        var ticking = false;
+
+        function update() {
+            ticking = false;
+            header.classList.toggle('is-scrolled', (window.pageYOffset || document.documentElement.scrollTop || 0) > threshold);
+        }
+
+        window.addEventListener('scroll', function () {
+            if (!ticking) {
+                ticking = true;
+                window.requestAnimationFrame(update);
+            }
+        }, { passive: true });
+
+        update();   // set the initial state (covers a load that is already scrolled)
     }
 
     /**
