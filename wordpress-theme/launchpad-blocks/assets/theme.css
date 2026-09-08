@@ -1502,6 +1502,17 @@
     color: var(--wp--preset--color--base, #fff);
 }
 
+/* WordPress renders the header template part as an OUTER <header class="wp-block-template-part"> wrapping
+   our inner <header class="lp-header">. position:sticky on the inner header can't travel — its containing
+   block is that short outer wrapper — so on real pages the bar just scrolled away. Make the OUTER wrapper
+   the sticky element too: its containing block is the page, so it pins the whole header. The `header` tag
+   qualifier scopes this to the header part and never the footer (also a .wp-block-template-part). */
+header.wp-block-template-part {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
 .lp-header-inner {
     display: flex;
     align-items: center;
