@@ -178,6 +178,13 @@ return [
     'link_plan' => [
         'max_links_per_source' => (int) env('LAUNCHPAD_LINK_PLAN_MAX_PER_SOURCE', 3),
         'neighbour_radius_miles' => (float) env('LAUNCHPAD_LINK_PLAN_NEIGHBOUR_MILES', 20.0),
+        // Mesh (town→town) is constrained to a real relationship, not every neighbour in the radius:
+        // each target receives from at most its N NEAREST indexed neighbours, and never beyond the inbound
+        // floor below. Proximity is not relevance, so the mesh is held hard.
+        'mesh_nearest' => (int) env('LAUNCHPAD_LINK_PLAN_MESH_NEAREST', 3),
+        // The inbound floor mesh fills to (not a hard cap on stronger sources): a page already carrying this
+        // many inbound links gets no mesh edge — mesh feeds the starved, it doesn't circulate among winners.
+        'max_inbound_per_target' => (int) env('LAUNCHPAD_LINK_PLAN_MAX_INBOUND', 3),
     ],
 
     /*

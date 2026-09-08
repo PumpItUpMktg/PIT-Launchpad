@@ -56,34 +56,35 @@ it('reports the plan spine shape: breakdown, reciprocals, over-cap and top-3 tar
         'title' => 'Areas', 'slug' => 'areas-we-serve', 'body' => '', 'slot_payload' => [],
     ]);
 
-    // Two same-tier towns, indexed, ~1.4mi apart → a mesh neighbour pair (A→B and B→A).
+    // Two same-tier towns ~1.4mi apart. Alpha is INDEXED (a mesh source); Bravo is UNINDEXED (a mesh target).
+    // The constrained builder emits mesh only Alpha→Bravo (directional) — never Bravo→Alpha — so no reciprocal.
     $alpha = ilrTown($site, $market, 'Alpha', 'alpha');
     $bravo = ilrTown($site, $market, 'Bravo', 'bravo');
-    foreach ([['Alpha', 40.70, $alpha], ['Bravo', 40.72, $bravo]] as [$name, $lat, $page]) {
+    foreach ([['Alpha', 40.70], ['Bravo', 40.72]] as [$name, $lat]) {
         CoverageArea::factory()->create([
             'site_id' => $site->id, 'geo_id' => '340230'.($name === 'Alpha' ? '01' : '02'), 'name' => $name,
             'size_tier' => 'major', 'lat' => $lat, 'lng' => -74.50, 'source_location_ids' => [$market->id],
         ]);
-        PageIndexState::create([
-            'site_id' => $site->id, 'content_id' => $page->id,
-            'url' => ILR_HOME.'/'.strtolower($name), 'url_normalized' => ILR_HOME.'/'.strtolower($name),
-            'index_verdict' => 'PASS',
-        ]);
     }
+    PageIndexState::create([
+        'site_id' => $site->id, 'content_id' => $alpha->id,
+        'url' => ILR_HOME.'/alpha', 'url_normalized' => ILR_HOME.'/alpha', 'index_verdict' => 'PASS',
+    ]);
 
-    ilrGscPosition($site, 'alpha', 2.0); // Alpha already ranks top 3 → needs no link
+    ilrGscPosition($site, 'alpha', 2.0); // Alpha ranks top 3
 
     $plan = ilrReport($site)['plan'];
 
-    // Six edges: landing→{A,B} (market), areas→{A,B} (areas), A↔B (mesh).
+    // Edges now: landing→{Alpha,Bravo} (market), Alpha→Bravo (mesh). No Areas source; no reciprocal.
     expect($plan['breakdown']['market→town'])->toBe(2)
-        ->and($plan['breakdown']['areas→town'])->toBe(2)
-        ->and($plan['breakdown']['town→town'])->toBe(2)
-        ->and($plan['by_source_type'])->toMatchArray(['market' => 2, 'areas' => 2, 'mesh' => 2])
-        ->and($plan['reciprocal_pairs'])->toBe(1)          // Alpha ↔ Bravo — the link-wheel signature
-        ->and($plan['top3_targets'])->toBe(1)              // Alpha (GSC position 2)
+        ->and($plan['breakdown']['town→town'])->toBe(1)     // Alpha→Bravo only (directional)
+        ->and($plan['breakdown'])->not->toHaveKey('areas→town') // Areas is no longer a plan source
+        ->and($plan['by_source_type'])->toMatchArray(['market' => 2, 'mesh' => 1])
+        ->and($plan['by_source_type'])->not->toHaveKey('areas')
+        ->and($plan['reciprocal_pairs'])->toBe(0)           // directional mesh → the link wheel is gone
+        ->and($plan['top3_targets'])->toBe(1)               // Alpha (GSC position 2)
         ->and($plan['distinct_targets'])->toBe(2)
-        ->and($plan['over_cap_count'])->toBeGreaterThanOrEqual(1); // thin pages → cap 0, every source exceeds
+        ->and($plan['over_cap_count'])->toBeGreaterThanOrEqual(1); // thin pages → cap 0
 });
 
 it('is read-only — proposes and persists nothing', function () {
