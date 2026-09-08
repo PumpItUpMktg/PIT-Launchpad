@@ -38,6 +38,37 @@ use Illuminate\Support\Collection;
  */
 class LinkPlanBuilder
 {
+    /**
+     * READ-ONLY preview of the whole link-plan spine: the capped candidate edges {@see propose} WOULD
+     * persist across every market × tier, WITHOUT writing anything. The per-source cap is applied PER
+     * PLAN (as propose does), and it does NOT compose across plans — so a source that appears in many
+     * plans (the Areas page, a market landing) accumulates far past the per-plan cap. This preview keeps
+     * that composition visible for the read-only link report; {@see propose} stays the only writer.
+     *
+     * @return list<array{source: ?string, target: string, type: LinkSourceType, anchor: ?string, market_id: string, tier: ?string}>
+     */
+    public function previewAll(Site $site): array
+    {
+        $markets = Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->get();
+
+        $out = [];
+        foreach ($markets as $market) {
+            // The tier axis propose() plans against — the four size tiers plus the ungrouped (null) band.
+            foreach (['major', 'large', 'medium', 'small', null] as $tier) {
+                $targets = $this->targetTowns($site, $market, $tier);
+                if ($targets->isEmpty()) {
+                    continue;
+                }
+                foreach ($this->dedupeAndCap($this->candidates($site, $market, $targets)) as $c) {
+                    $out[] = $c + ['market_id' => (string) $market->id, 'tier' => $tier];
+                }
+            }
+        }
+
+        return $out;
+    }
+
     public function propose(Site $site, Location $market, ?string $tier): LinkPlan
     {
         $plan = LinkPlan::create([
