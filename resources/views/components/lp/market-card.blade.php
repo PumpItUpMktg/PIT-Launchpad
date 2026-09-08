@@ -70,7 +70,10 @@
         </div>
         <div class="lp-mc-badges">
             @if ($held)
-                <x-lp.chip tone="warn">Held — seasoning@if ($c['drafted_pages'] > 0) · {{ $c['drafted_pages'] }} drafted @endif</x-lp.chip>
+                {{-- Label built in PHP, not with an inline @if inside the component slot: Blade's anonymous-
+                     component slot compiler mis-nests an inline @if/@endif living in the slot, orphaning an
+                     `endif` (a hard compile error the moment the card renders). Same output, no in-slot directive. --}}
+                <x-lp.chip tone="warn">{{ $c['drafted_pages'] > 0 ? 'Held — seasoning · '.$c['drafted_pages'].' drafted' : 'Held — seasoning' }}</x-lp.chip>
             @endif
             <x-lp.chip :tone="$c['market_page_index_state'] === 'indexed' ? 'good' : 'neutral'">
                 {{ ['indexed' => 'Indexed', 'not_indexed' => 'Not indexed', 'unchecked' => 'Not yet checked'][$c['market_page_index_state']] ?? 'Not yet checked' }}
