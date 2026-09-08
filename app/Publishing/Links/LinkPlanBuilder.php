@@ -9,6 +9,7 @@ use App\Enums\LinkPlanStatus;
 use App\Enums\LinkSourceType;
 use App\Enums\PageType;
 use App\Locations\Distance;
+use App\Locations\TownGeoFallback;
 use App\Metrics\UrlNormalizer;
 use App\Models\Content;
 use App\Models\ContentTown;
@@ -58,6 +59,12 @@ class LinkPlanBuilder
 
     /** @var array<string, ?float> content id → blended GSC position (for the top-3 skip); null = untracked */
     private array $position = [];
+
+    /** The transitional geo-first/name-fallback resolver for this run (tier + centroid lookups). */
+    private ?TownGeoFallback $geoFallback = null;
+
+    /** @var array<string, array{tier: ?string, lat: ?float, lng: ?float}> town page id → its resolved coverage attrs */
+    private array $townCoverage = [];
 
     /**
      * READ-ONLY preview of the whole link-plan spine: the capped candidate edges {@see propose} WOULD
@@ -229,11 +236,9 @@ class LinkPlanBuilder
      */
     private function targetTowns(Site $site, Location $market, ?string $tier): Collection
     {
-        $tierByTown = $this->tierByTown($site);
-
         return $this->townPages($site)
             ->filter(fn (Content $c): bool => (string) $c->parent_location_id === (string) $market->id
-                && ($tierByTown[TownName::key((string) $c->title)] ?? null) === $tier)
+                && ($this->townCoverage[(string) $c->id]['tier'] ?? null) === $tier)
             ->values();
     }
 
@@ -247,7 +252,7 @@ class LinkPlanBuilder
             ->whereNull('location_id')
             ->whereNotNull('parent_location_id')
             ->whereNull('primary_service_id')
-            ->get(['id', 'title', 'slug', 'parent_location_id', 'status']);
+            ->get(['id', 'title', 'slug', 'parent_location_id', 'status', 'geo_id']);
     }
 
     /** The market's landing page (page_type=location WITH location_id set to the market Location). */
@@ -272,7 +277,62 @@ class LinkPlanBuilder
         $this->builtGraph = $this->graph->build($site);
         $this->position = $this->blendedPositions($site, $this->builtGraph);
         $this->inbound = [];
-        $this->centroidCache = [];
+
+        // Resolve each town page's coverage (tier + centroid) ONCE per run via the geo-first/name-fallback
+        // seam — anchored pages join by geo_id, un-anchored resolve by name exactly as before. Done here,
+        // not inside the tier-filter loop, so the tripwire counts each page once (in-loop would inflate it).
+        $this->geoFallback = new TownGeoFallback('LinkPlanBuilder', (string) $site->id);
+        $this->townCoverage = $this->resolveTownCoverage($site);
+        $this->geoFallback->report();
+    }
+
+    /**
+     * town page id → its coverage attributes (tier + centroid), resolved geo-first with a name fallback.
+     * One resolve per page (both attributes come from the one matched coverage row).
+     *
+     * @return array<string, array{tier: ?string, lat: ?float, lng: ?float}>
+     */
+    private function resolveTownCoverage(Site $site): array
+    {
+        [$byGeo, $byName] = $this->coverageIndexes($site);
+        $blank = ['tier' => null, 'lat' => null, 'lng' => null];
+
+        $out = [];
+        foreach ($this->townPages($site) as $page) {
+            $out[(string) $page->id] = $this->geoFallback?->resolve(
+                $page->geo_id, TownName::key((string) $page->title), $byGeo, $byName,
+            ) ?? $blank;
+        }
+
+        return $out;
+    }
+
+    /**
+     * The site's coverage areas indexed by geo_id AND by town-name key, each carrying tier + centroid. The
+     * name index is last-wins (as the old tierByTown/townCentroids maps were), so a unique-named town is
+     * byte-identical to before; only a same-named collision differs, and only on the name path that the
+     * anchor is retiring anyway.
+     *
+     * @return array{0: array<string, array{tier: ?string, lat: ?float, lng: ?float}>, 1: array<string, array{tier: ?string, lat: ?float, lng: ?float}>}
+     */
+    private function coverageIndexes(Site $site): array
+    {
+        $byGeo = [];
+        $byName = [];
+        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get(['geo_id', 'name', 'size_tier', 'lat', 'lng']) as $area) {
+            $entry = [
+                'tier' => is_string($area->size_tier) && $area->size_tier !== '' ? $area->size_tier : null,
+                'lat' => $area->lat !== null ? (float) $area->lat : null,
+                'lng' => $area->lng !== null ? (float) $area->lng : null,
+            ];
+            $geo = (string) $area->geo_id;
+            if ($geo !== '') {
+                $byGeo[$geo] = $entry;
+            }
+            $byName[TownName::key((string) $area->name)] = $entry;
+        }
+
+        return [$byGeo, $byName];
     }
 
     /** The running inbound-source set for a target, seeded lazily from the live graph's existing inbound. */
@@ -345,14 +405,13 @@ class LinkPlanBuilder
      */
     private function indexedTownCentroids(Site $site, array $indexed): array
     {
-        $centroids = $this->townCentroids($site);
         $pool = [];
         foreach ($this->townPages($site) as $page) {
             if ($page->status !== ContentStatus::Published || ! isset($indexed[(string) $page->id])) {
                 continue;
             }
-            $c = $centroids[TownName::key((string) $page->title)] ?? null;
-            if ($c !== null) {
+            $c = $this->townCoverage[(string) $page->id] ?? null;
+            if ($c !== null && $c['lat'] !== null && $c['lng'] !== null) {
                 $pool[] = ['id' => (string) $page->id, 'lat' => $c['lat'], 'lng' => $c['lng']];
             }
         }
@@ -368,9 +427,8 @@ class LinkPlanBuilder
      */
     private function neighbours(Content $town, array $pool): array
     {
-        $centroids = $this->centroidCache;
-        $c = $centroids[TownName::key((string) $town->title)] ?? null;
-        if ($c === null) {
+        $c = $this->townCoverage[(string) $town->id] ?? null;
+        if ($c === null || $c['lat'] === null || $c['lng'] === null) {
             return [];
         }
 
@@ -436,34 +494,5 @@ class LinkPlanBuilder
         }
 
         return $set;
-    }
-
-    /** @var array<string, array{lat: float, lng: float}> memoized normalized town => centroid */
-    private array $centroidCache = [];
-
-    /** @return array<string, array{lat: float, lng: float}> */
-    private function townCentroids(Site $site): array
-    {
-        if ($this->centroidCache !== []) {
-            return $this->centroidCache;
-        }
-        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereNotNull('lat')->whereNotNull('lng')->get(['name', 'lat', 'lng']) as $area) {
-            $this->centroidCache[TownName::key((string) $area->name)] = ['lat' => (float) $area->lat, 'lng' => (float) $area->lng];
-        }
-
-        return $this->centroidCache;
-    }
-
-    /** @return array<string, string> normalized town name => size_tier value */
-    private function tierByTown(Site $site): array
-    {
-        $map = [];
-        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get(['name', 'size_tier']) as $area) {
-            if (is_string($area->size_tier) && $area->size_tier !== '') {
-                $map[TownName::key((string) $area->name)] = $area->size_tier;
-            }
-        }
-
-        return $map;
     }
 }

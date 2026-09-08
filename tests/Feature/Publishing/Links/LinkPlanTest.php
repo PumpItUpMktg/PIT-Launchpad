@@ -320,6 +320,24 @@ it('mesh skips a top-3 target and one already at the inbound floor, but still fe
         ->and($mesh($full))->toBe(0);                  // already at the inbound floor → skipped
 });
 
+it('tiers a town page by GEOID when anchored — the right tier across a same-name collision', function () {
+    [$site, $market] = lpMarket();
+
+    // Two 'Dupe' coverage rows, same name, different tiers + geo_ids. The name map is last-wins (→ small);
+    // the anchored page must resolve to its OWN geo_id's tier (major), not the name-collision winner.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Dupe', 'geo_id' => '3400111111', 'size_tier' => 'major', 'lat' => 40.70, 'lng' => -74.10, 'source_location_ids' => [$market->id], 'source' => 'county']);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Dupe', 'geo_id' => '3400122222', 'size_tier' => 'small', 'lat' => 40.71, 'lng' => -74.11, 'source_location_ids' => [$market->id], 'source' => 'county']);
+
+    $page = lpTown($site, 'Dupe', $market->id);
+    $page->forceFill(['geo_id' => '3400111111'])->save(); // anchored to the MAJOR row
+
+    $major = app(LinkPlanBuilder::class)->propose($site, $market, 'major')->items;
+    $small = app(LinkPlanBuilder::class)->propose($site, $market, 'small')->items;
+
+    expect($major->where('target_content_id', (string) $page->id)->isNotEmpty())->toBeTrue()  // geo → major tier
+        ->and($small->where('target_content_id', (string) $page->id)->isEmpty())->toBeTrue();   // not the name-collision small
+});
+
 it('the plan-links command proposes and reports', function () {
     [$site, $market] = lpMarket();
     lpTown($site, 'Big', $market->id);
