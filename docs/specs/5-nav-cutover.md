@@ -155,6 +155,22 @@ rename — or a duplicate/qualified name — to trigger it.
    the one component renders only when present; per-board actions ride the `actions`
    slot. A new board consumes the component + DTO; it never hand-rolls a card array
    or a card partial.
+9. **A route guard must render a tenant WITH DATA, and its dataset must be verified to
+   point at the surface it names.** An end-to-end page guard (e.g. `AdminPanelSmokeTest`)
+   only guards the states it actually renders, so it has two failure modes that each hide
+   a bug on their own: (a) an EMPTY tenant renders the empty state — the one shape that
+   cannot reproduce a card/row-rendering bug — so the fixture must seed at least one row of
+   the model the surface renders; (b) a per-surface dataset entry silently tests whatever
+   class it points at, not the one its label claims — a nav label repointed at a new page
+   (Territory → "Markets" moved from `MarketsBoard` to `MarketCardsBoard` in #790/#798)
+   leaves the guard exercising the old surface until the dataset is corrected. Both failed
+   together in #805: a Blade compile error 500'd `/admin/market-cards` for every tenant with
+   a Location while 16 read-model tests stayed green — the smoke dataset named the wrong
+   class AND rendered an empty tenant, and either hole alone would have hidden it. Corollary
+   (the counterfactual, and `tenant-lock-remediation.md` rule 1 restated): a new or repaired
+   guard must be PROVEN to catch its defect — reintroduce the exact failure, watch the guard
+   go red, then restore. A guard not shown to fail on the thing it exists for is the
+   false-green pattern (rule 7's cousin) in another form.
 
 ## Item → surface mapping
 
