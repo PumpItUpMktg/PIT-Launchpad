@@ -147,6 +147,27 @@ class Test_Site_Chrome extends WP_UnitTestCase
         $this->assertStringContainsString('href="https://sewergurus.com/radon-mitigation"', $header);
     }
 
+    public function test_services_is_the_primary_nav_before_the_company_links(): void
+    {
+        // PR 2 swap: Services leads the header (leftmost after the logo); the company pages become the
+        // secondary .lp-company strip AFTER it. Assert both the marker class and the source order.
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'Sewer Gurus',
+            'services' => [['label' => 'Sump Pumps', 'url' => 'https://sewergurus.com/sump-pumps']],
+            'nav' => [['label' => 'About', 'url' => 'https://sewergurus.com/about']],
+        ]);
+
+        $header = (new SiteChrome())->header();
+
+        $this->assertStringContainsString('lp-company', $header);                 // company demoted to the strip
+        $this->assertStringContainsString('lp-services-nav', $header);            // services is a rendered nav
+        $this->assertLessThan(                                                    // ...and it comes first
+            strpos($header, 'lp-company'),
+            strpos($header, 'lp-services-nav'),
+            'Services nav must render before the company links (Services is the primary nav).'
+        );
+    }
+
     public function test_footer_services_stay_flat_ignoring_children(): void
     {
         ( new SiteProfileStore() )->save([

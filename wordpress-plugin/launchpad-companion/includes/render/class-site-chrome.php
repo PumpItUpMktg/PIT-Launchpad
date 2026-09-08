@@ -55,30 +55,28 @@ final class SiteChrome
         }
         $out .= '</a>';
 
+        // Services is the PRIMARY nav (leftmost after the logo — it's what people came for); the company
+        // pages (About / Areas / Contact / FAQ) drop to the slim secondary strip below. Both are siblings
+        // of the toggle so the mobile hamburger reveals them together (`:checked ~ .lp-services-nav` /
+        // `~ .lp-company`), Services first. On desktop the theme wraps the company strip to its own row.
+        $services = $this->servicesMenu($p);
+        $company = $this->navList($p['nav'] ?? [], 'lp-nav lp-company');
+
         // Mobile menu toggle — a CSS-only checkbox + hamburger label (the theme hides both on desktop,
         // shows the hamburger and drawers the nav on small screens). No JS, so it works even with the
-        // script-delay optimizer active. Sibling of .lp-nav so `:checked ~ .lp-nav` reveals it.
-        if (! empty($p['nav'])) {
+        // script-delay optimizer active. Placed BEFORE the two navs it reveals.
+        if ($services !== '' || $company !== '') {
             $out .= '<input type="checkbox" id="lp-nav-toggle" class="lp-nav-checkbox">';
             $out .= '<label for="lp-nav-toggle" class="lp-hamburger" aria-label="Menu"><span></span><span></span><span></span></label>';
         }
 
-        $out .= $this->navList($p['nav'] ?? [], 'lp-nav');
+        $out .= $services;   // primary nav, leftmost after the logo
         // Secondary CTA ("Free Assessment") beside the phone — a way through for the people who won't call.
         $out .= $this->headerCta($p);
         $out .= $this->callbar($p);
+        $out .= $company;    // secondary strip (desktop row 2) / drawered after Services on mobile
 
         $out .= '</div>';
-
-        // A slim secondary bar of the site's service pages, below the main menu — direct navigation to
-        // services without cluttering the primary nav. Only when there are service pages. Inherits the
-        // header tone so it reads on both a dark and a light bar.
-        $services = $this->servicesMenu($p);
-        if ($services !== '') {
-            $out .= '<div class="lp-header-services lp-tone-' . $tone . '"><div class="lp-header-services-inner">'
-                . '<span class="lp-services-label">Services</span>' . $services
-                . '</div></div>';
-        }
 
         return $out;
     }
