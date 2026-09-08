@@ -15,12 +15,20 @@ use Illuminate\Support\Facades\Log;
  * name path trends toward its floor; when it reaches zero across runs the dual path (and this class) can
  * be removed in one cleanup, not hunted across five call sites.
  *
- * Two fallback reasons are counted apart because they mean different things:
- *  - `geo_null`  — the page has no geo_id yet (pre-anchor). Expected; shrinks as the anchor runs.
- *  - `geo_miss`  — the page HAS a geo_id but it matches no entry in the geo index. That means the anchor
- *                  produced a key the consumer's coverage set doesn't contain — anchor and consumer
- *                  DISAGREE about the key — which is a real defect, not a transitional state, so it is
- *                  logged as a warning of its own rather than buried in the aggregate.
+ * The anchorable entity (the town page) can be on EITHER side of the join, so there are two resolve modes:
+ *  - {@see resolve()} — PAGE-DRIVEN: the page carries the geo_id and the coverage set is the index.
+ *  - {@see resolveByCoverage()} — COVERAGE-DRIVEN: the coverage carries the geo_id and the anchorable page
+ *    is the counterpart being looked up. `geo_miss` keeps ONE meaning across both — "the anchored side has
+ *    a key the other doesn't recognise" — which is why coverage-driven needs a THIRD count to stay honest.
+ *
+ * Three fallback reasons, counted apart because they mean different things:
+ *  - `geo_null`  — page-driven only: the page has no geo_id yet (pre-anchor). Expected; shrinks as the anchor runs.
+ *  - `counterpart_unanchored` — coverage-driven only: a page for this name exists but isn't anchored yet
+ *                  (pre-anchor). The honest transitional state; shrinks to zero as the anchor runs.
+ *  - `geo_miss`  — either direction: the ANCHORED side has a geo_id the other side doesn't recognise
+ *                  (page-driven: the page's geo_id is in no coverage entry; coverage-driven: a same-named
+ *                  page is anchored to a DIFFERENT geo than the driver). A real disagreement, not a
+ *                  transitional state — logged as its own warning, never buried in the aggregate.
  */
 final class TownGeoFallback
 {
@@ -29,6 +37,8 @@ final class TownGeoFallback
     private int $byGeo = 0;
 
     private int $geoNull = 0;
+
+    private int $counterpartUnanchored = 0;
 
     private int $geoMiss = 0;
 
@@ -71,6 +81,48 @@ final class TownGeoFallback
     }
 
     /**
+     * COVERAGE-DRIVEN resolve: the driver (a coverage area) carries the geo_id; the anchorable COUNTERPART
+     * (the town page) is what's indexed. Prefer the counterpart found by the driver's geo_id, else the name
+     * key. The fallback reason is coded from the counterpart's OWN anchor state so `geo_miss` keeps its one
+     * meaning:
+     *  - name-matched counterpart that is NOT anchored → `counterpart_unanchored` (expected, shrinks as the
+     *    anchor runs);
+     *  - name-matched counterpart that IS anchored (necessarily to a different geo, since the geo lookup
+     *    missed) → `geo_miss` (a real disagreement: same name, different geo);
+     *  - no counterpart by either key → null, UNCOUNTED (a driver with no page is a legitimate absence, not
+     *    a fallback — e.g. a served town that simply has no page yet).
+     *
+     * @template TValue
+     *
+     * @param  array<string, TValue>  $byGeo  counterpart indexed by its geo_id (anchored counterparts only)
+     * @param  array<string, array{value: TValue, anchored: bool}>  $byName  counterpart by name key, carrying whether it is anchored
+     * @return TValue|null
+     */
+    public function resolveByCoverage(?string $driverGeoId, string $nameKey, array $byGeo, array $byName): mixed
+    {
+        if ($driverGeoId !== null && $driverGeoId !== '' && array_key_exists($driverGeoId, $byGeo)) {
+            $this->total++;
+            $this->byGeo++;
+
+            return $byGeo[$driverGeoId];
+        }
+
+        $named = $byName[$nameKey] ?? null;
+        if ($named === null) {
+            return null; // no counterpart at all — a legitimate absence, not a fallback (uncounted)
+        }
+
+        $this->total++;
+        if ($named['anchored']) {
+            $this->geoMiss++; // a same-named page is anchored to a different geo — a real disagreement
+        } else {
+            $this->counterpartUnanchored++;
+        }
+
+        return $named['value'];
+    }
+
+    /**
      * Log the per-run tripwire: ONE aggregate line per (consumer, site), with the total so the fallback
      * count is read in proportion. Call once at the end of a run. A non-zero `geo_miss` also raises its own
      * warning — that path should never fire once the anchor and the consumer agree on the key.
@@ -81,7 +133,7 @@ final class TownGeoFallback
             return;
         }
 
-        $byName = $this->geoNull + $this->geoMiss;
+        $byName = $this->geoNull + $this->counterpartUnanchored + $this->geoMiss;
 
         Log::info('towngeo.fallback', [
             'consumer' => $this->consumer,
@@ -90,6 +142,7 @@ final class TownGeoFallback
             'by_geo' => $this->byGeo,
             'by_name' => $byName,
             'geo_null' => $this->geoNull,
+            'counterpart_unanchored' => $this->counterpartUnanchored,
             'geo_miss' => $this->geoMiss,
         ]);
 
@@ -105,15 +158,16 @@ final class TownGeoFallback
     /**
      * The per-run counts (for tests and callers that want the numbers without the log).
      *
-     * @return array{total: int, by_geo: int, by_name: int, geo_null: int, geo_miss: int}
+     * @return array{total: int, by_geo: int, by_name: int, geo_null: int, counterpart_unanchored: int, geo_miss: int}
      */
     public function counts(): array
     {
         return [
             'total' => $this->total,
             'by_geo' => $this->byGeo,
-            'by_name' => $this->geoNull + $this->geoMiss,
+            'by_name' => $this->geoNull + $this->counterpartUnanchored + $this->geoMiss,
             'geo_null' => $this->geoNull,
+            'counterpart_unanchored' => $this->counterpartUnanchored,
             'geo_miss' => $this->geoMiss,
         ];
     }

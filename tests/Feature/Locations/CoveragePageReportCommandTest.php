@@ -52,6 +52,21 @@ it('confirms full coverage when every town has a page', function () {
         ->assertExitCode(0);
 });
 
+it('counts a served town covered by a page anchored on the same GEO id, even under a different title', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    // Coverage names it "Haverford" (geo 4204500000); its page is titled differently but anchored to the
+    // same geo — a bare-name join would report it MISSING; the GEOID join must count it as covered.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Haverford', 'geo_id' => '4204500000']);
+    Content::create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'title' => 'Haverford Township, PA', 'slug' => 'haverford-township-pa', 'geo_id' => '4204500000', 'version' => 1,
+    ]);
+
+    $this->artisan('launchpad:coverage-page-report', ['site' => $site->id])
+        ->expectsOutputToContain('Every served town has its own location page')
+        ->assertExitCode(0);
+});
+
 it('fails clearly when no site matches', function () {
     $this->artisan('launchpad:coverage-page-report', ['site' => 'nope-nothing'])
         ->expectsOutputToContain('No site matches')

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\ContentKind;
 use App\Enums\PageType;
+use App\Locations\TownGeoFallback;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Scopes\SiteScope;
@@ -45,28 +46,48 @@ class CoveragePageReportCommand extends Command
         /** @var Site $site */
         $site = $matches->first();
 
-        // Keys of every town that already has a published location page (title "{City}, {ST}").
-        $pageKeys = Content::withoutGlobalScope(SiteScope::class)
+        // Every published location page, indexed BOTH ways for the geo-first join: by census geo_id (the
+        // anchored ones), and by town-name key carrying whether it is anchored. Coverage-driven resolve
+        // (the coverage row carries the geo_id, the page is the anchorable counterpart), so `geo_miss`
+        // keeps its one meaning — a same-named page anchored to a DIFFERENT geo than the served town.
+        $byGeo = [];
+        $byName = [];
+        $pageCount = 0;
+        foreach (Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Location->value)
             ->whereNotNull('slug')
-            ->pluck('title')
-            ->map(fn ($t): string => TownName::key((string) $t))
-            ->filter(fn (string $k): bool => $k !== '')
-            ->unique();
+            ->get(['title', 'geo_id']) as $page) {
+            $key = TownName::key((string) $page->title);
+            if ($key === '') {
+                continue;
+            }
+            $pageCount++;
+            $geoId = trim((string) $page->geo_id);
+            if ($geoId !== '') {
+                $byGeo[$geoId] = true;
+            }
+            $byName[$key] = ['value' => true, 'anchored' => $geoId !== ''];
+        }
 
-        // Served towns, deduped by their key (the same identity the areas grid links on).
+        // Served towns, deduped by geo_id where present (else name key) — the honest distinct-town identity
+        // now that a page carries a geo, so two same-named towns in different counties are no longer merged.
         $towns = CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->orderBy('name')
-            ->pluck('name')
-            ->map(fn ($n): string => trim((string) $n))
-            ->filter(fn (string $n): bool => $n !== '')
-            ->unique(fn (string $n): string => TownName::key($n))
+            ->get(['name', 'geo_id'])
+            ->map(fn (CoverageArea $a): array => ['name' => trim((string) $a->name), 'geo_id' => trim((string) $a->geo_id)])
+            ->filter(fn (array $t): bool => $t['name'] !== '')
+            ->unique(fn (array $t): string => $t['geo_id'] !== '' ? 'g:'.$t['geo_id'] : 'n:'.TownName::key($t['name']))
             ->values();
 
-        $missing = $towns->reject(fn (string $n): bool => $pageKeys->contains(TownName::key($n)))->values();
+        $geo = new TownGeoFallback('CoveragePageReportCommand', (string) $site->id);
+        $missing = $towns
+            ->reject(fn (array $t): bool => $geo->resolveByCoverage($t['geo_id'] !== '' ? $t['geo_id'] : null, TownName::key($t['name']), $byGeo, $byName) !== null)
+            ->map(fn (array $t): string => $t['name'])
+            ->values();
+        $geo->report(); // the coverage-driven tripwire's home: one aggregate line + a geo_miss warning
         $withPage = $towns->count() - $missing->count();
 
         if ($this->option('missing')) {
@@ -78,7 +99,7 @@ class CoveragePageReportCommand extends Command
         $this->info($site->brand_name ?: (string) $site->id);
         $this->table(['Metric', 'Count'], [
             ['Served towns', (string) $towns->count()],
-            ['Location pages', (string) $pageKeys->count()],
+            ['Location pages', (string) $pageCount],
             ['Towns with a page', (string) $withPage],
             ['Towns missing a page', (string) $missing->count()],
         ]);
