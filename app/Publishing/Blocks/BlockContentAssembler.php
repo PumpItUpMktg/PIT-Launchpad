@@ -834,24 +834,32 @@ final class BlockContentAssembler
         $address = $storefront && is_string($location->address) && trim($location->address) !== '' ? trim($location->address) : null;
         $email = is_string($location->email) && trim($location->email) !== '' ? trim($location->email) : null;
 
-        // §8.1: the "areas we serve" coverage — this location's towns grouped by county, from the
-        // census CoverageArea (scoped via source_location_ids). Rendered as PLAIN names (the per-town
-        // child pages were collapsed away), so every town's url is cleared before it reaches the block.
-        $coverageByCounty = array_map(
-            fn (array $g): array => [
-                'county' => $g['county'],
-                'cities' => array_map(fn (array $c): array => ['label' => $c['label'], 'url' => ''], $g['cities']),
-            ],
-            $this->serviceAreas->byCounty((string) $content->site_id, (string) $location->id),
-        );
-        $coverageCounties = array_map(fn (array $g): string => (string) $g['county'], $coverageByCounty);
-
-        // Coverage prose: ONE county-level sentence that hands off to the structured "Towns we serve"
-        // list below — never the town-by-town enumeration that read as keyword-stuffing. It is derived
-        // from the SAME county source as the list (so the two never drift) and the drafted `loc_coverage`
-        // slot that produced the enumeration is retired, so a repush replaces every existing dump. Drops
-        // with the list when the location has no captured county coverage.
-        $coverage = $this->coverageSentence($city, $coverageCounties);
+        // The coverage list + its lead-in sentence, resolved from the census CoverageArea. Two shapes:
+        //  - a HUB (market) page carries the FULL county-grouped list (the site's linked "areas we serve"
+        //    spine) + a county sentence;
+        //  - a TOWN page carries only its NEAREST neighbours (distance-ranked, capped, scoped to the parent
+        //    location) + a neighbour sentence — non-duplicate across the 193 town pages, and the honest
+        //    internal-link mesh in the copy. An un-anchored town (no centroid) or one with nothing in range
+        //    drops the section rather than inheriting the parent's 22-town block.
+        // Both link to PUBLISHED town pages only (byCounty / neighbours resolve the URL, plain text where
+        // no live page exists — the §8.1 url-clearing is gone now that town pages are published again).
+        $coverageCounties = [];
+        $coverageByCounty = [];
+        $nearbyTowns = [];
+        if ($isTown) {
+            $neighbours = $this->serviceAreas->neighbours(
+                (string) $content->site_id,
+                (string) $location->id,   // the parent GBP location whose coverage the town sits in
+                $content->geo_id,
+                $city,                    // the town itself (townSubject set $city above)
+            );
+            $nearbyTowns = $neighbours['towns'];
+            $coverage = $nearbyTowns === [] ? [] : $this->townCoverageSentence($city, $neighbours['county']);
+        } else {
+            $coverageByCounty = $this->serviceAreas->byCounty((string) $content->site_id, (string) $location->id);
+            $coverageCounties = array_map(fn (array $g): string => (string) $g['county'], $coverageByCounty);
+            $coverage = $this->coverageSentence($city, $coverageCounties);
+        }
 
         return $this->composer->composeLocation(
             slots: $slots,
@@ -874,6 +882,8 @@ final class BlockContentAssembler
             hours: $this->businessHours($location),
             coverageCounties: $coverageCounties,
             coverageByCounty: $coverageByCounty,
+            nearbyTowns: $nearbyTowns,
+            isTown: $isTown,
             localConditions: $this->locationGroundingFacts($location),
             hasMap: is_array($slots['location_map'] ?? null),
             areasMapAvailable: $areasMapAvailable,
@@ -966,6 +976,24 @@ final class BlockContentAssembler
         $lead = $city !== '' ? 'From '.$city.' we serve ' : 'We serve ';
 
         return [$lead.$this->countyPhrase($counties).' and the surrounding communities — see the full list below.'];
+    }
+
+    /**
+     * A TOWN page's coverage lead-in — one sentence naming the town + its own county (when anchored),
+     * handing off to the nearest-neighbours list beneath it. Never claims a full county the six-town list
+     * doesn't back. Empty city → [] (the caller has already dropped the section when there are no
+     * neighbours; this guards the degenerate case).
+     *
+     * @return list<string>
+     */
+    private function townCoverageSentence(string $city, ?string $county): array
+    {
+        if (trim($city) === '') {
+            return [];
+        }
+        $tail = $county !== null && trim($county) !== '' ? ' across '.trim($county) : '';
+
+        return ['Serving '.trim($city).' and nearby communities'.$tail.'.'];
     }
 
     /**

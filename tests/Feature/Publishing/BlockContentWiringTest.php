@@ -174,8 +174,9 @@ it('groups the major cities under each county, largest-first, county names in th
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3401351000', 'size_tier' => 'major', 'population' => 300000]);
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bloomfield', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3401306260', 'size_tier' => 'medium', 'population' => 50000]);
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Jersey City', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3401736000', 'size_tier' => 'major', 'population' => 290000]);
-    // Newark has a real location page → its name links; the rest are plain (no invented URL).
-    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'slug' => 'newark', 'title' => 'Newark']);
+    // Newark has a real LIVE location page → its name links; the rest are plain (no invented URL). Only
+    // published+pushed pages are linkable, so the coverage list never points at a page that isn't on the site.
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'slug' => 'newark', 'title' => 'Newark']);
 
     $home = blockHomePage($site);
     $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);

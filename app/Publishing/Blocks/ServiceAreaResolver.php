@@ -3,10 +3,12 @@
 namespace App\Publishing\Blocks;
 
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Locations\Distance;
 use App\Locations\TownGeoFallback;
 use App\Models\Content;
 use App\Models\CoverageArea;
@@ -38,6 +40,9 @@ final class ServiceAreaResolver
 
     /** Largest towns shown per county in the grouped "major cities" column. */
     private const PER_COUNTY = 6;
+
+    /** The most neighbours a town page's "nearby towns" list carries (nearest-first, within the radius). */
+    private const NEIGHBOUR_MAX = 6;
 
     private const COUNTY_CACHE_DAYS = 30;
 
@@ -145,6 +150,122 @@ final class ServiceAreaResolver
     }
 
     /**
+     * The NEAREST served towns to a TOWN page's own subject town — the town-page "nearby towns" list. A
+     * flat, great-circle-distance-ranked set (up to {@see NEIGHBOUR_MAX} within
+     * {@see neighbourRadiusMiles()}), scoped to the parent location's coverage, EXCLUDING the subject town.
+     * Each neighbour links to its own PUBLISHED town page (plain text — empty url — when it has none, the
+     * same link-or-plain rule the county list uses).
+     *
+     * Returns `towns: []` when the subject town has no resolvable centroid (un-anchored — geo_id absent AND
+     * name unmatched) or when nothing is within range: the caller drops the section rather than invent an
+     * arbitrary set or name a town 40 miles away. `county` is the subject town's OWN county (from its geo_id)
+     * for the lead-in sentence, or null. This is deliberately distinct from {@see byCounty()} (the market
+     * hub's full county-grouped list): a town page is about its town, so it names its actual neighbours.
+     *
+     * @return array{county: ?string, towns: list<array{label: string, url: string}>}
+     */
+    public function neighbours(string $siteId, string $parentLocationId, ?string $subjectGeoId, string $subjectName): array
+    {
+        $blank = ['county' => null, 'towns' => []];
+
+        $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->get(['name', 'geo_id', 'lat', 'lng', 'source_location_ids']);
+
+        // Subject-town centroid: geo_id first, then the town-name key (the same dual path the mesh uses).
+        $byGeo = [];
+        $byName = [];
+        foreach ($areas as $a) {
+            $entry = ['lat' => $a->lat !== null ? (float) $a->lat : null, 'lng' => $a->lng !== null ? (float) $a->lng : null];
+            $gid = trim((string) $a->geo_id);
+            if ($gid !== '') {
+                $byGeo[$gid] = $entry;
+            }
+            $byName[$this->key((string) $a->name)] = $entry;
+        }
+
+        $origin = (new TownGeoFallback('ServiceAreaResolver.neighbours', $siteId))
+            ->resolve($subjectGeoId, $this->key($subjectName), $byGeo, $byName);
+        if ($origin === null || $origin['lat'] === null || $origin['lng'] === null) {
+            return $blank; // un-anchored subject town → no honest neighbours to name
+        }
+
+        $subjectKey = $this->key($subjectName);
+        $radius = $this->neighbourRadiusMiles();
+
+        // Candidates: the parent's coverage rows with coordinates, minus the subject; nearest-first within
+        // the radius, then deduped by name (a place + its same-named MCD are one town), capped.
+        $near = [];
+        foreach ($areas as $a) {
+            if (! is_array($a->source_location_ids) || ! in_array($parentLocationId, $a->source_location_ids, true)) {
+                continue;
+            }
+            if ($a->lat === null || $a->lng === null) {
+                continue;
+            }
+            $name = trim((string) $a->name);
+            if ($name === '' || $this->key($name) === $subjectKey) {
+                continue;
+            }
+            $near[] = [
+                'name' => $name,
+                'geo_id' => trim((string) $a->geo_id),
+                'miles' => Distance::miles($origin['lat'], $origin['lng'], (float) $a->lat, (float) $a->lng),
+            ];
+        }
+        usort($near, fn (array $x, array $y): int => $x['miles'] <=> $y['miles']);
+
+        $seen = [];
+        $picked = [];
+        foreach ($near as $n) {
+            if ($n['miles'] > $radius) {
+                break; // sorted nearest-first — nothing beyond here is in range
+            }
+            $k = $this->key($n['name']);
+            if (isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $picked[] = $n;
+            if (count($picked) >= self::NEIGHBOUR_MAX) {
+                break;
+            }
+        }
+        if ($picked === []) {
+            return $blank; // nothing within range — a town with no nearby served towns has nothing true to say
+        }
+
+        // Link each neighbour to its PUBLISHED town page (plain text otherwise).
+        [$pageGeo, $pageName] = $this->pageUrlIndexes($siteId);
+        $links = new TownGeoFallback('ServiceAreaResolver.neighbourLinks', $siteId);
+        $towns = [];
+        foreach ($picked as $n) {
+            $url = $links->resolveByCoverage($n['geo_id'] !== '' ? $n['geo_id'] : null, $this->key($n['name']), $pageGeo, $pageName);
+            $towns[] = ['label' => $n['name'], 'url' => is_string($url) ? $url : ''];
+        }
+        $links->report();
+
+        return ['county' => $this->subjectCounty($siteId, $subjectGeoId), 'towns' => $towns];
+    }
+
+    /** The town's OWN county name (its geo_id's 5-digit county prefix, if it's one the site serves), or null. */
+    private function subjectCounty(string $siteId, ?string $subjectGeoId): ?string
+    {
+        $gid = trim((string) $subjectGeoId);
+        if (strlen($gid) < 5) {
+            return null;
+        }
+
+        return $this->countyNamesForSite($siteId)[substr($gid, 0, 5)] ?? null;
+    }
+
+    /** The neighbour radius (miles) — shared with the internal-link mesh so copy + links never drift. */
+    private function neighbourRadiusMiles(): float
+    {
+        return (float) config('launchpad.link_plan.neighbour_radius_miles', 20.0);
+    }
+
+    /**
      * Qualify a town name that appears in MORE THAN ONE county with its county — "Washington (Warren
      * County)" vs "Washington (Hunterdon County)" — so two genuinely different towns that share a name
      * across the served counties read distinctly. A name unique across the grid is left exactly as it is.
@@ -219,10 +340,15 @@ final class ServiceAreaResolver
         $domain = Site::find($siteId)?->domain_url;
         $home = is_string($domain) && trim($domain) !== '' ? rtrim($domain, '/').'/' : '/';
 
+        // Only LIVE pages are linkable — status published AND actually pushed (wp_post_id set), the same
+        // "live page" rule the service-card link rule uses. Linking a planned-but-unpublished town page
+        // would manufacture a dead link, the exact class the coverage cleanup is removing.
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Location->value)
+            ->where('status', ContentStatus::Published->value)
+            ->whereNotNull('wp_post_id')
             ->whereNotNull('slug')
             ->get(['title', 'slug', 'geo_id']);
 
