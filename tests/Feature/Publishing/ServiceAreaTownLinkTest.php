@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Enums\StandardPageType;
@@ -40,6 +41,9 @@ it('links a served town to its own "{City}, {ST}"-titled location page, not the 
     Content::create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
         'title' => 'Haverford, PA', 'slug' => 'haverford-pa', 'version' => 1,
+        // Live (published + pushed) — only live pages are linkable now, so the coverage list never points
+        // at a page that isn't on the site yet.
+        'status' => ContentStatus::Published, 'wp_post_id' => 601,
     ]);
     // The fallback target — a real "Areas we serve" page — which the town must NOT link to.
     Content::create([

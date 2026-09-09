@@ -115,8 +115,8 @@ it('links a built town to its own page and renders an unbuilt town as plain text
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'standard_type' => StandardPageType::AreasWeServe,
         'slug' => 'areas-we-serve', 'title' => 'Areas We Serve',
     ]);
-    // A town WITH its own published location page.
-    Content::factory()->create([
+    // A town WITH its own published location page (live — only live pages are linkable).
+    Content::factory()->published()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
         'slug' => 'flemington-nj', 'title' => 'Flemington',
     ]);

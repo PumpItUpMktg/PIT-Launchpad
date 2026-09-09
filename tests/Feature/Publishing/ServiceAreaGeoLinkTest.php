@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Integrations\Census\County;
@@ -40,6 +41,8 @@ it('links a served town to its page by GEO id even when the page TITLE differs f
     Content::create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
         'title' => 'Haverford Township, PA', 'slug' => 'haverford-township-pa', 'geo_id' => '4204500000', 'version' => 1,
+        // Live (published + pushed) — the gate only links pages that are actually on the site.
+        'status' => ContentStatus::Published, 'wp_post_id' => 602,
     ]);
 
     $byCounty = app(ServiceAreaResolver::class)->byCounty($site->id);
