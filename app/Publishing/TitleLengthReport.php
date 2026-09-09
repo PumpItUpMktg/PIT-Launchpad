@@ -103,7 +103,7 @@ final class TitleLengthReport
 
             $pages[] = [
                 'slug' => (string) $content->slug,
-                'page_type' => (string) ($content->page_type?->value ?? ''),
+                'page_type' => (string) $content->page_type?->value,
                 'title' => $title,
                 'len' => $len,
                 'over' => $isOver,
