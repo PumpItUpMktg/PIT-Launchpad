@@ -51,13 +51,14 @@ test('publishing renders, pushes the meta-blob by ULID, stores wp_post_id and au
     expect(AuditLog::where('action', AuditAction::ContentPublished->value)
         ->where('target_id', $content->id)->exists())->toBeTrue();
 
-    Http::assertSent(function ($request) use ($content) {
+    Http::assertSent(function ($request) use ($content, $site) {
         return str_contains($request->url(), '/wp-json/launchpad/v1/content')
             && $request['content_id'] === $content->id
             && $request['status'] === 'published'
             && $request['slot_payload']['hero_problem'] !== ''
             && is_string($request['images']['hero_image']['url'])
-            && $request['seo']['title'] === 'Water Heater Repair in Austin'; // SEO title normalized (no "| Apex")
+            // Stored "| Apex" source suffix stripped by normalize; the tenant brand composed back on.
+            && $request['seo']['title'] === 'Water Heater Repair in Austin | '.$site->brand_name;
     });
 });
 
