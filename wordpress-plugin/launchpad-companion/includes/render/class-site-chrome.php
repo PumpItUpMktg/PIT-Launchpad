@@ -45,40 +45,54 @@ final class SiteChrome
 
         $out .= '<a class="lp-brand" href="' . $home . '">';
         // The uploaded logo (served from R2) replaces the text business name; no logo → text fallback.
+        // The tagline is NOT repeated here — it renders once, in the utility bar (compressed header).
         if (! empty($p['logo_url'])) {
             $out .= '<img class="lp-logo" src="' . esc_url((string) $p['logo_url']) . '" alt="' . esc_attr($brand) . '" />';
         } else {
             $out .= '<span class="lp-brand-name">' . esc_html($brand) . '</span>';
         }
-        if (! empty($p['tagline'])) {
-            $out .= '<span class="lp-brand-tag">' . esc_html((string) $p['tagline']) . '</span>';
-        }
         $out .= '</a>';
 
-        // Services is the PRIMARY nav (leftmost after the logo — it's what people came for); the company
-        // pages (About / Areas / Contact / FAQ) drop to the slim secondary strip below. Both are siblings
-        // of the toggle so the mobile hamburger reveals them together (`:checked ~ .lp-services-nav` /
-        // `~ .lp-company`), Services first. On desktop the theme wraps the company strip to its own row.
+        // The working row's nav: Services (the primary, what people came for) + Areas We Serve (a primary
+        // intent for a local business, so it stays here, not in the utility bar with the company links).
+        // The company pages live in the utility bar on desktop; a copy rides in the hamburger drawer on
+        // mobile (where the utility bar is hidden). All three are siblings of the toggle so the hamburger
+        // reveals them together on small screens.
         $services = $this->servicesMenu($p);
-        $company = $this->navList($p['nav'] ?? [], 'lp-nav lp-company');
+        $areas = $this->areasItem($p);
+        $company = $this->navList($p['company'] ?? [], 'lp-nav lp-company');
 
-        // Mobile menu toggle — a CSS-only checkbox + hamburger label (the theme hides both on desktop,
-        // shows the hamburger and drawers the nav on small screens). No JS, so it works even with the
-        // script-delay optimizer active. Placed BEFORE the two navs it reveals.
-        if ($services !== '' || $company !== '') {
+        if ($services !== '' || $areas !== '' || $company !== '') {
             $out .= '<input type="checkbox" id="lp-nav-toggle" class="lp-nav-checkbox">';
             $out .= '<label for="lp-nav-toggle" class="lp-hamburger" aria-label="Menu"><span></span><span></span><span></span></label>';
         }
 
-        $out .= $services;   // primary nav, leftmost after the logo
-        // Secondary CTA ("Free Assessment") beside the phone — a way through for the people who won't call.
-        $out .= $this->headerCta($p);
-        $out .= $this->callbar($p);
-        $out .= $company;    // secondary strip (desktop row 2) / drawered after Services on mobile
+        $out .= $services;             // primary services nav — one line, centred on the working row
+        $out .= $areas;                // Areas We Serve — stays in the main nav
+        $out .= $this->callbar($p);    // phone as a button, right
+        $out .= $company;              // desktop: hidden here (shown in the utility bar); mobile: drawered
 
         $out .= '</div>';
 
         return $out;
+    }
+
+    /**
+     * The Areas We Serve link as a single primary-nav item, or '' when the profile carries none. Kept in
+     * the working row (not the utility bar) — a local business's service-area page is a primary intent.
+     *
+     * @param  array<string, mixed>  $p
+     */
+    private function areasItem(array $p): string
+    {
+        $a = is_array($p['areas_link'] ?? null) ? $p['areas_link'] : [];
+        $label = trim((string) ($a['label'] ?? ''));
+        $url = trim((string) ($a['url'] ?? ''));
+        if ($label === '' || $url === '') {
+            return '';
+        }
+
+        return '<nav class="lp-header-areas" aria-label="Service areas"><a href="' . esc_url($url) . '">' . esc_html($label) . '</a></nav>';
     }
 
     /**
@@ -257,38 +271,26 @@ final class SiteChrome
     {
         $area = trim((string) ($p['tagline'] ?? ''));
         $emergency = ! empty($p['emergency']);
-        if ($area === '' && ! $emergency) {
+        // The secondary company links (About / Why Choose Us / FAQ / Contact) live on the RIGHT of the
+        // utility bar — small, top of the page. On mobile the utility bar is hidden and a copy of these
+        // rides in the hamburger drawer (see header()).
+        $links = $this->navList($p['company'] ?? [], 'lp-util-links');
+        if ($area === '' && ! $emergency && $links === '') {
             return '';
         }
 
         $out = '<div class="lp-utilitybar lp-tone-' . $tone . '"><div class="lp-utilitybar-inner">';
+        $out .= '<div class="lp-util-left">';
         if ($area !== '') {
             $out .= '<span class="lp-util-area">' . esc_html($area) . '</span>';
         }
         if ($emergency) {
             $out .= '<span class="lp-util-avail">24/7 Emergency Service</span>';
         }
+        $out .= '</div>';
+        $out .= $links;   // right side (theme pushes it right with margin-left:auto)
 
         return $out . '</div></div>';
-    }
-
-    /**
-     * The secondary header CTA ("Free Assessment") — rendered only when the profile carries a cta with both
-     * a label and a URL (the control plane emits it only when the Contact page exists). The theme hides it
-     * in the mobile condensed state, where only the logo, tap-to-call and hamburger remain.
-     *
-     * @param  array<string, mixed>  $p
-     */
-    private function headerCta(array $p): string
-    {
-        $cta = is_array($p['cta'] ?? null) ? $p['cta'] : [];
-        $label = trim((string) ($cta['label'] ?? ''));
-        $url = trim((string) ($cta['url'] ?? ''));
-        if ($label === '' || $url === '') {
-            return '';
-        }
-
-        return '<a class="lp-header-cta" href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
     }
 
     /**

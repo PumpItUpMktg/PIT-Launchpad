@@ -92,6 +92,9 @@ final class SiteProfileAssembler
             'services' => $services,
             'areas' => $this->areas($site),
             'company' => $company,
+            // The Areas We Serve page as a single link for the PRIMARY (working) nav row — a primary intent
+            // for a local business, so it stays in the main nav, not the utility bar with the company links.
+            'areas_link' => $this->areasLink($site, $home),
             // The header main menu: the company pages + Areas We Serve (a top-level destination, not a
             // footer afterthought), in the operator's Header-menu-builder order. Legal pages stay OUT of
             // the header — they live in the footer bar.
@@ -112,6 +115,18 @@ final class SiteProfileAssembler
             // Severe-weather banner config — coords + on/off; the plugin fetches the live forecast itself.
             'alert' => $this->weatherAlert($site, $location, $home),
         ];
+    }
+
+    /**
+     * The Areas We Serve page as a single {label, url} link (the first matching slug that exists), or null.
+     * Rendered in the primary working row — a local business's service-area page is a primary intent, so it
+     * belongs beside the services, not with the secondary company links in the utility bar.
+     *
+     * @return array{label: string, url: string}|null
+     */
+    private function areasLink(Site $site, string $home): ?array
+    {
+        return $this->pagesBySlug($site, $home, ['areas-we-serve', 'areas', 'service-areas'])[0] ?? null;
     }
 
     /**
