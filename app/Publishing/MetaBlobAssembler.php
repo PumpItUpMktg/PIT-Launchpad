@@ -55,6 +55,12 @@ class MetaBlobAssembler
     /** @var array<string, array{0: string, 1: list<string>}> memoized service-area region per site id */
     private array $serviceAreaRegionCache = [];
 
+    /** @var array<string, string> memoized brand name per site id */
+    private array $brandNameCache = [];
+
+    /** Practical <title> display limit; the brand suffix is protected, the page portion shortens to fit. */
+    private const TITLE_MAX = 60;
+
     public function __construct(
         private readonly PublishEligibility $eligibility,
         private readonly NativeComposer $composer,
@@ -1057,7 +1063,63 @@ class MetaBlobAssembler
             $title = ServiceAreaTitle::qualify($title, $full, $abbrevs);
         }
 
-        return $title;
+        return $this->withBrand($content, $title);
+    }
+
+    /**
+     * Compose the tenant brand into the title: brand-FIRST on the home page (the page that should win the
+     * brand query — the brand belongs at the front), suffixed " | {brand}" on every other page type. This
+     * is render-time only — the stored title is untouched, so the operator field keeps showing what they
+     * wrote and the rule can change without re-editing content. `seoTitle()` is the single source, so the
+     * suffix flows to the <title>, og:title and twitter:title alike.
+     *
+     * Length guard: if the composed title runs past {@see TITLE_MAX}, the PAGE portion shortens (dropping a
+     * trailing subtitle at a real separator) — the brand is never dropped. A page portion with no safe
+     * shortening point is left whole rather than truncated mid-word; those are surfaced by
+     * `launchpad:report-title-lengths`, not mangled here.
+     */
+    private function withBrand(Content $content, string $title): string
+    {
+        $brand = $this->brandName($content);
+        if ($brand === '' || $title === '') {
+            return $title;
+        }
+        // Idempotent: a stored title that already carries the brand is not doubled.
+        if (str_contains($title, $brand)) {
+            return $title;
+        }
+
+        $brandFirst = $content->page_type === PageType::Home;
+        $compose = fn (string $page): string => $brandFirst ? $brand.' | '.$page : $page.' | '.$brand;
+
+        $composed = $compose($title);
+        if (mb_strlen($composed) <= self::TITLE_MAX) {
+            return $composed;
+        }
+
+        // Over length — shorten the PAGE portion at a real title/subtitle separator (never the brand,
+        // never mid-word). A sentence title with no separator is returned whole (see the report command).
+        foreach ([' | ', ' — ', ' – ', ': '] as $sep) {
+            $pos = mb_strpos($title, $sep);
+            if ($pos !== false && $pos > 0) {
+                $head = trim(mb_substr($title, 0, $pos));
+                if ($head !== '' && mb_strlen($compose($head)) <= self::TITLE_MAX) {
+                    return $compose($head);
+                }
+            }
+        }
+
+        return $composed;
+    }
+
+    /** The tenant's brand name (`sites.brand_name`), memoized per site so a bulk assemble hits it once. */
+    private function brandName(Content $content): string
+    {
+        $siteId = (string) $content->site_id;
+
+        return $this->brandNameCache[$siteId] ??= trim((string) (
+            Site::withoutGlobalScope(SiteScope::class)->whereKey($siteId)->value('brand_name') ?? ''
+        ));
     }
 
     /**
