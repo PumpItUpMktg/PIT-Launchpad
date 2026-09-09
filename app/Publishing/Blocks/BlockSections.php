@@ -403,7 +403,7 @@ final class BlockSections
         $towns = array_map(function (array $l): string {
             $label = trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim((string) $l['label'])));
             $label = $label !== '' ? $label : (string) $l['label'];
-            $url = trim((string) ($l['url'] ?? ''));
+            $url = trim((string) $l['url']);
             $inner = $url !== '' ? '<a href="'.$this->attr($url).'">'.$this->text($label).'</a>' : $this->text($label);
 
             return '<span class="lp-areas-town">'.$inner.'</span>';
