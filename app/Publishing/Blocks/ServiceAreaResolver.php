@@ -162,11 +162,15 @@ final class ServiceAreaResolver
      * for the lead-in sentence, or null. This is deliberately distinct from {@see byCounty()} (the market
      * hub's full county-grouped list): a town page is about its town, so it names its actual neighbours.
      *
-     * @return array{county: ?string, towns: list<array{label: string, url: string}>}
+     * `anchored` reports whether the subject town resolved a centroid at all — false means un-anchored (the
+     * section drops because we can't measure distance, distinct from an anchored town with nothing in range).
+     * The preview command splits the two so the un-anchored count can be watched down as anchoring completes.
+     *
+     * @return array{county: ?string, towns: list<array{label: string, url: string}>, anchored: bool}
      */
     public function neighbours(string $siteId, string $parentLocationId, ?string $subjectGeoId, string $subjectName): array
     {
-        $blank = ['county' => null, 'towns' => []];
+        $blank = ['county' => null, 'towns' => [], 'anchored' => false];
 
         $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
@@ -232,7 +236,9 @@ final class ServiceAreaResolver
             }
         }
         if ($picked === []) {
-            return $blank; // nothing within range — a town with no nearby served towns has nothing true to say
+            // Anchored (we had a centroid) but no served town within range — the section still drops, but
+            // this is a real coverage-density fact, not a missing anchor.
+            return ['county' => $this->subjectCounty($siteId, $subjectGeoId), 'towns' => [], 'anchored' => true];
         }
 
         // Link each neighbour to its PUBLISHED town page (plain text otherwise).
@@ -245,7 +251,7 @@ final class ServiceAreaResolver
         }
         $links->report();
 
-        return ['county' => $this->subjectCounty($siteId, $subjectGeoId), 'towns' => $towns];
+        return ['county' => $this->subjectCounty($siteId, $subjectGeoId), 'towns' => $towns, 'anchored' => true];
     }
 
     /** The town's OWN county name (its geo_id's 5-digit county prefix, if it's one the site serves), or null. */
