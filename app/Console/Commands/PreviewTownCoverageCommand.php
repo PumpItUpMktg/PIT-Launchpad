@@ -15,8 +15,9 @@ use Illuminate\Console\Command;
 /**
  * Previews (dry-run by default) the town-page nearest-neighbour coverage change and, with --apply, repushes.
  *
- * The preview is COMPUTED from the real production selector ({@see \App\Publishing\Blocks\ServiceAreaResolver::neighbours()}),
- * not a re-derived proxy — the numbers are what the render will actually produce. It reports, per tenant, the
+ * The preview is COMPUTED from the real production selector (ServiceAreaResolver::neighbours via
+ * TownCoveragePreview), not a re-derived proxy — the numbers are what the render will actually produce. It
+ * reports, per tenant, the
  * town neighbour-count distribution (6 / 3–5 / 1–2 / dropped, drops split into un-anchored vs nothing-in-range)
  * and the repush count (every published location page). `--apply` dispatches {@see PublishContent} (idempotent,
  * one in-flight per page) for each published location page so the deterministic render replaces the section.
@@ -72,9 +73,9 @@ class PreviewTownCoverageCommand extends Command
             $d = $entry['dist'];
             $this->line(sprintf(
                 '  town neighbours — 6: %d   3–5: %d   1–2: %d   dropped: %d (%d un-anchored, %d nothing in range)',
-                $d['6'],
-                $d['3-5'],
-                $d['1-2'],
+                $d['n6'],
+                $d['n3_5'],
+                $d['n1_2'],
                 $d['drop'],
                 $entry['unanchored'],
                 $entry['no_range'],

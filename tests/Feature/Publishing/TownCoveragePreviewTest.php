@@ -47,8 +47,8 @@ it('computes the town neighbour distribution from the real selector, and --apply
     expect($entry['town'])->toBe(4)
         ->and($entry['hub'])->toBe(0)
         ->and($entry['total'])->toBe(4)
-        ->and($entry['dist']['1-2'])->toBe(3)      // each anchored town has its two neighbours
-        ->and($entry['dist']['6'])->toBe(0)
+        ->and($entry['dist']['n1_2'])->toBe(3)     // each anchored town has its two neighbours
+        ->and($entry['dist']['n6'])->toBe(0)
         ->and($entry['dist']['drop'])->toBe(1)     // Nowheresville
         ->and($entry['unanchored'])->toBe(1)       // ...because it has no centroid
         ->and($entry['no_range'])->toBe(0);

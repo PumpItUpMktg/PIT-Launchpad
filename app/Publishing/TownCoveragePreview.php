@@ -55,7 +55,10 @@ final class TownCoveragePreview
      * repush count (all published location pages), and per-town rows (fewest neighbours first, so the drops
      * and thin cases lead).
      *
-     * @return array{site: Site, brand: string, hub: int, town: int, total: int, dist: array{'6': int, '3-5': int, '1-2': int, drop: int}, unanchored: int, no_range: int, pages: list<array{slug: string, count: int, dropped: bool, anchored: bool, neighbours: list<string>}>}
+     * The `dist` keys are non-numeric on purpose (n6 / n3_5 / n1_2 / drop) so the array shape stays
+     * string-keyed; the command maps them to the "6 / 3–5 / 1–2" labels for display.
+     *
+     * @return array{site: Site, brand: string, hub: int, town: int, total: int, dist: array{n6: int, n3_5: int, n1_2: int, drop: int}, unanchored: int, no_range: int, pages: list<array{slug: string, count: int, dropped: bool, anchored: bool, neighbours: list<string>}>}
      */
     public function forSite(Site $site): array
     {
@@ -68,7 +71,7 @@ final class TownCoveragePreview
 
         $hub = 0;
         $town = 0;
-        $dist = ['6' => 0, '3-5' => 0, '1-2' => 0, 'drop' => 0];
+        $dist = ['n6' => 0, 'n3_5' => 0, 'n1_2' => 0, 'drop' => 0];
         $unanchored = 0;
         $noRange = 0;
         $pages = [];
@@ -95,13 +98,17 @@ final class TownCoveragePreview
 
             if ($count === 0) {
                 $dist['drop']++;
-                $result['anchored'] ? $noRange++ : $unanchored++;
+                if ($result['anchored']) {
+                    $noRange++;
+                } else {
+                    $unanchored++;
+                }
             } elseif ($count >= 6) {
-                $dist['6']++;
+                $dist['n6']++;
             } elseif ($count >= 3) {
-                $dist['3-5']++;
+                $dist['n3_5']++;
             } else {
-                $dist['1-2']++;
+                $dist['n1_2']++;
             }
 
             $pages[] = [
