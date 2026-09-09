@@ -71,18 +71,6 @@
             "elementor_binding": "lp/text"
         },
         {
-            "key": "loc_coverage",
-            "label": "Coverage Copy",
-            "content_type": "long_text",
-            "role": "body_explainer",
-            "source": "generated",
-            "cardinality": { "type": "single" },
-            "constraints": { "required": false, "min_length": 60 },
-            "client_override": true,
-            "generation_hint": "Readable coverage prose from the SERVED TOWNS list — the neighborhoods-and-towns paragraph a person would write, not a keyword dump. Name only the towns provided.",
-            "elementor_binding": "lp/text"
-        },
-        {
             "key": "faq",
             "label": "Local FAQ",
             "content_type": "faq",
