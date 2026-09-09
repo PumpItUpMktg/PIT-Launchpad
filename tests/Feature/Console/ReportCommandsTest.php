@@ -9,6 +9,7 @@ use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\PageIndexState;
 use App\Models\Site;
+use App\Publishing\CoverageProseReport;
 use App\Publishing\TitleLengthReport;
 use App\Support\PublicUrl;
 use Illuminate\Support\Facades\DB;
@@ -134,6 +135,40 @@ it('report-title-lengths measures the page portion and the brand-suffix headroom
 
     // The command runs read-only and reports the structural finding + the headroom count.
     $this->artisan('launchpad:report-title-lengths')
+        ->assertSuccessful()
+        ->expectsOutputToContain('READ-ONLY');
+});
+
+it('report-coverage-prose counts hub/town location pages and flags the long enumeration, read-only', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hoboken']);
+
+    // A HUB page carrying the drafted enumeration (dozens of town names → well over the long threshold).
+    $enumeration = 'We serve '.str_repeat('Jersey City, Bayonne, Union City, Weehawken, Secaucus, ', 8).'and the surrounding area.';
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'slug' => 'hoboken-nj', 'title' => 'Hoboken, NJ',
+        'location_id' => $loc->id,
+        'slot_payload' => ['loc_coverage' => $enumeration],
+    ]);
+    // A TOWN page with a short, benign coverage line (under the threshold).
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'slug' => 'weehawken-nj', 'title' => 'Weehawken, NJ',
+        'parent_location_id' => $loc->id,
+        'slot_payload' => ['loc_coverage' => 'We serve Weehawken and the surrounding area.'],
+    ]);
+
+    $entry = app(CoverageProseReport::class)->forSite($site->fresh());
+
+    expect($entry['total'])->toBe(2)         // both are repush candidates
+        ->and($entry['hub'])->toBe(1)
+        ->and($entry['town'])->toBe(1)
+        ->and($entry['with_prose'])->toBe(2)
+        ->and($entry['long'])->toBe(1)       // only the hub enumeration exceeds the long threshold
+        ->and($entry['max'])->toBeGreaterThan(CoverageProseReport::LONG_CHARS);
+
+    $this->artisan('launchpad:report-coverage-prose')
         ->assertSuccessful()
         ->expectsOutputToContain('READ-ONLY');
 });
