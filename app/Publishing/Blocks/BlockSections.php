@@ -385,6 +385,40 @@ final class BlockSections
     }
 
     /**
+     * A TOWN page's "nearby towns" list — the town's nearest served neighbours (the caller ranks by
+     * distance and caps at six). Unlike {@see areasServed()}, a neighbour WITHOUT a live page renders as
+     * plain text rather than being dropped, so the list stays honest (link-or-plain, the same rule the
+     * county list uses). One pipe-separated line. When $heading is '' the section renders bare (no head),
+     * so it can sit directly under the coverage sentence as one visual unit. Empty links → '' (drops).
+     *
+     * @param  list<array{label: string, url: string}>  $links
+     */
+    public function nearbyTowns(string $eyebrow, string $heading, array $links): string
+    {
+        $links = array_values(array_filter($links, fn (array $l): bool => trim((string) $l['label']) !== ''));
+        if ($links === []) {
+            return '';
+        }
+
+        $towns = array_map(function (array $l): string {
+            $label = trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim((string) $l['label'])));
+            $label = $label !== '' ? $label : (string) $l['label'];
+            $url = trim((string) ($l['url'] ?? ''));
+            $inner = $url !== '' ? '<a href="'.$this->attr($url).'">'.$this->text($label).'</a>' : $this->text($label);
+
+            return '<span class="lp-areas-town">'.$inner.'</span>';
+        }, $links);
+
+        $sep = '<span class="lp-areas-sep" aria-hidden="true"> | </span>';
+        $list = '<p class="lp-areas-townlist">'.implode($sep, $towns).'</p>';
+        $block = "<!-- wp:html -->\n".'<div class="lp-areas-townblock">'.$list.'</div>'."\n<!-- /wp:html -->";
+
+        $children = $heading !== '' || $eyebrow !== '' ? [$this->sectionHead($eyebrow, $heading), $block] : [$block];
+
+        return $this->b->group($children, ['align' => 'full', 'className' => 'lp-areas lp-areas--towns lp-areas--nearby']);
+    }
+
+    /**
      * The proof gallery: honest photo slots. The client's real photos beat any stock image, so unfilled
      * slots render as an explicit "add your own photo" placeholder — never a fabricated image. A
      * provided (AI/uploaded) image fills a slot; the rest stay placeholders.

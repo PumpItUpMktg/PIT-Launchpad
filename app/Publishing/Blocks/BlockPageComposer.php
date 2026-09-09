@@ -973,6 +973,8 @@ final class BlockPageComposer
         array $hours = [],
         array $coverageCounties = [],
         array $coverageByCounty = [],
+        array $nearbyTowns = [],
+        bool $isTown = false,
         array $localConditions = [],
         bool $hasMap = false,
         bool $areasMapAvailable = false,
@@ -1053,28 +1055,36 @@ final class BlockPageComposer
             features: $localConditions,
         );
 
-        // Coverage prose from the served-towns list (readable paragraph, never a keyword dump).
+        // Coverage lead-in — ONE sentence. On a TOWN page the heading names the town's neighbours (the
+        // list below is its nearest six), so it must NOT claim "the towns we cover around {town}" — a
+        // claim the six-neighbour list no longer supports.
+        $coverageHeading = $isTown
+            ? ($city !== '' ? 'Towns near '.$city : 'Nearby towns')
+            : ($city !== '' ? 'The towns we cover around '.$city : 'The towns we cover');
         $coverageBlock = $this->sections->prose(
             eyebrow: 'Coverage',
-            heading: $city !== '' ? 'The towns we cover around '.$city : 'The towns we cover',
+            heading: $coverageHeading,
             paragraphs: $coverage,
             surface: true,
             preview: $preview,
             activates: 'appears when this location\'s served towns are captured',
         );
 
-        // The "areas we serve" section — the towns this location covers, grouped by county, sourced from
-        // the census-derived CoverageArea (scoped to this location). §8.1 collapse: the thin per-town
-        // child pages are gone, so these render as PLAIN names (no dead links); the section drops when
-        // the location has no captured coverage. Same county-grouped block the home/areas page uses.
-        $areas = $this->sections->serviceAreas(
-            eyebrow: 'Areas we serve',
-            heading: $city !== '' ? 'Towns we serve from '.$city : 'Towns we serve',
-            counties: $coverageCounties,
-            byCounty: $coverageByCounty,
-            preview: $preview,
-            mapAvailable: $areasMapAvailable,
-        );
+        // The coverage list. A HUB (market) page carries the full county-grouped list — the site's linked
+        // "areas we serve" spine. A TOWN page instead carries a flat list of its NEAREST neighbours
+        // (distance-ranked, capped, resolved upstream): non-duplicate across the 193 town pages and the
+        // internal-link mesh done honestly in the copy. Both link to PUBLISHED town pages, plain text
+        // otherwise; each drops when it has nothing to show.
+        $areas = $isTown
+            ? $this->sections->nearbyTowns('', '', $nearbyTowns)
+            : $this->sections->serviceAreas(
+                eyebrow: 'Areas we serve',
+                heading: $city !== '' ? 'Towns we serve from '.$city : 'Towns we serve',
+                counties: $coverageCounties,
+                byCounty: $coverageByCounty,
+                preview: $preview,
+                mapAvailable: $areasMapAvailable,
+            );
 
         // Reviews + jobs are STRICTLY provider-gated — preview: false is deliberate (no "Example"
         // placeholder in either context; nothing an operator does today can fill them).
