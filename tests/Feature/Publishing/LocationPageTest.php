@@ -90,7 +90,7 @@ function locRelayPage(Site $site, Location $location, array $overrides = []): Co
     ], $overrides));
 }
 
-it('composes the location page: formula H1, live-page link rule, coverage from served towns, the location phone', function () {
+it('composes the location page: formula H1, live-page link rule, a county coverage sentence, the location phone', function () {
     $site = locRelaySite();
     $location = locRelayLocation($site);
     SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
@@ -105,6 +105,7 @@ it('composes the location page: formula H1, live-page link rule, coverage from s
     ]);
 
     $page = locRelayPage($site, $location);
+    locScopedCoverage($site, $location); // Montgomery County + its towns (drives both the sentence and the list)
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
     expect($markup)->toBeString()
@@ -113,8 +114,10 @@ it('composes the location page: formula H1, live-page link rule, coverage from s
         // The link rule: the live service page links; the page-less service renders as text.
         ->toContain('href="https://drybasements.example/sump-pump-installation"')
         ->toContain('French Drains')
-        // Coverage prose derives honestly from the served towns (readable list, not a keyword dump).
-        ->toContain('Norristown, Audubon, and Eagleville')
+        // Coverage prose is now ONE county-level sentence handing off to the structured list below — never
+        // the town-by-town enumeration that read as keyword-stuffing.
+        ->toContain('From Trooper we serve Montgomery County and the surrounding communities')
+        ->not->toContain('Norristown, Audubon, and Eagleville')
         // The CTA/hero carry the LOCATION's own phone.
         ->toContain('tel:6105550142')
         ->toContain('(610) 555-0142')
@@ -262,7 +265,6 @@ it('generate-location creates the pinned page once and drives the drafting path 
             'hero_subhead' => 'Fast, honest help for wet basements across the Trooper area.',
             'loc_intro' => 'From the stone foundations near the Schuylkill to newer slabs in Audubon, we keep Trooper-area basements dry through the spring water-table surge — honest assessments, clean installs.',
             'loc_services_intro' => 'Here is what we do across the Trooper area.',
-            'loc_coverage' => 'We cover Norristown, Audubon, and Eagleville — the towns immediately around our Trooper base.',
             'faq' => [
                 ['question' => 'Do you serve Norristown?', 'answer' => 'Yes, Norristown is core coverage.'],
                 ['question' => 'How fast can you assess?', 'answer' => 'Usually within a few days.'],
@@ -469,7 +471,7 @@ it('the location hub renders the interactive map mount above the coverage when a
     expect($markup)
         ->toContain('lp-areas--map')
         ->toContain('lp-areas-map')     // the Leaflet mount
-        ->toContain('Norristown');      // the crawlable coverage fallback stays
+        ->toContain('Norristown');      // the crawlable county-grouped town list stays
 });
 
 it('the location hub drops the address for a non-storefront (mobile base stays private) but keeps hours', function () {

@@ -827,16 +827,6 @@ final class BlockContentAssembler
             }
         }
 
-        $towns = $this->servedTownNames($location);
-
-        // Coverage prose: the drafted slot when generated, else the honest derived sentence naming
-        // ONLY the captured towns (real data, never invented — and never a bare keyword dump).
-        $coverage = $this->storyParagraphs($this->slotString($slots, 'loc_coverage'));
-        if ($coverage === [] && $towns !== []) {
-            $base = $city !== '' ? ' from our '.$city.' location' : '';
-            $coverage = ['We serve '.$this->naturalList($towns).' and the surrounding area'.$base.'.'];
-        }
-
         // The location's own NAP — its address (only for a real STOREFRONT, like the contact page:
         // a mobile business's base address stays private), email, and hours. This is a GBP location
         // hub, so its own contact truths lead.
@@ -855,6 +845,13 @@ final class BlockContentAssembler
             $this->serviceAreas->byCounty((string) $content->site_id, (string) $location->id),
         );
         $coverageCounties = array_map(fn (array $g): string => (string) $g['county'], $coverageByCounty);
+
+        // Coverage prose: ONE county-level sentence that hands off to the structured "Towns we serve"
+        // list below — never the town-by-town enumeration that read as keyword-stuffing. It is derived
+        // from the SAME county source as the list (so the two never drift) and the drafted `loc_coverage`
+        // slot that produced the enumeration is retired, so a repush replaces every existing dump. Drops
+        // with the list when the location has no captured county coverage.
+        $coverage = $this->coverageSentence($city, $coverageCounties);
 
         return $this->composer->composeLocation(
             slots: $slots,
@@ -951,27 +948,49 @@ final class BlockContentAssembler
     }
 
     /**
-     * The location's served-town names (state suffix dropped — coverage prose reads "Norristown,
-     * Audubon, and Eagleville", not a comma soup of state codes). Ungeocodable towns still count:
-     * the claim is the operator's captured list, not the geocoder's success.
+     * The location's coverage prose — ONE county-level sentence that hands off to the structured "Towns
+     * we serve" list below it, or [] when the location has no captured county coverage (the list drops
+     * too, so the section is omitted rather than headed over nothing). It names COUNTIES, never the
+     * individual towns: the town-by-town version read as keyword-stuffing, and the list already carries
+     * every town, grouped and linkable.
      *
+     * @param  list<string>  $counties  the served county names (display-ready, the same source as the list)
      * @return list<string>
      */
-    private function servedTownNames(Location $location): array
+    private function coverageSentence(string $city, array $counties): array
     {
-        $names = [];
-        foreach ($location->served_towns ?? [] as $row) {
-            $name = trim((string) ($row['name'] ?? ''));
-            if ($name !== '') {
-                $names[] = $name;
-            }
+        $counties = array_values(array_filter(array_map('trim', $counties), fn (string $c): bool => $c !== ''));
+        if ($counties === []) {
+            return [];
         }
+        $lead = $city !== '' ? 'From '.$city.' we serve ' : 'We serve ';
 
-        return array_slice($names, 0, 12);
+        return [$lead.$this->countyPhrase($counties).' and the surrounding communities — see the full list below.'];
     }
 
     /**
-     * "A", "A and B", "A, B, and C" — the readable list the coverage fallback sentence uses.
+     * The counties as readable prose: "Hudson County"; "Hudson and Bergen counties"; "Hudson, Bergen, and
+     * Passaic counties" — collapsing the repeated "County" suffix when every name carries it, else a plain
+     * natural list of whatever county names were captured.
+     *
+     * @param  non-empty-list<string>  $counties
+     */
+    private function countyPhrase(array $counties): string
+    {
+        if (count($counties) > 1) {
+            $allCounty = array_reduce($counties, fn (bool $c, string $n): bool => $c && str_ends_with($n, ' County'), true);
+            if ($allCounty) {
+                $bare = array_map(fn (string $n): string => rtrim(substr($n, 0, -7)), $counties); // strip trailing " County"
+
+                return $this->naturalList($bare).' counties';
+            }
+        }
+
+        return $this->naturalList($counties);
+    }
+
+    /**
+     * "A", "A and B", "A, B, and C" — the readable list the coverage sentence uses.
      *
      * @param  non-empty-list<string>  $names
      */

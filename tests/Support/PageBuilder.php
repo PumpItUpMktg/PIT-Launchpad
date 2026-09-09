@@ -151,7 +151,6 @@ class PageBuilder
             'hero_headline' => 'Water Heater Repair in Austin, TX',
             'hero_image' => ['src' => 'austin.webp', 'alt' => 'Austin neighborhood street', 'width' => 1200, 'height' => 675],
             'loc_intro' => str_repeat('We serve Austin neighborhoods with prompt, honest local service. ', 3),
-            'loc_coverage' => 'We cover Hyde Park, Mueller, and Windsor Park — the neighborhoods around our Austin base.',
             'faq' => [
                 ['question' => 'Do you serve Hyde Park?', 'answer' => 'Yes — it is core coverage.'],
                 ['question' => 'How fast can you come out?', 'answer' => 'Often the same day.'],

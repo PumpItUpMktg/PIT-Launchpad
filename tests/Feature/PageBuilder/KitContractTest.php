@@ -22,10 +22,10 @@ test('both kits round-trip losslessly through the value objects', function (stri
     expect($reparsed->toArray())->toBe($schema->toArray());
 })->with([
     ['service-page', PageType::Service, 17], // drafted body slots + 7 drafted section-heading H2s + the two platform conversion slots (cta / contact_block)
-    ['location-page', PageType::Location, 7], // block-era: drafted slots only (sections/NAP/schema live in the composer + blob)
+    ['location-page', PageType::Location, 6], // block-era: drafted slots only (sections/NAP/schema live in the composer + blob); loc_coverage retired
 ]);
 
-test('the block-era location kit generates six slots and stakes no entity slots', function () {
+test('the block-era location kit generates five slots and stakes no entity slots', function () {
     $kit = PageBuilder::locationKit();
 
     $generating = array_filter(
@@ -33,8 +33,10 @@ test('the block-era location kit generates six slots and stakes no entity slots'
         fn ($slot) => in_array($slot->source, [SlotSource::Generated, SlotSource::Grounded], true),
     );
 
-    // hero_headline / hero_subhead / loc_intro / loc_services_intro / loc_coverage / faq.
-    expect($generating)->toHaveCount(6)
+    // hero_headline / hero_subhead / loc_intro / loc_services_intro / faq. The old loc_coverage slot is
+    // retired: the coverage prose is now a deterministic county sentence in the composer, not a drafted
+    // (and keyword-stuffing-prone) enumeration of served towns.
+    expect($generating)->toHaveCount(5)
         // Reviews/jobs are provider-gated page SECTIONS (empty ⇒ omitted by the composer), and the
         // NAP/map ride the blob + LocalBusiness schema — the kit deliberately stakes no entity slot.
         ->and(array_filter($kit->slots, fn ($slot) => $slot->source === SlotSource::Entity))->toBe([]);
