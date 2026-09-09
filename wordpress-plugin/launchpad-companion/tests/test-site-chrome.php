@@ -34,9 +34,11 @@ class Test_Site_Chrome extends WP_UnitTestCase
 
     public function test_header_emits_the_mobile_hamburger_toggle_when_there_is_a_nav(): void
     {
+        // Compressed header: the company pages live in the utility bar on desktop and are drawered behind
+        // the hamburger on mobile, so a company nav is what makes the toggle render (services/areas do too).
         ( new SiteProfileStore() )->save([
             'brand_name' => 'Sewer Gurus',
-            'nav' => [['label' => 'About', 'url' => 'https://sewergurus.com/about']],
+            'company' => [['label' => 'About', 'url' => 'https://sewergurus.com/about']],
         ]);
 
         $header = (new SiteChrome())->header();
@@ -90,8 +92,11 @@ class Test_Site_Chrome extends WP_UnitTestCase
         $this->assertStringContainsString('Call now', $header);
     }
 
-    public function test_header_renders_the_secondary_cta_when_the_profile_carries_one(): void
+    public function test_header_drops_the_secondary_cta_in_the_compressed_layout(): void
     {
+        // The compressed header omits the secondary "Free Assessment" CTA even when the profile carries one:
+        // the working row is logo · services · areas · phone, and the phone button is the single header CTA.
+        // (Regression guard for the deliberate drop — the header must not resurrect the button.)
         ( new SiteProfileStore() )->save([
             'brand_name' => 'Sewer Gurus',
             'cta' => ['label' => 'Free Assessment', 'url' => 'https://sewergurus.com/contact'],
@@ -99,16 +104,8 @@ class Test_Site_Chrome extends WP_UnitTestCase
 
         $header = (new SiteChrome())->header();
 
-        $this->assertStringContainsString('lp-header-cta', $header);
-        $this->assertStringContainsString('href="https://sewergurus.com/contact"', $header);
-        $this->assertStringContainsString('Free Assessment', $header);
-    }
-
-    public function test_header_omits_the_secondary_cta_when_there_is_none(): void
-    {
-        ( new SiteProfileStore() )->save(['brand_name' => 'Sewer Gurus']);
-
-        $this->assertStringNotContainsString('lp-header-cta', (new SiteChrome())->header());
+        $this->assertStringNotContainsString('lp-header-cta', $header);
+        $this->assertStringNotContainsString('Free Assessment', $header);
     }
 
     public function test_header_tone_survives_the_store_sanitize(): void
@@ -149,17 +146,18 @@ class Test_Site_Chrome extends WP_UnitTestCase
 
     public function test_services_is_the_primary_nav_before_the_company_links(): void
     {
-        // PR 2 swap: Services leads the header (leftmost after the logo); the company pages become the
-        // secondary .lp-company strip AFTER it. Assert both the marker class and the source order.
+        // Services leads the working row (leftmost after the logo); the company pages render as the
+        // secondary .lp-company nav AFTER it (desktop-hidden there, shown in the utility bar / mobile drawer).
+        // Assert both the marker class and the source order within the working row.
         ( new SiteProfileStore() )->save([
             'brand_name' => 'Sewer Gurus',
             'services' => [['label' => 'Sump Pumps', 'url' => 'https://sewergurus.com/sump-pumps']],
-            'nav' => [['label' => 'About', 'url' => 'https://sewergurus.com/about']],
+            'company' => [['label' => 'About', 'url' => 'https://sewergurus.com/about']],
         ]);
 
         $header = (new SiteChrome())->header();
 
-        $this->assertStringContainsString('lp-company', $header);                 // company demoted to the strip
+        $this->assertStringContainsString('lp-company', $header);                 // company as the secondary nav
         $this->assertStringContainsString('lp-services-nav', $header);            // services is a rendered nav
         $this->assertLessThan(                                                    // ...and it comes first
             strpos($header, 'lp-company'),

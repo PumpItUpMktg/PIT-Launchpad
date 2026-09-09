@@ -294,25 +294,6 @@ final class SiteChrome
     }
 
     /**
-     * The secondary header CTA ("Free Assessment") — rendered only when the profile carries a cta with both
-     * a label and a URL (the control plane emits it only when the Contact page exists). The theme hides it
-     * in the mobile condensed state, where only the logo, tap-to-call and hamburger remain.
-     *
-     * @param  array<string, mixed>  $p
-     */
-    private function headerCta(array $p): string
-    {
-        $cta = is_array($p['cta'] ?? null) ? $p['cta'] : [];
-        $label = trim((string) ($cta['label'] ?? ''));
-        $url = trim((string) ($cta['url'] ?? ''));
-        if ($label === '' || $url === '') {
-            return '';
-        }
-
-        return '<a class="lp-header-cta" href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
-    }
-
-    /**
      * The click-to-call bar — a `tel:` link on every viewport (the emergency audience calls from a phone).
      * A "Call now" label sits above the number (it says the line is for right now, not enquiries); emergency
      * (opted-in) also gets the pulsing 24/7 tag. A phone is required or the bar is omitted entirely. In the
