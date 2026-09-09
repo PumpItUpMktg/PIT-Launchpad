@@ -5,9 +5,11 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Metrics\UrlNormalizer;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\PageIndexState;
 use App\Models\Site;
+use App\Publishing\TitleLengthReport;
 use App\Support\PublicUrl;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -98,8 +100,8 @@ it('report-title-lengths measures the page portion and the brand-suffix headroom
         'status' => ContentStatus::Published, 'slug' => 'home', 'title' => 'Home',
         'slot_payload' => ['service_area' => 'New Jersey & Eastern Pennsylvania'],
     ]);
-    \App\Models\CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3401', 'name' => 'Newark', 'state' => 'NJ']);
-    \App\Models\CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4209', 'name' => 'Reading', 'state' => 'PA']);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3401', 'name' => 'Newark', 'state' => 'NJ']);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4209', 'name' => 'Reading', 'state' => 'PA']);
 
     // Service page: region-qualifies to a 59-char portion (≤60), but + " | Sump Pump Gurus" (18) blows past 60.
     Content::factory()->create([
@@ -114,7 +116,7 @@ it('report-title-lengths measures the page portion and the brand-suffix headroom
         'meta' => ['seo' => ['title' => 'About Us', 'meta_description' => 'x']],
     ]);
 
-    $entry = app(\App\Publishing\TitleLengthReport::class)->forSite($site->fresh());
+    $entry = app(TitleLengthReport::class)->forSite($site->fresh());
 
     expect($entry['total'])->toBe(3)
         ->and($entry['brand_cost'])->toBe(18)                       // " | " + "Sump Pump Gurus"
