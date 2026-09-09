@@ -655,3 +655,79 @@ it('keeps the CTA button when no lead form is configured', function () {
         ->not->toContain('[lp_form]')
         ->toContain('>Get in touch</a>');
 });
+
+it('a TOWN page lists its nearest neighbours — linked when live, plain otherwise — not the market\'s full list', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.test', 'brand_name' => 'SPG']);
+    $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hudson office', 'county_geoids' => ['34017']]);
+
+    // Hudson County name for the lead-in sentence ("across Hudson County"); neighbours() never touches polygons.
+    $gaz = Mockery::mock(MunicipalityGazetteer::class);
+    $gaz->shouldReceive('countiesInState')->andReturn([new County('34017', 'Hudson County', '34', '017')]);
+    $gaz->shouldReceive('countyPolygons')->andReturn([]);
+    app()->instance(MunicipalityGazetteer::class, $gaz);
+
+    // Coverage under the parent: the subject town itself + three near neighbours + one far town.
+    $cov = fn (string $name, string $geo, float $lat, float $lng) => CoverageArea::factory()->create([
+        'site_id' => $site->id, 'name' => $name, 'state' => 'NJ', 'type' => MunicipalityType::CountySubdivision,
+        'geo_id' => $geo, 'lat' => $lat, 'lng' => $lng, 'size_tier' => 'large', 'population' => 40000,
+        'source_location_ids' => [$parent->id],
+    ]);
+    $cov('Hoboken', '3401732250', 40.745, -74.030);      // the subject town itself → excluded from its own list
+    $cov('Jersey City', '3401736000', 40.728, -74.078);  // ~2.8 mi
+    $cov('Weehawken', '3401778000', 40.770, -74.020);    // ~1.8 mi
+    $cov('Union City', '3401774000', 40.766, -74.030);   // ~1.5 mi — no page → plain text
+    $cov('Trenton', '3402174000', 40.220, -74.760);      // ~52 mi → out of range, excluded
+
+    // Live town pages for two neighbours; Union City has none (plain), Trenton is out of range anyway.
+    $livePage = fn (string $geo, string $title, string $slug) => Content::factory()->published()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => $geo, 'title' => $title, 'slug' => $slug,
+    ]);
+    $livePage('3401736000', 'Jersey City, NJ', 'jersey-city');
+    $livePage('3401778000', 'Weehawken, NJ', 'weehawken-nj');
+
+    $town = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '3401732250',
+        'title' => 'Hoboken, NJ', 'slug' => 'hoboken-nj', 'slot_payload' => [],
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+
+    expect($markup)
+        ->toContain('Towns near Hoboken')                                        // neighbour-framed heading
+        ->not->toContain('The towns we cover around')                            // NOT the over-claiming hub heading
+        ->toContain('Serving Hoboken and nearby communities across Hudson County')
+        ->toContain('href="https://spg.test/jersey-city"')                       // live neighbour → linked
+        ->toContain('href="https://spg.test/weehawken-nj"')
+        ->toContain('Union City')                                                // in range but no live page → plain text
+        ->not->toContain('href="https://spg.test/union-city"')
+        ->not->toContain('Trenton');                                             // out of range (~52 mi) → excluded
+});
+
+it('a TOWN page with no resolvable centroid drops the coverage section entirely (never an arbitrary set)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.test']);
+    $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hudson office', 'county_geoids' => ['34017']]);
+
+    // Neighbours exist under the parent, but the SUBJECT town has no coverage row and no geo_id → no origin.
+    CoverageArea::factory()->create([
+        'site_id' => $site->id, 'name' => 'Jersey City', 'state' => 'NJ', 'type' => MunicipalityType::CountySubdivision,
+        'geo_id' => '3401736000', 'lat' => 40.728, 'lng' => -74.078, 'size_tier' => 'large', 'population' => 40000,
+        'source_location_ids' => [$parent->id],
+    ]);
+
+    $town = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => null,
+        'title' => 'Nowheresville, NJ', 'slug' => 'nowheresville-nj', 'slot_payload' => [],
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+
+    // The town is still the page subject, but there is no coverage/neighbours section at all.
+    expect($markup)
+        ->toContain('Nowheresville')
+        ->not->toContain('Towns near')
+        ->not->toContain('nearby communities')
+        ->not->toContain('lp-areas--nearby');
+});
