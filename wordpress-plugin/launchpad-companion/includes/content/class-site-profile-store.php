@@ -72,6 +72,8 @@ final class SiteProfileStore
             // On the whitelist so it survives the sanitize (the header_tone regression: an un-whitelisted
             // key is silently dropped and the button would never render).
             'cta' => self::cta($p['cta'] ?? null),
+            // Areas We Serve link for the primary nav row — a single {label,url}, same shape as the CTA.
+            'areas_link' => self::cta($p['areas_link'] ?? null),
             'services' => self::links($p['services'] ?? [], true),
             'areas' => self::links($p['areas'] ?? []),
             'company' => self::links($p['company'] ?? []),

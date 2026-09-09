@@ -75,6 +75,20 @@ it('emits the Free Assessment header CTA pointing at the Contact page, and omits
         ->toBe(['label' => 'Free Assessment', 'url' => 'https://sewergurus.com/contact']);
 });
 
+it('emits an areas_link for the working row when the Areas We Serve page exists, else null', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+
+    expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['areas_link'])->toBeNull();
+
+    Content::factory()->published()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility,
+        'slug' => 'areas-we-serve', 'title' => 'Areas We Serve',
+    ]);
+
+    expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['areas_link'])
+        ->toBe(['label' => 'Areas We Serve', 'url' => 'https://sewergurus.com/areas-we-serve']);
+});
+
 it('excludes non-published pages from the menu — a drafted or taken-down page never appears', function () {
     $site = Site::factory()->create(['domain_url' => 'https://sg.test']);
 
