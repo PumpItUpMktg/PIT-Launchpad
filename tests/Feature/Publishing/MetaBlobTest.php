@@ -58,9 +58,10 @@ test('the assembled meta-blob matches the companion-plugin /content contract', f
 
     // Engine-owned SEO, with canonical + the OG image driven by the kit's
     // og_image seo_binding (the hero).
-    // The SEO title is normalized — the "| Apex" branding suffix is stripped.
+    // The stored "| Apex" source suffix is stripped by normalize; the tenant brand is then composed back
+    // in as the render-time suffix (brand on every page title).
     expect($payload['seo'])->toHaveKeys(['title', 'meta_description', 'canonical', 'robots', 'og', 'schema_type', 'breadcrumbs'])
-        ->and($payload['seo']['title'])->toBe('Water Heater Repair in Austin')
+        ->and($payload['seo']['title'])->toBe('Water Heater Repair in Austin | '.$site->brand_name)
         ->and($payload['seo']['canonical'])->toBe('https://apex.example/water-heater-repair-austin/')
         ->and($payload['seo']['og']['image'])->toBe($payload['images']['hero_image']['url'])
         ->and($payload['seo']['schema_type'])->toBe('Service');
@@ -301,7 +302,9 @@ test('a service-page <title> carries the tenant service-area region (fork A: ful
 
     $payload = app(MetaBlobAssembler::class)->assemble($content->fresh(), new Collection);
 
-    expect($payload['seo']['title'])->toBe('Basement Waterproofing in New Jersey & Eastern Pennsylvania');
+    // Region-qualified, then the brand composed on (this one runs past 60 with no safe shorten point — the
+    // brand is preserved whole; report-title-lengths surfaces it as over-length, PR 2's concern).
+    expect($payload['seo']['title'])->toBe('Basement Waterproofing in New Jersey & Eastern Pennsylvania | '.$site->brand_name);
 });
 
 test('a location page title is NOT region-qualified (it already leads with its city)', function () {
@@ -321,5 +324,54 @@ test('a location page title is NOT region-qualified (it already leads with its c
 
     $payload = app(MetaBlobAssembler::class)->assemble($loc->fresh(), new Collection);
 
-    expect($payload['seo']['title'])->toBe('Sump Pump Service in Bedminster'); // untouched — not service/hub
+    // Not region-qualified (location leads with its city), but the brand suffix still applies to every page.
+    expect($payload['seo']['title'])->toBe('Sump Pump Service in Bedminster | '.$site->brand_name);
+});
+
+test('the brand is composed into every title: suffixed on inner pages, brand-FIRST on the home page', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $site->forceFill(['brand_name' => 'Sump Pump Gurus'])->save();
+
+    // Home — brand leads (it should win the brand query); the hand-set title is the right-hand side.
+    $home = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Home,
+        'slug' => 'home', 'slot_payload' => ['service_area' => 'NJ & Eastern PA'],
+        'meta' => ['seo' => ['title' => 'Basement Waterproofing in NJ & Eastern PA', 'meta_description' => 'x']],
+    ]);
+    expect(app(MetaBlobAssembler::class)->assemble($home->fresh(), new Collection)['seo']['title'])
+        ->toBe('Sump Pump Gurus | Basement Waterproofing in NJ & Eastern PA');
+
+    // A location page — brand suffixed.
+    $town = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'slug' => 'hoboken-nj', 'title' => 'Hoboken, NJ',
+        'meta' => ['seo' => ['title' => 'Sump Pump Service in Hoboken, NJ', 'meta_description' => 'x']],
+    ]);
+    expect(app(MetaBlobAssembler::class)->assemble($town->fresh(), new Collection)['seo']['title'])
+        ->toBe('Sump Pump Service in Hoboken, NJ | Sump Pump Gurus');
+});
+
+test('the length guard shortens the PAGE portion at a separator and never drops the brand', function () {
+    PublishHarness::fakeAdapters();
+    $site = PublishHarness::site();
+    $site->forceFill(['brand_name' => 'Sump Pump Gurus'])->save();
+
+    // A long title WITH a subtitle separator → the subtitle is dropped so the brand fits under ~60.
+    $withSub = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'slug' => 'sub', 'title' => 'Sub',
+        'meta' => ['seo' => ['title' => 'Emergency Sump Pump Repair: Fast 24/7 Basement Service', 'meta_description' => 'x']],
+    ]);
+    expect(app(MetaBlobAssembler::class)->assemble($withSub->fresh(), new Collection)['seo']['title'])
+        ->toBe('Emergency Sump Pump Repair | Sump Pump Gurus');   // subtitle after ": " dropped, brand kept
+
+    // A long single-clause title with NO safe separator → left whole, brand still appended (never mid-word).
+    $noSep = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'slug' => 'nosep', 'title' => 'NoSep',
+        'meta' => ['seo' => ['title' => 'Basement Waterproofing Solutions for a Dry Protected Home', 'meta_description' => 'x']],
+    ]);
+    expect(app(MetaBlobAssembler::class)->assemble($noSep->fresh(), new Collection)['seo']['title'])
+        ->toBe('Basement Waterproofing Solutions for a Dry Protected Home | Sump Pump Gurus');
 });
