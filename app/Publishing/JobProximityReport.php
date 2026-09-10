@@ -19,8 +19,8 @@ use App\Publishing\Blocks\ServiceAreaResolver;
  * read-before-shipping data for the jobs fix (PR 5). It measures each published location page's jobs from
  * the RIGHT subject (a town page from its own centroid, a hub from the location's coordinates) against the
  * site's published jobs, using the same great-circle distance ({@see Distance::miles()}) and radius
- * ({@see \App\Publishing\Blocks\ServiceAreaResolver} / `neighbour_radius_miles`) the town-coverage change
- * uses — so the numbers are what the fix will actually select, not a proxy.
+ * ({@see ServiceAreaResolver} / `neighbour_radius_miles`) the town-coverage change uses — so the numbers
+ * are what the fix will actually select, not a proxy.
  *
  * The headline is the distribution: how many pages would show 3+ jobs, how many 1–2, how many drop the
  * section (nothing in range). With a small published-jobs set most pages will drop — that is the honest
@@ -117,8 +117,8 @@ final class JobProximityReport
             }
 
             $count = 0;
-            foreach ($jobPoints as [$jlat, $jlng]) {
-                if (Distance::miles($lat, $lng, $jlat, $jlng) <= $radius) {
+            foreach ($jobPoints as $point) {
+                if (Distance::miles($lat, $lng, $point[0], $point[1]) <= $radius) {
                     $count++;
                 }
             }
