@@ -59,6 +59,7 @@ final class BlockContentAssembler
         private readonly LocalJobProvider $localJobs,
         private readonly ServiceReviewProvider $serviceReviews,
         private readonly ServiceJobProvider $serviceJobs,
+        private readonly LocationSubject $locationSubject,
     ) {}
 
     /**
@@ -810,22 +811,12 @@ final class BlockContentAssembler
             return null;
         }
 
-        ['city' => $city, 'state' => $state] = $location->cityState();
-        if ($city === '') {
-            $city = trim((string) $location->name);
-        }
-
-        // A TOWN page's subject is the TOWN itself (parsed from its title, "Pequannock, NJ"), not the
-        // parent location's city — the parent only supplies NAP / served-area / reviews context.
-        if ($isTown) {
-            ['city' => $townCity, 'state' => $townState] = $this->townSubject($content);
-            if ($townCity !== '') {
-                $city = $townCity;
-            }
-            if ($townState !== '') {
-                $state = $townState;
-            }
-        }
+        // The page's subject city/state — resolved from STRUCTURED data, never the drafter-authored title:
+        // a hub grounds on its pinned Location (cityState); a TOWN grounds on the census CoverageArea joined
+        // by its geo_id. An un-anchored town degrades to the legacy title-parse (anchored=false) so nothing
+        // regresses. This is the parent-city / hallucinated-town fix at its source — the county sentence,
+        // neighbour framing, and H1 formula-fallback below all read $city/$state.
+        ['city' => $city, 'state' => $state] = $this->locationSubject->resolve($content);
 
         // The location's own NAP — its address (only for a real STOREFRONT, like the contact page:
         // a mobile business's base address stays private), email, and hours. This is a GBP location
@@ -851,7 +842,7 @@ final class BlockContentAssembler
                 (string) $content->site_id,
                 (string) $location->id,   // the parent GBP location whose coverage the town sits in
                 $content->geo_id,
-                $city,                    // the town itself (townSubject set $city above)
+                $city,                    // the town itself (authoritative subject resolved above)
             );
             $nearbyTowns = $neighbours['towns'];
             $coverage = $nearbyTowns === [] ? [] : $this->townCoverageSentence($city, $neighbours['county']);
@@ -889,21 +880,6 @@ final class BlockContentAssembler
             areasMapAvailable: $areasMapAvailable,
             preview: $preview,
         );
-    }
-
-    /**
-     * A town page's own town parsed from its title ("Pequannock, NJ" → city "Pequannock", state "NJ").
-     *
-     * @return array{city: string, state: string}
-     */
-    private function townSubject(Content $content): array
-    {
-        $title = trim((string) $content->title);
-        if (preg_match('/^(.*?),\s*([A-Za-z]{2})\.?$/', $title, $m) === 1) {
-            return ['city' => trim($m[1]), 'state' => strtoupper($m[2])];
-        }
-
-        return ['city' => $title, 'state' => ''];
     }
 
     /**

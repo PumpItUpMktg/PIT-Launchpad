@@ -31,6 +31,7 @@ use App\Publishing\Blocks\ServiceAreaMap;
 use App\Publishing\Breadcrumbs\SiloIndexResolver;
 use App\Publishing\Schema\LocationSchemaBuilder;
 use App\Publishing\Schema\ServiceSchemaBuilder;
+use App\Publishing\Seo\LocationTitle;
 use App\Support\PublicUrl;
 use App\Support\SeoTitle;
 use App\Support\ServiceAreaTitle;
@@ -71,6 +72,7 @@ class MetaBlobAssembler
         private readonly ServiceAreaMap $serviceAreaMap,
         private readonly NapPin $napPin,
         private readonly SiloIndexResolver $siloIndex,
+        private readonly LocationTitle $locationTitle,
     ) {}
 
     /**
@@ -1063,6 +1065,17 @@ class MetaBlobAssembler
      */
     private function seoTitle(Content $content): string
     {
+        // A location page's title is DETERMINISTIC — "{Trade} in {Town}, {ST}" composed from the page's
+        // authoritative structured subject, NOT the drafter-authored stored title (which has hallucinated
+        // the wrong town / no town). An un-anchored town page has no authoritative subject → compose()
+        // returns null and we fall through to the stored-title behaviour below.
+        if ($content->page_type === PageType::Location) {
+            $deterministic = $this->locationTitle->compose($content);
+            if ($deterministic !== null) {
+                return $this->withBrand($content, $deterministic);
+            }
+        }
+
         $metaSeo = is_array($content->meta['seo'] ?? null) ? $content->meta['seo'] : [];
         $title = SeoTitle::normalize((string) ($metaSeo['title'] ?? $content->title), $content->source_name);
 
