@@ -92,7 +92,7 @@ it('report-orphan-index-states finds stale-URL and content-gone orphans, keeps c
         ->and(PageIndexState::withoutGlobalScopes()->find($liveId))->not->toBeNull();
 });
 
-it('report-title-lengths measures the page portion and the brand-suffix headroom, read-only', function () {
+it('report-title-lengths measures the REAL composed <title> (guard applied), read-only', function () {
     $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://spg.example']);
 
     // Home carries the service_area; coverage states drive the region qualifier on service/hub titles.
@@ -104,7 +104,8 @@ it('report-title-lengths measures the page portion and the brand-suffix headroom
     CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3401', 'name' => 'Newark', 'state' => 'NJ']);
     CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4209', 'name' => 'Reading', 'state' => 'PA']);
 
-    // Service page: region-qualifies to a 59-char portion (≤60), but + " | Sump Pump Gurus" (18) blows past 60.
+    // Service page: region-qualifies, then the brand pushes the composed <title> to 77 chars — with no
+    // separator to shorten at (" & " is not one), the guard correctly leaves it whole, so it renders over 60.
     Content::factory()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
         'status' => ContentStatus::Published, 'slug' => 'basement-waterproofing',
@@ -119,21 +120,21 @@ it('report-title-lengths measures the page portion and the brand-suffix headroom
 
     $entry = app(TitleLengthReport::class)->forSite($site->fresh());
 
+    // `over` is the TRUE count of composed titles > 60 (the guard is applied), not a projection.
     expect($entry['total'])->toBe(3)
-        ->and($entry['brand_cost'])->toBe(18)                       // " | " + "Sump Pump Gurus"
-        ->and($entry['over'])->toBe(0)                              // page portion is capped at 60 by construction
-        ->and($entry['brand_over'])->toBe(1)                        // only the region-qualified service page overflows
-        ->and($entry['max'])->toBe(59);
+        ->and($entry['over'])->toBe(1)     // only the service page's composed title exceeds 60
+        ->and($entry['max'])->toBe(77);
 
-    // The service page: portion within 60, projected over once the brand is composed on.
     $service = collect($entry['pages'])->firstWhere('slug', 'basement-waterproofing');
-    expect($service['title'])->toBe('Basement Waterproofing in New Jersey & Eastern Pennsylvania')
-        ->and($service['len'])->toBe(59)
-        ->and($service['over'])->toBeFalse()
-        ->and($service['with_brand'])->toBe(77)
-        ->and($service['brand_over'])->toBeTrue();
+    expect($service['title'])->toBe('Basement Waterproofing in New Jersey & Eastern Pennsylvania | Sump Pump Gurus')
+        ->and($service['len'])->toBe(77)
+        ->and($service['over'])->toBeTrue();
 
-    // The command runs read-only and reports the structural finding + the headroom count.
+    // The home page composes brand-FIRST and comfortably fits.
+    $home = collect($entry['pages'])->firstWhere('slug', 'home');
+    expect($home['title'])->toBe('Sump Pump Gurus | Home')
+        ->and($home['over'])->toBeFalse();
+
     $this->artisan('launchpad:report-title-lengths')
         ->assertSuccessful()
         ->expectsOutputToContain('READ-ONLY');

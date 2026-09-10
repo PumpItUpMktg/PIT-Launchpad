@@ -1048,6 +1048,16 @@ class MetaBlobAssembler
     }
 
     /**
+     * The page's fully-composed document title exactly as it ships — normalize + (service/hub) service-area
+     * qualifier + brand suffix and length guard. Public so a report can measure the REAL rendered title
+     * (`<title>`/og:title carry this same value), never a re-derived length proxy.
+     */
+    public function documentTitle(Content $content): string
+    {
+        return $this->seoTitle($content);
+    }
+
+    /**
      * The page's normalized SEO/document title — the single source for the <title>,
      * the OG title, and the breadcrumb leaf, so they never drift.
      */
