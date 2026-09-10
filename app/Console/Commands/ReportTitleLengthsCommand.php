@@ -7,23 +7,19 @@ use App\Publishing\TitleLengthReport;
 use Illuminate\Console\Command;
 
 /**
- * READ-ONLY report of rendered page-title lengths across the portfolio (or one site with `--site=`). Changes
- * nothing. It measures the page portion of each published page's title — normalized, plus the service-area
- * region on service/hub pages — i.e. the value BEFORE any brand suffix is composed on, and the projected
- * length once the brand suffix is added.
- *
- * The finding it surfaces: the page portion can never exceed 60 (normalize + the region qualifier both cap
- * at 60), so the literal "titles over 60 before the suffix" count is 0 by construction. The number that
- * decides whether shortening is needed is HEADROOM — how many titles have no room for the brand suffix
- * (`page portion + " | brand" > 60`). `--over` lists only those.
+ * READ-ONLY report of the REAL rendered `<title>` length across the portfolio (or one site with `--site=`).
+ * Changes nothing. It measures the actual composed title (MetaBlobAssembler::documentTitle — normalize +
+ * service/hub qualifier + brand suffix AND the length guard), the same value the `<title>`/og:title ship —
+ * NOT a `page + " | brand"` projection. So `over` is the TRUE count of published titles that exceed 60
+ * characters as they render live. `--over` lists only those.
  */
 class ReportTitleLengthsCommand extends Command
 {
     protected $signature = 'launchpad:report-title-lengths
         {--site= : Report only this site id (default: all sites)}
-        {--over : List only the pages with no headroom for the brand suffix}';
+        {--over : List only the pages whose composed title exceeds 60 characters}';
 
-    protected $description = 'READ-ONLY: report published page-title lengths (page portion + projected brand-suffix fit). Changes nothing.';
+    protected $description = 'READ-ONLY: report the real composed <title> length per published page (guard applied). Changes nothing.';
 
     public function handle(TitleLengthReport $report): int
     {
@@ -49,36 +45,32 @@ class ReportTitleLengthsCommand extends Command
         $onlyOver = (bool) $this->option('over');
         $totalPages = 0;
         $totalOver = 0;
-        $totalBrandOver = 0;
 
         foreach ($sites as $entry) {
             /** @var Site $site */
             $site = $entry['site'];
             $totalPages += $entry['total'];
             $totalOver += $entry['over'];
-            $totalBrandOver += $entry['brand_over'];
 
             $this->newLine();
             $this->line("<info>{$entry['brand']}</info>  ({$site->id})");
             $this->line(sprintf(
-                '  %d published page(s) · %d page portion(s) over %d · %d with NO room for the brand suffix · longest portion %d · suffix costs %d char(s)',
+                '  %d published page(s) · %d composed <title>(s) over %d · longest %d',
                 $entry['total'],
                 $entry['over'],
                 TitleLengthReport::LIMIT,
-                $entry['brand_over'],
                 $entry['max'],
-                $entry['brand_cost'],
             ));
 
-            // Coarse histogram of page-portion lengths.
+            // Coarse histogram of composed-title lengths.
             $hist = [];
             foreach ($entry['buckets'] as $range => $count) {
                 $hist[] = "{$range}: {$count}";
             }
-            $this->line('  page-portion distribution — '.implode('  ', $hist));
+            $this->line('  composed-title distribution — '.implode('  ', $hist));
 
             $pages = $onlyOver
-                ? array_values(array_filter($entry['pages'], fn (array $p): bool => $p['brand_over']))
+                ? array_values(array_filter($entry['pages'], fn (array $p): bool => $p['over']))
                 : $entry['pages'];
 
             if ($pages === []) {
@@ -89,30 +81,22 @@ class ReportTitleLengthsCommand extends Command
             foreach ($pages as $p) {
                 $rows[] = [
                     $p['len'].($p['over'] ? ' ⚠' : ''),
-                    $p['with_brand'].($p['brand_over'] ? ' ⚠' : ''),
                     $p['page_type'],
                     $p['slug'],
                     $p['title'],
                 ];
             }
-            $this->table(['Portion', '+Brand', 'Type', 'Slug', 'Rendered title (before brand)'], $rows);
+            $this->table(['Len', 'Type', 'Slug', 'Composed <title> (as it renders)'], $rows);
         }
 
         $this->newLine();
         $this->line(sprintf(
-            'Portfolio: %d of %d published page(s) have a page portion over %d BEFORE any suffix (0 expected — normalize + the region qualifier cap at %d).',
+            'Portfolio: %d of %d published page(s) render a <title> over %d characters (the real composed value, guard applied).',
             $totalOver,
             $totalPages,
             TitleLengthReport::LIMIT,
-            TitleLengthReport::LIMIT,
         ));
-        $this->line(sprintf(
-            '           %d of %d have NO room for the brand suffix (page portion + " | brand" > %d) — the guard drops a subtitle where it can, else leaves the title over-length.',
-            $totalBrandOver,
-            $totalPages,
-            TitleLengthReport::LIMIT,
-        ));
-        $this->comment('READ-ONLY — nothing was changed. This is the corpus measurement before deciding any title shortening.');
+        $this->comment('READ-ONLY — nothing was changed. This is the true over-length count as titles render live.');
 
         return self::SUCCESS;
     }
