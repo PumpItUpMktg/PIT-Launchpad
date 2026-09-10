@@ -254,6 +254,33 @@ final class ServiceAreaResolver
         return ['county' => $this->subjectCounty($siteId, $subjectGeoId), 'towns' => $towns, 'anchored' => true];
     }
 
+    /**
+     * The centroid (lat/lng) of a subject TOWN, resolved from CoverageArea by geo_id then name-key — the
+     * same resolution {@see neighbours()} uses to measure distance, exposed for other proximity consumers
+     * (the "jobs near {town}" selection). Returns nulls when the town is un-anchored (no geo_id and no
+     * name match) — the caller then has no origin to rank from, exactly as neighbours() drops.
+     *
+     * @return array{lat: ?float, lng: ?float}
+     */
+    public function subjectCentroid(string $siteId, ?string $subjectGeoId, string $subjectName): array
+    {
+        $byGeo = [];
+        $byName = [];
+        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->get(['name', 'geo_id', 'lat', 'lng']) as $a) {
+            $entry = ['lat' => $a->lat !== null ? (float) $a->lat : null, 'lng' => $a->lng !== null ? (float) $a->lng : null];
+            $gid = trim((string) $a->geo_id);
+            if ($gid !== '') {
+                $byGeo[$gid] = $entry;
+            }
+            $byName[$this->key((string) $a->name)] = $entry;
+        }
+
+        $origin = (new TownGeoFallback('ServiceAreaResolver.subjectCentroid', $siteId))
+            ->resolve($subjectGeoId, $this->key($subjectName), $byGeo, $byName);
+
+        return is_array($origin) ? ['lat' => $origin['lat'], 'lng' => $origin['lng']] : ['lat' => null, 'lng' => null];
+    }
+
     /** The town's OWN county name (its geo_id's 5-digit county prefix, if it's one the site serves), or null. */
     private function subjectCounty(string $siteId, ?string $subjectGeoId): ?string
     {
