@@ -77,7 +77,7 @@ class RepushLocationTitlesCommand extends Command
         $this->newLine();
         $dispatched = 0;
         foreach ($sites as $entry) {
-            $dispatched += $this->execute($entry['site'], $composer);
+            $dispatched += $this->backfillSite($entry['site'], $composer);
         }
         $this->info(sprintf('Backfilled + queued %d PublishContent job(s) for anchored location pages (idempotent by ULID; un-anchored skipped).', $dispatched));
 
@@ -133,7 +133,7 @@ class RepushLocationTitlesCommand extends Command
      * Backfill + re-push one site's ANCHORED published location pages. Writes only meta.seo.title (rest of
      * meta preserved), dispatched in throttled waves. Returns the number of pages touched.
      */
-    private function execute(Site $site, LocationTitle $composer): int
+    private function backfillSite(Site $site, LocationTitle $composer): int
     {
         $rows = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
