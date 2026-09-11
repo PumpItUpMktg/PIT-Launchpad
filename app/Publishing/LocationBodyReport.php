@@ -57,7 +57,7 @@ final class LocationBodyReport
     /**
      * One site's drafted-body census. `pages` is foreign-town first, then by body-hit depth.
      *
-     * @return array{site: Site, brand: string, pages: list<array{slug: string, auth: string, h1: string, status: string, foreign: list<string>, body_hits: int}>, total: int, anchored: int, foreign_town: int, weak: int, ok: int}
+     * @return array{site: Site, brand: string, pages: list<array{id: string, slug: string, auth: string, h1: string, status: string, foreign: list<string>, body_hits: int}>, total: int, anchored: int, foreign_town: int, weak: int, ok: int}
      */
     public function forSite(Site $site): array
     {
@@ -66,7 +66,7 @@ final class LocationBodyReport
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Location->value)
             ->where('status', ContentStatus::Published->value)
-            ->get(['site_id', 'slug', 'title', 'slot_payload', 'geo_id', 'location_id', 'parent_location_id']);
+            ->get(['id', 'site_id', 'slug', 'title', 'slot_payload', 'geo_id', 'location_id', 'parent_location_id']);
 
         $pages = [];
         $anchored = 0;
@@ -95,6 +95,7 @@ final class LocationBodyReport
             $ok += $status === 'ok' ? 1 : 0;
 
             $pages[] = [
+                'id' => (string) $content->id,
                 'slug' => (string) $content->slug,
                 'auth' => $authCity,
                 'h1' => $h1,
