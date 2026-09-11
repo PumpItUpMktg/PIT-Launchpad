@@ -180,7 +180,7 @@ it('reviews and jobs sections are strictly gated — omitted with the null provi
 
 it('provider-fed reviews and jobs render the moment real providers bind', function () {
     $site = locRelaySite();
-    $location = locRelayLocation($site);
+    $location = locRelayLocation($site, ['lat' => 40.12, 'lng' => -75.34]); // hub measures jobs from its own coords
     $page = locRelayPage($site, $location);
 
     app()->instance(LocalReviewProvider::class, new class implements LocalReviewProvider
@@ -194,6 +194,11 @@ it('provider-fed reviews and jobs render the moment real providers bind', functi
     {
         public function for(Location $location): array
         {
+            return [];
+        }
+
+        public function near(string $siteId, float $lat, float $lng, float $radius): array
+        {
             return [new LocalJob('Sump pump install', 'Full perimeter drain + sump in a 1950s foundation.', [], 'Audubon', null, 'March 2026')];
         }
     });
@@ -204,6 +209,41 @@ it('provider-fed reviews and jobs render the moment real providers bind', functi
         ->toContain('What neighbors say')
         ->toContain('Sump pump install')
         ->toContain('Audubon · March 2026')
+        ->toContain('lp-jobs');
+});
+
+it('a TOWN page measures recent jobs from its OWN centroid, not the parent office', function () {
+    $site = locRelaySite();
+    $parent = locRelayLocation($site, ['lat' => 40.12, 'lng' => -75.34]); // Trooper office
+    // The town's own centroid (geo_id → CoverageArea), deliberately offset from the parent office.
+    CoverageArea::factory()->create([
+        'site_id' => $site->id, 'name' => 'Neptune', 'state' => 'NJ', 'type' => MunicipalityType::CountySubdivision,
+        'geo_id' => '3401799999', 'lat' => 40.20, 'lng' => -74.03, 'source_location_ids' => [$parent->id],
+    ]);
+    $town = locRelayPage($site, $parent, [
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '3401799999',
+        'title' => 'Neptune, NJ', 'slug' => 'neptune-nj',
+    ]);
+
+    // The fake returns a job ONLY when measured from the TOWN centroid (40.20), never the parent (40.12).
+    app()->instance(LocalJobProvider::class, new class implements LocalJobProvider
+    {
+        public function for(Location $location): array
+        {
+            return [];
+        }
+
+        public function near(string $siteId, float $lat, float $lng, float $radius): array
+        {
+            return abs($lat - 40.20) < 0.001
+                ? [new LocalJob('Sump pit swap', 'Replaced a failed pit in a bungalow.', [], 'Neptune', null, 'April 2026')]
+                : [];
+        }
+    });
+
+    $markup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+
+    expect($markup)->toContain('Sump pit swap')       // measured from Neptune's centroid, so it rendered
         ->toContain('lp-jobs');
 });
 

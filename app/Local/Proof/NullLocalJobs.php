@@ -11,4 +11,9 @@ final class NullLocalJobs implements LocalJobProvider
     {
         return [];
     }
+
+    public function near(string $siteId, float $lat, float $lng, float $radius): array
+    {
+        return [];
+    }
 }
