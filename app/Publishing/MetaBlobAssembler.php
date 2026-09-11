@@ -1003,14 +1003,19 @@ class MetaBlobAssembler
     private function breadcrumbShortName(Content $content): string
     {
         $title = $this->seoTitle($content);
+
+        // Cut at the EARLIEST-position separator, not the first one in list order. A title that carries both
+        // a subtitle and the brand ("Foo: Bar | Brand") must yield the short name "Foo" — stripping the brand
+        // pipe first (it appears later in the string) would wrongly leave "Foo: Bar".
+        $cut = null;
         foreach ([' — ', ' – ', ' | ', ': ', ' - '] as $sep) {
             $pos = mb_strpos($title, $sep);
             if ($pos !== false && $pos > 0) {
-                return trim(mb_substr($title, 0, $pos));
+                $cut = $cut === null ? $pos : min($cut, $pos);
             }
         }
 
-        return $title;
+        return $cut !== null ? trim(mb_substr($title, 0, $cut)) : $title;
     }
 
     /**
