@@ -132,7 +132,11 @@ it('the composed page is well-formed — every block-level tag balances', functi
 
 it('the breadcrumb leaf uses the page short name, not the SEO subtitle', function () {
     (new WireframeKitSeeder)->run();
-    $site = Site::factory()->create(['domain_url' => 'https://spg.test']);
+    // A SHORT brand keeps "…: Fixes | SPG" under the 60-char guard, so the composed title carries BOTH the
+    // ':' subtitle and the ' | ' brand — the exact shape that must strip at the earliest separator (the
+    // colon), not the brand pipe. (A random factory brand made this flaky: a long one tripped the guard and
+    // masked the bug.)
+    $site = Site::factory()->create(['domain_url' => 'https://spg.test', 'brand_name' => 'SPG']);
     $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Basement Waterproofing']);
     $kit = WireframeKit::query()->where('page_type', 'hub')->whereNull('site_id')->orderByDesc('version')->firstOrFail();
     $page = Content::factory()->create([
