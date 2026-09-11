@@ -123,20 +123,21 @@ it('a landing whose pin is unresolvable titles from its own "{City}, {ST}" ident
         ->toBe('Sump Pump Services in Hoboken, NJ | Sump Pump Gurus');
 });
 
-it('a landing with an unresolvable pin AND a clobbered title still titles from its slug', function () {
+it('an unresolvable-pin landing whose stored title already names its place keeps that stored title', function () {
     $site = locTitleSite();
     locTitlePillar($site);
 
-    // Both the stored SEO title and the row title are geography-less prose; only the slug still names it.
+    // The stored SEO title already leads with the place — a good hand/factory title — so it is preserved,
+    // NOT replaced by the generic pillar composition. The rescue fires only for a title that drops the place.
     $landing = Content::factory()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
         'location_id' => null, 'parent_location_id' => null,
-        'title' => 'Sump & sewage pump service and replacement', 'slug' => 'markets/hoboken-nj',
-        'meta' => ['seo' => ['title' => 'Sump & sewage pump service and replacement', 'meta_description' => 'x']],
+        'title' => 'Hoboken, NJ', 'slug' => 'hoboken-nj',
+        'meta' => ['seo' => ['title' => 'Emergency Sump Pump Repair in Hoboken, NJ', 'meta_description' => 'x']],
     ]);
 
     expect(app(MetaBlobAssembler::class)->documentTitle($landing->fresh()))
-        ->toBe('Sump Pump Services in Hoboken, NJ | Sump Pump Gurus');
+        ->toBe('Emergency Sump Pump Repair in Hoboken, NJ | Sump Pump Gurus');
 });
 
 it('with neither a service nor a captured trade the deterministic title names the authoritative place alone', function () {

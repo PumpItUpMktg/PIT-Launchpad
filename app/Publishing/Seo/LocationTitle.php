@@ -40,6 +40,38 @@ final class LocationTitle
     }
 
     /**
+     * The deterministic "{Trade} in {City}, {ST}" for an UN-ANCHORED hub/landing page, composed from the
+     * page's OWN "{City}, {ST}" identity (its LocationSubject subject), returned WITH the resolved city so
+     * the caller can prefer it only over a stored title that fails to name that place. This rescues a
+     * storefront-hub/market landing whose pin is unresolvable and whose stored SEO title was clobbered to a
+     * geography-less phrase.
+     *
+     * Null when the page is a TOWN (an un-anchored town's title may be a drafter hallucination of the WRONG
+     * town — never composed from; that is #823's caution, preserved) or when no reliable "{City}, {ST}"
+     * place is derivable (an arbitrary slug/title, so no place is ever invented).
+     *
+     * @return array{title: string, city: string}|null
+     */
+    public function fromIdentity(Content $content): ?array
+    {
+        $isTown = $content->location_id === null && $content->parent_location_id !== null;
+        if ($isTown) {
+            return null;
+        }
+
+        ['city' => $city, 'state' => $state] = $this->subject->resolve($content);
+        if ($city === '' || $state === '') {
+            return null;
+        }
+
+        $trade = $this->trade($content);
+        $place = $city.', '.$state;
+        $title = SeoTitle::normalize($trade !== '' ? $trade.' in '.$place : $place, $content->source_name);
+
+        return ['title' => $title, 'city' => $city];
+    }
+
+    /**
      * The service label the title leads with, in preference order: the page's own primary service, the
      * site's pillar service (both real, proper-cased Service names — mirrors CityKeywordTracker's head term),
      * and finally the site's captured trade noun (SiloBlueprint.trade — the same source the location H1
