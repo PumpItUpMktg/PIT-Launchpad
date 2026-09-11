@@ -113,7 +113,7 @@ final class LocationSubject
 
         $city = ucwords(str_replace('-', ' ', $segment));
 
-        return $city !== '' ? ['city' => $city, 'state' => $state] : null;
+        return ['city' => $city, 'state' => $state];
     }
 
     /**
