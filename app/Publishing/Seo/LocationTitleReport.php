@@ -151,10 +151,19 @@ final class LocationTitleReport
         return trim((string) ($seo['title'] ?? $content->title));
     }
 
-    /** The town an "… in {Town}, {ST}" title names ('' when the title carries no such clause). */
+    /**
+     * The town a title names — both shapes the deterministic template can render: "{Trade} in {Town}, {ST}"
+     * (the town after "in") and the place-only "{Town}, {ST}" (the no-trade form that leads with the town).
+     * '' when the title carries neither, so a genuinely town-less title still reads as missing.
+     */
     private function townInTitle(string $title): string
     {
         if (preg_match('/\bin\s+(.+?),\s*[A-Za-z]{2}\b/i', $title, $m) === 1) {
+            return trim($m[1]);
+        }
+        // Place-only "{Town}, {ST}" leading the title — the state as a 2-letter uppercase code so a stray
+        // "Word, Ab…" clause isn't mistaken for a town.
+        if (preg_match('/^(.+?),\s*[A-Z]{2}\b/', $title, $m) === 1) {
             return trim($m[1]);
         }
 
