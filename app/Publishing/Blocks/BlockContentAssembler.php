@@ -873,7 +873,7 @@ final class BlockContentAssembler
             serviceCards: $this->locationServiceCards($content),
             coverage: $coverage,
             reviews: $this->locationReviews($location),
-            jobs: $this->locationJobs($location),
+            jobs: $this->locationJobs($content, $location, $isTown),
             localPosts: $this->localPosts($content, $city),
             faqs: $this->faqItems($slots, $this->offersEmergency($content)),
             trustStats: $this->trustStats($content),
@@ -1108,14 +1108,34 @@ final class BlockContentAssembler
     }
 
     /**
-     * Provider-fed nearby jobs mapped to the job-card shape. Same contract-first gating as reviews.
+     * Provider-fed nearby jobs mapped to the job-card shape — measured from the page's SUBJECT: a town page
+     * from its own centroid (geo_id → CoverageArea), a hub from its location's coordinates, within the
+     * neighbour radius, capped at 3. Drops (empty) when the subject can't be located or nothing is in range,
+     * so a town no longer shows its parent office's market jobs. Same contract-first gating as reviews.
      *
      * @return list<array{title: string, description: string, photo: string, town: string, date: string}>
      */
-    private function locationJobs(Location $location): array
+    private function locationJobs(Content $content, Location $location, bool $isTown): array
     {
+        if ($isTown) {
+            ['lat' => $lat, 'lng' => $lng] = $this->serviceAreas->subjectCentroid(
+                (string) $content->site_id,
+                $content->geo_id,
+                (string) $content->title,
+            );
+        } else {
+            $lat = $location->lat !== null ? (float) $location->lat : null;
+            $lng = $location->lng !== null ? (float) $location->lng : null;
+        }
+
+        if ($lat === null || $lng === null) {
+            return []; // no measurable subject → the section drops
+        }
+
+        $radius = (float) config('launchpad.link_plan.neighbour_radius_miles', 20.0);
+
         $out = [];
-        foreach ($this->localJobs->for($location) as $job) {
+        foreach ($this->localJobs->near((string) $content->site_id, $lat, $lng, $radius) as $job) {
             $out[] = [
                 'title' => $job->title,
                 'description' => $job->description,

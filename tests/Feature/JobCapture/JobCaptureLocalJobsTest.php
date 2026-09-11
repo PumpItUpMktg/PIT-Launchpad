@@ -101,3 +101,27 @@ it('returns nothing when the site has no published jobs', function () {
 
     expect(app(JobCaptureLocalJobs::class)->for($location->fresh()))->toBe([]);
 });
+
+it('near() selects published jobs within radius of an arbitrary subject point, nearest-first', function () {
+    $site = Site::factory()->create();
+    $city = JobCity::factory()->create(['name' => 'Somewhere']);
+
+    // Subject point (a town centroid) at 40.00/-75.00, radius 20mi.
+    publishedJobIn($site, $city, ['post_title' => 'Mid job', 'lat_jittered' => 40.15, 'lng_jittered' => -75.10]);   // ~12 mi
+    publishedJobIn($site, $city, ['post_title' => 'Near job', 'lat_jittered' => 40.05, 'lng_jittered' => -75.02]);  // ~4 mi
+    publishedJobIn($site, $city, ['post_title' => 'Far job', 'lat_jittered' => 42.00, 'lng_jittered' => -78.00]);   // way out of range
+
+    $jobs = app(JobCaptureLocalJobs::class)->near((string) $site->id, 40.00, -75.00, 20.0);
+
+    expect($jobs)->toHaveCount(2)                 // the far job is excluded
+        ->and($jobs[0]->title)->toBe('Near job')  // nearest first
+        ->and($jobs[1]->title)->toBe('Mid job');
+});
+
+it('near() returns nothing when no job is in range', function () {
+    $site = Site::factory()->create();
+    $city = JobCity::factory()->create(['name' => 'Somewhere']);
+    publishedJobIn($site, $city, ['post_title' => 'Far job', 'lat_jittered' => 42.00, 'lng_jittered' => -78.00]);
+
+    expect(app(JobCaptureLocalJobs::class)->near((string) $site->id, 40.00, -75.00, 20.0))->toBe([]);
+});

@@ -59,6 +59,32 @@ final class JobCaptureLocalJobs implements LocalJobProvider
     }
 
     /**
+     * Published jobs within $radius miles of an arbitrary subject point, nearest-first — pure proximity from
+     * the public (jittered) coordinates, no served-town-name membership (the subject is a point, not a
+     * location). Powers the "jobs near {town}" selection so a town page measures from its own centroid.
+     *
+     * @return list<LocalJob>
+     */
+    public function near(string $siteId, float $lat, float $lng, float $radius): array
+    {
+        $miles = fn (Job $job): float => $this->haversineMiles($lat, $lng, (float) $job->lat_jittered, (float) $job->lng_jittered);
+
+        return Job::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->where('status', JobStatus::Published->value)
+            ->whereNotNull('lat_jittered')
+            ->whereNotNull('lng_jittered')
+            ->with(['city', 'jobTypes'])
+            ->get()
+            ->filter(fn (Job $job): bool => $miles($job) <= $radius)
+            ->sortBy(fn (Job $job): float => $miles($job))
+            ->take(self::MAX)
+            ->map(fn (Job $job): LocalJob => $this->toLocalJob($job))
+            ->values()
+            ->all();
+    }
+
+    /**
      * The location's served-town + own-city names, normalized for membership matching.
      *
      * @return array<string, true>
