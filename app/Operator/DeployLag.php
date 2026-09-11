@@ -51,7 +51,7 @@ final class DeployLag
      */
     public function compute(bool $fetch = false): array
     {
-        $sha = $this->git(['rev-parse', 'HEAD']);
+        $sha = $this->deployedSha();
         if ($fetch) {
             $this->git(['fetch', '--quiet', 'origin', 'main']);
         }
@@ -68,7 +68,9 @@ final class DeployLag
 
         return [
             'deployed_sha' => $sha,
-            'deployed_short' => $this->git(['rev-parse', '--short', 'HEAD']) ?? ($sha !== null ? substr($sha, 0, 12) : null),
+            // Short form derived from the resolved SHA so it never disagrees with deployed_sha (git --short
+            // would report the working-tree HEAD, which a build-time APP_REVISION need not match).
+            'deployed_short' => $sha !== null ? substr($sha, 0, 12) : null,
             'subject' => $this->git(['show', '-s', '--format=%s', 'HEAD']),
             'committed_at' => $this->git(['show', '-s', '--format=%cI', 'HEAD']),
             'behind' => $behind,
@@ -131,6 +133,30 @@ final class DeployLag
     private function staleHours(): int
     {
         return max(1, (int) config('launchpad.deploy_lag_stale_hours', 6));
+    }
+
+    /**
+     * The deployed build's git SHA. A production artifact has no `.git`, so prefer a build-time source — the
+     * `APP_REVISION` env (via `config('app.revision')`) the deploy pipeline stamps, then a committed
+     * `REVISION` file at the app root — and fall back to `git rev-parse HEAD` for local development. Null
+     * only when none resolve.
+     */
+    private function deployedSha(): ?string
+    {
+        $configured = config('app.revision');
+        if (is_string($configured) && trim($configured) !== '') {
+            return trim($configured);
+        }
+
+        $file = base_path('REVISION');
+        if (is_file($file)) {
+            $contents = trim((string) @file_get_contents($file));
+            if ($contents !== '') {
+                return $contents;
+            }
+        }
+
+        return $this->git(['rev-parse', 'HEAD']);
     }
 
     /** Run git in the app root; trimmed stdout, or null on failure (non-zero exit, or git/.git missing). */

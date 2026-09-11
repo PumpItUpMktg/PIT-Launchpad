@@ -36,3 +36,13 @@ it('the lobby notice fires ONLY when stale, re-derived live from the stored olde
     Cache::forget('deploy_lag');
     expect($lag->notice())->toBeNull();
 });
+
+it('reads the deployed SHA from the build-time revision (no git needed in a prod artifact)', function () {
+    // The deploy pipeline stamps APP_REVISION; a production build has no .git to shell out to.
+    config(['app.revision' => '6351c834a040473a04fa77e8a7a0f70c2142e3a8']);
+
+    $snap = (new DeployLag)->compute();
+
+    expect($snap['deployed_sha'])->toBe('6351c834a040473a04fa77e8a7a0f70c2142e3a8')
+        ->and($snap['deployed_short'])->toBe('6351c834a040'); // first 12, derived from the same SHA (not git --short)
+});
