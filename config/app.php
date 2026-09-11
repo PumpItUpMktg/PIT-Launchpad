@@ -123,4 +123,18 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Deployed Revision
+    |--------------------------------------------------------------------------
+    |
+    | The git SHA of the deployed build, stamped at build time — a production
+    | artifact has no .git, so DeployLag cannot shell out for it. Set by the
+    | deploy pipeline; DeployLag falls back to a committed REVISION file, then
+    | to git for local development.
+    |
+    */
+
+    'revision' => env('APP_REVISION'),
+
 ];
