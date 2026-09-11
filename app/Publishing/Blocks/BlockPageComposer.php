@@ -952,6 +952,27 @@ final class BlockPageComposer
      * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero trust row
      * @param  bool  $preview  operator proof-view — drafted sections show labeled placeholders; the provider-gated reviews/jobs stay strictly data-gated even here
      */
+    /**
+     * A TOWN page's NAP shows the PARENT office's contact truths (its address/phone/hours), so the heading
+     * must not claim an office in the town ("Our {Town} location"): it reads "Serving {Town} from our
+     * {ParentCity} office". A hub's NAP is its own office → "Our {City} location". Degrades cleanly when a
+     * piece is missing (no parent city → "Serving {Town}"; no town → "Contact this location").
+     */
+    private function napHeading(bool $isTown, string $city, string $parentCity): string
+    {
+        $city = trim($city);
+        if ($city === '') {
+            return 'Contact this location';
+        }
+        if ($isTown) {
+            return trim($parentCity) !== ''
+                ? 'Serving '.$city.' from our '.trim($parentCity).' office'
+                : 'Serving '.$city;
+        }
+
+        return 'Our '.$city.' location';
+    }
+
     public function composeLocation(
         array $slots,
         array $images,
@@ -975,6 +996,7 @@ final class BlockPageComposer
         array $coverageByCounty = [],
         array $nearbyTowns = [],
         bool $isTown = false,
+        string $parentCity = '',
         array $localConditions = [],
         bool $hasMap = false,
         bool $areasMapAvailable = false,
@@ -1024,7 +1046,7 @@ final class BlockPageComposer
         // drops, never a fabricated line).
         $nap = $this->sections->contactDetails(
             eyebrow: 'Visit or call',
-            heading: $city !== '' ? 'Our '.$city.' location' : 'Contact this location',
+            heading: $this->napHeading($isTown, $city, $parentCity),
             phoneDisplay: $ctx->phoneDisplay,
             phoneTel: $ctx->phoneTel,
             email: $email,

@@ -818,6 +818,15 @@ final class BlockContentAssembler
         // neighbour framing, and H1 formula-fallback below all read $city/$state.
         ['city' => $city, 'state' => $state] = $this->locationSubject->resolve($content);
 
+        // A TOWN page's NAP shows the PARENT office's contact info, so its heading names that office
+        // ("Serving {town} from our {parentCity} office") rather than claiming an office in the town itself.
+        // Hubs use their own city and ignore this.
+        $parentCity = '';
+        if ($isTown) {
+            ['city' => $pc] = $location->cityState();
+            $parentCity = $pc !== '' ? $pc : trim((string) $location->name);
+        }
+
         // The location's own NAP — its address (only for a real STOREFRONT, like the contact page:
         // a mobile business's base address stays private), email, and hours. This is a GBP location
         // hub, so its own contact truths lead.
@@ -875,6 +884,7 @@ final class BlockContentAssembler
             coverageByCounty: $coverageByCounty,
             nearbyTowns: $nearbyTowns,
             isTown: $isTown,
+            parentCity: $parentCity,
             localConditions: $this->locationGroundingFacts($location),
             hasMap: is_array($slots['location_map'] ?? null),
             areasMapAvailable: $areasMapAvailable,

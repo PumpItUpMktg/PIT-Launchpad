@@ -731,3 +731,31 @@ it('a TOWN page with no resolvable centroid drops the coverage section entirely 
         ->not->toContain('nearby communities')
         ->not->toContain('lp-areas--nearby');
 });
+
+it('a TOWN page NAP heading serves the town from the PARENT office, not "Our {town} location"', function () {
+    $site = locRelaySite();
+    $parent = locRelayLocation($site); // Trooper, PA — the parent GBP office
+    $town = locRelayPage($site, $parent, [
+        'location_id' => null,
+        'parent_location_id' => $parent->id,
+        'title' => 'Pequannock, NJ',
+        'slug' => 'pequannock-nj',
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+
+    // The NAP shows the Trooper office's contact info, so the heading frames it as serving-from, never an
+    // office in the town.
+    expect($markup)->toContain('Serving Pequannock from our Trooper office')
+        ->and($markup)->not->toContain('Our Pequannock location');
+});
+
+it('a HUB page NAP heading stays "Our {city} location" (its own office)', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site);
+    $page = locRelayPage($site, $location); // a hub (location_id set)
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toContain('Our Trooper location');
+});
