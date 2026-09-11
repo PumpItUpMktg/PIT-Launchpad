@@ -6,6 +6,7 @@ use App\Enums\ServiceSiloRole;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
+use App\Models\SiloBlueprint;
 use App\Publishing\Blocks\LocationSubject;
 use App\Support\SeoTitle;
 
@@ -39,9 +40,11 @@ final class LocationTitle
     }
 
     /**
-     * The site's pillar-service head term (the page's own primary service, else the site's pillar service) —
-     * the short, real service label the title leads with. '' when the site has no service to anchor on (the
-     * title then names the place alone). Mirrors the CityKeywordTracker head-term logic.
+     * The service label the title leads with, in preference order: the page's own primary service, the
+     * site's pillar service (both real, proper-cased Service names — mirrors CityKeywordTracker's head term),
+     * and finally the site's captured trade noun (SiloBlueprint.trade — the same source the location H1
+     * formula uses, so title and H1 agree; capitalised to read as a title term). '' only when the site has
+     * neither a service nor a captured trade, and the title then names the place alone.
      */
     private function trade(Content $content): string
     {
@@ -57,7 +60,16 @@ final class LocationTitle
             ->where('silo_role', ServiceSiloRole::Pillar->value)
             ->orderBy('name')
             ->first(['name']);
+        if ($pillar !== null && trim((string) $pillar->name) !== '') {
+            return trim((string) $pillar->name);
+        }
 
-        return $pillar !== null ? trim((string) $pillar->name) : '';
+        // Last resort: the owner-interview trade noun the H1 formula falls back to, so the title still leads
+        // with the service rather than the bare town on a tenant with no pillar service designated.
+        $blueprintTrade = SiloBlueprint::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->value('trade');
+
+        return is_string($blueprintTrade) && trim($blueprintTrade) !== '' ? ucfirst(trim($blueprintTrade)) : '';
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Service;
+use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\MetaBlobAssembler;
@@ -105,7 +106,7 @@ it('a HUB page titles deterministically from its own Location city/state', funct
         ->toBe('Sump Pump Services in Hackensack, NJ | Sump Pump Gurus');
 });
 
-it('with no pillar service the deterministic title names the authoritative place alone', function () {
+it('with neither a service nor a captured trade the deterministic title names the authoritative place alone', function () {
     $site = locTitleSite();
     $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hudson office']);
     locTitleCoverage($site, $parent, '3401700001', 'Neptune');
@@ -119,4 +120,22 @@ it('with no pillar service the deterministic title names the authoritative place
 
     expect(app(MetaBlobAssembler::class)->documentTitle($town->fresh()))
         ->toBe('Neptune, NJ | Sump Pump Gurus');
+});
+
+it('falls back to the site trade noun when no pillar service is designated, so the title still leads with the service', function () {
+    $site = locTitleSite();
+    $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hudson office']);
+    locTitleCoverage($site, $parent, '3401700009', 'Bayonne');
+    // No pillar Service, no primary_service_id — only the owner-interview trade noun (the H1's source).
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'sump pump service']);
+
+    $town = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '3401700009',
+        'title' => 'Bayonne, NJ', 'slug' => 'bayonne-nj',
+        'meta' => ['seo' => ['title' => 'x', 'meta_description' => 'x']],
+    ]);
+
+    expect(app(MetaBlobAssembler::class)->documentTitle($town->fresh()))
+        ->toBe('Sump pump service in Bayonne, NJ | Sump Pump Gurus');
 });

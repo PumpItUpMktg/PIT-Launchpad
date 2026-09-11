@@ -10,6 +10,7 @@ use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Service;
 use App\Models\Site;
+use App\Publishing\Seo\LocationTitleReport;
 use Illuminate\Support\Facades\Queue;
 
 it('reports the wrong-town census read-only, then backfills + re-pushes only anchored pages on --execute', function () {
@@ -56,4 +57,29 @@ it('reports the wrong-town census read-only, then backfills + re-pushes only anc
 
     // Exactly one re-push — the anchored page. The un-anchored page is never queued.
     Queue::assertPushed(PublishContent::class, 1);
+});
+
+it('a place-only "{Town}, {ST}" stored title reads as the correct town, not missing', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.test', 'brand_name' => 'Sump Pump Gurus']);
+    $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hudson office']);
+    CoverageArea::factory()->create([
+        'site_id' => $site->id, 'geo_id' => '3401700009', 'name' => 'Bayonne', 'state' => 'NJ',
+        'type' => MunicipalityType::CountySubdivision, 'source_location_ids' => [$parent->id],
+    ]);
+
+    // The deterministic place-only form (no trade) — stored title leads with the town, no "in".
+    Content::factory()->published()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '3401700009',
+        'title' => 'Bayonne, NJ', 'slug' => 'bayonne-nj',
+        'meta' => ['seo' => ['title' => 'Bayonne, NJ', 'meta_description' => 'x']],
+    ]);
+
+    $entry = app(LocationTitleReport::class)->forSite($site->fresh());
+    $bayonne = collect($entry['pages'])->firstWhere('slug', 'bayonne-nj');
+
+    // The town IS named (as the title lead), so it's correct — not a false "missing-town".
+    expect($bayonne['status'])->toBe('correct')
+        ->and($entry['missing_town'])->toBe(0)
+        ->and($entry['wrong_town'])->toBe(0);
 });
