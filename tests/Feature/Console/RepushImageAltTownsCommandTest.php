@@ -99,3 +99,24 @@ it('never treats the brand name, a bare state code, or the page\'s own town as a
         ->and($report->rewrite('A technician in a basement', 'neptune', 'Neptune, NJ', 'Sump Pump Gurus'))
         ->toBe('A technician in a basement');                                     // no place at all
 });
+
+it('leaves a multi-state list alone and re-agrees a leading a/an with the replacement town', function () {
+    $report = app(ImageAltTownReport::class);
+
+    // "Service Across PA, NJ, and MD" is a STATE LIST — the words before "PA" are prose, not a town (the prod
+    // report proposed "Sump Whitemarsh, PA, NJ, and MD" for it). Every list shape the vision pass emits:
+    expect($report->rewrite('Sump Pump Gurus — Basement Sump Pump Service Across PA, NJ, and MD', 'whitemarsh', 'Whitemarsh, PA', 'Sump Pump Gurus'))
+        ->toBe('Sump Pump Gurus — Basement Sump Pump Service Across PA, NJ, and MD')
+        ->and($report->rewrite('Sump Pump Gurus — Basement Water Protection Across NJ, PA & MD', 'linden', 'Linden, NJ', 'Sump Pump Gurus'))
+        ->toBe('Sump Pump Gurus — Basement Water Protection Across NJ, PA & MD')
+        ->and($report->rewrite('Sump Pump Gurus — Serving NJ, PA & MD', 'secaucus', 'Secaucus, NJ', 'Sump Pump Gurus'))
+        ->toBe('Sump Pump Gurus — Serving NJ, PA & MD');
+
+    // The article agrees with the NEW town: "an Allentown" → "a Cumru" / "an Ocean"; sentence-case kept.
+    expect($report->rewrite('A technician checks a sump pump in an Allentown, PA basement', 'cumru', 'Cumru, PA', 'Sump Pump Gurus'))
+        ->toBe('A technician checks a sump pump in a Cumru, PA basement')
+        ->and($report->rewrite('A technician checks a sump pit in an Allentown, PA home.', 'ocean', 'Ocean, NJ', 'Sump Pump Gurus'))
+        ->toBe('A technician checks a sump pit in an Ocean, NJ home.')
+        ->and($report->rewrite('An Allentown, PA basement.', 'wall', 'Wall, NJ', 'Sump Pump Gurus'))
+        ->toBe('A Wall, NJ basement.');
+});

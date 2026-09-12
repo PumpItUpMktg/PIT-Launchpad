@@ -115,19 +115,22 @@ final class ImageAltTownReport
      * Swap every FOREIGN "{Town}[, ]{ST}" in $text for the authoritative "{Town}, {ST}"; returns $text
      * unchanged when nothing foreign is named. A match is a place only when ST is a real state; the page's
      * own town (or a "Serving {town}"-style phrase ending in it), a bare state code, and the brand name are
-     * left alone.
+     * left alone. A state that is itself followed by another state (", NJ", "& MD", "and MD") is a STATE LIST
+     * ("Service Across PA, NJ, and MD"), never a place — the words before it are prose, not a town. A leading
+     * "a"/"an" is re-agreed with the replacement ("in an Allentown, PA basement" → "in a Neptune, NJ basement").
      */
     public function rewrite(string $text, string $authKey, string $replacement, string $brand): string
     {
         $brandKey = mb_strtolower($brand);
 
         $out = preg_replace_callback(
-            '/\b((?:[A-Z][A-Za-z.\'\-]*)(?:\s+[A-Z][A-Za-z.\'\-]*){0,2}),?\s+([A-Z]{2})\b/',
+            '/(?:\b([Aa]n?)\s+)?\b((?:[A-Z][A-Za-z.\'\-]*)(?:\s+[A-Z][A-Za-z.\'\-]*){0,2}),?\s+([A-Z]{2})\b(?!\s*(?:,|&|and)\s*(?:and\s+)?[A-Z]{2}\b)/',
             function (array $m) use ($authKey, $replacement, $brandKey): string {
-                $town = trim($m[1]);
+                $article = $m[1];
+                $town = trim($m[2]);
                 $key = TownName::key($town);
 
-                if (! in_array($m[2], self::STATE_ABBREVS, true)) {
+                if (! in_array($m[3], self::STATE_ABBREVS, true)) {
                     return $m[0]; // "{Word} XY" where XY is not a state — not a place
                 }
                 if ($key === '' || in_array(strtoupper($town), self::STATE_ABBREVS, true)) {
@@ -139,8 +142,12 @@ final class ImageAltTownReport
                 if ($brandKey !== '' && (str_contains($brandKey, $key) || str_contains($key, $brandKey))) {
                     return $m[0]; // brand words ("Sump Pump Gurus NJ") are not a town
                 }
+                if ($article === '') {
+                    return $replacement;
+                }
+                $agreed = preg_match('/^[AEIOU]/i', $replacement) === 1 ? 'an' : 'a';
 
-                return $replacement;
+                return (ctype_upper($article[0]) ? ucfirst($agreed) : $agreed).' '.$replacement;
             },
             $text,
         );
