@@ -120,7 +120,7 @@ it('--execute copies the object + variant to the town-correct keys, repoints the
 
 it('rewrites only known foreign places, never a trade word, a state list, the brand, or the own town', function () {
     $report = app(ImageFilenameTownReport::class);
-    $known = ['allentown' => true, 'lower-macungie' => true, 'neptune' => true, 'west-orange' => true];
+    $known = ['allentown' => true, 'lower-macungie' => true, 'neptune' => true, 'west-orange' => true, 'plainfield' => true, 'north-plainfield' => true];
 
     expect($report->rewrite('sump-pump-repair-allentown-pa.jpg', $known, 'neptune', 'neptune-nj', 'sump-pump-gurus'))
         ->toBe('sump-pump-repair-neptune-nj.jpg')
@@ -135,5 +135,11 @@ it('rewrites only known foreign places, never a trade word, a state list, the br
         ->and($report->rewrite('west-orange-nj-basement.jpg', $known, 'orange', 'orange-nj', 'sump-pump-gurus'))
         ->toBe('west-orange-nj-basement.jpg')                              // ends in the own town
         ->and($report->rewrite('neptune-nj-hero.webp', $known, 'neptune', 'neptune-nj', 'sump-pump-gurus'))
-        ->toBe('neptune-nj-hero.webp');                                    // own town
+        ->toBe('neptune-nj-hero.webp')                                     // own town
+        // The own town's TAIL is a known place too (Plainfield inside North Plainfield): the whole run is the
+        // own town and stays — never "north-north-plainfield-nj" (the prod report's four false positives).
+        ->and($report->rewrite('sump-pump-repair-north-plainfield-nj.jpg', $known, 'north-plainfield', 'north-plainfield-nj', 'sump-pump-gurus'))
+        ->toBe('sump-pump-repair-north-plainfield-nj.jpg')
+        ->and($report->rewrite('plainfield-nj-hero.jpg', $known, 'north-plainfield', 'north-plainfield-nj', 'sump-pump-gurus'))
+        ->toBe('north-plainfield-nj-hero.jpg');                            // bare Plainfield IS foreign here
 });
