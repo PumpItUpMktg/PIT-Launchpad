@@ -2,6 +2,7 @@
 
 namespace App\Publishing;
 
+use App\Build\Permalinks;
 use App\Console\Commands\RepushBreadcrumbsCommand;
 use App\ContentEngine\Reconcile\PostTownTagger;
 use App\Enums\ContentKind;
@@ -559,7 +560,7 @@ class MetaBlobAssembler
             }
             $metaSeo = is_array($sibling->meta['seo'] ?? null) ? $sibling->meta['seo'] : [];
             $blurb = trim((string) ($metaSeo['meta_description'] ?? ''));
-            $url = $home.\App\Build\Permalinks::slugPath((string) $sibling->slug);
+            $url = $home.Permalinks::slugPath((string) $sibling->slug);
             // Descriptive anchor: a visually-hidden suffix names the target service so sibling cards
             // aren't identical "Learn more" links (link-purpose a11y + SEO anchor text). Crawlers read it.
             $body = ($blurb !== '' ? '<p>'.e($blurb).'</p>' : '')
@@ -885,7 +886,7 @@ class MetaBlobAssembler
             ->orderBy('title')
             ->limit(12)
             ->get(['title', 'slug'])
-            ->map(fn (Content $p): array => ['name' => trim((string) $p->title), 'url' => $home.\App\Build\Permalinks::slugPath((string) $p->slug)])
+            ->map(fn (Content $p): array => ['name' => trim((string) $p->title), 'url' => $home.Permalinks::slugPath((string) $p->slug)])
             ->filter(fn (array $i): bool => $i['name'] !== '')
             ->values()
             ->all();
@@ -996,7 +997,7 @@ class MetaBlobAssembler
 
         $name = trim((string) $parent->title);
 
-        return ['name' => $name !== '' ? $name : 'Location', 'url' => $home.\App\Build\Permalinks::slugPath((string) $parent->slug)];
+        return ['name' => $name !== '' ? $name : 'Location', 'url' => $home.Permalinks::slugPath((string) $parent->slug)];
     }
 
     /** The breadcrumb leaf's short name: the SEO title's head segment before a colon/pipe/dash subtitle. */

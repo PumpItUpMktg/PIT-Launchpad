@@ -28,12 +28,12 @@ final class Permalinks
     /**
      * The trailing-slash-normalized link SEGMENT for a slug — "{slug}/" (empty for the home/root slug) — so a
      * RENDERED internal link (nav, footer, breadcrumb, service grid, area/sibling links) matches the canonical
-     * WordPress permalink ({@see \App\Support\PublicUrl}) and never 301-redirects to its "/"-suffixed form. The
-     * caller supplies the leading slash / domain base: a relative "/".slugPath($slug) or an absolute
+     * WordPress permalink (the PublicUrl form) and never 301-redirects to its "/"-suffixed form. The caller
+     * supplies the leading slash / domain base: a relative "/".slugPath($slug) or an absolute
      * "{home}".slugPath($slug) where {home} already ends in "/".
      *
      * This is for rendered hrefs only; the slash-less {@see path()} / {@see urlMap()} stay the key format the
-     * link-audit, redirect and metric matchers ({@see \App\Metrics\UrlNormalizer}) compare on.
+     * link-audit, redirect and metric matchers (the UrlNormalizer form) compare on.
      */
     public static function slugPath(string $slug): string
     {

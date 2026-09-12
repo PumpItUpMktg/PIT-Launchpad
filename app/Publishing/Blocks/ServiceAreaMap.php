@@ -2,6 +2,7 @@
 
 namespace App\Publishing\Blocks;
 
+use App\Build\Permalinks;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
@@ -124,7 +125,7 @@ final class ServiceAreaMap
         foreach ($pages as $page) {
             $key = $this->townKey((string) $page->title);
             if ($key !== '' && ! isset($urls[$key])) {
-                $urls[$key] = '/'.\App\Build\Permalinks::slugPath((string) $page->slug);
+                $urls[$key] = '/'.Permalinks::slugPath((string) $page->slug);
             }
         }
         if ($urls === []) {

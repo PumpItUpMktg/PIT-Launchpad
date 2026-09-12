@@ -3,6 +3,7 @@
 namespace App\Publishing\Chrome;
 
 use App\Branding\LogoHeaderTone;
+use App\Build\Permalinks;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
@@ -381,7 +382,7 @@ final class SiteProfileAssembler
         $label = trim((string) $page->title);
         $slug = trim((string) $page->slug);
 
-        return $label === '' || $slug === '' ? null : ['label' => $label, 'url' => $home.\App\Build\Permalinks::slugPath($slug)];
+        return $label === '' || $slug === '' ? null : ['label' => $label, 'url' => $home.Permalinks::slugPath($slug)];
     }
 
     /** Header nav priority: category hub → core (pillar) service → supporting service → guide/other. */
@@ -480,7 +481,7 @@ final class SiteProfileAssembler
             if ($label === '' || $slug === '') {
                 continue;
             }
-            $out[] = ['label' => $label, 'url' => $home.\App\Build\Permalinks::slugPath($slug)];
+            $out[] = ['label' => $label, 'url' => $home.Permalinks::slugPath($slug)];
         }
 
         return $out;

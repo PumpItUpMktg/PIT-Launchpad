@@ -2,6 +2,7 @@
 
 namespace App\Publishing\Blocks;
 
+use App\Build\Permalinks;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\MunicipalityType;
@@ -393,7 +394,7 @@ final class ServiceAreaResolver
             if ($title === '' || $slug === '') {
                 continue;
             }
-            $url = $home.\App\Build\Permalinks::slugPath($slug);
+            $url = $home.Permalinks::slugPath($slug);
             $geoId = trim((string) $page->geo_id);
             if ($geoId !== '') {
                 $byGeo[$geoId] = $url;
