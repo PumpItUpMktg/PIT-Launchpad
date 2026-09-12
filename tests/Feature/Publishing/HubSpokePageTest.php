@@ -140,8 +140,8 @@ it('composes the spoke: keyword H1, symptoms, scope, record process, cost with t
         ->toContain('Pump capacity')
         // Related spine: hub + sibling, never cross-silo.
         ->toContain('lp-related')
-        ->toContain('href="https://sewergurus.com/sump-pump-services"')
-        ->toContain('href="https://sewergurus.com/battery-backup-installation"')
+        ->toContain('href="https://sewergurus.com/sump-pump-services/"')
+        ->toContain('href="https://sewergurus.com/battery-backup-installation/"')
         ->not->toContain('hydro-jetting')
         // Gated reviews/jobs stay out with the null providers.
         ->not->toContain('lp-testimonials')
@@ -172,7 +172,7 @@ it('the spoke and hub reciprocally link to the tenant location pages (§8.4)', f
         expect($markup)
             ->toContain('lp-areas')                                        // the "areas we serve" module
             ->toContain('Areas we serve')
-            ->toContain('href="https://sewergurus.com/doylestown-pa"')     // links the LIVE location page
+            ->toContain('href="https://sewergurus.com/doylestown-pa/"')     // links the LIVE location page
             ->toContain('>Doylestown</a>')                                 // ", PA" dropped in the label
             ->not->toContain('Draftville');                                // the draft location is never linked
     }
@@ -406,7 +406,7 @@ it('composes the hub: category keyword H1, one grid card per spoke, refreshed on
         ->toContain('lp-services-grid')
         ->toContain('Sump Pump Installation')                               // one card per child spoke
         ->toContain('Reliable sump systems, sized to your basement.')       // the record's short_description
-        ->toContain('href="https://sewergurus.com/sump-pump-installation"')
+        ->toContain('href="https://sewergurus.com/sump-pump-installation/"')
         ->not->toContain('lp-testimonials');                                // gated reviews absent
 
     // Data-bound at compose time: a spoke added later appears on the next compose — no regeneration.
@@ -415,7 +415,7 @@ it('composes the hub: category keyword H1, one grid card per spoke, refreshed on
         'page_type' => PageType::Service, 'title' => 'Battery Backup Installation', 'slug' => 'battery-backup-installation',
     ]);
     $recomposed = app(BlockContentAssembler::class)->compose($hub->fresh(), $hub->slot_payload, []);
-    expect($recomposed)->toContain('href="https://sewergurus.com/battery-backup-installation"');
+    expect($recomposed)->toContain('href="https://sewergurus.com/battery-backup-installation/"');
 });
 
 it('builds the spoke Service node — serviceType from the primary keyword, offers only from a real range', function () {

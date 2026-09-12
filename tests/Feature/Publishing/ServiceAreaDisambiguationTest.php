@@ -126,6 +126,6 @@ it('links a built town to its own page and renders an unbuilt town as plain text
 
     $cities = collect(app(ServiceAreaResolver::class)->byCounty($site->id))->flatMap(fn (array $g): array => $g['cities']);
 
-    expect($cities->firstWhere('label', 'Flemington')['url'])->toBe('https://spg.test/flemington-nj') // built → own page
+    expect($cities->firstWhere('label', 'Flemington')['url'])->toBe('https://spg.test/flemington-nj/') // built → own page
         ->and($cities->firstWhere('label', 'Clinton')['url'])->toBe('');                              // unbuilt → plain text
 });

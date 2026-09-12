@@ -56,13 +56,13 @@ it('links a served town to its own "{City}, {ST}"-titled location page, not the 
         ->firstWhere('label', 'Haverford');
 
     expect($haverford)->not->toBeNull()
-        ->and($haverford['url'])->toBe('https://spg.test/haverford-pa')     // its own page
+        ->and($haverford['url'])->toBe('https://spg.test/haverford-pa/')     // its own page
         ->and($haverford['url'])->not->toBe('https://spg.test/areas-we-serve');
 
     // The flat pills path resolves the same link (both share the town-name key).
     $flat = app(ServiceAreaResolver::class)->resolve($site->id);
     expect(collect($flat['cities'])->firstWhere('label', 'Haverford')['url'])
-        ->toBe('https://spg.test/haverford-pa');
+        ->toBe('https://spg.test/haverford-pa/');
 });
 
 it('renders an unbuilt town as PLAIN TEXT (empty url), not a self-referencing Areas-page link', function () {

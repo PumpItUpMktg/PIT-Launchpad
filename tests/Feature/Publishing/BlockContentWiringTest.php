@@ -70,7 +70,7 @@ it('the home services grid lists only LIVE services — a drafted/orphaned page 
     $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
 
     expect($markup)->toContain('Drain Cleaning')
-        ->toContain('href="https://sewergurus.com/drain-cleaning"')
+        ->toContain('href="https://sewergurus.com/drain-cleaning/"')
         ->not->toContain('Foundation Water Problems')
         ->not->toContain('foundation-water-problems');
 });
@@ -97,8 +97,8 @@ it('composes Home post_content from real inputs — cards link to real pages, ph
         ->and($markup)->toContain('<!-- wp:group {"backgroundColor":"primary"')
         ->toContain('Stop sewer problems before they shut you down.')
         // service cards link to the REAL child pages
-        ->toContain('href="https://sewergurus.com/drain-cleaning"')
-        ->toContain('href="https://sewergurus.com/sewer-line-services"')
+        ->toContain('href="https://sewergurus.com/drain-cleaning/"')
+        ->toContain('href="https://sewergurus.com/sewer-line-services/"')
         // resolved click-to-call + emergency treatment
         ->toContain('href="tel:9735550100"')
         ->toContain('24/7')
@@ -187,7 +187,7 @@ it('groups the major cities under each county, largest-first, county names in th
         ->not->toContain('Essex County | Hudson County')        // no separate pipe county line
         ->not->toContain('Ocean County')                        // an unselected in-state county is excluded
         ->toContain('Jersey City')                              // Hudson's town, grouped
-        ->toContain('href="https://sewergurus.com/newark"');    // real town-page link
+        ->toContain('href="https://sewergurus.com/newark/"');    // real town-page link
 
     // Within Essex: largest-first (major → medium → small).
     expect(mb_strpos($markup, 'Newark'))->toBeLessThan(mb_strpos($markup, 'Bloomfield'));

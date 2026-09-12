@@ -112,7 +112,7 @@ it('composes the location page: formula H1, live-page link rule, a county covera
         // The deterministic H1 formula (no drafted headline in the payload).
         ->toContain('Basement waterproofing in Trooper, PA')
         // The link rule: the live service page links; the page-less service renders as text.
-        ->toContain('href="https://drybasements.example/sump-pump-installation"')
+        ->toContain('href="https://drybasements.example/sump-pump-installation/"')
         ->toContain('French Drains')
         // Coverage prose is now ONE county-level sentence handing off to the structured list below — never
         // the town-by-town enumeration that read as keyword-stuffing.
@@ -495,7 +495,7 @@ it('forLocation builds a scoped areas map — its served towns as LINKED points 
     expect($map)->not->toBeNull()
         ->and($map['cities'])->toHaveCount(1)                       // only the town with a page
         ->and($map['cities'][0]['name'])->toBe('Norristown')        // ", PA" stripped
-        ->and($map['cities'][0]['url'])->toBe('/norristown')        // links its town page
+        ->and($map['cities'][0]['url'])->toBe('/norristown/')        // links its town page
         ->and($map['pin']['lat'])->toBe(40.12);                     // the location pin
 });
 
@@ -582,7 +582,7 @@ it('lists the town\'s recent posts as a local blog feed on the location page (§
     expect($markup)->toBeString()
         ->toContain('Latest from Trooper')
         ->toContain('Spring water tables in Trooper')
-        ->toContain('href="/spring-water-tables-trooper"')
+        ->toContain('href="/spring-water-tables-trooper/"')
         ->toContain('Stone foundation repair tips');
 
     // Newest-first ordering.
@@ -738,8 +738,8 @@ it('a TOWN page lists its nearest neighbours — linked when live, plain otherwi
         ->toContain('Towns near Hoboken')                                        // neighbour-framed heading
         ->not->toContain('The towns we cover around')                            // NOT the over-claiming hub heading
         ->toContain('Serving Hoboken and nearby communities across Hudson County')
-        ->toContain('href="https://spg.test/jersey-city"')                       // live neighbour → linked
-        ->toContain('href="https://spg.test/weehawken-nj"')
+        ->toContain('href="https://spg.test/jersey-city/"')                       // live neighbour → linked
+        ->toContain('href="https://spg.test/weehawken-nj/"')
         ->toContain('Union City')                                                // in range but no live page → plain text
         ->not->toContain('href="https://spg.test/union-city"')
         ->not->toContain('Trenton');                                             // out of range (~52 mi) → excluded

@@ -49,10 +49,10 @@ it('links a served town to its page by GEO id even when the page TITLE differs f
     $haverford = collect($byCounty)->flatMap(fn (array $g): array => $g['cities'])->firstWhere('label', 'Haverford');
 
     expect($haverford)->not->toBeNull()
-        ->and($haverford['url'])->toBe('https://spg.test/haverford-township-pa'); // linked by GEO, not by name
+        ->and($haverford['url'])->toBe('https://spg.test/haverford-township-pa/'); // linked by GEO, not by name
 
     // The flat pills path resolves the same page by geo too.
     $flat = app(ServiceAreaResolver::class)->resolve($site->id);
     expect(collect($flat['cities'])->firstWhere('label', 'Haverford')['url'])
-        ->toBe('https://spg.test/haverford-township-pa');
+        ->toBe('https://spg.test/haverford-township-pa/');
 });
