@@ -51,10 +51,18 @@ it('report-only lists each wrong-town field as current → proposed and writes n
     Queue::fake();
     [$site, , $stale, $clean] = altTownFixture();
 
+    // The census: both stale fields, each proposing the authoritative town. Asserted on the service rows
+    // rather than the console table — the narrow non-TTY test console word-wraps the long alt cells, which
+    // can split "Neptune, NJ" across a line break and defeat a substring assertion on the rendered table.
+    $rows = app(ImageAltTownReport::class)->forSite($site->fresh())['rows'];
+    expect(array_column($rows, 'field'))->toEqualCanonicalizing(['alt', 'caption']);
+    foreach ($rows as $row) {
+        expect($row['proposed'])->toContain('Neptune, NJ');
+    }
+
     $this->artisan('launchpad:repush-image-alt-towns --site='.$site->id)
         ->assertSuccessful()
         ->expectsOutputToContain('new-brunswick-nj/neptune-nj')
-        ->expectsOutputToContain('Neptune, NJ')
         ->expectsOutputToContain('READ-ONLY');
 
     // Nothing rewritten, nothing pushed.
