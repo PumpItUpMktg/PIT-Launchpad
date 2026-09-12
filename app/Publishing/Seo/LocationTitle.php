@@ -32,11 +32,7 @@ final class LocationTitle
             return null;
         }
 
-        $place = $state !== '' ? $city.', '.$state : $city;
-        $trade = $this->trade($content);
-        $title = $trade !== '' ? $trade.' in '.$place : $place;
-
-        return SeoTitle::normalize($title, $content->source_name);
+        return SeoTitle::normalize($this->leadWithPlace($content, $city, $state), $content->source_name);
     }
 
     /**
@@ -64,11 +60,42 @@ final class LocationTitle
             return null;
         }
 
-        $trade = $this->trade($content);
-        $place = $city.', '.$state;
-        $title = SeoTitle::normalize($trade !== '' ? $trade.' in '.$place : $place, $content->source_name);
+        $title = SeoTitle::normalize($this->leadWithPlace($content, $city, $state), $content->source_name);
 
         return ['title' => $title, 'city' => $city];
+    }
+
+    /**
+     * Compose the page portion so the TOWN is never the part the length cap sacrifices. The town is the
+     * whole point of a location title, but SeoTitle::truncate cuts from the END — and with a long or
+     * comma-joined trade (e.g. SPG's "sump & sewage pump service and replacement, basement waterproofing")
+     * "{Trade} in {Town}, {ST}" runs past the cap and truncation drops the geography (it even cuts at the
+     * comma INSIDE the trade). So build the fullest town-preserving form that fits:
+     *   1. "{Trade} in {Town}, {ST}" when it fits;
+     *   2. else the trade's first comma-clause + place, when THAT fits (drops a trailing ", second trade");
+     *   3. else the place alone ("{Town}, {ST}") — always short, always keeps the town.
+     * A brand suffix is still appended downstream by withBrand; a very long trade may push the whole title
+     * past the cap, but the town is present and it is surfaced (not mangled) by report-title-lengths.
+     */
+    private function leadWithPlace(Content $content, string $city, string $state): string
+    {
+        $place = $state !== '' ? $city.', '.$state : $city;
+        $trade = $this->trade($content);
+        if ($trade === '') {
+            return $place;
+        }
+
+        if (mb_strlen($trade.' in '.$place) <= SeoTitle::MAX_LENGTH) {
+            return $trade.' in '.$place;
+        }
+
+        $parts = preg_split('/\s*,\s*/', $trade);
+        $firstClause = is_array($parts) ? trim((string) ($parts[0] ?? '')) : '';
+        if ($firstClause !== '' && $firstClause !== $trade && mb_strlen($firstClause.' in '.$place) <= SeoTitle::MAX_LENGTH) {
+            return $firstClause.' in '.$place;
+        }
+
+        return $place;
     }
 
     /**

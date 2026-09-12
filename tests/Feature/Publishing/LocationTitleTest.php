@@ -173,3 +173,41 @@ it('falls back to the site trade noun when no pillar service is designated, so t
     expect(app(MetaBlobAssembler::class)->documentTitle($town->fresh()))
         ->toBe('Sump pump service in Bayonne, NJ | Sump Pump Gurus');
 });
+
+it('keeps the town when a long comma-joined trade would otherwise be truncated past it', function () {
+    $site = locTitleSite();
+    $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hudson office']);
+    locTitleCoverage($site, $parent, '3401700055', 'Neptune');
+    // No pillar service → the captured trade noun is used, and SPG's is a long, comma-joined phrase.
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'sump & sewage pump service and replacement, basement waterproofing']);
+
+    $town = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '3401700055',
+        'title' => 'Neptune, NJ', 'slug' => 'neptune-nj',
+        'meta' => ['seo' => ['title' => 'Sump & sewage pump service and replacement', 'meta_description' => 'x']],
+    ]);
+
+    // The trade shortens to its first clause so the town survives — never the reverse (the bug dropped
+    // " in Neptune, NJ" and kept the trade alone).
+    expect(app(MetaBlobAssembler::class)->documentTitle($town->fresh()))
+        ->toBe('Sump & sewage pump service and replacement in Neptune, NJ | Sump Pump Gurus');
+});
+
+it('drops the trade to the bare place when even its first clause plus a long town exceeds the cap', function () {
+    $site = locTitleSite();
+    $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Morris office']);
+    locTitleCoverage($site, $parent, '3403300077', 'Parsippany-Troy Hills');
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'sump & sewage pump service and replacement, basement waterproofing']);
+
+    $town = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '3403300077',
+        'title' => 'Parsippany-Troy Hills, NJ', 'slug' => 'parsippany-troy-hills-nj',
+        'meta' => ['seo' => ['title' => 'x', 'meta_description' => 'x']],
+    ]);
+
+    // No trade form fits alongside the long town, so the title is the place alone — the town is kept.
+    expect(app(MetaBlobAssembler::class)->documentTitle($town->fresh()))
+        ->toBe('Parsippany-Troy Hills, NJ | Sump Pump Gurus');
+});
