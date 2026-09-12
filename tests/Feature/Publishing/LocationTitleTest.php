@@ -106,6 +106,40 @@ it('a HUB page titles deterministically from its own Location city/state', funct
         ->toBe('Sump Pump Services in Hackensack, NJ | Sump Pump Gurus');
 });
 
+it('a landing whose pin is unresolvable titles from its own "{City}, {ST}" identity, not the hallucinated stored title', function () {
+    $site = locTitleSite();
+    locTitlePillar($site);
+
+    // A storefront/market landing (page_type=Location) with NO resolvable location_id — the drafter
+    // clobbered meta.seo.title to a generic, geography-less service phrase. The factory title survives.
+    $landing = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => null,
+        'title' => 'Hoboken, NJ', 'slug' => 'hoboken-nj',
+        'meta' => ['seo' => ['title' => 'Sump & sewage pump service and replacement', 'meta_description' => 'x']],
+    ]);
+
+    expect(app(MetaBlobAssembler::class)->documentTitle($landing->fresh()))
+        ->toBe('Sump Pump Services in Hoboken, NJ | Sump Pump Gurus');
+});
+
+it('an unresolvable-pin landing whose stored title already names its place keeps that stored title', function () {
+    $site = locTitleSite();
+    locTitlePillar($site);
+
+    // The stored SEO title already leads with the place — a good hand/factory title — so it is preserved,
+    // NOT replaced by the generic pillar composition. The rescue fires only for a title that drops the place.
+    $landing = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => null,
+        'title' => 'Hoboken, NJ', 'slug' => 'hoboken-nj',
+        'meta' => ['seo' => ['title' => 'Emergency Sump Pump Repair in Hoboken, NJ', 'meta_description' => 'x']],
+    ]);
+
+    expect(app(MetaBlobAssembler::class)->documentTitle($landing->fresh()))
+        ->toBe('Emergency Sump Pump Repair in Hoboken, NJ | Sump Pump Gurus');
+});
+
 it('with neither a service nor a captured trade the deterministic title names the authoritative place alone', function () {
     $site = locTitleSite();
     $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hudson office']);

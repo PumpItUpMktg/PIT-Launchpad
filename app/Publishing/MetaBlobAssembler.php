@@ -1070,18 +1070,30 @@ class MetaBlobAssembler
      */
     private function seoTitle(Content $content): string
     {
+        $metaSeo = is_array($content->meta['seo'] ?? null) ? $content->meta['seo'] : [];
+
         // A location page's title is DETERMINISTIC — "{Trade} in {Town}, {ST}" composed from the page's
         // authoritative structured subject, NOT the drafter-authored stored title (which has hallucinated
-        // the wrong town / no town). An un-anchored town page has no authoritative subject → compose()
-        // returns null and we fall through to the stored-title behaviour below.
+        // the wrong town / no town). An un-anchored page has no authoritative subject → compose() returns
+        // null and we fall through to the stored-title behaviour below.
         if ($content->page_type === PageType::Location) {
             $deterministic = $this->locationTitle->compose($content);
             if ($deterministic !== null) {
                 return $this->withBrand($content, $deterministic);
             }
+
+            // Un-anchored, but keep the stored title UNLESS it fails to name the page's OWN place — a
+            // storefront-hub/market landing whose stored SEO title was clobbered to a geography-less phrase
+            // (e.g. "Sump & sewage pump service and replacement" on the Hoboken market page). Then compose
+            // the deterministic title from the page's own "{City}, {ST}" identity so the <title> still leads
+            // with the place. A good stored title (already names the place), an un-anchored TOWN (whose
+            // title may be a hallucination), or a page with no reliable place is left untouched.
+            $identity = $this->locationTitle->fromIdentity($content);
+            if ($identity !== null && mb_stripos((string) ($metaSeo['title'] ?? ''), $identity['city']) === false) {
+                return $this->withBrand($content, $identity['title']);
+            }
         }
 
-        $metaSeo = is_array($content->meta['seo'] ?? null) ? $content->meta['seo'] : [];
         $title = SeoTitle::normalize((string) ($metaSeo['title'] ?? $content->title), $content->source_name);
 
         // Service + hub (commercial) titles carry the tenant's service-area REGION so they aren't
