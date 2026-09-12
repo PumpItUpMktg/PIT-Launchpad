@@ -87,7 +87,10 @@ final class BlockSections
 
         $children = [$this->sectionHead($eyebrow, $heading)];
         if (trim($intro) !== '') {
-            $children[] = $this->b->paragraph($this->text($intro), ['textColor' => 'muted', 'className' => 'lp-services-intro']);
+            // The drafter weaves internal service cross-links into this intro (e.g. an <a> to a sibling
+            // service page), so render it as sanitized inline HTML — NOT escaped like a plain label, which
+            // printed the raw "<a href=…>…</a>" as visible text on the page.
+            $children[] = $this->b->paragraph($this->richText($intro), ['textColor' => 'muted', 'className' => 'lp-services-intro']);
         }
         $children[] = $this->b->columns($columns, ['className' => 'lp-services-grid']);
 
