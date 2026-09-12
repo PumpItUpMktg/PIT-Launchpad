@@ -38,7 +38,7 @@ final class ImageAltTownReport
     /** The render-job text fields that reach the page (RenderJob::toImageObject). */
     private const FIELDS = ['alt', 'title', 'caption'];
 
-    public function __construct(private readonly LocationSubject $subject) {}
+    public function __construct(private readonly LocationSubject $subject, private readonly KnownPlaces $places) {}
 
     /**
      * One site's census: every succeeded render job on an anchored, published location page whose alt /
@@ -56,6 +56,7 @@ final class ImageAltTownReport
             ->get(['id', 'site_id', 'slug', 'title', 'geo_id', 'location_id', 'parent_location_id']);
 
         $brand = trim((string) $site->brand_name);
+        $knownNames = $this->places->forSite($site)['names'];
         $rows = [];
         $anchored = 0;
         $affected = [];
@@ -81,7 +82,7 @@ final class ImageAltTownReport
                     if ($current === '') {
                         continue;
                     }
-                    $proposed = $this->rewrite($current, $authKey, $replacement, $brand);
+                    $proposed = $this->rewrite($current, $authKey, $replacement, $brand, $knownNames, $state);
                     if ($proposed === $current) {
                         continue;
                     }
@@ -111,47 +112,133 @@ final class ImageAltTownReport
         ];
     }
 
+    /** Full state names the vision pass sometimes writes instead of the abbreviation ("Allentown, Pennsylvania"). */
+    private const STATE_NAMES = [
+        'Alabama' => 'AL', 'Alaska' => 'AK', 'Arizona' => 'AZ', 'Arkansas' => 'AR', 'California' => 'CA',
+        'Colorado' => 'CO', 'Connecticut' => 'CT', 'Delaware' => 'DE', 'Florida' => 'FL', 'Georgia' => 'GA',
+        'Hawaii' => 'HI', 'Idaho' => 'ID', 'Illinois' => 'IL', 'Indiana' => 'IN', 'Iowa' => 'IA', 'Kansas' => 'KS',
+        'Kentucky' => 'KY', 'Louisiana' => 'LA', 'Maine' => 'ME', 'Maryland' => 'MD', 'Massachusetts' => 'MA',
+        'Michigan' => 'MI', 'Minnesota' => 'MN', 'Mississippi' => 'MS', 'Missouri' => 'MO', 'Montana' => 'MT',
+        'Nebraska' => 'NE', 'Nevada' => 'NV', 'New Hampshire' => 'NH', 'New Jersey' => 'NJ', 'New Mexico' => 'NM',
+        'New York' => 'NY', 'North Carolina' => 'NC', 'North Dakota' => 'ND', 'Ohio' => 'OH', 'Oklahoma' => 'OK',
+        'Oregon' => 'OR', 'Pennsylvania' => 'PA', 'Rhode Island' => 'RI', 'South Carolina' => 'SC',
+        'South Dakota' => 'SD', 'Tennessee' => 'TN', 'Texas' => 'TX', 'Utah' => 'UT', 'Vermont' => 'VT',
+        'Virginia' => 'VA', 'Washington' => 'WA', 'West Virginia' => 'WV', 'Wisconsin' => 'WI', 'Wyoming' => 'WY',
+    ];
+
     /**
-     * Swap every FOREIGN "{Town}[, ]{ST}" in $text for the authoritative "{Town}, {ST}"; returns $text
-     * unchanged when nothing foreign is named. A match is a place only when ST is a real state; the page's
-     * own town (or a "Serving {town}"-style phrase ending in it), a bare state code, and the brand name are
-     * left alone. A state that is itself followed by another state (", NJ", "& MD", "and MD") is a STATE LIST
-     * ("Service Across PA, NJ, and MD"), never a place — the words before it are prose, not a town. A leading
-     * "a"/"an" is re-agreed with the replacement ("in an Allentown, PA basement" → "in a Neptune, NJ basement").
+     * Regions the old grounding named alongside its town. A region is wrong on a page whose state differs
+     * from the region's; its clause is dropped ("…and the surrounding Lehigh Valley area" → "…and the
+     * surrounding area") rather than swapped, since no page has an authoritative region.
      */
-    public function rewrite(string $text, string $authKey, string $replacement, string $brand): string
+    private const REGIONS = ['Lehigh Valley' => 'PA'];
+
+    /** A bare town name counts as a place only in a place context: after one of these words (an article alone is not enough)… */
+    private const BARE_BEFORE = '(?:[Ii]n|[Tt]hroughout|[Aa]cross|[Ss]erves|[Ss]erving|[Nn]ear|[Aa]round)';
+
+    /** …or before one of these ("Allentown home", "Allentown-area basement", "Allentown basements"). */
+    private const BARE_AFTER = '(?:-area\b|\s+(?:home|homes|basement|basements|homeowners|residents|area|communities|families|properties)\b)';
+
+    /** Never a town when followed by one of these — "Ocean County", "Union Township" are other places. */
+    private const BARE_NOT_AFTER = '(?!\s+(?:County|Township|Borough|City|Valley|Pike|Avenue|Street|Road)\b)';
+
+    /**
+     * Swap every FOREIGN place in $text for the authoritative town; returns $text unchanged when nothing
+     * foreign is named. Three shapes, in order:
+     *
+     *  1. "{Town}[, ]{ST}" and "{Town}, {State name}" → "{Auth}, {ST}". A match is a place only when the
+     *     state is real; the page's own town (or a "Serving {town}"-style phrase ending in it), a bare state
+     *     code, the brand name, and a state list ("Across PA, NJ, and MD") are left alone. A leading a/an
+     *     is re-agreed with the replacement.
+     *  2. A bare KNOWN foreign town in a place context ("in an Allentown home", "Keeping Allentown basements
+     *     dry", "serves Allentown and…", "Allentown-area") → the bare authoritative town ("in a Kearny home").
+     *     Known = the site's coverage areas / locations / served towns; the context guard keeps a Title-Case
+     *     "Basement Wall Crack Repair" or "Ocean County" from being read as Wall, NJ or Ocean, NJ.
+     *  3. A foreign REGION clause on a page outside that region's state is dropped.
+     *
+     * @param  list<string>  $knownPlaces  display names of every place the site knows (longest first)
+     */
+    public function rewrite(string $text, string $authKey, string $replacement, string $brand, array $knownPlaces = [], string $pageState = ''): string
     {
         $brandKey = mb_strtolower($brand);
+        $bare = TownName::display($replacement);
 
+        $skip = function (string $town) use ($authKey, $brandKey): bool {
+            $key = TownName::key($town);
+            if ($key === '' || in_array(strtoupper($town), self::STATE_ABBREVS, true)) {
+                return true;
+            }
+            if ($key === $authKey || str_ends_with($key, ' '.$authKey)) {
+                return true; // the page's own town
+            }
+
+            return $brandKey !== '' && (str_contains($brandKey, $key) || str_contains($key, $brandKey));
+        };
+        $agree = function (string $article, string $with): string {
+            $agreed = preg_match('/^[AEIOU]/i', $with) === 1 ? 'an' : 'a';
+
+            return (ctype_upper($article[0]) ? ucfirst($agreed) : $agreed).' '.$with;
+        };
+
+        // 1. "{Town}[, ]{ST}" / "{Town}, {State name}"
+        $stateNames = implode('|', array_map(fn (string $n): string => preg_quote($n, '/'), array_keys(self::STATE_NAMES)));
         $out = preg_replace_callback(
-            '/(?:\b([Aa]n?)\s+)?\b((?:[A-Z][A-Za-z.\'\-]*)(?:\s+[A-Z][A-Za-z.\'\-]*){0,2}),?\s+([A-Z]{2})\b(?!\s*(?:,|&|and)\s*(?:and\s+)?[A-Z]{2}\b)/',
-            function (array $m) use ($authKey, $replacement, $brandKey): string {
+            '/(?:\b([Aa]n?)\s+)?\b((?:[A-Z][A-Za-z.\'\-]*)(?:\s+[A-Z][A-Za-z.\'\-]*){0,2})(?:,?\s+([A-Z]{2})\b(?!\s*(?:,|&|and)\s*(?:and\s+)?[A-Z]{2}\b)|,\s+('.$stateNames.')\b)/',
+            function (array $m) use ($skip, $replacement, $agree): string {
                 $article = $m[1];
                 $town = trim($m[2]);
-                $key = TownName::key($town);
-
-                if (! in_array($m[3], self::STATE_ABBREVS, true)) {
+                $abbrev = $m[3] ?? '';
+                if ($abbrev !== '' && ! in_array($abbrev, self::STATE_ABBREVS, true)) {
                     return $m[0]; // "{Word} XY" where XY is not a state — not a place
                 }
-                if ($key === '' || in_array(strtoupper($town), self::STATE_ABBREVS, true)) {
+                if ($skip($town)) {
                     return $m[0];
                 }
-                if ($key === $authKey || str_ends_with($key, ' '.$authKey)) {
-                    return $m[0]; // the page's own town
-                }
-                if ($brandKey !== '' && (str_contains($brandKey, $key) || str_contains($key, $brandKey))) {
-                    return $m[0]; // brand words ("Sump Pump Gurus NJ") are not a town
-                }
-                if ($article === '') {
-                    return $replacement;
-                }
-                $agreed = preg_match('/^[AEIOU]/i', $replacement) === 1 ? 'an' : 'a';
 
-                return (ctype_upper($article[0]) ? ucfirst($agreed) : $agreed).' '.$replacement;
+                return $article === '' ? $replacement : $agree($article, $replacement);
             },
             $text,
         );
+        $text = is_string($out) ? $out : $text;
 
-        return is_string($out) ? $out : $text;
+        // 2. bare known foreign towns in a place context
+        $foreign = array_values(array_filter($knownPlaces, fn (string $p): bool => ! $skip($p)));
+        if ($foreign !== []) {
+            $alternation = implode('|', array_map(fn (string $p): string => preg_quote($p, '/'), $foreign));
+            $out = preg_replace_callback(
+                '/(?:\b('.self::BARE_BEFORE.')\s+)?(?:\b([Aa]n?|[Tt]he)\s+)?\b('.$alternation.')\b'
+                    .'(?!,?\s+[A-Z]{2}\b|,\s+(?:'.$stateNames.')\b)'.self::BARE_NOT_AFTER.'((?='.self::BARE_AFTER.'))?/',
+                function (array $m) use ($bare, $agree): string {
+                    $context = $m[1] ?? '';
+                    $article = $m[2] ?? '';
+                    $hasAfter = isset($m[4]);
+                    if ($context === '' && ! $hasAfter) {
+                        return $m[0]; // no place context — not a town
+                    }
+                    $lead = $article === '' ? $bare
+                        : (in_array(strtolower($article), ['a', 'an'], true) ? $agree($article, $bare) : $article.' '.$bare);
+
+                    return $context === '' ? $lead : $context.' '.$lead;
+                },
+                $text,
+            );
+            $text = is_string($out) ? $out : $text;
+        }
+
+        // 3. foreign region clauses
+        foreach (self::REGIONS as $region => $regionState) {
+            if ($pageState === '' || strtoupper($pageState) === $regionState) {
+                continue;
+            }
+            $r = preg_quote($region, '/');
+            $out = preg_replace(
+                ['/\bsurrounding '.$r.' (area|communities)\b/', '/,?\s+and (?:the )?(?:surrounding )?'.$r.'(?: area| communities)?\b/'],
+                ['surrounding $1', ''],
+                $text,
+            );
+            $text = is_string($out) ? $out : $text;
+        }
+
+        return $text;
     }
 }
