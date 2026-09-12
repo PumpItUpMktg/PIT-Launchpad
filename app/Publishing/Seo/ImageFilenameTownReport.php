@@ -222,7 +222,8 @@ final class ImageFilenameTownReport
         }
         foreach (Location::withoutGlobalScopes()->where('site_id', $site->id)->get() as $location) {
             $add($location->cityState()['city']);
-            foreach (is_array($location->served_towns) ? $location->served_towns : [] as $town) {
+            $servedTowns = $location->getAttribute('served_towns');
+            foreach (is_array($servedTowns) ? $servedTowns : [] as $town) {
                 if (is_array($town) && isset($town['name'])) {
                     $add((string) $town['name']);
                 }
