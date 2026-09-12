@@ -124,7 +124,7 @@ final class ServiceAreaMap
         foreach ($pages as $page) {
             $key = $this->townKey((string) $page->title);
             if ($key !== '' && ! isset($urls[$key])) {
-                $urls[$key] = '/'.ltrim((string) $page->slug, '/');
+                $urls[$key] = '/'.\App\Build\Permalinks::slugPath((string) $page->slug);
             }
         }
         if ($urls === []) {

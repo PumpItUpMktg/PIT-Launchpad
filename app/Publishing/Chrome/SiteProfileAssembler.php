@@ -381,7 +381,7 @@ final class SiteProfileAssembler
         $label = trim((string) $page->title);
         $slug = trim((string) $page->slug);
 
-        return $label === '' || $slug === '' ? null : ['label' => $label, 'url' => $home.ltrim($slug, '/')];
+        return $label === '' || $slug === '' ? null : ['label' => $label, 'url' => $home.\App\Build\Permalinks::slugPath($slug)];
     }
 
     /** Header nav priority: category hub → core (pillar) service → supporting service → guide/other. */
@@ -480,7 +480,7 @@ final class SiteProfileAssembler
             if ($label === '' || $slug === '') {
                 continue;
             }
-            $out[] = ['label' => $label, 'url' => $home.ltrim($slug, '/')];
+            $out[] = ['label' => $label, 'url' => $home.\App\Build\Permalinks::slugPath($slug)];
         }
 
         return $out;

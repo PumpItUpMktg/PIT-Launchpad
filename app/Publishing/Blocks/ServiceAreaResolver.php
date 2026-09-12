@@ -393,7 +393,7 @@ final class ServiceAreaResolver
             if ($title === '' || $slug === '') {
                 continue;
             }
-            $url = $home.ltrim($slug, '/');
+            $url = $home.\App\Build\Permalinks::slugPath($slug);
             $geoId = trim((string) $page->geo_id);
             if ($geoId !== '') {
                 $byGeo[$geoId] = $url;

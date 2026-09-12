@@ -60,6 +60,14 @@ it('nests spokes under a CURATED hub (curation controls columns, the silo tree f
         ->and($childNav)->toContain('Installation')->toContain('Repair');
 });
 
+it('normalizes nav link URLs to the canonical trailing slash (A7)', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    navPage($site, 'sump-pump-installation', 'Sump Pump Installation');
+
+    // The rendered nav href matches the canonical (trailing slash) — no 301 hop to its "/"-suffixed form.
+    expect(assembledServices($site)[0]['url'])->toBe('https://apex.example/sump-pump-installation/');
+});
+
 it('emits the grouped-nav menu-mode thresholds from config', function () {
     config()->set('launchpad.nav.flat_max', 5);
     config()->set('launchpad.nav.group_overflow', 7);

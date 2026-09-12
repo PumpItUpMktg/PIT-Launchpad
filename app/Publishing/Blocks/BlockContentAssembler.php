@@ -589,7 +589,7 @@ final class BlockContentAssembler
             ->whereNotNull('slug')
             ->first();
         if ($hub !== null && trim((string) $hub->title) !== '') {
-            $links[] = ['label' => 'All '.lcfirst(trim((string) $hub->title)), 'url' => $home.ltrim((string) $hub->slug, '/')];
+            $links[] = ['label' => 'All '.lcfirst(trim((string) $hub->title)), 'url' => $home.Permalinks::slugPath((string) $hub->slug)];
         }
 
         $siblings = Content::withoutGlobalScope(SiteScope::class)
@@ -605,7 +605,7 @@ final class BlockContentAssembler
         foreach ($siblings as $sibling) {
             $title = trim((string) $sibling->title);
             if ($title !== '') {
-                $links[] = ['label' => $title, 'url' => $home.ltrim((string) $sibling->slug, '/')];
+                $links[] = ['label' => $title, 'url' => $home.Permalinks::slugPath((string) $sibling->slug)];
             }
         }
 
@@ -642,7 +642,7 @@ final class BlockContentAssembler
             $title = trim((string) $page->title);
             $slug = trim((string) $page->slug);
             if ($title !== '' && $slug !== '') {
-                $links[] = ['label' => $title, 'url' => $home.ltrim($slug, '/')];
+                $links[] = ['label' => $title, 'url' => $home.Permalinks::slugPath($slug)];
             }
         }
 
@@ -690,7 +690,7 @@ final class BlockContentAssembler
             $cards[] = [
                 'title' => $title,
                 'blurb' => $short !== '' ? $short : $this->cardBlurb->for($page),
-                'url' => $home.ltrim((string) $page->slug, '/'),
+                'url' => $home.Permalinks::slugPath((string) $page->slug),
             ];
         }
 
@@ -1056,7 +1056,7 @@ final class BlockContentAssembler
         $byService = [];
         $byTitle = [];
         foreach ($pages as $page) {
-            $url = $home.ltrim((string) $page->slug, '/');
+            $url = $home.Permalinks::slugPath((string) $page->slug);
             if ($page->primary_service_id !== null) {
                 $byService[(string) $page->primary_service_id] = $url;
             }
@@ -1224,12 +1224,11 @@ final class BlockContentAssembler
      */
     private function postFeed(Collection $posts): array
     {
-        $permalinks = new Permalinks;
         $images = $this->postFeedImages($posts->pluck('id')->all());
 
         return $posts->map(fn (Content $p): array => [
             'title' => (string) $p->title,
-            'url' => $permalinks->path($p),
+            'url' => '/'.Permalinks::slugPath((string) $p->slug),
             'date' => $p->published_at?->format('M j, Y') ?? '',
             'image' => (string) ($images[(string) $p->id]['url'] ?? ''),
             'image_alt' => (string) ($images[(string) $p->id]['alt'] ?? ''),
@@ -1922,7 +1921,7 @@ final class BlockContentAssembler
                 // Never null — child-page description if it exists, else a generated keyword-grounded
                 // blurb (see {@see ServiceCardBlurb}), so no card ships as a bare "Learn more".
                 'blurb' => $this->cardBlurb->for($page),
-                'url' => $home.ltrim((string) $page->slug, '/'),
+                'url' => $home.Permalinks::slugPath((string) $page->slug),
             ];
         }
 
