@@ -1620,7 +1620,29 @@ final class BlockSections
             ->allowLinkSchemes(['https', 'http', 'mailto', 'tel'])
             ->allowRelativeLinks();
 
-        return trim((new HtmlSanitizer($config))->sanitize($html));
+        return $this->slashInternalLinks(trim((new HtmlSanitizer($config))->sanitize($html)));
+    }
+
+    /**
+     * Normalize a drafter-authored INTERNAL prose link (e.g. an FAQ or services-intro cross-link
+     * `<a href="/water-damage-cleanup">`) to the canonical trailing slash, so it matches WordPress's
+     * pretty permalink and never 301-redirects — the drafter-prose counterpart to the composed-link
+     * normalization ({@see \App\Build\Permalinks::slugPath}). Only clean root-relative paths are touched:
+     * a path with a query/fragment never matched (the regex stops at " before ? or #), an external/tel/
+     * mailto href doesn't start with "/", a bare "/" (home) and a file path (last segment has a dot) are
+     * left as-is, and an already-slashed path is a no-op.
+     */
+    private function slashInternalLinks(string $html): string
+    {
+        return (string) preg_replace_callback('/href="(\/[^"?#]*)"/', function (array $m): string {
+            $path = $m[1];
+            $lastSegment = substr((string) strrchr($path, '/'), 1);
+            if ($path === '/' || str_ends_with($path, '/') || str_contains($lastSegment, '.')) {
+                return $m[0];
+            }
+
+            return 'href="'.$path.'/"';
+        }, $html);
     }
 
     private function attr(?string $v): string
