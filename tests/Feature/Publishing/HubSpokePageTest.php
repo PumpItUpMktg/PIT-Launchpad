@@ -327,7 +327,7 @@ it('renders FAQ answer inline HTML (internal links) instead of shipping escaped 
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
     expect($markup)
-        ->toContain('<a href="/basement-waterproofing-cost-guide">Cost Guide</a>') // the link renders
+        ->toContain('<a href="/basement-waterproofing-cost-guide/">Cost Guide</a>') // the link renders, canonical trailing slash (A7 pt2)
         ->not->toContain('&lt;a href')                                             // NOT escaped raw tags
         ->not->toContain('<script>');                                              // sanitized away
 });
