@@ -67,8 +67,8 @@ test('a hub page ships the BLOCK body with a services-grid of its silo children 
         // the internal-link spine: one card per child spoke with its REAL permalink
         ->toContain('Hydro Jetting')
         ->toContain('Rooter Service')
-        ->toContain('href="https://apex.example/hydro-jetting"')
-        ->toContain('href="https://apex.example/rooter-service"');
+        ->toContain('href="https://apex.example/hydro-jetting/"')
+        ->toContain('href="https://apex.example/rooter-service/"');
 
     // The resolved sibling_services still travel in slot_payload (the plugin's slot reference).
     expect($payload['slot_payload']['sibling_services'])->toHaveCount(2)

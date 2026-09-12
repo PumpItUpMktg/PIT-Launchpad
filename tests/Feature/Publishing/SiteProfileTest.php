@@ -54,8 +54,8 @@ it('assembles the site profile from real §1 data — brand, NAP, real page link
         ->and($profile['hours'])->toContain('24/7 Emergency')
         // real internal links only
         ->and($profile['services'])->toHaveCount(1)
-        ->and($profile['services'][0])->toBe(['label' => 'Drain Cleaning', 'url' => 'https://sewergurus.com/drain-cleaning'])
-        ->and($profile['company'][0])->toBe(['label' => 'About Us', 'url' => 'https://sewergurus.com/about'])
+        ->and($profile['services'][0])->toBe(['label' => 'Drain Cleaning', 'url' => 'https://sewergurus.com/drain-cleaning/'])
+        ->and($profile['company'][0])->toBe(['label' => 'About Us', 'url' => 'https://sewergurus.com/about/'])
         // priority market ordered first
         ->and(array_column($profile['areas'], 'label'))->toBe(['Jersey City', 'Newark']);
 });
@@ -72,7 +72,7 @@ it('emits the Free Assessment header CTA pointing at the Contact page, and omits
     ]);
 
     expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['cta'])
-        ->toBe(['label' => 'Free Assessment', 'url' => 'https://sewergurus.com/contact']);
+        ->toBe(['label' => 'Free Assessment', 'url' => 'https://sewergurus.com/contact/']);
 });
 
 it('emits an areas_link for the working row when the Areas We Serve page exists, else null', function () {
@@ -86,7 +86,7 @@ it('emits an areas_link for the working row when the Areas We Serve page exists,
     ]);
 
     expect(app(SiteProfileAssembler::class)->assemble($site->fresh())['areas_link'])
-        ->toBe(['label' => 'Areas We Serve', 'url' => 'https://sewergurus.com/areas-we-serve']);
+        ->toBe(['label' => 'Areas We Serve', 'url' => 'https://sewergurus.com/areas-we-serve/']);
 });
 
 it('excludes non-published pages from the menu — a drafted or taken-down page never appears', function () {
@@ -339,11 +339,11 @@ it('puts Areas We Serve in the header nav and Privacy/Terms in the footer legal 
     expect($navLabels)->toContain('About Us')->toContain('Areas We Serve')
         ->not->toContain('Privacy Policy')->not->toContain('Terms of Service');
     expect(collect($profile['nav'])->firstWhere('label', 'Areas We Serve')['url'])
-        ->toBe('https://sewergurus.com/areas-we-serve');
+        ->toBe('https://sewergurus.com/areas-we-serve/');
 
     // Footer legal links: privacy + terms, real URLs.
     expect(array_column($profile['legal_links'], 'label'))->toBe(['Privacy Policy', 'Terms of Service'])
-        ->and($profile['legal_links'][0]['url'])->toBe('https://sewergurus.com/privacy-policy');
+        ->and($profile['legal_links'][0]['url'])->toBe('https://sewergurus.com/privacy-policy/');
 
     // A site without those pages advertises nothing (never a dead link).
     $bare = Site::factory()->create(['domain_url' => 'https://bare.example']);
@@ -363,7 +363,7 @@ it('enables the weather alert only when the tenant is opted in AND has coordinat
         ->and($alert['lat'])->toBe(40.1215)
         ->and($alert['lng'])->toBe(-75.3399)
         ->and($alert['noun'])->toBe('sump pump')
-        ->and($alert['cta_url'])->toBe('https://drybasements.example/contact');
+        ->and($alert['cta_url'])->toBe('https://drybasements.example/contact/');
 });
 
 it('keeps the weather alert OFF unless the operator opts the tenant in — no trade auto-enable', function () {
