@@ -90,7 +90,7 @@ final class LocationTitle
         }
 
         $parts = preg_split('/\s*,\s*/', $trade);
-        $firstClause = is_array($parts) ? trim((string) ($parts[0] ?? '')) : '';
+        $firstClause = is_array($parts) ? trim($parts[0]) : '';
         if ($firstClause !== '' && $firstClause !== $trade && mb_strlen($firstClause.' in '.$place) <= SeoTitle::MAX_LENGTH) {
             return $firstClause.' in '.$place;
         }
