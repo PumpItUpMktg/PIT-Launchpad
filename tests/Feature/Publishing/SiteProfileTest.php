@@ -343,7 +343,7 @@ it('puts Areas We Serve in the header nav and Privacy/Terms in the footer legal 
 
     // Footer legal links: privacy + terms, real URLs.
     expect(array_column($profile['legal_links'], 'label'))->toBe(['Privacy Policy', 'Terms of Service'])
-        ->and($profile['legal_links'][0]['url'])->toBe('https://sewergurus.com/privacy-policy');
+        ->and($profile['legal_links'][0]['url'])->toBe('https://sewergurus.com/privacy-policy/');
 
     // A site without those pages advertises nothing (never a dead link).
     $bare = Site::factory()->create(['domain_url' => 'https://bare.example']);
