@@ -165,6 +165,7 @@ final class ImageFilenameTownReport
         $i = 0;
         while ($i < $count) {
             $hit = null;
+            $own = null;
             for ($len = 3; $len >= 1; $len--) {
                 $stateAt = $i + $len;
                 if ($stateAt >= $count || ! in_array($tokens[$stateAt], self::STATE_ABBREVS, true)) {
@@ -178,7 +179,8 @@ final class ImageFilenameTownReport
                     continue; // not a place the site knows ("service-pa")
                 }
                 if ($candidate === $authSlug || str_ends_with($candidate, '-'.$authSlug)) {
-                    continue; // the page's own town
+                    $own = $len; // the page's own town — keep the WHOLE run, so its tail ("plainfield-nj"
+                    break;       // inside "north-plainfield-nj") is never re-matched as a foreign place
                 }
                 if ($brandSlug !== '' && (str_contains($brandSlug, $candidate) || str_contains($candidate, $brandSlug))) {
                     continue;
@@ -187,6 +189,14 @@ final class ImageFilenameTownReport
                 break;
             }
 
+            if ($own !== null) {
+                for ($k = $i; $k <= $i + $own; $k++) {
+                    $out[] = $tokens[$k];
+                }
+                $i += $own + 1;
+
+                continue;
+            }
             if ($hit === null) {
                 $out[] = $tokens[$i];
                 $i++;
