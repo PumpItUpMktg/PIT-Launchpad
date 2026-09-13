@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\GoogleConnectController;
+use App\Http\Controllers\Interview\ClientInterviewController;
 use App\Http\Controllers\JobCapture\CaptureController;
 use App\Http\Controllers\JobCapture\CapturePageController;
 use App\Http\Controllers\Reviews\ReviewSubmissionController;
@@ -24,6 +25,16 @@ Route::middleware('throttle:30,1')->group(function (): void {
     Route::get('reviews/{token}/thanks', [ReviewSubmissionController::class, 'thanks'])->name('reviews.thanks');
     Route::get('reviews/{token}', [ReviewSubmissionController::class, 'show'])->name('reviews.show');
     Route::post('reviews/{token}', [ReviewSubmissionController::class, 'submit'])->name('reviews.submit');
+});
+
+// Client interview link (relay PR 2) — the public, no-auth owner-interview surface. Reached only by a
+// multi-use, expiring, hashed token that carries the tenant (bound from the row, never a session). Same
+// throttle anchor as reviews: client IP + token path. No other parameter is read.
+Route::middleware('throttle:30,1')->group(function (): void {
+    Route::get('interview/{token}', [ClientInterviewController::class, 'show'])->name('interview.show');
+    Route::post('interview/{token}/answer', [ClientInterviewController::class, 'answer'])->name('interview.answer');
+    Route::post('interview/{token}/retry', [ClientInterviewController::class, 'retry'])->name('interview.retry');
+    Route::post('interview/{token}/finish', [ClientInterviewController::class, 'finish'])->name('interview.finish');
 });
 
 // Platform-wide Google (GSC + GA4) OAuth connect backend — the "one email" the

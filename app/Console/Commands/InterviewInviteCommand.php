@@ -64,6 +64,7 @@ class InterviewInviteCommand extends Command
             $this->comment("  Previous link (issued {$live->issued_at->toDateString()}) revoked.");
         }
         $this->line("  Token:   {$issued->plaintext}");
+        $this->line('  Link:    '.route('interview.show', ['token' => $issued->plaintext]));
         $this->line("  Expires: {$issued->invite->expires_at->toDateTimeString()} ({$this->ttlLabel($issued)})");
         $this->comment('  The token is shown ONCE — it is stored hashed and cannot be recovered. Re-run to issue a new one.');
 

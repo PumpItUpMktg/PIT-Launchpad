@@ -10,6 +10,7 @@
             .gi-msg { max-width:78%; padding:9px 13px; border-radius:12px; font-size:13.5px; line-height:1.45; }
             .gi-msg.assistant { align-self:flex-start; background:rgba(79,70,229,.1); border:1px solid rgba(79,70,229,.25); }
             .gi-msg.operator { align-self:flex-end; background:rgba(148,163,184,.12); border:1px solid rgba(148,163,184,.3); }
+            .gi-msg.owner { align-self:flex-end; background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.3); } /* answered by the owner on the client link */
             .gi-tag { display:block; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#818cf8; margin-bottom:2px; font-weight:700; }
             .gi-meter .row { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid rgba(148,163,184,.16); font-size:12.5px; }
             .gi-meter .row:last-child { border-bottom:0; }
