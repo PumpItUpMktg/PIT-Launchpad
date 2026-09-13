@@ -18,20 +18,24 @@ use Illuminate\Support\Str;
 final class KnownPlaces
 {
     /**
-     * @return array{names: list<string>, slugs: array<string, true>} display names (original case, longest first)
-     *                                                                 and their slugs
+     * Display names (original case, longest first) and their slugs.
+     *
+     * @return array{names: list<string>, slugs: array<string, true>}
      */
     public function forSite(Site $site): array
     {
+        /** @var list<string> $names */
         $names = [];
+        $seen = [];
         $slugs = [];
-        $add = function (string $name) use (&$names, &$slugs): void {
+        $add = function (string $name) use (&$names, &$seen, &$slugs): void {
             $display = TownName::display($name);
             $slug = Str::slug($display);
-            if ($slug === '') {
+            if ($slug === '' || isset($seen[$display])) {
                 return;
             }
-            $names[$display] = true;
+            $seen[$display] = true;
+            $names[] = $display;
             $slugs[$slug] = true;
         };
 
@@ -48,9 +52,8 @@ final class KnownPlaces
             }
         }
 
-        $list = array_keys($names);
-        usort($list, fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
+        usort($names, fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
 
-        return ['names' => $list, 'slugs' => $slugs];
+        return ['names' => $names, 'slugs' => $slugs];
     }
 }
