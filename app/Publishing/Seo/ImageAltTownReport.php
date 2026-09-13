@@ -113,7 +113,7 @@ final class ImageAltTownReport
     }
 
     /** Full state names the vision pass sometimes writes instead of the abbreviation ("Allentown, Pennsylvania"). */
-    private const STATE_NAMES = [
+    public const STATE_NAMES = [
         'Alabama' => 'AL', 'Alaska' => 'AK', 'Arizona' => 'AZ', 'Arkansas' => 'AR', 'California' => 'CA',
         'Colorado' => 'CO', 'Connecticut' => 'CT', 'Delaware' => 'DE', 'Florida' => 'FL', 'Georgia' => 'GA',
         'Hawaii' => 'HI', 'Idaho' => 'ID', 'Illinois' => 'IL', 'Indiana' => 'IN', 'Iowa' => 'IA', 'Kansas' => 'KS',
@@ -131,7 +131,7 @@ final class ImageAltTownReport
      * from the region's; its clause is dropped ("…and the surrounding Lehigh Valley area" → "…and the
      * surrounding area") rather than swapped, since no page has an authoritative region.
      */
-    private const REGIONS = ['Lehigh Valley' => 'PA'];
+    public const REGIONS = ['Lehigh Valley' => 'PA'];
 
     /** A bare town name counts as a place only in a place context: after one of these words (an article alone is not enough)… */
     private const BARE_BEFORE = '(?:[Ii]n|[Tt]hroughout|[Aa]cross|[Ss]erves|[Ss]erving|[Nn]ear|[Aa]round)';
