@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.43
+Stable tag: 0.9.44
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,14 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.44 =
+* Redirects: disable WordPress core's 404 "guess permalink" redirect. It 301'd any unknown URL to a live
+  page whose slug matched the last segment, so a dead `/bedminster-nj/washington-nj` landed on
+  `/hackensack-nj/washington-nj` — a different town (Washington exists in four NJ counties). The control
+  plane's redirect map is the only redirect authority; a dead path it does not cover now 404s.
+* Sitemap: render `/sitemap.xml` (and the content / jobs children) before core's canonical redirect, so the
+  URL robots.txt advertises answers 200 directly instead of a 301 to `/sitemap.xml/`.
 
 = 0.9.38 =
 * Job Capture sitemap: publish a dedicated `/sitemap-jobs.xml` child (added to the sitemap index) listing

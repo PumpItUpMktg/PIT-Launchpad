@@ -94,6 +94,23 @@ class Test_Sitemap extends WP_UnitTestCase
         $this->assertStringContainsString('sitemap-jobs.xml', $this->render('render_index'));
     }
 
+    public function test_sitemap_renders_before_core_canonical_redirect_and_refuses_it(): void
+    {
+        $sitemap = new Sitemap();
+        $sitemap->register();
+
+        // Registered ahead of redirect_canonical (priority 10) so the XML answers before any trailing-slash 301.
+        $this->assertSame(0, has_action('template_redirect', [$sitemap, 'maybe_render']));
+
+        // And a canonical redirect of a sitemap request is refused outright.
+        set_query_var('lp_sitemap', 'index');
+        $this->assertFalse($sitemap->skip_canonical('https://example.test/sitemap.xml/', 'https://example.test/sitemap.xml'));
+
+        // Any other request keeps core's decision.
+        set_query_var('lp_sitemap', '');
+        $this->assertSame('https://example.test/page/', $sitemap->skip_canonical('https://example.test/page/', 'https://example.test/page'));
+    }
+
     public function test_index_ignores_a_thin_only_job_set(): void
     {
         $this->make_job(['thumb' => false]); // only a thin job exists → still no jobs sitemap advertised

@@ -19,6 +19,13 @@ final class Redirects
     public function register(): void
     {
         add_action('template_redirect', [$this, 'maybe_redirect'], 0);
+
+        // Core's 404 "guess" (redirect_guess_404_permalink) 301s any unknown URL to a live post whose slug
+        // matches its last segment — so a dead /bedminster-nj/washington-nj lands on /hackensack-nj/washington-nj,
+        // a DIFFERENT town 40 miles away (Washington exists in four NJ counties; Franklin, Monroe, Hamilton and
+        // Union likewise). The control plane's redirect map above is the only redirect authority: a dead path
+        // it does not cover must 404, never guess.
+        add_filter('do_redirect_guess_404_permalink', '__return_false');
     }
 
     public function maybe_redirect(): void
