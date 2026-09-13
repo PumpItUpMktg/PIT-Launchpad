@@ -165,8 +165,8 @@ final class ImageAltTownReport
 
         $skip = function (string $town) use ($authKey, $brandKey): bool {
             $key = TownName::key($town);
-            if ($key === '' || in_array(strtoupper($town), self::STATE_ABBREVS, true)) {
-                return true;
+            if ($key === '' || in_array(strtoupper($town), self::STATE_ABBREVS, true) || isset(self::STATE_NAMES[$town])) {
+                return true; // a bare state ("NJ", "New Jersey") is not a town
             }
             if ($key === $authKey || str_ends_with($key, ' '.$authKey)) {
                 return true; // the page's own town
@@ -182,8 +182,10 @@ final class ImageAltTownReport
 
         // 1. "{Town}[, ]{ST}" / "{Town}, {State name}"
         $stateNames = implode('|', array_map(fn (string $n): string => preg_quote($n, '/'), array_keys(self::STATE_NAMES)));
+        // "…PA, NJ, and MD" / "…New Jersey, Pennsylvania, or Maryland" — a state followed by another state is a LIST.
+        $notStateList = '(?!\s*(?:,|&|and|or)\s*(?:and\s+|or\s+)?(?:[A-Z]{2}\b|(?:'.$stateNames.')\b))';
         $out = preg_replace_callback(
-            '/(?:\b([Aa]n?)\s+)?\b((?:[A-Z][A-Za-z.\'\-]*)(?:\s+[A-Z][A-Za-z.\'\-]*){0,2})(?:,?\s+([A-Z]{2})\b(?!\s*(?:,|&|and)\s*(?:and\s+)?[A-Z]{2}\b)|,\s+('.$stateNames.')\b)/',
+            '/(?:\b([Aa]n?)\s+)?\b((?:[A-Z][A-Za-z.\'\-]*)(?:\s+[A-Z][A-Za-z.\'\-]*){0,2})(?:,?\s+([A-Z]{2})\b'.$notStateList.'|,\s+('.$stateNames.')\b'.$notStateList.')/',
             function (array $m) use ($skip, $replacement, $agree): string {
                 $article = $m[1];
                 $town = trim($m[2]);
@@ -201,19 +203,27 @@ final class ImageAltTownReport
         );
         $text = is_string($out) ? $out : $text;
 
-        // 2. bare known foreign towns in a place context
-        $foreign = array_values(array_filter($knownPlaces, fn (string $p): bool => ! $skip($p)));
-        if ($foreign !== []) {
-            $alternation = implode('|', array_map(fn (string $p): string => preg_quote($p, '/'), $foreign));
+        // 2. bare known foreign towns in a place context. The alternation carries EVERY known place (longest
+        //    first) — the page's own town included, returned unchanged — so "Upper Darby" is consumed whole and
+        //    its tail "Darby" is never matched on its own. Region names are masked so "Lehigh Valley" can't be
+        //    read as the town Valley.
+        if ($knownPlaces !== []) {
+            $masks = [];
+            foreach (array_keys(self::REGIONS) as $i => $region) {
+                $masks[$region] = "\x00R{$i}\x00";
+            }
+            $text = strtr($text, $masks);
+
+            $alternation = implode('|', array_map(fn (string $p): string => preg_quote($p, '/'), $knownPlaces));
             $out = preg_replace_callback(
                 '/(?:\b('.self::BARE_BEFORE.')\s+)?(?:\b([Aa]n?|[Tt]he)\s+)?\b('.$alternation.')\b'
                     .'(?!,?\s+[A-Z]{2}\b|,\s+(?:'.$stateNames.')\b)'.self::BARE_NOT_AFTER.'((?='.self::BARE_AFTER.'))?/',
-                function (array $m) use ($bare, $agree): string {
+                function (array $m) use ($bare, $agree, $skip): string {
                     $context = $m[1] ?? '';
                     $article = $m[2] ?? '';
                     $hasAfter = isset($m[4]);
-                    if ($context === '' && ! $hasAfter) {
-                        return $m[0]; // no place context — not a town
+                    if ($skip($m[3]) || ($context === '' && ! $hasAfter)) {
+                        return $m[0]; // the page's own town, or no place context — not a foreign town
                     }
                     $lead = $article === '' ? $bare
                         : (in_array(strtolower($article), ['a', 'an'], true) ? $agree($article, $bare) : $article.' '.$bare);
@@ -222,7 +232,7 @@ final class ImageAltTownReport
                 },
                 $text,
             );
-            $text = is_string($out) ? $out : $text;
+            $text = strtr(is_string($out) ? $out : $text, array_flip($masks));
         }
 
         // 3. foreign region clauses
