@@ -39,7 +39,8 @@ final class LobbyCard
 
     /**
      * The badges actually rendered. Blocked → only the single top Tier-1 badge (the blocker), the rest
-     * suppressed. Active → up to three, tier-ordered. Clean/Onboarding → none.
+     * suppressed. Active → up to three, tier-ordered. Onboarding → the client-interview badges only (the one
+     * thing an onboarding card carries). Clean → none.
      *
      * @return list<LobbyBadge>
      */
@@ -47,7 +48,7 @@ final class LobbyCard
     {
         return match ($this->state) {
             LobbyCardState::Blocked => array_slice($this->badges, 0, 1),
-            LobbyCardState::ActivePending => array_slice($this->badges, 0, self::MAX_ACTIVE_BADGES),
+            LobbyCardState::ActivePending, LobbyCardState::Onboarding => array_slice($this->badges, 0, self::MAX_ACTIVE_BADGES),
             default => [],
         };
     }

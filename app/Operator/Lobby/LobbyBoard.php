@@ -7,6 +7,7 @@ use App\Enums\CitationPresence;
 use App\Enums\ConnectionProvider;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\InterviewStatus;
 use App\Enums\JobStatus;
 use App\Enums\LobbyBadgeTier;
 use App\Enums\LobbyCardState;
@@ -18,6 +19,7 @@ use App\Models\CitationStatus;
 use App\Models\Connection;
 use App\Models\Content;
 use App\Models\CoverageScanPlan;
+use App\Models\Interview;
 use App\Models\Job;
 use App\Models\Location;
 use App\Models\Market;
@@ -49,6 +51,9 @@ class LobbyBoard
 {
     /** A feed with no items for at least this many days reads as "returned nothing for N days". */
     private const FEED_STALE_DAYS = 6;
+
+    /** A client-completed interview reads as "newly completed" for this many days (then the badge retires). */
+    private const INTERVIEW_FRESH_DAYS = 7;
 
     /**
      * @param  string  $filter  'all' | 'attention' | 'onboarding'
@@ -135,7 +140,27 @@ class LobbyBoard
             ->selectRaw('site_id, count(*) as bad, min(last_item_at) as oldest_item')
             ->get();
 
+        // Client interviews (relay PR 3): interviews the OWNER is answering on the client link (≥ 1 `owner`
+        // turn), split into in-progress vs newly completed — one grouped query, badged on onboarding cards too
+        // (the interview is a setup-time event; it is the one thing an onboarding card badges).
+        $interviews = Interview::withoutGlobalScope(SiteScope::class)
+            ->whereIn('site_id', $ids)
+            ->whereExists(function ($q): void {
+                $q->selectRaw('1')->from('interview_turns')
+                    ->whereColumn('interview_turns.interview_id', 'interviews.id')
+                    ->where('interview_turns.role', 'owner');
+            })
+            ->groupBy('site_id')
+            ->selectRaw('site_id')
+            ->selectRaw('SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as in_progress', [InterviewStatus::InProgress->value])
+            ->selectRaw('SUM(CASE WHEN status = ? AND completed_at >= ? THEN 1 ELSE 0 END) as completed', [
+                InterviewStatus::Complete->value, $now->copy()->subDays(self::INTERVIEW_FRESH_DAYS),
+            ])
+            ->get();
+
         return [
+            'client_interview_in_progress' => $interviews->pluck('in_progress', 'site_id')->map(fn ($v) => (int) $v)->all(),
+            'client_interview_complete' => $interviews->pluck('completed', 'site_id')->map(fn ($v) => (int) $v)->all(),
             // Tier 4 — starved blog queues: silos that have held a blog target but whose Queued queue has
             // run dry (≤ near-empty). One grouped subquery (count-per-silo → count starved silos per site),
             // so the pass stays constant regardless of tenant count. (Absorbed from the retired AttentionBoard.)
@@ -269,12 +294,14 @@ class LobbyBoard
         $id = (string) $site->id;
         $at = fn (string $metric): int => (int) ($agg[$metric][$id] ?? 0);
 
-        // An onboarding tenant is a setup task, not an operational one — no badges, just progress.
+        // An onboarding tenant is a setup task, not an operational one — no operational badges, just
+        // progress. The one exception is the client interview: a setup-time event the operator needs to
+        // notice without checking, so its (Tier 4) badges ride on the onboarding card too.
         if ($site->status === SiteStatus::Onboarding) {
             return new LobbyCard(
                 site: $site,
                 state: LobbyCardState::Onboarding,
-                badges: [],
+                badges: $this->clientInterviewBadges($at),
                 onboardingStep: (int) ($agg['setup_step'][$id] ?? 1),
                 onboardingStepCount: $stepCount,
             );
@@ -375,8 +402,32 @@ class LobbyBoard
         if ($at('starved_queues') > 0) {
             $badges[] = new LobbyBadge('starved_queues', $t4, 'Blog queues run dry', $at('starved_queues'));
         }
+        foreach ($this->clientInterviewBadges($at) as $badge) {
+            $badges[] = $badge;
+        }
 
         usort($badges, fn (LobbyBadge $a, LobbyBadge $b) => $a->tier->rank() <=> $b->tier->rank());
+
+        return $badges;
+    }
+
+    /**
+     * Tier 4 (quiet) — the owner is answering the interview on the client link, or has just finished it
+     * (extraction is the operator's next move). Only client-answered interviews badge; an operator-led call
+     * is the operator's own doing and never badges.
+     *
+     * @param  callable(string): int  $at
+     * @return list<LobbyBadge>
+     */
+    private function clientInterviewBadges(callable $at): array
+    {
+        $badges = [];
+        if ($at('client_interview_complete') > 0) {
+            $badges[] = new LobbyBadge('client_interview_complete', LobbyBadgeTier::Degrading, 'Client interview complete', null, 'ready to extract');
+        }
+        if ($at('client_interview_in_progress') > 0) {
+            $badges[] = new LobbyBadge('client_interview_in_progress', LobbyBadgeTier::Degrading, 'Client interview in progress');
+        }
 
         return $badges;
     }

@@ -6,8 +6,12 @@ use App\Enums\InterviewSection;
 use App\Enums\InterviewStatus;
 use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
+use App\Interview\Invites\InterviewInvites;
+use App\Mail\InterviewInviteMail;
 use App\Models\Interview;
+use App\Models\InterviewInvite;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Mail;
 
 /**
  * New Setup · Step 2 — the adaptive owner interview. Operator-led chat: the operator conducts the
@@ -32,6 +36,81 @@ class InterviewStep extends GatheringPage
     public string $input = '';
 
     public string $noteInput = '';
+
+    /** Client link (relay PR 3): who to send it to, and the one-time link shown right after issuing. */
+    public string $inviteEmail = '';
+
+    public ?string $issuedLink = null;
+
+    /** The site's live client link, if any. */
+    public function getInviteProperty(): ?InterviewInvite
+    {
+        $site = $this->getSite();
+
+        return $site === null ? null : app(InterviewInvites::class)->live($site);
+    }
+
+    /** How many answers the OWNER has typed on the client link (0 = operator-led or not started). */
+    public function getClientAnswersProperty(): int
+    {
+        $interview = $this->getInterviewProperty();
+
+        return $interview === null ? 0 : $interview->turns()->where('role', 'owner')->count();
+    }
+
+    /**
+     * Issue (or re-issue) the client link — the previous one dies — and queue the invite email when an
+     * address is given. The plaintext link is shown ONCE on this page (it is stored hashed).
+     */
+    public function sendLink(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $email = trim($this->inviteEmail);
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            Notification::make()->warning()->title('That email address doesn\'t look right.')->send();
+
+            return;
+        }
+
+        $issued = app(InterviewInvites::class)->issue($site, $email !== '' ? $email : null, $this->operatorId());
+        $this->issuedLink = route('interview.show', ['token' => $issued->plaintext]);
+
+        if ($email !== '') {
+            Mail::to($email)->queue(new InterviewInviteMail((string) $issued->invite->id, $issued->plaintext));
+        }
+
+        Notification::make()->success()
+            ->title($email !== '' ? "Link sent to {$email}" : 'Link issued')
+            ->body('Any earlier link no longer works. The link below is shown once — copy it now if you need it.')
+            ->send();
+    }
+
+    /** Revoke the live client link outright. The interview and its answers stay. */
+    public function revokeLink(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $revoked = app(InterviewInvites::class)->revokeLive($site);
+        $this->issuedLink = null;
+
+        Notification::make()->success()
+            ->title($revoked > 0 ? 'Client link revoked' : 'No live link to revoke')
+            ->send();
+    }
+
+    private function operatorId(): ?string
+    {
+        $id = auth()->id();
+
+        return $id === null ? null : (string) $id;
+    }
 
     public function getInterviewProperty(): ?Interview
     {
@@ -148,11 +227,14 @@ class InterviewStep extends GatheringPage
     public function readiness(): array
     {
         $interview = $this->getInterviewProperty();
+        $answers = $this->getClientAnswersProperty();
 
         return match ($interview?->status) {
-            InterviewStatus::Complete => ['state' => 'complete', 'label' => 'Complete'],
-            InterviewStatus::InProgress => ['state' => 'attention', 'label' => 'In progress — resume anytime'],
-            default => ['state' => 'empty', 'label' => 'Not started (skippable)'],
+            InterviewStatus::Complete => ['state' => 'complete', 'label' => $answers > 0 ? 'Complete — answered by the client' : 'Complete'],
+            InterviewStatus::InProgress => ['state' => 'attention', 'label' => $answers > 0
+                ? "In progress — client answering ({$answers} ".($answers === 1 ? 'answer' : 'answers').' so far)'
+                : 'In progress — resume anytime'],
+            default => ['state' => 'empty', 'label' => $this->getInviteProperty() !== null ? 'Link sent — waiting on the client' : 'Not started (skippable)'],
         };
     }
 
