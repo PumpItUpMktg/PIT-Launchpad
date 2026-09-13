@@ -8,13 +8,16 @@ use App\Enums\InterviewStatus;
 use App\Gathering\InterviewEngine;
 use App\Http\Controllers\Controller;
 use App\Interview\Invites\InterviewInvites;
+use App\Mail\InterviewCompletedMail;
 use App\Models\Interview;
 use App\Models\InterviewInvite;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
@@ -123,9 +126,21 @@ class ClientInterviewController extends Controller
         $interview = $this->interviewFor($invite, $site);
         if ($interview->status === InterviewStatus::InProgress) {
             $this->engine->end($interview);
+            $this->notifyIssuer($invite, $site);
         }
 
         return redirect()->route('interview.show', ['token' => $token]);
+    }
+
+    /** Tell the operator who issued the link that the owner has finished (queued; never inline). */
+    private function notifyIssuer(InterviewInvite $invite, Site $site): void
+    {
+        $issuer = $invite->issued_by !== null ? User::query()->find($invite->issued_by) : null;
+        if ($issuer === null || trim((string) $issuer->email) === '') {
+            return;
+        }
+
+        Mail::to($issuer->email)->queue(new InterviewCompletedMail((string) $site->id));
     }
 
     /**

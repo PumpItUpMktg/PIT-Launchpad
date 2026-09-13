@@ -21,7 +21,32 @@
             .gi-skip { background:none; border:0; color:#94a3b8; font-size:11px; cursor:pointer; padding:0; }
         </style>
 
-        @php $interview = $this->interview; @endphp
+        @php $interview = $this->interview; $invite = $this->invite; @endphp
+
+        {{-- Client link (relay PR 3): let the owner answer on their own, on a private link. --}}
+        <div class="g-card">
+            <div class="g-row" style="justify-content:space-between">
+                <h3>Client link</h3>
+                @if ($invite !== null)
+                    <span class="g-muted">Live · issued {{ $invite->issued_at->toFormattedDateString() }} · expires {{ $invite->expires_at->toFormattedDateString() }} · opened {{ $invite->open_count }} time{{ $invite->open_count === 1 ? '' : 's' }}{{ $invite->last_opened_at ? ' (last '.$invite->last_opened_at->diffForHumans().')' : '' }}</span>
+                @else
+                    <span class="g-muted">No live link</span>
+                @endif
+            </div>
+            <p class="g-hint">The owner answers the same interview themselves — no login, nothing else reachable. One live link per site: sending again replaces it. Their answers land here as they go{{ $this->clientAnswers > 0 ? ' — '.$this->clientAnswers.' so far' : '' }}.</p>
+            <div class="g-row">
+                <input class="g-input" style="max-width:320px" type="email" placeholder="owner@example.com (optional — leave blank to just get the link)" wire:model="inviteEmail">
+                <button class="g-btn primary" wire:click="sendLink" wire:loading.attr="disabled">{{ $invite !== null ? 'Resend (new link)' : 'Send link' }}</button>
+                @if ($invite !== null)
+                    <button class="g-btn danger" wire:click="revokeLink" onclick="return confirm('Revoke the client link? The interview and its answers stay; the link stops working.')">Revoke</button>
+                @endif
+            </div>
+            @if ($this->issuedLink)
+                <div style="border:1px solid rgba(22,163,74,.4); background:rgba(22,163,74,.07); border-radius:9px; padding:9px 12px; font-size:12.5px; word-break:break-all">
+                    <strong>Shown once:</strong> <code>{{ $this->issuedLink }}</code>
+                </div>
+            @endif
+        </div>
 
         @if ($interview === null)
             <div class="g-card">

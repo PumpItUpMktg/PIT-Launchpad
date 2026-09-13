@@ -94,7 +94,8 @@
                 @if ($card->isOnboarding())
                     <div class="lb-progress"><span style="width:{{ $card->onboardingStepCount ? min(100, round($card->onboardingStep / $card->onboardingStepCount * 100)) : 0 }}%"></span></div>
                     <div class="lb-sub">Step {{ $card->onboardingStep }} of {{ $card->onboardingStepCount }} · Continue setup</div>
-                @else
+                @endif
+                @if (! $card->isOnboarding() || $card->visibleBadges() !== [])
                     <div class="lb-badges">
                         @foreach ($card->visibleBadges() as $badge)
                             <button type="button" class="lb-badge {{ $badge->color() }}" wire:click.stop="enterBadge('{{ $card->site->id }}', '{{ $badge->key }}')">

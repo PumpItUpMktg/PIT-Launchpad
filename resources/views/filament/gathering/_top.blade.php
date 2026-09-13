@@ -42,8 +42,8 @@
     <div class="g-rail">
         @foreach ($this->steps as $step)
             <a class="g-rstep {{ $step['current'] ? 'current' : ($step['done'] ? 'done' : '') }}" href="{{ $step['url'] }}" wire:navigate
-                title="{{ $step['label'] }}{{ $step['optional'] ? ' (optional)' : '' }}{{ $step['done'] ? ' — done' : '' }}">
-                <span class="n">{{ $step['done'] && ! $step['current'] ? '✓' : $step['n'] }}</span>{{ $step['label'] }}
+                title="{{ $step['label'] }}{{ $step['optional'] ? ' (optional)' : '' }}{{ $step['done'] ? ' — done' : '' }}{{ $step['detail'] ? ' · '.$step['detail'] : '' }}">
+                <span class="n">{{ $step['done'] && ! $step['current'] ? '✓' : $step['n'] }}</span>{{ $step['label'] }}@if ($step['detail'])<span style="font-weight:500;opacity:.75"> · {{ $step['detail'] }}</span>@endif
             </a>
             @if (! $loop->last)<span class="g-rsep">›</span>@endif
         @endforeach

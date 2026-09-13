@@ -39,7 +39,7 @@ abstract class GatheringPage extends Page
     /**
      * The stepper rail — all nine steps with done-state, this page marked current.
      *
-     * @return list<array{n: int, class: class-string, label: string, url: string, done: bool, optional: bool, current: bool}>
+     * @return list<array{n: int, class: class-string, label: string, url: string, done: bool, optional: bool, current: bool, detail: string|null}>
      */
     public function getStepsProperty(): array
     {

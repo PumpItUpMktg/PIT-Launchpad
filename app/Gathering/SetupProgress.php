@@ -3,6 +3,7 @@
 namespace App\Gathering;
 
 use App\Enums\ConnectionProvider;
+use App\Enums\InterviewSection;
 use App\Enums\InterviewStatus;
 use App\Enums\VoiceStatus;
 use App\Filament\Pages\Gathering\BrandStep;
@@ -34,7 +35,7 @@ use App\Models\VoiceProfile;
 class SetupProgress
 {
     /**
-     * @return list<array{n: int, class: class-string, label: string, url: string, done: bool, optional: bool, current: bool}>
+     * @return list<array{n: int, class: class-string, label: string, url: string, done: bool, optional: bool, current: bool, detail: string|null}>
      */
     public function steps(Site $site, ?string $currentClass = null): array
     {
@@ -69,10 +70,36 @@ class SetupProgress
                 'done' => $done,
                 'optional' => $optional,
                 'current' => $currentClass === $class,
+                'detail' => $class === InterviewStep::class ? $this->interviewDetail($site) : null,
             ];
         }
 
         return $steps;
+    }
+
+    /**
+     * The interview step's progress at a glance: sections covered out of five, and whether the owner is
+     * answering on the client link (relay PR 3). Null when no interview exists yet.
+     */
+    public function interviewDetail(Site $site): ?string
+    {
+        $interview = Interview::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->latest('started_at')
+            ->first();
+        if ($interview === null) {
+            return null;
+        }
+
+        $coverage = (array) ($interview->coverage ?? []);
+        $filled = collect(InterviewSection::cases())
+            ->filter(fn (InterviewSection $s) => ($coverage[$s->value] ?? 'empty') === 'filled')
+            ->count();
+        $byClient = $interview->turns()->where('role', 'owner')->exists();
+
+        $who = $byClient ? ($interview->status === InterviewStatus::Complete ? 'client finished' : 'client answering') : null;
+
+        return $filled.'/'.count(InterviewSection::cases()).' covered'.($who !== null ? ' · '.$who : '');
     }
 
     /**

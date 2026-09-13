@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
 use App\Filament\Pages\Citations\CitationsBoard;
+use App\Filament\Pages\Gathering\InterviewStep;
 use App\Filament\Pages\Gathering\SetupEntry;
 use App\Filament\Pages\Operate\OperateBlog;
 use App\Filament\Pages\Operate\RebuildReadiness;
@@ -114,6 +115,7 @@ class Lobby extends Page
             'publish_failed', 'render_failed', 'pages_review', 'blog_review' => ContentReviewResource::getUrl('index'),
             'starved_queues' => OperateBlog::getUrl(),
             'setup_gaps' => SetupEntry::getUrl(),
+            'client_interview_in_progress', 'client_interview_complete' => InterviewStep::getUrl(),
             'chrome_stale', 'chrome_never_synced' => RebuildReadiness::getUrl(), // Recover → Push chrome
             default => TenantDashboard::getUrl(), // held_market (Markets → PR 5), jobs_review (console), coverage_overdue
         };
