@@ -167,3 +167,32 @@ it('rewrites a stateless known town only in a place context, a full state name, 
         ->and($report->rewrite('A Spring-loaded float and a Reading of the gauge', 'neptune', 'Neptune, NJ', $b, $known, 'NJ'))
         ->toBe('A Spring-loaded float and a Reading of the gauge');
 });
+
+it('never reads a state-name list, a region name, or the tail of the own town as a foreign town', function () {
+    $report = app(ImageAltTownReport::class);
+    // Valley, Darby, Chester and Milford are all towns the site knows — the three prod false positives.
+    $known = ['Upper Darby', 'West Chester', 'New Milford', 'Allentown', 'Valley', 'Darby', 'Chester', 'Milford', 'Belleville', 'Spring'];
+    $b = 'Sump Pump Gurus';
+
+    // "New Jersey, Pennsylvania, and Maryland" is a state LIST: "New Jersey" is a state, never a town.
+    expect($report->rewrite('Serves homeowners across New Jersey, Pennsylvania, and Maryland with honest service.', 'belleville', 'Belleville, NJ', $b, $known, 'NJ'))
+        ->toBe('Serves homeowners across New Jersey, Pennsylvania, and Maryland with honest service.')
+        ->and($report->rewrite('A pump keeping a Pennsylvania, New Jersey, or Maryland basement dry', 'belleville', 'Belleville, NJ', $b, $known, 'NJ'))
+        ->toBe('A pump keeping a Pennsylvania, New Jersey, or Maryland basement dry')
+        ->and($report->rewrite('Sump pump service in New Jersey', 'belleville', 'Belleville, NJ', $b, $known, 'NJ'))
+        ->toBe('Sump pump service in New Jersey');
+
+    // "Lehigh Valley" is a region, not the town Valley — kept whole on a PA page, dropped as a clause on NJ.
+    expect($report->rewrite('Serves Allentown and the surrounding Lehigh Valley communities.', 'spring', 'Spring, PA', $b, $known, 'PA'))
+        ->toBe('Serves Spring and the surrounding Lehigh Valley communities.')
+        ->and($report->rewrite('Serves homeowners in Allentown and the surrounding Lehigh Valley area', 'ocean', 'Ocean, NJ', $b, $known, 'NJ'))
+        ->toBe('Serves homeowners in Ocean and the surrounding area');
+
+    // The own town is consumed whole: its tail ("Darby" inside "Upper Darby") is never a foreign town.
+    expect($report->rewrite('A technician checks a sump pump system in an Upper Darby home.', 'upper darby', 'Upper Darby, PA', $b, $known, 'PA'))
+        ->toBe('A technician checks a sump pump system in an Upper Darby home.')
+        ->and($report->rewrite('A properly installed sump pump keeping a West Chester basement dry', 'west chester', 'West Chester, PA', $b, $known, 'PA'))
+        ->toBe('A properly installed sump pump keeping a West Chester basement dry')
+        ->and($report->rewrite('A technician checks a sump pit in a New Milford home', 'new milford', 'New Milford, NJ', $b, $known, 'NJ'))
+        ->toBe('A technician checks a sump pit in a New Milford home');
+});
