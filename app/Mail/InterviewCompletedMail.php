@@ -37,7 +37,8 @@ class InterviewCompletedMail extends Mailable implements ShouldQueue
     private function brand(): string
     {
         $site = Site::query()->withoutGlobalScopes()->find($this->siteId);
+        $name = $site === null ? '' : trim((string) $site->brand_name);
 
-        return trim((string) ($site?->brand_name ?? '')) !== '' ? (string) $site?->brand_name : 'A client';
+        return $name !== '' ? $name : 'A client';
     }
 }

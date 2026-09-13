@@ -46,8 +46,9 @@ class InterviewInviteMail extends Mailable implements ShouldQueue
     private function brand(): string
     {
         $site = $this->invite()?->site;
+        $name = $site === null ? '' : trim((string) $site->brand_name);
 
-        return trim((string) ($site?->brand_name ?? '')) !== '' ? (string) $site?->brand_name : 'your business';
+        return $name !== '' ? $name : 'your business';
     }
 
     private function days(): int
