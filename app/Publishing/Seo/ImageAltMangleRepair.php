@@ -36,9 +36,11 @@ final class ImageAltMangleRepair
     public function __construct(private readonly LocationSubject $subject) {}
 
     /**
-     * @return array{site: Site, brand: string, rows: list<array{content_id: string, slug: string, auth: string, job_id: string, slot: string, field: string, current: string, proposed: string}>, unresolved: list<array{slug: string, field: string, current: string}>, pages: int, anchored: int, unanchored: int, affected_pages: int}
+     * @param  list<string>|null  $states  the states the site's boilerplate lists (2-letter); null → derived
+     *                                     from the site's GBP locations ({@see siteStates})
+     * @return array{site: Site, brand: string, rows: list<array{content_id: string, slug: string, auth: string, job_id: string, slot: string, field: string, current: string, proposed: string}>, unresolved: list<array{slug: string, field: string, current: string}>, pages: int, anchored: int, unanchored: int, affected_pages: int, states: list<string>}
      */
-    public function forSite(Site $site): array
+    public function forSite(Site $site, ?array $states = null): array
     {
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -47,7 +49,7 @@ final class ImageAltMangleRepair
             ->where('status', ContentStatus::Published->value)
             ->get(['id', 'site_id', 'slug', 'title', 'geo_id', 'location_id', 'parent_location_id']);
 
-        $siteStates = $this->siteStates($site);
+        $siteStates = $states ?? $this->siteStates($site);
         $rows = [];
         $unresolved = [];
         $anchored = 0;
@@ -103,6 +105,7 @@ final class ImageAltMangleRepair
             'anchored' => $anchored,
             'unanchored' => count($pages) - $anchored,
             'affected_pages' => count($affected),
+            'states' => $siteStates,
         ];
     }
 
@@ -164,7 +167,10 @@ final class ImageAltMangleRepair
     }
 
     /**
-     * The states the site operates in — every coverage-area state plus each GBP location's state.
+     * The states the site's boilerplate lists: the states of its GBP LOCATIONS (where the business sits —
+     * "New Jersey, Pennsylvania" for NJ + PA hubs), not every county it covers (coverage areas reach into
+     * NY / DE / MD from border counties, which would make the missing state ambiguous). Falls back to
+     * coverage-area states only when no location carries a state.
      *
      * @return list<string>
      */
@@ -178,11 +184,14 @@ final class ImageAltMangleRepair
                 $states[] = $st;
             }
         };
-        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereNotNull('state')->distinct()->pluck('state') as $st) {
-            $add((string) $st);
-        }
         foreach (Location::withoutGlobalScopes()->where('site_id', $site->id)->get() as $location) {
             $add($location->cityState()['state']);
+        }
+        if ($states !== []) {
+            return $states;
+        }
+        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereNotNull('state')->distinct()->pluck('state') as $st) {
+            $add((string) $st);
         }
 
         return $states;
