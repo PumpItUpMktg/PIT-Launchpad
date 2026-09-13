@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Interview\Invites\InterviewInvites;
 use App\Models\Interview;
 use App\Models\InterviewInvite;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -144,16 +145,24 @@ class ClientInterviewController extends Controller
     }
 
     /**
-     * The site's open interview — the same row the operator's step reads (latest in-progress) — created with
-     * the owner-facing opener when none exists, and pinned on the invite the first time.
+     * The interview this link is for. Once pinned, the link always opens THAT interview whatever its status
+     * (a finished one shows the done page — it must never spawn a fresh interview on the next visit). Only
+     * an unpinned link starts one: the site's open interview — the same row the operator's step reads —
+     * created with the owner-facing opener when none exists.
      */
     private function interviewFor(InterviewInvite $invite, Site $site): Interview
     {
-        $interview = $this->engine->start($site, InterviewAudience::Owner);
-
-        if ($invite->interview_id !== $interview->id) {
-            $invite->forceFill(['interview_id' => $interview->id])->save();
+        if ($invite->interview_id !== null) {
+            $pinned = Interview::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)
+                ->find($invite->interview_id);
+            if ($pinned !== null) {
+                return $pinned;
+            }
         }
+
+        $interview = $this->engine->start($site, InterviewAudience::Owner);
+        $invite->forceFill(['interview_id' => $interview->id])->save();
 
         return $interview;
     }
