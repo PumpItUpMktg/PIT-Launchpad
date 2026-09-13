@@ -22,8 +22,25 @@ final class Sitemap
         add_filter('wp_sitemaps_enabled', '__return_false');
         add_action('init', [$this, 'add_rewrite_rules']);
         add_filter('query_vars', [$this, 'query_vars']);
-        add_action('template_redirect', [$this, 'maybe_render']);
+        // Priority 0: core's redirect_canonical also runs on template_redirect (at 10, registered before any
+        // plugin) and 301s /sitemap.xml to /sitemap.xml/ before the sitemap has rendered — a needless hop on
+        // the URL robots.txt advertises. Render first; the canonical filter below is the belt to this brace.
+        add_action('template_redirect', [$this, 'maybe_render'], 0);
+        add_filter('redirect_canonical', [$this, 'skip_canonical'], 10, 2);
         add_filter('robots_txt', [$this, 'robots_txt'], 10, 1);
+    }
+
+    /**
+     * Never canonical-redirect a sitemap request (no trailing-slash 301 on /sitemap.xml).
+     *
+     * @param  string|false  $redirect_url
+     * @return string|false
+     */
+    public function skip_canonical($redirect_url, string $requested_url)
+    {
+        $type = get_query_var('lp_sitemap');
+
+        return ($type === '' || $type === false) ? $redirect_url : false;
     }
 
     public function add_rewrite_rules(): void

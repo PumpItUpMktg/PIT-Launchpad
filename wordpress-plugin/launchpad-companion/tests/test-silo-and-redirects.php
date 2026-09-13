@@ -5,6 +5,7 @@
 
 use Launchpad\Companion\Content\RedirectStore;
 use Launchpad\Companion\Content\SiloStore;
+use Launchpad\Companion\Redirects;
 
 class Test_Silo_And_Redirects extends WP_UnitTestCase
 {
@@ -71,5 +72,17 @@ class Test_Silo_And_Redirects extends WP_UnitTestCase
     {
         $this->assertSame('/foo/bar', RedirectStore::normalize('https://site.com/foo/bar/'));
         $this->assertSame('/foo', RedirectStore::normalize('/foo?utm=1'));
+    }
+
+    public function test_core_404_permalink_guess_is_disabled(): void
+    {
+        // Core guesses by default: a dead /bedminster-nj/washington-nj 301s to the live
+        // /hackensack-nj/washington-nj — a different town. The redirect map is the only authority, so the
+        // plugin pins the guess off. (The bootstrap loads the plugin before any test, so there is no
+        // "before" state to assert — the registration itself is the fact under test.)
+        (new Redirects())->register();
+
+        $this->assertNotFalse(has_filter('do_redirect_guess_404_permalink', '__return_false'));
+        $this->assertFalse(apply_filters('do_redirect_guess_404_permalink', true));
     }
 }
