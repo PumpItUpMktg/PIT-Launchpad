@@ -8,8 +8,8 @@ use App\Support\CurrentSite;
 use Illuminate\Support\Str;
 
 /**
- * Client interview links (relay PR 1) — the review-capture token pattern ({@see \App\Reviews\Requests\ReviewTokens})
- * with three deliberate differences:
+ * Client interview links (relay PR 1) — the review-capture token pattern (the ReviewTokens service in
+ * App\Reviews\Requests) with three deliberate differences:
  *
  *  - MULTI-USE: resolving or opening the link never spends it. A client will not finish in one sitting, so the
  *    link stays live until it expires or the operator revokes it.

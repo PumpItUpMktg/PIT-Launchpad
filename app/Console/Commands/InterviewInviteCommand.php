@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Interview\Invites\InterviewInvites;
 use App\Interview\Invites\IssuedInvite;
+use App\Models\InterviewInvite;
 use App\Models\Site;
 use Illuminate\Console\Command;
 
@@ -69,7 +70,7 @@ class InterviewInviteCommand extends Command
         return self::SUCCESS;
     }
 
-    private function describe(Site $site, mixed $live): void
+    private function describe(Site $site, ?InterviewInvite $live): void
     {
         $this->line("<info>{$site->brand_name}</info>  ({$site->id})");
         if ($live === null) {
