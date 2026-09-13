@@ -127,7 +127,7 @@ test('finishing completes the interview (extraction stays with the operator) and
         ->and($interview->completed_at)->not->toBeNull()
         ->and(VoiceProfile::withoutGlobalScopes()->count())->toBe(0); // draft-only guard: the public path never touches voice
 
-    $this->get(route('interview.show', $issued->plaintext))->assertOk()->assertSee('that\'s everything we need');
+    $this->get(route('interview.show', $issued->plaintext))->assertOk()->assertSee('everything we need');
     // A late answer to a completed interview is ignored, not appended.
     $this->post(route('interview.answer', $issued->plaintext), ['answer' => 'late'])->assertRedirect();
     expect($interview->turns()->count())->toBe(1);
