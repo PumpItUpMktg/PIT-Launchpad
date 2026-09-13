@@ -217,6 +217,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Client interview link — lifetime
+    |--------------------------------------------------------------------------
+    |
+    | How long a client-facing interview link stays live from the day it is
+    | issued. Multi-use (never spent by opening it) so the client can come back;
+    | 30 days is long enough that a link picked up next week still works and
+    | short enough that one in an old email does not stay live indefinitely.
+    | Issuing a new link revokes the previous one regardless.
+    */
+    'interview_invite_ttl_days' => (int) env('LAUNCHPAD_INTERVIEW_INVITE_TTL_DAYS', 30),
+
+    /*
+    |--------------------------------------------------------------------------
     | New Operate group (operate relay) — CUT OVER, default ON
     |--------------------------------------------------------------------------
     |
