@@ -7,14 +7,11 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\RenderStatus;
 use App\Models\Content;
-use App\Models\CoverageArea;
-use App\Models\Location;
 use App\Models\RenderJob;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\Blocks\LocationSubject;
 use App\Publishing\TenantStorage;
-use App\Support\TownName;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -41,7 +38,7 @@ final class ImageFilenameTownReport
         'oh', 'ok', 'or', 'pa', 'ri', 'sc', 'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy', 'dc',
     ];
 
-    public function __construct(private readonly LocationSubject $subject) {}
+    public function __construct(private readonly LocationSubject $subject, private readonly KnownPlaces $places) {}
 
     /**
      * One site's census: every succeeded render job on an anchored, published location page whose R2 key
@@ -59,7 +56,7 @@ final class ImageFilenameTownReport
             ->where('status', ContentStatus::Published->value)
             ->get(['id', 'site_id', 'slug', 'title', 'geo_id', 'location_id', 'parent_location_id']);
 
-        $known = $this->knownPlaces($site);
+        $known = $this->places->forSite($site)['slugs'];
         $brandSlug = Str::slug((string) $site->brand_name);
         $disk = Storage::disk(TenantStorage::DISK);
 
@@ -210,37 +207,6 @@ final class ImageFilenameTownReport
         $renamed = implode('-', $out);
 
         return $ext !== '' ? $renamed.'.'.$ext : $renamed;
-    }
-
-    /**
-     * Every place the site knows, as slugs: coverage-area names, GBP location cities, and served towns.
-     *
-     * @return array<string, true>
-     */
-    private function knownPlaces(Site $site): array
-    {
-        $known = [];
-        $add = function (string $name) use (&$known): void {
-            $slug = Str::slug(TownName::display($name));
-            if ($slug !== '') {
-                $known[$slug] = true;
-            }
-        };
-
-        foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->pluck('name') as $name) {
-            $add((string) $name);
-        }
-        foreach (Location::withoutGlobalScopes()->where('site_id', $site->id)->get() as $location) {
-            $add($location->cityState()['city']);
-            $servedTowns = $location->getAttribute('served_towns');
-            foreach (is_array($servedTowns) ? $servedTowns : [] as $town) {
-                if (is_array($town) && isset($town['name'])) {
-                    $add((string) $town['name']);
-                }
-            }
-        }
-
-        return $known;
     }
 
     /**
