@@ -21,6 +21,7 @@ class RepairImageAltManglesCommand extends Command
 {
     protected $signature = 'launchpad:repair-image-alt-mangles
         {--site= : limit to one site id (default: all sites)}
+        {--states= : the states the boilerplate list named, e.g. NJ,PA (default: the site\'s GBP location states)}
         {--execute : write the repaired render-job fields and re-push (default: report, change nothing)}';
 
     protected $description = 'Undo the state-list / region / doubled-town mis-rewrites in image alt/title/caption, then re-push. Report-only unless --execute.';
@@ -31,6 +32,12 @@ class RepairImageAltManglesCommand extends Command
 
     public function handle(ImageAltMangleRepair $repair): int
     {
+        $statesOption = $this->option('states');
+        $states = null;
+        if (is_string($statesOption) && trim($statesOption) !== '') {
+            $states = array_values(array_filter(array_map(fn (string $s): string => strtoupper(trim($s)), explode(',', $statesOption)), fn (string $s): bool => $s !== ''));
+        }
+
         $siteId = $this->option('site');
         if ($siteId !== null) {
             $site = Site::withoutGlobalScopes()->find($siteId);
@@ -39,11 +46,11 @@ class RepairImageAltManglesCommand extends Command
 
                 return self::FAILURE;
             }
-            $entries = [$repair->forSite($site)];
+            $entries = [$repair->forSite($site, $states)];
         } else {
             $entries = [];
             foreach (Site::withoutGlobalScopes()->orderBy('brand_name')->get() as $site) {
-                $entry = $repair->forSite($site);
+                $entry = $repair->forSite($site, $states);
                 if ($entry['pages'] > 0) {
                     $entries[] = $entry;
                 }
@@ -99,12 +106,13 @@ class RepairImageAltManglesCommand extends Command
         $this->newLine();
         $this->line("<info>{$entry['brand']}</info>  ({$site->id})");
         $this->line(sprintf(
-            '  %d published location page(s) · %d anchored / %d un-anchored · %d mangled field(s) across %d page(s)',
+            '  %d published location page(s) · %d anchored / %d un-anchored · %d mangled field(s) across %d page(s) · list states: %s',
             $entry['pages'],
             $entry['anchored'],
             $entry['unanchored'],
             count($entry['rows']),
             $entry['affected_pages'],
+            implode(',', $entry['states']) ?: '(none)',
         ));
 
         if ($entry['rows'] !== []) {
@@ -115,7 +123,7 @@ class RepairImageAltManglesCommand extends Command
         }
 
         foreach ($entry['unresolved'] as $u) {
-            $this->warn(sprintf('  UNRESOLVED %s [%s]: more than one site state could fill the list — left as-is: %s', $u['slug'], $u['field'], $u['current']));
+            $this->warn(sprintf('  UNRESOLVED %s [%s]: the missing list state is not unique — pass --states=XX,YY: %s', $u['slug'], $u['field'], $u['current']));
         }
     }
 
