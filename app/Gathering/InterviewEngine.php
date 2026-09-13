@@ -2,6 +2,7 @@
 
 namespace App\Gathering;
 
+use App\Enums\InterviewAudience;
 use App\Enums\InterviewSection;
 use App\Enums\InterviewStatus;
 use App\Integrations\Claude\ClaudeClient;
@@ -25,8 +26,12 @@ class InterviewEngine
 {
     public function __construct(private readonly ClaudeClient $claude) {}
 
-    /** Start (or resume) — returns the site's open interview, creating one with its opener. */
-    public function start(Site $site): Interview
+    /**
+     * Start (or resume) — returns the site's open interview, creating one with its opener. The audience only
+     * shapes the opener's framing (operator on a call vs the owner typing on the client link); the interview
+     * row is the same one either surface shows.
+     */
+    public function start(Site $site, InterviewAudience $audience = InterviewAudience::Operator): Interview
     {
         $open = Interview::query()
             ->where('site_id', $site->id)
@@ -44,17 +49,20 @@ class InterviewEngine
             'started_at' => now(),
         ]);
 
-        $this->ask($interview);
+        $this->ask($interview, $audience);
 
         return $interview;
     }
 
-    /** Record the operator-typed owner answer, then produce the next adaptive question. */
-    public function answer(Interview $interview, string $content): InterviewTurn
+    /**
+     * Record an owner answer — typed by the operator on a call (role `operator`) or by the owner directly on
+     * the client link (role `owner`) — then produce the next adaptive question.
+     */
+    public function answer(Interview $interview, string $content, InterviewAudience $audience = InterviewAudience::Operator): InterviewTurn
     {
-        $interview->turns()->create(['role' => 'operator', 'content' => trim($content)]);
+        $interview->turns()->create(['role' => $audience->role(), 'content' => trim($content)]);
 
-        return $this->ask($interview);
+        return $this->ask($interview, $audience);
     }
 
     /**
@@ -63,14 +71,14 @@ class InterviewEngine
      * was already persisted by {@see answer()} before the failed model call). A no-op (returns null)
      * when a question is already waiting, so it is safe to call repeatedly.
      */
-    public function resume(Interview $interview): ?InterviewTurn
+    public function resume(Interview $interview, InterviewAudience $audience = InterviewAudience::Operator): ?InterviewTurn
     {
         $last = $interview->turns()->reorder()->orderByDesc('id')->first();
         if ($last !== null && $last->role === 'assistant') {
             return null; // a question is already pending — nothing to retry
         }
 
-        return $this->ask($interview);
+        return $this->ask($interview, $audience);
     }
 
     /** Operator skip — the engine moves on and won't circle back to this section. */
@@ -114,10 +122,10 @@ class InterviewEngine
     }
 
     /** Ask the model for the next question; store + tag it and refresh the coverage meter. */
-    private function ask(Interview $interview): InterviewTurn
+    private function ask(Interview $interview, InterviewAudience $audience = InterviewAudience::Operator): InterviewTurn
     {
         $site = $interview->site;
-        $raw = $this->claude->complete($this->conversationPrompt($interview), $this->systemPrompt($site));
+        $raw = $this->claude->complete($this->conversationPrompt($interview), $this->systemPrompt($site, $audience));
         $parsed = $this->parse($raw);
 
         if (is_array($parsed['coverage'] ?? null)) {
@@ -131,14 +139,20 @@ class InterviewEngine
         ]);
     }
 
-    private function systemPrompt(Site $site): string
+    private function systemPrompt(Site $site, InterviewAudience $audience = InterviewAudience::Operator): string
     {
         $goals = collect(InterviewSection::cases())
             ->map(fn (InterviewSection $s) => "- {$s->value} ({$s->label()}): {$s->goal()}")
             ->implode("\n");
 
+        // The framing is the only thing the audience changes: on a call the operator relays the owner's
+        // answers; on the client link the owner is typing their own, so speak to them directly.
+        $framing = $audience === InterviewAudience::Owner
+            ? "You are interviewing the OWNER of {$site->brand_name}, a local service business, directly: they are typing their own answers on a private page their marketing team sent them. Speak to them in the second person, warmly and in plain language, one question at a time. When you ask for something sensitive (a license number, insurance details), say in a few words why it helps their website. If they decline or don't know, move on."
+            : "You are conducting an intake interview for {$site->brand_name}, a local service business. An operator is on a call with the owner and types the owner's answers to you; you produce the next question, one at a time.";
+
         return <<<PROMPT
-You are conducting an intake interview for {$site->brand_name}, a local service business. An operator is on a call with the owner and types the owner's answers to you; you produce the next question, one at a time.
+{$framing}
 
 WHAT IS ALREADY KNOWN (imported — never re-ask any of it; reference it naturally in your questions):
 {$this->knownContext($site)}
@@ -199,7 +213,11 @@ PROMPT;
         }
 
         $lines = $turns->map(function (InterviewTurn $turn) {
-            $who = $turn->role === 'assistant' ? 'YOU ASKED' : 'OWNER (via operator)';
+            $who = match ($turn->role) {
+                'assistant' => 'YOU ASKED',
+                'owner' => 'OWNER',
+                default => 'OWNER (via operator)',
+            };
 
             return "{$who}: {$turn->content}";
         })->implode("\n");
