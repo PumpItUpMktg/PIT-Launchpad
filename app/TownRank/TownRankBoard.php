@@ -158,14 +158,14 @@ final class TownRankBoard
             $results = is_array($point?->top_results) ? $point->top_results : [];
             $competitors = [];
             foreach ($results as $item) {
-                $domain = strtolower(preg_replace('/^www\./i', '', (string) ($item['domain'] ?? '')) ?? '');
+                $domain = strtolower(preg_replace('/^www\./i', '', $item['domain']) ?? $item['domain']);
                 if ($domain === '' || $domain === $host) {
                     continue;
                 }
-                if ($rank !== null && (int) ($item['position'] ?? 0) > $rank) {
+                if ($rank !== null && $item['position'] > $rank) {
                     continue;   // only who is ABOVE us
                 }
-                $competitors[] = ['position' => (int) ($item['position'] ?? 0), 'domain' => $domain, 'url' => (string) ($item['url'] ?? '')];
+                $competitors[] = ['position' => $item['position'], 'domain' => $domain, 'url' => $item['url']];
             }
             $modes[$mode] = [
                 'rank' => $rank,
