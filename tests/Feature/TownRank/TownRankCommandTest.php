@@ -72,10 +72,16 @@ it('posts, polls in, and prints the town table with rank, page, and ranking URL'
     ]);
     [$site, $keyword] = cmdSite();
 
-    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--scan' => true, '--mode' => 'local'])
-        ->expectsConfirmation('Post 2 DataForSEO request(s) (~$0.00)?', 'yes')
+    // --yes: no prompt (the hosted Commands panel can't answer one). After a scan only the summary prints;
+    // the table needs --town.
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--scan' => true, '--mode' => 'local', '--yes' => true])
         ->expectsOutputToContain('2/2 towns collected · complete')
         ->expectsOutputToContain('page-1 2')
+        ->expectsOutputToContain('pass --town=<name>')
+        ->doesntExpectOutputToContain('#5')
+        ->assertExitCode(0);
+
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--mode' => 'local', '--town' => 'hackett'])
         ->expectsOutputToContain('#5')   // one substring per printed line: the URL sits on this same row, so it is asserted below
         ->assertExitCode(0);
 
@@ -101,6 +107,23 @@ it('refuses a scan over the hard ceiling and cancels cleanly without confirmatio
         ->expectsOutputToContain('Cancelled')
         ->assertExitCode(0);
     Http::assertNothingSent();
+});
+
+it('prints only the summary for a large footprint unless --town slices it', function () {
+    Http::fake();
+    [$site, $keyword, $loc] = cmdSite();
+    config()->set('launchpad.town_rank.request_ceiling', 10000);
+    for ($i = 0; $i < 85; $i++) {
+        CoverageArea::factory()->create(['site_id' => $site->id, 'name' => "Town {$i}", 'population' => 100 + $i, 'lat' => 40.0 + $i / 1000, 'lng' => -74.0, 'source_location_ids' => [$loc->id]]);
+    }
+
+    $this->artisan('launchpad:town-rank', ['site' => $site->id])
+        ->expectsOutputToContain('87 covered towns — pass --town=<name>')
+        ->doesntExpectOutputToContain('Town 42')
+        ->assertExitCode(0);
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--town' => 'Town 42'])
+        ->expectsOutputToContain('Town 42')
+        ->assertExitCode(0);
 });
 
 it('joins the latest scan per mode onto every covered town with the map-pack rank beside it, and filters by --town', function () {
