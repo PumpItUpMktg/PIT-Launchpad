@@ -30,7 +30,11 @@ class TownRankCommand extends Command
         {--town= : Filter the report to towns matching this text}
         {--scan : Post a NEW scan (spends DataForSEO credits after confirmation)}
         {--collect : Collect results for scans still pending}
-        {--dry-run : With --scan: print the plan (towns × modes → requests + cost) and spend nothing}';
+        {--dry-run : With --scan: print the plan (towns × modes → requests + cost) and spend nothing}
+        {--yes : With --scan: skip the confirmation prompt (required where no prompt can be answered, e.g. a hosted Commands panel)}';
+
+    /** Above this many towns the default report prints the summary only (the table needs --town). */
+    private const TABLE_LIMIT = 80;
 
     protected $description = 'Where the website ranks for a keyword in every covered town (organic, per town) — report-first; --scan to pull fresh data.';
 
@@ -107,10 +111,17 @@ class TownRankCommand extends Command
 
             return self::FAILURE;
         }
-        if (! $this->confirm("Post {$requests} DataForSEO request(s) (~\$".number_format($requests * $costPer, 2).')?', false)) {
-            $this->comment('Cancelled.');
+        if (! (bool) $this->option('yes')) {
+            if (! $this->input->isInteractive()) {
+                $this->error('Non-interactive run — nothing posted. Re-run with --yes to post the '.number_format($requests).' request(s) (~$'.number_format($requests * $costPer, 2).').');
 
-            return self::SUCCESS;
+                return self::FAILURE;
+            }
+            if (! $this->confirm("Post {$requests} DataForSEO request(s) (~\$".number_format($requests * $costPer, 2).')?', false)) {
+                $this->comment('Cancelled.');
+
+                return self::SUCCESS;
+            }
         }
 
         $scans = [];
@@ -225,6 +236,13 @@ class TownRankCommand extends Command
         $rows = array_values(array_filter($data['rows'], fn (array $r): bool => $filter === '' || str_contains(mb_strtolower((string) $r['label']), $filter)));
         if ($rows === []) {
             $this->comment($filter !== '' ? "  No covered town matches [{$filter}]." : '  No covered towns.');
+
+            return;
+        }
+        // A whole-site table is hundreds of rows: after a scan/collect, or on a big footprint, print only the
+        // summary unless the operator sliced it with --town.
+        if ($filter === '' && (count($rows) > self::TABLE_LIMIT || (bool) $this->option('scan') || (bool) $this->option('collect'))) {
+            $this->comment('  '.count($rows).' covered towns — pass --town=<name> to see a slice of the table.');
 
             return;
         }
