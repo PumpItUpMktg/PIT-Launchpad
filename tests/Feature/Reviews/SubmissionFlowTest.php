@@ -77,6 +77,7 @@ test('a live token shows the form; submitting lands a pending review and retires
         ->and($review->location_id)->toBe((string) $location->id)
         ->and($review->customer_name)->toBe('John D.')
         ->and($review->needs_location)->toBeFalse()
+        ->and($review->project_date?->toDateString())->toBe(now()->toDateString()) // the completed job's date
         ->and($review->services()->pluck('services.id')->all())->toBe([(string) $service->id]);
 
     // Single-use: the request is submitted and the link no longer works.

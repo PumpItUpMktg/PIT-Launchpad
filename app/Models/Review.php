@@ -32,7 +32,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $postal_code
  * @property string|null $lat
  * @property string|null $lng
- * @property Carbon $reviewed_at
+ * @property Carbon $reviewed_at the day the customer wrote the review
+ * @property Carbon|null $project_date the day the work was done (optional; from the sheet or the completed job)
  * @property Carbon|null $submitted_at
  * @property Carbon|null $approved_at
  * @property Carbon|null $published_at
@@ -76,6 +77,7 @@ class Review extends Model
             'lat' => 'decimal:7',
             'lng' => 'decimal:7',
             'reviewed_at' => 'datetime',
+            'project_date' => 'date',
             'submitted_at' => 'datetime',
             'approved_at' => 'datetime',
             'published_at' => 'datetime',

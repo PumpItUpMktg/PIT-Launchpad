@@ -78,6 +78,7 @@ class ReviewSubmissionController extends Controller
             'customer_phone' => $validated['customer_phone'] ?? $job->customerPhone,
             'service_address' => $job->serviceAddress !== '' ? $job->serviceAddress : null,
             'reviewed_at' => now(),
+            'project_date' => $job->completedAt->toDateString(),
             'submitted_at' => now(),
             'needs_location' => $job->locationId === null,
         ]);
