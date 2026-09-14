@@ -320,7 +320,7 @@ class JobReview extends ConsolePage
             ->success()->send();
     }
 
-    /** Toggle the add-a-previous-job panel. 
+    /** Toggle the add-a-previous-job panel. */
     public function toggleAddJob(): void
     {
         $this->addingJob = ! $this->addingJob;

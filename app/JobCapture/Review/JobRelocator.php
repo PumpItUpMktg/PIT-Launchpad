@@ -2,8 +2,8 @@
 
 namespace App\JobCapture\Review;
 
-use App\Integrations\Census\GeocodeResult;
 use App\Integrations\Census\Geocoder;
+use App\Integrations\Census\GeocodeResult;
 use App\JobCapture\Capture\CouldNotPlaceJobException;
 use App\JobCapture\Geography\GeographyResolver;
 use App\Jobs\ResolveJobGeography;
