@@ -100,7 +100,14 @@ it('collects ready results, ranks the site by its own host (www-insensitive, fir
 });
 
 it('leaves not-ready towns pending, within the budget, and completes on a later call', function () {
-    fakeOrganicQueue(2, 1, organicItems());
+    // tasks_ready answers from a mutable count (a second Http::fake would merge behind the first, not replace it).
+    $readyCount = 1;
+    $ids = collect(['otask-0', 'otask-1']);
+    Http::fake([
+        '*/serp/google/organic/task_post' => Http::response(['status_code' => 20000, 'tasks' => $ids->map(fn ($id): array => ['id' => $id, 'status_code' => 20000])->all()]),
+        '*/serp/google/organic/tasks_ready' => fn () => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'r', 'status_code' => 20000, 'result' => $ids->take($readyCount)->map(fn ($id): array => ['id' => $id])->all()]]]),
+        '*/serp/google/organic/task_get/advanced/*' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => organicItems()]]]]]),
+    ]);
     [$site, $keyword] = townRankSite();
     $scan = app(TownRankScanner::class)->post($site, $keyword, TownRankScan::MODE_LOCAL);
 
@@ -109,7 +116,7 @@ it('leaves not-ready towns pending, within the budget, and completes on a later 
     expect($scan->status)->toBe('pending')
         ->and($scan->points()->whereNull('collected_at')->count())->toBe(1);
 
-    fakeOrganicQueue(2, 2, organicItems());   // now both ready
+    $readyCount = 2;   // now both ready
     expect(app(TownRankScanner::class)->collectPending($scan, 10))->toBe(1);
     expect($scan->fresh()->status)->toBe('complete');
 });

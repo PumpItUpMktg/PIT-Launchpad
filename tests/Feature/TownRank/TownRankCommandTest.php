@@ -76,11 +76,13 @@ it('posts, polls in, and prints the town table with rank, page, and ranking URL'
         ->expectsConfirmation('Post 2 DataForSEO request(s) (~$0.00)?', 'yes')
         ->expectsOutputToContain('2/2 towns collected · complete')
         ->expectsOutputToContain('page-1 2')
-        ->expectsOutputToContain('#5')
-        ->expectsOutputToContain('spg.com/hackettstown-nj/')
+        ->expectsOutputToContain('#5')   // one substring per printed line: the URL sits on this same row, so it is asserted below
         ->assertExitCode(0);
 
-    expect(TownRankScan::query()->withoutGlobalScopes()->where('keyword_id', $keyword->id)->where('mode', 'local')->where('status', 'complete')->count())->toBe(1);
+    $scan = TownRankScan::query()->withoutGlobalScopes()->where('keyword_id', $keyword->id)->where('mode', 'local')->first();
+    expect($scan?->status)->toBe('complete')
+        ->and($scan?->found_count)->toBe(2)
+        ->and($scan?->points()->where('label', 'Hackettstown')->value('ranking_url'))->toBe('https://spg.com/hackettstown-nj/');
 });
 
 it('refuses a scan over the hard ceiling and cancels cleanly without confirmation', function () {
