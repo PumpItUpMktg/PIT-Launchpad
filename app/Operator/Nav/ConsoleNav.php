@@ -19,6 +19,7 @@ use App\Filament\Pages\Operate\OperatePages;
 use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Pages\RankingsBoard;
+use App\Filament\Pages\TownRankPage;
 use App\Filament\Pages\UsersBoard;
 use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\KeywordResource;
@@ -30,7 +31,7 @@ use App\Filament\Resources\VoiceProfileResource;
 /**
  * The operator console navigation — the single source of the header IA (Relay 3 · PR 5). A
  * **four-column header**: four groups (Build · Territory · Results · System), no dropdowns, exactly
- * 24 items. Every item is either a live link to its surface or a "soon" placeholder for a surface
+ * 25 items. Every item is either a live link to its surface or a "soon" placeholder for a surface
  * that has not shipped yet — the IA is complete and legible from day one; each placeholder goes live
  * as its own PR lands (see `docs/specs/5-nav-cutover.md`, the authoritative mapping).
  *
@@ -75,6 +76,7 @@ class ConsoleNav
             ]],
             ['group' => 'Results', 'items' => [
                 ['label' => 'Rankings', 'surface' => RankingsBoard::class, 'soon' => false],
+                ['label' => 'Town rank', 'surface' => TownRankPage::class, 'soon' => false],
                 ['label' => 'Indexing', 'surface' => IndexingBoard::class, 'soon' => false],
                 ['label' => 'Geo grid', 'surface' => LocationGeoGrid::class, 'soon' => false],
                 ['label' => 'Coverage', 'surface' => LocationCoverage::class, 'soon' => false],

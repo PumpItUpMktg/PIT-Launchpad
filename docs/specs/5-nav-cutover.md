@@ -1,7 +1,7 @@
-# PR 5 — Navigation cutover (header-only, 4 groups, 24 items)
+# PR 5 — Navigation cutover (header-only, 4 groups, 25 items)
 
 The final operator IA. Header-only nav (no sidebar), four groups, no dropdowns,
-exactly **24 items**. Some items are single surfaces; five are **tabbed**
+exactly **25 items** (24 at cutover; Town rank joined Results with the Town Rank relay). Some items are single surfaces; five are **tabbed**
 consolidations of surfaces that are separate nav entries today. Vocabulary is
 settled — use the names below verbatim.
 
@@ -13,14 +13,14 @@ the recovery record: the cutover can be rebuilt from it alone.
 | Build | Territory | Results | System |
 | --- | --- | --- | --- |
 | Dashboard | Markets | Rankings | Connections |
-| Setup | Towns | Indexing | Feeds |
-| Posts | Citations | Geo grid | Brand |
-| Pages | Silos | Coverage | Voice |
-| Jobs | Keywords | AI visibility | Users |
-| Reviews | Internal links | | Recover |
+| Setup | Towns | Town rank | Feeds |
+| Posts | Citations | Indexing | Brand |
+| Pages | Silos | Geo grid | Voice |
+| Jobs | Keywords | Coverage | Users |
+| Reviews | Internal links | AI visibility | Recover |
 | Live | | | |
 
-Build 7 · Territory 6 · Results 5 · System 6 = **24**.
+Build 7 · Territory 6 · Results 6 · System 6 = **25**.
 
 ## Tabs (NOT nav items)
 
