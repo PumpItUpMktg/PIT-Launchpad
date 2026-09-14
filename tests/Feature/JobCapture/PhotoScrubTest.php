@@ -52,7 +52,7 @@ function foreignExif(string $jpeg, int $orientation = 1): string
 function withXmp(string $jpeg): string
 {
     $xmp = "http://ns.adobe.com/xap/1.0/\0<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"
-        ."<rdf:Description xmlns:exif=\"http://ns.adobe.com/exif/1.0/\" exif:GPSLatitude=\"51,30.0N\" exif:GPSLongitude=\"0,7.0W\"/></rdf:RDF></x:xmpmeta>";
+        .'<rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/" exif:GPSLatitude="51,30.0N" exif:GPSLongitude="0,7.0W"/></rdf:RDF></x:xmpmeta>';
     $segment = "\xFF\xE1".pack('n', strlen($xmp) + 2).$xmp;
 
     return substr($jpeg, 0, 2).$segment.substr($jpeg, 2);
