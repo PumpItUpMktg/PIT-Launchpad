@@ -375,6 +375,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Town Rank — the website's organic rank per covered town (§ Town Rank)
+    |--------------------------------------------------------------------------
+    | One DataForSEO organic task per town × mode × keyword, standard queue. `depth` is how deep a town's
+    | results are read (30 = three pages); beyond it the site is "not found". `request_ceiling` is the hard
+    | per-run abort; `cost_per_request` is an ESTIMATE for the plan output — verify against the account.
+    */
+
+    'town_rank' => [
+        'depth' => (int) env('LAUNCHPAD_TOWN_RANK_DEPTH', 30),
+        'device' => env('LAUNCHPAD_TOWN_RANK_DEVICE', 'desktop'),
+        'request_ceiling' => (int) env('LAUNCHPAD_TOWN_RANK_REQUEST_CEILING', 2000),
+        'cost_per_request' => (float) env('LAUNCHPAD_TOWN_RANK_COST_PER_REQUEST', env('DATAFORSEO_SERP_TASK_COST', 0.0012)),
+        'poll_interval_seconds' => (int) env('LAUNCHPAD_TOWN_RANK_POLL_INTERVAL', 5),
+        'poll_max_attempts' => (int) env('LAUNCHPAD_TOWN_RANK_POLL_ATTEMPTS', 24),   // ~2 min, then --collect
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Geo Grid (operator-only, internal test build)
     |--------------------------------------------------------------------------
     |
