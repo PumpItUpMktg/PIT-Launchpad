@@ -12,6 +12,7 @@ use App\JobCapture\Capture\ManualJobIntake;
 use App\JobCapture\Enhancement\DescriptionEnhancer;
 use App\JobCapture\Photos\LibraryPhotoAttacher;
 use App\JobCapture\Review\JobPhotoAttacher;
+use App\JobCapture\Review\JobRelocator;
 use App\JobCapture\Review\JobReviewActions;
 use App\Models\Job;
 use App\Models\JobType;
@@ -32,8 +33,9 @@ use Throwable;
  * Console → Jobs → Review: the operator's Job Capture review screen (§8), thin over {@see JobReviewActions}.
  * For each job awaiting a decision it shows the three photos (primary selectable), the raw / operator-source
  * / AI-enhanced descriptions side by side, the resolved job types + city/county, and the jittered public
- * point — with edit-in-place, re-enhance, approve, and reject. Nothing here pushes to WordPress directly:
- * approve enqueues the §9 publish. Every mutating action re-checks its capability.
+ * point — with edit-in-place, re-enhance, approve, reject, and re-place (type the job's real address; the
+ * point, town/county, and photo GPS follow — {@see JobRelocator}). Nothing here pushes to WordPress
+ * directly: approve enqueues the §9 publish. Every mutating action re-checks its capability.
  */
 class JobReview extends ConsolePage
 {
@@ -66,6 +68,13 @@ class JobReview extends ConsolePage
     public ?string $rejectingId = null;
 
     public string $rejectReason = '';
+
+    // Re-place state: the job being moved and the typed address (with the same live Places suggestions).
+    public ?string $placingId = null;
+
+    public string $placeAddress = '';
+
+    public bool $placePicked = false;
 
     // Add-a-previous-job (operator backfill) state — no device, no GPS, so the address is typed + geocoded.
     public bool $addingJob = false;
@@ -143,6 +152,7 @@ class JobReview extends ConsolePage
         $this->editMeta = (string) $job->meta_description;
         $this->editPrimary = (int) $job->primary_photo_index;
         $this->rejectingId = null;
+        $this->placingId = null;
     }
 
     public function cancelEdit(): void
@@ -210,6 +220,7 @@ class JobReview extends ConsolePage
         $this->rejectingId = $id;
         $this->rejectReason = '';
         $this->editingId = null;
+        $this->placingId = null;
     }
 
     public function cancelReject(): void
@@ -233,7 +244,83 @@ class JobReview extends ConsolePage
         Notification::make()->title('Rejected.')->success()->send();
     }
 
-    /** Toggle the add-a-previous-job panel. */
+    /** Open the re-place panel for one job, pre-filled with the address it is currently placed at (if typed). */
+    public function startPlace(string $id): void
+    {
+        $job = $this->ownedJob($id);
+        if ($job === null) {
+            return;
+        }
+
+        $this->placingId = $id;
+        $this->placeAddress = (string) $job->address_true;
+        $this->placePicked = true; // don't pop suggestions over the current value until the operator types
+        $this->editingId = null;
+        $this->rejectingId = null;
+    }
+
+    public function cancelPlace(): void
+    {
+        $this->placingId = null;
+        $this->placeAddress = '';
+        $this->placePicked = false;
+    }
+
+    /** Typing in the re-place box re-opens live suggestions. */
+    public function updatedPlaceAddress(): void
+    {
+        $this->placePicked = false;
+    }
+
+    /** @return list<string> */
+    public function getPlaceSuggestionsProperty(): array
+    {
+        return $this->placePicked ? [] : $this->suggestionsFor($this->placeAddress);
+    }
+
+    public function pickPlaceSuggestion(string $address): void
+    {
+        $this->placeAddress = $address;
+        $this->placePicked = true;
+    }
+
+    /**
+     * Move the job to the typed address: geocode → new true point; jitter, town/county, and every photo's
+     * GPS are reset and re-resolved off the request ({@see JobRelocator}). The write-up is left alone.
+     */
+    public function place(): void
+    {
+        if (! $this->can(Capability::EditContent) || $this->placingId === null) {
+            return;
+        }
+        $job = $this->ownedJob($this->placingId);
+        if ($job === null) {
+            return;
+        }
+        if (trim($this->placeAddress) === '') {
+            Notification::make()->title('Enter the job’s street address.')->warning()->send();
+
+            return;
+        }
+
+        try {
+            $point = app(JobRelocator::class)->relocate($job, $this->placeAddress);
+        } catch (CouldNotPlaceJobException $e) {
+            Notification::make()->title('Could not re-place the job')->body($e->getMessage())->danger()->send();
+
+            return;
+        }
+
+        $wasPushed = $job->wp_post_id !== null;
+        $this->cancelPlace();
+        Notification::make()->title('Re-placed at '.$point->matchedAddress)
+            ->body('Town, county, the map pin, and the photo GPS refresh in a moment.'
+                .($wasPushed ? ' Re-approve to republish the live page.' : '')
+                .' If the write-up names the old town, Re-enhance it.')
+            ->success()->send();
+    }
+
+    /** Toggle the add-a-previous-job panel. 
     public function toggleAddJob(): void
     {
         $this->addingJob = ! $this->addingJob;
@@ -249,15 +336,26 @@ class JobReview extends ConsolePage
     }
 
     /**
-     * Address autocomplete — Places candidates for the typed query. Min-length guarded and skipped right
-     * after a pick so the dropdown doesn't re-open over the chosen value.
+     * Address autocomplete — Places candidates for the typed query. Skipped right after a pick so the
+     * dropdown doesn't re-open over the chosen value.
      *
      * @return list<string>
      */
     public function getAddressSuggestionsProperty(): array
     {
-        $query = trim($this->newAddress);
-        if ($this->addressPicked || mb_strlen($query) < 5) {
+        return $this->addressPicked ? [] : $this->suggestionsFor($this->newAddress);
+    }
+
+    /**
+     * Places candidates for a typed address query (min-length guarded), shared by the add-job and re-place
+     * boxes.
+     *
+     * @return list<string>
+     */
+    private function suggestionsFor(string $query): array
+    {
+        $query = trim($query);
+        if (mb_strlen($query) < 5) {
             return [];
         }
 
@@ -514,6 +612,8 @@ class JobReview extends ConsolePage
             'client' => (string) $job->client_name_display,
             'city' => $job->job_city_id !== null ? $job->city->name : null,
             'county' => $job->job_county_id !== null ? $job->county->name : null,
+            'address' => (string) $job->address_true,   // operator-only: the typed address the job is placed at ('' = GPS capture)
+            'pushed' => $job->wp_post_id !== null,
             'lat' => $job->lat_jittered !== null ? (float) $job->lat_jittered : null,
             'lng' => $job->lng_jittered !== null ? (float) $job->lng_jittered : null,
             'job_types' => $job->jobTypes->pluck('label')->all(),

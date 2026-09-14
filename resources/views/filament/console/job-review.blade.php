@@ -204,7 +204,33 @@
                     </div>
                 @endif
 
-                @if ($rejectingId === $job['id'])
+                @if ($placingId === $job['id'])
+                    {{-- Re-place: move the job to its real address; point, town/county, and photo GPS follow. --}}
+                    @php $placeSuggestions = $this->placeSuggestions; @endphp
+                    <div class="jr-ac">
+                        <div class="jr-lbl">Re-place this job — its real street address</div>
+                        <div class="jr-empty" style="margin-bottom:6px;">
+                            Currently placed {{ $job['address'] !== '' ? 'at: '.$job['address'] : 'by the capture GPS fix (where the photos were uploaded from)' }}.
+                            Moving it re-resolves the town/county, the public map pin, and the GPS written into every photo.
+                        </div>
+                        <input type="text" class="jr-field" wire:model.live.debounce.500ms="placeAddress" placeholder="Start typing the street address…" autocomplete="off">
+                        @if (count($placeSuggestions) > 0)
+                            <div class="jr-ac-list">
+                                @foreach ($placeSuggestions as $s)
+                                    <div class="jr-ac-item" wire:key="pac-{{ $job['id'] }}-{{ md5($s) }}" wire:click="pickPlaceSuggestion(@js($s))">{{ $s }}</div>
+                                @endforeach
+                            </div>
+                        @endif
+                        <div class="jr-row" style="margin-top:10px;">
+                            <button class="jr-btn go" wire:click="place" wire:loading.attr="disabled" wire:target="place">
+                                <span wire:loading.remove wire:target="place">Re-place job</span>
+                                <span wire:loading wire:target="place">Placing…</span>
+                            </button>
+                            <button class="jr-btn" wire:click="cancelPlace">Cancel</button>
+                            @if ($job['pushed'])<span class="jr-empty">Live page: re-approve after re-placing to republish.</span>@endif
+                        </div>
+                    </div>
+                @elseif ($rejectingId === $job['id'])
                     <div>
                         <div class="jr-lbl">Reason (optional)</div>
                         <input type="text" class="jr-field" wire:model="rejectReason" placeholder="e.g. Blurry photos — reshoot">
@@ -218,6 +244,7 @@
                         <button class="jr-btn go" wire:click="approve('{{ $job['id'] }}')" @disabled(! $job['has_draft'])>Approve &amp; publish</button>
                         <button class="jr-btn warn" wire:click="reEnhance('{{ $job['id'] }}')">Re-enhance</button>
                         <button class="jr-btn" wire:click="startEdit('{{ $job['id'] }}')">Edit</button>
+                        <button class="jr-btn" wire:click="startPlace('{{ $job['id'] }}')" title="Move the job to its real address">Re-place</button>
                         <button class="jr-btn danger" wire:click="startReject('{{ $job['id'] }}')">Reject</button>
                     </div>
                 @endif
