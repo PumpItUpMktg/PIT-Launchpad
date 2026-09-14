@@ -20,7 +20,7 @@ test('it captures a manual job — photos under the per-job prefix, source seede
         clientNameDisplay: 'Jane H.',
         rawDescription: 'Replaced a failed sump pump and cleared the pit.',
         lat: 40.66, lng: -74.65,
-        photos: [['bytes' => 'IMG1', 'filename' => '1.jpg'], ['bytes' => 'IMG2']],
+        photos: [['bytes' => tinyJpeg(), 'filename' => '1.jpg'], ['bytes' => tinyJpeg()]],
         jobTypes: [['label' => 'Sump Pump Repair', 'slug' => 'sump-pump-repair']],
     ));
 
@@ -69,7 +69,7 @@ test('it caps photos and job types at three', function () {
 
     $job = app(CaptureIntake::class)->capture($device, new CaptureData(
         rawDescription: 'many',
-        photos: array_map(fn (int $i): array => ['bytes' => "IMG{$i}"], range(1, 5)),
+        photos: array_map(fn (int $i): array => ['bytes' => tinyJpeg()], range(1, 5)),
         jobTypes: array_map(fn (int $i): array => ['label' => "Type {$i}", 'slug' => "type-{$i}"], range(1, 5)),
     ));
 
