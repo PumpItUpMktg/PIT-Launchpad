@@ -8,6 +8,7 @@ use App\Integrations\Census\CensusPopulation;
 use App\Integrations\Census\County;
 use App\Integrations\Census\Municipality;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\JobCapture\Photos\JobPhotoStore;
 use App\Models\Job;
 use App\Models\JobCity;
 use App\Models\JobCounty;
@@ -32,6 +33,7 @@ final class GeographyResolver
         private readonly MunicipalityGazetteer $gazetteer,
         private readonly CensusPopulation $population,
         private readonly Jitter $jitter,
+        private readonly JobPhotoStore $photos,
     ) {}
 
     public function resolve(Job $job): void
@@ -61,6 +63,10 @@ final class GeographyResolver
         }
 
         $job->save();
+
+        // Photos stored before the point existed (a walk-in placed at review, a capture with no GPS fix) are
+        // scrubbed but carry no location yet — stamp them now that the public point is known.
+        $this->photos->restamp($job, onlyUnstamped: true);
     }
 
     private function upsertCounty(County $county, ?string $stateAbbr): JobCounty
