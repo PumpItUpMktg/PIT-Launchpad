@@ -20,7 +20,7 @@ it('qualifies same-named towns by county (registry name, else FIPS, else "place"
         ['id' => 'a', 'name' => 'Bethlehem', 'state' => 'PA', 'geo_id' => '4209506088'],   // Northampton (known)
         ['id' => 'b', 'name' => 'Bethlehem', 'state' => 'PA', 'geo_id' => '4207706088'],   // Lehigh (unknown to the registry)
         ['id' => 'c', 'name' => 'Bethlehem', 'state' => 'PA', 'geo_id' => '4200000001'],   // fixture: a 10-digit id in an unknown county
-        ['id' => 'd', 'name' => 'Washington', 'state' => 'NJ', 'geo_id' => '3400000001'],  // 7-digit place id — no county
+        ['id' => 'd', 'name' => 'Washington', 'state' => 'NJ', 'geo_id' => '3477510'],     // 7-digit place id — no county
         ['id' => 'e', 'name' => 'washington', 'state' => 'NJ', 'geo_id' => '3402777510'],  // case-insensitive duplicate
         ['id' => 'f', 'name' => 'Bethlehem', 'state' => 'NJ', 'geo_id' => '3401905230'],   // different state → its own group, unique
         ['id' => 'g', 'name' => 'Hackettstown', 'state' => 'NJ', 'geo_id' => '3404128590'],
