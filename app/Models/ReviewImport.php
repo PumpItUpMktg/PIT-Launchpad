@@ -16,6 +16,9 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $imported_count
  * @property int $skipped_count
  * @property int $total_rows
+ * @property string|null $source_contents the uploaded CSV text / base64 XLSX, carried for the worker
+ * @property string|null $error
+ * @property string|null $import_source
  */
 class ReviewImport extends Model
 {

@@ -10,13 +10,26 @@
         table.ri-prev th, table.ri-prev td { border:1px solid rgba(148,163,184,.25); padding:5px 8px; text-align:left; }
         .ri-imports { font-size:13px; }
         .ri-imports li { margin:3px 0; color:#647380; }
+        .ri-note { font-size:12px; color:#94a3b8; margin-top:4px; }
+        .ri-ok { font-size:12px; color:#16a34a; margin-top:4px; }
+        .ri-err { font-size:12px; color:#dc2626; margin-top:4px; }
+        .ri-hint { font-size:11px; color:#94a3b8; }
     </style>
 
     <div class="ri-wrap">
         <div class="ri-card">
             <div class="ri-field" style="margin-bottom:10px">
                 <label>Upload a CSV or XLSX</label>
-                <input type="file" wire:model="upload" accept=".csv,.xlsx">
+                <input type="file" wire:model="upload" accept=".csv,.xlsx,text/csv">
+                <div class="ri-note" wire:loading wire:target="upload">Uploading…</div>
+                @error('upload')
+                    <div class="ri-err">{{ $message }}</div>
+                @else
+                    @if ($this->uploadedName !== null)
+                        <div class="ri-ok" wire:loading.remove wire:target="upload">Ready: {{ $this->uploadedName }}</div>
+                    @endif
+                @enderror
+                <div class="ri-note">First row = column headers. Columns can be in any order — you map them in the next step. A <em>project date</em> column (the day the work was done) is optional.</div>
             </div>
             <div class="ri-field" style="margin-bottom:10px">
                 <label>…or paste a Google Sheet URL</label>
@@ -26,8 +39,9 @@
                 <label>Import source label (e.g. google, facebook, angi)</label>
                 <input type="text" wire:model="importSource" placeholder="google">
             </div>
-            <x-filament::button wire:click="detect" wire:loading.attr="disabled" icon="heroicon-o-magnifying-glass">
-                Detect columns
+            <x-filament::button wire:click="detect" wire:loading.attr="disabled" wire:target="detect,upload" icon="heroicon-o-magnifying-glass">
+                <span wire:loading.remove wire:target="detect">Detect columns</span>
+                <span wire:loading wire:target="detect">Reading…</span>
             </x-filament::button>
         </div>
 
@@ -36,7 +50,10 @@
                 <strong style="font-size:14px">Map columns</strong>
                 <div class="ri-map">
                     @foreach (\App\Reviews\Import\ReviewImporter::FIELDS as $field)
-                        <label>{{ str_replace('_', ' ', $field) }}{{ in_array($field, ['rating','body','reviewed_at']) ? ' *' : '' }}</label>
+                        <label>
+                            {{ $field === 'reviewed_at' ? 'review date' : str_replace('_', ' ', $field) }}{{ in_array($field, ['rating','body','reviewed_at']) ? ' *' : '' }}
+                            @if ($field === 'project_date')<div class="ri-hint">day the work was done (optional)</div>@endif
+                        </label>
                         <select wire:model="mapping.{{ $field }}" class="ri-field">
                             <option value="">—</option>
                             @foreach ($columns as $column)
@@ -58,8 +75,9 @@
                 @endif
 
                 <div style="margin-top:14px">
-                    <x-filament::button wire:click="import" wire:loading.attr="disabled" icon="heroicon-o-arrow-up-tray" color="success">
-                        Import (queued)
+                    <x-filament::button wire:click="import" wire:loading.attr="disabled" wire:target="import" icon="heroicon-o-arrow-up-tray" color="success">
+                        <span wire:loading.remove wire:target="import">Import (queued)</span>
+                        <span wire:loading wire:target="import">Queuing…</span>
                     </x-filament::button>
                 </div>
             </div>
@@ -71,7 +89,13 @@
                 <strong style="font-size:14px">Recent imports</strong>
                 <ul>
                     @foreach ($recent as $i)
-                        <li>{{ $i['filename'] }} — <strong>{{ $i['status'] }}</strong> · {{ $i['imported'] }} imported, {{ $i['skipped'] }} skipped · {{ $i['created'] }}</li>
+                        <li>
+                            {{ $i['filename'] }} — <strong>{{ $i['status'] }}</strong> · {{ $i['imported'] }} imported, {{ $i['skipped'] }} skipped · {{ $i['created'] }}
+                            @if ($i['error'] !== null)<div class="ri-err">{{ $i['error'] }}</div>@endif
+                            @foreach ($i['skipped_rows'] as $skip)
+                                <div class="ri-hint">row {{ $skip['row'] }}: {{ $skip['reason'] }}</div>
+                            @endforeach
+                        </li>
                     @endforeach
                 </ul>
             </div>

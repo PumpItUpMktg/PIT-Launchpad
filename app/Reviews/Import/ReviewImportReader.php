@@ -20,15 +20,65 @@ final class ReviewImportReader
      */
     public function csv(string $contents): array
     {
-        $reader = CsvReader::createFromString($contents);
-        $reader->setHeaderOffset(0);
+        // A UTF-8 BOM (Excel, Sheets exports) would otherwise become part of the first header's name.
+        if (str_starts_with($contents, "\xEF\xBB\xBF")) {
+            $contents = substr($contents, 3);
+        }
 
+        $reader = CsvReader::createFromString($contents);
+
+        // Headers are read by hand: a Sheets/Excel export routinely carries blank trailing columns or repeated
+        // names, which league/csv's header mode rejects outright. Blank headers are dropped; repeats are
+        // suffixed so every column stays addressable in the mapping step.
+        $headers = null;
         $rows = [];
         foreach ($reader->getRecords() as $record) {
-            $rows[] = array_map(fn ($v): string => trim((string) $v), $record);
+            $cells = array_map(fn ($v): string => trim((string) $v), array_values($record));
+            if ($headers === null) {
+                $headers = $this->uniqueHeaders($cells);
+
+                continue;
+            }
+            if (implode('', $cells) === '') {
+                continue; // a fully blank line
+            }
+            $assoc = [];
+            foreach ($headers as $i => $header) {
+                if ($header !== '') {
+                    $assoc[$header] = $cells[$i] ?? '';
+                }
+            }
+            $rows[] = $assoc;
         }
 
         return $rows;
+    }
+
+    /**
+     * Blank headers stay '' (skipped when mapping cells); duplicates become "name (2)", "name (3)".
+     *
+     * @param  list<string>  $cells
+     * @return list<string>
+     */
+    private function uniqueHeaders(array $cells): array
+    {
+        $seen = [];
+        $headers = [];
+        foreach ($cells as $cell) {
+            if ($cell === '') {
+                $headers[] = '';
+
+                continue;
+            }
+            $name = $cell;
+            for ($n = 2; isset($seen[$name]); $n++) {
+                $name = "{$cell} ({$n})";
+            }
+            $seen[$name] = true;
+            $headers[] = $name;
+        }
+
+        return $headers;
     }
 
     /**
@@ -45,9 +95,12 @@ final class ReviewImportReader
             foreach ($sheet->getRowIterator() as $row) {
                 $cells = array_map($this->stringify(...), $row->toArray());
                 if ($headers === null) {
-                    $headers = $cells;
+                    $headers = $this->uniqueHeaders($cells);
 
                     continue;
+                }
+                if (implode('', $cells) === '') {
+                    continue; // a fully blank line
                 }
                 $assoc = [];
                 foreach ($headers as $i => $header) {

@@ -23,10 +23,57 @@ use Throwable;
  */
 final class ReviewImporter
 {
-    /** The importable fields; rating/body/reviewed_at are required. */
-    public const FIELDS = ['rating', 'body', 'reviewed_at', 'name', 'city', 'state', 'zip', 'service', 'import_source'];
+    /** The importable fields; rating/body/reviewed_at are required. `project_date` is the day the work was done. */
+    public const FIELDS = ['rating', 'body', 'reviewed_at', 'project_date', 'name', 'city', 'state', 'zip', 'service', 'import_source'];
+
+    /**
+     * Header spellings that auto-map to each field (compared after lower-casing and stripping non-alphanumerics,
+     * so "Review Date", "review_date" and "ReviewDate" all match). First column wins; a column maps once.
+     *
+     * @var array<string, list<string>>
+     */
+    private const HEADER_ALIASES = [
+        'rating' => ['rating', 'stars', 'star rating', 'score', 'review rating', 'star'],
+        'body' => ['body', 'review', 'review text', 'review body', 'text', 'comment', 'comments', 'content', 'message', 'testimonial'],
+        'reviewed_at' => ['reviewed at', 'reviewed', 'review date', 'date', 'date of review', 'posted', 'posted at', 'created', 'created at', 'time'],
+        'project_date' => ['project date', 'date of project', 'job date', 'date of job', 'service date', 'date of service', 'work date', 'completed', 'completed at', 'completion date', 'date completed', 'performed at', 'performed'],
+        'name' => ['name', 'customer', 'customer name', 'reviewer', 'reviewer name', 'author', 'client', 'client name', 'full name'],
+        'city' => ['city', 'town', 'municipality'],
+        'state' => ['state', 'st', 'province'],
+        'zip' => ['zip', 'zip code', 'zipcode', 'postal code', 'postcode'],
+        'service' => ['service', 'services', 'service type', 'job type', 'service performed'],
+        'import_source' => ['import source', 'source', 'platform', 'site'],
+    ];
 
     public function __construct(private readonly ReviewLocationResolver $locations) {}
+
+    /**
+     * Guess field => column from the sheet's headers. Only the operator-visible starting point — every mapping
+     * stays editable on the page before the import is committed.
+     *
+     * @param  list<string>  $columns
+     * @return array<string, string>
+     */
+    public static function guessMapping(array $columns): array
+    {
+        $normalized = [];
+        foreach ($columns as $column) {
+            $normalized[$column] = preg_replace('/[^a-z0-9]/', '', mb_strtolower($column)) ?? '';
+        }
+
+        $mapping = [];
+        foreach (self::FIELDS as $field) {
+            $aliases = array_map(fn (string $a): string => str_replace(' ', '', $a), [$field, ...self::HEADER_ALIASES[$field]]);
+            foreach ($normalized as $column => $key) {
+                if ($key !== '' && in_array($key, $aliases, true) && ! in_array($column, $mapping, true)) {
+                    $mapping[$field] = (string) $column;
+                    break;
+                }
+            }
+        }
+
+        return $mapping;
+    }
 
     /**
      * @param  list<array<string, string>>  $rows
@@ -44,6 +91,7 @@ final class ReviewImporter
             $rating = (int) $this->value($row, $mapping, 'rating');
             $body = trim($this->value($row, $mapping, 'body'));
             $date = $this->parseDate($this->value($row, $mapping, 'reviewed_at'));
+            $projectDate = $this->parseDate($this->value($row, $mapping, 'project_date'));
 
             if ($rating < 1 || $rating > 5 || $body === '' || $date === null) {
                 $skipped[] = ['row' => $rowNumber, 'reason' => 'missing/invalid rating, body, or date'];
@@ -82,6 +130,7 @@ final class ReviewImporter
                 'state' => $state !== '' ? $state : null,
                 'postal_code' => $this->value($row, $mapping, 'zip') ?: null,
                 'reviewed_at' => $date,
+                'project_date' => $projectDate?->toDateString(),
                 'submitted_at' => now(),
                 'needs_location' => $locationId === null,
             ]);

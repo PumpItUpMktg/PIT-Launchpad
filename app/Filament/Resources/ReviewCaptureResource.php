@@ -16,6 +16,7 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -91,7 +92,8 @@ class ReviewCaptureResource extends Resource
                 TextColumn::make('location.name')->label('Location')
                     ->placeholder('⚠ needs location')->color(fn (Review $record): string => $record->needs_location ? 'danger' : 'gray'),
                 TextColumn::make('body')->limit(60)->wrap(),
-                TextColumn::make('reviewed_at')->date()->sortable(),
+                TextColumn::make('reviewed_at')->label('Reviewed')->date()->sortable(),
+                TextColumn::make('project_date')->label('Project')->date()->sortable()->placeholder('—')->toggleable(),
             ])
             ->filters([
                 SelectFilter::make('status')->options(collect(ReviewStatus::cases())->mapWithKeys(fn (ReviewStatus $s): array => [$s->value => $s->label()])->all()),
@@ -145,6 +147,10 @@ class ReviewCaptureResource extends Resource
     {
         return $schema->components([
             Textarea::make('body')->required()->rows(4),
+            DatePicker::make('reviewed_at')->label('Review date')->required()->native(false)
+                ->helperText('The day the customer wrote the review.'),
+            DatePicker::make('project_date')->label('Project date')->native(false)
+                ->helperText('The day the work was done — optional.'),
             Select::make('location_id')->label('Location')->searchable()
                 ->helperText('Reassign the owning location — required to clear a "needs location" review.')
                 ->options(fn (?Review $record): array => $record !== null
