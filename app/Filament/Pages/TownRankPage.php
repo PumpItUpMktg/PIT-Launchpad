@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Url;
 
 /**
- * Town Rank (operator) — one page per keyword: where the WEBSITE ranks in every covered town, as a town
+ * Town Rank (operator, Results menu) — one page per keyword: where the WEBSITE ranks in every covered town, as a town
  * scatter (coloured by organic rank, in either query mode), the bucket summary, a filterable town table, and
  * a per-town panel with who outranks us, the page state, the map-pack rank, and the suggested next actions
  * ({@see TownRankBoard}; the rules live in TownDiagnosis). Operator-only, internal, like the sibling geo
@@ -33,9 +33,7 @@ class TownRankPage extends Page
 
     protected static ?string $navigationLabel = 'Town Rank';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
-
-    protected static ?int $navigationSort = 12;
+    protected static string|\UnitEnum|null $navigationGroup = 'Results';
 
     protected static ?string $slug = 'town-rank';
 
