@@ -389,6 +389,14 @@ return [
         'cost_per_request' => (float) env('LAUNCHPAD_TOWN_RANK_COST_PER_REQUEST', env('DATAFORSEO_SERP_TASK_COST', 0.0012)),
         'poll_interval_seconds' => (int) env('LAUNCHPAD_TOWN_RANK_POLL_INTERVAL', 5),
         'poll_max_attempts' => (int) env('LAUNCHPAD_TOWN_RANK_POLL_ATTEMPTS', 24),   // ~2 min, then --collect
+        // The weekly sweep: a (keyword × mode) is due when its newest scan is older than `cadence_days` (or
+        // there is none); a site whose due set exceeds `request_ceiling` is skipped and reported, never
+        // silently trimmed. Posted scans are collected by the IngestTownRankScans sweep, `ingest_batch`
+        // task_get calls per run; a scan still pending after `pending_expiry_hours` finalizes as `partial`.
+        'cadence_days' => (int) env('LAUNCHPAD_TOWN_RANK_CADENCE_DAYS', 7),
+        'ingest_batch' => (int) env('LAUNCHPAD_TOWN_RANK_INGEST_BATCH', 40),
+        'pending_expiry_hours' => (int) env('LAUNCHPAD_TOWN_RANK_PENDING_EXPIRY_HOURS', 24),
+        'queue' => env('LAUNCHPAD_TOWN_RANK_QUEUE'),   // blank ⇒ the default queue
     ],
 
     /*

@@ -137,6 +137,26 @@
                 @endif
             </div>
 
+            {{-- 5b · Town rank (website organic, per covered town) --}}
+            <div class="ld-card">
+                <h3>Town rank <span class="ld-muted">website · organic</span> @if ($d['town_rank']['available'])<a class="ld-link" href="{{ $this->townRankUrl($d['town_rank']['keyword_id']) }}">Open board →</a>@endif</h3>
+                @if (! $d['town_rank']['available'])
+                    <p class="ld-empty">No town-rank scans yet. Run <code>launchpad:town-rank {site} --keyword="…" --scan --yes</code>.</p>
+                @else
+                    <p class="ld-muted">“{{ $d['town_rank']['keyword'] }}” across this location's {{ $d['town_rank']['towns'] }} covered towns.</p>
+                    @foreach ($d['town_rank']['modes'] as $mode => $m)
+                        @if ($m !== null)
+                            <div class="ld-stat-row">
+                                <div class="ld-stat"><span class="n">{{ $m['top3'] }}</span><span class="l">{{ $mode === 'local' ? 'From town' : 'Town search' }} · top 3</span></div>
+                                <div class="ld-stat"><span class="n">{{ $m['top3'] + $m['page1'] }}</span><span class="l">page 1</span></div>
+                                <div class="ld-stat"><span class="n">{{ $m['not_found'] }}</span><span class="l">not found</span></div>
+                                @if ($m['up'] + $m['down'] > 0)<div class="ld-stat"><span class="n">▲{{ $m['up'] }} ▼{{ $m['down'] }}</span><span class="l">moved</span></div>@endif
+                            </div>
+                        @endif
+                    @endforeach
+                @endif
+            </div>
+
             {{-- 6 · Reviews --}}
             <div class="ld-card">
                 <h3>Reviews</h3>

@@ -207,7 +207,7 @@ class TownRankCommand extends Command
     }
 
     /**
-     * @param  array{keyword: string, scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, found: int}|null>, rows: list<array<string, mixed>>, summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int}>}  $data
+     * @param  array{keyword: string, scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, found: int, previous_scanned_at: string|null}|null>, rows: list<array<string, mixed>>, summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>}  $data
      * @param  list<string>  $modes
      */
     private function printReport(array $data, array $modes): void
@@ -225,10 +225,11 @@ class TownRankCommand extends Command
             }
             $s = $data['summary'][$mode];
             $this->line(sprintf(
-                '  %s: %s %s · %d towns · top-3 %d · page-1 %d · page-2 %d · beyond %d · not found %d%s',
+                '  %s: %s %s · %d towns · top-3 %d · page-1 %d · page-2 %d · beyond %d · not found %d%s%s',
                 $label, $scan['status'], (string) $scan['scanned_at'], $scan['points'],
                 $s['top3'], $s['page1'], $s['page2'], $s['beyond'], $s['not_found'],
                 $s['pending'] > 0 ? " · pending {$s['pending']}" : '',
+                $scan['previous_scanned_at'] !== null ? sprintf(' · vs %s: ▲%d ▼%d new %d lost %d', $scan['previous_scanned_at'], $s['up'], $s['down'], $s['new'], $s['lost']) : '',
             ));
         }
 

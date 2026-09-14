@@ -63,3 +63,26 @@ it('shows an empty state when the site has no town-rank scans', function () {
         ->assertOk()
         ->assertSee('No town-rank scans for this site yet');
 });
+
+it('offers the movement view once a previous scan exists', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.85, 'lng' => -74.83]);
+    $hack = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown', 'state' => 'NJ', 'population' => 10000, 'lat' => 40.85, 'lng' => -74.83, 'source_location_ids' => [$loc->id]]);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    foreach ([['2026-09-01 10:00:00', 9], ['2026-09-08 10:00:00', 4]] as [$at, $rank]) {
+        $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'complete', 'points_count' => 1, 'found_count' => 1, 'scanned_at' => $at]);
+        TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown', 'state' => 'NJ', 'lat' => 40.85, 'lng' => -74.83, 'query' => 'q', 'rank' => $rank, 'collected_at' => $at]);
+    }
+
+    Livewire::test(TownRankPage::class)
+        ->set('siteId', $site->id)
+        ->assertOk()
+        ->assertSee('Movement')
+        ->assertSee('vs Sep 1')
+        ->call('setView', 'move')
+        ->assertSet('colorBy', 'move')
+        ->assertSee('moved up')
+        ->call('selectTown', $hack->id)
+        ->assertSee('was #9');
+});

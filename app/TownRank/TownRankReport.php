@@ -25,18 +25,27 @@ final class TownRankReport
     /**
      * @return array{
      *     keyword: string,
-     *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, found: int}|null>,
-     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, local_rank: int|null, local_url: string|null, local_state: string, town_rank: int|null, town_url: string|null, town_state: string, map_rank: int|null}>,
-     *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int}>
+     *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, found: int, previous_scanned_at: string|null}|null>,
+     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, map_rank: int|null}>,
+     *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
      * }
      */
     public function forKeyword(Site $site, Keyword $keyword): array
     {
         $scans = [];
         $pointsByMode = [];
+        $prevByMode = [];
         foreach (TownRankScan::MODES as $mode) {
             $scan = TownRankScan::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
+                ->orderByDesc('scanned_at')->first();
+            // The scan to compare against: the newest FINALIZED one older than the latest (a pending latest
+            // compares against the last finalized, so movement is never measured against half a sweep).
+            $previous = $scan === null ? null : TownRankScan::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
+                ->whereIn('status', ['complete', 'partial'])
+                ->whereKeyNot($scan->id)
+                ->where('scanned_at', '<=', $scan->scanned_at)
                 ->orderByDesc('scanned_at')->first();
             $scans[$mode] = $scan === null ? null : [
                 'id' => (string) $scan->id,
@@ -44,8 +53,10 @@ final class TownRankReport
                 'scanned_at' => $scan->scanned_at?->toDateTimeString(),
                 'points' => $scan->points_count,
                 'found' => $scan->found_count,
+                'previous_scanned_at' => $previous?->scanned_at?->toDateTimeString(),
             ];
             $pointsByMode[$mode] = $scan === null ? collect() : $scan->points()->get()->keyBy('coverage_area_id');
+            $prevByMode[$mode] = $previous === null ? null : $previous->points()->get()->keyBy('coverage_area_id');
         }
 
         $mapRanks = $this->mapPackRanks($site, $keyword);
@@ -53,7 +64,7 @@ final class TownRankReport
         $rows = [];
         $summary = [];
         foreach (TownRankScan::MODES as $mode) {
-            $summary[$mode] = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'pending' => 0];
+            $summary[$mode] = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'pending' => 0, 'up' => 0, 'down' => 0, 'new' => 0, 'lost' => 0, 'same' => 0];
         }
 
         foreach ($this->points->forSite($site) as $town) {
@@ -63,6 +74,7 @@ final class TownRankReport
                 'state' => $town['state'],
                 'population' => $town['population'],
                 'page_url' => $town['page_url'],
+                'page_match' => $town['page_match'],
                 'map_rank' => $mapRanks[$town['coverage_area_id']] ?? null,
             ];
             foreach (TownRankScan::MODES as $mode) {
@@ -70,17 +82,42 @@ final class TownRankReport
                 /** @var TownRankPoint|null $point */
                 $point = $pointsByMode[$mode]->get($town['coverage_area_id']);
                 $state = self::stateOf($point, $scans[$mode]);
-                $row["{$prefix}_rank"] = $point?->rank;
+                $rank = $point?->rank;
+                /** @var TownRankPoint|null $prevPoint */
+                $prevPoint = $prevByMode[$mode]?->get($town['coverage_area_id']);
+                $hasPrevious = $prevByMode[$mode] !== null;
+                $prevRank = $hasPrevious ? $prevPoint?->rank : null;
+                $change = $hasPrevious && ! in_array($state, ['pending', 'unscanned'], true) ? self::changeOf($rank, $prevRank) : null;
+
+                $row["{$prefix}_rank"] = $rank;
                 $row["{$prefix}_url"] = $point?->ranking_url;
                 $row["{$prefix}_state"] = $state;
+                $row["{$prefix}_prev_rank"] = $prevRank;
+                $row["{$prefix}_change"] = $change;
                 if ($scans[$mode] !== null && $state !== 'unscanned') {
                     $summary[$mode][$state]++;
+                }
+                if ($change !== null) {
+                    $summary[$mode][$change]++;
                 }
             }
             $rows[] = $row;
         }
 
         return ['keyword' => (string) $keyword->query, 'scans' => $scans, 'rows' => $rows, 'summary' => $summary];
+    }
+
+    /** Movement since the previous scan: up | down | same | new (ranked now, not before) | lost (the reverse). */
+    public static function changeOf(?int $rank, ?int $previous): string
+    {
+        return match (true) {
+            $rank === null && $previous === null => 'same',
+            $previous === null => 'new',
+            $rank === null => 'lost',
+            $rank < $previous => 'up',
+            $rank > $previous => 'down',
+            default => 'same',
+        };
     }
 
     /**
