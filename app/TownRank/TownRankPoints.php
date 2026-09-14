@@ -16,22 +16,27 @@ use Illuminate\Support\Str;
 /**
  * The SITE-WIDE town point-source for town-rank scanning (§ Town Rank): the union of every location's
  * coverage towns ({@see CoverageGrid} — each municipality in the served counties, geocoded), de-duplicated,
- * population-descending. Each point also carries the town's published page (matched on the shared Census
- * GEOID, never by name) so the report can separate "we rank with a page" from "we rank with nothing" from
- * "no page, no rank" — the last being where to build next.
+ * population-descending. Census placeholder rows ("County subdivisions not defined") and towns with no
+ * population are left out: nobody searches from them. Each point carries the bare `name` (what a query is
+ * built from) and a display `label` that disambiguates same-named towns ({@see TownLabels}), plus the town's
+ * published page (matched on the shared Census GEOID, never by name) so the report can separate "we rank
+ * with a page" from "we rank with nothing" from "no page, no rank" — the last being where to build next.
  *
  * Operator context crosses tenants, so the {@see SiteScope} is dropped and site_id filtered explicitly.
  */
 final class TownRankPoints
 {
-    public function __construct(private readonly CoverageGrid $coverage) {}
+    public function __construct(
+        private readonly CoverageGrid $coverage,
+        private readonly TownLabels $labels,
+    ) {}
 
     /**
      * `page_match` says how the page was found: `geoid` (the anchor join) or `slug` (a published location page
      * whose slug is this town's — the page exists but its GEOID is a different Census form than the coverage
      * row's, or it is un-anchored), else null.
      *
-     * @return list<array{coverage_area_id: string, geo_id: string|null, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null}>
+     * @return list<array{coverage_area_id: string, geo_id: string|null, name: string, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null}>
      */
     public function forSite(Site $site): array
     {
@@ -40,6 +45,9 @@ final class TownRankPoints
         $byArea = [];
         foreach ($locations as $location) {
             foreach ($this->coverage->pointsFor($location) as $point) {
+                if ($point['population'] <= 0 || preg_match('/not defined/i', $point['label']) === 1) {
+                    continue;   // a Census placeholder or an unpopulated pseudo-area — nobody searches from it
+                }
                 $byArea[$point['coverage_area_id']] ??= $point;
             }
         }
@@ -51,6 +59,13 @@ final class TownRankPoints
             ->whereIn('id', array_keys($byArea))
             ->get(['id', 'geo_id', 'state'])
             ->keyBy('id');
+
+        $labelInput = [];
+        foreach ($byArea as $id => $point) {
+            $area = $areas->get($id);
+            $labelInput[] = ['id' => (string) $id, 'name' => $point['label'], 'state' => $area?->state, 'geo_id' => $area !== null && $area->geo_id !== '' ? $area->geo_id : null];
+        }
+        $labels = $this->labels->for($labelInput);
 
         $published = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -83,7 +98,8 @@ final class TownRankPoints
             $points[] = [
                 'coverage_area_id' => (string) $id,
                 'geo_id' => $geoId,
-                'label' => $point['label'],
+                'name' => $point['label'],
+                'label' => $labels[(string) $id] ?? $point['label'],
                 'state' => $state !== null && $state !== '' ? $state : null,
                 'lat' => $point['lat'],
                 'lng' => $point['lng'],
