@@ -129,3 +129,22 @@ it('joins the latest scan per mode onto every covered town with the map-pack ran
         ->doesntExpectOutputToContain('Mansfield')
         ->assertExitCode(0);
 });
+
+it('--keyword prefers an exact query match over substring neighbours, and falls back to substring only when nothing is exact', function () {
+    Http::fake();
+    [$site] = cmdSite();   // tracks "sump pump repair" (grid)
+    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service', 'is_grid_keyword' => false]);
+    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'commercial sump pump service', 'is_grid_keyword' => false]);
+
+    // Exact: one keyword → 2 towns × 2 modes = 4 requests, and the plan names only it.
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--keyword' => 'Sump Pump Service', '--scan' => true, '--dry-run' => true])
+        ->expectsOutputToContain('4 (1 per town × mode × keyword)')
+        ->doesntExpectOutputToContain('commercial sump pump service')
+        ->assertExitCode(0);
+
+    // Substring fallback: "pump service" matches both service keywords → 8 requests.
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--keyword' => 'pump service', '--scan' => true, '--dry-run' => true])
+        ->expectsOutputToContain('8 (1 per town × mode × keyword)')
+        ->assertExitCode(0);
+    Http::assertNothingSent();
+});

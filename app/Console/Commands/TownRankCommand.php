@@ -292,17 +292,31 @@ class TownRankCommand extends Command
         return $site;
     }
 
-    /** @return Collection<int, Keyword> */
+    /**
+     * The keywords to scan/report: --keyword by id or EXACT query first (so naming one keyword scans one
+     * keyword — "sump pump service" must not also pull in "commercial sump pump service"), falling back to a
+     * substring match only when nothing matches exactly; no option → the site's grid keywords.
+     *
+     * @return Collection<int, Keyword>
+     */
     private function keywords(Site $site): Collection
     {
         $opt = trim((string) $this->option('keyword'));
+        $base = Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id);
 
-        return Keyword::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->when($opt !== '', fn ($q) => $q->where(fn ($w) => $w->where('id', $opt)->orWhere('query', 'like', "%{$opt}%")))
-            ->when($opt === '', fn ($q) => $q->where('is_grid_keyword', true))
+        if ($opt === '') {
+            return $base->where('is_grid_keyword', true)->orderBy('query')->get();
+        }
+
+        $exact = (clone $base)
+            ->where(fn ($w) => $w->where('id', $opt)->orWhereRaw('LOWER(query) = ?', [mb_strtolower($opt)]))
             ->orderBy('query')
             ->get();
+        if ($exact->isNotEmpty()) {
+            return $exact;
+        }
+
+        return $base->where('query', 'like', "%{$opt}%")->orderBy('query')->get();
     }
 
     /** @return list<string> */
