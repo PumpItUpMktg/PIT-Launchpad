@@ -64,6 +64,16 @@ it('lists scanned keywords and builds the board with north-up markers coloured b
     $local = $board->for($site, $kw->id, 'local');
     expect($local['summary'])->toMatchArray(['page1' => 1, 'not_found' => 2])
         ->and(collect($local['markers'])->keyBy('id')[$hack->id]['rank'])->toBe(8);
+
+    // The card wall: one card per scanned keyword, both modes summarised, thumbnail coloured by the town search.
+    $cards = $board->cards($site);
+    expect($cards)->toHaveCount(1)
+        ->and($cards[0]['query'])->toBe('sump pump service')
+        ->and($cards[0]['thumbnail_mode'])->toBe('town_query')
+        ->and($cards[0]['modes']['town_query'])->toMatchArray(['page1' => 1, 'page2' => 1, 'not_found' => 1])
+        ->and($cards[0]['modes']['local'])->toMatchArray(['page1' => 1, 'not_found' => 2])
+        ->and($cards[0]['has_previous'])->toBeFalse()
+        ->and(collect($cards[0]['markers'])->keyBy('id')[$hack->id]['rank'])->toBe(4);
 });
 
 it('builds a town detail: competitors above us only, page state incl. un-anchored, map pack, and ordered actions', function () {

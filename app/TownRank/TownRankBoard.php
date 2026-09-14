@@ -84,36 +84,6 @@ final class TownRankBoard
 
         $data = $this->report->forKeyword($site, $keyword);
         $coords = $this->coords($site);
-        $bbox = $this->boundingBox($coords);
-        $latSpan = $bbox['maxLat'] - $bbox['minLat'];
-        $lngSpan = $bbox['maxLng'] - $bbox['minLng'];
-
-        $markers = [];
-        foreach ($data['rows'] as $row) {
-            $c = $coords[$row['coverage_area_id']] ?? null;
-            if ($c === null) {
-                continue;
-            }
-            $rank = $row["{$prefix}_rank"] !== null ? (int) $row["{$prefix}_rank"] : null;
-            $prev = $row["{$prefix}_prev_rank"] !== null ? (int) $row["{$prefix}_prev_rank"] : null;
-            $change = $row["{$prefix}_change"];
-            // 6..94 padding so edge dots aren't clipped; a single-town span collapses to the centre.
-            $x = $lngSpan > 0 ? 6 + (($c['lng'] - $bbox['minLng']) / $lngSpan) * 88 : 50.0;
-            $y = $latSpan > 0 ? 6 + (($bbox['maxLat'] - $c['lat']) / $latSpan) * 88 : 50.0;
-            $markers[] = [
-                'id' => $row['coverage_area_id'],
-                'x' => round($x, 2),
-                'y' => round($y, 2),
-                'rank' => $rank,
-                'prev_rank' => $prev,
-                'change' => is_string($change) ? $change : null,
-                'color' => GeoGridPalette::absolute($rank),
-                'delta_color' => $change === null ? GeoGridPalette::ABSENT : GeoGridPalette::delta($rank, $prev),
-                'label' => $row['label'].($row['state'] !== null ? ', '.$row['state'] : ''),
-                'population' => $row['population'],
-                'page' => $row['page_url'] !== null,
-            ];
-        }
 
         return [
             'keyword_id' => (string) $keyword->id,
@@ -122,9 +92,99 @@ final class TownRankBoard
             'scan' => $data['scans'][$mode],
             'summary' => $data['summary'][$mode],
             'has_previous' => $data['scans'][$mode] !== null && $data['scans'][$mode]['previous_scanned_at'] !== null,
-            'markers' => $markers,
+            'markers' => $this->markers($data['rows'], $prefix, $coords),
             'rows' => $data['rows'],
         ];
+    }
+
+    /**
+     * The card wall: one card per scanned keyword — both modes' buckets, movement, when it was scanned, and a
+     * thumbnail of the town map (coloured by the town-search rank when that mode is scanned, else the local
+     * one). Click-through opens {@see for()} for the keyword.
+     *
+     * @return list<array{
+     *     keyword_id: string, query: string, scanned_at: string|null, thumbnail_mode: string, has_previous: bool,
+     *     modes: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}|null>,
+     *     markers: list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>
+     * }>
+     */
+    public function cards(Site $site): array
+    {
+        $keywords = $this->keywords($site);
+        if ($keywords === []) {
+            return [];
+        }
+        $coords = $this->coords($site);
+
+        $cards = [];
+        foreach ($keywords as $entry) {
+            $keyword = Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($entry['keyword_id'])->first();
+            if ($keyword === null) {
+                continue;
+            }
+            $data = $this->report->forKeyword($site, $keyword);
+            $thumbMode = $data['scans'][TownRankScan::MODE_TOWN_QUERY] !== null ? TownRankScan::MODE_TOWN_QUERY : TownRankScan::MODE_LOCAL;
+            $modes = [];
+            $hasPrevious = false;
+            foreach (TownRankScan::MODES as $mode) {
+                $modes[$mode] = $data['scans'][$mode] === null ? null : $data['summary'][$mode];
+                $hasPrevious = $hasPrevious || ($data['scans'][$mode] !== null && $data['scans'][$mode]['previous_scanned_at'] !== null);
+            }
+            $cards[] = [
+                'keyword_id' => (string) $keyword->id,
+                'query' => $data['keyword'],
+                'scanned_at' => $entry['scanned_at'],
+                'thumbnail_mode' => $thumbMode,
+                'has_previous' => $hasPrevious,
+                'modes' => $modes,
+                'markers' => $this->markers($data['rows'], $thumbMode === TownRankScan::MODE_LOCAL ? 'local' : 'town', $coords),
+            ];
+        }
+
+        return $cards;
+    }
+
+    /**
+     * Town markers normalised into one shared bounding box (north-up, 6..94 padding so edge dots aren't
+     * clipped; a single-town span collapses to the centre), coloured by the given mode's rank.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, array{lat: float, lng: float}>  $coords
+     * @return list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>
+     */
+    private function markers(array $rows, string $prefix, array $coords): array
+    {
+        $bbox = $this->boundingBox($coords);
+        $latSpan = $bbox['maxLat'] - $bbox['minLat'];
+        $lngSpan = $bbox['maxLng'] - $bbox['minLng'];
+
+        $markers = [];
+        foreach ($rows as $row) {
+            $c = $coords[$row['coverage_area_id']] ?? null;
+            if ($c === null) {
+                continue;
+            }
+            $rank = $row["{$prefix}_rank"] !== null ? (int) $row["{$prefix}_rank"] : null;
+            $prev = $row["{$prefix}_prev_rank"] !== null ? (int) $row["{$prefix}_prev_rank"] : null;
+            $change = $row["{$prefix}_change"];
+            $x = $lngSpan > 0 ? 6 + (($c['lng'] - $bbox['minLng']) / $lngSpan) * 88 : 50.0;
+            $y = $latSpan > 0 ? 6 + (($bbox['maxLat'] - $c['lat']) / $latSpan) * 88 : 50.0;
+            $markers[] = [
+                'id' => (string) $row['coverage_area_id'],
+                'x' => round($x, 2),
+                'y' => round($y, 2),
+                'rank' => $rank,
+                'prev_rank' => $prev,
+                'change' => is_string($change) ? $change : null,
+                'color' => GeoGridPalette::absolute($rank),
+                'delta_color' => $change === null ? GeoGridPalette::ABSENT : GeoGridPalette::delta($rank, $prev),
+                'label' => (string) $row['label'].($row['state'] !== null ? ', '.$row['state'] : ''),
+                'population' => (int) $row['population'],
+                'page' => $row['page_url'] !== null,
+            ];
+        }
+
+        return $markers;
     }
 
     /**

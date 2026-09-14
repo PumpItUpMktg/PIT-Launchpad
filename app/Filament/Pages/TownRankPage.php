@@ -13,12 +13,14 @@ use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Url;
 
 /**
- * Town Rank (operator, Results menu) — one page per keyword: where the WEBSITE ranks in every covered town, as a town
- * scatter (coloured by organic rank, in either query mode), the bucket summary, a filterable town table, and
- * a per-town panel with who outranks us, the page state, the map-pack rank, and the suggested next actions
- * ({@see TownRankBoard}; the rules live in TownDiagnosis). Operator-only, internal, like the sibling geo
- * surfaces; keywordId/mode/townId are URL-bound so a town can be deep-linked.
+ * Town Rank (operator, Results menu). Landing: a card wall, one card per scanned keyword (both modes' buckets,
+ * movement, a map thumbnail). Click a card → that keyword's board: where the WEBSITE ranks in every covered
+ * town, as a town scatter (coloured by organic rank, in either query mode), the bucket summary, a filterable
+ * town table, and a per-town panel with who outranks us, the page state, the map-pack rank, and the suggested
+ * next actions ({@see TownRankBoard}; the rules live in TownDiagnosis). Operator-only, internal, like the
+ * sibling geo surfaces; keywordId/mode/townId are URL-bound so a keyword or a town can be deep-linked.
  *
+ * @property-read list<array<string, mixed>> $cards
  * @property-read array<string, mixed>|null $board
  * @property-read list<array{keyword_id: string, query: string, scanned_at: string|null}> $keywords
  * @property-read array<string, mixed>|null $town
@@ -79,6 +81,29 @@ class TownRankPage extends Page
         $this->townId = null;
     }
 
+    /** Card click: open the keyword's board. */
+    public function openKeyword(string $id): void
+    {
+        $this->keywordId = $id;
+        $this->townId = null;
+    }
+
+    /** Back to the card wall. */
+    public function closeKeyword(): void
+    {
+        $this->keywordId = null;
+        $this->townId = null;
+        $this->filter = '';
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function getCardsProperty(): array
+    {
+        $site = $this->site();
+
+        return $site !== null ? app(TownRankBoard::class)->cards($site) : [];
+    }
+
     public function selectTown(string $id): void
     {
         $this->townId = $id;
@@ -102,12 +127,15 @@ class TownRankPage extends Page
         return $site !== null ? app(TownRankBoard::class)->keywords($site) : [];
     }
 
-    /** @return array<string, mixed>|null */
+    /** The selected keyword's board; null on the card wall (no keyword selected) or without scans. */
     public function getBoardProperty(): ?array
     {
         $site = $this->site();
+        if ($site === null || $this->keywordId === null) {
+            return null;
+        }
 
-        return $site !== null ? app(TownRankBoard::class)->for($site, $this->keywordId, $this->mode) : null;
+        return app(TownRankBoard::class)->for($site, $this->keywordId, $this->mode);
     }
 
     /** @return array<string, mixed>|null */
