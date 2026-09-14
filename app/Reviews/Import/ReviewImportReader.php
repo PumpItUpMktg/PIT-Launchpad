@@ -93,7 +93,7 @@ final class ReviewImportReader
         foreach ($reader->getSheetIterator() as $sheet) {
             $headers = null;
             foreach ($sheet->getRowIterator() as $row) {
-                $cells = array_values(array_map($this->stringify(...), $row->toArray()));
+                $cells = array_map($this->stringify(...), $row->toArray());
                 if ($headers === null) {
                     $headers = $this->uniqueHeaders($cells);
 
