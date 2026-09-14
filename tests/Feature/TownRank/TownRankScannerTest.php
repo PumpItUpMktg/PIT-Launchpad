@@ -105,7 +105,9 @@ it('leaves not-ready towns pending, within the budget, and completes on a later 
     $ids = collect(['otask-0', 'otask-1']);
     Http::fake([
         '*/serp/google/organic/task_post' => Http::response(['status_code' => 20000, 'tasks' => $ids->map(fn ($id): array => ['id' => $id, 'status_code' => 20000])->all()]),
-        '*/serp/google/organic/tasks_ready' => fn () => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'r', 'status_code' => 20000, 'result' => $ids->take($readyCount)->map(fn ($id): array => ['id' => $id])->all()]]]),
+        '*/serp/google/organic/tasks_ready' => function () use ($ids, &$readyCount) {   // by reference: an arrow fn would freeze the count at 1
+            return Http::response(['status_code' => 20000, 'tasks' => [['id' => 'r', 'status_code' => 20000, 'result' => $ids->take($readyCount)->map(fn ($id): array => ['id' => $id])->all()]]]);
+        },
         '*/serp/google/organic/task_get/advanced/*' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => organicItems()]]]]]),
     ]);
     [$site, $keyword] = townRankSite();
