@@ -11,6 +11,7 @@ use App\Integrations\Places\PlaceDetails;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\Places\PlacesStatus;
 use App\Jobs\PublishJob;
+use App\Jobs\ResolveJobGeography;
 use App\Models\Job;
 use App\Models\JobType;
 use App\Models\Site;
@@ -236,4 +237,52 @@ it('streams a CSV import template', function () {
     $response->sendContent();
     $body = ob_get_clean();
     expect($body)->toContain('client_name,address,performed_at,service_types,description');
+});
+
+it('re-places a job from the review card: geocodes the typed address, resets the point, and queues geography', function () {
+    Queue::fake();
+    app()->instance(Geocoder::class, new class implements Geocoder
+    {
+        public function geocode(string $address): ?GeocodeResult
+        {
+            return new GeocodeResult(40.56, -74.61, '12 Main St, Somerville, NJ 08876');
+        }
+    });
+    $site = Site::factory()->create();
+    $job = Job::factory()->create([
+        'site_id' => $site->id, 'status' => JobStatus::Review, 'enhanced_description' => 'A write-up.',
+        'address_true' => '1 Office Park, Trooper PA', 'lat_jittered' => 40.15, 'lng_jittered' => -75.39,
+    ]);
+
+    Livewire::test(JobReview::class)
+        ->set('siteId', $site->id)
+        ->call('startPlace', $job->id)
+        ->assertSet('placingId', $job->id)
+        ->assertSet('placeAddress', '1 Office Park, Trooper PA')
+        ->assertSee('Currently placed at: 1 Office Park, Trooper PA')
+        ->set('placeAddress', '12 Main St, Somerville NJ')
+        ->call('place')
+        ->assertSet('placingId', null);
+
+    $job->refresh();
+    expect($job->address_true)->toBe('12 Main St, Somerville NJ')
+        ->and((float) $job->lat_true)->toBe(40.56)
+        ->and($job->lat_jittered)->toBeNull();
+    Queue::assertPushed(ResolveJobGeography::class);
+});
+
+it('will not re-place a job without an address', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+    $job = Job::factory()->create(['site_id' => $site->id, 'status' => JobStatus::Review, 'address_true' => '1 Office Park']);
+
+    Livewire::test(JobReview::class)
+        ->set('siteId', $site->id)
+        ->call('startPlace', $job->id)
+        ->set('placeAddress', '   ')
+        ->call('place')
+        ->assertSet('placingId', $job->id); // panel stays open
+
+    expect($job->fresh()->address_true)->toBe('1 Office Park');
+    Queue::assertNothingPushed();
 });
