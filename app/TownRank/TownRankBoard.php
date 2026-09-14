@@ -186,7 +186,11 @@ final class TownRankBoard
             'label' => $row['label'].($row['state'] !== null ? ', '.$row['state'] : ''),
             'population' => $row['population'],
             'page_url' => $row['page_url'],
-            'page_state' => match ($row['page_match']) { 'geoid' => 'anchored', 'slug' => 'slug', default => 'none' },
+            'page_state' => match ($row['page_match']) {
+                'geoid' => 'anchored',
+                'slug' => 'slug',
+                default => 'none',
+            },
             'local' => $modes[TownRankScan::MODE_LOCAL],
             'town_query' => $modes[TownRankScan::MODE_TOWN_QUERY],
             'map_rank' => $row['map_rank'],

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\SiteStatus;
 use App\Jobs\IngestTownRankScans;
 use App\Jobs\RunTownRankSweep;
 use App\Models\CoverageArea;
@@ -8,13 +9,14 @@ use App\Models\Location;
 use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
+use App\TownRank\TownRankScanner;
 use App\TownRank\TownRankSweep;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
 function sweepSite(int $towns = 2): array
 {
-    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.com', 'status' => \App\Enums\SiteStatus::Live]);
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.com', 'status' => SiteStatus::Live]);
     $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.0, 'lng' => -74.0]);
     for ($i = 0; $i < $towns; $i++) {
         CoverageArea::factory()->create(['site_id' => $site->id, 'name' => "Town {$i}", 'population' => 100, 'lat' => 40.0 + $i / 100, 'lng' => -74.0, 'source_location_ids' => [$loc->id]]);
@@ -73,7 +75,7 @@ it('the sweep command plans per eligible site and dispatches one job per site un
     Queue::fake();
     Http::fake();
     [$site] = sweepSite(2);
-    Site::factory()->create(['brand_name' => 'Onboarding Co', 'status' => \App\Enums\SiteStatus::Onboarding]);   // not eligible
+    Site::factory()->create(['brand_name' => 'Onboarding Co', 'status' => SiteStatus::Onboarding]);   // not eligible
 
     $this->artisan('launchpad:town-rank-sweep', ['--dry-run' => true])
         ->expectsOutputToContain('SPG — 2 town(s) × 2 due pair(s) = 4 request(s)')
@@ -98,12 +100,12 @@ it('the ingest sweep collects pending scans within its budget and closes expired
     TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $stale->id, 'label' => 'Old', 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => 'never-ready', 'collected_at' => null]);
 
     config()->set('launchpad.town_rank.ingest_batch', 3);   // 4 points ready + 1 never: budget stops at 3
-    (new IngestTownRankScans)->handle(app(\App\TownRank\TownRankScanner::class));
+    (new IngestTownRankScans)->handle(app(TownRankScanner::class));
 
     expect(TownRankPoint::query()->withoutGlobalScopes()->whereNotNull('collected_at')->count())->toBe(3)
         ->and($stale->fresh()->status)->toBe('partial');   // expired → closed over what it has
 
     config()->set('launchpad.town_rank.ingest_batch', 40);
-    (new IngestTownRankScans)->handle(app(\App\TownRank\TownRankScanner::class));
+    (new IngestTownRankScans)->handle(app(TownRankScanner::class));
     expect(TownRankScan::query()->withoutGlobalScopes()->where('site_id', $site->id)->where('status', 'complete')->count())->toBe(2);
 });
