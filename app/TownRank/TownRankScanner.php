@@ -172,13 +172,13 @@ final class TownRankScanner
     }
 
     /**
-     * @param  array{label: string, state: string|null, lat: float, lng: float}  $town
+     * @param  array{name: string, state: string|null, lat: float, lng: float}  $town
      * @return array<string, mixed>
      */
     private function task(string $mode, string $keyword, array $town): array
     {
         $task = [
-            'keyword' => self::queryFor($mode, $keyword, $town['label'], $town['state']),
+            'keyword' => self::queryFor($mode, $keyword, $town['name'], $town['state']),   // the bare name, never the display label
             'language_code' => (string) config('services.dataforseo.language_code', 'en'),
             'device' => (string) config('launchpad.town_rank.device', 'desktop'),
             'depth' => (int) config('launchpad.town_rank.depth', 30),

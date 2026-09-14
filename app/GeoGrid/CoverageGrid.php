@@ -33,6 +33,8 @@ final class CoverageGrid
             ->where('site_id', $location->site_id)
             ->whereNotNull('lat')->whereNotNull('lng')
             ->get()
+            // TIGER's pseudo-subdivision ("County subdivisions not defined") is water/unorganized area, not a town.
+            ->filter(fn (CoverageArea $area): bool => preg_match('/not defined/i', (string) $area->name) !== 1)
             ->filter(fn (CoverageArea $area): bool => $this->inScan($area, $location, $counties))
             ->sortByDesc(fn (CoverageArea $area): int => (int) ($area->population ?? 0))
             ->map(fn (CoverageArea $area): array => [
