@@ -39,7 +39,7 @@ use Illuminate\Support\Str;
  * @property float|null $lng_jittered
  * @property string|null $job_city_id
  * @property string|null $job_county_id
- * @property list<array{r2_key: string, hash?: string, alt?: string}>|null $photos
+ * @property list<array{r2_key: string, hash?: string, alt?: string, geotagged?: bool, scrubbed?: bool, lat?: float, lng?: float}>|null $photos
  * @property int $primary_photo_index
  * @property string|null $raw_description immutable tech input
  * @property string|null $source_description operator-editable AI seed

@@ -64,7 +64,7 @@ class RescrubJobPhotosCommand extends Command
                     continue;
                 }
                 $photoRows += count($rows);
-                $unscrubbed = count(array_filter($rows, fn ($r) => ! is_array($r) || ($r['scrubbed'] ?? false) !== true || ($r['geotagged'] ?? false) !== true));
+                $unscrubbed = count(array_filter($rows, fn (array $r) => ($r['scrubbed'] ?? false) !== true || ($r['geotagged'] ?? false) !== true));
                 if ($unscrubbed > 0) {
                     $pending += $unscrubbed;
                     $pendingJobs[] = $job;

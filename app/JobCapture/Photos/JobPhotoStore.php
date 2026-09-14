@@ -84,9 +84,6 @@ final class JobPhotoStore
         $rewritten = 0;
 
         foreach ($rows as $i => $row) {
-            if (! is_array($row) || ! is_string($row['r2_key'] ?? null)) {
-                continue;
-            }
             if ($onlyUnstamped && ($row['scrubbed'] ?? false) === true && ($row['geotagged'] ?? false) === true) {
                 continue;
             }
@@ -109,7 +106,7 @@ final class JobPhotoStore
         }
 
         if ($rewritten > 0) {
-            $job->forceFill(['photos' => array_values($rows)])->save();
+            $job->forceFill(['photos' => $rows])->save();
         }
 
         return $rewritten;
