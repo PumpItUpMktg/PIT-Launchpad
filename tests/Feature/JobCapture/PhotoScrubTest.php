@@ -10,6 +10,7 @@ use App\Support\CurrentSite;
 use Illuminate\Support\Facades\Storage;
 use lsolesen\pel\PelDataWindow;
 use lsolesen\pel\PelEntryAscii;
+use lsolesen\pel\PelEntryRational;
 use lsolesen\pel\PelEntryShort;
 use lsolesen\pel\PelExif;
 use lsolesen\pel\PelIfd;
@@ -32,7 +33,7 @@ function scrubJpeg(int $w = 16, int $h = 16): string
     return $bytes;
 }
 
-/** Write foreign EXIF into a JPEG: a device Make, an orientation, and (via the old stamp) a GPS block. */
+/** Write foreign EXIF into a JPEG the way a phone would: a device Make, an orientation, and a London GPS block. */
 function foreignExif(string $jpeg, int $orientation = 1): string
 {
     $pel = new PelJpeg(new PelDataWindow($jpeg));
@@ -44,6 +45,13 @@ function foreignExif(string $jpeg, int $orientation = 1): string
     $tiff->setIfd($ifd0);
     $ifd0->addEntry(new PelEntryAscii(PelTag::MAKE, 'SomePhoneMaker'));
     $ifd0->addEntry(new PelEntryShort(PelTag::ORIENTATION, $orientation));
+
+    $gps = new PelIfd(PelIfd::GPS);
+    $ifd0->addSubIfd($gps);
+    $gps->addEntry(new PelEntryAscii(PelTag::GPS_LATITUDE_REF, 'N'));
+    $gps->addEntry(new PelEntryRational(PelTag::GPS_LATITUDE, [51, 1], [30, 1], [0, 1]));
+    $gps->addEntry(new PelEntryAscii(PelTag::GPS_LONGITUDE_REF, 'W'));
+    $gps->addEntry(new PelEntryRational(PelTag::GPS_LONGITUDE, [0, 1], [7, 1], [0, 1]));
 
     return $pel->getBytes();
 }
@@ -69,7 +77,9 @@ function gpsOf(string $bytes): array
 }
 
 test('scrub drops every foreign metadata segment (EXIF make, XMP location, old GPS) and writes only our point', function (): void {
-    $source = withXmp((new ExifGeotagger)->stamp(foreignExif(scrubJpeg()), 51.5, -0.12)); // London GPS + XMP + Make
+    $dirty = foreignExif(scrubJpeg()); // Make + London GPS
+    expect(gpsOf($dirty)['GPSLatitude'][0])->toBe('51/1');
+    $source = withXmp($dirty); // + XMP location
     expect($source)->toContain('ns.adobe.com/xap')->toContain('SomePhoneMaker');
 
     $clean = (new ExifGeotagger)->scrub($source, 40.1490, -75.3877); // Trooper, PA
@@ -86,7 +96,7 @@ test('scrub drops every foreign metadata segment (EXIF make, XMP location, old G
 });
 
 test('scrub with no point writes a clean image with no GPS at all', function (): void {
-    $clean = (new ExifGeotagger)->scrub(withXmp((new ExifGeotagger)->stamp(scrubJpeg(), 51.5, -0.12)), null, null);
+    $clean = (new ExifGeotagger)->scrub(withXmp(foreignExif(scrubJpeg())), null, null);
 
     expect($clean)->not->toBeNull()->and($clean)->not->toContain('ns.adobe.com/xap');
     expect(gpsOf($clean))->not->toHaveKey('GPSLatitude');
@@ -126,7 +136,7 @@ test('restamp rewrites legacy photos in place with the current public point and 
 
     // A legacy row: stored by the old pipeline with a phone's London GPS + XMP, no `scrubbed` flag.
     $key = 'sites/'.$site->id.'/jobs/'.$job->id.'/1.jpg';
-    Storage::disk('r2')->put($key, withXmp((new ExifGeotagger)->stamp(scrubJpeg(), 51.5, -0.12)));
+    Storage::disk('r2')->put($key, withXmp(foreignExif(scrubJpeg())));
     $job->forceFill(['photos' => [['r2_key' => $key, 'hash' => 'old', 'geotagged' => true]]])->save();
 
     $rewritten = app(JobPhotoStore::class)->restamp($job, onlyUnstamped: true);

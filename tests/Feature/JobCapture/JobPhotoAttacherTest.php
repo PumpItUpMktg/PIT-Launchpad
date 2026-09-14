@@ -13,8 +13,8 @@ it('appends photos to an existing job under the per-job prefix', function () {
     $job = Job::factory()->create(['site_id' => $site->id, 'photos' => null]);
 
     $added = app(JobPhotoAttacher::class)->attach($job, [
-        ['bytes' => 'AAA', 'filename' => 'a.jpg'],
-        ['bytes' => 'BBB', 'filename' => 'b.jpg'],
+        ['bytes' => tinyJpeg(), 'filename' => 'a.jpg'],
+        ['bytes' => tinyJpeg(), 'filename' => 'b.jpg'],
     ]);
 
     $job->refresh();
@@ -32,7 +32,7 @@ it('keeps existing photos and caps the total at the per-job max', function () {
     ]);
 
     $added = app(JobPhotoAttacher::class)->attach($job, [
-        ['bytes' => 'AAA'], ['bytes' => 'BBB'], ['bytes' => 'CCC'], // 3 more, only 2 fit (max 3 total)
+        ['bytes' => tinyJpeg()], ['bytes' => tinyJpeg()], ['bytes' => tinyJpeg()], // 3 more, only 2 fit (max 3 total)
     ]);
 
     expect($added)->toBe(2)
@@ -47,6 +47,6 @@ it('adds nothing when the job is already full', function () {
         'photos' => [['r2_key' => '1.jpg'], ['r2_key' => '2.jpg'], ['r2_key' => '3.jpg']],
     ]);
 
-    expect(app(JobPhotoAttacher::class)->attach($job, [['bytes' => 'AAA']]))->toBe(0)
+    expect(app(JobPhotoAttacher::class)->attach($job, [['bytes' => tinyJpeg()]]))->toBe(0)
         ->and($job->refresh()->photos)->toHaveCount(3);
 });

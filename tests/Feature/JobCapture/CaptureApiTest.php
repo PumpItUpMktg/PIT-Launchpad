@@ -51,7 +51,7 @@ test('an authenticated tech captures a job through the API', function () {
         'client_name_display' => 'Jane H.',
         'raw_description' => 'Replaced a sump pump.',
         'lat' => 40.66, 'lng' => -74.65,
-        'photos' => [['data' => base64_encode('IMG1'), 'filename' => '1.jpg']],
+        'photos' => [['data' => base64_encode(tinyJpeg()), 'filename' => '1.jpg']],
         'job_types' => [['label' => 'Sump Pump Repair', 'slug' => 'sump-pump-repair']],
     ])->assertCreated();
 

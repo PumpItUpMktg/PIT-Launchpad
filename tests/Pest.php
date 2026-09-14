@@ -48,3 +48,19 @@ function something()
 {
     // ..
 }
+
+/**
+ * A tiny but valid JPEG (§ Job Capture fixtures). The photo store re-encodes every upload to strip its source
+ * metadata, so a fixture that must be STORED has to be a real image — a placeholder string is refused.
+ */
+function tinyJpeg(int $width = 16, int $height = 16): string
+{
+    $img = imagecreatetruecolor($width, $height);
+    imagefilledrectangle($img, 0, 0, $width - 1, $height - 1, imagecolorallocate($img, 120, 120, 120));
+    ob_start();
+    imagejpeg($img, null, 90);
+    $bytes = (string) ob_get_clean();
+    imagedestroy($img);
+
+    return $bytes;
+}

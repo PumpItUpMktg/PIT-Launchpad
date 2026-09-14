@@ -81,7 +81,7 @@ it('stores uploaded photos under the per-job prefix', function () {
     $job = app(ManualJobIntake::class)->intake($site, new ManualJobData(
         clientName: 'Jane Homeowner',
         address: '12 Main St',
-        photos: [['bytes' => 'FAKEJPEGBYTES', 'filename' => 'before.jpg']],
+        photos: [['bytes' => tinyJpeg(), 'filename' => 'before.jpg']],
     ));
 
     expect($job->photos)->toHaveCount(1)
