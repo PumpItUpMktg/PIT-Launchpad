@@ -52,6 +52,10 @@ class TownRankPage extends Page
     #[Url]
     public ?string $townId = null;
 
+    /** Colour the map by: rank (absolute, default) | move (movement since the previous scan). */
+    #[Url]
+    public string $colorBy = 'rank';
+
     public string $filter = '';
 
     public static function menuTag(): string
@@ -80,6 +84,11 @@ class TownRankPage extends Page
     public function selectTown(string $id): void
     {
         $this->townId = $id;
+    }
+
+    public function setView(string $colorBy): void
+    {
+        $this->colorBy = $colorBy === 'move' ? 'move' : 'rank';
     }
 
     public function setMode(string $mode): void

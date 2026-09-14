@@ -17,6 +17,9 @@
         default => '#'.(int) $rank,
     };
     $levelColor = fn (string $level): string => match ($level) { 'do' => '#c0392b', 'watch' => '#ca8a04', default => '#15803d' };
+    $moveView = $board !== null && $colorBy === 'move' && $board['has_previous'];
+    $arrow = fn (?string $change): string => match ($change) { 'up' => '▲', 'down' => '▼', 'new' => '★', 'lost' => '✕', 'same' => '·', default => '' };
+    $arrowColor = fn (?string $change): string => match ($change) { 'up' => '#15803d', 'down' => '#c0392b', 'new' => '#2563eb', 'lost' => '#7f1d1d', default => '#9ca3af' };
 @endphp
 
 <style>
@@ -79,6 +82,12 @@
                 <button type="button" class="{{ ! $isLocal ? 'on' : '' }}" wire:click="setMode('town_query')" title="&quot;keyword Town ST&quot; searched nationally — does the town page win its own search?">Town search</button>
                 <button type="button" class="{{ $isLocal ? 'on' : '' }}" wire:click="setMode('local')" title="The bare keyword searched from the town — what a resident sees">Searched from town</button>
             </div>
+            @if ($board['has_previous'])
+                <div class="t-modes" role="group" aria-label="Colour by" style="margin-left:8px">
+                    <button type="button" class="{{ ! $moveView ? 'on' : '' }}" wire:click="setView('rank')" title="Colour each town by its rank">Rank</button>
+                    <button type="button" class="{{ $moveView ? 'on' : '' }}" wire:click="setView('move')" title="Colour each town by its movement since the previous scan">Movement</button>
+                </div>
+            @endif
         </div>
 
         @php($s = $board['summary'])
@@ -94,6 +103,9 @@
             </div>
             <div class="t-note">
                 “{{ $board['keyword'] }}” · {{ $isLocal ? 'searched from each town' : 'town search: “'.$board['keyword'].' Town ST”' }} · {{ $board['scan']['points'] }} towns · {{ $board['scan']['status'] }} {{ $board['scan']['scanned_at'] ? \Illuminate\Support\Carbon::parse($board['scan']['scanned_at'])->diffForHumans() : '' }}
+                @if ($board['has_previous'])
+                    · vs {{ \Illuminate\Support\Carbon::parse($board['scan']['previous_scanned_at'])->format('M j') }}: <span style="color:#15803d">▲{{ $s['up'] }}</span> <span style="color:#c0392b">▼{{ $s['down'] }}</span> · new {{ $s['new'] }} · lost {{ $s['lost'] }}
+                @endif
             </div>
         @endif
 
@@ -103,14 +115,20 @@
                     @php($r = $dotR($board['markers']))
                     <svg class="t-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Town rank map">
                         @foreach ($board['markers'] as $m)
-                            <circle class="t-dot {{ $m['id'] === $townId ? 'sel' : '' }} {{ $m['page'] ? '' : 'nopage' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $m['id'] }}')">
-                                <title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}{{ $m['page'] ? '' : ' · no page' }}@if ($m['population'] > 0) · pop {{ number_format($m['population']) }}@endif</title>
+                            <circle class="t-dot {{ $m['id'] === $townId ? 'sel' : '' }} {{ $m['page'] ? '' : 'nopage' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $moveView ? $m['delta_color'] : $m['color'] }}" wire:click="selectTown('{{ $m['id'] }}')">
+                                <title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}{{ $m['prev_rank'] !== null ? ' (was #'.$m['prev_rank'].')' : ($m['change'] === 'new' ? ' (new)' : '') }}{{ $m['page'] ? '' : ' · no page' }}@if ($m['population'] > 0) · pop {{ number_format($m['population']) }}@endif</title>
                             </circle>
                         @endforeach
                     </svg>
-                    <div class="t-legend">
-                        <span><i style="background:#15803d"></i>1–3</span><span><i style="background:#65a30d"></i>4–7</span><span><i style="background:#ca8a04"></i>8–10</span><span><i style="background:#c2410c"></i>11–15</span><span><i style="background:#c0392b"></i>16+</span><span><i style="background:#9ca3af"></i>not found</span><span>dashed = no page</span>
-                    </div>
+                    @if ($moveView)
+                        <div class="t-legend">
+                            <span><i style="background:#15803d"></i>moved up</span><span><i style="background:#c0392b"></i>slipped</span><span><i style="background:#2563eb"></i>newly ranking</span><span><i style="background:#7f1d1d"></i>lost</span><span><i style="background:#9ca3af"></i>unchanged / never ranked</span><span>dashed = no page</span>
+                        </div>
+                    @else
+                        <div class="t-legend">
+                            <span><i style="background:#15803d"></i>1–3</span><span><i style="background:#65a30d"></i>4–7</span><span><i style="background:#ca8a04"></i>8–10</span><span><i style="background:#c2410c"></i>11–15</span><span><i style="background:#c0392b"></i>16+</span><span><i style="background:#9ca3af"></i>not found</span><span>dashed = no page</span>
+                        </div>
+                    @endif
                 </div>
             </div>
 
@@ -120,9 +138,9 @@
                     <div class="sub">Click a dot on the map or a row in the table to see who outranks you there and what to do.</div>
                 @else
                     <h3>{{ $town['label'] }}</h3>
-                    <div class="sub">{{ $town['population'] > 0 ? 'pop '.number_format($town['population']).' · ' : '' }}{{ $town['page_state'] === 'anchored' ? 'page: '.$town['page_url'] : ($town['page_state'] === 'unanchored' ? 'page published, not anchored' : 'no page') }}</div>
-                    <div class="t-krow"><span>Town search</span><b>{{ $rankCell($town['town_query']['rank'], $town['town_query']['state']) ?: '—' }}</b></div>
-                    <div class="t-krow"><span>Searched from town</span><b>{{ $rankCell($town['local']['rank'], $town['local']['state']) ?: '—' }}</b></div>
+                    <div class="sub">{{ $town['population'] > 0 ? 'pop '.number_format($town['population']).' · ' : '' }}{{ $town['page_state'] === 'anchored' ? 'page: '.$town['page_url'] : ($town['page_state'] === 'slug' ? 'page found by slug (GEOID differs): '.$town['page_url'] : 'no page') }}</div>
+                    <div class="t-krow"><span>Town search</span><b>{{ $rankCell($town['town_query']['rank'], $town['town_query']['state']) ?: '—' }}@if ($town['town_query']['change'] !== null) <span style="color:{{ $arrowColor($town['town_query']['change']) }}">{{ $arrow($town['town_query']['change']) }}{{ $town['town_query']['prev_rank'] !== null ? ' was #'.$town['town_query']['prev_rank'] : '' }}</span>@endif</b></div>
+                    <div class="t-krow"><span>Searched from town</span><b>{{ $rankCell($town['local']['rank'], $town['local']['state']) ?: '—' }}@if ($town['local']['change'] !== null) <span style="color:{{ $arrowColor($town['local']['change']) }}">{{ $arrow($town['local']['change']) }}{{ $town['local']['prev_rank'] !== null ? ' was #'.$town['local']['prev_rank'] : '' }}</span>@endif</b></div>
                     <div class="t-krow"><span>Map pack</span><b>{{ $town['map_rank'] !== null ? '#'.$town['map_rank'] : ($town['map_scanned'] ? 'not found' : '—') }}</b></div>
 
                     <h4 class="t-h">What to do</h4>
@@ -149,7 +167,7 @@
         <div class="t-tablewrap">
             <input type="text" class="t-filter" wire:model.live.debounce.300ms="filter" placeholder="Filter towns…" aria-label="Filter towns">
             <table class="t-table">
-                <thead><tr><th>Town</th><th>Pop</th><th>Page</th><th>Town search</th><th>From town</th><th>Map pack</th></tr></thead>
+                <thead><tr><th>Town</th><th>Pop</th><th>Page</th><th>Town search</th><th>From town</th><th>Map pack</th>@if ($board['has_previous'])<th>Δ {{ $isLocal ? 'from town' : 'town search' }}</th>@endif</tr></thead>
                 <tbody>
                     @foreach ($rows as $row)
                         <tr class="row {{ $row['coverage_area_id'] === $townId ? 'sel' : '' }}" wire:key="tr-{{ $row['coverage_area_id'] }}" wire:click="selectTown('{{ $row['coverage_area_id'] }}')">
@@ -159,6 +177,10 @@
                             <td class="t-num">{{ $rankCell($row['town_rank'], (string) $row['town_state']) }}</td>
                             <td class="t-num">{{ $rankCell($row['local_rank'], (string) $row['local_state']) }}</td>
                             <td class="t-num">{{ $row['map_rank'] !== null ? '#'.$row['map_rank'] : '—' }}</td>
+                            @if ($board['has_previous'])
+                                @php($chg = $row[$prefix.'_change'])
+                                <td class="t-num" style="color:{{ $arrowColor($chg) }}">{{ $arrow($chg) }}{{ $row[$prefix.'_prev_rank'] !== null && $chg !== 'same' && $chg !== null ? ' #'.$row[$prefix.'_prev_rank'] : '' }}</td>
+                            @endif
                         </tr>
                     @endforeach
                 </tbody>

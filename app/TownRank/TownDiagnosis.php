@@ -31,9 +31,9 @@ final class TownDiagnosis
         if ($town['page_state'] === 'none') {
             $actions[] = self::action('build_page', 'do', 'Build a town page',
                 'No published page for this town.'.($tq['rank'] !== null ? ' Google is serving another of your pages (#'.$tq['rank'].') for the town search — a dedicated page can take that slot.' : ' Nothing of yours ranks for the town search.'));
-        } elseif ($town['page_state'] === 'unanchored') {
-            $actions[] = self::action('anchor_page', 'do', 'Anchor the page to its Census GEOID',
-                'A page with this town\'s slug is published but not anchored, so proof, neighbours, and this report can\'t join it to the town. Run launchpad:anchor-town-pages.');
+        } elseif ($town['page_state'] === 'slug') {
+            $actions[] = self::action('check_anchor', 'watch', 'Page found by its slug, not by GEOID',
+                'The page exists, but its Census id is not this coverage row\'s (a 7-digit place vs a 10-digit subdivision, or un-anchored). Check it with launchpad:anchor-town-pages so proof and neighbours join.');
         }
 
         // 2. The explicit town search — the page's own query.

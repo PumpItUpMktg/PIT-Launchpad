@@ -5,6 +5,7 @@ namespace App\Operate;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\GeoGrid\CoverageGrid;
 use App\GeoGrid\GeoGridBoard;
 use App\Local\Proof\LocalJob;
 use App\Local\Proof\LocalJobProvider;
@@ -16,8 +17,11 @@ use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use App\Models\TownRankScan;
 use App\Operator\Coverage\PositionTracking;
 use App\Support\PublicUrl;
+use App\TownRank\TownRankBoard;
+use App\TownRank\TownRankReport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -42,6 +46,9 @@ class LocationDashboard
         private readonly GeoGridBoard $geoGrid,
         private readonly LocalJobProvider $jobs,
         private readonly LocalReviewProvider $reviews,
+        private readonly TownRankReport $townRank,
+        private readonly TownRankBoard $townRankBoard,
+        private readonly CoverageGrid $coverage,
     ) {}
 
     /**
@@ -52,6 +59,7 @@ class LocationDashboard
      *   indexing: array<string, mixed>,
      *   keywords: list<array<string, mixed>>,
      *   geo_grid: array<string, mixed>,
+     *   town_rank: array<string, mixed>,
      *   reviews: array<string, mixed>,
      *   jobs: array<string, mixed>
      * }
@@ -75,6 +83,7 @@ class LocationDashboard
             'indexing' => $this->indexing($location->site_id, $domain, $cluster),
             'keywords' => $this->keywordMovement($location->site_id, $cluster),
             'geo_grid' => $this->geoSummary($location),
+            'town_rank' => $this->townRankSummary($location),
             'reviews' => $this->reviewSummary($location),
             'jobs' => $this->jobSummary($location),
         ];
@@ -305,6 +314,61 @@ class LocationDashboard
             'mean_solv' => $solvs->isNotEmpty() ? round((float) $solvs->avg(), 1) : null,
             'last_scan' => $scans->isNotEmpty() ? (string) $scans->max() : null,
         ];
+    }
+
+    /**
+     * The website's organic town rank across THIS location's coverage towns (§ Town Rank): the most recently
+     * scanned keyword, bucketed per query mode, with movement since the previous sweep. Reads the site-wide
+     * report and keeps only the location's towns.
+     *
+     * @return array{available: bool, keyword: string|null, keyword_id: string|null, towns: int, modes: array<string, array{scanned_at: string|null, top3: int, page1: int, page2: int, beyond: int, not_found: int, up: int, down: int}|null>}
+     */
+    private function townRankSummary(Location $location): array
+    {
+        $empty = ['available' => false, 'keyword' => null, 'keyword_id' => null, 'towns' => 0, 'modes' => []];
+        $site = $location->site;
+        if ($site === null) {
+            return $empty;
+        }
+        $keywords = $this->townRankBoard->keywords($site);
+        if ($keywords === []) {
+            return $empty;
+        }
+        $keyword = Keyword::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($keywords[0]['keyword_id'])->first();
+        if ($keyword === null) {
+            return $empty;
+        }
+
+        $data = $this->townRank->forKeyword($site, $keyword);
+        $townIds = array_flip(array_column($this->coverage->pointsFor($location), 'coverage_area_id'));
+
+        $modes = [];
+        foreach (TownRankScan::MODES as $mode) {
+            if ($data['scans'][$mode] === null) {
+                $modes[$mode] = null;
+
+                continue;
+            }
+            $prefix = $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town';
+            $counts = ['scanned_at' => $data['scans'][$mode]['scanned_at'], 'top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'up' => 0, 'down' => 0];
+            foreach ($data['rows'] as $row) {
+                if (! isset($townIds[$row['coverage_area_id']])) {
+                    continue;
+                }
+                $state = (string) $row["{$prefix}_state"];
+                if (in_array($state, ['top3', 'page1', 'page2', 'beyond', 'not_found'], true)) {
+                    $counts[$state]++;
+                }
+                $change = $row["{$prefix}_change"];
+                if ($change === 'up' || $change === 'down') {
+                    $counts[$change]++;
+                }
+            }
+            $modes[$mode] = $counts;
+        }
+
+        return ['available' => true, 'keyword' => $data['keyword'], 'keyword_id' => (string) $keyword->id, 'towns' => count($townIds), 'modes' => $modes];
     }
 
     /**

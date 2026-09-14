@@ -106,6 +106,12 @@ class LocationDashboard extends Page
     }
 
     /** Deep-link to the geo-grid small-multiples board for the current location. */
+    /** Deep-link into the Town Rank board for the location's most recently scanned keyword. */
+    public function townRankUrl(?string $keywordId): string
+    {
+        return TownRankPage::getUrl($keywordId !== null ? ['keywordId' => $keywordId] : []);
+    }
+
     public function geoGridUrl(): string
     {
         // No ?siteId= — LocationGeoGrid resolves the working tenant from the lock; only the in-tenant

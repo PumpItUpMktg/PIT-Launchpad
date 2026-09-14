@@ -50,10 +50,13 @@ it('lists scanned keywords and builds the board with north-up markers coloured b
 
     $tq = $board->for($site, null, 'town_query');   // null → the most recently scanned keyword
     expect($tq['keyword'])->toBe('sump pump service')
-        ->and($tq['summary'])->toMatchArray(['page1' => 1, 'page2' => 1, 'not_found' => 1])
-        ->and($tq['markers'])->toHaveCount(3);
+        ->and($tq['summary'])->toMatchArray(['page1' => 1, 'page2' => 1, 'not_found' => 1, 'up' => 0, 'down' => 0])
+        ->and($tq['has_previous'])->toBeFalse()
+        ->and($tq['markers'])->toHaveCount(3)
+        ->and($tq['markers'][0]['change'])->toBeNull();
     $byId = collect($tq['markers'])->keyBy('id');
     expect($byId[$hack->id]['rank'])->toBe(4)->and($byId[$hack->id]['page'])->toBeTrue()
+        ->and($byId[$mans->id]['page'])->toBeTrue()   // found by slug — a page, just not anchored to this GEOID
         ->and($byId[$indy->id]['rank'])->toBeNull()->and($byId[$indy->id]['page'])->toBeFalse()
         ->and($byId[$indy->id]['y'])->toBeLessThan($byId[$mans->id]['y'])   // north-up: Independence (40.90) above Mansfield (40.80)
         ->and($byId[$mans->id]['x'])->toBeLessThan($byId[$indy->id]['x']);  // west of it
@@ -77,8 +80,9 @@ it('builds a town detail: competitors above us only, page state incl. un-anchore
         ->and($h['actions'][0]['why'])->toContain('rival.com, yelp.com, other.com');
 
     $m = $board->town($site, $kw->id, $mans->id);
-    expect($m['page_state'])->toBe('unanchored')
-        ->and(array_column($m['actions'], 'key'))->toBe(['anchor_page', 'strengthen_page', 'local_weak', 'map_absent']);
+    expect($m['page_state'])->toBe('slug')
+        ->and($m['page_url'])->toBe('https://spg.com/mansfield-nj')
+        ->and(array_column($m['actions'], 'key'))->toBe(['check_anchor', 'strengthen_page', 'local_weak', 'map_absent']);
 
     $i = $board->town($site, $kw->id, $indy->id);
     expect($i['page_state'])->toBe('none')

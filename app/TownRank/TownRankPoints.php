@@ -11,6 +11,7 @@ use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use Illuminate\Support\Str;
 
 /**
  * The SITE-WIDE town point-source for town-rank scanning (§ Town Rank): the union of every location's
@@ -26,7 +27,11 @@ final class TownRankPoints
     public function __construct(private readonly CoverageGrid $coverage) {}
 
     /**
-     * @return list<array{coverage_area_id: string, geo_id: string|null, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null}>
+     * `page_match` says how the page was found: `geoid` (the anchor join) or `slug` (a published location page
+     * whose slug is this town's — the page exists but its GEOID is a different Census form than the coverage
+     * row's, or it is un-anchored), else null.
+     *
+     * @return list<array{coverage_area_id: string, geo_id: string|null, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null}>
      */
     public function forSite(Site $site): array
     {
@@ -47,13 +52,14 @@ final class TownRankPoints
             ->get(['id', 'geo_id', 'state'])
             ->keyBy('id');
 
-        $pages = Content::withoutGlobalScope(SiteScope::class)
+        $published = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Location->value)
             ->where('status', ContentStatus::Published->value)
-            ->whereNotNull('geo_id')
-            ->pluck('slug', 'geo_id');
+            ->get(['slug', 'geo_id']);
+        $pages = $published->whereNotNull('geo_id')->pluck('slug', 'geo_id');
+        $slugs = $published->pluck('slug')->map(fn ($s): string => (string) $s)->flip();
 
         $domain = is_string($site->domain_url) ? rtrim($site->domain_url, '/') : '';
 
@@ -62,7 +68,18 @@ final class TownRankPoints
             $area = $areas->get($id);
             $geoId = $area !== null && $area->geo_id !== '' ? $area->geo_id : null;
             $state = $area?->state;
-            $slug = $geoId !== null && $pages->has($geoId) ? (string) $pages->get($geoId) : null;
+            $match = null;
+            $slug = null;
+            if ($geoId !== null && $pages->has($geoId)) {
+                $slug = (string) $pages->get($geoId);
+                $match = 'geoid';
+            } else {
+                $townSlug = Str::slug($point['label']).($state !== null && $state !== '' ? '-'.strtolower($state) : '');
+                if ($slugs->has($townSlug)) {
+                    $slug = $townSlug;
+                    $match = 'slug';
+                }
+            }
             $points[] = [
                 'coverage_area_id' => (string) $id,
                 'geo_id' => $geoId,
@@ -73,6 +90,7 @@ final class TownRankPoints
                 'population' => $point['population'],
                 'page_slug' => $slug,
                 'page_url' => $slug !== null && $domain !== '' ? $domain.'/'.ltrim($slug, '/') : null,
+                'page_match' => $match,
             ];
         }
 

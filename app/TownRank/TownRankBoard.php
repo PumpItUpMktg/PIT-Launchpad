@@ -2,26 +2,21 @@
 
 namespace App\TownRank;
 
-use App\Enums\ContentKind;
-use App\Enums\ContentStatus;
-use App\Enums\PageType;
 use App\GeoGrid\GeoGridPalette;
-use App\Models\Content;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
-use Illuminate\Support\Str;
 
 /**
  * The operator Town Rank board read-model (§ Town Rank, PR 2): one page per keyword — the site's whole covered
  * footprint as a town scatter coloured by the website's organic rank (in either query mode), the bucket
  * summary, the town table, and a per-town detail with the suggested actions ({@see TownDiagnosis}). Built on
  * {@see TownRankReport}; adds the map geometry (all towns share one bounding box, north-up), the keyword
- * selector (keywords that have been scanned), and the town detail (competitors above us, page state incl.
- * "published but un-anchored", map-pack rank).
+ * selector (keywords that have been scanned), movement since the previous scan, and the town detail
+ * (competitors above us, page state incl. "found by slug, not by GEOID", map-pack rank).
  *
  * Operator context crosses tenants, so the {@see SiteScope} is dropped and site_id filtered explicitly.
  */
@@ -72,8 +67,9 @@ final class TownRankBoard
      * @return array{
      *     keyword_id: string, keyword: string, mode: string,
      *     scan: array{id: string, status: string, scanned_at: string|null, points: int, found: int}|null,
-     *     summary: array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int},
-     *     markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>,
+     *     summary: array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int},
+     *     has_previous: bool,
+     *     markers: list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>,
      *     rows: list<array<string, mixed>>
      * }|null
      */
@@ -99,6 +95,8 @@ final class TownRankBoard
                 continue;
             }
             $rank = $row["{$prefix}_rank"] !== null ? (int) $row["{$prefix}_rank"] : null;
+            $prev = $row["{$prefix}_prev_rank"] !== null ? (int) $row["{$prefix}_prev_rank"] : null;
+            $change = $row["{$prefix}_change"];
             // 6..94 padding so edge dots aren't clipped; a single-town span collapses to the centre.
             $x = $lngSpan > 0 ? 6 + (($c['lng'] - $bbox['minLng']) / $lngSpan) * 88 : 50.0;
             $y = $latSpan > 0 ? 6 + (($bbox['maxLat'] - $c['lat']) / $latSpan) * 88 : 50.0;
@@ -107,7 +105,10 @@ final class TownRankBoard
                 'x' => round($x, 2),
                 'y' => round($y, 2),
                 'rank' => $rank,
+                'prev_rank' => $prev,
+                'change' => is_string($change) ? $change : null,
                 'color' => GeoGridPalette::absolute($rank),
+                'delta_color' => $change === null ? GeoGridPalette::ABSENT : GeoGridPalette::delta($rank, $prev),
                 'label' => $row['label'].($row['state'] !== null ? ', '.$row['state'] : ''),
                 'population' => $row['population'],
                 'page' => $row['page_url'] !== null,
@@ -120,6 +121,7 @@ final class TownRankBoard
             'mode' => $mode,
             'scan' => $data['scans'][$mode],
             'summary' => $data['summary'][$mode],
+            'has_previous' => $data['scans'][$mode] !== null && $data['scans'][$mode]['previous_scanned_at'] !== null,
             'markers' => $markers,
             'rows' => $data['rows'],
         ];
@@ -172,6 +174,8 @@ final class TownRankBoard
                 'state' => (string) $row["{$prefix}_state"],
                 'url' => $row["{$prefix}_url"],
                 'query' => $point?->query,
+                'prev_rank' => $row["{$prefix}_prev_rank"] !== null ? (int) $row["{$prefix}_prev_rank"] : null,
+                'change' => is_string($row["{$prefix}_change"]) ? $row["{$prefix}_change"] : null,
                 'competitors' => $competitors,
             ];
         }
@@ -182,7 +186,11 @@ final class TownRankBoard
             'label' => $row['label'].($row['state'] !== null ? ', '.$row['state'] : ''),
             'population' => $row['population'],
             'page_url' => $row['page_url'],
-            'page_state' => $this->pageState($site, $row),
+            'page_state' => match ($row['page_match']) {
+                'geoid' => 'anchored',
+                'slug' => 'slug',
+                default => 'none',
+            },
             'local' => $modes[TownRankScan::MODE_LOCAL],
             'town_query' => $modes[TownRankScan::MODE_TOWN_QUERY],
             'map_rank' => $row['map_rank'],
@@ -218,29 +226,6 @@ final class TownRankBoard
 
         return TownRankPoint::withoutGlobalScope(SiteScope::class)
             ->where('scan_id', $scanId)->where('coverage_area_id', $coverageAreaId)->first();
-    }
-
-    /**
-     * anchored (a published page joined by GEOID) | unanchored (a published location page whose slug is this
-     * town's slug, but no GEOID join — the report can't see it) | none.
-     *
-     * @param  array<string, mixed>  $row
-     */
-    private function pageState(Site $site, array $row): string
-    {
-        if ($row['page_url'] !== null) {
-            return 'anchored';
-        }
-        $slug = Str::slug((string) $row['label']).($row['state'] !== null ? '-'.strtolower((string) $row['state']) : '');
-        $exists = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('kind', ContentKind::Page->value)
-            ->where('page_type', PageType::Location->value)
-            ->where('status', ContentStatus::Published->value)
-            ->where('slug', $slug)
-            ->exists();
-
-        return $exists ? 'unanchored' : 'none';
     }
 
     private function mapScanned(Site $site, Keyword $keyword): bool

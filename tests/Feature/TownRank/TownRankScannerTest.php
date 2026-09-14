@@ -55,8 +55,10 @@ it('lists the site\'s covered towns once each, population-descending, with the t
         ->and($points[0]['label'])->toBe('Hackettstown')
         ->and($points[0]['state'])->toBe('NJ')
         ->and($points[0]['page_url'])->toBe('https://www.spg.com/hackettstown-nj')
+        ->and($points[0]['page_match'])->toBe('geoid')
         ->and($points[1]['label'])->toBe('Mansfield')
-        ->and($points[1]['page_url'])->toBeNull();
+        ->and($points[1]['page_url'])->toBeNull()
+        ->and($points[1]['page_match'])->toBeNull();
 });
 
 it('posts one organic task per town — from the town\'s coordinate in local mode, as "keyword town ST" nationally in town mode', function () {

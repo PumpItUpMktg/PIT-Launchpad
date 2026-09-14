@@ -3,6 +3,7 @@
 use App\Integrations\Conversions\IngestConversions;
 use App\Integrations\DataForSeo\IngestSerpTasks;
 use App\Jobs\IngestCoverageScans;
+use App\Jobs\IngestTownRankScans;
 use App\KeywordGenerator\Pipeline\RefreshKeywordPipelines;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -161,6 +162,16 @@ Schedule::command('launchpad:run-due-coverage-plans')->daily()->withoutOverlappi
 // whole-county scan never overruns a job timeout. Finalizes each scan (complete, or partial past the expiry
 // window) and recomputes its aggregates. Every five minutes; withoutOverlapping so runs can't double-collect.
 Schedule::job(new IngestCoverageScans)->everyFiveMinutes()->withoutOverlapping();
+
+// Town Rank weekly sweep — for every engine-eligible site, post a fresh (keyword × mode) town scan for each
+// pair whose newest scan is older than the cadence (one organic task per covered town, standard queue), one
+// queued job per site, cost-braked by the per-site request ceiling. Mondays, early; withoutOverlapping.
+Schedule::command('launchpad:town-rank-sweep')->weeklyOn(1, '04:00')->withoutOverlapping();
+
+// Town Rank collection sweep — the async half: collect ready results for pending town-rank scans in bounded
+// batches (rate-limited task_get), finalize complete scans, and close out expired ones as partial. Every five
+// minutes; withoutOverlapping so runs can't double-collect.
+Schedule::job(new IngestTownRankScans)->everyFiveMinutes()->withoutOverlapping();
 
 // Review Capture reminders — day-3 / day-10 nudges for unsubmitted review requests (capped at 2, per-tenant
 // toggle). Daily; the command itself decides which requests are due. Everything it sends is queued.
