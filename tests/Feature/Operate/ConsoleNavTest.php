@@ -13,14 +13,14 @@ beforeEach(function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
 });
 
-it('is a four-column header of exactly 25 items in the settled group order', function () {
+it('is a four-column header of exactly 26 items in the settled group order', function () {
     $structure = app(ConsoleNav::class)->structure();
 
     expect(collect($structure)->pluck('group')->all())->toBe(['Build', 'Territory', 'Results', 'System']);
 
     $counts = collect($structure)->mapWithKeys(fn (array $c): array => [$c['group'] => count($c['items'])]);
-    expect($counts->all())->toBe(['Build' => 7, 'Territory' => 6, 'Results' => 6, 'System' => 6])
-        ->and($counts->sum())->toBe(25);
+    expect($counts->all())->toBe(['Build' => 7, 'Territory' => 6, 'Results' => 7, 'System' => 6])
+        ->and($counts->sum())->toBe(26);
 });
 
 it('places every item in its settled group and vocabulary', function () {
@@ -29,7 +29,7 @@ it('places every item in its settled group and vocabulary', function () {
 
     expect($byGroup['Build'])->toBe(['Dashboard', 'Setup', 'Posts', 'Pages', 'Jobs', 'Reviews', 'Live'])
         ->and($byGroup['Territory'])->toBe(['Markets', 'Towns', 'Citations', 'Silos', 'Keywords', 'Internal links'])
-        ->and($byGroup['Results'])->toBe(['Rankings', 'Town rank', 'Indexing', 'Geo grid', 'Coverage', 'AI visibility'])
+        ->and($byGroup['Results'])->toBe(['Rankings', 'Town rank', 'Service areas', 'Indexing', 'Geo grid', 'Coverage', 'AI visibility'])
         ->and($byGroup['System'])->toBe(['Connections', 'Feeds', 'Brand', 'Voice', 'Users', 'Recover']);
 });
 
@@ -45,7 +45,7 @@ it('Territory vocabulary: "Markets" opens the market-card wall, "Towns" opens th
         ->and(app(MarketsBoard::class)->getTitle())->toBe('Towns'); // the served-town board reads "Towns"
 });
 
-it('has no remaining gap items — all 25 surfaces are live', function () {
+it('has no remaining gap items — all 26 surfaces are live', function () {
     $soon = collect(app(ConsoleNav::class)->columns())
         ->flatMap(fn (array $c) => $c['items'])
         ->filter(fn (array $i): bool => $i['soon'])
@@ -54,17 +54,17 @@ it('has no remaining gap items — all 25 surfaces are live', function () {
     // Brand + Users shipped — the final two GAP surfaces of the nav cutover. No "soon" items remain.
     expect($soon->all())->toBe([]);
 
-    // Every one of the 25 items resolves to a real /admin URL (Dashboard lands at '/admin' with no
+    // Every one of the 26 items resolves to a real /admin URL (Dashboard lands at '/admin' with no
     // trailing path, so match '/admin', not '/admin/').
     $items = collect(app(ConsoleNav::class)->columns())->flatMap(fn (array $c) => $c['items']);
-    expect($items)->toHaveCount(25);
+    expect($items)->toHaveCount(26);
     foreach ($items as $item) {
         expect($item['soon'])->toBeFalse()
             ->and($item['url'])->toBeString()->toContain('/admin');
     }
 });
 
-it('renders the four-column header — group titles and 25 live links, no greyed "soon" items', function () {
+it('renders the four-column header — group titles and 26 live links, no greyed "soon" items', function () {
     $html = View::make('filament.operator.console-nav')->render();
 
     // The four group columns, each titled.
@@ -75,7 +75,7 @@ it('renders the four-column header — group titles and 25 live links, no greyed
         ->toContain('>Brand<')  // now a live link
         ->toContain('>Users<'); // now a live link
 
-    // All 25 items render as links; no "soon" spans remain.
+    // All 26 items render as links; no "soon" spans remain.
     expect(substr_count($html, 'class="lp-cn-soon"'))->toBe(0)
-        ->and(substr_count($html, 'wire:navigate'))->toBe(25); // the full 25 live links
+        ->and(substr_count($html, 'wire:navigate'))->toBe(26); // the full 26 live links
 });

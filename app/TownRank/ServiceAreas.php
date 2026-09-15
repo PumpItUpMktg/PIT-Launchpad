@@ -1,0 +1,337 @@
+<?php
+
+namespace App\TownRank;
+
+use App\GeoGrid\CoverageGrid;
+use App\GeoGrid\GeoGridPalette;
+use App\Models\GeoGridScan;
+use App\Models\JobCounty;
+use App\Models\Keyword;
+use App\Models\Location;
+use App\Models\Scopes\SiteScope;
+use App\Models\Site;
+use App\Models\TownRankScan;
+
+/**
+ * The per-service-area read-model (§ Town Rank): one "area" per physical location, defined by the counties
+ * that location serves (its home county plus any owner-selected counties — the same set the coverage grid
+ * scans). An area page shows every tracked keyword as one card with two maps side by side over the SAME
+ * towns and the same bounding box: the website's town rank (the Town Rank scan, sliced to this area) and
+ * the GBP's map-pack rank (the latest coverage-mode geo-grid scan for this location × keyword), plus a
+ * metrics slot the operator will fill with scoring once the data has been seen. Pure read-model; operator
+ * context crosses tenants, so the {@see SiteScope} is dropped and site_id filtered explicitly.
+ */
+final class ServiceAreas
+{
+    public function __construct(
+        private readonly CoverageGrid $coverage,
+        private readonly TownRankPoints $points,
+        private readonly TownRankBoard $board,
+        private readonly TownRankReport $report,
+    ) {}
+
+    /**
+     * Every service area of the site: the location, the counties it serves (labelled from the county
+     * registry), how many towns that is, and how many keywords are tracked.
+     *
+     * @return list<array{location_id: string, name: string, city: string, state: string, counties: list<array{geoid: string, label: string}>, towns: int, keywords: int}>
+     */
+    public function areas(Site $site): array
+    {
+        $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->orderBy('name')->get();
+        if ($locations->isEmpty()) {
+            return [];
+        }
+        $townsByLocation = $this->coverage->pointsForMany($locations);
+        $keywords = count($this->board->keywords($site));
+
+        $geoids = [];
+        foreach ($locations as $location) {
+            $geoids = array_merge($geoids, $this->countyGeoIds($location));
+        }
+        $labels = $this->countyLabels(array_values(array_unique($geoids)));
+
+        $areas = [];
+        foreach ($locations as $location) {
+            $cityState = $location->cityState();
+            $areas[] = [
+                'location_id' => (string) $location->id,
+                'name' => (string) $location->name,
+                'city' => $cityState['city'],
+                'state' => $cityState['state'],
+                'counties' => array_map(fn (string $g): array => ['geoid' => $g, 'label' => $labels[$g] ?? "County {$g}"], $this->countyGeoIds($location)),
+                'towns' => count($townsByLocation[(string) $location->id] ?? []),
+                'keywords' => $keywords,
+            ];
+        }
+
+        return $areas;
+    }
+
+    /**
+     * One area's page: the header (location + counties + town count) and one card per tracked keyword.
+     * Each card carries the website map (`web`), the GBP map-pack map (`gbp`, null until a coverage scan
+     * exists for this location × keyword), and a `metrics` list — the scoring slot. Both maps share the
+     * area's bounding box so a town sits in the same spot on each.
+     *
+     * @return array{
+     *     location: array{location_id: string, name: string, city: string, state: string},
+     *     counties: list<array{geoid: string, label: string}>,
+     *     towns: int,
+     *     cards: list<array{
+     *         keyword_id: string, query: string,
+     *         web: array{mode: string, status: string|null, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
+     *         gbp: array{scan_id: string, status: string, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
+     *         metrics: list<array{key: string, label: string, value: string|null, note: string}>
+     *     }>
+     * }|null
+     */
+    public function area(Site $site, string $locationId): ?array
+    {
+        $location = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($locationId)->first();
+        if ($location === null) {
+            return null;
+        }
+
+        $areaTowns = $this->coverage->pointsFor($location);
+        $areaIds = array_fill_keys(array_column($areaTowns, 'coverage_area_id'), true);
+        $siteTowns = [];
+        foreach ($this->points->forSite($site) as $town) {
+            if (isset($areaIds[$town['coverage_area_id']])) {
+                $siteTowns[$town['coverage_area_id']] = $town;
+            }
+        }
+        $coords = [];
+        foreach ($areaTowns as $town) {
+            $coords[$town['coverage_area_id']] = ['lat' => $town['lat'], 'lng' => $town['lng']];
+        }
+        $bbox = self::boundingBox($coords);
+
+        $cards = [];
+        foreach ($this->board->keywords($site) as $entry) {
+            $keyword = Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($entry['keyword_id'])->first();
+            if ($keyword === null) {
+                continue;
+            }
+            $web = $this->webMap($site, $keyword, $areaIds, $coords, $bbox);
+            $gbp = $this->gbpMap($location, $keyword, $siteTowns, $coords, $bbox);
+            $cards[] = [
+                'keyword_id' => (string) $keyword->id,
+                'query' => (string) $keyword->query,
+                'web' => $web,
+                'gbp' => $gbp,
+                'metrics' => $this->metrics(count($areaTowns), $web, $gbp),
+            ];
+        }
+
+        $cityState = $location->cityState();
+
+        return [
+            'location' => ['location_id' => (string) $location->id, 'name' => (string) $location->name, 'city' => $cityState['city'], 'state' => $cityState['state']],
+            'counties' => array_map(fn (string $g): array => ['geoid' => $g, 'label' => $this->countyLabels([$g])[$g] ?? "County {$g}"], $this->countyGeoIds($location)),
+            'towns' => count($areaTowns),
+            'cards' => $cards,
+        ];
+    }
+
+    /**
+     * The website's town-rank map for this keyword, sliced to the area: town-search mode when it has been
+     * scanned, else searched-from-town, else null (no Town Rank scan at all).
+     *
+     * @param  array<string, true>  $areaIds
+     * @param  array<string, array{lat: float, lng: float}>  $coords
+     * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $bbox
+     * @return array{mode: string, status: string|null, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
+     */
+    private function webMap(Site $site, Keyword $keyword, array $areaIds, array $coords, array $bbox): ?array
+    {
+        $data = $this->report->forKeyword($site, $keyword);
+        $mode = $data['scans'][TownRankScan::MODE_TOWN_QUERY] !== null ? TownRankScan::MODE_TOWN_QUERY : TownRankScan::MODE_LOCAL;
+        $scan = $data['scans'][$mode];
+        if ($scan === null) {
+            return null;
+        }
+        $prefix = $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town';
+
+        $summary = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'pending' => 0];
+        $markers = [];
+        foreach ($data['rows'] as $row) {
+            $id = (string) $row['coverage_area_id'];
+            if (! isset($areaIds[$id], $coords[$id])) {
+                continue;
+            }
+            $state = (string) $row["{$prefix}_state"];
+            if (isset($summary[$state])) {
+                $summary[$state]++;
+            }
+            $rank = $row["{$prefix}_rank"] !== null ? (int) $row["{$prefix}_rank"] : null;
+            $markers[] = self::marker($id, $coords[$id], $bbox, $rank, (string) $row['label'], $row['state'], (int) $row['population'], $row['page_url'] !== null);
+        }
+
+        return [
+            'mode' => $mode,
+            'status' => $scan['status'],
+            'scanned_at' => $scan['scanned_at'],
+            'summary' => $summary,
+            'markers' => $markers,
+        ];
+    }
+
+    /**
+     * The GBP's map-pack map: the latest coverage-mode geo-grid scan for this location × keyword (complete,
+     * partial, or still collecting). Null until one exists — the card shows the placeholder.
+     *
+     * @param  array<string, array<string, mixed>>  $siteTowns
+     * @param  array<string, array{lat: float, lng: float}>  $coords
+     * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $bbox
+     * @return array{scan_id: string, status: string, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
+     */
+    private function gbpMap(Location $location, Keyword $keyword, array $siteTowns, array $coords, array $bbox): ?array
+    {
+        $scan = GeoGridScan::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $location->site_id)->where('location_id', $location->id)->where('keyword_id', $keyword->id)
+            ->where('mode', 'coverage')
+            ->orderByDesc('scanned_at')
+            ->with('points')
+            ->first();
+        if ($scan === null) {
+            return null;
+        }
+
+        $summary = ['top3' => 0, 'top7' => 0, 'top10' => 0, 'beyond' => 0, 'absent' => 0, 'pending' => 0];
+        $markers = [];
+        foreach ($scan->points as $point) {
+            $id = (string) $point->coverage_area_id;
+            if ($id === '' || ! isset($coords[$id])) {
+                continue;
+            }
+            $town = $siteTowns[$id] ?? null;
+            $rank = $point->rank;
+            if ($point->collected_at === null && $scan->status === 'pending') {
+                $summary['pending']++;
+            } else {
+                $summary[match (true) {
+                    $rank === null => 'absent',
+                    $rank <= 3 => 'top3',
+                    $rank <= 7 => 'top7',
+                    $rank <= 10 => 'top10',
+                    default => 'beyond',
+                }]++;
+            }
+            $markers[] = self::marker(
+                $id, $coords[$id], $bbox, $rank,
+                (string) ($town['name'] ?? $point->label ?? ''), $town['state'] ?? null, (int) ($town['population'] ?? 0), ($town['page_url'] ?? null) !== null,
+            );
+        }
+
+        return [
+            'scan_id' => (string) $scan->id,
+            'status' => (string) $scan->status,
+            'scanned_at' => $scan->scanned_at?->toDateTimeString(),
+            'summary' => $summary,
+            'markers' => $markers,
+        ];
+    }
+
+    /**
+     * The scoring slot. The operator has not chosen a score yet; these are the raw shares the two maps
+     * already carry, labelled as provisional, plus an explicit empty score so the card's layout is settled
+     * before the formula is.
+     *
+     * @param  array<string, mixed>|null  $web
+     * @param  array<string, mixed>|null  $gbp
+     * @return list<array{key: string, label: string, value: string|null, note: string}>
+     */
+    private function metrics(int $towns, ?array $web, ?array $gbp): array
+    {
+        $share = fn (int $n): ?string => $towns > 0 ? sprintf('%d%%', (int) round($n / $towns * 100)) : null;
+        $webSummary = is_array($web['summary'] ?? null) ? $web['summary'] : [];
+        $gbpSummary = is_array($gbp['summary'] ?? null) ? $gbp['summary'] : [];
+
+        return [
+            ['key' => 'web_page1_share', 'label' => 'Website page-1 share', 'value' => $web === null ? null : $share((int) ($webSummary['top3'] ?? 0) + (int) ($webSummary['page1'] ?? 0)), 'note' => 'towns where the site ranks 1–10 (provisional)'],
+            ['key' => 'web_top3_share', 'label' => 'Website top-3 share', 'value' => $web === null ? null : $share((int) ($webSummary['top3'] ?? 0)), 'note' => 'towns where the site ranks 1–3 (provisional)'],
+            ['key' => 'gbp_top3_share', 'label' => 'GBP top-3 share', 'value' => $gbp === null ? null : $share((int) ($gbpSummary['top3'] ?? 0)), 'note' => 'towns where the GBP is in the map pack (provisional)'],
+            ['key' => 'score', 'label' => 'Area score', 'value' => null, 'note' => 'not defined yet — the formula is chosen once the data has been seen'],
+        ];
+    }
+
+    /**
+     * @param  array{lat: float, lng: float}  $c
+     * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $bbox
+     * @return array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}
+     */
+    private static function marker(string $id, array $c, array $bbox, ?int $rank, string $name, ?string $state, int $population, bool $page): array
+    {
+        $latSpan = $bbox['maxLat'] - $bbox['minLat'];
+        $lngSpan = $bbox['maxLng'] - $bbox['minLng'];
+        $x = $lngSpan > 0 ? 6 + (($c['lng'] - $bbox['minLng']) / $lngSpan) * 88 : 50.0;
+        $y = $latSpan > 0 ? 6 + (($bbox['maxLat'] - $c['lat']) / $latSpan) * 88 : 50.0;
+
+        return [
+            'id' => $id,
+            'x' => round($x, 2),
+            'y' => round($y, 2),
+            'rank' => $rank,
+            'color' => GeoGridPalette::absolute($rank),
+            'label' => $name.($state !== null && $state !== '' ? ", {$state}" : ''),
+            'population' => $population,
+            'page' => $page,
+        ];
+    }
+
+    /**
+     * @param  array<string, array{lat: float, lng: float}>  $coords
+     * @return array{minLat: float, maxLat: float, minLng: float, maxLng: float}
+     */
+    private static function boundingBox(array $coords): array
+    {
+        $lats = array_column($coords, 'lat');
+        $lngs = array_column($coords, 'lng');
+        if ($lats === []) {
+            return ['minLat' => 0.0, 'maxLat' => 0.0, 'minLng' => 0.0, 'maxLng' => 0.0];
+        }
+
+        return ['minLat' => min($lats), 'maxLat' => max($lats), 'minLng' => min($lngs), 'maxLng' => max($lngs)];
+    }
+
+    /**
+     * The 5-digit county GEOIDs the location serves — the same set the coverage grid scans.
+     *
+     * @return list<string>
+     */
+    private function countyGeoIds(Location $location): array
+    {
+        return collect([$location->home_county_geoid])
+            ->merge(is_array($location->county_geoids) ? $location->county_geoids : [])
+            ->map(fn ($g): string => trim((string) $g))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * "Warren County, NJ" per GEOID from the county registry; a county the registry doesn't know keeps its
+     * GEOID as the label.
+     *
+     * @param  list<string>  $geoids
+     * @return array<string, string>
+     */
+    private function countyLabels(array $geoids): array
+    {
+        if ($geoids === []) {
+            return [];
+        }
+        $labels = [];
+        foreach (JobCounty::query()->whereIn('county_geoid', $geoids)->get() as $county) {
+            $name = (string) $county->name;
+            if (! preg_match('/county|parish|borough|census area/i', $name)) {
+                $name .= ' County';
+            }
+            $labels[(string) $county->county_geoid] = $name.($county->state !== null && $county->state !== '' ? ", {$county->state}" : '');
+        }
+
+        return $labels;
+    }
+}
