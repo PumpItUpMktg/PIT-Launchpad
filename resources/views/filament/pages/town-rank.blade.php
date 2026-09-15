@@ -2,7 +2,6 @@
 @php
     $cards = $this->cards;
     $board = $keywordId !== null ? $this->board : null;
-    $keywords = $this->keywords;
     $town = $this->town;
     $rows = $this->visibleRows;
     $isLocal = $board !== null && $board['mode'] === \App\Models\TownRankScan::MODE_LOCAL;
@@ -27,8 +26,7 @@
     .trk { --t-line:#e2e7ee; --t-muted:#5a6675; --t-faint:#8a95a3; --t-surface:#ffffff; --t-surface2:#f6f8fb; }
     .dark .trk { --t-line:#232c37; --t-muted:#9aa7b5; --t-faint:#6b7887; --t-surface:#0b1017; --t-surface2:#0f151c; }
     .trk .t-chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
-    .trk .t-chip { font-size:12px; border:1px solid var(--t-line); border-radius:999px; padding:6px 12px; background:transparent; color:var(--t-muted); cursor:pointer; }
-    .trk .t-chip.on { border-color:#2563eb; color:inherit; background:rgba(37,99,235,.08); font-weight:600; }
+    .trk .t-kw { font-size:18px; font-weight:800; margin:0 8px 0 0; }
     .trk .t-modes { display:inline-flex; border:1px solid var(--t-line); border-radius:8px; overflow:hidden; margin-left:auto; }
     .trk .t-modes button { font-size:12px; padding:6px 12px; background:transparent; color:var(--t-muted); border:none; cursor:pointer; }
     .trk .t-modes button.on { background:rgba(37,99,235,.10); color:inherit; font-weight:600; }
@@ -151,10 +149,9 @@
         @endif
     @else
         <button type="button" class="t-back" wire:click="closeKeyword">← All keywords</button>
+        {{-- Drill-down header: this keyword only (the wall is the place to pick another), plus the mode toggles. --}}
         <div class="t-chips">
-            @foreach ($keywords as $kw)
-                <button type="button" class="t-chip {{ $kw['keyword_id'] === $board['keyword_id'] ? 'on' : '' }}" wire:click="$set('keywordId', '{{ $kw['keyword_id'] }}')">{{ $kw['query'] }}</button>
-            @endforeach
+            <h2 class="t-kw">{{ $board['keyword'] }}</h2>
             <div class="t-modes" role="group" aria-label="Query mode">
                 <button type="button" class="{{ ! $isLocal ? 'on' : '' }}" wire:click="setMode('town_query')" title="&quot;keyword Town ST&quot; searched nationally — does the town page win its own search?">Town search</button>
                 <button type="button" class="{{ $isLocal ? 'on' : '' }}" wire:click="setMode('local')" title="The bare keyword searched from the town — what a resident sees">Searched from town</button>
