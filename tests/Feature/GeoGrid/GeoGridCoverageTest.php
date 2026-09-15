@@ -9,6 +9,7 @@ use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Site;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -180,4 +181,27 @@ it('runs coverage scans with --force and writes coverage-mode rows', function ()
 
     expect(GeoGridScan::where('mode', 'coverage')->count())->toBe(1)
         ->and(GeoGridScan::where('mode', 'coverage')->first()->pop_found_rate)->not->toBeNull();
+});
+
+it('resolves many locations from ONE coverage-area load, each list identical to the single-location call', function () {
+    $site = Site::factory()->create();
+    $a = coverageLocation($site);
+    $b = coverageLocation($site, ['name' => 'Other', 'place_id' => 'ChIJ_o', 'home_county_geoid' => '34013']);
+    servedTown($site, $a, 'Nutley', 30000, 40.82, -74.16);
+    servedTown($site, $a, 'Belleville', 36000, 40.79, -74.15);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Newark', 'geo_id' => '3401351000', 'population' => 300000, 'lat' => 40.73, 'lng' => -74.17, 'source_location_ids' => []]);   // b's county
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'County subdivisions not defined', 'geo_id' => '3401300000', 'population' => 0, 'lat' => 40.7, 'lng' => -74.1, 'source_location_ids' => []]);
+
+    $grid = app(CoverageGrid::class);
+    $single = [(string) $a->id => $grid->pointsFor($a->fresh()), (string) $b->id => $grid->pointsFor($b->fresh())];
+
+    DB::enableQueryLog();
+    $many = $grid->pointsForMany([$a->fresh(), $b->fresh()]);
+    $areaQueries = collect(DB::getQueryLog())->filter(fn (array $q): bool => str_contains($q['query'], 'coverage_areas'))->count();
+    DB::disableQueryLog();
+
+    expect($many)->toBe($single)
+        ->and(array_column($many[(string) $a->id], 'label'))->toBe(['Belleville', 'Nutley'])
+        ->and(array_column($many[(string) $b->id], 'label'))->toBe(['Newark'])
+        ->and($areaQueries)->toBe(1);
 });

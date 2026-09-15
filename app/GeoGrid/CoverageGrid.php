@@ -27,25 +27,62 @@ final class CoverageGrid
      */
     public function pointsFor(Location $location): array
     {
-        $counties = $this->countyGeoIds($location);
+        return $this->pointsForMany([$location])[(string) $location->id] ?? [];
+    }
 
-        return CoverageArea::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $location->site_id)
-            ->whereNotNull('lat')->whereNotNull('lng')
-            ->get()
-            // TIGER's pseudo-subdivision ("County subdivisions not defined") is water/unorganized area, not a town.
-            ->filter(fn (CoverageArea $area): bool => preg_match('/not defined/i', (string) $area->name) !== 1)
-            ->filter(fn (CoverageArea $area): bool => $this->inScan($area, $location, $counties))
-            ->sortByDesc(fn (CoverageArea $area): int => (int) ($area->population ?? 0))
-            ->map(fn (CoverageArea $area): array => [
-                'coverage_area_id' => (string) $area->id,
-                'label' => (string) $area->name,
-                'lat' => (float) $area->lat,
-                'lng' => (float) $area->lng,
-                'population' => (int) ($area->population ?? 0),
-            ])
-            ->values()
-            ->all();
+    /**
+     * {@see pointsFor()} for several locations at once, keyed by location id — the site's coverage areas are
+     * loaded ONCE and shared, so a whole-site walk (Town Rank's town list) costs one query rather than one
+     * full area load per location. Each location's list is identical to what {@see pointsFor()} returns.
+     *
+     * @param  iterable<Location>  $locations
+     * @return array<string, list<array{coverage_area_id: string, label: string, lat: float, lng: float, population: int}>>
+     */
+    public function pointsForMany(iterable $locations): array
+    {
+        /** @var array<string, list<Location>> $bySite */
+        $bySite = [];
+        foreach ($locations as $location) {
+            $bySite[(string) $location->site_id][] = $location;
+        }
+
+        $result = [];
+        foreach ($bySite as $siteId => $siteLocations) {
+            // Rows pre-shaped once: the point payload plus the two things inScan() needs (GEOID + assigned ids).
+            $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $siteId)
+                ->whereNotNull('lat')->whereNotNull('lng')
+                ->get()
+                // TIGER's pseudo-subdivision ("County subdivisions not defined") is water/unorganized area, not a town.
+                ->filter(fn (CoverageArea $area): bool => preg_match('/not defined/i', (string) $area->name) !== 1)
+                ->map(fn (CoverageArea $area): array => [
+                    'point' => [
+                        'coverage_area_id' => (string) $area->id,
+                        'label' => (string) $area->name,
+                        'lat' => (float) $area->lat,
+                        'lng' => (float) $area->lng,
+                        'population' => (int) ($area->population ?? 0),
+                    ],
+                    'geo_id' => (string) $area->geo_id,
+                    'assigned' => array_map('strval', is_array($area->source_location_ids) ? $area->source_location_ids : []),
+                ])
+                ->values()
+                ->all();
+
+            foreach ($siteLocations as $location) {
+                $counties = $this->countyGeoIds($location);
+                $points = [];
+                foreach ($areas as $area) {
+                    if ($this->inScan($area['geo_id'], $area['assigned'], $location, $counties)) {
+                        $points[] = $area['point'];
+                    }
+                }
+                usort($points, fn (array $a, array $b): int => $b['population'] <=> $a['population']);
+                $result[(string) $location->id] = $points;
+            }
+        }
+
+        return $result;
     }
 
     /** Town count for a location — for the scan command's cost estimate (requests = towns × keywords). */
@@ -74,21 +111,17 @@ final class CoverageGrid
      * In the scan when the municipality sits in one of the location's counties (GEOID prefix) OR was
      * explicitly assigned to it (the fallback that keeps a not-yet-countied location scanning).
      *
+     * @param  list<string>  $assigned  the area's `source_location_ids`, as strings
      * @param  list<string>  $counties
      */
-    private function inScan(CoverageArea $area, Location $location, array $counties): bool
+    private function inScan(string $geoId, array $assigned, Location $location, array $counties): bool
     {
-        $geoId = (string) $area->geo_id;
         foreach ($counties as $county) {
             if ($county !== '' && str_starts_with($geoId, $county)) {
                 return true;
             }
         }
 
-        return in_array(
-            (string) $location->id,
-            array_map('strval', is_array($area->source_location_ids) ? $area->source_location_ids : []),
-            true,
-        );
+        return in_array((string) $location->id, $assigned, true);
     }
 }
