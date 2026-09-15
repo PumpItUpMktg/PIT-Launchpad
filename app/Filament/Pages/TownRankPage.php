@@ -35,6 +35,8 @@ class TownRankPage extends Page
 
     protected static ?string $navigationLabel = 'Town Rank';
 
+    protected static ?string $title = 'Town Rank';
+
     protected static string|\UnitEnum|null $navigationGroup = 'Results';
 
     protected static ?string $slug = 'town-rank';
