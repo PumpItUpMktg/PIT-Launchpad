@@ -85,7 +85,7 @@
     .trk .t-card .when { font-size:11px; color:var(--t-faint); margin-top:6px; }
 </style>
 
-<div class="trk">
+<div class="trk" @if ($board !== null && $board['scan'] !== null && $board['scan']['status'] === 'pending') wire:poll.30s @endif>
     @if ($board === null)
         {{-- Card wall: add a keyword; one card per tracked / scanned keyword. Click a card → its board; Run → post its scans. --}}
         <div class="t-add">
@@ -96,7 +96,9 @@
         @if ($cards === [])
             <div class="t-empty">No keywords tracked for Town Rank yet. Add one above, or run <code>launchpad:town-rank {site} --keyword="…" --scan --yes</code>.</div>
         @else
-            <div class="t-cards">
+            @php($collecting = collect($cards)->contains(fn (array $c): bool => $c['pending']))
+            {{-- While any card is collecting, refresh the wall every 30s so progress moves without a reload. --}}
+            <div class="t-cards" @if ($collecting) wire:poll.30s @endif>
                 @foreach ($cards as $card)
                     @php($cr = $dotR($card['markers']))
                     @php($runRequests = $card['towns'] * 2)
@@ -115,10 +117,14 @@
                                 @else
                                     @foreach (['town_query' => 'Town search', 'local' => 'From town'] as $mode => $label)
                                         @php($s = $card['modes'][$mode])
+                                        @php($pg = $card['progress'][$mode])
                                         <div class="mrow">
                                             <span>{{ $label }}:</span>
                                             @if ($s === null)
                                                 <span>not scanned</span>
+                                            @elseif ($pg !== null)
+                                                <span style="color:#2563eb">collecting {{ number_format($pg['collected']) }} / {{ number_format($pg['points']) }} towns</span>
+                                                @if ($pg['collected'] > 0)<span>· so far: top-3 <b style="color:#15803d">{{ $s['top3'] }}</b> page-1 <b>{{ $s['top3'] + $s['page1'] }}</b> not found <b style="color:#9ca3af">{{ $s['not_found'] }}</b></span>@endif
                                             @else
                                                 <span>top-3 <b style="color:#15803d">{{ $s['top3'] }}</b></span>
                                                 <span>page-1 <b>{{ $s['top3'] + $s['page1'] }}</b></span>
@@ -173,7 +179,7 @@
                 <div class="t-bucket"><div class="n" style="color:#9ca3af">{{ $s['not_found'] }}</div><div class="lab">Not found{{ $s['pending'] > 0 ? ' · '.$s['pending'].' pending' : '' }}</div></div>
             </div>
             <div class="t-note">
-                “{{ $board['keyword'] }}” · {{ $isLocal ? 'searched from each town' : 'town search: “'.$board['keyword'].' Town ST”' }} · {{ $board['scan']['points'] }} towns · {{ $board['scan']['status'] }} {{ $board['scan']['scanned_at'] ? \Illuminate\Support\Carbon::parse($board['scan']['scanned_at'])->diffForHumans() : '' }}
+                “{{ $board['keyword'] }}” · {{ $isLocal ? 'searched from each town' : 'town search: “'.$board['keyword'].' Town ST”' }} · {{ $board['scan']['points'] }} towns · {{ $board['scan']['status'] }}{{ $board['scan']['status'] === 'pending' ? ' — collecting '.number_format($board['scan']['collected']).' / '.number_format($board['scan']['points']) : '' }} {{ $board['scan']['scanned_at'] ? \Illuminate\Support\Carbon::parse($board['scan']['scanned_at'])->diffForHumans() : '' }}
                 @if ($board['has_previous'])
                     · vs {{ \Illuminate\Support\Carbon::parse($board['scan']['previous_scanned_at'])->format('M j') }}: <span style="color:#15803d">▲{{ $s['up'] }}</span> <span style="color:#c0392b">▼{{ $s['down'] }}</span> · new {{ $s['new'] }} · lost {{ $s['lost'] }}
                 @endif

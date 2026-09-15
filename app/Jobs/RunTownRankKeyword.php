@@ -9,12 +9,15 @@ use App\Models\TownRankScan;
 use App\TownRank\TownRankScanner;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * POSTS one keyword's town-rank scans (both query modes, skipping a mode whose latest scan is still
- * collecting) on the queue — the "Run ranking report" button on the Town Rank wall. Posting is a couple of
- * rate-limited task_post calls; the {@see IngestTownRankScans} sweep collects the results. `tries = 1`: the
- * operator can press the button again.
+ * collecting) on the queue — the "Run ranking report" button on the Town Rank wall. Posting is a handful of
+ * rate-limited task_post calls per mode; the {@see IngestTownRankScans} sweep collects the results. Each mode
+ * posts independently: a vendor error on one is logged and the other still goes out (a half-posted keyword
+ * shows "not scanned" for the missing mode, and Run posts just that mode next time). `tries = 1`.
  */
 class RunTownRankKeyword implements ShouldQueue
 {
@@ -47,7 +50,13 @@ class RunTownRankKeyword implements ShouldQueue
             if ($latest !== null && $latest->status === 'pending') {
                 continue;
             }
-            $scanner->post($site, $keyword, $mode);
+            try {
+                $scanner->post($site, $keyword, $mode);
+            } catch (Throwable $e) {
+                Log::warning('Town-rank run: posting a mode failed; the other mode still posts.', [
+                    'site_id' => $site->id, 'keyword_id' => $keyword->id, 'mode' => $mode, 'error' => mb_substr($e->getMessage(), 0, 300),
+                ]);
+            }
         }
     }
 }

@@ -106,7 +106,8 @@ it('adds a keyword from the wall, shows its card, and queues its ranking report 
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
     $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.85, 'lng' => -74.83]);
-    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown', 'state' => 'NJ', 'population' => 10000, 'lat' => 40.85, 'lng' => -74.83, 'source_location_ids' => [$loc->id]]);
+    $hack = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown', 'state' => 'NJ', 'population' => 10000, 'lat' => 40.85, 'lng' => -74.83, 'source_location_ids' => [$loc->id]]);
+    $mans = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Mansfield', 'state' => 'NJ', 'population' => 8000, 'lat' => 40.80, 'lng' => -74.85, 'source_location_ids' => [$loc->id]]);
 
     $page = Livewire::test(TownRankPage::class)
         ->set('siteId', $site->id)
@@ -125,9 +126,14 @@ it('adds a keyword from the wall, shows its card, and queues its ranking report 
     $page->call('runKeyword', $kw->id);
     Queue::assertPushed(RunTownRankKeyword::class, fn (RunTownRankKeyword $j): bool => $j->keywordId === (string) $kw->id);
 
-    // While a scan is collecting the card says so and the button is disabled.
-    TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'local', 'status' => 'pending', 'points_count' => 1, 'scanned_at' => now()]);
-    Livewire::test(TownRankPage::class)->set('siteId', $site->id)->assertSee('Collecting…');
+    // While a scan is collecting the card says so, shows how far along it is, and the button is disabled.
+    $pending = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'local', 'status' => 'pending', 'points_count' => 2, 'scanned_at' => now()]);
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $pending->id, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown', 'lat' => 40.85, 'lng' => -74.83, 'query' => 'q', 'rank' => 3, 'collected_at' => now()]);
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $pending->id, 'coverage_area_id' => $mans->id, 'label' => 'Mansfield', 'lat' => 40.80, 'lng' => -74.85, 'query' => 'q', 'rank' => null, 'collected_at' => null]);
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)
+        ->assertSee('Collecting…')
+        ->assertSee('collecting 1 / 2 towns')
+        ->assertSeeHtml('wire:poll.30s');   // the wall refreshes itself while a report collects
 
     // A blank add is refused without creating anything.
     Livewire::test(TownRankPage::class)->set('siteId', $site->id)->set('newKeyword', '  ')->call('addKeyword');

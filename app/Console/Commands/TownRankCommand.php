@@ -207,7 +207,7 @@ class TownRankCommand extends Command
     }
 
     /**
-     * @param  array{keyword: string, scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, found: int, previous_scanned_at: string|null}|null>, rows: list<array<string, mixed>>, summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>}  $data
+     * @param  array{keyword: string, scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>, rows: list<array<string, mixed>>, summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>}  $data
      * @param  list<string>  $modes
      */
     private function printReport(array $data, array $modes): void

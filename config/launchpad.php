@@ -394,7 +394,11 @@ return [
         // silently trimmed. Posted scans are collected by the IngestTownRankScans sweep, `ingest_batch`
         // task_get calls per run; a scan still pending after `pending_expiry_hours` finalizes as `partial`.
         'cadence_days' => (int) env('LAUNCHPAD_TOWN_RANK_CADENCE_DAYS', 7),
-        'ingest_batch' => (int) env('LAUNCHPAD_TOWN_RANK_INGEST_BATCH', 40),
+        // A whole-site scan is ~700 towns per mode (1,444 points per keyword); the collector must clear that
+        // in a few runs, not a day. task_get is a free call and the CLI poll collected 1,448 in ~2 min, so
+        // 1,000 per five-minute run fits well inside the job's timeout (which sits under the schedule
+        // interval so runs never stack). Lower it only if DataForSEO's 2,000 calls/min limit is shared.
+        'ingest_batch' => (int) env('LAUNCHPAD_TOWN_RANK_INGEST_BATCH', 1000),
         'pending_expiry_hours' => (int) env('LAUNCHPAD_TOWN_RANK_PENDING_EXPIRY_HOURS', 24),
         'queue' => env('LAUNCHPAD_TOWN_RANK_QUEUE'),   // blank ⇒ the default queue
     ],

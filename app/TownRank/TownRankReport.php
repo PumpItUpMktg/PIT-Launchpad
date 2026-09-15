@@ -25,7 +25,7 @@ final class TownRankReport
     /**
      * @return array{
      *     keyword: string,
-     *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, found: int, previous_scanned_at: string|null}|null>,
+     *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>,
      *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, map_rank: int|null}>,
      *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
      * }
@@ -47,15 +47,18 @@ final class TownRankReport
                 ->whereKeyNot($scan->id)
                 ->where('scanned_at', '<=', $scan->scanned_at)
                 ->orderByDesc('scanned_at')->first();
+            $rawPoints = $scan === null ? collect() : $scan->points()->get();
+            $points = $rawPoints->keyBy('coverage_area_id');
             $scans[$mode] = $scan === null ? null : [
                 'id' => (string) $scan->id,
                 'status' => $scan->status,
                 'scanned_at' => $scan->scanned_at?->toDateTimeString(),
                 'points' => $scan->points_count,
+                'collected' => $rawPoints->filter(fn (TownRankPoint $p): bool => $p->collected_at !== null)->count(),
                 'found' => $scan->found_count,
                 'previous_scanned_at' => $previous?->scanned_at?->toDateTimeString(),
             ];
-            $pointsByMode[$mode] = $scan === null ? collect() : $scan->points()->get()->keyBy('coverage_area_id');
+            $pointsByMode[$mode] = $points;
             $prevByMode[$mode] = $previous === null ? null : $previous->points()->get()->keyBy('coverage_area_id');
         }
 
