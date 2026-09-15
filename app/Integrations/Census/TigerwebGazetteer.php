@@ -426,7 +426,14 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
         if ($fips === '' && strlen($geoId) >= 2) {
             $fips = substr($geoId, 0, 2);
         }
-        $fips = str_pad($fips, 2, '0', STR_PAD_LEFT);
+
+        return self::stateForFips($fips);
+    }
+
+    /** USPS abbreviation for a 2-digit state FIPS (or any GEOID that starts with one); null when unknown. */
+    public static function stateForFips(string $fipsOrGeoId): ?string
+    {
+        $fips = str_pad(substr(trim($fipsOrGeoId), 0, 2), 2, '0', STR_PAD_LEFT);
 
         return self::STATE_FIPS[$fips] ?? null;
     }
