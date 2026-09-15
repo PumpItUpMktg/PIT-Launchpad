@@ -130,6 +130,7 @@ use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
 use App\Support\CurrentSite;
+use App\TownRank\TownRankPoints;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\NoPendingMigrations;
@@ -147,6 +148,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(CurrentSite::class);
+        // Town Rank's town list is memoised per request (see the class): one instance per request/job.
+        $this->app->scoped(TownRankPoints::class);
 
         // Client-dashboard metric spine (§ Client Dashboard v1): the provider registry is a singleton with
         // its providers registered here. GSC (PR 2) rolls up from gsc_url_daily; DataForSEO (PR 4) will join

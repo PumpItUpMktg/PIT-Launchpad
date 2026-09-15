@@ -26,6 +26,16 @@ use Illuminate\Support\Str;
  */
 final class TownRankPoints
 {
+    /**
+     * Per-request memo keyed by site id. The town list is read by the report, the board's map, the
+     * estimate and the scanner — a card wall of K keywords asked for it K+1 times, each a full walk of the
+     * site's coverage areas, which is what pushed the page past the gateway timeout. The service is bound
+     * `scoped`, so every caller in one request shares this.
+     *
+     * @var array<string, list<array{coverage_area_id: string, geo_id: string|null, name: string, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null}>>
+     */
+    private array $memo = [];
+
     public function __construct(
         private readonly CoverageGrid $coverage,
         private readonly TownLabels $labels,
@@ -40,11 +50,28 @@ final class TownRankPoints
      */
     public function forSite(Site $site): array
     {
+        $siteId = (string) $site->id;
+        if (isset($this->memo[$siteId])) {
+            return $this->memo[$siteId];
+        }
+
+        return $this->memo[$siteId] = $this->build($site);
+    }
+
+    /** Drop the per-request memo (tests, or a long-lived process that changed coverage). */
+    public function forget(): void
+    {
+        $this->memo = [];
+    }
+
+    /** @return list<array{coverage_area_id: string, geo_id: string|null, name: string, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null}> */
+    private function build(Site $site): array
+    {
         $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
 
         $byArea = [];
-        foreach ($locations as $location) {
-            foreach ($this->coverage->pointsFor($location) as $point) {
+        foreach ($this->coverage->pointsForMany($locations) as $points) {
+            foreach ($points as $point) {
                 if ($point['population'] <= 0 || preg_match('/not defined/i', $point['label']) === 1) {
                     continue;   // a Census placeholder or an unpopulated pseudo-area — nobody searches from it
                 }
