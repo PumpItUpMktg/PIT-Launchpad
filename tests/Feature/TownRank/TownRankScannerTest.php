@@ -7,6 +7,7 @@ use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Site;
+use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\TownRank\TownRankPoints;
 use App\TownRank\TownRankScanner;
@@ -140,4 +141,25 @@ it('derives the host www-insensitively and returns null without a domain', funct
     expect(TownRankScanner::host('https://www.spg.com/'))->toBe('spg.com')
         ->and(TownRankScanner::host('spg.com'))->toBe('spg.com')
         ->and(TownRankScanner::host(null))->toBeNull();
+});
+
+it('stops collecting at a wall-clock deadline and leaves the rest pending for the next run', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair']);
+    $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'local', 'status' => 'pending', 'points_count' => 2, 'scanned_at' => now()]);
+    foreach (['a', 'b'] as $id) {
+        TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'label' => $id, 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => "task-{$id}"]);
+    }
+    Http::fake([
+        '*/tasks_ready' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'r', 'status_code' => 20000, 'result' => [['id' => 'task-a'], ['id' => 'task-b']]]]]),
+        '*/task_get/advanced/*' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => []]]]]]),
+    ]);
+
+    // A deadline already in the past: nothing is fetched, the scan stays pending.
+    expect(app(TownRankScanner::class)->collectPending($scan, 10, microtime(true) - 1))->toBe(0)
+        ->and($scan->fresh()->status)->toBe('pending');
+
+    // A deadline well ahead: both collected, scan complete.
+    expect(app(TownRankScanner::class)->collectPending($scan, 10, microtime(true) + 60))->toBe(2)
+        ->and($scan->fresh()->status)->toBe('complete');
 });

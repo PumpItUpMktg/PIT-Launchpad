@@ -30,6 +30,15 @@ class DataForSeoClient
     /** @var list<float> */
     private array $requestTimes = [];
 
+    /**
+     * The same window for the free, no-body READS (tasks_ready / task_get / user_data). A standard-queue
+     * scan is one task_get per town, so these run under their own, far higher cap: at the post cap a
+     * 1,444-town keyword would take two hours to collect.
+     *
+     * @var list<float>
+     */
+    private array $readTimes = [];
+
     public function __construct(
         private readonly Http $http,
         private readonly string $login,
@@ -426,9 +435,9 @@ class DataForSeoClient
      * @param  callable(): array<string, mixed>  $fn
      * @return array<string, mixed>
      */
-    private function send(callable $fn): array
+    private function send(callable $fn, bool $read = false): array
     {
-        $this->throttle();
+        $this->throttle($read);
 
         for ($attempt = 1; ; $attempt++) {
             try {
@@ -446,25 +455,35 @@ class DataForSeoClient
     }
 
     /**
-     * Space requests to stay under DataForSEO's per-minute cap (config-driven, default 12/min): once the
-     * rolling 60s window is full, sleep until the oldest request ages out, then record this one.
+     * Space requests to stay under DataForSEO's per-minute cap: once the rolling 60s window is full, sleep
+     * until the oldest request ages out, then record this one. Posts (which spend credits) run under
+     * `rate_limit_per_min` (default 12); reads under `read_rate_limit_per_min` (default 600 — DataForSEO
+     * allows 2,000 calls/min), each in its own window.
      */
-    private function throttle(): void
+    private function throttle(bool $read = false): void
     {
-        $perMin = max(1, (int) config('services.dataforseo.rate_limit_per_min', 12));
+        $perMin = $read
+            ? max(1, (int) config('services.dataforseo.read_rate_limit_per_min', 600))
+            : max(1, (int) config('services.dataforseo.rate_limit_per_min', 12));
+        $times = $read ? $this->readTimes : $this->requestTimes;
         $now = microtime(true);
-        $this->requestTimes = array_values(array_filter($this->requestTimes, fn (float $t): bool => $now - $t < 60.0));
+        $times = array_values(array_filter($times, fn (float $t): bool => $now - $t < 60.0));
 
-        if (count($this->requestTimes) >= $perMin) {
-            $wait = 60.0 - ($now - $this->requestTimes[0]) + 0.25;
+        if (count($times) >= $perMin) {
+            $wait = 60.0 - ($now - $times[0]) + 0.25;
             if ($wait > 0) {
                 usleep((int) ($wait * 1_000_000));
             }
             $now = microtime(true);
-            $this->requestTimes = array_values(array_filter($this->requestTimes, fn (float $t): bool => $now - $t < 60.0));
+            $times = array_values(array_filter($times, fn (float $t): bool => $now - $t < 60.0));
         }
 
-        $this->requestTimes[] = microtime(true);
+        $times[] = microtime(true);
+        if ($read) {
+            $this->readTimes = $times;
+        } else {
+            $this->requestTimes = $times;
+        }
     }
 
     /**
@@ -476,7 +495,7 @@ class DataForSeoClient
      */
     private function requestGet(string $path): array
     {
-        return $this->send(fn (): array => $this->handle($this->pending()->get($this->url($path))));
+        return $this->send(fn (): array => $this->handle($this->pending()->get($this->url($path))), read: true);
     }
 
     private function pending(): PendingRequest

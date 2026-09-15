@@ -96,6 +96,9 @@ return [
         // discovery burst otherwise trips status_code 40202), and the reactive backoff per retry when
         // the cap is hit anyway. Tests set backoff to 0 to skip the sleep.
         'rate_limit_per_min' => (int) env('DATAFORSEO_RATE_LIMIT_PER_MIN', 12),
+        // The free, no-body reads (tasks_ready / task_get) have their own window: a standard-queue scan is
+        // one task_get per town, so the collectors need hundreds a minute (DataForSEO allows 2,000/min).
+        'read_rate_limit_per_min' => (int) env('DATAFORSEO_READ_RATE_LIMIT_PER_MIN', 600),
         'rate_limit_backoff_ms' => (int) env('DATAFORSEO_RATE_LIMIT_BACKOFF_MS', 5000),
         // Default geo for the location-less SerpProvider contract methods.
         'location_code' => (int) env('DATAFORSEO_LOCATION_CODE', 2840), // United States

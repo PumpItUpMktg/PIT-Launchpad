@@ -231,3 +231,24 @@ it('surfaces the 40202 loudly only after exhausting the bounded retries', functi
 
     expect(fn () => dfsClient()->liveSearchVolume(['x'], 2840, 'en'))->toThrow(DataForSeoException::class);
 });
+
+it('throttles the free reads (tasks_ready / task_get) in their own window, not under the post cap', function () {
+    config(['services.dataforseo.rate_limit_per_min' => 1, 'services.dataforseo.read_rate_limit_per_min' => 1000, 'services.dataforseo.rate_limit_backoff_ms' => 0]);
+    HttpFacade::fake([
+        '*/task_post' => HttpFacade::response(dfsEnvelope([])),
+        '*/tasks_ready' => HttpFacade::response(dfsEnvelope([])),
+        '*/task_get/advanced/*' => HttpFacade::response(dfsEnvelope([['items' => []]])),
+    ]);
+    $client = dfsClient();
+
+    // One post fills the 1/min post window. Reads must still go straight through — a collector issues one
+    // task_get per town, so sharing the post cap would make a whole-site scan take hours to gather.
+    $client->taskPost('/v3/serp/google/organic/task_post', [['keyword' => 'k']]);
+    $t = microtime(true);
+    for ($i = 0; $i < 5; $i++) {
+        $client->tasksReady('/v3/serp/google/organic/tasks_ready');
+        $client->taskGet('/v3/serp/google/organic/task_get/advanced', "t{$i}");
+    }
+    expect(microtime(true) - $t)->toBeLessThan(5.0);
+    HttpFacade::assertSentCount(11);
+});
