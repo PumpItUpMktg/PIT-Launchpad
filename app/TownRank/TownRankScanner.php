@@ -107,13 +107,14 @@ final class TownRankScanner
     }
 
     /**
-     * Collect ready results for a pending scan's uncollected points, up to $budget task_get calls. A point
+     * Collect ready results for a pending scan's uncollected points, up to $budget task_get calls and, when
+     * given, a wall-clock $deadline (microtime) so a queued caller stops well inside its own timeout. A point
      * whose task isn't ready is left for the next call; a task DataForSEO reports as errored (e.g. "No Search
      * Results") is collected as rank null so it can't block completion. Returns task_get calls spent.
      */
-    public function collectPending(TownRankScan $scan, int $budget): int
+    public function collectPending(TownRankScan $scan, int $budget, ?float $deadline = null): int
     {
-        if ($budget <= 0 || $scan->status !== 'pending') {
+        if ($budget <= 0 || $scan->status !== 'pending' || ($deadline !== null && microtime(true) >= $deadline)) {
             return 0;
         }
 
@@ -127,8 +128,8 @@ final class TownRankScanner
             $ready = array_flip($this->client->tasksReady(self::ORGANIC_READY));
 
             foreach ($pending as $point) {
-                if ($spent >= $budget) {
-                    break;
+                if ($spent >= $budget || ($deadline !== null && microtime(true) >= $deadline)) {
+                    break;   // the caller's budget or wall-clock is spent; the rest waits for the next run
                 }
                 $taskId = (string) $point->provider_task_id;
                 if (! isset($ready[$taskId])) {
