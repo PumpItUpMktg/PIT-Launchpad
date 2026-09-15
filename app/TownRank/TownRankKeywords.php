@@ -79,7 +79,7 @@ final class TownRankKeywords
             'towns' => $towns,
             'modes' => $modes,
             'requests' => $requests,
-            'cost' => $requests * (float) config('launchpad.town_rank.cost_per_request', 0.0012),
+            'cost' => $requests * TownRankScanner::costPerRequest(),
             'ceiling' => $ceiling,
             'over_ceiling' => $ceiling > 0 && $requests > $ceiling,
             'pending' => $pending,

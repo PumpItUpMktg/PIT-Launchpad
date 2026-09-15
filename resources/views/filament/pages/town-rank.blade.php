@@ -102,7 +102,7 @@
                 @foreach ($cards as $card)
                     @php($cr = $dotR($card['markers']))
                     @php($runRequests = $card['towns'] * 2)
-                    @php($runCost = $runRequests * (float) config('launchpad.town_rank.cost_per_request', 0.0012))
+                    @php($runCost = $runRequests * \App\TownRank\TownRankScanner::costPerRequest())
                     <div class="t-card" wire:key="card-{{ $card['keyword_id'] }}">
                         <button type="button" class="t-open" wire:click="openKeyword('{{ $card['keyword_id'] }}')" title="Open {{ $card['query'] }}">
                             <svg class="thumb" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">

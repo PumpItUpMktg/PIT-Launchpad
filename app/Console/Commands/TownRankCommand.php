@@ -81,7 +81,7 @@ class TownRankCommand extends Command
     {
         $towns = $points->forSite($site);
         $requests = count($towns) * count($modes) * $keywords->count();
-        $costPer = (float) config('launchpad.town_rank.cost_per_request', 0.0012);
+        $costPer = TownRankScanner::costPerRequest();
         $ceiling = max(0, (int) config('launchpad.town_rank.request_ceiling', 2000));
         $withPage = count(array_filter($towns, fn (array $t): bool => $t['page_url'] !== null));
 
