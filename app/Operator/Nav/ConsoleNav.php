@@ -19,6 +19,7 @@ use App\Filament\Pages\Operate\OperatePages;
 use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Pages\RankingsBoard;
+use App\Filament\Pages\ServiceAreasPage;
 use App\Filament\Pages\TownRankPage;
 use App\Filament\Pages\UsersBoard;
 use App\Filament\Resources\ConnectionsResource;
@@ -77,6 +78,7 @@ class ConsoleNav
             ['group' => 'Results', 'items' => [
                 ['label' => 'Rankings', 'surface' => RankingsBoard::class, 'soon' => false],
                 ['label' => 'Town rank', 'surface' => TownRankPage::class, 'soon' => false],
+                ['label' => 'Service areas', 'surface' => ServiceAreasPage::class, 'soon' => false],
                 ['label' => 'Indexing', 'surface' => IndexingBoard::class, 'soon' => false],
                 ['label' => 'Geo grid', 'surface' => LocationGeoGrid::class, 'soon' => false],
                 ['label' => 'Coverage', 'surface' => LocationCoverage::class, 'soon' => false],
