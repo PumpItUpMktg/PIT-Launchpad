@@ -35,6 +35,7 @@ it('renders the keyword board, switches mode, and shows a town\'s diagnosis when
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Mansfield', 'state' => 'NJ', 'population' => 7000, 'lat' => 40.80, 'lng' => -74.85, 'source_location_ids' => [$loc->id]]);
     Content::factory()->page()->published()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'status' => ContentStatus::Published, 'geo_id' => '3404128590', 'slug' => 'hackettstown-nj']);
     $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'mold remediation', 'track_town_rank' => true]);   // a second card on the wall
     $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'complete', 'points_count' => 2, 'found_count' => 1, 'scanned_at' => now()]);
     TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown', 'state' => 'NJ', 'lat' => 40.85, 'lng' => -74.83, 'query' => 'sump pump service Hackettstown NJ', 'rank' => 4, 'ranking_url' => 'https://spg.com/hackettstown-nj/', 'collected_at' => now(),
         'top_results' => [['position' => 1, 'url' => 'https://rival.com', 'domain' => 'rival.com'], ['position' => 4, 'url' => 'https://spg.com/hackettstown-nj/', 'domain' => 'spg.com']]]);
@@ -44,11 +45,13 @@ it('renders the keyword board, switches mode, and shows a town\'s diagnosis when
         ->assertOk()
         // The card wall first: one card per scanned keyword, no board yet.
         ->assertSee('sump pump service')
+        ->assertSee('mold remediation')
         ->assertSee('Town search:')
         ->assertDontSee('Pick a town')
         ->call('openKeyword', $kw->id)
         ->assertSet('keywordId', $kw->id)
         ->assertSee('All keywords')
+        ->assertDontSee('mold remediation')   // a drill-down: no chip row of every other keyword
         ->assertSee('Page 1 (4–10)')
         ->assertSee('Hackettstown, NJ')
         ->assertSee('Pick a town')
