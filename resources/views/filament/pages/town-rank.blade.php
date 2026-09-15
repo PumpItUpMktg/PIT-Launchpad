@@ -1,6 +1,7 @@
 <x-filament-panels::page>
 @php
-    $board = $this->board;
+    $cards = $this->cards;
+    $board = $keywordId !== null ? $this->board : null;
     $keywords = $this->keywords;
     $town = $this->town;
     $rows = $this->visibleRows;
@@ -66,14 +67,56 @@
     .trk table.t-table tr.row:hover, .trk table.t-table tr.row.sel { background:rgba(37,99,235,.07); }
     .trk .t-num { font-variant-numeric:tabular-nums; }
     .trk .t-note { font-size:12px; color:var(--t-faint); margin-top:8px; }
+    .trk .t-back { font-size:12px; color:#2563eb; background:none; border:none; cursor:pointer; padding:0; margin-bottom:12px; display:inline-block; }
+    .trk .t-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:14px; }
+    .trk .t-card { border:1px solid var(--t-line); border-radius:14px; background:var(--t-surface); padding:14px; cursor:pointer; text-align:left; display:grid; grid-template-columns:96px minmax(0,1fr); gap:12px; align-items:start; color:inherit; }
+    .trk .t-card:hover { border-color:#2563eb; }
+    .trk .t-card .thumb { width:96px; height:96px; background:var(--t-surface2); border-radius:10px; display:block; }
+    .trk .t-card h3 { font-size:14px; font-weight:800; margin:0 0 6px; }
+    .trk .t-card .mrow { font-size:11.5px; color:var(--t-muted); margin:3px 0; display:flex; gap:8px; flex-wrap:wrap; }
+    .trk .t-card .mrow b { color:inherit; font-variant-numeric:tabular-nums; }
+    .trk .t-card .when { font-size:11px; color:var(--t-faint); margin-top:6px; }
 </style>
 
 <div class="trk">
-    @if ($board === null)
+    @if ($cards === [])
         <div class="t-empty">
             No town-rank scans for this site yet. Run <code>launchpad:town-rank {site} --keyword="…" --scan --yes</code> to scan the covered towns.
         </div>
+    @elseif ($board === null)
+        {{-- Card wall: one card per scanned keyword. Click → the keyword's board. --}}
+        <div class="t-cards">
+            @foreach ($cards as $card)
+                @php($cr = $dotR($card['markers']))
+                <button type="button" class="t-card" wire:key="card-{{ $card['keyword_id'] }}" wire:click="openKeyword('{{ $card['keyword_id'] }}')" title="Open {{ $card['query'] }}">
+                    <svg class="thumb" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                        @foreach ($card['markers'] as $m)
+                            <circle cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $cr($m['population']) }}" fill="{{ $m['color'] }}" />
+                        @endforeach
+                    </svg>
+                    <div>
+                        <h3>{{ $card['query'] }}</h3>
+                        @foreach (['town_query' => 'Town search', 'local' => 'From town'] as $mode => $label)
+                            @php($s = $card['modes'][$mode])
+                            <div class="mrow">
+                                <span>{{ $label }}:</span>
+                                @if ($s === null)
+                                    <span>not scanned</span>
+                                @else
+                                    <span>top-3 <b style="color:#15803d">{{ $s['top3'] }}</b></span>
+                                    <span>page-1 <b>{{ $s['top3'] + $s['page1'] }}</b></span>
+                                    <span>not found <b style="color:#9ca3af">{{ $s['not_found'] }}</b></span>
+                                    @if ($s['up'] + $s['down'] > 0)<span><b style="color:#15803d">▲{{ $s['up'] }}</b> <b style="color:#c0392b">▼{{ $s['down'] }}</b></span>@endif
+                                @endif
+                            </div>
+                        @endforeach
+                        <div class="when">{{ count($card['markers']) }} towns · scanned {{ $card['scanned_at'] ? \Illuminate\Support\Carbon::parse($card['scanned_at'])->diffForHumans() : '—' }}</div>
+                    </div>
+                </button>
+            @endforeach
+        </div>
     @else
+        <button type="button" class="t-back" wire:click="closeKeyword">← All keywords</button>
         <div class="t-chips">
             @foreach ($keywords as $kw)
                 <button type="button" class="t-chip {{ $kw['keyword_id'] === $board['keyword_id'] ? 'on' : '' }}" wire:click="$set('keywordId', '{{ $kw['keyword_id'] }}')">{{ $kw['query'] }}</button>

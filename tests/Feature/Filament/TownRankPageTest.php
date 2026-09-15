@@ -40,7 +40,13 @@ it('renders the keyword board, switches mode, and shows a town\'s diagnosis when
     Livewire::test(TownRankPage::class)
         ->set('siteId', $site->id)
         ->assertOk()
+        // The card wall first: one card per scanned keyword, no board yet.
         ->assertSee('sump pump service')
+        ->assertSee('Town search:')
+        ->assertDontSee('Pick a town')
+        ->call('openKeyword', $kw->id)
+        ->assertSet('keywordId', $kw->id)
+        ->assertSee('All keywords')
         ->assertSee('Page 1 (4–10)')
         ->assertSee('Hackettstown, NJ')
         ->assertSee('Pick a town')
@@ -51,7 +57,11 @@ it('renders the keyword board, switches mode, and shows a town\'s diagnosis when
         ->assertSee('No searched-from-town scan')
         ->set('filter', 'mans')
         ->assertSeeHtml('wire:key="tr-'.CoverageArea::query()->withoutGlobalScopes()->where('name', 'Mansfield')->value('id').'"')
-        ->assertDontSeeHtml('wire:key="tr-'.$hack->id.'"');   // the table row is filtered out (the map dot + panel still name it)
+        ->assertDontSeeHtml('wire:key="tr-'.$hack->id.'"')   // the table row is filtered out (the map dot + panel still name it)
+        ->call('closeKeyword')
+        ->assertSet('keywordId', null)
+        ->assertSet('townId', null)
+        ->assertSee('Town search:');   // back on the card wall
 });
 
 it('shows an empty state when the site has no town-rank scans', function () {
@@ -78,6 +88,8 @@ it('offers the movement view once a previous scan exists', function () {
     Livewire::test(TownRankPage::class)
         ->set('siteId', $site->id)
         ->assertOk()
+        ->assertSee('▲1')   // the card already carries the movement counts
+        ->call('openKeyword', $kw->id)
         ->assertSee('Movement')
         ->assertSee('vs Sep 1')
         ->call('setView', 'move')
