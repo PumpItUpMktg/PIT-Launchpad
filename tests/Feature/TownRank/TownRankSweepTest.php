@@ -23,7 +23,7 @@ function sweepSite(int $towns = 2): array
     }
     $grid = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service', 'is_grid_keyword' => true]);
     $scanned = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair', 'is_grid_keyword' => false]);
-    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'unrelated', 'is_grid_keyword' => false]);   // never scanned, not grid → not in the set
+    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'unrelated', 'is_grid_keyword' => false, 'track_town_rank' => false]);   // never scanned, not grid, not tracked → not in the set
 
     return [$site, $grid, $scanned];
 }
@@ -47,10 +47,13 @@ it('a pair is due when never scanned or past the cadence; fresh and pending scan
     // grid keyword: local pending (not due), town_query never scanned (due).
     TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $grid->id, 'mode' => 'local', 'status' => 'pending', 'scanned_at' => now()->subDays(20)]);
 
+    // A keyword tracked on the Town Rank wall (never scanned, not grid) is in the set: both modes due.
+    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'battery backup', 'is_grid_keyword' => false, 'track_town_rank' => true]);
+
     $due = app(TownRankSweep::class)->due($site);
 
     expect(array_map(fn (array $p): string => $p['keyword']->query.'·'.$p['mode'], $due))
-        ->toBe(['sump pump repair·town_query', 'sump pump service·town_query']);
+        ->toBe(['battery backup·local', 'battery backup·town_query', 'sump pump repair·town_query', 'sump pump service·town_query']);
 });
 
 it('plans requests = towns × due pairs, posts when under the ceiling, and skips whole when over it', function () {

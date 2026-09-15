@@ -28,34 +28,47 @@ final class TownRankBoard
     ) {}
 
     /**
-     * Keywords with at least one town-rank scan, most recently scanned first.
+     * The wall's keyword set: every keyword with a town-rank scan, plus the ones tracked for Town Rank or
+     * flagged for the geo grid (the sweep's set) that have not been scanned yet. Scanned keywords first, most
+     * recent first; unscanned after, by query. `pending` = a scan is still collecting.
      *
-     * @return list<array{keyword_id: string, query: string, scanned_at: string|null}>
+     * @return list<array{keyword_id: string, query: string, scanned_at: string|null, pending: bool}>
      */
     public function keywords(Site $site): array
     {
-        $latest = TownRankScan::withoutGlobalScope(SiteScope::class)
+        $scans = TownRankScan::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->orderByDesc('scanned_at')
-            ->get(['keyword_id', 'scanned_at'])
-            ->unique('keyword_id');
-        if ($latest->isEmpty()) {
-            return [];
-        }
+            ->get(['keyword_id', 'scanned_at', 'status']);
+        $latest = $scans->unique('keyword_id');
+        $pendingIds = $scans->where('status', 'pending')->pluck('keyword_id')->flip();
 
-        $queries = Keyword::withoutGlobalScope(SiteScope::class)
+        $keywords = Keyword::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
-            ->whereIn('id', $latest->pluck('keyword_id')->all())
-            ->pluck('query', 'id')
-            ->all();
+            ->where(fn ($q) => $q->where('track_town_rank', true)->orWhere('is_grid_keyword', true)->orWhereIn('id', $latest->pluck('keyword_id')->all()))
+            ->orderBy('query')
+            ->get(['id', 'query'])
+            ->keyBy('id');
 
         $out = [];
         foreach ($latest as $scan) {
+            $keyword = $keywords->get($scan->keyword_id);
+            if ($keyword === null) {
+                continue;
+            }
             $out[] = [
                 'keyword_id' => (string) $scan->keyword_id,
-                'query' => (string) ($queries[$scan->keyword_id] ?? '—'),
+                'query' => (string) $keyword->query,
                 'scanned_at' => $scan->scanned_at?->toDateTimeString(),
+                'pending' => $pendingIds->has($scan->keyword_id),
             ];
+        }
+        $scannedIds = array_flip(array_column($out, 'keyword_id'));
+        foreach ($keywords as $id => $keyword) {
+            if (isset($scannedIds[(string) $id])) {
+                continue;
+            }
+            $out[] = ['keyword_id' => (string) $id, 'query' => (string) $keyword->query, 'scanned_at' => null, 'pending' => false];
         }
 
         return $out;
@@ -103,7 +116,7 @@ final class TownRankBoard
      * one). Click-through opens {@see for()} for the keyword.
      *
      * @return list<array{
-     *     keyword_id: string, query: string, scanned_at: string|null, thumbnail_mode: string, has_previous: bool,
+     *     keyword_id: string, query: string, scanned_at: string|null, pending: bool, towns: int, thumbnail_mode: string, has_previous: bool,
      *     modes: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}|null>,
      *     markers: list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>
      * }>
@@ -115,6 +128,7 @@ final class TownRankBoard
             return [];
         }
         $coords = $this->coords($site);
+        $towns = count($coords);
 
         $cards = [];
         foreach ($keywords as $entry) {
@@ -134,6 +148,8 @@ final class TownRankBoard
                 'keyword_id' => (string) $keyword->id,
                 'query' => $data['keyword'],
                 'scanned_at' => $entry['scanned_at'],
+                'pending' => $entry['pending'],
+                'towns' => $towns,
                 'thumbnail_mode' => $thumbMode,
                 'has_previous' => $hasPrevious,
                 'modes' => $modes,

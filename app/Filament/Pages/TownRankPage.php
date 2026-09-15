@@ -3,13 +3,18 @@
 namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
+use App\Models\Keyword;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankScan;
 use App\Operator\ActiveTenant;
 use App\TownRank\TownRankBoard;
+use App\TownRank\TownRankKeywords;
 use BackedEnum;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use InvalidArgumentException;
 use Livewire\Attributes\Url;
 
 /**
@@ -60,6 +65,9 @@ class TownRankPage extends Page
 
     public string $filter = '';
 
+    /** The "Add keyword" box on the wall. */
+    public string $newKeyword = '';
+
     public static function menuTag(): string
     {
         return 'unaddressed';
@@ -81,6 +89,44 @@ class TownRankPage extends Page
     public function updatedKeywordId(): void
     {
         $this->townId = null;
+    }
+
+    /** Track a keyword for Town Rank: it gets a card now and joins the weekly sweep. */
+    public function addKeyword(): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+        try {
+            $keyword = app(TownRankKeywords::class)->track($site, $this->newKeyword);
+        } catch (InvalidArgumentException $e) {
+            Notification::make()->warning()->title($e->getMessage())->send();
+
+            return;
+        }
+        $this->newKeyword = '';
+        Notification::make()->success()->title("Tracking “{$keyword->query}”")
+            ->body('Run its ranking report from the card, or wait for the Monday sweep.')->send();
+    }
+
+    /** "Run ranking report" on a card: post both query modes for the keyword (queued, collected within minutes). */
+    public function runKeyword(string $id): void
+    {
+        $site = $this->site();
+        $keyword = $site === null ? null : Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($id)->first();
+        if ($site === null || $keyword === null) {
+            return;
+        }
+        $result = app(TownRankKeywords::class)->run($site, $keyword);
+        if (! $result['queued']) {
+            Notification::make()->warning()->title('Not queued')->body((string) $result['reason'])->send();
+
+            return;
+        }
+        Notification::make()->success()
+            ->title(sprintf('Posting %s DataForSEO requests (~$%s) for “%s”', number_format($result['requests']), number_format($result['cost'], 2), $keyword->query))
+            ->body('Results collect over the next few minutes; the card updates as they land.')->send();
     }
 
     /** Card click: open the keyword's board. */

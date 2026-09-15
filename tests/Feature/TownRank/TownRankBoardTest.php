@@ -65,9 +65,17 @@ it('lists scanned keywords and builds the board with north-up markers coloured b
     expect($local['summary'])->toMatchArray(['page1' => 1, 'not_found' => 2])
         ->and(collect($local['markers'])->keyBy('id')[$hack->id]['rank'])->toBe(8);
 
-    // The card wall: one card per scanned keyword, both modes summarised, thumbnail coloured by the town search.
+    // The card wall: one card per scanned keyword, both modes summarised, thumbnail coloured by the town search;
+    // a keyword tracked for Town Rank but never scanned gets a card too (after the scanned ones, no modes).
+    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair', 'track_town_rank' => true]);
+    Keyword::factory()->create(['site_id' => $site->id, 'query' => 'untracked', 'track_town_rank' => false, 'is_grid_keyword' => false]);
     $cards = $board->cards($site);
-    expect($cards)->toHaveCount(1)
+    expect($cards)->toHaveCount(2)
+        ->and($cards[1]['query'])->toBe('sump pump repair')
+        ->and($cards[1]['scanned_at'])->toBeNull()
+        ->and($cards[1]['pending'])->toBeFalse()
+        ->and($cards[1]['modes'])->toBe(['local' => null, 'town_query' => null])
+        ->and($cards[1]['towns'])->toBe(3)
         ->and($cards[0]['query'])->toBe('sump pump service')
         ->and($cards[0]['thumbnail_mode'])->toBe('town_query')
         ->and($cards[0]['modes']['town_query'])->toMatchArray(['page1' => 1, 'page2' => 1, 'not_found' => 1])
