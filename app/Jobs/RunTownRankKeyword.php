@@ -40,18 +40,28 @@ class RunTownRankKeyword implements ShouldQueue
         $site = Site::withoutGlobalScopes()->find($this->siteId);
         $keyword = Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->whereKey($this->keywordId)->first();
         if ($site === null || $keyword === null) {
+            Log::warning('Town-rank run: site or keyword not found; nothing posted.', ['site_id' => $this->siteId, 'keyword_id' => $this->keywordId]);
+
             return;
         }
+        Log::info('Town-rank run: started.', ['site_id' => $site->id, 'keyword_id' => $keyword->id, 'query' => (string) $keyword->query]);
 
         foreach (TownRankScan::MODES as $mode) {
             $latest = TownRankScan::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
                 ->orderByDesc('scanned_at')->first();
             if ($latest !== null && $latest->status === 'pending') {
+                Log::info('Town-rank run: mode already collecting; skipped.', ['keyword_id' => $keyword->id, 'mode' => $mode, 'scan_id' => $latest->id]);
+
                 continue;
             }
             try {
-                $scanner->post($site, $keyword, $mode);
+                $scan = $scanner->post($site, $keyword, $mode);
+                if ($scan === null) {
+                    Log::warning('Town-rank run: no scannable towns; nothing posted for this mode.', ['site_id' => $site->id, 'keyword_id' => $keyword->id, 'mode' => $mode]);
+                } else {
+                    Log::info('Town-rank run: posted.', ['keyword_id' => $keyword->id, 'mode' => $mode, 'scan_id' => $scan->id, 'towns' => $scan->points_count]);
+                }
             } catch (Throwable $e) {
                 Log::warning('Town-rank run: posting a mode failed; the other mode still posts.', [
                     'site_id' => $site->id, 'keyword_id' => $keyword->id, 'mode' => $mode, 'error' => mb_substr($e->getMessage(), 0, 300),
