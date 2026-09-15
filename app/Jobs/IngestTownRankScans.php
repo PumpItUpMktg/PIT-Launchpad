@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Scopes\SiteScope;
 use App\Models\TownRankScan;
 use App\TownRank\TownRankScanner;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Carbon;
@@ -18,11 +19,14 @@ use Illuminate\Support\Facades\Log;
  * window is closed as `partial` over what it has so it can never block the next sweep. Cross-tenant, so the
  * {@see SiteScope} is dropped.
  */
-class IngestTownRankScans implements ShouldQueue
+class IngestTownRankScans implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 280;   // under the five-minute schedule so a slow run can't overlap the next
+    /** Scheduled every minute; unique for the job's own timeout so runs queue behind one another, never beside. */
+    public int $uniqueFor = 300;
+
+    public int $timeout = 280;   // a run stops at its deadline; ShouldBeUnique keeps the next minute's dispatch from stacking
 
     public int $tries = 1;
 

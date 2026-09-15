@@ -43,6 +43,21 @@ final class TownRankScanner
     /** How many of the town's results to keep for "who outranks us here". */
     private const TOP_RESULTS = 5;
 
+    /** DataForSEO's high-priority queue value (`priority: 2`), which doubles the per-task price. */
+    public const HIGH_PRIORITY = 2;
+
+    /** Whether tasks post to DataForSEO's high-priority queue (config `launchpad.town_rank.priority` = 2). */
+    public static function highPriority(): bool
+    {
+        return (int) config('launchpad.town_rank.priority', 1) >= self::HIGH_PRIORITY;
+    }
+
+    /** The per-request cost every estimate uses: the base price, doubled on the high-priority queue. */
+    public static function costPerRequest(): float
+    {
+        return (float) config('launchpad.town_rank.cost_per_request', 0.0012) * (self::highPriority() ? 2 : 1);
+    }
+
     public function __construct(
         private readonly DataForSeoClient $client,
         private readonly TownRankPoints $points,
@@ -208,6 +223,9 @@ final class TownRankScanner
             'device' => (string) config('launchpad.town_rank.device', 'desktop'),
             'depth' => (int) config('launchpad.town_rank.depth', 30),
         ];
+        if (self::highPriority()) {
+            $task['priority'] = self::HIGH_PRIORITY;
+        }
         if ($mode === TownRankScan::MODE_LOCAL) {
             $task['location_coordinate'] = sprintf('%.7f,%.7f', $town['lat'], $town['lng']);
         } else {

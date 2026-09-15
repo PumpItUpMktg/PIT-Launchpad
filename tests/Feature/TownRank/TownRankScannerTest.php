@@ -188,3 +188,19 @@ it('never records a transient read failure as "not found": only a genuine empty 
         ->and($byLabel['ok']->rank)->toBe(2)
         ->and($scan->fresh()->status)->toBe('pending');            // one town still owed
 });
+
+it('posts to DataForSEO\'s high-priority queue only when configured, and the cost estimate doubles with it', function () {
+    config(['launchpad.town_rank.cost_per_request' => 0.0012]);
+    expect(TownRankScanner::highPriority())->toBeFalse()
+        ->and(TownRankScanner::costPerRequest())->toBe(0.0012);
+
+    config(['launchpad.town_rank.priority' => 2]);
+    expect(TownRankScanner::highPriority())->toBeTrue()
+        ->and(TownRankScanner::costPerRequest())->toBe(0.0024);
+
+    fakeOrganicQueue(2, 0, []);
+    [$site, $keyword] = townRankSite();
+    app(TownRankScanner::class)->post($site, $keyword, TownRankScan::MODE_LOCAL);
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/task_post')
+        && collect($request->data())->every(fn (array $task): bool => ($task['priority'] ?? null) === 2));
+});

@@ -171,7 +171,7 @@ Schedule::command('launchpad:town-rank-sweep')->weeklyOn(1, '04:00')->withoutOve
 // Town Rank collection sweep — the async half: collect ready results for pending town-rank scans in bounded
 // batches (rate-limited task_get), finalize complete scans, and close out expired ones as partial. Every five
 // minutes; withoutOverlapping so runs can't double-collect.
-Schedule::job(new IngestTownRankScans)->everyFiveMinutes()->withoutOverlapping();
+Schedule::job(new IngestTownRankScans)->everyMinute()->withoutOverlapping();   // ShouldBeUnique: never two at once
 
 // Review Capture reminders — day-3 / day-10 nudges for unsubmitted review requests (capped at 2, per-tenant
 // toggle). Daily; the command itself decides which requests are due. Everything it sends is queued.

@@ -401,6 +401,9 @@ return [
         'ingest_batch' => (int) env('LAUNCHPAD_TOWN_RANK_INGEST_BATCH', 1000),
         'pending_expiry_hours' => (int) env('LAUNCHPAD_TOWN_RANK_PENDING_EXPIRY_HOURS', 24),
         'queue' => env('LAUNCHPAD_TOWN_RANK_QUEUE'),   // blank ⇒ the default queue
+        // DataForSEO task priority: 1 = normal queue, 2 = high priority (faster turnaround at DOUBLE the
+        // per-task price). Off by default; the cost estimates shown on the wall and CLI follow it.
+        'priority' => (int) env('LAUNCHPAD_TOWN_RANK_PRIORITY', 1),
     ],
 
     /*
