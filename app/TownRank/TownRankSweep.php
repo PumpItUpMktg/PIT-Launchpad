@@ -12,7 +12,8 @@ use Illuminate\Support\Carbon;
  * The town-rank cadence (§ Town Rank, PR 3): which (keyword × mode) pairs a site is due to re-scan, what
  * that costs, and posting them. A pair is due when it has never been scanned, or its newest scan is
  * finalized and older than `town_rank.cadence_days`; a pending scan is never re-posted. The keyword set is
- * the site's grid keywords plus any keyword already scanned here (so a one-off --scan keeps refreshing).
+ * the site's grid keywords, the keywords tracked on the Town Rank wall, and any keyword already scanned here
+ * (so a one-off --scan keeps refreshing).
  * A site whose due set exceeds the request ceiling is skipped whole and reported — never silently trimmed.
  */
 final class TownRankSweep
@@ -34,7 +35,7 @@ final class TownRankSweep
             ->where('site_id', $site->id)->distinct()->pluck('keyword_id')->all();
         $keywords = Keyword::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
-            ->where(fn ($q) => $q->where('is_grid_keyword', true)->orWhereIn('id', $scannedIds))
+            ->where(fn ($q) => $q->where('is_grid_keyword', true)->orWhere('track_town_rank', true)->orWhereIn('id', $scannedIds))
             ->orderBy('query')
             ->get();
 

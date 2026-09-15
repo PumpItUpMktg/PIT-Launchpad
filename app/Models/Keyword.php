@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $priority
  * @property string|null $target_content_id
  * @property bool $is_grid_keyword opts this keyword into geo-grid scanning (49 DataForSEO requests per location)
+ * @property bool $track_town_rank opts this keyword into the Town Rank card wall + weekly town sweep (one organic task per covered town per mode)
  */
 class Keyword extends Model
 {
@@ -79,6 +80,7 @@ class Keyword extends Model
             'beatability' => 'decimal:4',
             'priority' => 'integer',
             'is_grid_keyword' => 'boolean',
+            'track_town_rank' => 'boolean',
         ];
     }
 }

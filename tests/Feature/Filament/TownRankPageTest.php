@@ -11,8 +11,10 @@ use App\Models\Location;
 use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
+use App\Jobs\RunTownRankKeyword;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 beforeEach(fn () => Filament::setCurrentPanel('admin'));
@@ -71,7 +73,7 @@ it('shows an empty state when the site has no town-rank scans', function () {
     Livewire::test(TownRankPage::class)
         ->set('siteId', $site->id)
         ->assertOk()
-        ->assertSee('No town-rank scans for this site yet');
+        ->assertSee('No keywords tracked for Town Rank yet');
 });
 
 it('offers the movement view once a previous scan exists', function () {
@@ -97,4 +99,37 @@ it('offers the movement view once a previous scan exists', function () {
         ->assertSee('moved up')
         ->call('selectTown', $hack->id)
         ->assertSee('was #9');
+});
+
+it('adds a keyword from the wall, shows its card, and queues its ranking report from the card', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.85, 'lng' => -74.83]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown', 'state' => 'NJ', 'population' => 10000, 'lat' => 40.85, 'lng' => -74.83, 'source_location_ids' => [$loc->id]]);
+
+    $page = Livewire::test(TownRankPage::class)
+        ->set('siteId', $site->id)
+        ->assertOk()
+        ->assertSee('No keywords tracked for Town Rank yet')
+        ->set('newKeyword', 'sump pump repair')
+        ->call('addKeyword')
+        ->assertSet('newKeyword', '')
+        ->assertSee('sump pump repair')
+        ->assertSee('Not scanned yet')
+        ->assertSee('Run ranking report');
+
+    $kw = Keyword::query()->withoutGlobalScopes()->where('site_id', $site->id)->where('query', 'sump pump repair')->first();
+    expect($kw)->not->toBeNull()->and($kw->track_town_rank)->toBeTrue();
+
+    $page->call('runKeyword', $kw->id);
+    Queue::assertPushed(RunTownRankKeyword::class, fn (RunTownRankKeyword $j): bool => $j->keywordId === (string) $kw->id);
+
+    // While a scan is collecting the card says so and the button is disabled.
+    TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'local', 'status' => 'pending', 'points_count' => 1, 'scanned_at' => now()]);
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)->assertSee('Collecting…');
+
+    // A blank add is refused without creating anything.
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)->set('newKeyword', '  ')->call('addKeyword');
+    expect(Keyword::query()->withoutGlobalScopes()->where('site_id', $site->id)->count())->toBe(1);
 });

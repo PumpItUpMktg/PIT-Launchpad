@@ -69,8 +69,15 @@
     .trk .t-note { font-size:12px; color:var(--t-faint); margin-top:8px; }
     .trk .t-back { font-size:12px; color:#2563eb; background:none; border:none; cursor:pointer; padding:0; margin-bottom:12px; display:inline-block; }
     .trk .t-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:14px; }
-    .trk .t-card { border:1px solid var(--t-line); border-radius:14px; background:var(--t-surface); padding:14px; cursor:pointer; text-align:left; display:grid; grid-template-columns:96px minmax(0,1fr); gap:12px; align-items:start; color:inherit; }
+    .trk .t-card { border:1px solid var(--t-line); border-radius:14px; background:var(--t-surface); padding:14px; color:inherit; }
     .trk .t-card:hover { border-color:#2563eb; }
+    .trk .t-open { display:grid; grid-template-columns:96px minmax(0,1fr); gap:12px; align-items:start; width:100%; background:none; border:none; padding:0; cursor:pointer; text-align:left; color:inherit; }
+    .trk .t-cardfoot { display:flex; align-items:center; gap:10px; margin-top:10px; padding-top:10px; border-top:1px solid var(--t-line); font-size:11.5px; color:var(--t-faint); }
+    .trk .t-run { font-size:12px; border:1px solid #2563eb; color:#2563eb; background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; }
+    .trk .t-run:disabled { opacity:.55; cursor:default; }
+    .trk .t-add { display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
+    .trk .t-add input { font-size:13px; border:1px solid var(--t-line); border-radius:8px; padding:8px 12px; background:transparent; color:inherit; min-width:280px; }
+    .trk .t-add button { font-size:13px; border:none; border-radius:8px; padding:8px 14px; background:#2563eb; color:#fff; cursor:pointer; }
     .trk .t-card .thumb { width:96px; height:96px; background:var(--t-surface2); border-radius:10px; display:block; }
     .trk .t-card h3 { font-size:14px; font-weight:800; margin:0 0 6px; }
     .trk .t-card .mrow { font-size:11.5px; color:var(--t-muted); margin:3px 0; display:flex; gap:8px; flex-wrap:wrap; }
@@ -79,42 +86,63 @@
 </style>
 
 <div class="trk">
-    @if ($cards === [])
-        <div class="t-empty">
-            No town-rank scans for this site yet. Run <code>launchpad:town-rank {site} --keyword="…" --scan --yes</code> to scan the covered towns.
+    @if ($board === null)
+        {{-- Card wall: add a keyword; one card per tracked / scanned keyword. Click a card → its board; Run → post its scans. --}}
+        <div class="t-add">
+            <input type="text" wire:model="newKeyword" wire:keydown.enter="addKeyword" placeholder="Add a keyword to track, e.g. sump pump repair" aria-label="Add keyword">
+            <button type="button" wire:click="addKeyword" wire:loading.attr="disabled" wire:target="addKeyword">Add keyword</button>
+            <span class="t-note" style="margin:0">A tracked keyword gets a card, a Run button, and joins the Monday sweep.</span>
         </div>
-    @elseif ($board === null)
-        {{-- Card wall: one card per scanned keyword. Click → the keyword's board. --}}
-        <div class="t-cards">
-            @foreach ($cards as $card)
-                @php($cr = $dotR($card['markers']))
-                <button type="button" class="t-card" wire:key="card-{{ $card['keyword_id'] }}" wire:click="openKeyword('{{ $card['keyword_id'] }}')" title="Open {{ $card['query'] }}">
-                    <svg class="thumb" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-                        @foreach ($card['markers'] as $m)
-                            <circle cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $cr($m['population']) }}" fill="{{ $m['color'] }}" />
-                        @endforeach
-                    </svg>
-                    <div>
-                        <h3>{{ $card['query'] }}</h3>
-                        @foreach (['town_query' => 'Town search', 'local' => 'From town'] as $mode => $label)
-                            @php($s = $card['modes'][$mode])
-                            <div class="mrow">
-                                <span>{{ $label }}:</span>
-                                @if ($s === null)
-                                    <span>not scanned</span>
+        @if ($cards === [])
+            <div class="t-empty">No keywords tracked for Town Rank yet. Add one above, or run <code>launchpad:town-rank {site} --keyword="…" --scan --yes</code>.</div>
+        @else
+            <div class="t-cards">
+                @foreach ($cards as $card)
+                    @php($cr = $dotR($card['markers']))
+                    @php($runRequests = $card['towns'] * 2)
+                    @php($runCost = $runRequests * (float) config('launchpad.town_rank.cost_per_request', 0.0012))
+                    <div class="t-card" wire:key="card-{{ $card['keyword_id'] }}">
+                        <button type="button" class="t-open" wire:click="openKeyword('{{ $card['keyword_id'] }}')" title="Open {{ $card['query'] }}">
+                            <svg class="thumb" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                                @foreach ($card['markers'] as $m)
+                                    <circle cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $cr($m['population']) }}" fill="{{ $m['color'] }}" />
+                                @endforeach
+                            </svg>
+                            <div>
+                                <h3>{{ $card['query'] }}</h3>
+                                @if ($card['scanned_at'] === null)
+                                    <div class="mrow"><span>Not scanned yet — run the ranking report, or wait for the Monday sweep.</span></div>
                                 @else
-                                    <span>top-3 <b style="color:#15803d">{{ $s['top3'] }}</b></span>
-                                    <span>page-1 <b>{{ $s['top3'] + $s['page1'] }}</b></span>
-                                    <span>not found <b style="color:#9ca3af">{{ $s['not_found'] }}</b></span>
-                                    @if ($s['up'] + $s['down'] > 0)<span><b style="color:#15803d">▲{{ $s['up'] }}</b> <b style="color:#c0392b">▼{{ $s['down'] }}</b></span>@endif
+                                    @foreach (['town_query' => 'Town search', 'local' => 'From town'] as $mode => $label)
+                                        @php($s = $card['modes'][$mode])
+                                        <div class="mrow">
+                                            <span>{{ $label }}:</span>
+                                            @if ($s === null)
+                                                <span>not scanned</span>
+                                            @else
+                                                <span>top-3 <b style="color:#15803d">{{ $s['top3'] }}</b></span>
+                                                <span>page-1 <b>{{ $s['top3'] + $s['page1'] }}</b></span>
+                                                <span>not found <b style="color:#9ca3af">{{ $s['not_found'] }}</b></span>
+                                                @if ($s['up'] + $s['down'] > 0)<span><b style="color:#15803d">▲{{ $s['up'] }}</b> <b style="color:#c0392b">▼{{ $s['down'] }}</b></span>@endif
+                                            @endif
+                                        </div>
+                                    @endforeach
                                 @endif
+                                <div class="when">{{ $card['towns'] }} towns · {{ $card['scanned_at'] ? 'scanned '.\Illuminate\Support\Carbon::parse($card['scanned_at'])->diffForHumans() : 'never scanned' }}</div>
                             </div>
-                        @endforeach
-                        <div class="when">{{ count($card['markers']) }} towns · scanned {{ $card['scanned_at'] ? \Illuminate\Support\Carbon::parse($card['scanned_at'])->diffForHumans() : '—' }}</div>
+                        </button>
+                        <div class="t-cardfoot">
+                            <button type="button" class="t-run" wire:click="runKeyword('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="runKeyword"
+                                    wire:confirm="Post {{ number_format($runRequests) }} DataForSEO requests (~${{ number_format($runCost, 2) }}) for “{{ $card['query'] }}”? Results collect over the next few minutes."
+                                    @disabled($card['pending'])>
+                                {{ $card['pending'] ? 'Collecting…' : 'Run ranking report' }}
+                            </button>
+                            <span>{{ $card['pending'] ? 'a report is collecting — the card updates as results land' : number_format($runRequests).' requests · ~$'.number_format($runCost, 2) }}</span>
+                        </div>
                     </div>
-                </button>
-            @endforeach
-        </div>
+                @endforeach
+            </div>
+        @endif
     @else
         <button type="button" class="t-back" wire:click="closeKeyword">← All keywords</button>
         <div class="t-chips">
