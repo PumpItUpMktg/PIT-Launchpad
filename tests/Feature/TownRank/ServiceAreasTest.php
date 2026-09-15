@@ -1,5 +1,8 @@
 <?php
 
+use App\GeoGrid\CountyOutlines;
+use App\Integrations\Census\MockMunicipalityGazetteer;
+use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\CoverageArea;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
@@ -10,6 +13,7 @@ use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\TownRank\ServiceAreas;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Two service areas on one site: Warren County NJ (Hackettstown + Mansfield) and Northampton County PA
@@ -20,6 +24,10 @@ use App\TownRank\ServiceAreas;
  */
 function serviceAreaSite(): array
 {
+    // The gazetteer knows Warren's outline (a 0.2° × 0.2° box around its towns) and not Northampton's.
+    app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer(polygons: [
+        '34041' => [[['lat' => 40.95, 'lng' => -74.95], ['lat' => 40.95, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.95]]],
+    ]));
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.com']);
     JobCounty::factory()->create(['county_geoid' => '34041', 'name' => 'Warren', 'state' => 'NJ']);
     JobCounty::factory()->create(['county_geoid' => '42095', 'name' => 'Northampton', 'state' => 'PA']);
@@ -111,4 +119,50 @@ it('leaves the GBP map null where no coverage scan exists for that location, and
         ->and(collect($byQuery['mold remediation']['metrics'])->pluck('value')->all())->toBe([null, null, null, null]);
 
     expect(app(ServiceAreas::class)->area($f['site'], 'not-a-location'))->toBeNull();
+});
+
+it('draws the county outline under both maps, framed to the county with one uniform scale, and caches the boundary', function () {
+    $f = serviceAreaSite();
+
+    $area = app(ServiceAreas::class)->area($f['site'], $f['warren']->id);
+
+    // One outline, one ring, closed; the frame is the county's extent, so its corners land on the 6..94 box.
+    expect($area['outlines'])->toHaveCount(1)
+        ->and($area['outlines'][0]['label'])->toBe('Warren County, NJ')
+        ->and($area['outlines'][0]['paths'])->toHaveCount(1);
+    $d = $area['outlines'][0]['paths'][0];
+    expect($d)->toStartWith('M')->toEndWith(' Z');
+    $pts = array_map(fn (string $p): array => array_map('floatval', explode(' ', $p)), preg_split('/[ML]/', trim($d, 'MLZ '), -1, PREG_SPLIT_NO_EMPTY));
+    $xs = array_column($pts, 0);
+    $ys = array_column($pts, 1);
+    // North up, vertical span fills the frame (0.2° of latitude → 88 units); the horizontal span is the same
+    // 0.2° of longitude shrunk by cos(40.85°) ≈ 0.756, centred — a true shape, not a stretched square.
+    expect(min($ys))->toBe(6.0)->and(max($ys))->toBe(94.0)
+        ->and(round(max($xs) - min($xs), 1))->toBe(66.6)
+        ->and(round((max($xs) + min($xs)) / 2, 1))->toBe(50.0);
+
+    // The towns sit inside the outline on both maps, at the same spot.
+    $card = $area['cards'][0];
+    foreach ([$card['web']['markers'], $card['gbp']['markers']] as $markers) {
+        foreach ($markers as $m) {
+            expect($m['x'])->toBeGreaterThan(min($xs))->toBeLessThan(max($xs))
+                ->and($m['y'])->toBeGreaterThan(6.0)->toBeLessThan(94.0);
+        }
+    }
+
+    // The boundary is cached per county, so the next page view doesn't ask the gazetteer again.
+    expect(Cache::get('lp.county_outline.34041'))->toBeArray();
+    app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer);   // gazetteer now knows nothing
+    expect(app(CountyOutlines::class)->for(['34041']))->toHaveKey('34041')
+        ->and(app(CountyOutlines::class)->for(['42095']))->toBe([]);                // unknown county: no outline, no error
+});
+
+it('frames the map to the towns and draws no outline when the gazetteer has no boundary for the county', function () {
+    $f = serviceAreaSite();
+
+    $area = app(ServiceAreas::class)->area($f['site'], $f['northampton']->id);   // gazetteer knows no 42095 polygon
+
+    expect($area['outlines'])->toBe([])
+        ->and($area['cards'][0]['web']['markers'][0]['x'])->toBe(50.0)   // a single town: centred
+        ->and($area['cards'][0]['web']['markers'][0]['y'])->toBe(50.0);
 });
