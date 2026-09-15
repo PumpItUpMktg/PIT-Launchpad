@@ -8,6 +8,7 @@ use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankScan;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 /**
@@ -104,6 +105,11 @@ final class TownRankKeywords
         }
 
         RunTownRankKeyword::dispatch((string) $site->id, (string) $keyword->id);
+        Log::info('Town-rank run: queued.', [
+            'site_id' => (string) $site->id, 'keyword_id' => (string) $keyword->id, 'query' => (string) $keyword->query,
+            'connection' => config('queue.default'), 'queue' => config('launchpad.town_rank.queue') ?? 'default',
+            'towns' => $e['towns'], 'modes' => $e['modes'], 'requests' => $e['requests'],
+        ]);
 
         return ['queued' => true, 'reason' => null, 'requests' => $e['requests'], 'cost' => $e['cost']];
     }
