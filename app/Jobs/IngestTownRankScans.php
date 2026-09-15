@@ -21,7 +21,7 @@ class IngestTownRankScans implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 300;
+    public int $timeout = 280;   // under the five-minute schedule so a slow run can't overlap the next
 
     public int $tries = 1;
 

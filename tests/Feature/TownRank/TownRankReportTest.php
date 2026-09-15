@@ -47,6 +47,8 @@ it('measures movement against the previous finalized scan — up, down, new, los
 
     // Local: latest is pending → its previous is the complete 09-01 scan, but pending points carry no change.
     expect($data['scans']['local']['status'])->toBe('pending')
+        ->and($data['scans']['local']['collected'])->toBe(0)
+        ->and($data['scans']['town_query']['collected'])->toBe(5)
         ->and($data['scans']['local']['previous_scanned_at'])->toBe('2026-09-01 10:00:00')
         ->and($rows[$areas['A']]['local_state'])->toBe('pending')
         ->and($rows[$areas['A']]['local_change'])->toBeNull()

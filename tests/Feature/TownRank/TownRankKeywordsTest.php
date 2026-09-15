@@ -86,3 +86,21 @@ it('the run job posts both modes and skips a mode whose latest scan is still col
         ->and($scans->where('mode', 'town_query')->first()->points()->count())->toBe(2);
     Http::assertSentCount(1);
 });
+
+it('the run job posts the other mode when one mode\'s post fails at the vendor', function () {
+    $ids = collect(['k-0', 'k-1']);
+    Http::fake([
+        '*/serp/google/organic/task_post' => Http::sequence()
+            ->push(['status_code' => 40000, 'status_message' => 'Bad request'])   // first mode (local): envelope error → exception
+            ->push(['status_code' => 20000, 'tasks' => $ids->map(fn ($id): array => ['id' => $id, 'status_code' => 20000])->all()]),
+    ]);
+    $site = trkSite(2);
+    $kw = app(TownRankKeywords::class)->track($site, 'sump pump repair');
+
+    (new RunTownRankKeyword((string) $site->id, (string) $kw->id))->handle(app(TownRankScanner::class));
+
+    $scans = TownRankScan::query()->withoutGlobalScopes()->where('keyword_id', $kw->id)->get();
+    expect($scans)->toHaveCount(1)
+        ->and($scans->first()->mode)->toBe('town_query')   // local failed and was logged; town_query still went out
+        ->and($scans->first()->status)->toBe('pending');
+});

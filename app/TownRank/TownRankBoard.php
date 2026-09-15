@@ -79,7 +79,7 @@ final class TownRankBoard
      *
      * @return array{
      *     keyword_id: string, keyword: string, mode: string,
-     *     scan: array{id: string, status: string, scanned_at: string|null, points: int, found: int}|null,
+     *     scan: array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null,
      *     summary: array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int},
      *     has_previous: bool,
      *     markers: list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>,
@@ -118,6 +118,7 @@ final class TownRankBoard
      * @return list<array{
      *     keyword_id: string, query: string, scanned_at: string|null, pending: bool, towns: int, thumbnail_mode: string, has_previous: bool,
      *     modes: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}|null>,
+     *     progress: array<string, array{collected: int, points: int}|null>,
      *     markers: list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>
      * }>
      */
@@ -139,10 +140,13 @@ final class TownRankBoard
             $data = $this->report->forKeyword($site, $keyword);
             $thumbMode = $data['scans'][TownRankScan::MODE_TOWN_QUERY] !== null ? TownRankScan::MODE_TOWN_QUERY : TownRankScan::MODE_LOCAL;
             $modes = [];
+            $progress = [];
             $hasPrevious = false;
             foreach (TownRankScan::MODES as $mode) {
-                $modes[$mode] = $data['scans'][$mode] === null ? null : $data['summary'][$mode];
-                $hasPrevious = $hasPrevious || ($data['scans'][$mode] !== null && $data['scans'][$mode]['previous_scanned_at'] !== null);
+                $scan = $data['scans'][$mode];
+                $modes[$mode] = $scan === null ? null : $data['summary'][$mode];
+                $progress[$mode] = $scan !== null && $scan['status'] === 'pending' ? ['collected' => $scan['collected'], 'points' => $scan['points']] : null;
+                $hasPrevious = $hasPrevious || ($scan !== null && $scan['previous_scanned_at'] !== null);
             }
             $cards[] = [
                 'keyword_id' => (string) $keyword->id,
@@ -153,6 +157,7 @@ final class TownRankBoard
                 'thumbnail_mode' => $thumbMode,
                 'has_previous' => $hasPrevious,
                 'modes' => $modes,
+                'progress' => $progress,
                 'markers' => $this->markers($data['rows'], $thumbMode === TownRankScan::MODE_LOCAL ? 'local' : 'town', $coords),
             ];
         }
