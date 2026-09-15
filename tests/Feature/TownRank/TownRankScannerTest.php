@@ -163,3 +163,28 @@ it('stops collecting at a wall-clock deadline and leaves the rest pending for th
     expect(app(TownRankScanner::class)->collectPending($scan, 10, microtime(true) + 60))->toBe(2)
         ->and($scan->fresh()->status)->toBe('complete');
 });
+
+it('never records a transient read failure as "not found": only a genuine empty SERP is, the rest waits for the next run', function () {
+    config(['services.dataforseo.rate_limit_backoff_ms' => 0]);
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair']);
+    $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'local', 'status' => 'pending', 'points_count' => 3, 'scanned_at' => now()]);
+    foreach (['limited', 'empty', 'ok'] as $id) {
+        TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'label' => $id, 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => "task-{$id}"]);
+    }
+    Http::fake([
+        '*/tasks_ready' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'r', 'status_code' => 20000, 'result' => [['id' => 'task-limited'], ['id' => 'task-empty'], ['id' => 'task-ok']]]]]),
+        '*/task_get/advanced/task-limited' => Http::response(['status_code' => 40202, 'status_message' => 'Too many requests']),      // rate-limited, even after the client's retries
+        '*/task_get/advanced/task-empty' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'e', 'status_code' => 40102, 'status_message' => 'No Search Results']]]),
+        '*/task_get/advanced/task-ok' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => [['type' => 'organic', 'rank_absolute' => 2, 'url' => 'https://spg.com/x', 'domain' => 'spg.com']]]]]]]),
+    ]);
+
+    app(TownRankScanner::class)->collectPending($scan, 10);
+
+    $byLabel = $scan->points()->get()->keyBy('label');
+    expect($byLabel['limited']->collected_at)->toBeNull()          // left for the next run, not a phantom miss
+        ->and($byLabel['empty']->collected_at)->not->toBeNull()
+        ->and($byLabel['empty']->rank)->toBeNull()                 // Google returned nothing: genuinely not found
+        ->and($byLabel['ok']->rank)->toBe(2)
+        ->and($scan->fresh()->status)->toBe('pending');            // one town still owed
+});

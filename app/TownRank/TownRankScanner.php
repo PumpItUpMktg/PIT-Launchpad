@@ -3,6 +3,7 @@
 namespace App\TownRank;
 
 use App\Integrations\DataForSeo\DataForSeoClient;
+use App\Integrations\DataForSeo\DataForSeoException;
 use App\Models\Keyword;
 use App\Models\Site;
 use App\Models\TownRankPoint;
@@ -10,6 +11,7 @@ use App\Models\TownRankScan;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -109,8 +111,10 @@ final class TownRankScanner
     /**
      * Collect ready results for a pending scan's uncollected points, up to $budget task_get calls and, when
      * given, a wall-clock $deadline (microtime) so a queued caller stops well inside its own timeout. A point
-     * whose task isn't ready is left for the next call; a task DataForSEO reports as errored (e.g. "No Search
-     * Results") is collected as rank null so it can't block completion. Returns task_get calls spent.
+     * whose task isn't ready is left for the next call. A task DataForSEO answers with "No Search Results"
+     * (40102) is collected as rank null; any other read failure (rate limit, transport, still in queue) leaves
+     * the town uncollected for the next run — never recorded as a phantom "not found" — and a fatal
+     * auth/quota error stops the run. Returns task_get calls spent.
      */
     public function collectPending(TownRankScan $scan, int $budget, ?float $deadline = null): int
     {
@@ -122,6 +126,7 @@ final class TownRankScanner
         $pending = $scan->points()->whereNotNull('provider_task_id')->whereNull('collected_at')->get();
 
         $spent = 0;
+        $skipped = 0;
         if ($pending->isNotEmpty()) {
             $site = Site::withoutGlobalScopes()->find($scan->site_id);
             $host = self::host($site?->domain_url);
@@ -138,12 +143,31 @@ final class TownRankScanner
 
                 try {
                     $items = DataForSeoClient::parseOrganic($this->client->taskGet(self::ORGANIC_GET, $taskId));
-                } catch (Throwable) {
-                    $items = [];   // an errored task: collected, not found
+                } catch (DataForSeoException $e) {
+                    if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
+                        $items = [];   // Google returned an empty page for this query: genuinely not found
+                    } elseif ($e->fatal) {
+                        throw $e;      // auth / quota: stop the run, nothing here is collectable
+                    } else {
+                        // Rate-limited, in queue, transport hiccup: NOT a result. Leave the town uncollected for
+                        // the next run rather than record a phantom "not found".
+                        $skipped++;
+                        $spent++;
+
+                        continue;
+                    }
+                } catch (Throwable $e) {
+                    $skipped++;
+                    $spent++;
+
+                    continue;
                 }
                 $point->forceFill([...$this->extract($items, $host), 'collected_at' => Carbon::now()])->save();
                 $spent++;
             }
+        }
+        if ($skipped > 0) {
+            Log::warning('Town-rank collect: some ready tasks could not be read this run; left for the next.', ['scan_id' => $scan->id, 'skipped' => $skipped]);
         }
 
         $this->finalizeIfComplete($scan);
