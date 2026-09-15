@@ -32,6 +32,8 @@
     .sva .s-col h4 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--s-muted); font-weight:700; margin:0 0 6px; }
     .sva .s-mapwrap { border:1px solid var(--s-line); border-radius:12px; background:var(--s-surface2); padding:8px; }
     .sva .s-map { width:100%; height:auto; display:block; aspect-ratio:1/1; }
+    .sva .s-county { fill:rgba(37,99,235,.07); stroke:rgba(37,99,235,.55); stroke-width:.5; stroke-linejoin:round; }
+    .dark .sva .s-county { fill:rgba(37,99,235,.12); stroke:rgba(96,165,250,.7); }
     .sva .s-dot { stroke:rgba(0,0,0,.25); stroke-width:.4; }
     .sva .s-dot.nopage { stroke-dasharray:1 .6; }
     .sva .s-placeholder { border:1px dashed var(--s-line); border-radius:12px; background:var(--s-surface2); aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; font-size:12.5px; color:var(--s-muted); }
@@ -99,6 +101,11 @@
                                     @php($r = $dotR($card['web']['markers']))
                                     <div class="s-mapwrap">
                                         <svg class="s-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Website rank by town">
+                                            @foreach ($area['outlines'] as $o)
+                                                @foreach ($o['paths'] as $d)
+                                                    <path class="s-county" d="{{ $d }}"><title>{{ $o['label'] }}</title></path>
+                                                @endforeach
+                                            @endforeach
                                             @foreach ($card['web']['markers'] as $m)
                                                 <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}</title></circle>
                                             @endforeach
@@ -125,6 +132,11 @@
                                     @php($r = $dotR($card['gbp']['markers']))
                                     <div class="s-mapwrap">
                                         <svg class="s-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="GBP map-pack rank by town">
+                                            @foreach ($area['outlines'] as $o)
+                                                @foreach ($o['paths'] as $d)
+                                                    <path class="s-county" d="{{ $d }}"><title>{{ $o['label'] }}</title></path>
+                                                @endforeach
+                                            @endforeach
                                             @foreach ($card['gbp']['markers'] as $m)
                                                 <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}</title></circle>
                                             @endforeach

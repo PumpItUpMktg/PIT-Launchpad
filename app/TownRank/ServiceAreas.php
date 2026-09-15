@@ -2,6 +2,7 @@
 
 namespace App\TownRank;
 
+use App\GeoGrid\CountyOutlines;
 use App\GeoGrid\CoverageGrid;
 use App\GeoGrid\GeoGridPalette;
 use App\Models\GeoGridScan;
@@ -18,8 +19,10 @@ use App\Models\TownRankScan;
  * scans). An area page shows every tracked keyword as one card with two maps side by side over the SAME
  * towns and the same bounding box: the website's town rank (the Town Rank scan, sliced to this area) and
  * the GBP's map-pack rank (the latest coverage-mode geo-grid scan for this location × keyword), plus a
- * metrics slot the operator will fill with scoring once the data has been seen. Pure read-model; operator
- * context crosses tenants, so the {@see SiteScope} is dropped and site_id filtered explicitly.
+ * metrics slot the operator will fill with scoring once the data has been seen. Both maps are drawn over
+ * the area's county outlines ({@see CountyOutlines}) when the Census gazetteer knows them, projected with
+ * one uniform scale so a county keeps its true shape. Pure read-model; operator context crosses tenants,
+ * so the {@see SiteScope} is dropped and site_id filtered explicitly.
  */
 final class ServiceAreas
 {
@@ -28,6 +31,7 @@ final class ServiceAreas
         private readonly TownRankPoints $points,
         private readonly TownRankBoard $board,
         private readonly TownRankReport $report,
+        private readonly CountyOutlines $outlines,
     ) {}
 
     /**
@@ -78,6 +82,7 @@ final class ServiceAreas
      *     location: array{location_id: string, name: string, city: string, state: string},
      *     counties: list<array{geoid: string, label: string}>,
      *     towns: int,
+     *     outlines: list<array{geoid: string, label: string, paths: list<string>}>,
      *     cards: list<array{
      *         keyword_id: string, query: string,
      *         web: array{mode: string, status: string|null, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
@@ -105,7 +110,12 @@ final class ServiceAreas
         foreach ($areaTowns as $town) {
             $coords[$town['coverage_area_id']] = ['lat' => $town['lat'], 'lng' => $town['lng']];
         }
-        $bbox = self::boundingBox($coords);
+        $countyIds = $this->countyGeoIds($location);
+        $rings = $this->outlines->for($countyIds);
+        // The frame is the counties' extent when their outlines are known (so the whole county shows and the
+        // dots sit inside it), else the towns' extent; one uniform scale keeps the county's true shape.
+        $extent = $rings !== [] ? self::ringsExtent($rings) : self::pointsExtent($coords);
+        $project = self::projector($extent);
 
         $cards = [];
         foreach ($this->board->keywords($site) as $entry) {
@@ -113,8 +123,8 @@ final class ServiceAreas
             if ($keyword === null) {
                 continue;
             }
-            $web = $this->webMap($site, $keyword, $areaIds, $coords, $bbox);
-            $gbp = $this->gbpMap($location, $keyword, $siteTowns, $coords, $bbox);
+            $web = $this->webMap($site, $keyword, $areaIds, $coords, $project);
+            $gbp = $this->gbpMap($location, $keyword, $siteTowns, $coords, $project);
             $cards[] = [
                 'keyword_id' => (string) $keyword->id,
                 'query' => (string) $keyword->query,
@@ -125,11 +135,28 @@ final class ServiceAreas
         }
 
         $cityState = $location->cityState();
+        $labels = $this->countyLabels($countyIds);
+        $outlines = [];
+        foreach ($rings as $geoId => $countyRings) {
+            $paths = [];
+            foreach ($countyRings as $ring) {
+                $d = '';
+                foreach ($ring as $i => $pt) {
+                    [$x, $y] = $project((float) $pt['lat'], (float) $pt['lng']);
+                    $d .= ($i === 0 ? 'M' : 'L').$x.' '.$y.' ';
+                }
+                if ($d !== '') {
+                    $paths[] = trim($d).' Z';
+                }
+            }
+            $outlines[] = ['geoid' => (string) $geoId, 'label' => $labels[$geoId] ?? "County {$geoId}", 'paths' => $paths];
+        }
 
         return [
             'location' => ['location_id' => (string) $location->id, 'name' => (string) $location->name, 'city' => $cityState['city'], 'state' => $cityState['state']],
-            'counties' => array_map(fn (string $g): array => ['geoid' => $g, 'label' => $this->countyLabels([$g])[$g] ?? "County {$g}"], $this->countyGeoIds($location)),
+            'counties' => array_map(fn (string $g): array => ['geoid' => $g, 'label' => $labels[$g] ?? "County {$g}"], $countyIds),
             'towns' => count($areaTowns),
+            'outlines' => $outlines,
             'cards' => $cards,
         ];
     }
@@ -140,10 +167,10 @@ final class ServiceAreas
      *
      * @param  array<string, true>  $areaIds
      * @param  array<string, array{lat: float, lng: float}>  $coords
-     * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $bbox
+     * @param  callable(float, float): array{float, float}  $project
      * @return array{mode: string, status: string|null, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
      */
-    private function webMap(Site $site, Keyword $keyword, array $areaIds, array $coords, array $bbox): ?array
+    private function webMap(Site $site, Keyword $keyword, array $areaIds, array $coords, callable $project): ?array
     {
         $data = $this->report->forKeyword($site, $keyword);
         $mode = $data['scans'][TownRankScan::MODE_TOWN_QUERY] !== null ? TownRankScan::MODE_TOWN_QUERY : TownRankScan::MODE_LOCAL;
@@ -165,7 +192,7 @@ final class ServiceAreas
                 $summary[$state]++;
             }
             $rank = $row["{$prefix}_rank"] !== null ? (int) $row["{$prefix}_rank"] : null;
-            $markers[] = self::marker($id, $coords[$id], $bbox, $rank, (string) $row['label'], $row['state'], (int) $row['population'], $row['page_url'] !== null);
+            $markers[] = self::marker($id, $coords[$id], $project, $rank, (string) $row['label'], $row['state'], (int) $row['population'], $row['page_url'] !== null);
         }
 
         return [
@@ -183,10 +210,10 @@ final class ServiceAreas
      *
      * @param  array<string, array<string, mixed>>  $siteTowns
      * @param  array<string, array{lat: float, lng: float}>  $coords
-     * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $bbox
+     * @param  callable(float, float): array{float, float}  $project
      * @return array{scan_id: string, status: string, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
      */
-    private function gbpMap(Location $location, Keyword $keyword, array $siteTowns, array $coords, array $bbox): ?array
+    private function gbpMap(Location $location, Keyword $keyword, array $siteTowns, array $coords, callable $project): ?array
     {
         $scan = GeoGridScan::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $location->site_id)->where('location_id', $location->id)->where('keyword_id', $keyword->id)
@@ -219,7 +246,7 @@ final class ServiceAreas
                 }]++;
             }
             $markers[] = self::marker(
-                $id, $coords[$id], $bbox, $rank,
+                $id, $coords[$id], $project, $rank,
                 (string) ($town['name'] ?? $point->label ?? ''), $town['state'] ?? null, (int) ($town['population'] ?? 0), ($town['page_url'] ?? null) !== null,
             );
         }
@@ -258,20 +285,17 @@ final class ServiceAreas
 
     /**
      * @param  array{lat: float, lng: float}  $c
-     * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $bbox
+     * @param  callable(float, float): array{float, float}  $project
      * @return array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}
      */
-    private static function marker(string $id, array $c, array $bbox, ?int $rank, string $name, ?string $state, int $population, bool $page): array
+    private static function marker(string $id, array $c, callable $project, ?int $rank, string $name, ?string $state, int $population, bool $page): array
     {
-        $latSpan = $bbox['maxLat'] - $bbox['minLat'];
-        $lngSpan = $bbox['maxLng'] - $bbox['minLng'];
-        $x = $lngSpan > 0 ? 6 + (($c['lng'] - $bbox['minLng']) / $lngSpan) * 88 : 50.0;
-        $y = $latSpan > 0 ? 6 + (($bbox['maxLat'] - $c['lat']) / $latSpan) * 88 : 50.0;
+        [$x, $y] = $project($c['lat'], $c['lng']);
 
         return [
             'id' => $id,
-            'x' => round($x, 2),
-            'y' => round($y, 2),
+            'x' => $x,
+            'y' => $y,
             'rank' => $rank,
             'color' => GeoGridPalette::absolute($rank),
             'label' => $name.($state !== null && $state !== '' ? ", {$state}" : ''),
@@ -281,13 +305,59 @@ final class ServiceAreas
     }
 
     /**
+     * A lat/lng → SVG (0–100 viewBox) projector for one frame: the frame is centred, scaled uniformly (the
+     * longitude span corrected by cos(latitude) so a county keeps its shape) to fit inside 6..94, north up.
+     *
+     * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $extent
+     * @return callable(float, float): array{float, float}
+     */
+    private static function projector(array $extent): callable
+    {
+        $midLat = ($extent['minLat'] + $extent['maxLat']) / 2;
+        $midLng = ($extent['minLng'] + $extent['maxLng']) / 2;
+        $cos = max(0.05, cos(deg2rad($midLat)));
+        $spanX = ($extent['maxLng'] - $extent['minLng']) * $cos;
+        $spanY = $extent['maxLat'] - $extent['minLat'];
+        $span = max($spanX, $spanY);
+        $scale = $span > 0 ? 88 / $span : 0.0;
+
+        return fn (float $lat, float $lng): array => [
+            round(50 + ($lng - $midLng) * $cos * $scale, 2),
+            round(50 - ($lat - $midLat) * $scale, 2),
+        ];
+    }
+
+    /**
      * @param  array<string, array{lat: float, lng: float}>  $coords
      * @return array{minLat: float, maxLat: float, minLng: float, maxLng: float}
      */
-    private static function boundingBox(array $coords): array
+    private static function pointsExtent(array $coords): array
     {
         $lats = array_column($coords, 'lat');
         $lngs = array_column($coords, 'lng');
+        if ($lats === []) {
+            return ['minLat' => 0.0, 'maxLat' => 0.0, 'minLng' => 0.0, 'maxLng' => 0.0];
+        }
+
+        return ['minLat' => min($lats), 'maxLat' => max($lats), 'minLng' => min($lngs), 'maxLng' => max($lngs)];
+    }
+
+    /**
+     * @param  array<string, list<list<array{lat: float, lng: float}>>>  $rings
+     * @return array{minLat: float, maxLat: float, minLng: float, maxLng: float}
+     */
+    private static function ringsExtent(array $rings): array
+    {
+        $lats = [];
+        $lngs = [];
+        foreach ($rings as $countyRings) {
+            foreach ($countyRings as $ring) {
+                foreach ($ring as $pt) {
+                    $lats[] = (float) $pt['lat'];
+                    $lngs[] = (float) $pt['lng'];
+                }
+            }
+        }
         if ($lats === []) {
             return ['minLat' => 0.0, 'maxLat' => 0.0, 'minLng' => 0.0, 'maxLng' => 0.0];
         }

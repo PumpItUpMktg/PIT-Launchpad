@@ -2,6 +2,8 @@
 
 use App\Enums\UserRole;
 use App\Filament\Pages\ServiceAreasPage;
+use App\Integrations\Census\MockMunicipalityGazetteer;
+use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\CoverageArea;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
@@ -27,6 +29,9 @@ it('is operator-only', function () {
 
 it('lists the service areas, opens one to a card per keyword with both maps, and shows the GBP placeholder where no scan exists', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer(polygons: [
+        '34041' => [[['lat' => 40.95, 'lng' => -74.95], ['lat' => 40.95, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.95]]],
+    ]));
     $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
     JobCounty::factory()->create(['county_geoid' => '34041', 'name' => 'Warren', 'state' => 'NJ']);
     $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office', 'lat' => 40.85, 'lng' => -74.83, 'home_county_geoid' => '34041', 'county_geoids' => []]);
@@ -55,6 +60,7 @@ it('lists the service areas, opens one to a card per keyword with both maps, and
         ->assertSee('No GBP coverage scan for this keyword here yet')          // mold remediation's GBP column
         ->assertSee('No Town Rank scan for this keyword yet')                  // mold remediation's website column
         ->assertSeeHtml('aria-label="GBP map-pack rank by town"')              // sump pump service has both maps
+        ->assertSeeHtml('class="s-county"')                                     // the county outline under the maps
         ->call('closeArea')
         ->assertSet('locationId', null)
         ->assertDontSee('Google Business Profile');
