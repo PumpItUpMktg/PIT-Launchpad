@@ -44,6 +44,7 @@ final class TownRankKeywords
         if (! $keyword->track_town_rank) {
             $keyword->forceFill(['track_town_rank' => true])->save();
         }
+        $keyword->refresh();   // a just-created row carries the column defaults (is_grid_keyword, priority…) once re-read
 
         return $keyword;
     }
