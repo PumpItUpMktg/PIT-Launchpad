@@ -7,6 +7,14 @@
         return fn (int $pop): float => round(1.6 + sqrt(max(0, $pop) / $max) * 2.6, 2);
     };
     $when = fn (?string $at): string => $at !== null ? \Illuminate\Support\Carbon::parse($at)->diffForHumans() : '';
+    $town = $area !== null ? $this->town : null;
+    $rankCell = fn ($rank, string $state): string => match ($state) {
+        'unscanned' => '',
+        'pending' => '…',
+        'not_found' => 'not found',
+        default => '#'.(int) $rank,
+    };
+    $levelColor = fn (string $level): string => match ($level) { 'do' => '#c0392b', 'watch' => '#ca8a04', default => '#15803d' };
 @endphp
 
 <style>
@@ -34,8 +42,23 @@
     .sva .s-map { width:100%; height:auto; display:block; aspect-ratio:1/1; }
     .sva .s-county { fill:rgba(37,99,235,.07); stroke:rgba(37,99,235,.55); stroke-width:.5; stroke-linejoin:round; }
     .dark .sva .s-county { fill:rgba(37,99,235,.12); stroke:rgba(96,165,250,.7); }
-    .sva .s-dot { stroke:rgba(0,0,0,.25); stroke-width:.4; }
+    .sva .s-dot { stroke:rgba(0,0,0,.25); stroke-width:.4; cursor:pointer; }
     .sva .s-dot.nopage { stroke-dasharray:1 .6; }
+    .sva .s-dot.sel { stroke:#2563eb; stroke-width:1.2; }
+    .sva .s-town { border:1px solid var(--s-line); border-radius:12px; padding:12px 14px; background:var(--s-surface2); margin-top:12px; }
+    .sva .s-town h5 { font-size:14px; font-weight:800; margin:0 0 2px; display:flex; justify-content:space-between; gap:10px; }
+    .sva .s-town .sub { font-size:12px; color:var(--s-muted); margin-bottom:8px; }
+    .sva .s-town .s-close { font-size:12px; color:#2563eb; background:none; border:none; cursor:pointer; padding:0; font-weight:600; }
+    .sva .s-krow { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--s-line); }
+    .sva .s-krow:last-child { border-bottom:none; }
+    .sva .s-krow b { font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .sva .s-act { border-left:3px solid; padding:6px 10px; margin-top:8px; font-size:12.5px; background:var(--s-surface); border-radius:0 8px 8px 0; }
+    .sva .s-act b { display:block; }
+    .sva .s-act span { color:var(--s-muted); }
+    .sva .s-comp { font-size:12px; color:var(--s-muted); margin:6px 0 0; padding-left:16px; }
+    .sva h6.s-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--s-muted); font-weight:700; margin:12px 0 4px; }
+    .sva .s-towncols { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); gap:14px; }
+    @media (max-width:900px){ .sva .s-towncols { grid-template-columns:1fr; } }
     .sva .s-placeholder { border:1px dashed var(--s-line); border-radius:12px; background:var(--s-surface2); aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; font-size:12.5px; color:var(--s-muted); }
     .sva .s-legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:var(--s-muted); margin-top:6px; }
     .sva .s-legend b { color:inherit; font-variant-numeric:tabular-nums; }
@@ -110,7 +133,7 @@
                                                 @endforeach
                                             @endforeach
                                             @foreach ($card['web']['markers'] as $m)
-                                                <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}</title></circle>
+                                                <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $keywordId === $card['keyword_id'] && $townId === $m['id'] ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}</title></circle>
                                             @endforeach
                                         </svg>
                                     </div>
@@ -141,7 +164,7 @@
                                                 @endforeach
                                             @endforeach
                                             @foreach ($card['gbp']['markers'] as $m)
-                                                <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}</title></circle>
+                                                <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $keywordId === $card['keyword_id'] && $townId === $m['id'] ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}</title></circle>
                                             @endforeach
                                         </svg>
                                     </div>
@@ -179,6 +202,39 @@
                                 </div>
                             </div>
                         </div>
+
+                        {{-- The selected town's detail (a dot on either map), the Town Rank board's panel. --}}
+                        @if ($town !== null && $keywordId === $card['keyword_id'])
+                            <div class="s-town" wire:key="town-{{ $card['keyword_id'] }}-{{ $town['id'] }}">
+                                <h5><span>{{ $town['label'] }}</span><button type="button" class="s-close" wire:click="clearTown">close</button></h5>
+                                <div class="sub">{{ $town['population'] > 0 ? 'pop '.number_format($town['population']).' · ' : '' }}{{ $town['page_state'] === 'anchored' ? 'page: '.$town['page_url'] : ($town['page_state'] === 'slug' ? 'page found by slug (GEOID differs): '.$town['page_url'] : 'no page') }}</div>
+                                <div class="s-towncols">
+                                    <div>
+                                        <div class="s-krow"><span>Town search</span><b>{{ $rankCell($town['town_query']['rank'], $town['town_query']['state']) ?: '—' }}{{ $town['town_query']['prev_rank'] !== null && $town['town_query']['change'] !== null ? ' (was #'.$town['town_query']['prev_rank'].')' : '' }}</b></div>
+                                        <div class="s-krow"><span>Searched from town</span><b>{{ $rankCell($town['local']['rank'], $town['local']['state']) ?: '—' }}{{ $town['local']['prev_rank'] !== null && $town['local']['change'] !== null ? ' (was #'.$town['local']['prev_rank'].')' : '' }}</b></div>
+                                        <div class="s-krow"><span>GBP map pack</span><b>{{ $town['map_rank'] !== null ? '#'.$town['map_rank'] : ($town['map_scanned'] ? 'absent' : '—') }}</b></div>
+                                        @if ($town['town_query']['competitors'] !== [])
+                                            <h6 class="s-h">Above you for the town search</h6>
+                                            <ol class="s-comp">
+                                                @foreach ($town['town_query']['competitors'] as $c)<li>#{{ $c['position'] }} {{ $c['domain'] }}</li>@endforeach
+                                            </ol>
+                                        @endif
+                                        @if ($town['local']['competitors'] !== [])
+                                            <h6 class="s-h">Above you searched from town</h6>
+                                            <ol class="s-comp">
+                                                @foreach ($town['local']['competitors'] as $c)<li>#{{ $c['position'] }} {{ $c['domain'] }}</li>@endforeach
+                                            </ol>
+                                        @endif
+                                    </div>
+                                    <div>
+                                        <h6 class="s-h" style="margin-top:0">What to do</h6>
+                                        @foreach ($town['actions'] as $a)
+                                            <div class="s-act" style="border-color:{{ $levelColor($a['level']) }}"><b>{{ $a['title'] }}</b><span>{{ $a['why'] }}</span></div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
                     </div>
                 @endforeach
             </div>
