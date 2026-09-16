@@ -17,9 +17,20 @@
     .lgg .lgg-card { border:1px solid var(--lgg-line); border-radius:12px; padding:14px; background:var(--lgg-surface); cursor:pointer; transition:border-color .12s, transform .12s; }
     .lgg .lgg-card:hover { border-color:#2563eb; transform:translateY(-1px); }
     .lgg .lgg-kw { font-size:13px; font-weight:700; margin-bottom:10px; line-height:1.3; word-break:break-word; }
-    .lgg .lgg-thumb { display:grid; gap:2px; margin:0 auto 12px; width:max-content; }
-    .lgg .lgg-cell { width:16px; height:16px; border-radius:2px; background:var(--abs); }
-    .lgg.mode-delta .lgg-cell { background:var(--delta); }
+    .lgg .lgg-map { width:100%; aspect-ratio:1/1; display:block; margin:0 auto 12px; background:var(--lgg-surface2); border-radius:10px; }
+    .lgg .lgg-town { stroke:rgba(255,255,255,.55); stroke-width:.35; stroke-linejoin:round; fill:var(--abs); }
+    .dark .lgg .lgg-town { stroke:rgba(0,0,0,.45); }
+    .lgg.mode-delta .lgg-town { fill:var(--delta); }
+    .lgg .lgg-dot { stroke:rgba(0,0,0,.25); stroke-width:.4; fill:var(--abs); }
+    .lgg.mode-delta .lgg-dot { fill:var(--delta); }
+    .lgg .lgg-county { fill:none; stroke:#334155; stroke-width:.7; stroke-linejoin:round; opacity:.8; }
+    .dark .lgg .lgg-county { stroke:#cbd5e1; }
+    /* The map-pack position written into the town it belongs to — white with a dark outline so it reads on
+       any fill, in either theme. */
+    .lgg .lgg-rank { font-size:2.6px; font-weight:700; fill:#fff; stroke:rgba(0,0,0,.65); stroke-width:.55px;
+                     paint-order:stroke fill; text-anchor:middle; dominant-baseline:central;
+                     font-family:'Spline Sans Mono',ui-monospace,monospace; }
+    .lgg .lgg-bigmap .lgg-rank { font-size:2.2px; stroke-width:.45px; }
     .lgg .lgg-stats { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--lgg-muted); }
     .lgg .lgg-stats b { color:inherit; font-weight:700; font-variant-numeric:tabular-nums; }
     .lgg .lgg-chip { font-size:11px; font-weight:700; border-radius:999px; padding:2px 8px; }
@@ -68,24 +79,40 @@
 
     @if ($board === null || $board['keyword_count'] === 0)
         <div class="lgg-empty">
-            No geo-grid scans for this location yet. Flag keywords with <code>is_grid_keyword</code> and run
-            <code>launchpad:geo-grid-scan</code> for a GBP-backed, grid-ready location.
+            No map-pack scans for this location yet. Each scan is one Maps search per served town, from that
+            town's own coordinates — run one from a keyword's card on Service Areas, or with
+            <code>launchpad:coverage-scan</code>.
         </div>
     @else
-        <p class="lgg-hint" style="margin-bottom:14px;">{{ $board['keyword_count'] }} keyword grid(s) · worst ATRP first · click a card to expand.</p>
+        <p class="lgg-hint" style="margin-bottom:14px;">{{ $board['keyword_count'] }} keyword(s) across {{ $board['towns'] }} town(s) · worst ATRP first · click a card to expand.</p>
 
         <div class="lgg-wall">
             @foreach ($board['cards'] as $i => $card)
                 @php($delta = $card['delta_atrp'])
                 <div class="lgg-card" @click="open = {{ $i }}" role="button" tabindex="0" aria-label="Expand {{ $card['keyword'] }}">
                     <div class="lgg-kw">{{ $card['keyword'] }}</div>
-                    <div class="lgg-thumb" style="grid-template-columns:repeat({{ $card['grid_size'] }}, 16px);">
-                        @foreach ($card['matrix'] as $row)
-                            @foreach ($row as $cell)
-                                <div class="lgg-cell" style="--abs:{{ $cell['absolute_color'] }};--delta:{{ $cell['delta_color'] }};"></div>
+                    <svg class="lgg-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img"
+                         aria-label="Map-pack rank by town for {{ $card['keyword'] }}">
+                        @foreach ($card['towns'] as $t)
+                            @if (isset($board['town_paths'][$t['id']]))
+                                @foreach ($board['town_paths'][$t['id']] as $d)
+                                    <path class="lgg-town" d="{{ $d }}" style="--abs:{{ $t['color'] }};--delta:{{ $t['delta_color'] }};"><title>{{ $t['label'] }} — {{ $t['rank'] !== null ? '#'.$t['rank'] : 'absent' }}</title></path>
+                                @endforeach
+                            @else
+                                <circle class="lgg-dot" cx="{{ $t['x'] }}" cy="{{ $t['y'] }}" r="1.4" style="--abs:{{ $t['color'] }};--delta:{{ $t['delta_color'] }};"><title>{{ $t['label'] }} — {{ $t['rank'] !== null ? '#'.$t['rank'] : 'absent' }}</title></circle>
+                            @endif
+                        @endforeach
+                        @foreach ($board['outlines'] as $o)
+                            @foreach ($o['paths'] as $d)
+                                <path class="lgg-county" d="{{ $d }}" pointer-events="none"><title>{{ $o['label'] }}</title></path>
                             @endforeach
                         @endforeach
-                    </div>
+                        @foreach ($card['towns'] as $t)
+                            @if ($t['rank'] !== null)
+                                <text class="lgg-rank" x="{{ $t['x'] }}" y="{{ $t['y'] }}" pointer-events="none">{{ $t['rank'] }}</text>
+                            @endif
+                        @endforeach
+                    </svg>
                     <div class="lgg-stats">
                         <span>ATRP <b>{{ $card['atrp'] !== null ? number_format($card['atrp'], 1) : '—' }}</b></span>
                         <span>SoLV <b>{{ $card['solv'] !== null ? number_format($card['solv'], 0).'%' : '—' }}</b></span>
@@ -110,24 +137,50 @@
                         <button type="button" class="lgg-close" @click="open = null" aria-label="Close">&times;</button>
                     </div>
                     <div class="lgg-meta">
-                        {{ $card['grid_size'] }}×{{ $card['grid_size'] }} · depth {{ $card['depth_cap'] }} ·
+                        {{ $board['towns'] }} town(s) · depth {{ $card['depth_cap'] }} ·
                         {{ ucfirst($card['status']) }} ·
                         scanned {{ $card['scanned_at'] ? \Illuminate\Support\Carbon::parse($card['scanned_at'])->diffForHumans() : '—' }}
                         @if ($card['prev_scanned_at']) · prev {{ \Illuminate\Support\Carbon::parse($card['prev_scanned_at'])->diffForHumans() }} @endif
                     </div>
 
-                    <div class="lgg-biggrid" style="grid-template-columns:repeat({{ $card['grid_size'] }}, 42px);">
-                        @foreach ($card['matrix'] as $row)
-                            @foreach ($row as $cell)
-                                @php($title = $this->cellTitle($cell))
-                                <div class="lgg-bigcell {{ $cell['rank'] === null ? 'absent' : '' }}"
-                                     style="--abs:{{ $cell['absolute_color'] }};--delta:{{ $cell['delta_color'] }};"
-                                     title="{{ $title }}">
-                                    <span x-show="mode==='absolute'">{{ $cell['rank'] ?? '·' }}</span>
-                                    <span x-show="mode==='delta'" x-cloak>{{ $cell['move'] !== null ? ($cell['move'] > 0 ? '+'.$cell['move'] : $cell['move']) : ($cell['rank'] === null ? '·' : '•') }}</span>
-                                </div>
+                    <svg class="lgg-map lgg-bigmap" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img"
+                         aria-label="Map-pack rank by town, expanded">
+                        @foreach ($card['towns'] as $t)
+                            @if (isset($board['town_paths'][$t['id']]))
+                                @foreach ($board['town_paths'][$t['id']] as $d)
+                                    <path class="lgg-town" d="{{ $d }}" style="--abs:{{ $t['color'] }};--delta:{{ $t['delta_color'] }};"><title>{{ $this->townTitle($t) }}</title></path>
+                                @endforeach
+                            @else
+                                <circle class="lgg-dot" cx="{{ $t['x'] }}" cy="{{ $t['y'] }}" r="1.4" style="--abs:{{ $t['color'] }};--delta:{{ $t['delta_color'] }};"><title>{{ $this->townTitle($t) }}</title></circle>
+                            @endif
+                        @endforeach
+                        @foreach ($board['outlines'] as $o)
+                            @foreach ($o['paths'] as $d)
+                                <path class="lgg-county" d="{{ $d }}" pointer-events="none"><title>{{ $o['label'] }}</title></path>
                             @endforeach
                         @endforeach
+                        {{-- The position itself, over the town it was found in; an absent town carries no number. --}}
+                        @foreach ($card['towns'] as $t)
+                            @if ($t['rank'] !== null)
+                                <text class="lgg-rank" x="{{ $t['x'] }}" y="{{ $t['y'] }}" pointer-events="none"
+                                      x-show="mode==='absolute'">{{ $t['rank'] }}</text>
+                                <text class="lgg-rank" x="{{ $t['x'] }}" y="{{ $t['y'] }}" pointer-events="none"
+                                      x-show="mode==='delta'" x-cloak>{{ $t['move'] !== null ? ($t['move'] > 0 ? '+'.$t['move'] : $t['move']) : '•' }}</text>
+                            @endif
+                        @endforeach
+                    </svg>
+
+                    <div class="lgg-comps" style="margin-top:10px">
+                        <h4>Every town, best position first</h4>
+                        <ul>
+                            @foreach ($card['towns'] as $t)
+                                <li>
+                                    <b style="font-variant-numeric:tabular-nums">{{ $t['rank'] !== null ? '#'.$t['rank'] : ($t['pending'] ? '…' : '—') }}</b>
+                                    {{ $t['label'] }}
+                                    <span>@if ($t['move'] !== null && $t['move'] !== 0)· {{ $t['move'] > 0 ? 'up '.$t['move'] : 'down '.abs($t['move']) }} @endif @if ($t['population'] > 0)· pop {{ number_format($t['population']) }}@endif</span>
+                                </li>
+                            @endforeach
+                        </ul>
                     </div>
 
                     <div class="lgg-legend">

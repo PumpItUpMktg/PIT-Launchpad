@@ -7,6 +7,7 @@ use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use App\TownRank\TownPointLinks;
 use Illuminate\Support\Collection;
 
 /**
@@ -39,27 +40,33 @@ final class GeoGridBoard
      *     }>
      * }
      */
+    public function __construct(private readonly TownAreaMap $map) {}
+
     public function for(Location $location): array
     {
         $scans = GeoGridScan::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $location->site_id)
             ->where('location_id', $location->id)
-            ->where('mode', 'grid')   // the square small-multiples view; coverage-mode scans render elsewhere
+            // Town centres, not a lattice: one Maps search per served town, from that town's own coordinates.
+            ->where('mode', 'coverage')
             ->with('points')
             ->orderByDesc('scanned_at')
             ->get();
 
         $labels = $this->keywordLabels($location, $scans);
+        // The area's drawing frame, built once and shared by every card: county outline, each town's own
+        // boundary, and the projector the website's town map uses — so the same town sits on the same spot.
+        $frame = $this->map->for($location);
 
         $cards = $scans->groupBy('keyword_id')
-            ->map(function (Collection $forKeyword) use ($labels): array {
+            ->map(function (Collection $forKeyword) use ($labels, $frame): array {
                 /** @var GeoGridScan $latest */
                 $latest = $forKeyword->first();
                 $previous = $forKeyword->skip(1)->first();
 
-                return $this->card($latest, $previous, (string) ($labels[$latest->keyword_id] ?? '—'));
+                return $this->card($latest, $previous, (string) ($labels[$latest->keyword_id] ?? '—'), $frame);
             })
-            // Worst ATRP first — the operator wants the weakest keyword's grid to catch the eye.
+            // Worst ATRP first — the operator wants the weakest keyword to catch the eye.
             ->sortByDesc(fn (array $card): float => $card['atrp'] ?? -1)
             ->values()
             ->all();
@@ -67,33 +74,68 @@ final class GeoGridBoard
         return [
             'location_id' => (string) $location->id,
             'keyword_count' => count($cards),
+            'towns' => count($frame['towns']),
+            'outlines' => $frame['outlines'],
+            'counties' => $frame['counties'],
+            'town_paths' => $frame['town_paths'],
             'cards' => $cards,
         ];
     }
 
     /**
+     * @param  array<string, mixed>  $frame
      * @return array{
      *     keyword_id: string, keyword: string, scan_id: string, status: string, scanned_at: ?string,
-     *     grid_size: int, depth_cap: int, atrp: ?float, arp: ?float, solv: ?float, found_rate: ?float,
-     *     delta_atrp: ?float, prev_scanned_at: ?string, matrix: list<list<array<string, mixed>>>
+     *     depth_cap: int, atrp: ?float, arp: ?float, solv: ?float, found_rate: ?float, pop_found_rate: ?float,
+     *     pop_solv: ?float, delta_atrp: ?float, prev_scanned_at: ?string, summary: array<string, int>,
+     *     towns: list<array<string, mixed>>
      * }
      */
-    private function card(GeoGridScan $latest, ?GeoGridScan $previous, string $keyword): array
+    private function card(GeoGridScan $latest, ?GeoGridScan $previous, string $keyword, array $frame): array
     {
-        $gridSize = (int) $latest->grid_size;
-        $depthCap = (int) $latest->depth_cap;
-        $prevByCell = $this->rankByCell($previous);
+        $previousRanks = $previous === null ? [] : $this->ranksByTown($previous, $frame);
+        $towns = [];
+        $summary = ['top3' => 0, 'top7' => 0, 'top10' => 0, 'beyond' => 0, 'absent' => 0, 'pending' => 0];
 
-        // Build the display matrix north-up: display row 0 = northernmost = highest geometry row.
-        $matrix = [];
-        for ($displayRow = 0; $displayRow < $gridSize; $displayRow++) {
-            $geoRow = $gridSize - 1 - $displayRow;
-            $row = [];
-            for ($col = 0; $col < $gridSize; $col++) {
-                $row[] = $this->cell($latest, $geoRow, $col, $prevByCell);
+        foreach (TownPointLinks::byTown($frame['towns'], $latest->points) as $townId => $point) {
+            $id = (string) $townId;
+            $coords = $frame['coords'][$id] ?? null;
+            if ($coords === null) {
+                continue;
             }
-            $matrix[] = $row;
+            $rank = $point->rank !== null ? (int) $point->rank : null;
+            $pending = $point->collected_at === null && $latest->status === 'pending';
+            [$x, $y] = $frame['project']($coords['lat'], $coords['lng']);
+            $prevRank = $previousRanks[$id] ?? null;
+            $town = collect($frame['towns'])->firstWhere('coverage_area_id', $id);
+
+            $summary[match (true) {
+                $pending => 'pending',
+                $rank === null => 'absent',
+                $rank <= 3 => 'top3',
+                $rank <= 7 => 'top7',
+                $rank <= 10 => 'top10',
+                default => 'beyond',
+            }]++;
+
+            $towns[] = [
+                'id' => $id,
+                'label' => (string) ($town['label'] ?? $point->label ?? '—'),
+                'x' => $x,
+                'y' => $y,
+                'rank' => $rank,
+                'prev_rank' => $prevRank,
+                'pending' => $pending,
+                'competitors' => is_array($point->competitors) ? $point->competitors : [],
+                'color' => GeoGridPalette::absolute($rank),
+                'delta_color' => GeoGridPalette::delta($rank, $prevRank),
+                'move' => GeoGridPalette::move($rank, $prevRank),
+                'population' => (int) ($town['population'] ?? 0),
+            ];
         }
+
+        // Best first: the pack positions an operator reads down the list.
+        usort($towns, fn (array $a, array $b): int => [$a['rank'] === null, $a['rank'] ?? 0] <=> [$b['rank'] === null, $b['rank'] ?? 0]);
 
         return [
             'keyword_id' => (string) $latest->keyword_id,
@@ -101,59 +143,31 @@ final class GeoGridBoard
             'scan_id' => (string) $latest->id,
             'status' => (string) $latest->status,
             'scanned_at' => $latest->scanned_at?->toDateTimeString(),
-            'grid_size' => $gridSize,
-            'depth_cap' => $depthCap,
+            'depth_cap' => (int) $latest->depth_cap,
             'atrp' => $this->num($latest->atrp),
             'arp' => $this->num($latest->arp),
             'solv' => $this->num($latest->solv),
             'found_rate' => $this->num($latest->found_rate),
+            'pop_found_rate' => $this->num($latest->pop_found_rate),
+            'pop_solv' => $this->num($latest->pop_solv),
             'delta_atrp' => $this->deltaAtrp($latest, $previous),
             'prev_scanned_at' => $previous?->scanned_at?->toDateTimeString(),
-            'matrix' => $matrix,
+            'summary' => $summary,
+            'towns' => $towns,
         ];
     }
 
     /**
-     * @param  array<string, ?int>  $prevByCell  "row:col" => previous rank
-     * @return array{row:int, col:int, rank:?int, lat:float, lng:float, competitors:list<array<string,mixed>>,
-     *     absolute_color:string, delta_color:string, move:?int}
-     */
-    private function cell(GeoGridScan $latest, int $geoRow, int $col, array $prevByCell): array
-    {
-        $point = $latest->points->first(
-            fn ($p): bool => (int) $p->row === $geoRow && (int) $p->col === $col
-        );
-
-        $rank = $point?->rank !== null ? (int) $point->rank : null;
-        $prevRank = $prevByCell["{$geoRow}:{$col}"] ?? null;
-
-        return [
-            'row' => $geoRow,
-            'col' => $col,
-            'rank' => $rank,
-            'lat' => (float) ($point->lat ?? 0),
-            'lng' => (float) ($point->lng ?? 0),
-            'competitors' => is_array($point?->competitors) ? $point->competitors : [],
-            'absolute_color' => GeoGridPalette::absolute($rank),
-            'delta_color' => GeoGridPalette::delta($rank, $prevRank),
-            'move' => GeoGridPalette::move($rank, $prevRank),
-        ];
-    }
-
-    /**
-     * Previous scan's rank keyed by "row:col", for the per-point delta overlay.
+     * The previous scan's rank per CURRENT town, for the movement colouring.
      *
-     * @return array<string, ?int>
+     * @param  array<string, mixed>  $frame
+     * @return array<string, int|null>
      */
-    private function rankByCell(?GeoGridScan $scan): array
+    private function ranksByTown(GeoGridScan $scan, array $frame): array
     {
-        if ($scan === null) {
-            return [];
-        }
-
         $out = [];
-        foreach ($scan->points as $p) {
-            $out[((int) $p->row).':'.((int) $p->col)] = $p->rank !== null ? (int) $p->rank : null;
+        foreach (TownPointLinks::byTown($frame['towns'], $scan->points) as $townId => $point) {
+            $out[(string) $townId] = $point->rank !== null ? (int) $point->rank : null;
         }
 
         return $out;

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
 use App\GeoGrid\GeoGridBoard;
+use App\GeoGrid\TownAreaMap;
 use App\Models\GeoGridScan;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -14,10 +15,16 @@ use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Url;
 
 /**
- * Geo Grid (operator) — the "small multiples" board for one GBP-backed location: a responsive card wall, one
- * card per grid keyword, each a 7×7 heat-map thumbnail with ATRP / SoLV and a delta chip versus the previous
- * scan. Click a card to expand it to full size with per-point rank + top-3 competitors and scan metadata. The
- * point is reading every keyword's local health at a glance, so it is deliberately NOT a keyword dropdown.
+ * Geo Grid (operator) — the map-pack board for one GBP-backed location: a card wall, one card per keyword,
+ * each a map of the towns this location serves, coloured by the position the profile holds in that town's
+ * map pack, with the position written into the town. Click a card to expand it: the same map at full size,
+ * every town listed best-first, and the competitors seen across them. The point is reading every keyword's
+ * local health at a glance, so it is deliberately NOT a keyword dropdown.
+ *
+ * The geography is the real one — county outline, each town's own boundary, the same projector the website's
+ * town-rank map uses ({@see TownAreaMap}) — so a town sits on the same spot on both maps and
+ * the two can be read side by side. Scans are coverage mode: one Maps search per town from that town's own
+ * coordinates, which replaced the 7×7 lattice (a square of points that answered for no town in particular).
  *
  * Operator-only, internal test build (§ Geo Grid PR 6) — gated strictly to {@see UserRole::Operator} like the
  * sibling GEO consoles, not merely the admin panel's staff default. All assembly is delegated to the testable
@@ -116,17 +123,20 @@ class LocationGeoGrid extends Page
      * competitors at that point. Kept on the page (not the view) so the string-building stays testable-ish
      * and out of the Blade.
      *
-     * @param  array<string, mixed>  $cell
+     * @param  array<string, mixed>  $town
      */
-    public function cellTitle(array $cell): string
+    public function townTitle(array $town): string
     {
-        $rank = $cell['rank'] ?? null;
-        $parts = [$rank !== null ? "Rank {$rank}" : 'Not found'];
-        $parts[] = sprintf('%.5f, %.5f', (float) $cell['lat'], (float) $cell['lng']);
+        $rank = $town['rank'] ?? null;
+        $parts = [(string) ($town['label'] ?? '—')];
+        $parts[] = $rank !== null ? "map pack #{$rank}" : (($town['pending'] ?? false) ? 'still collecting' : 'absent from the pack');
+        if (($town['move'] ?? null) !== null && $town['move'] !== 0) {
+            $parts[] = $town['move'] > 0 ? "up {$town['move']}" : 'down '.abs((int) $town['move']);
+        }
 
         $comps = array_filter(array_map(
             fn (array $c): string => trim(($c['name'] ?? '').(isset($c['rank']) ? " (#{$c['rank']})" : '')),
-            is_array($cell['competitors'] ?? null) ? $cell['competitors'] : []
+            is_array($town['competitors'] ?? null) ? $town['competitors'] : []
         ));
         if ($comps !== []) {
             $parts[] = 'vs '.implode(', ', array_slice($comps, 0, 3));
@@ -136,8 +146,8 @@ class LocationGeoGrid extends Page
     }
 
     /**
-     * Aggregate the top competitors across every point of a card's grid — how often each shows up and its
-     * best rank seen — for the expanded card's competitor panel.
+     * Aggregate the top competitors across every town of a card — how often each shows up and its best rank
+     * seen — for the expanded card's competitor panel.
      *
      * @param  array<string, mixed>  $card
      * @return list<array{name: string, points: int, best: int}>
@@ -145,19 +155,19 @@ class LocationGeoGrid extends Page
     public function topCompetitors(array $card): array
     {
         $tally = [];
-        foreach ($card['matrix'] as $row) {
-            foreach ($row as $cell) {
-                foreach ((is_array($cell['competitors'] ?? null) ? $cell['competitors'] : []) as $c) {
-                    $name = trim((string) ($c['name'] ?? ''));
-                    $rank = $c['rank'] ?? null;
-                    if ($name === '' || $rank === null) {
-                        continue;
-                    }
-                    $tally[$name] ??= ['name' => $name, 'points' => 0, 'best' => PHP_INT_MAX];
-                    $tally[$name]['points']++;
-                    $tally[$name]['best'] = min($tally[$name]['best'], (int) $rank);
+        foreach ($card['towns'] as $cell) {
+
+            foreach ((is_array($cell['competitors'] ?? null) ? $cell['competitors'] : []) as $c) {
+                $name = trim((string) ($c['name'] ?? ''));
+                $rank = $c['rank'] ?? null;
+                if ($name === '' || $rank === null) {
+                    continue;
                 }
+                $tally[$name] ??= ['name' => $name, 'points' => 0, 'best' => PHP_INT_MAX];
+                $tally[$name]['points']++;
+                $tally[$name]['best'] = min($tally[$name]['best'], (int) $rank);
             }
+
         }
 
         $ranked = array_values($tally);

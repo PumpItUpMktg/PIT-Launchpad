@@ -2,13 +2,10 @@
 
 namespace App\TownRank;
 
-use App\GeoGrid\CountyOutlines;
 use App\GeoGrid\CoverageGrid;
 use App\GeoGrid\GeoGridPalette;
-use App\GeoGrid\TownOutlines;
-use App\Integrations\Census\TigerwebGazetteer;
+use App\GeoGrid\TownAreaMap;
 use App\Models\GeoGridScan;
-use App\Models\JobCounty;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -33,8 +30,7 @@ final class ServiceAreas
         private readonly TownRankPoints $points,
         private readonly TownRankBoard $board,
         private readonly TownRankReport $report,
-        private readonly CountyOutlines $outlines,
-        private readonly TownOutlines $townOutlines,
+        private readonly TownAreaMap $map,
     ) {}
 
     /**
@@ -54,9 +50,9 @@ final class ServiceAreas
 
         $geoids = [];
         foreach ($locations as $location) {
-            $geoids = array_merge($geoids, $this->countyGeoIds($location));
+            $geoids = array_merge($geoids, $this->map->countyGeoIds($location));
         }
-        $labels = $this->countyLabels(array_values(array_unique($geoids)));
+        $labels = $this->map->countyLabels(array_values(array_unique($geoids)));
 
         $areas = [];
         foreach ($locations as $location) {
@@ -66,7 +62,7 @@ final class ServiceAreas
                 'name' => (string) $location->name,
                 'city' => $cityState['city'],
                 'state' => $cityState['state'],
-                'counties' => array_map(fn (string $g): array => ['geoid' => $g, 'label' => $labels[$g] ?? "County {$g}"], $this->countyGeoIds($location)),
+                'counties' => array_map(fn (string $g): array => ['geoid' => $g, 'label' => $labels[$g] ?? "County {$g}"], $this->map->countyGeoIds($location)),
                 'towns' => count($townsByLocation[(string) $location->id] ?? []),
                 'keywords' => $keywords,
             ];
@@ -103,7 +99,10 @@ final class ServiceAreas
             return null;
         }
 
-        $areaTowns = $this->coverage->pointsFor($location);
+        // The county outline, each town's own boundary and the shared projector — the same frame the GBP
+        // board draws on, so a town lands on the same spot wherever it is compared ({@see TownAreaMap}).
+        $frame = $this->map->for($location);
+        $areaTowns = $frame['towns'];
         $areaIds = array_fill_keys(array_column($areaTowns, 'coverage_area_id'), true);
         $siteTowns = [];
         foreach ($this->points->forSite($site) as $town) {
@@ -111,35 +110,9 @@ final class ServiceAreas
                 $siteTowns[$town['coverage_area_id']] = $town;
             }
         }
-        $coords = [];
-        foreach ($areaTowns as $town) {
-            $coords[$town['coverage_area_id']] = ['lat' => $town['lat'], 'lng' => $town['lng']];
-        }
-        $countyIds = $this->countyGeoIds($location);
-        $rings = $this->outlines->for($countyIds);
-        // Each town's own boundary, by its GEOID, so the map colours the town's shape rather than a dot; a
-        // town without one (no GEOID, or a shape the Census doesn't return) keeps its dot.
-        $townGeoIds = [];
-        foreach ($siteTowns as $id => $town) {
-            if ($town['geo_id'] !== null && $town['geo_id'] !== '') {
-                $townGeoIds[$id] = (string) $town['geo_id'];
-            }
-        }
-        $townRings = $this->townOutlines->for(array_values($townGeoIds));
-        // The frame is the union of what is drawn — county outlines, town shapes, town centres — so nothing is
-        // clipped; one uniform scale keeps every shape true.
-        $extent = self::unionExtent([
-            self::ringsExtent($rings),
-            self::ringsExtent($townRings),
-            self::pointsExtent($coords),
-        ]);
-        $project = self::projector($extent);
-        $townPaths = [];
-        foreach ($townGeoIds as $id => $geoId) {
-            if (isset($townRings[$geoId])) {
-                $townPaths[(string) $id] = self::paths($townRings[$geoId], $project);
-            }
-        }
+        $coords = $frame['coords'];
+        $project = $frame['project'];
+        $townPaths = $frame['town_paths'];
 
         $cards = [];
         foreach ($this->board->keywords($site) as $entry) {
@@ -165,17 +138,12 @@ final class ServiceAreas
         }
 
         $cityState = $location->cityState();
-        $labels = $this->countyLabels($countyIds);
-        $outlines = [];
-        foreach ($rings as $geoId => $countyRings) {
-            $outlines[] = ['geoid' => (string) $geoId, 'label' => $labels[$geoId] ?? "County {$geoId}", 'paths' => self::paths($countyRings, $project)];
-        }
 
         return [
             'location' => ['location_id' => (string) $location->id, 'name' => (string) $location->name, 'city' => $cityState['city'], 'state' => $cityState['state']],
-            'counties' => array_map(fn (string $g): array => ['geoid' => $g, 'label' => $labels[$g] ?? "County {$g}"], $countyIds),
+            'counties' => $frame['counties'],
             'towns' => count($areaTowns),
-            'outlines' => $outlines,
+            'outlines' => $frame['outlines'],
             'town_paths' => $townPaths,
             'cards' => $cards,
         ];
@@ -325,164 +293,5 @@ final class ServiceAreas
             'population' => $population,
             'page' => $page,
         ];
-    }
-
-    /**
-     * A lat/lng → SVG (0–100 viewBox) projector for one frame: the frame is centred, scaled uniformly (the
-     * longitude span corrected by cos(latitude) so a county keeps its shape) to fit inside 6..94, north up.
-     *
-     * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $extent
-     * @return callable(float, float): array{float, float}
-     */
-    private static function projector(array $extent): callable
-    {
-        $midLat = ($extent['minLat'] + $extent['maxLat']) / 2;
-        $midLng = ($extent['minLng'] + $extent['maxLng']) / 2;
-        $cos = max(0.05, cos(deg2rad($midLat)));
-        $spanX = ($extent['maxLng'] - $extent['minLng']) * $cos;
-        $spanY = $extent['maxLat'] - $extent['minLat'];
-        $span = max($spanX, $spanY);
-        $scale = $span > 0 ? 88 / $span : 0.0;
-
-        return fn (float $lat, float $lng): array => [
-            round(50 + ($lng - $midLng) * $cos * $scale, 2),
-            round(50 - ($lat - $midLat) * $scale, 2),
-        ];
-    }
-
-    /**
-     * SVG path strings (one per ring, closed) for a polygon under the frame's projector.
-     *
-     * @param  list<list<array{lat: float, lng: float}>>  $rings
-     * @param  callable(float, float): array{float, float}  $project
-     * @return list<string>
-     */
-    private static function paths(array $rings, callable $project): array
-    {
-        $paths = [];
-        foreach ($rings as $ring) {
-            $d = '';
-            foreach ($ring as $i => $pt) {
-                [$x, $y] = $project((float) $pt['lat'], (float) $pt['lng']);
-                $d .= ($i === 0 ? 'M' : 'L').$x.' '.$y.' ';
-            }
-            if ($d !== '') {
-                $paths[] = trim($d).' Z';
-            }
-        }
-
-        return $paths;
-    }
-
-    /**
-     * The extent covering every non-empty extent given (an empty one is all-zero and skipped).
-     *
-     * @param  list<array{minLat: float, maxLat: float, minLng: float, maxLng: float}>  $extents
-     * @return array{minLat: float, maxLat: float, minLng: float, maxLng: float}
-     */
-    private static function unionExtent(array $extents): array
-    {
-        $live = array_values(array_filter($extents, fn (array $e): bool => $e !== ['minLat' => 0.0, 'maxLat' => 0.0, 'minLng' => 0.0, 'maxLng' => 0.0]));
-        if ($live === []) {
-            return ['minLat' => 0.0, 'maxLat' => 0.0, 'minLng' => 0.0, 'maxLng' => 0.0];
-        }
-
-        return [
-            'minLat' => min(array_column($live, 'minLat')),
-            'maxLat' => max(array_column($live, 'maxLat')),
-            'minLng' => min(array_column($live, 'minLng')),
-            'maxLng' => max(array_column($live, 'maxLng')),
-        ];
-    }
-
-    /**
-     * @param  array<string, array{lat: float, lng: float}>  $coords
-     * @return array{minLat: float, maxLat: float, minLng: float, maxLng: float}
-     */
-    private static function pointsExtent(array $coords): array
-    {
-        $lats = array_column($coords, 'lat');
-        $lngs = array_column($coords, 'lng');
-        if ($lats === []) {
-            return ['minLat' => 0.0, 'maxLat' => 0.0, 'minLng' => 0.0, 'maxLng' => 0.0];
-        }
-
-        return ['minLat' => min($lats), 'maxLat' => max($lats), 'minLng' => min($lngs), 'maxLng' => max($lngs)];
-    }
-
-    /**
-     * @param  array<string, list<list<array{lat: float, lng: float}>>>  $rings
-     * @return array{minLat: float, maxLat: float, minLng: float, maxLng: float}
-     */
-    private static function ringsExtent(array $rings): array
-    {
-        $lats = [];
-        $lngs = [];
-        foreach ($rings as $countyRings) {
-            foreach ($countyRings as $ring) {
-                foreach ($ring as $pt) {
-                    $lats[] = (float) $pt['lat'];
-                    $lngs[] = (float) $pt['lng'];
-                }
-            }
-        }
-        if ($lats === []) {
-            return ['minLat' => 0.0, 'maxLat' => 0.0, 'minLng' => 0.0, 'maxLng' => 0.0];
-        }
-
-        return ['minLat' => min($lats), 'maxLat' => max($lats), 'minLng' => min($lngs), 'maxLng' => max($lngs)];
-    }
-
-    /**
-     * The 5-digit county GEOIDs the location serves — the same set the coverage grid scans.
-     *
-     * @return list<string>
-     */
-    private function countyGeoIds(Location $location): array
-    {
-        return collect([$location->home_county_geoid])
-            ->merge(is_array($location->county_geoids) ? $location->county_geoids : [])
-            ->map(fn ($g): string => trim((string) $g))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-    }
-
-    /**
-     * "Warren County, NJ" per GEOID: from the county registry when it has the county, else the Census name
-     * that came with the county's outline plus the state read off the GEOID; a county neither knows keeps
-     * its GEOID as the label.
-     *
-     * @param  list<string>  $geoids
-     * @return array<string, string>
-     */
-    private function countyLabels(array $geoids): array
-    {
-        if ($geoids === []) {
-            return [];
-        }
-        $labels = [];
-        foreach (JobCounty::query()->whereIn('county_geoid', $geoids)->get() as $county) {
-            $labels[(string) $county->county_geoid] = self::countyLabel((string) $county->name, $county->state);
-        }
-        $missing = array_values(array_filter($geoids, fn (string $g): bool => ! isset($labels[$g])));
-        if ($missing !== []) {
-            foreach ($this->outlines->names($missing) as $geoId => $name) {
-                $labels[(string) $geoId] = self::countyLabel($name, TigerwebGazetteer::stateForFips((string) $geoId));
-            }
-        }
-
-        return $labels;
-    }
-
-    private static function countyLabel(string $name, ?string $state): string
-    {
-        $name = trim($name);
-        if (! preg_match('/county|parish|borough|census area|municipio/i', $name)) {
-            $name .= ' County';
-        }
-
-        return $name.($state !== null && $state !== '' ? ", {$state}" : '');
     }
 }

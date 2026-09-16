@@ -145,14 +145,18 @@ it('summarizes geo grids for a GBP location and deep-link availability', functio
     $site = Site::factory()->create();
     $location = ldGbpLocation($site);
     $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'grid kw', 'is_grid_keyword' => true]);
+    // Coverage mode: one Maps search per served town, which is what the board reads now.
+    $town = CoverageArea::factory()->create([
+        'site_id' => $site->id, 'name' => 'Hackettstown', 'state' => 'NJ', 'geo_id' => '3404128590',
+        'population' => 10000, 'lat' => 40.7, 'lng' => -74.0, 'source_location_ids' => [$location->id],
+    ]);
     $scan = GeoGridScan::create([
         'site_id' => $site->id, 'location_id' => $location->id, 'keyword_id' => $kw->id, 'provider' => 'dataforseo',
-        'grid_size' => 3, 'spacing_miles' => 1.5, 'center_lat' => 40.7, 'center_lng' => -74.0, 'zoom' => 13,
+        'mode' => 'coverage', 'grid_size' => 1, 'spacing_miles' => 0, 'center_lat' => 40.7, 'center_lng' => -74.0, 'zoom' => 13,
         'depth_cap' => 20, 'atrp' => 7.5, 'solv' => 40, 'found_rate' => 90, 'status' => 'complete', 'scanned_at' => now(),
     ]);
-    foreach (range(0, 8) as $i) {
-        GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'row' => intdiv($i, 3), 'col' => $i % 3, 'lat' => 40.7, 'lng' => -74.0, 'rank' => 5]);
-    }
+    GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'row' => 0, 'col' => 0, 'lat' => 40.7, 'lng' => -74.0, 'rank' => 5,
+        'coverage_area_id' => $town->id, 'geo_id' => $town->geo_id, 'label' => $town->name, 'collected_at' => now()]);
 
     $d = app(LocationDashboard::class)->for($location->fresh());
 
