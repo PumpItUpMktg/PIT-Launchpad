@@ -4,6 +4,7 @@ use App\Enums\UserRole;
 use App\Filament\Pages\ServiceAreasPage;
 use App\Integrations\Census\MockMunicipalityGazetteer;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Jobs\RunCoverageScan;
 use App\Models\CoverageArea;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
@@ -15,6 +16,7 @@ use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 beforeEach(fn () => Filament::setCurrentPanel(Filament::getPanel('admin')));
@@ -64,4 +66,30 @@ it('lists the service areas, opens one to a card per keyword with both maps, and
         ->call('closeArea')
         ->assertSet('locationId', null)
         ->assertDontSee('Google Business Profile');
+});
+
+it('queues a GBP report (coverage scan) for the area\'s location × keyword from the card, and refuses while one is collecting', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer);
+    config(['launchpad.geo_grid.cost_per_request' => 0.002]);
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office', 'lat' => 40.85, 'lng' => -74.83, 'home_county_geoid' => '34041', 'county_geoids' => []]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown', 'state' => 'NJ', 'geo_id' => '3404128590', 'population' => 10000, 'lat' => 40.85, 'lng' => -74.83, 'source_location_ids' => []]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Mansfield', 'state' => 'NJ', 'geo_id' => '3404143440', 'population' => 7000, 'lat' => 40.80, 'lng' => -74.85, 'source_location_ids' => []]);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service', 'track_town_rank' => true]);
+
+    $page = Livewire::test(ServiceAreasPage::class)->set('siteId', $site->id)->call('openArea', $loc->id)
+        ->assertSee('Run GBP report')
+        ->assertSee('2 requests · ~$0.00');   // 2 towns × $0.002, shown to the cent
+
+    $page->call('runGbp', $kw->id);
+    Queue::assertPushed(RunCoverageScan::class, fn (RunCoverageScan $j): bool => $j->locationId === (string) $loc->id && $j->keywordId === (string) $kw->id);
+
+    // A coverage scan now collecting: the button reads Collecting… and a second click queues nothing more.
+    GeoGridScan::create(['site_id' => $site->id, 'location_id' => $loc->id, 'keyword_id' => $kw->id, 'provider' => 'dataforseo', 'mode' => 'coverage', 'grid_size' => 2, 'spacing_miles' => 0, 'center_lat' => 40.85, 'center_lng' => -74.83, 'zoom' => 13, 'depth_cap' => 20, 'status' => 'pending', 'scanned_at' => now()]);
+    Livewire::test(ServiceAreasPage::class)->set('siteId', $site->id)->call('openArea', $loc->id)
+        ->assertSee('Collecting…')
+        ->call('runGbp', $kw->id);
+    Queue::assertPushed(RunCoverageScan::class, 1);
 });

@@ -40,6 +40,9 @@
     .sva .s-legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:var(--s-muted); margin-top:6px; }
     .sva .s-legend b { color:inherit; font-variant-numeric:tabular-nums; }
     .sva .s-when { font-size:11px; color:var(--s-faint); margin-top:4px; }
+    .sva .s-runrow { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:11.5px; color:var(--s-faint); flex-wrap:wrap; }
+    .sva .s-run { font-size:12px; border:1px solid #2563eb; color:#2563eb; background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; }
+    .sva .s-run:disabled { opacity:.55; cursor:default; }
     .sva .s-metrics { border:1px dashed var(--s-line); border-radius:12px; padding:10px 12px; background:var(--s-surface2); }
     .sva .s-metric { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--s-line); }
     .sva .s-metric:last-child { border-bottom:none; }
@@ -152,6 +155,15 @@
                                     </div>
                                     <div class="s-when">{{ $card['gbp']['status'] }} · {{ $when($card['gbp']['scanned_at']) }}</div>
                                 @endif
+                                @php($gr = $card['gbp_run'])
+                                <div class="s-runrow">
+                                    <button type="button" class="s-run" wire:click="runGbp('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="runGbp"
+                                            wire:confirm="Post {{ number_format($gr['requests']) }} DataForSEO Maps requests (~${{ number_format($gr['cost'], 2) }}) for “{{ $card['query'] }}” in {{ $area['location']['name'] }}? One search per town from the town’s coordinates; results collect over the next few minutes."
+                                            @disabled($gr['pending'])>
+                                        {{ $gr['pending'] ? 'Collecting…' : 'Run GBP report' }}
+                                    </button>
+                                    <span>{{ $gr['pending'] ? 'a GBP report is collecting — the column updates as results land' : number_format($gr['requests']).' requests · ~$'.number_format($gr['cost'], 2) }}</span>
+                                </div>
                             </div>
 
                             {{-- Column 3: the scoring slot — provisional shares now, the score once its formula is chosen. --}}

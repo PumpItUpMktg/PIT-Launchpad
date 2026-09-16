@@ -88,6 +88,7 @@ final class ServiceAreas
      *         keyword_id: string, query: string,
      *         web: array{mode: string, status: string|null, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
      *         gbp: array{scan_id: string, status: string, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
+     *         gbp_run: array{requests: int, cost: float, pending: bool},
      *         metrics: list<array{key: string, label: string, value: string|null, note: string}>
      *     }>
      * }|null
@@ -131,6 +132,12 @@ final class ServiceAreas
                 'query' => (string) $keyword->query,
                 'web' => $web,
                 'gbp' => $gbp,
+                // The GBP report is one Maps search per town from the town's own coordinates (a coverage scan).
+                'gbp_run' => [
+                    'requests' => count($areaTowns),
+                    'cost' => round(count($areaTowns) * (float) config('launchpad.geo_grid.cost_per_request', 0.002), 2),
+                    'pending' => $gbp !== null && $gbp['status'] === 'pending',
+                ],
                 'metrics' => $this->metrics(count($areaTowns), $web, $gbp),
             ];
         }
