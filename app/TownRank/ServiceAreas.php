@@ -5,6 +5,7 @@ namespace App\TownRank;
 use App\GeoGrid\CountyOutlines;
 use App\GeoGrid\CoverageGrid;
 use App\GeoGrid\GeoGridPalette;
+use App\Integrations\Census\TigerwebGazetteer;
 use App\Models\GeoGridScan;
 use App\Models\JobCounty;
 use App\Models\Keyword;
@@ -382,8 +383,9 @@ final class ServiceAreas
     }
 
     /**
-     * "Warren County, NJ" per GEOID from the county registry; a county the registry doesn't know keeps its
-     * GEOID as the label.
+     * "Warren County, NJ" per GEOID: from the county registry when it has the county, else the Census name
+     * that came with the county's outline plus the state read off the GEOID; a county neither knows keeps
+     * its GEOID as the label.
      *
      * @param  list<string>  $geoids
      * @return array<string, string>
@@ -395,13 +397,25 @@ final class ServiceAreas
         }
         $labels = [];
         foreach (JobCounty::query()->whereIn('county_geoid', $geoids)->get() as $county) {
-            $name = (string) $county->name;
-            if (! preg_match('/county|parish|borough|census area/i', $name)) {
-                $name .= ' County';
+            $labels[(string) $county->county_geoid] = self::countyLabel((string) $county->name, $county->state);
+        }
+        $missing = array_values(array_filter($geoids, fn (string $g): bool => ! isset($labels[$g])));
+        if ($missing !== []) {
+            foreach ($this->outlines->names($missing) as $geoId => $name) {
+                $labels[(string) $geoId] = self::countyLabel($name, TigerwebGazetteer::stateForFips((string) $geoId));
             }
-            $labels[(string) $county->county_geoid] = $name.($county->state !== null && $county->state !== '' ? ", {$county->state}" : '');
         }
 
         return $labels;
+    }
+
+    private static function countyLabel(string $name, ?string $state): string
+    {
+        $name = trim($name);
+        if (! preg_match('/county|parish|borough|census area|municipio/i', $name)) {
+            $name .= ' County';
+        }
+
+        return $name.($state !== null && $state !== '' ? ", {$state}" : '');
     }
 }

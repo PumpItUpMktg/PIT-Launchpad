@@ -1,6 +1,7 @@
 <?php
 
 use App\GeoGrid\CountyOutlines;
+use App\Integrations\Census\County;
 use App\Integrations\Census\MockMunicipalityGazetteer;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\CoverageArea;
@@ -165,4 +166,24 @@ it('frames the map to the towns and draws no outline when the gazetteer has no b
     expect($area['outlines'])->toBe([])
         ->and($area['cards'][0]['web']['markers'][0]['x'])->toBe(50.0)   // a single town: centred
         ->and($area['cards'][0]['web']['markers'][0]['y'])->toBe(50.0);
+});
+
+it('labels a served county the registry lacks from the Census outline name plus the state on its GEOID, and keeps the GEOID when neither knows it', function () {
+    $f = serviceAreaSite();
+    // Warren also serves Morris (34027): no registry row, but the gazetteer returns its outline and name.
+    // 34099 is served too and known to nobody.
+    $f['warren']->forceFill(['county_geoids' => ['34027', '34099']])->save();
+    app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer(
+        counties: [new County('34027', 'Morris County', '34', '027')],
+        polygons: [
+            '34041' => [[['lat' => 40.95, 'lng' => -74.95], ['lat' => 40.95, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.95]]],
+            '34027' => [[['lat' => 41.05, 'lng' => -74.75], ['lat' => 41.05, 'lng' => -74.45], ['lat' => 40.75, 'lng' => -74.45], ['lat' => 40.75, 'lng' => -74.75]]],
+        ],
+    ));
+
+    $labels = collect(app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['counties'])->pluck('label', 'geoid')->all();
+    expect($labels)->toBe(['34041' => 'Warren County, NJ', '34027' => 'Morris County, NJ', '34099' => 'County 34099']);
+
+    $list = collect(app(ServiceAreas::class)->areas($f['site']))->firstWhere('name', 'Hackettstown office');
+    expect(collect($list['counties'])->pluck('label')->all())->toBe(['Warren County, NJ', 'Morris County, NJ', 'County 34099']);
 });
