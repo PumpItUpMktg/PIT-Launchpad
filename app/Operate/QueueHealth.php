@@ -10,6 +10,7 @@ use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\Content;
 use App\Models\QueueWorker;
 use App\Models\Scopes\SiteScope;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -38,7 +39,7 @@ final class QueueHealth
     public const BUSY_GRACE_MINUTES = 20;
 
     /**
-     * @return array{pending: int, oldest_minutes: int, failed: int, processing: int, draining: bool, worker_down: bool, stalled: bool, lanes: list<array{queue: string, pending: int, reserved: int, oldest_minutes: int, expected: bool, workers: list<string>, alive: bool, busy: ?string, down: bool}>, silent_lanes: list<string>}
+     * @return array{connection: string, maintenance: bool, driver: string, pending: int, oldest_minutes: int, failed: int, processing: int, draining: bool, worker_down: bool, stalled: bool, lanes: list<array{queue: string, pending: int, reserved: int, oldest_minutes: int, expected: bool, workers: list<string>, alive: bool, busy: ?string, down: bool}>, silent_lanes: list<string>}
      */
     public function snapshot(int $stalledAfterMinutes = 5): array
     {
@@ -76,6 +77,11 @@ final class QueueHealth
         $busy = array_filter($lanes, fn (array $l): bool => $l['busy'] !== null) !== [];
 
         return [
+            'connection' => self::appConnection(),
+            // A queue:work daemon PAUSES while the app is down for maintenance, and keeps firing its loop
+            // (so it keeps heartbeating) — live, idle, consuming nothing, over a growing backlog.
+            'maintenance' => App::isDownForMaintenance(),
+            'driver' => (string) config('queue.connections.'.self::appConnection().'.driver', ''),
             'pending' => $pending,
             'oldest_minutes' => $oldestMinutes,
             'failed' => $failed,
@@ -136,7 +142,7 @@ final class QueueHealth
     /**
      * Every worker that has reported in the retention window, freshest first, with its liveness resolved.
      *
-     * @return list<array{worker_id: string, hostname: string, pid: int, queues: string, lanes: list<string>, started_at: string, last_seen_at: string, seconds_since_seen: int, current_job: ?string, current_queue: ?string, job_seconds: ?int, jobs_processed: int, jobs_failed: int, memory_mb: int, stopped_at: ?string, stop_reason: ?string, alive: bool, state: string}>
+     * @return list<array{worker_id: string, hostname: string, pid: int, connection: string, connection_ok: bool, queues: string, lanes: list<string>, started_at: string, last_seen_at: string, seconds_since_seen: int, current_job: ?string, current_queue: ?string, job_seconds: ?int, jobs_processed: int, jobs_failed: int, memory_mb: int, stopped_at: ?string, stop_reason: ?string, alive: bool, state: string}>
      */
     public function workers(): array
     {
@@ -161,6 +167,11 @@ final class QueueHealth
                     'worker_id' => $w->worker_id,
                     'hostname' => $w->hostname,
                     'pid' => $w->pid,
+                    'connection' => (string) $w->connection,
+                    // The queue the app ENQUEUES on vs the one this process POLLS: a worker started against a
+                    // different connection (or a driver that holds nothing, like `sync`) loops forever, idle,
+                    // while the jobs sit untouched — live, healthy, and reading the wrong place.
+                    'connection_ok' => self::connectionPolls((string) $w->connection),
                     'queues' => (string) $w->queues,
                     'lanes' => $w->lanes(),
                     'started_at' => $w->started_at->toDateTimeString(),
@@ -202,6 +213,26 @@ final class QueueHealth
         }
 
         return array_values(array_unique($lanes));
+    }
+
+    /** The connection the app enqueues on — the one whose tables this page reads. */
+    public static function appConnection(): string
+    {
+        return (string) config('queue.default', 'database');
+    }
+
+    /**
+     * Whether a worker started on this connection can pick up the jobs the app enqueues: the same connection,
+     * and a driver that actually holds a backlog (`sync` and `null` run or discard a job inline, so a worker
+     * polling one finds nothing forever).
+     */
+    public static function connectionPolls(string $connection): bool
+    {
+        if ($connection === '' || $connection !== self::appConnection()) {
+            return false;
+        }
+
+        return ! in_array((string) config('queue.connections.'.$connection.'.driver', ''), ['sync', 'null'], true);
     }
 
     private static function basename(string $class): string

@@ -5,6 +5,7 @@ use App\Filament\Pages\QueueBoard;
 use App\Models\QueueWorker;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 
@@ -48,4 +49,39 @@ it('clears failed jobs from the page', function () {
         ->assertDontSee('WP 401');
 
     expect(DB::table('failed_jobs')->count())->toBe(0);
+});
+
+it('calls out a live worker that is polling a connection which does not hold these jobs', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    config(['queue.default' => 'database']);
+    DB::table('jobs')->insert(['queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null, 'available_at' => time() - 600, 'created_at' => time() - 600]);
+    // Alive, heartbeating, zero jobs done — because it is polling the `sync` connection, which never holds one.
+    QueueWorker::create(['worker_id' => 'web#20', 'hostname' => 'web', 'pid' => 20, 'connection' => 'sync', 'queues' => 'default', 'started_at' => now()->subHour(), 'last_seen_at' => now(), 'jobs_processed' => 0]);
+
+    Livewire::test(QueueBoard::class)
+        ->assertSee('polling a queue connection that does not hold these jobs')
+        ->assertSee('web#20')
+        ->assertSee('wrong connection')
+        ->assertSee('This app enqueues on')
+        ->assertSeeHtml('<code>database</code>');
+});
+
+it('does not call out a worker on the app\'s own connection', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    config(['queue.default' => 'database']);
+    QueueWorker::create(['worker_id' => 'web#21', 'hostname' => 'web', 'pid' => 21, 'connection' => 'database', 'queues' => 'default', 'started_at' => now()->subHour(), 'last_seen_at' => now()]);
+
+    Livewire::test(QueueBoard::class)
+        ->assertDontSee('polling a queue connection that does not hold these jobs')
+        ->assertDontSee('wrong connection');
+});
+
+it('says so when maintenance mode is pausing every worker', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    App::shouldReceive('isDownForMaintenance')->andReturn(true);
+    QueueWorker::create(['worker_id' => 'web#22', 'hostname' => 'web', 'pid' => 22, 'connection' => 'database', 'queues' => 'default', 'started_at' => now()->subHour(), 'last_seen_at' => now()]);
+
+    Livewire::test(QueueBoard::class)
+        ->assertSee('maintenance mode')
+        ->assertSee('keep heartbeating and consume nothing');
 });
