@@ -18,6 +18,7 @@ use App\Filament\Pages\Operate\OperateLive;
 use App\Filament\Pages\Operate\OperatePages;
 use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
+use App\Filament\Pages\QueueBoard;
 use App\Filament\Pages\RankingsBoard;
 use App\Filament\Pages\ServiceAreasPage;
 use App\Filament\Pages\TownRankPage;
@@ -90,6 +91,7 @@ class ConsoleNav
                 ['label' => 'Brand', 'surface' => BrandBoard::class, 'soon' => false],
                 ['label' => 'Voice', 'surface' => VoiceProfileResource::class, 'soon' => false],
                 ['label' => 'Users', 'surface' => UsersBoard::class, 'soon' => false],
+                ['label' => 'Queue', 'surface' => QueueBoard::class, 'soon' => false],
                 ['label' => 'Recover', 'surface' => RebuildReadiness::class, 'soon' => false],
             ]],
         ];

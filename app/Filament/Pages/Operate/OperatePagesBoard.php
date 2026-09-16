@@ -79,7 +79,7 @@ abstract class OperatePagesBoard extends OperatePage
      * surface it here with the inline-drain escape hatch instead. Carries the tenant brand for the
      * `launchpad:drain-publish` hint.
      *
-     * @return array{pending: int, oldest_minutes: int, failed: int, processing: int, draining: bool, worker_down: bool, stalled: bool, brand: string, failures: list<array{job: string, reason: string, count: int, last: string, pages: list<string>}>}
+     * @return array<string, mixed> the {@see QueueHealth::snapshot()} shape plus `brand` and `failures`
      */
     public function getQueueHealthProperty(): array
     {
