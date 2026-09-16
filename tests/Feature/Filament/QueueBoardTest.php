@@ -85,3 +85,17 @@ it('says so when maintenance mode is pausing every worker', function () {
         ->assertSee('maintenance mode')
         ->assertSee('keep heartbeating and consume nothing');
 });
+
+it('names a live worker waiting on a lane whose name carries a space', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    config(['queue.default' => 'database']);
+    DB::table('jobs')->insert(['queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'reserved_at' => null, 'available_at' => time() - 600, 'created_at' => time() - 600]);
+    QueueWorker::create(['worker_id' => 'web#30', 'hostname' => 'web', 'pid' => 30, 'connection' => 'database', 'queues' => 'high, default', 'started_at' => now()->subHour(), 'last_seen_at' => now()]);
+
+    Livewire::test(QueueBoard::class)
+        ->assertSee('waiting on a lane name that carries a')
+        ->assertSee('web#30')
+        ->assertSee('Remove the space from the process command')
+        ->assertSee('␣default')                               // the lane, with the space made visible
+        ->assertSee('Down — jobs waiting, no worker');         // and `default` correctly reads unlistened
+});

@@ -142,7 +142,7 @@ final class QueueHealth
     /**
      * Every worker that has reported in the retention window, freshest first, with its liveness resolved.
      *
-     * @return list<array{worker_id: string, hostname: string, pid: int, connection: string, connection_ok: bool, queues: string, lanes: list<string>, started_at: string, last_seen_at: string, seconds_since_seen: int, current_job: ?string, current_queue: ?string, job_seconds: ?int, jobs_processed: int, jobs_failed: int, memory_mb: int, stopped_at: ?string, stop_reason: ?string, alive: bool, state: string}>
+     * @return list<array{worker_id: string, hostname: string, pid: int, connection: string, connection_ok: bool, whitespace_lanes: list<string>, queues: string, lanes: list<string>, started_at: string, last_seen_at: string, seconds_since_seen: int, current_job: ?string, current_queue: ?string, job_seconds: ?int, jobs_processed: int, jobs_failed: int, memory_mb: int, stopped_at: ?string, stop_reason: ?string, alive: bool, state: string}>
      */
     public function workers(): array
     {
@@ -168,6 +168,10 @@ final class QueueHealth
                     'hostname' => $w->hostname,
                     'pid' => $w->pid,
                     'connection' => (string) $w->connection,
+                    // Lane names as the process actually polls them, and any that carry whitespace: a space
+                    // after a comma in --queue makes a lane nothing enqueues to, and the worker waits on it
+                    // forever while the real lane grows.
+                    'whitespace_lanes' => $w->whitespaceLanes(),
                     // The queue the app ENQUEUES on vs the one this process POLLS: a worker started against a
                     // different connection (or a driver that holds nothing, like `sync`) loops forever, idle,
                     // while the jobs sit untouched — live, healthy, and reading the wrong place.

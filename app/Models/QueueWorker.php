@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Operate\WorkerHeartbeat;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\Worker;
 use Illuminate\Support\Carbon;
 
 /**
@@ -50,9 +51,28 @@ class QueueWorker extends Model
         ];
     }
 
-    /** The lanes this worker polls, in the order it polls them. @return list<string> */
+    /**
+     * The lanes this worker polls, in the order it polls them — VERBATIM, never trimmed.
+     *
+     * `queue:work` splits its --queue argument on commas and does not trim the parts
+     * ({@see Worker::getNextJob()}: `explode(',', $queue)`), so `--queue=high, default`
+     * polls `high` and ` default` — and a lane named with a leading space is one nothing ever enqueues to.
+     * Trimming here would quietly "correct" the name and hide exactly the fault worth seeing.
+     *
+     * @return list<string>
+     */
     public function lanes(): array
     {
-        return array_values(array_filter(array_map('trim', explode(',', (string) $this->queues)), fn (string $q): bool => $q !== ''));
+        return array_values(array_filter(explode(',', (string) $this->queues), fn (string $q): bool => $q !== ''));
+    }
+
+    /**
+     * The lanes whose name carries surrounding whitespace — polled as written, matching nothing.
+     *
+     * @return list<string>
+     */
+    public function whitespaceLanes(): array
+    {
+        return array_values(array_filter($this->lanes(), fn (string $q): bool => $q !== trim($q)));
     }
 }
