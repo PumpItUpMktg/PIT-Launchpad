@@ -438,10 +438,10 @@ return [
         'queue' => env('LAUNCHPAD_GEO_GRID_QUEUE'),
         // Coverage scans are POSTED by one fast job, then COLLECTED incrementally by the IngestCoverageScans
         // sweep so a 100+ town county never overruns a single job's timeout. `ingest_batch` caps the task_get
-        // calls per sweep run (rate-limited at ~12/min, so the sweep job stays well inside its timeout); the
-        // remainder is collected on the next run. `pending_expiry_hours` finalizes a scan as `partial` if some
-        // tasks never became ready, so it can't sit pending forever.
-        'ingest_batch' => (int) env('LAUNCHPAD_GEO_GRID_INGEST_BATCH', 40),
+        // calls per sweep run — reads run under `services.dataforseo.read_rate_limit_per_min` (600/min), so
+        // 500 fits in under a minute and a 72-town GBP report lands in one run; the remainder is collected on
+        // the next run. `pending_expiry_hours` finalizes a scan as `partial` if some tasks never became ready.
+        'ingest_batch' => (int) env('LAUNCHPAD_GEO_GRID_INGEST_BATCH', 500),
         'pending_expiry_hours' => (int) env('LAUNCHPAD_GEO_GRID_PENDING_EXPIRY_HOURS', 24),
         // The coverage-plan keyword dropdown offers each silo's buyer-intent keywords (everything except
         // informational longtails), opportunity-ranked and capped to this many per silo — the main

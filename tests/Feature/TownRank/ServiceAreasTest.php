@@ -97,6 +97,11 @@ it('builds an area page: one card per keyword with the website map sliced to the
     $gbpHack = collect($gbp['markers'])->firstWhere('id', (string) $f['hack']->id);
     expect([$webHack['x'], $webHack['y']])->toBe([$gbpHack['x'], $gbpHack['y']]);
 
+    // The GBP report estimate: one Maps request per area town, priced at the geo-grid rate; nothing collecting.
+    config(['launchpad.geo_grid.cost_per_request' => 0.002]);
+    $fresh = app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['cards'][0];
+    expect($fresh['gbp_run'])->toBe(['requests' => 2, 'cost' => 0.0, 'pending' => false]);
+
     // Metrics: provisional shares now, the score itself explicitly undefined.
     $metrics = collect($card['metrics'])->keyBy('key');
     expect($metrics['web_page1_share']['value'])->toBe('50%')

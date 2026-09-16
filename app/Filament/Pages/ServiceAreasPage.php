@@ -3,20 +3,27 @@
 namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
+use App\Jobs\RunCoverageScan;
+use App\Models\GeoGridScan;
+use App\Models\Keyword;
+use App\Models\Location;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\TownRank\ServiceAreas;
 use BackedEnum;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Url;
 
 /**
  * Service Areas (§ Town Rank): one page per GBP service area — a physical location and the counties it
  * serves. The list is one card per area; an area opens to one card per tracked keyword with the website's
  * town-rank map and the GBP's map-pack map side by side over the same towns, and a metrics slot for the
- * scoring the operator will define once the data has been seen. Read-only: scans are run from Town Rank
- * (website) and the coverage plans (GBP).
+ * scoring the operator will define once the data has been seen. Website scans are run from Town Rank; the
+ * GBP report (one Maps search per town from the town's coordinates — a coverage scan) runs from the card.
  *
  * @property-read list<array<string, mixed>> $areas
  * @property-read array<string, mixed>|null $area
@@ -63,6 +70,37 @@ class ServiceAreasPage extends Page
     public function closeArea(): void
     {
         $this->locationId = null;
+    }
+
+    /**
+     * "Run GBP report" on a card: post one coverage-mode geo-grid scan for this area's location × keyword
+     * (the same scan the coverage plans run), unless one is already collecting. Results land through the
+     * IngestCoverageScans sweep; the card's GBP column fills as they do.
+     */
+    public function runGbp(string $keywordId): void
+    {
+        $site = $this->site();
+        $location = $site === null || $this->locationId === null ? null
+            : Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($this->locationId)->first();
+        $keyword = $site === null ? null : Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($keywordId)->first();
+        if ($site === null || $location === null || $keyword === null) {
+            return;
+        }
+
+        $latest = GeoGridScan::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('location_id', $location->id)->where('keyword_id', $keyword->id)->where('mode', 'coverage')
+            ->orderByDesc('scanned_at')->first();
+        if ($latest !== null && $latest->status === 'pending') {
+            Notification::make()->warning()->title('Not queued')->body('A GBP report is already collecting for this keyword here — results land within a few minutes.')->send();
+
+            return;
+        }
+
+        RunCoverageScan::dispatch((string) $location->id, (string) $keyword->id);
+        Log::info('Service areas: GBP report queued.', ['site_id' => $site->id, 'location_id' => $location->id, 'keyword_id' => $keyword->id, 'query' => (string) $keyword->query]);
+        Notification::make()->success()
+            ->title(sprintf('Posting the GBP report for “%s” in %s', $keyword->query, $location->name))
+            ->body('One Maps search per town from the town’s coordinates; the card fills in as results land.')->send();
     }
 
     /** @return list<array<string, mixed>> */

@@ -28,8 +28,8 @@ class IngestCoverageScans implements ShouldQueue
 {
     use Queueable;
 
-    /** Fits the shared task_get budget (rate-limited ~12/min) comfortably inside one run. */
-    public int $timeout = 300;
+    /** Under the five-minute schedule; the batch (500 reads at 600/min) takes well under a minute. */
+    public int $timeout = 280;
 
     public int $tries = 1;
 
