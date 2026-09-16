@@ -6,6 +6,7 @@ use App\GeoGrid\GeoGridMetrics;
 use App\GeoGrid\GeoGridScanner;
 use App\Models\GeoGridScan;
 use App\Models\Scopes\SiteScope;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Carbon;
@@ -24,8 +25,11 @@ use Illuminate\Support\Carbon;
  *
  * Cross-tenant sweep, so {@see SiteScope} is dropped.
  */
-class IngestCoverageScans implements ShouldQueue
+class IngestCoverageScans implements ShouldBeUnique, ShouldQueue
 {
+    /** One at a time: a duplicate dispatch (a second scheduler, a stacked tick) is dropped, not queued. */
+    public int $uniqueFor = 300;
+
     use Queueable;
 
     /** Under the five-minute schedule; the batch (500 reads at 600/min) takes well under a minute. */

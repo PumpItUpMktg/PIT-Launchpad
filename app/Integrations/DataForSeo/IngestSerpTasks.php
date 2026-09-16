@@ -7,6 +7,7 @@ use App\Integrations\Serp\SerpResult;
 use App\Integrations\Serp\SerpResultSet;
 use App\Models\SerpTask;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;
@@ -23,8 +24,11 @@ use Throwable;
  * expiry window is marked `failed` ("expired"). Both states are retained on the
  * SerpTask row for §5 / operators to see.
  */
-class IngestSerpTasks implements ShouldQueue
+class IngestSerpTasks implements ShouldBeUnique, ShouldQueue
 {
+    /** One at a time: a duplicate dispatch (a second scheduler, a stacked tick) is dropped, not queued. */
+    public int $uniqueFor = 300;
+
     use Queueable;
 
     /** Pending tasks older than this (hours) with no result are expired. */
