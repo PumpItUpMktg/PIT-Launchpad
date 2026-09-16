@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $row
  * @property int $col
  * @property string|null $coverage_area_id the town this point measures (coverage mode); null in grid mode
+ * @property string|null $geo_id the town's Census GEOID — its durable identity across a coverage rebuild
  * @property string|null $label town name (coverage mode)
  * @property float $lat
  * @property float $lng

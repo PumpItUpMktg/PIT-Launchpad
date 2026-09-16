@@ -305,8 +305,9 @@ final class TownRankBoard
             return null;
         }
 
-        return TownRankPoint::withoutGlobalScope(SiteScope::class)
-            ->where('scan_id', $scanId)->where('coverage_area_id', $coverageAreaId)->first();
+        // Linked, not keyed: after a coverage rebuild the stored row id no longer matches this town.
+        return TownPointLinks::byTown($this->points->forSite($site), TownRankPoint::withoutGlobalScope(SiteScope::class)
+            ->where('scan_id', $scanId)->get())->get($coverageAreaId);
     }
 
     private function mapScanned(Site $site, Keyword $keyword): bool

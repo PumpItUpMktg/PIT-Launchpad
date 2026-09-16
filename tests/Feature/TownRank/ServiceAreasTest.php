@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\TownRank\ServiceAreas;
+use App\TownRank\TownRankPoints;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -216,4 +217,34 @@ it('gives a town its own boundary shape under the frame\'s projector, and no sha
 
     // Cached per town, so the next page view doesn't ask the gazetteer again.
     expect(Cache::get('lp.town_outline.3404128590'))->toBeArray();
+});
+
+it('keeps BOTH maps on a service area after a coverage rebuild replaced every town row id', function () {
+    $f = serviceAreaSite();
+    $before = app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['cards'][0];
+    expect(collect($before['web']['markers'])->whereNotNull('rank'))->toHaveCount(1)
+        ->and(collect($before['gbp']['markers'])->whereNotNull('rank'))->toHaveCount(1);
+
+    // The rebuild CoverageWriter performs: every computed town row deleted and re-inserted, same GEOIDs,
+    // brand-new ids. The stored scan points keep pointing at the ids that are now gone.
+    $rebuilt = [];
+    foreach ([$f['hack'], $f['mans'], $f['beth']] as $area) {
+        $attrs = $area->only(['site_id', 'name', 'state', 'geo_id', 'population', 'lat', 'lng', 'source_location_ids']);
+        $area->delete();
+        $rebuilt[$attrs['name']] = CoverageArea::factory()->create($attrs);
+    }
+    app(TownRankPoints::class)->forget();
+    Cache::flush();
+
+    $after = app(ServiceAreas::class)->area($f['site'], $f['warren']->id);
+    $card = $after['cards'][0];
+
+    // Website map: Hackettstown still #2, Mansfield still the known miss — on the NEW town ids.
+    expect(collect($card['web']['markers'])->pluck('rank', 'id')->all())
+        ->toBe([(string) $rebuilt['Hackettstown']->id => 2, (string) $rebuilt['Mansfield']->id => null])
+        ->and($card['web']['summary']['top3'])->toBe(1)
+        // GBP map: the map-pack rank survives the same way.
+        ->and(collect($card['gbp']['markers'])->pluck('rank', 'id')->all())
+        ->toBe([(string) $rebuilt['Hackettstown']->id => 1, (string) $rebuilt['Mansfield']->id => null])
+        ->and($card['gbp']['summary'])->toMatchArray(['top3' => 1, 'absent' => 1]);
 });
