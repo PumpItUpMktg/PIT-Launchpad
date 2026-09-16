@@ -23,7 +23,7 @@ final class CoverageGrid
     /**
      * The location's county towns as scan points, population-descending (highest-value first).
      *
-     * @return list<array{coverage_area_id: string, label: string, lat: float, lng: float, population: int}>
+     * @return list<array{coverage_area_id: string, geo_id: string, label: string, lat: float, lng: float, population: int}>
      */
     public function pointsFor(Location $location): array
     {
@@ -36,7 +36,7 @@ final class CoverageGrid
      * full area load per location. Each location's list is identical to what {@see pointsFor()} returns.
      *
      * @param  iterable<Location>  $locations
-     * @return array<string, list<array{coverage_area_id: string, label: string, lat: float, lng: float, population: int}>>
+     * @return array<string, list<array{coverage_area_id: string, geo_id: string, label: string, lat: float, lng: float, population: int}>>
      */
     public function pointsForMany(iterable $locations): array
     {
@@ -58,6 +58,8 @@ final class CoverageGrid
                 ->map(fn (CoverageArea $area): array => [
                     'point' => [
                         'coverage_area_id' => (string) $area->id,
+                        // The town's durable identity: the row id above is replaced on every coverage rebuild.
+                        'geo_id' => (string) $area->geo_id,
                         'label' => (string) $area->name,
                         'lat' => (float) $area->lat,
                         'lng' => (float) $area->lng,

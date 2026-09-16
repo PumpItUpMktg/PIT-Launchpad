@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string $site_id
  * @property string $scan_id
  * @property string|null $coverage_area_id
+ * @property string|null $geo_id the town's Census GEOID — its durable identity across a coverage rebuild
  * @property string $label
  * @property string|null $state
  * @property float $lat

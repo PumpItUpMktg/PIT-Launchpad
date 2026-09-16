@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToSite;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
@@ -59,6 +60,12 @@ class GeoGridScan extends Model
             'pop_solv' => 'decimal:2',
             'scanned_at' => 'datetime',
         ];
+    }
+
+    /** @return BelongsTo<Keyword, $this> */
+    public function keyword(): BelongsTo
+    {
+        return $this->belongsTo(Keyword::class)->withoutGlobalScopes();
     }
 
     /** @return HasMany<GeoGridPoint, $this> */

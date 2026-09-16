@@ -32,6 +32,9 @@ final class TownRankReport
      */
     public function forKeyword(Site $site, Keyword $keyword): array
     {
+        // The town list first: a scan's points are linked to the towns that exist NOW (a coverage rebuild
+        // gives every town a new row id, which would otherwise orphan every point — see TownPointLinks).
+        $towns = $this->points->forSite($site);
         $scans = [];
         $pointsByMode = [];
         $prevByMode = [];
@@ -48,7 +51,7 @@ final class TownRankReport
                 ->where('scanned_at', '<=', $scan->scanned_at)
                 ->orderByDesc('scanned_at')->first();
             $rawPoints = $scan === null ? collect() : $scan->points()->get();
-            $points = $rawPoints->keyBy('coverage_area_id');
+            $points = TownPointLinks::byTown($towns, $rawPoints);
             $scans[$mode] = $scan === null ? null : [
                 'id' => (string) $scan->id,
                 'status' => $scan->status,
@@ -59,10 +62,10 @@ final class TownRankReport
                 'previous_scanned_at' => $previous?->scanned_at?->toDateTimeString(),
             ];
             $pointsByMode[$mode] = $points;
-            $prevByMode[$mode] = $previous === null ? null : $previous->points()->get()->keyBy('coverage_area_id');
+            $prevByMode[$mode] = $previous === null ? null : TownPointLinks::byTown($towns, $previous->points()->get());
         }
 
-        $mapRanks = $this->mapPackRanks($site, $keyword);
+        $mapRanks = $this->mapPackRanks($site, $keyword, $towns);
 
         $rows = [];
         $summary = [];
@@ -70,7 +73,7 @@ final class TownRankReport
             $summary[$mode] = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'pending' => 0, 'up' => 0, 'down' => 0, 'new' => 0, 'lost' => 0, 'same' => 0];
         }
 
-        foreach ($this->points->forSite($site) as $town) {
+        foreach ($towns as $town) {
             $row = [
                 'coverage_area_id' => $town['coverage_area_id'],
                 'label' => $town['label'],
@@ -153,9 +156,10 @@ final class TownRankReport
      * The GBP's map-pack rank per town from the latest coverage-mode geo-grid scan for this keyword (any
      * location — a town belongs to the scan of whichever location serves it; the newest wins).
      *
+     * @param  list<array<string, mixed>>  $towns  the site's town list, to link each scan point to its town
      * @return array<string, int|null> coverage_area_id => rank
      */
-    private function mapPackRanks(Site $site, Keyword $keyword): array
+    private function mapPackRanks(Site $site, Keyword $keyword, array $towns): array
     {
         $scans = GeoGridScan::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', 'coverage')
@@ -166,9 +170,8 @@ final class TownRankReport
 
         $ranks = [];
         foreach ($scans as $scan) {
-            foreach ($scan->points as $point) {
-                $areaId = $point->coverage_area_id;
-                if (is_string($areaId) && ! array_key_exists($areaId, $ranks)) {
+            foreach (TownPointLinks::byTown($towns, $scan->points) as $areaId => $point) {
+                if (! array_key_exists($areaId, $ranks)) {
                     $ranks[$areaId] = $point->rank;
                 }
             }

@@ -80,6 +80,7 @@ final class GeoGridScanner
                 'lat' => $town['lat'],
                 'lng' => $town['lng'],
                 'coverage_area_id' => $town['coverage_area_id'],
+                'geo_id' => $town['geo_id'],
                 'label' => $town['label'],
             ];
         }
@@ -98,7 +99,7 @@ final class GeoGridScanner
      * place_id/CID, and persist the {@see GeoGridScan} header + one {@see GeoGridPoint} per point (carrying
      * whatever identity the point has — grid row/col or a coverage_area_id/label).
      *
-     * @param  list<array{row: int, col: int, lat: float, lng: float, coverage_area_id?: string, label?: string}>  $points
+     * @param  list<array{row: int, col: int, lat: float, lng: float, coverage_area_id?: string, geo_id?: string|null, label?: string}>  $points
      * @param  array{mode: string, grid_size: int, spacing_miles: float, center_lat: float, center_lng: float}  $header
      */
     private function runScan(Location $location, Keyword $keyword, array $points, array $header): GeoGridScan
@@ -152,6 +153,7 @@ final class GeoGridScanner
                     'competitors' => $found['competitors'] ?? null,
                     'provider_task_id' => $indexToTaskId[$i] ?? null,
                     'coverage_area_id' => $p['coverage_area_id'] ?? null,
+                    'geo_id' => $p['geo_id'] ?? null,
                     'label' => $p['label'] ?? null,
                 ]);
             }
@@ -177,6 +179,7 @@ final class GeoGridScanner
                 'lat' => $town['lat'],
                 'lng' => $town['lng'],
                 'coverage_area_id' => $town['coverage_area_id'],
+                'geo_id' => $town['geo_id'],
                 'label' => $town['label'],
             ];
         }
@@ -215,6 +218,7 @@ final class GeoGridScanner
                     'provider_task_id' => $taskIds[$i] ?? null,
                     'collected_at' => null,       // null = still awaiting its task result
                     'coverage_area_id' => $p['coverage_area_id'],
+                    'geo_id' => $p['geo_id'],
                     'label' => $p['label'],
                 ]);
             }

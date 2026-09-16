@@ -108,6 +108,8 @@ final class TownRankScanner
                     'site_id' => $site->id,
                     'scan_id' => $scan->id,
                     'coverage_area_id' => $town['coverage_area_id'],
+                    // The town's durable identity: the row id above is dropped by a coverage rebuild.
+                    'geo_id' => $town['geo_id'] ?? null,
                     'label' => $town['label'],
                     'state' => $town['state'],
                     'lat' => $town['lat'],

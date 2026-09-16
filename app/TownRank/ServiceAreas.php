@@ -247,9 +247,12 @@ final class ServiceAreas
 
         $summary = ['top3' => 0, 'top7' => 0, 'top10' => 0, 'beyond' => 0, 'absent' => 0, 'pending' => 0];
         $markers = [];
-        foreach ($scan->points as $point) {
-            $id = (string) $point->coverage_area_id;
-            if ($id === '' || ! isset($coords[$id])) {
+        // Linked by GEOID, not by the stored row id: a coverage rebuild replaces every town row, which would
+        // otherwise drop every marker off this map (see TownPointLinks).
+        $linked = TownPointLinks::byTown(array_values($siteTowns), $scan->points);
+        foreach ($linked as $id => $point) {
+            $id = (string) $id;
+            if (! isset($coords[$id])) {
                 continue;
             }
             $town = $siteTowns[$id] ?? null;
