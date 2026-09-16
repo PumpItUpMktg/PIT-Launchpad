@@ -40,11 +40,15 @@
     .sva .s-col h4 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--s-muted); font-weight:700; margin:0 0 6px; }
     .sva .s-mapwrap { border:1px solid var(--s-line); border-radius:12px; background:var(--s-surface2); padding:8px; }
     .sva .s-map { width:100%; height:auto; display:block; aspect-ratio:1/1; }
-    .sva .s-county { fill:rgba(37,99,235,.07); stroke:rgba(37,99,235,.55); stroke-width:.5; stroke-linejoin:round; }
-    .dark .sva .s-county { fill:rgba(37,99,235,.12); stroke:rgba(96,165,250,.7); }
+    .sva .s-county { fill:none; stroke:rgba(37,99,235,.7); stroke-width:.6; stroke-linejoin:round; }
+    .dark .sva .s-county { stroke:rgba(96,165,250,.8); }
     .sva .s-dot { stroke:rgba(0,0,0,.25); stroke-width:.4; cursor:pointer; }
     .sva .s-dot.nopage { stroke-dasharray:1 .6; }
     .sva .s-dot.sel { stroke:#2563eb; stroke-width:1.2; }
+    .sva .s-shape { stroke:rgba(255,255,255,.55); stroke-width:.35; stroke-linejoin:round; cursor:pointer; }
+    .dark .sva .s-shape { stroke:rgba(0,0,0,.45); }
+    .sva .s-shape:hover { stroke:#2563eb; stroke-width:.9; }
+    .sva .s-shape.sel { stroke:#2563eb; stroke-width:1.2; }
     .sva .s-town { border:1px solid var(--s-line); border-radius:12px; padding:12px 14px; background:var(--s-surface2); margin-top:12px; }
     .sva .s-town h5 { font-size:14px; font-weight:800; margin:0 0 2px; display:flex; justify-content:space-between; gap:10px; }
     .sva .s-town .sub { font-size:12px; color:var(--s-muted); margin-bottom:8px; }
@@ -127,13 +131,21 @@
                                     @php($r = $dotR($card['web']['markers']))
                                     <div class="s-mapwrap">
                                         <svg class="s-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Website rank by town">
+                                            @foreach ($card['web']['markers'] as $m)
+                                                @php($sel = $keywordId === $card['keyword_id'] && $townId === $m['id'])
+                                                @if (isset($area['town_paths'][$m['id']]))
+                                                    {{-- The town's own boundary, coloured by its rank. --}}
+                                                    @foreach ($area['town_paths'][$m['id']] as $d)
+                                                        <path class="s-shape {{ $sel ? 'sel' : '' }}" d="{{ $d }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}</title></path>
+                                                    @endforeach
+                                                @else
+                                                    <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $sel ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}</title></circle>
+                                                @endif
+                                            @endforeach
                                             @foreach ($area['outlines'] as $o)
                                                 @foreach ($o['paths'] as $d)
-                                                    <path class="s-county" d="{{ $d }}"><title>{{ $o['label'] }}</title></path>
+                                                    <path class="s-county" d="{{ $d }}" pointer-events="none"><title>{{ $o['label'] }}</title></path>
                                                 @endforeach
-                                            @endforeach
-                                            @foreach ($card['web']['markers'] as $m)
-                                                <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $keywordId === $card['keyword_id'] && $townId === $m['id'] ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}</title></circle>
                                             @endforeach
                                         </svg>
                                     </div>
@@ -158,13 +170,20 @@
                                     @php($r = $dotR($card['gbp']['markers']))
                                     <div class="s-mapwrap">
                                         <svg class="s-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="GBP map-pack rank by town">
+                                            @foreach ($card['gbp']['markers'] as $m)
+                                                @php($sel = $keywordId === $card['keyword_id'] && $townId === $m['id'])
+                                                @if (isset($area['town_paths'][$m['id']]))
+                                                    @foreach ($area['town_paths'][$m['id']] as $d)
+                                                        <path class="s-shape {{ $sel ? 'sel' : '' }}" d="{{ $d }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}</title></path>
+                                                    @endforeach
+                                                @else
+                                                    <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $sel ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}</title></circle>
+                                                @endif
+                                            @endforeach
                                             @foreach ($area['outlines'] as $o)
                                                 @foreach ($o['paths'] as $d)
-                                                    <path class="s-county" d="{{ $d }}"><title>{{ $o['label'] }}</title></path>
+                                                    <path class="s-county" d="{{ $d }}" pointer-events="none"><title>{{ $o['label'] }}</title></path>
                                                 @endforeach
-                                            @endforeach
-                                            @foreach ($card['gbp']['markers'] as $m)
-                                                <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $keywordId === $card['keyword_id'] && $townId === $m['id'] ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}</title></circle>
                                             @endforeach
                                         </svg>
                                     </div>

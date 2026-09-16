@@ -33,6 +33,7 @@ it('lists the service areas, opens one to a card per keyword with both maps, and
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer(polygons: [
         '34041' => [[['lat' => 40.95, 'lng' => -74.95], ['lat' => 40.95, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.95]]],
+        '3404128590' => [[['lat' => 40.87, 'lng' => -74.85], ['lat' => 40.87, 'lng' => -74.81], ['lat' => 40.83, 'lng' => -74.81], ['lat' => 40.83, 'lng' => -74.85]]],
     ]));
     $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
     JobCounty::factory()->create(['county_geoid' => '34041', 'name' => 'Warren', 'state' => 'NJ']);
@@ -72,7 +73,7 @@ it('lists the service areas, opens one to a card per keyword with both maps, and
         ->assertSee('Hackettstown, NJ')
         ->assertSee('What to do')
         ->assertSee('GBP map pack')
-        ->assertSeeHtml(' sel" cx=')   // the selected dot is outlined
+        ->assertSeeHtml('class="s-shape sel"')   // the selected town's shape is outlined (it has a boundary, so no dot)
         // The same dot again closes it.
         ->call('selectTown', $kw->id, $hack->id)
         ->assertSet('townId', null)

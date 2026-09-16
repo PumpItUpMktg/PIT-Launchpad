@@ -25,9 +25,11 @@ use Illuminate\Support\Facades\Cache;
  */
 function serviceAreaSite(): array
 {
-    // The gazetteer knows Warren's outline (a 0.2° × 0.2° box around its towns) and not Northampton's.
+    // The gazetteer knows Warren's outline (a 0.2° × 0.2° box around its towns) and Hackettstown's own shape
+    // (a small box at its centre); not Northampton's outline, nor Mansfield's or Bethlehem's shape.
     app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer(polygons: [
         '34041' => [[['lat' => 40.95, 'lng' => -74.95], ['lat' => 40.95, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.95]]],
+        '3404128590' => [[['lat' => 40.87, 'lng' => -74.85], ['lat' => 40.87, 'lng' => -74.81], ['lat' => 40.83, 'lng' => -74.81], ['lat' => 40.83, 'lng' => -74.85]]],
     ]));
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.com']);
     JobCounty::factory()->create(['county_geoid' => '34041', 'name' => 'Warren', 'state' => 'NJ']);
@@ -191,4 +193,27 @@ it('labels a served county the registry lacks from the Census outline name plus 
 
     $list = collect(app(ServiceAreas::class)->areas($f['site']))->firstWhere('name', 'Hackettstown office');
     expect(collect($list['counties'])->pluck('label')->all())->toBe(['Warren County, NJ', 'Morris County, NJ', 'County 34099']);
+});
+
+it('gives a town its own boundary shape under the frame\'s projector, and no shape (a dot) when the Census has none', function () {
+    $f = serviceAreaSite();
+
+    $area = app(ServiceAreas::class)->area($f['site'], $f['warren']->id);
+
+    // Hackettstown has a shape; Mansfield keeps its dot.
+    expect($area['town_paths'])->toHaveKey((string) $f['hack']->id)
+        ->and($area['town_paths'])->not->toHaveKey((string) $f['mans']->id)
+        ->and($area['town_paths'][(string) $f['hack']->id])->toHaveCount(1);
+
+    // The shape sits where the town's dot would: its centre is the town's projected centre.
+    $d = $area['town_paths'][(string) $f['hack']->id][0];
+    $pts = array_map(fn (string $p): array => array_map('floatval', explode(' ', $p)), preg_split('/[ML]/', trim($d, 'MLZ '), -1, PREG_SPLIT_NO_EMPTY));
+    $cx = (min(array_column($pts, 0)) + max(array_column($pts, 0))) / 2;
+    $cy = (min(array_column($pts, 1)) + max(array_column($pts, 1))) / 2;
+    $dot = collect($area['cards'][0]['web']['markers'])->firstWhere('id', (string) $f['hack']->id);
+    expect(round($cx, 1))->toBe(round($dot['x'], 1))
+        ->and(round($cy, 1))->toBe(round($dot['y'], 1));
+
+    // Cached per town, so the next page view doesn't ask the gazetteer again.
+    expect(Cache::get('lp.town_outline.3404128590'))->toBeArray();
 });

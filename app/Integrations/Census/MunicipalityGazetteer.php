@@ -49,6 +49,16 @@ interface MunicipalityGazetteer
     public function countyPolygons(array $geoIds): array;
 
     /**
+     * Boundary polygons for towns by GEOID — 10-digit county subdivisions and 7-digit places — for
+     * colouring a town's own shape on a map. Same ring shape as {@see countyPolygons()}; a GEOID the
+     * source doesn't know is simply absent from the result.
+     *
+     * @param  list<string>  $geoIds
+     * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
+     */
+    public function townPolygons(array $geoIds): array;
+
+    /**
      * Look up municipalities by name (places + MCDs) — for the owner's directed coverage
      * additions ("add a town"). Returns candidates to resolve to a GEOID + point + county.
      *
