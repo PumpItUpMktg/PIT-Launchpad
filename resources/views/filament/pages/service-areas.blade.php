@@ -49,6 +49,11 @@
     .dark .sva .s-shape { stroke:rgba(0,0,0,.45); }
     .sva .s-shape:hover { stroke:#2563eb; stroke-width:.9; }
     .sva .s-shape.sel { stroke:#2563eb; stroke-width:1.2; }
+    /* The map-pack position, drawn into the town it belongs to: white numerals carrying a dark outline via
+       paint-order, so they stay readable on a green, amber, red or grey fill in either theme. */
+    .sva .s-rank { font-size:2.6px; font-weight:700; fill:#fff; stroke:rgba(0,0,0,.65); stroke-width:.55px;
+                   paint-order:stroke fill; text-anchor:middle; dominant-baseline:central;
+                   font-family:'Spline Sans Mono',ui-monospace,monospace; }
     .sva .s-town { border:1px solid var(--s-line); border-radius:12px; padding:12px 14px; background:var(--s-surface2); margin-top:12px; }
     .sva .s-town h5 { font-size:14px; font-weight:800; margin:0 0 2px; display:flex; justify-content:space-between; gap:10px; }
     .sva .s-town .sub { font-size:12px; color:var(--s-muted); margin-bottom:8px; }
@@ -184,6 +189,13 @@
                                                 @foreach ($o['paths'] as $d)
                                                     <path class="s-county" d="{{ $d }}" pointer-events="none"><title>{{ $o['label'] }}</title></path>
                                                 @endforeach
+                                            @endforeach
+                                            {{-- The map-pack position itself, over each town it was found in. Drawn last so the
+                                                 county line never crosses a numeral; a town we're absent from carries no number. --}}
+                                            @foreach ($card['gbp']['markers'] as $m)
+                                                @if ($m['rank'] !== null)
+                                                    <text class="s-rank" x="{{ $m['x'] }}" y="{{ $m['y'] }}" pointer-events="none">{{ $m['rank'] }}</text>
+                                                @endif
                                             @endforeach
                                         </svg>
                                     </div>

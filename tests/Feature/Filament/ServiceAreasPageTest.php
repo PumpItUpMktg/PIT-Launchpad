@@ -74,6 +74,7 @@ it('lists the service areas, opens one to a card per keyword with both maps, and
         ->assertSee('What to do')
         ->assertSee('GBP map pack')
         ->assertSeeHtml('class="s-shape sel"')   // the selected town's shape is outlined (it has a boundary, so no dot)
+        ->assertSeeHtml('class="s-rank"')        // and the map-pack position is written into the town it was found in
         // The same dot again closes it.
         ->call('selectTown', $kw->id, $hack->id)
         ->assertSet('townId', null)

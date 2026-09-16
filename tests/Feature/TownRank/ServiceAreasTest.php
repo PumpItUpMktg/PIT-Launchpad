@@ -248,3 +248,16 @@ it('keeps BOTH maps on a service area after a coverage rebuild replaced every to
         ->toBe([(string) $rebuilt['Hackettstown']->id => 1, (string) $rebuilt['Mansfield']->id => null])
         ->and($card['gbp']['summary'])->toMatchArray(['top3' => 1, 'absent' => 1]);
 });
+
+it('carries the map-pack position per town so the GBP map can write the number into the shape', function () {
+    $f = serviceAreaSite();
+
+    $gbp = app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['cards'][0]['gbp'];
+
+    // Hackettstown is #1 in the pack; Mansfield is absent and so carries no number to draw.
+    $byId = collect($gbp['markers'])->keyBy('id');
+    expect($byId[(string) $f['hack']->id]['rank'])->toBe(1)
+        ->and($byId[(string) $f['mans']->id]['rank'])->toBeNull()
+        // The number is drawn at the town's own projected centre — the same spot its shape occupies.
+        ->and($byId[(string) $f['hack']->id])->toHaveKeys(['x', 'y']);
+});
