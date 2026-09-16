@@ -38,6 +38,7 @@
                 </div>
                 <div style="font-size:12.5px; color:#64748b; margin:6px 0 10px;">
                     @if ($q['worker_down'])
+                        @if (($q['silent_lanes'] ?? []) !== [])No live worker on @foreach ($q['silent_lanes'] as $lane)<code>{{ $lane }}</code>@if (! $loop->last), @endif @endforeach — <a href="{{ \App\Filament\Pages\QueueBoard::getUrl() }}" wire:navigate>System → Queue</a> shows what each worker is doing and how a gone one stopped. @endif
                         Approved pages won’t publish until it drains. Publish this tenant’s stuck pages now with the button below, or fix the worker (Horizon / <code>queue:work</code>). On the console: <code>php artisan launchpad:drain-publish "{{ $q['brand'] }}"</code>
                     @else
                         The worker is running{{ $q['pending'] > 0 ? ' and draining the queue' : '' }} — these are past failures. Clear them below (fix the cause first so they don’t recur){{ $q['pending'] > 0 ? ', or drain the rest now.' : '.' }}

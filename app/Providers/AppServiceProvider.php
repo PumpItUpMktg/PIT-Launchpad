@@ -120,6 +120,7 @@ use App\Metrics\Providers\GscMetricProvider;
 use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\User;
 use App\Onboarding\MissionPolisher;
+use App\Operate\WorkerHeartbeat;
 use App\Operator\Controls\BudgetControl;
 use App\Publishing\Seo\HeadlineKeywordFixer;
 use App\Reviews\Intake\Contracts\JobSource;
@@ -136,6 +137,11 @@ use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\NoPendingMigrations;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Factory as Http;
+use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\Looping;
+use Illuminate\Queue\Events\WorkerStopping;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -744,6 +750,17 @@ class AppServiceProvider extends ServiceProvider
                 SyncWireframeKitsOnMigrate::class,
             );
         }
+
+        // Queue worker heartbeat: a `queue:work` process reports itself (lane, current job, tally, how it
+        // stopped) to `queue_workers` — the Queue page and the stalled-worker banner read it. One instance
+        // per process; a row is only created on the first loop tick, so sync jobs in a web request never
+        // masquerade as a worker.
+        $this->app->singleton(WorkerHeartbeat::class);
+        Event::listen(Looping::class, [WorkerHeartbeat::class, 'looping']);
+        Event::listen(JobProcessing::class, [WorkerHeartbeat::class, 'processing']);
+        Event::listen(JobProcessed::class, [WorkerHeartbeat::class, 'processed']);
+        Event::listen(JobFailed::class, [WorkerHeartbeat::class, 'failed']);
+        Event::listen(WorkerStopping::class, [WorkerHeartbeat::class, 'stopping']);
 
         // §9 audit: record RBAC role changes. (Publish — ContentPublished — is
         // emitted by the §2 publish pipeline; that call site attaches there.)
