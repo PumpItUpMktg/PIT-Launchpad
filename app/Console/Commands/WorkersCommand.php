@@ -51,6 +51,10 @@ class WorkersCommand extends Command
                 'stopped' => "stopped {$w['stopped_at']}: {$w['stop_reason']}",
                 default => 'SILENT — no heartbeat, never stopped cleanly (killed, or never restarted)',
             };
+            if ($w['whitespace_lanes'] !== []) {
+                $this->warn(sprintf('  %s polls a lane name with a SPACE in it: "%s". queue:work splits --queue on commas without trimming, so that lane matches nothing and the worker waits on it forever. Remove the space from the process command.',
+                    $w['worker_id'], implode('", "', $w['whitespace_lanes'])));
+            }
             $this->line(sprintf('  %-28s [%s on %s]%s  seen %ds ago · %d done / %d failed · %d MB · started %s · %s',
                 $w['worker_id'], $w['queues'], $w['connection'] !== '' ? $w['connection'] : 'unknown',
                 $w['connection_ok'] ? '' : '  <comment>WRONG CONNECTION — this app enqueues on '.$snapshot['connection'].'</comment>',

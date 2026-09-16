@@ -94,3 +94,26 @@ it('derives the expected lanes from config: default, the Town Rank / geo-grid la
 
     expect(app(QueueHealth::class)->expectedLanes())->toBe(['default', 'high', 'metrics:gsc', 'metrics:dataforseo', 'metrics:ga4', 'metrics:index']);
 });
+
+it('does not match a worker to a lane whose name it only nearly polls: a space after the comma is a lane of its own', function () {
+    // The Cloud process command reads `--queue=high, default`. queue:work splits on commas WITHOUT trimming
+    // (Worker::getNextJob → explode(',', $queue)), so this process polls `high` and ` default`.
+    queueJob('high', 600);
+    queueJob('default', 600);
+    worker('web#10', 'high, default');
+
+    $lanes = collect(app(QueueHealth::class)->lanes())->keyBy('queue');
+    $snap = app(QueueHealth::class)->snapshot();
+
+    expect($lanes['high']['alive'])->toBeTrue()                     // high drains
+        ->and($lanes['high']['workers'])->toBe(['web#10'])
+        ->and($lanes['default']['alive'])->toBeFalse()              // ` default` is not `default`
+        ->and($lanes['default']['workers'])->toBe([])
+        ->and($lanes['default']['down'])->toBeTrue()
+        ->and($snap['silent_lanes'])->toBe(['default'])
+        ->and($snap['worker_down'])->toBeTrue();
+
+    $w = collect(app(QueueHealth::class)->workers())->firstWhere('worker_id', 'web#10');
+    expect($w['lanes'])->toBe(['high', ' default'])                 // verbatim, never tidied
+        ->and($w['whitespace_lanes'])->toBe([' default']);
+});

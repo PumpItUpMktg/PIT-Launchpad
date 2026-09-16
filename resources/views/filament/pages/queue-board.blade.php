@@ -52,6 +52,17 @@
             </div>
         @endif
 
+        @php($spaced = array_values(array_filter($h['workers'], fn (array $w): bool => $w['alive'] && $w['whitespace_lanes'] !== [])))
+        @if ($spaced !== [])
+            <div class="qb-alert">
+                ⚠ {{ count($spaced) }} live worker(s) are waiting on a lane name that carries a <b>space</b>:
+                @foreach ($spaced as $w)<code>{{ $w['worker_id'] }}</code> polls <code>"{{ str_replace(' ', '␣', implode('", "', $w['whitespace_lanes'])) }}"</code>@if (! $loop->last); @endif @endforeach.
+                <code>queue:work</code> splits <code>--queue</code> on commas and does not trim the parts, so
+                <code>--queue=high,&nbsp;default</code> polls <code>high</code> and <code>"&nbsp;default"</code> — a lane nothing enqueues to.
+                The worker waits on it forever while the real lane grows. Remove the space from the process command.
+            </div>
+        @endif
+
         @php($blind = array_values(array_filter($h['workers'], fn (array $w): bool => $w['alive'] && ! $w['connection_ok'])))
         @if ($blind !== [])
             <div class="qb-alert">
@@ -116,7 +127,9 @@
                             {{ $w['connection'] !== '' ? $w['connection'] : '—' }}
                             @unless ($w['connection_ok'])<div class="qb-pill bad" style="margin-top:4px">wrong connection</div>@endunless
                         </td>
-                        <td class="qb-mono">{{ $w['queues'] }}</td>
+                        <td class="qb-mono">
+                            @foreach ($w['lanes'] as $lane)<div>@if ($lane !== trim($lane))<span class="qb-pill bad">"{{ str_replace(' ', '␣', $lane) }}"</span>@else{{ $lane }}@endif</div>@endforeach
+                        </td>
                         <td>
                             @if ($w['state'] === 'working')<span class="qb-pill work">Working</span>
                             @elseif ($w['state'] === 'idle')<span class="qb-pill ok">Live · idle</span>
