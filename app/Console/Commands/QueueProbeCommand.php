@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Operate\QueueHealth;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Queue\DatabaseQueue;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
@@ -85,6 +86,9 @@ class QueueProbeCommand extends Command
 
             $this->line("  <comment>{$lane}</comment>  {$total} row(s)");
             if ($next !== null) {
+                $this->reportLockContention($dbConnection, $table, $lane, $now, $expiration, (string) $next->id);
+            }
+            if ($next !== null) {
                 $age = (int) floor(max(0, $now - (int) $next->available_at) / 60);
                 $this->line(sprintf('    → would reserve job #%s, attempts %d, available %dm ago%s',
                     (string) $next->id, (int) $next->attempts, $age,
@@ -120,5 +124,102 @@ class QueueProbeCommand extends Command
         $this->comment('launchpad:workers shows which processes are alive and what each one polls.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The same query again, but WITH the lock clause the driver pops under. On Postgres (and MySQL 8) that
+     * is `FOR UPDATE SKIP LOCKED`: a row another session holds a lock on is SKIPPED, so a worker sees
+     * nothing while a plain SELECT — the one above — reports the row as perfectly reservable. That gap is
+     * invisible from the outside and is exactly how a healthy, heartbeating worker sits idle on a backlog
+     * forever. Run inside a transaction that is always rolled back: nothing is reserved.
+     */
+    private function reportLockContention(string $dbConnection, string $table, string $lane, int $now, int $expiration, string $plainId): void
+    {
+        $db = DB::connection($dbConnection);
+        $lock = $this->lockForPopping();
+
+        $db->beginTransaction();
+        try {
+            $locked = $db->table($table)
+                ->lock($lock)
+                ->where('queue', $lane)
+                ->where(function ($query) use ($now, $expiration): void {
+                    $query->where(function ($q) use ($now): void {
+                        $q->whereNull('reserved_at')->where('available_at', '<=', $now);
+                    })->orWhere(function ($q) use ($expiration): void {
+                        $q->where('reserved_at', '<=', $expiration);
+                    });
+                })
+                ->orderBy('id')
+                ->first();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            $this->line("    under the driver's lock [{$lock}]: unreadable — {$e->getMessage()}");
+
+            return;
+        }
+        $db->rollBack();
+
+        if ($locked !== null) {
+            $this->line("    under the driver's lock [{$lock}]: job #".(string) $locked->id.' — a worker CAN take this row.');
+
+            return;
+        }
+
+        $this->error("    under the driver's lock [{$lock}]: NOTHING.");
+        $this->line("    Job #{$plainId} reads as reservable but is LOCKED by another database session, so every");
+        $this->line('    worker skips it (SKIP LOCKED) and finds an empty lane. That is the whole fault: the rows are');
+        $this->line('    fine, the workers are fine, and a stuck transaction is holding them.');
+        $this->reportLockHolders($dbConnection, $table);
+    }
+
+    /** Who is holding the lock — Postgres only, read-only. */
+    private function reportLockHolders(string $dbConnection, string $table): void
+    {
+        $db = DB::connection($dbConnection);
+        if ($db->getDriverName() !== 'pgsql') {
+            return;
+        }
+
+        try {
+            $holders = $db->select(
+                'select a.pid, a.state, a.application_name, now() - a.state_change as held_for, left(coalesce(a.query, \'\'), 120) as query
+                 from pg_locks l join pg_stat_activity a on a.pid = l.pid
+                 where l.relation = to_regclass(?) and a.pid <> pg_backend_pid()
+                 group by a.pid, a.state, a.application_name, held_for, a.query
+                 order by held_for desc nulls last limit 10', [$table],
+            );
+        } catch (\Throwable $e) {
+            $this->line('    (could not read pg_locks: '.$e->getMessage().')');
+
+            return;
+        }
+
+        if ($holders === []) {
+            $this->line('    No other session holds a lock on the table now — the holder may have just released it; re-run.');
+
+            return;
+        }
+
+        $this->newLine();
+        $this->line('    <info>Sessions holding a lock on '.$table.'</info>');
+        foreach ($holders as $h) {
+            $this->line(sprintf('      pid %s  %s  held %s  %s', (string) $h->pid, (string) $h->state, (string) ($h->held_for ?? '?'), (string) $h->query));
+        }
+        $this->line('    An "idle in transaction" session holding these rows never lets go on its own. Ending that');
+        $this->line('    backend releases the lane immediately: select pg_terminate_backend(<pid>);');
+    }
+
+    /** The lock clause the database driver pops under, asked of the driver itself rather than assumed. */
+    private function lockForPopping(): string
+    {
+        $queue = Queue::connection(QueueHealth::appConnection());
+        if (! $queue instanceof DatabaseQueue) {
+            return 'FOR UPDATE';
+        }
+
+        $lock = \Closure::bind(fn (): mixed => $this->getLockForPopping(), $queue, DatabaseQueue::class)();
+
+        return is_string($lock) ? $lock : 'FOR UPDATE';
     }
 }

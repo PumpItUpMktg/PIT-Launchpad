@@ -13,14 +13,16 @@ function probeJob(string $queue, array $attrs = []): void
 
 beforeEach(fn () => config(['queue.default' => 'database', 'queue.connections.database.retry_after' => 930]));
 
-it('names the store and the exact row each lane would hand a worker', function () {
+it('names the store and the exact row each lane would hand a worker, and checks it under the driver\'s own lock', function () {
     probeJob('high');
     probeJob('default');
 
     expect(Artisan::call('launchpad:queue-probe'))->toBe(0);
     $out = Artisan::output();
 
-    expect($out)->toContain('queue connection : database')
+    expect($out)->toContain("under the driver's lock")
+        ->toContain('a worker CAN take this row')
+        ->toContain('queue connection : database')
         ->toContain('retry_after      : 930s')
         ->toContain('maintenance mode : up')
         ->toContain('would reserve job #')
