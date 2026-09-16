@@ -19,6 +19,11 @@ class WorkersCommand extends Command
     {
         $snapshot = $health->snapshot();
 
+        if ($snapshot['maintenance']) {
+            $this->warn('The app is DOWN for maintenance — every queue:work daemon is paused. Workers keep heartbeating and consume nothing until `php artisan up`.');
+            $this->newLine();
+        }
+
         $this->line('<info>Lanes</info>');
         foreach ($snapshot['lanes'] as $lane) {
             $status = match (true) {
@@ -46,8 +51,10 @@ class WorkersCommand extends Command
                 'stopped' => "stopped {$w['stopped_at']}: {$w['stop_reason']}",
                 default => 'SILENT — no heartbeat, never stopped cleanly (killed, or never restarted)',
             };
-            $this->line(sprintf('  %-28s [%s]  seen %ds ago · %d done / %d failed · %d MB · started %s · %s',
-                $w['worker_id'], $w['queues'], $w['seconds_since_seen'], $w['jobs_processed'], $w['jobs_failed'], $w['memory_mb'], $w['started_at'], $state));
+            $this->line(sprintf('  %-28s [%s on %s]%s  seen %ds ago · %d done / %d failed · %d MB · started %s · %s',
+                $w['worker_id'], $w['queues'], $w['connection'] !== '' ? $w['connection'] : 'unknown',
+                $w['connection_ok'] ? '' : '  <comment>WRONG CONNECTION — this app enqueues on '.$snapshot['connection'].'</comment>',
+                $w['seconds_since_seen'], $w['jobs_processed'], $w['jobs_failed'], $w['memory_mb'], $w['started_at'], $state));
         }
 
         if ($snapshot['failed'] > 0) {

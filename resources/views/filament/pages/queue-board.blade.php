@@ -46,6 +46,21 @@
             </div>
         @endif
 
+        @if ($h['maintenance'])
+            <div class="qb-alert">
+                ⚠ The app is in <b>maintenance mode</b>. Every <code>queue:work</code> daemon pauses while it is down — the workers below keep heartbeating and consume nothing, however healthy they look. Bring the app up (<code>php artisan up</code>) to let the backlog drain.
+            </div>
+        @endif
+
+        @php($blind = array_values(array_filter($h['workers'], fn (array $w): bool => $w['alive'] && ! $w['connection_ok'])))
+        @if ($blind !== [])
+            <div class="qb-alert">
+                ⚠ {{ count($blind) }} live worker(s) are polling a queue connection that does not hold these jobs, so they run idle forever while the backlog sits:
+                @foreach ($blind as $w)<code>{{ $w['worker_id'] }}</code> polls <code>{{ $w['connection'] !== '' ? $w['connection'] : 'unknown' }}</code>@if (! $loop->last), @endif @endforeach.
+                This app enqueues on <code>{{ $h['connection'] }}</code> ({{ $h['driver'] }}). Start the worker against it — <code>php artisan queue:work {{ $h['connection'] }} --queue=high --tries=3</code> — or set <code>QUEUE_CONNECTION={{ $h['connection'] }}</code> in the worker's environment.
+            </div>
+        @endif
+
         <div class="qb-stats">
             <div class="qb-stat"><div class="n">{{ number_format($h['pending']) }}</div><div class="l">Waiting</div></div>
             <div class="qb-stat"><div class="n">{{ number_format(count(array_filter($h['workers'], fn (array $w): bool => $w['alive']))) }}</div><div class="l">Live workers</div></div>
@@ -92,11 +107,15 @@
             </div>
         @else
             <table class="qb-table" aria-label="Queue workers">
-                <thead><tr><th>Process</th><th>Lanes</th><th>State</th><th>Last seen</th><th>Now</th><th>Done · failed</th><th>Memory</th><th>Started</th></tr></thead>
+                <thead><tr><th>Process</th><th>Connection</th><th>Lanes</th><th>State</th><th>Last seen</th><th>Now</th><th>Done · failed</th><th>Memory</th><th>Started</th></tr></thead>
                 <tbody>
                 @foreach ($h['workers'] as $w)
                     <tr>
                         <td class="qb-mono">{{ $w['worker_id'] }}</td>
+                        <td class="qb-mono">
+                            {{ $w['connection'] !== '' ? $w['connection'] : '—' }}
+                            @unless ($w['connection_ok'])<div class="qb-pill bad" style="margin-top:4px">wrong connection</div>@endunless
+                        </td>
                         <td class="qb-mono">{{ $w['queues'] }}</td>
                         <td>
                             @if ($w['state'] === 'working')<span class="qb-pill work">Working</span>
