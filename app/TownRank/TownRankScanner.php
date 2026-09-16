@@ -156,29 +156,14 @@ final class TownRankScanner
                     continue;
                 }
 
-                try {
-                    $items = DataForSeoClient::parseOrganic($this->client->taskGet(self::ORGANIC_GET, $taskId));
-                } catch (DataForSeoException $e) {
-                    if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
-                        $items = [];   // Google returned an empty page for this query: genuinely not found
-                    } elseif ($e->fatal) {
-                        throw $e;      // auth / quota: stop the run, nothing here is collectable
-                    } else {
-                        // Rate-limited, in queue, transport hiccup: NOT a result. Leave the town uncollected for
-                        // the next run rather than record a phantom "not found".
-                        $skipped++;
-                        $spent++;
-
-                        continue;
-                    }
-                } catch (Throwable $e) {
+                $items = $this->readTask($taskId);
+                $spent++;
+                if ($items === null) {
                     $skipped++;
-                    $spent++;
 
                     continue;
                 }
                 $point->forceFill([...$this->extract($items, $host), 'collected_at' => Carbon::now()])->save();
-                $spent++;
             }
         }
         if ($skipped > 0) {
@@ -188,6 +173,87 @@ final class TownRankScanner
         $this->finalizeIfComplete($scan);
 
         return $spent;
+    }
+
+    /**
+     * Re-read a scan's PHANTOM towns straight from their stored task ids — the towns a collector run before
+     * the transient-read fix recorded as "not found" with no results at all (a rate-limited or failed read,
+     * not a Google answer). Reads are free and skip the tasks_ready gate: the task was already ready, only its
+     * read failed. A read that fails again is left exactly as it was and counted, never re-recorded as not
+     * found. The scan's found_count is recomputed. Returns {read, ranked, not_found, skipped}.
+     *
+     * @param  Collection<int, TownRankPoint>  $points
+     * @return array{read: int, ranked: int, not_found: int, skipped: int}
+     */
+    public function recollect(TownRankScan $scan, Collection $points, ?float $deadline = null): array
+    {
+        $site = Site::withoutGlobalScopes()->find($scan->site_id);
+        $host = self::host($site?->domain_url);
+        $out = ['read' => 0, 'ranked' => 0, 'not_found' => 0, 'skipped' => 0];
+
+        foreach ($points as $point) {
+            if ($deadline !== null && microtime(true) >= $deadline) {
+                break;
+            }
+            $items = $this->readTask((string) $point->provider_task_id);
+            $out['read']++;
+            if ($items === null) {
+                $out['skipped']++;
+
+                continue;
+            }
+            $fields = $this->extract($items, $host);
+            $point->forceFill([...$fields, 'collected_at' => Carbon::now()])->save();
+            $out[$fields['rank'] !== null ? 'ranked' : 'not_found']++;
+        }
+
+        $scan->forceFill(['found_count' => $scan->points()->whereNotNull('rank')->count()])->save();
+
+        return $out;
+    }
+
+    /**
+     * The phantom towns of a scan: collected as "not found" with NO results stored — the signature of a read
+     * that failed (rate limit, transport) before the transient-read fix, where a genuine not-found carries the
+     * top results that did rank. A task that returned an empty page ("No Search Results") looks the same and
+     * re-reads to the same answer, at no cost.
+     *
+     * @return Collection<int, TownRankPoint>
+     */
+    public static function phantoms(TownRankScan $scan): Collection
+    {
+        return $scan->points()
+            ->whereNotNull('provider_task_id')
+            ->whereNotNull('collected_at')
+            ->whereNull('rank')
+            ->get()
+            ->filter(fn (TownRankPoint $p): bool => ($p->top_results ?? []) === [])
+            ->values();
+    }
+
+    /**
+     * One task_get, classified: the organic items on success (an empty page — "No Search Results" — is an
+     * empty list, a real answer); null when the read did not produce an answer (rate-limited, still in
+     * queue, transport) so the caller leaves the town for a later read. A fatal auth/quota error propagates.
+     *
+     * @return list<array{position: int, url: string, domain: string}>|null
+     */
+    private function readTask(string $taskId): ?array
+    {
+        try {
+            return DataForSeoClient::parseOrganic($this->client->taskGet(self::ORGANIC_GET, $taskId));
+        } catch (DataForSeoException $e) {
+            if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
+                return [];       // Google returned an empty page for this query: genuinely not found
+            }
+            if ($e->fatal) {
+                throw $e;        // auth / quota: stop the run, nothing here is collectable
+            }
+
+            return null;         // rate-limited, in queue, transport hiccup: NOT a result
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /** Flip a pending scan to `complete` once every point carrying a task id has been collected. */
