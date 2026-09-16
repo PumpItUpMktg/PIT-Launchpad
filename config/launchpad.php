@@ -400,7 +400,10 @@ return [
         // interval so runs never stack). Lower it only if DataForSEO's 2,000 calls/min limit is shared.
         'ingest_batch' => (int) env('LAUNCHPAD_TOWN_RANK_INGEST_BATCH', 1000),
         'pending_expiry_hours' => (int) env('LAUNCHPAD_TOWN_RANK_PENDING_EXPIRY_HOURS', 24),
-        'queue' => env('LAUNCHPAD_TOWN_RANK_QUEUE'),   // blank ⇒ the default queue
+        // Queue for the Run / sweep posting jobs AND the every-minute collector. Blank ⇒ the default queue. Set
+        // it (e.g. "high") to give ranking work its own lane ahead of publishing — the worker must then be
+        // started `--queue=high,default`, or these silently never run.
+        'queue' => env('LAUNCHPAD_TOWN_RANK_QUEUE'),
         // DataForSEO task priority: 1 = normal queue, 2 = high priority (faster turnaround at DOUBLE the
         // per-task price). Off by default; the cost estimates shown on the wall and CLI follow it.
         'priority' => (int) env('LAUNCHPAD_TOWN_RANK_PRIORITY', 1),

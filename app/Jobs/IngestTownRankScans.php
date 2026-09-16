@@ -30,8 +30,18 @@ class IngestTownRankScans implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 1;
 
-    /** Seconds kept back from the job timeout so the last task_get and the finalize never race the kill. */
-    private const DEADLINE_MARGIN_SECONDS = 30;
+    /** Seconds kept back from the job timeout so a hung read and the finalize never race the kill. */
+    private const DEADLINE_MARGIN_SECONDS = 100;   // one hung read can take ~95s (3 tries × 30s + backoff)
+
+    public function __construct()
+    {
+        // Same lane as the Run button's posting job: with `launchpad.town_rank.queue` set (e.g. "high") and the
+        // worker started `--queue=high,default`, collection never waits behind a publishing backlog.
+        $queue = config('launchpad.town_rank.queue');
+        if (is_string($queue) && $queue !== '') {
+            $this->onQueue($queue);
+        }
+    }
 
     public function handle(TownRankScanner $scanner): void
     {

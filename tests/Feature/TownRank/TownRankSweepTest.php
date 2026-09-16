@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\SiteStatus;
+use App\Jobs\IngestCoverageScans;
 use App\Jobs\IngestTownRankScans;
 use App\Jobs\RunTownRankSweep;
 use App\Models\CoverageArea;
@@ -111,4 +112,14 @@ it('the ingest sweep collects pending scans within its budget and closes expired
     config()->set('launchpad.town_rank.ingest_batch', 40);
     (new IngestTownRankScans)->handle(app(TownRankScanner::class));
     expect(TownRankScan::query()->withoutGlobalScopes()->where('site_id', $site->id)->where('status', 'complete')->count())->toBe(2);
+});
+
+it('puts the collectors on the configured ranking lane, and on the default queue when none is set', function () {
+    config(['launchpad.town_rank.queue' => null, 'launchpad.geo_grid.queue' => null]);
+    expect((new IngestTownRankScans)->queue)->toBeNull()
+        ->and((new IngestCoverageScans)->queue)->toBeNull();
+
+    config(['launchpad.town_rank.queue' => 'high', 'launchpad.geo_grid.queue' => 'high']);
+    expect((new IngestTownRankScans)->queue)->toBe('high')
+        ->and((new IngestCoverageScans)->queue)->toBe('high');
 });

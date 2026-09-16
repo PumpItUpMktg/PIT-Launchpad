@@ -33,6 +33,16 @@ class IngestCoverageScans implements ShouldQueue
 
     public int $tries = 1;
 
+    public function __construct()
+    {
+        // Same lane as RunCoverageScan: with `launchpad.geo_grid.queue` set (e.g. "high") and the worker
+        // started `--queue=high,default`, collection never waits behind a publishing backlog.
+        $queue = config('launchpad.geo_grid.queue');
+        if (is_string($queue) && $queue !== '') {
+            $this->onQueue($queue);
+        }
+    }
+
     public function handle(GeoGridScanner $scanner, GeoGridMetrics $metrics): void
     {
         $budget = max(1, (int) config('launchpad.geo_grid.ingest_batch', 40));
