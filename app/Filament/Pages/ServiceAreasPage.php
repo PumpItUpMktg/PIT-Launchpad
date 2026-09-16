@@ -11,6 +11,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\TownRank\ServiceAreas;
+use App\TownRank\TownRankBoard;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -25,8 +26,12 @@ use Livewire\Attributes\Url;
  * scoring the operator will define once the data has been seen. Website scans are run from Town Rank; the
  * GBP report (one Maps search per town from the town's coordinates — a coverage scan) runs from the card.
  *
+ * A dot on either map selects its town: the card opens the same town detail the Town Rank board shows
+ * (both website modes, who outranks us, the page state, the map-pack rank, and the suggested actions).
+ *
  * @property-read list<array<string, mixed>> $areas
  * @property-read array<string, mixed>|null $area
+ * @property-read array<string, mixed>|null $town
  */
 class ServiceAreasPage extends Page
 {
@@ -46,6 +51,13 @@ class ServiceAreasPage extends Page
 
     #[Url]
     public ?string $locationId = null;
+
+    /** The card whose town is selected. */
+    #[Url]
+    public ?string $keywordId = null;
+
+    #[Url]
+    public ?string $townId = null;
 
     public static function menuTag(): string
     {
@@ -70,6 +82,37 @@ class ServiceAreasPage extends Page
     public function closeArea(): void
     {
         $this->locationId = null;
+        $this->keywordId = null;
+        $this->townId = null;
+    }
+
+    /** A dot on a card's map: open that town's detail under the card (clicking it again closes it). */
+    public function selectTown(string $keywordId, string $townId): void
+    {
+        if ($this->keywordId === $keywordId && $this->townId === $townId) {
+            $this->clearTown();
+
+            return;
+        }
+        $this->keywordId = $keywordId;
+        $this->townId = $townId;
+    }
+
+    public function clearTown(): void
+    {
+        $this->keywordId = null;
+        $this->townId = null;
+    }
+
+    /** The selected town's detail for the selected card — the Town Rank board's town panel; null when none. */
+    public function getTownProperty(): ?array
+    {
+        $site = $this->site();
+        if ($site === null || $this->locationId === null || $this->keywordId === null || $this->townId === null) {
+            return null;
+        }
+
+        return app(TownRankBoard::class)->town($site, $this->keywordId, $this->townId);
     }
 
     /**

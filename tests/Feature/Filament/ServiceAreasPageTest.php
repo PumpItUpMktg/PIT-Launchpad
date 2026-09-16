@@ -63,6 +63,20 @@ it('lists the service areas, opens one to a card per keyword with both maps, and
         ->assertSee('No Town Rank scan for this keyword yet')                  // mold remediation's website column
         ->assertSeeHtml('aria-label="GBP map-pack rank by town"')              // sump pump service has both maps
         ->assertSeeHtml('class="s-county"')                                     // the county outline under the maps
+        ->assertDontSee('What to do')
+        // A dot on either map selects its town: the Town Rank town detail opens under that card.
+        ->assertSeeHtml('wire:click="selectTown(\''.$kw->id.'\', \''.$hack->id.'\')"')
+        ->call('selectTown', $kw->id, $hack->id)
+        ->assertSet('keywordId', $kw->id)
+        ->assertSet('townId', $hack->id)
+        ->assertSee('Hackettstown, NJ')
+        ->assertSee('What to do')
+        ->assertSee('GBP map pack')
+        ->assertSeeHtml(' sel" cx=')   // the selected dot is outlined
+        // The same dot again closes it.
+        ->call('selectTown', $kw->id, $hack->id)
+        ->assertSet('townId', null)
+        ->assertDontSee('What to do')
         ->call('closeArea')
         ->assertSet('locationId', null)
         ->assertDontSee('Google Business Profile');
