@@ -16,6 +16,7 @@ use App\Gathering\IntakeExtractor;
 use App\Gathering\InterviewEngine;
 use App\Geo\GeoAnswerJudge;
 use App\Geo\GeoPromptTopUp;
+use App\GeoGrid\TownPopulations;
 use App\Integrations\AiSearch\AiEngineProvider;
 use App\Integrations\AiSearch\AiEngineRegistry;
 use App\Integrations\AiSearch\ClaudeWebSearchEngine;
@@ -156,6 +157,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(CurrentSite::class);
         // Town Rank's town list is memoised per request (see the class): one instance per request/job.
         $this->app->scoped(TownRankPoints::class);
+        // The coverage population weights are memoised the same way — one query per site per request.
+        $this->app->scoped(TownPopulations::class);
 
         // Client-dashboard metric spine (§ Client Dashboard v1): the provider registry is a singleton with
         // its providers registered here. GSC (PR 2) rolls up from gsc_url_daily; DataForSEO (PR 4) will join

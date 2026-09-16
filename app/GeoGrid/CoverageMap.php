@@ -2,7 +2,6 @@
 
 namespace App\GeoGrid;
 
-use App\Models\CoverageArea;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Location;
@@ -21,7 +20,10 @@ use Illuminate\Support\Collection;
  */
 final class CoverageMap
 {
-    public function __construct(private readonly CoverageScore $score) {}
+    public function __construct(
+        private readonly CoverageScore $score,
+        private readonly TownPopulations $populations,
+    ) {}
 
     /**
      * @return array{
@@ -74,11 +76,10 @@ final class CoverageMap
         /** @var Collection<int, GeoGridScan> $timeline */
         $timeline = $byKeyword->get($selectedId);
         $bbox = $this->boundingBox($timeline);
-        $populations = $this->populations($timeline);
 
         $current = $timeline->first();
         $previous = $timeline->skip(1)->first();
-        $currentScore = $this->scoreFor($current, $populations);
+        $currentScore = $this->scoreFor($current);
 
         return [
             'location' => ['id' => (string) $location->id, 'name' => trim((string) $location->name)],
@@ -88,7 +89,7 @@ final class CoverageMap
                 'scan_id' => (string) $current->id,
                 'scanned_at' => $current->scanned_at?->toDateTimeString(),
                 'score' => $currentScore,
-                'delta' => $this->delta($currentScore, $previous !== null ? $this->scoreFor($previous, $populations) : null),
+                'delta' => $this->delta($currentScore, $previous !== null ? $this->scoreFor($previous) : null),
                 'town_count' => $current->points->count(),
                 'found_count' => $current->points->filter(fn ($p): bool => $p->rank !== null)->count(),
                 'metrics' => [
@@ -99,13 +100,13 @@ final class CoverageMap
                     'arp' => $this->num($current->arp),
                     'atrp' => $this->num($current->atrp),
                 ],
-                'markers' => $this->markers($current, $bbox, $populations),
+                'markers' => $this->markers($current, $bbox),
             ],
             'history' => $timeline->skip(1)->map(fn (GeoGridScan $scan): array => [
                 'scan_id' => (string) $scan->id,
                 'scanned_at' => $scan->scanned_at?->toDateTimeString(),
-                'score' => $this->scoreFor($scan, $populations),
-                'markers' => $this->markers($scan, $bbox, $populations),
+                'score' => $this->scoreFor($scan),
+                'markers' => $this->markers($scan, $bbox),
             ])->values()->all(),
         ];
     }
@@ -130,9 +131,8 @@ final class CoverageMap
             return null;
         }
 
-        $populations = $this->populations($scans);
         $scores = $scans->groupBy('keyword_id')
-            ->map(fn (Collection $forKeyword): ?float => $this->scoreFor($forKeyword->first(), $populations))
+            ->map(fn (Collection $forKeyword): ?float => $this->scoreFor($forKeyword->first()))
             ->filter(fn (?float $score): bool => $score !== null);
 
         return $scores->isEmpty() ? null : round((float) $scores->avg(), 1);
@@ -142,15 +142,15 @@ final class CoverageMap
      * Town markers for a scan, normalised to the shared bounding box → x/y in [0,100], NORTH-UP.
      *
      * @param  array{minLat: float, maxLat: float, minLng: float, maxLng: float}  $bbox
-     * @param  array<string, int>  $populations
      * @return list<array{x: float, y: float, rank: ?int, color: string, label: string, population: int}>
      */
-    private function markers(GeoGridScan $scan, array $bbox, array $populations): array
+    private function markers(GeoGridScan $scan, array $bbox): array
     {
         $latSpan = $bbox['maxLat'] - $bbox['minLat'];
         $lngSpan = $bbox['maxLng'] - $bbox['minLng'];
+        $siteId = (string) $scan->site_id;
 
-        return $scan->points->map(function ($point) use ($bbox, $latSpan, $lngSpan, $populations): array {
+        return $scan->points->map(function ($point) use ($bbox, $latSpan, $lngSpan, $siteId): array {
             $rank = $point->rank !== null ? (int) $point->rank : null;
             // 6..94 padding so edge dots aren't clipped; single-town spans collapse to centre (50).
             $x = $lngSpan > 0 ? 6 + (((float) $point->lng - $bbox['minLng']) / $lngSpan) * 88 : 50.0;
@@ -162,7 +162,7 @@ final class CoverageMap
                 'rank' => $rank,
                 'color' => GeoGridPalette::absolute($rank),
                 'label' => (string) ($point->label ?? '—'),
-                'population' => (int) ($populations[$point->coverage_area_id] ?? 0),
+                'population' => $this->populations->of($siteId, $point),
             ];
         })->values()->all();
     }
@@ -185,43 +185,16 @@ final class CoverageMap
         return ['minLat' => min($lats), 'maxLat' => max($lats), 'minLng' => min($lngs), 'maxLng' => max($lngs)];
     }
 
-    /**
-     * The Local Visibility Score for a scan (population-weighted). Populations are passed in when known;
-     * otherwise loaded for this scan's towns.
-     *
-     * @param  array<string, int>|null  $populations
-     */
-    private function scoreFor(GeoGridScan $scan, ?array $populations = null): ?float
+    /** The Local Visibility Score for a scan (population-weighted). */
+    private function scoreFor(GeoGridScan $scan): ?float
     {
-        $populations ??= $this->populations(collect([$scan]));
-
+        $siteId = (string) $scan->site_id;
         $towns = $scan->points->map(fn ($point): array => [
             'rank' => $point->rank !== null ? (int) $point->rank : null,
-            'population' => (int) ($populations[$point->coverage_area_id] ?? 0),
+            'population' => $this->populations->of($siteId, $point),
         ])->all();
 
         return $this->score->compute($towns, (int) $scan->depth_cap);
-    }
-
-    /**
-     * Population by coverage_area_id for every town across the given scans (one query).
-     *
-     * @param  Collection<int, GeoGridScan>  $scans
-     * @return array<string, int>
-     */
-    private function populations(Collection $scans): array
-    {
-        $ids = $scans->flatMap(fn (GeoGridScan $s): array => $s->points->pluck('coverage_area_id')->all())
-            ->filter()->unique()->all();
-        if ($ids === []) {
-            return [];
-        }
-
-        return CoverageArea::withoutGlobalScope(SiteScope::class)
-            ->whereIn('id', $ids)
-            ->pluck('population', 'id')
-            ->map(fn ($p): int => (int) $p)
-            ->all();
     }
 
     /**

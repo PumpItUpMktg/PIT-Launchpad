@@ -2,11 +2,9 @@
 
 namespace App\GeoGrid;
 
-use App\Models\CoverageArea;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
 use App\Models\MetricSnapshot;
-use App\Models\Scopes\SiteScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -25,6 +23,8 @@ use Illuminate\Support\Str;
  */
 final class GeoGridMetrics
 {
+    public function __construct(private readonly TownPopulations $populations) {}
+
     /** metric_snapshots key for the trended geo-grid ATRP (per location × keyword, monthly). */
     public const ATRP_METRIC = 'geo_grid_atrp';
 
@@ -94,17 +94,16 @@ final class GeoGridMetrics
      */
     private function populationWeighted(GeoGridScan $scan): array
     {
-        $points = $scan->points()->get(['rank', 'coverage_area_id']);
-        $ids = $points->pluck('coverage_area_id')->filter()->unique()->all();
-        $populations = $ids === []
-            ? collect()
-            : CoverageArea::withoutGlobalScope(SiteScope::class)->whereIn('id', $ids)->pluck('population', 'id');
+        // geo_id + label come along so a point whose stored town row was replaced by a coverage rebuild still
+        // resolves to its town (a weight of 0 would silently drop it out of the metric).
+        $points = $scan->points()->get(['rank', 'coverage_area_id', 'geo_id', 'label']);
+        $siteId = (string) $scan->site_id;
 
         $total = 0;
         $found = 0;
         $solv = 0;
         foreach ($points as $point) {
-            $weight = (int) ($populations[$point->coverage_area_id] ?? 0);
+            $weight = $this->populations->of($siteId, $point);
             if ($weight <= 0) {
                 continue;
             }
