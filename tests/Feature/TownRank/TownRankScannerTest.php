@@ -204,3 +204,41 @@ it('posts to DataForSEO\'s high-priority queue only when configured, and the cos
     Http::assertSent(fn ($request) => str_contains($request->url(), '/task_post')
         && collect($request->data())->every(fn (array $task): bool => ($task['priority'] ?? null) === 2));
 });
+
+it('finds a scan\'s phantom towns — "not found" with no results stored — and re-reads them from their task ids without a tasks_ready gate', function () {
+    config(['services.dataforseo.rate_limit_backoff_ms' => 0]);
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'complete', 'points_count' => 4, 'found_count' => 1, 'scanned_at' => now()->subDays(2)]);
+    $mk = fn (string $label, array $attrs): TownRankPoint => TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'label' => $label, 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => "task-{$label}", 'collected_at' => now()->subDays(2), ...$attrs]);
+    $mk('ranked', ['rank' => 3, 'top_results' => [['position' => 1, 'url' => 'https://rival.com', 'domain' => 'rival.com']]]);
+    $mk('real-miss', ['rank' => null, 'top_results' => [['position' => 1, 'url' => 'https://rival.com', 'domain' => 'rival.com']]]);   // a genuine not-found: rivals stored
+    $mk('phantom-a', ['rank' => null, 'top_results' => []]);       // a failed read recorded as not found
+    $mk('phantom-b', ['rank' => null, 'top_results' => null]);
+    $mk('phantom-c', ['rank' => null, 'top_results' => []]);
+
+    $phantoms = TownRankScanner::phantoms($scan);
+    expect($phantoms->pluck('label')->sort()->values()->all())->toBe(['phantom-a', 'phantom-b', 'phantom-c']);
+
+    Http::fake([
+        '*/tasks_ready' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'r', 'status_code' => 20000, 'result' => []]]]),   // nothing listed: the reads must not depend on it
+        '*/task_get/advanced/task-phantom-a' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => [['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://rival.com/x', 'domain' => 'rival.com'], ['type' => 'organic', 'rank_absolute' => 5, 'url' => 'https://spg.com/x', 'domain' => 'spg.com']]]]]]]),
+        '*/task_get/advanced/task-phantom-b' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => [['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://rival.com/y', 'domain' => 'rival.com']]]]]]]),
+        '*/task_get/advanced/task-phantom-c' => Http::response(['status_code' => 40202, 'status_message' => 'Too many requests']),
+    ]);
+
+    $r = app(TownRankScanner::class)->recollect($scan, $phantoms);
+
+    expect($r)->toBe(['read' => 3, 'ranked' => 1, 'not_found' => 1, 'skipped' => 1]);
+    $byLabel = $scan->points()->get()->keyBy('label');
+    expect($byLabel['phantom-a']->rank)->toBe(5)
+        ->and($byLabel['phantom-a']->ranking_url)->toBe('https://spg.com/x')
+        ->and($byLabel['phantom-b']->rank)->toBeNull()
+        ->and($byLabel['phantom-b']->top_results)->toHaveCount(1)          // now a REAL not-found: the rivals are stored
+        ->and($byLabel['phantom-c']->rank)->toBeNull()
+        ->and($byLabel['phantom-c']->top_results)->toBe([])                // unreadable again: left exactly as it was
+        ->and($byLabel['ranked']->rank)->toBe(3)                           // untouched
+        ->and($scan->fresh()->found_count)->toBe(2)
+        ->and($scan->fresh()->status)->toBe('complete');
+    Http::assertNotSent(fn ($req): bool => str_contains($req->url(), 'tasks_ready'));   // the reads never consult the ready list
+});
