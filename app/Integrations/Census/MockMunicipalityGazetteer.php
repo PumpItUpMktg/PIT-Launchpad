@@ -68,6 +68,15 @@ class MockMunicipalityGazetteer implements MunicipalityGazetteer
      * @param  list<string>  $geoIds
      * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
      */
+    public function townPolygons(array $geoIds): array
+    {
+        return $this->countyPolygons($geoIds);   // the fixture map is keyed by GEOID; towns and counties don't collide
+    }
+
+    /**
+     * @param  list<string>  $geoIds
+     * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
+     */
     public function countyPolygons(array $geoIds): array
     {
         $out = [];

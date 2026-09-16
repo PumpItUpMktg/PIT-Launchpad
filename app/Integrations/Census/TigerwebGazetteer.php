@@ -140,6 +140,46 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
     }
 
     /**
+     * Town boundaries: 10-digit GEOIDs from the county-subdivision layer, 7-digit from the places layer, in
+     * batches of 100 per request, simplified (~50 m tolerance, 4-decimal coordinates) so a service area of
+     * 70 towns stays a few hundred points per map.
+     *
+     * @param  list<string>  $geoIds
+     * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
+     */
+    public function townPolygons(array $geoIds): array
+    {
+        $geoIds = array_values(array_unique(array_filter(array_map(fn ($g) => trim((string) $g), $geoIds), fn ($g) => $g !== '')));
+        $byLayer = ['cousub' => [], 'place' => []];
+        foreach ($geoIds as $geoId) {
+            if (strlen($geoId) === 10) {
+                $byLayer['cousub'][] = $geoId;
+            } elseif (strlen($geoId) === 7) {
+                $byLayer['place'][] = $geoId;
+            }
+        }
+
+        $out = [];
+        foreach ($byLayer as $layer => $ids) {
+            foreach (array_chunk($ids, 100) as $chunk) {
+                $in = implode(',', array_map(fn (string $g) => "'".$this->escape($g)."'", $chunk));
+                $out = array_merge($out, $this->mapPolygons($this->fetch($this->layers()[$layer], [
+                    'f' => 'json',
+                    'where' => "GEOID IN ({$in})",
+                    'outFields' => 'GEOID,NAME',
+                    'returnGeometry' => 'true',
+                    'outSR' => 4326,
+                    'geometryPrecision' => 4,
+                    'maxAllowableOffset' => 0.0005,
+                    'resultRecordCount' => 1000,
+                ])));
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  mixed  $features
      * @return list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}>
      */
