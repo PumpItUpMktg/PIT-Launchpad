@@ -119,7 +119,13 @@ final class QueueHealth
         $lanes = [];
         foreach ($names as $queue) {
             $row = $backlog->get($queue);
-            $listening = array_values(array_filter($workers, fn (array $w): bool => in_array($queue, $w['lanes'], true) && $w['alive']));
+            // A listener must be able to CONSUME, not merely claim the lane: a live worker polling another
+            // connection (or a driver that holds nothing) reaches this table never, so counting it here would
+            // report a listener that cannot take a single job — the page's whole purpose is to not do that.
+            $listening = array_values(array_filter(
+                $workers,
+                fn (array $w): bool => in_array($queue, $w['lanes'], true) && $w['alive'] && $w['connection_ok'],
+            ));
             $busy = collect($listening)->first(fn (array $w): bool => $w['current_job'] !== null);
             $pending = $row !== null ? (int) $row->pending : 0;
             $oldest = $row !== null && $row->oldest !== null ? (int) floor(max(0, $now - (int) $row->oldest) / 60) : 0;

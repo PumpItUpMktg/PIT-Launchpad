@@ -21,7 +21,8 @@ function worker(string $id, string $queues, array $overrides = []): QueueWorker
 }
 
 beforeEach(function () {
-    config(['launchpad.town_rank.queue' => 'high', 'launchpad.geo_grid.queue' => 'high', 'launchpad.metrics.queue' => 'default']);
+    // The suite runs on the `sync` driver; these tests are about the database queue the app enqueues on.
+    config(['queue.default' => 'database', 'launchpad.town_rank.queue' => 'high', 'launchpad.geo_grid.queue' => 'high', 'launchpad.metrics.queue' => 'default']);
 });
 
 it('lists the expected lanes plus any lane holding jobs, with the live worker polling each', function () {
@@ -116,4 +117,24 @@ it('does not match a worker to a lane whose name it only nearly polls: a space a
     $w = collect(app(QueueHealth::class)->workers())->firstWhere('worker_id', 'web#10');
     expect($w['lanes'])->toBe(['high', ' default'])                 // verbatim, never tidied
         ->and($w['whitespace_lanes'])->toBe([' default']);
+});
+
+it('does not count a worker on another queue connection as a lane\'s listener', function () {
+    queueJob('default', 600);
+    // Live and heartbeating, claiming `default` — but polling the platform's own `cloud` connection, which
+    // never holds these jobs.
+    worker('min#15', 'default', ['connection' => 'cloud']);
+
+    $lanes = collect(app(QueueHealth::class)->lanes())->keyBy('queue');
+    $snap = app(QueueHealth::class)->snapshot();
+
+    expect($lanes['default']['workers'])->toBe([])
+        ->and($lanes['default']['alive'])->toBeFalse()
+        ->and($lanes['default']['down'])->toBeTrue()
+        ->and($snap['silent_lanes'])->toBe(['default'])
+        ->and($snap['worker_down'])->toBeTrue();
+
+    // The worker is still listed, so the operator can see it exists and why it is useless.
+    $w = collect(app(QueueHealth::class)->workers())->firstWhere('worker_id', 'min#15');
+    expect($w['alive'])->toBeTrue()->and($w['connection_ok'])->toBeFalse()->and($w['connection'])->toBe('cloud');
 });
