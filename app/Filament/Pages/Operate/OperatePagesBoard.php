@@ -45,6 +45,16 @@ abstract class OperatePagesBoard extends OperatePage
 {
     public ?string $siteId = null;
 
+    /**
+     * The active per-location tab (a physical location id, or 'unassigned'); null → the first tab.
+     *
+     * Lives on the shared parent, not on one subclass: the view this whole family renders reads it for any
+     * location-grouped board. When only the standalone Location-pages board declared it, opening the
+     * consolidated board's Town tab threw "Property [$locTab] not found" the moment it rendered — the tab
+     * appeared to do nothing at all.
+     */
+    public ?string $locTab = null;
+
     /** The content id whose inline reject-reason input is open (null = none). */
     public ?string $rejecting = null;
 
@@ -62,6 +72,12 @@ abstract class OperatePagesBoard extends OperatePage
 
     /** Which PagesBoard family this page renders. */
     abstract protected function family(): string;
+
+    /** Switch the active location tab — a location-grouped board renders one location at a time. */
+    public function setLocTab(string $tab): void
+    {
+        $this->locTab = $tab;
+    }
 
     public function mount(): void
     {
@@ -186,8 +202,14 @@ abstract class OperatePagesBoard extends OperatePage
     {
         $site = $this->getSite();
 
-        return $site === null
-            ? ['work' => [], 'live' => []]
+        if ($site === null) {
+            return ['work' => [], 'live' => []];
+        }
+
+        // The locations family renders one location at a time — hand the board the tab being viewed so it
+        // builds that one's cards and no others.
+        return $this->family() === 'locations'
+            ? app(PagesBoard::class)->locations($site, is_string($this->locTab) && $this->locTab !== '' ? $this->locTab : null)
             : app(PagesBoard::class)->{$this->family()}($site);
     }
 

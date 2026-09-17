@@ -333,7 +333,8 @@ class PhysicalLocations
             // The same Position / GSC / GA4 tracking block every other page card shows (pending reasons
             // when a source or datum is absent — e.g. "Not tracked" for a hub). GA4
             // reads the warmed cache only on render (WarmGa4Pages warms it weekly off-request).
-            'metrics' => $this->metrics->for($landing, liveTraffic: false),
+            // Render path: cache-only for every source, so opening this board never waits on Google.
+            'metrics' => $this->metrics->for($landing, liveTraffic: false, liveSearch: false),
             'can_generate' => $state !== 'generating',
             // Review opens the proof editor for any drafted page (the same target as the core board).
             'can_review' => $drafted,

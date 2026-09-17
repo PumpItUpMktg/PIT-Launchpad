@@ -24,10 +24,23 @@ interface BingWebmasterProvider
     public function pageStats(Site $site, string $path, int $days = 28): ?PageSearchStats;
 
     /**
+     * The same totals, CACHE-ONLY: never calls Bing. The render path reads this, so a cold page costs
+     * nothing and shows an honest pending instead of putting an outbound HTTP call inside a web request.
+     */
+    public function pageStatsCached(Site $site, string $path, int $days = 28): ?PageSearchStats;
+
+    /**
      * The top Bing search queries one page was found for, most impressions first. Empty while the
      * source is disconnected or has no data yet.
      *
      * @return list<PageQuery>
      */
     public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array;
+
+    /**
+     * The query list, CACHE-ONLY (see {@see pageStatsCached()}).
+     *
+     * @return list<PageQuery>
+     */
+    public function pageQueriesCached(Site $site, string $path, int $days = 28, int $limit = 8): array;
 }

@@ -256,7 +256,18 @@ it('lights the earned "In Bing" state on the card when Bing Webmaster reports im
             return new PageSearchStats(impressions: 42, clicks: 3, days: $days);
         }
 
+        // The board renders through the cache-only readers, so the double answers on those too.
+        public function pageStatsCached(Site $site, string $path, int $days = 28): ?PageSearchStats
+        {
+            return $this->pageStats($site, $path, $days);
+        }
+
         public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array
+        {
+            return [];
+        }
+
+        public function pageQueriesCached(Site $site, string $path, int $days = 28, int $limit = 8): array
         {
             return [];
         }
