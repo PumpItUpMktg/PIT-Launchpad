@@ -11,17 +11,21 @@ use App\Guided\LiveBoards;
 use App\Guided\LiveMetrics;
 use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\SearchConsole\GoogleSearchConsole;
+use App\Integrations\SearchConsole\NullSearchConsole;
 use App\Integrations\SearchConsole\PageQuery;
 use App\Integrations\SearchConsole\PageSearchStats;
 use App\Integrations\SearchConsole\SearchConsoleProvider;
 use App\Locations\TownLocationAssigner;
 use App\Models\Content;
+use App\Models\GscUrlDaily;
+use App\Models\GscUrlQueryMonthly;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\PositionSnapshot;
 use App\Models\SerpTask;
 use App\Models\Service;
 use App\Models\Site;
+use App\Support\PublicUrl;
 
 function lbSite(): Site
 {
@@ -159,12 +163,48 @@ it('distinguishes tracked_not_ranking (SERP pulled, site absent) from checking (
         ->and($cards[$unpulledPage->id]['metrics']['position']['state'])->toBe('checking');
 });
 
-it('renders Search Console numbers once the provider connects (and the rollup sums them)', function () {
+it('renders Search Console numbers from our own stored rollups, not from the vendor', function () {
     $site = lbSite();
     $trooper = lbLocation($site, 'Trooper', 'PA', ['Norristown', 'Audubon']);
-    lbPublished($site, ['page_type' => PageType::Location, 'title' => 'Norristown', 'slug' => 'norristown-pa', 'parent_location_id' => $trooper->id]);
-    lbPublished($site, ['page_type' => PageType::Location, 'title' => 'Audubon', 'slug' => 'audubon-pa', 'parent_location_id' => $trooper->id]);
+    $norristown = lbPublished($site, ['page_type' => PageType::Location, 'title' => 'Norristown', 'slug' => 'norristown-pa', 'parent_location_id' => $trooper->id]);
+    $audubon = lbPublished($site, ['page_type' => PageType::Location, 'title' => 'Audubon', 'slug' => 'audubon-pa', 'parent_location_id' => $trooper->id]);
 
+    // What the daily sync writes: per-page, per-day rows the board should read in one query.
+    foreach ([$norristown, $audubon] as $page) {
+        $url = PublicUrl::forContent($site->domain_url, $page);
+        foreach ([[150, 6, 8.0], [150, 6, 4.0]] as $i => [$impressions, $clicks, $position]) {
+            GscUrlDaily::create([
+                'site_id' => $site->id, 'grain_hash' => hash('sha256', $url.$i), 'date' => now()->subDays($i + 1)->toDateString(),
+                'url' => $url, 'impressions' => $impressions, 'clicks' => $clicks, 'ctr' => 0.04, 'position' => $position,
+            ]);
+        }
+        GscUrlQueryMonthly::create([
+            'site_id' => $site->id, 'grain_hash' => hash('sha256', $url.'q'), 'month' => now()->startOfMonth()->toDateString(),
+            'url' => $url, 'query' => 'sump pump norristown', 'country' => 'usa', 'device' => 'desktop',
+            'impressions' => 120, 'clicks' => 5, 'position' => 3.4, 'days_present' => 20,
+        ]);
+    }
+
+    // The vendor client is NOT the source here: it answers nothing, and the card is still complete.
+    app()->instance(SearchConsoleProvider::class, new NullSearchConsole);
+
+    $board = app(LiveBoards::class)->locations($site);
+    $group = $board['groups'][0];
+    $card = $group['towns'][0];
+
+    expect($card['metrics']['gsc']['impressions'])->toBe(300)
+        ->and($card['metrics']['gsc']['clicks'])->toBe(12)
+        ->and($card['metrics']['gsc']['in_google'])->toBeTrue()          // impressions > 0 → indexed + appearing
+        // What the page is actually found for, straight from the stored query rollup.
+        ->and($card['metrics']['gsc']['queries'][0]['query'])->toBe('sump pump norristown')
+        ->and($card['metrics']['gsc']['queries'][0]['impressions'])->toBe(120)
+        ->and($group['rollup']['impressions'])->toBe(600)
+        ->and($group['rollup']['clicks'])->toBe(24);
+});
+
+it('says "collecting" for a page with no stored rows yet, rather than a fabricated zero', function () {
+    $site = lbSite();
+    // Connected, but the sync has written nothing for this page yet.
     app()->instance(SearchConsoleProvider::class, new class implements SearchConsoleProvider
     {
         public function connected(Site $site): bool
@@ -174,34 +214,34 @@ it('renders Search Console numbers once the provider connects (and the rollup su
 
         public function pageStats(Site $site, string $path, int $days = 28): ?PageSearchStats
         {
-            return new PageSearchStats(impressions: 300, clicks: 12, days: $days);
+            return null;
         }
 
+        /** @return list<PageQuery> */
         public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array
         {
-            return [new PageQuery('sump pump norristown', 5, 120, 4.2, 3.4)];
+            return [];
         }
 
         public function pageStatsCached(Site $site, string $path, int $days = 28): ?PageSearchStats
         {
-            return $this->pageStats($site, $path, $days);
+            return null;
         }
 
+        /** @return list<PageQuery> */
         public function pageQueriesCached(Site $site, string $path, int $days = 28, int $limit = 8): array
         {
-            return $this->pageQueries($site, $path, $days, $limit);
+            return [];
         }
     });
+    $trooper = lbLocation($site, 'Trooper', 'PA', ['Norristown']);
+    lbPublished($site, ['page_type' => PageType::Location, 'title' => 'Norristown', 'slug' => 'norristown-pa', 'parent_location_id' => $trooper->id]);
 
-    $board = app(LiveBoards::class)->locations($site);
-    $group = $board['groups'][0];
+    $card = app(LiveBoards::class)->locations($site)['groups'][0]['towns'][0];
 
-    expect($group['towns'][0]['metrics']['gsc']['impressions'])->toBe(300)
-        ->and($group['towns'][0]['metrics']['gsc']['ctr'])->toBe(4.0)
-        ->and($group['towns'][0]['metrics']['gsc']['in_google'])->toBeTrue() // impressions > 0 → indexed + appearing
-        ->and($group['towns'][0]['metrics']['gsc']['queries'][0]['query'])->toBe('sump pump norristown')
-        ->and($group['rollup']['impressions'])->toBe(600)
-        ->and($group['rollup']['clicks'])->toBe(24);
+    expect($card['metrics']['gsc']['impressions'])->toBeNull()
+        ->and($card['metrics']['gsc']['in_google'])->toBeFalse()
+        ->and($card['metrics']['gsc']['pending'])->toBe('Collecting — first data in a few days');
 });
 
 it('published pages leave the Grow work board but keep counting in its stats', function () {
