@@ -47,17 +47,22 @@ final class PageMaterializer
     ) {}
 
     /**
+     * @param  string|null  $onlyPageKey  build ONE manifest entry (its page_key — for a location entry, the
+     *                                    source CoverageArea id). The operator builds a town at a time from
+     *                                    the pages board; materializing all 54 at once to reach one of them
+     *                                    is not what "generate this town" should mean.
      * @return list<Content> the materialized pages (one per manifest entry)
      */
-    public function materialize(Site $site): array
+    public function materialize(Site $site, ?string $onlyPageKey = null): array
     {
-        return DB::transaction(function () use ($site): array {
+        return DB::transaction(function () use ($site, $onlyPageKey): array {
             // Project the spoke structure into §1 Service + §4 Silo BEFORE materializing, so each
             // page can pin its silo and the drafter grounds on real entities.
             $this->projector->project($site);
 
             $manifest = BuildPage::query()
                 ->where('site_id', $site->id)
+                ->when($onlyPageKey !== null, fn ($q) => $q->where('page_key', $onlyPageKey))
                 ->orderBy('priority')
                 ->orderBy('id')
                 ->get();

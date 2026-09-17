@@ -5,6 +5,7 @@ use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperatePages;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Site;
 use App\Models\User;
@@ -100,4 +101,34 @@ it('builds only the tab it is about to show, never every location, on the first 
         ->and($built->first()['towns'])->toHaveCount(1)
         // Every location still appears, so the tab strip is whole.
         ->and($board['live']['groups'])->toHaveCount(3);
+});
+
+it('lists the towns selected for this location that have no page yet, each with its own build button', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown', 'lat' => 40.31, 'lng' => -75.13]);
+
+    // Chalfont is selected AND built; Warrington and Perkasie are selected with nothing made yet.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Chalfont', 'state' => 'PA', 'geo_id' => '4201712408',
+        'population' => 4259, 'lat' => 40.28, 'lng' => -75.20, 'page_selected' => true, 'source_location_ids' => [$loc->id]]);
+    Content::factory()->page()->published()->create(['site_id' => $site->id, 'page_type' => PageType::Location,
+        'status' => ContentStatus::Published, 'parent_location_id' => $loc->id, 'geo_id' => '4201712408',
+        'slug' => 'chalfont-pa', 'title' => 'Chalfont']);
+    $warrington = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Warrington', 'state' => 'PA', 'geo_id' => '4201781720',
+        'population' => 25597, 'lat' => 40.25, 'lng' => -75.15, 'page_selected' => true, 'source_location_ids' => [$loc->id]]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Perkasie', 'state' => 'PA', 'geo_id' => '4201759032',
+        'population' => 9130, 'lat' => 40.37, 'lng' => -75.29, 'page_selected' => true, 'source_location_ids' => [$loc->id]]);
+    // Not selected: not a candidate, so it must not appear.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Riegelsville', 'state' => 'PA', 'geo_id' => '4201765488',
+        'population' => 792, 'lat' => 40.59, 'lng' => -75.19, 'page_selected' => false, 'source_location_ids' => [$loc->id]]);
+
+    Livewire::test(OperatePages::class)->set('siteId', $site->id)->set('tab', 'town')
+        ->assertOk()
+        ->assertSee('town(s) selected here with no page yet')
+        ->assertSeeHtml('<b>2</b> town(s) selected here with no page yet')
+        ->assertSee('Warrington, PA')       // biggest first — the one worth building next
+        ->assertSee('Perkasie, PA')
+        ->assertDontSee('Chalfont, PA')     // already built, so it is a live card, not a candidate
+        ->assertDontSee('Riegelsville')     // never selected
+        ->assertSeeHtml('wire:click="generateTown(\''.$warrington->id.'\')"');
 });

@@ -125,6 +125,16 @@
             .pb-loctab.on .pb-locpin { color:#fff; }
             .pb-loctab-n { font-variant-numeric:tabular-nums; font-size:10.5px; font-weight:700; background:rgba(148,163,184,.2); color:inherit; border-radius:99px; padding:0 6px; }
             .pb-loctab.on .pb-loctab-n { background:rgba(255,255,255,.25); }
+            .pb-loctab-todo { background:rgba(217,119,6,.18); color:#b45309; }
+            .pb-loctab.on .pb-loctab-todo { background:rgba(255,255,255,.3); color:#fff; }
+            .pb-eligible { border:1px dashed rgba(148,163,184,.5); border-radius:11px; padding:12px 14px; margin:0 0 14px; }
+            .pb-eligible-h { font-size:12.5px; color:#64748b; margin-bottom:8px; }
+            .pb-eligible-rows { display:flex; flex-direction:column; gap:6px; }
+            .pb-eligible-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px; padding:5px 0; border-top:1px solid rgba(148,163,184,.18); }
+            .pb-eligible-row:first-child { border-top:0; }
+            .pb-eligible-town { font-weight:600; }
+            .pb-eligible-pop { font-size:11.5px; color:#94a3b8; font-variant-numeric:tabular-nums; }
+            .pb-eligible-row .lv-btn { margin-left:auto; }
             .pb-gbp { border:1px solid rgba(37,99,235,.25); background:rgba(37,99,235,.04); border-radius:11px; padding:12px 15px; margin:0 0 14px; }
             .pb-gbp-name { font-weight:700; font-size:15px; color:#1e293b; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
             .pb-gbp-cat { font-weight:600; font-size:10.5px; color:#2563eb; background:rgba(37,99,235,.1); border:1px solid rgba(37,99,235,.22); padding:1px 8px; border-radius:99px; }
@@ -141,6 +151,8 @@
             $board = $this->board;
             $work = $board['work'];
             $live = $board['live'];
+            // Selected towns with no page yet, keyed by location id — the build queue (locations family).
+            $eligibleByLocation = $board['eligible'] ?? [];
             $isLocations = array_key_exists('groups', is_array($live) ? $live : []);
             $readyCount = collect($work)->filter(fn ($r) => in_array('generate', $r['actions'] ?? [], true))->count();
 
@@ -251,9 +263,11 @@
             <div class="pb-loctabs">
                 @foreach ($locTabs as $t)
                     @php $tActive = $activeTab !== null && $t['id'] === $activeTab['id']; @endphp
+                    @php $tEligible = count($eligibleByLocation[$t['id']] ?? []); @endphp
                     <button type="button" class="pb-loctab {{ $tActive ? 'on' : '' }}" wire:click="setLocTab('{{ $t['id'] }}')" wire:key="lt-{{ $t['id'] }}">
                         @if ($t['id'] !== 'unassigned')<span class="pb-locpin">📍</span>@endif {{ $t['label'] }}
                         <span class="pb-loctab-n">{{ count($t['work']) + ($t['live'] !== null ? ($t['live']['rollup']['towns_live'] ?? 0) : 0) + count($t['orphans']) }}</span>
+                        @if ($tEligible > 0)<span class="pb-loctab-n pb-loctab-todo" title="{{ $tEligible }} selected town(s) with no page yet">+{{ $tEligible }}</span>@endif
                     </button>
                 @endforeach
             </div>
@@ -279,6 +293,31 @@
                     @include('filament.operate.partials.pages-work-row', ['row' => $row])
                 @endforeach
             </div>
+        @endif
+
+        {{-- Selected towns with no page yet: the build queue for this location, one town at a time. --}}
+        @if ($isLocations && $activeTab !== null)
+            @php $eligible = $eligibleByLocation[$activeTab['id']] ?? []; @endphp
+            @if ($eligible !== [])
+                <div class="pb-eligible">
+                    <div class="pb-eligible-h">
+                        <b>{{ count($eligible) }}</b> town(s) selected here with no page yet — build them one at a time.
+                    </div>
+                    <div class="pb-eligible-rows">
+                        @foreach ($eligible as $town)
+                            <div class="pb-eligible-row" wire:key="elig-{{ $town['coverage_area_id'] }}">
+                                <span class="pb-eligible-town">{{ $town['name'].($town['state'] ? ', '.$town['state'] : '') }}</span>
+                                @if ($town['population'] > 0)<span class="pb-eligible-pop">pop {{ number_format($town['population']) }}</span>@endif
+                                <button type="button" class="lv-btn primary" wire:click="generateTown('{{ $town['coverage_area_id'] }}')"
+                                        wire:loading.attr="disabled" wire:target="generateTown('{{ $town['coverage_area_id'] }}')">
+                                    <span wire:loading.remove wire:target="generateTown('{{ $town['coverage_area_id'] }}')">Build page</span>
+                                    <span wire:loading wire:target="generateTown('{{ $town['coverage_area_id'] }}')">Building…</span>
+                                </button>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
         @endif
 
         {{-- ─── Live lane (active location tab only) ─── --}}

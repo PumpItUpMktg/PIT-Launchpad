@@ -2,9 +2,12 @@
 
 namespace App\Operate;
 
+use App\Enums\ContentKind;
+use App\Enums\PageType;
 use App\Guided\GrowDashboard;
 use App\Guided\LiveBoards;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -51,7 +54,12 @@ class PagesBoard
     {
         // The live side is already grouped under its location; the work lane is a flat list, so tag each
         // work card with the brick-and-mortar location it belongs to — a visual link for the operator.
-        return ['work' => $this->tagBrickMortar($site, $this->workLane($site, 'town')), 'live' => $this->live->locations($site, $locationId)];
+        return [
+            'work' => $this->tagBrickMortar($site, $this->workLane($site, 'town')),
+            'live' => $this->live->locations($site, $locationId),
+            // Selected towns with no page yet — the build queue for this location, one town at a time.
+            'eligible' => $this->eligibleTowns($site),
+        ];
     }
 
     /**
@@ -98,6 +106,52 @@ class PagesBoard
         }
 
         return $cards;
+    }
+
+    /**
+     * Towns selected for a page that do not have one yet, per location id.
+     *
+     * Selecting a town makes it ELIGIBLE; it does not create anything. Until now the board showed only what
+     * had been created, so a location with 54 towns selected and 27 built looked finished — the remaining 27
+     * were invisible, and the only way to reach them was "generate everything". This is that backlog, named,
+     * so the operator builds one when they choose to.
+     *
+     * A town counts as built when a page carries its GEOID (the anchor join), whatever its status.
+     *
+     * @return array<string, list<array{coverage_area_id: string, name: string, state: string|null, population: int}>>
+     */
+    private function eligibleTowns(Site $site): array
+    {
+        $built = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->whereNotNull('geo_id')
+            ->pluck('geo_id')
+            ->flip();
+
+        $out = [];
+        $towns = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('page_selected', true)
+            ->orderByDesc('population')
+            ->get();
+
+        foreach ($towns as $town) {
+            if (trim($town->geo_id) !== '' && $built->has($town->geo_id)) {
+                continue;
+            }
+            foreach (is_array($town->source_location_ids) ? $town->source_location_ids : [] as $locationId) {
+                $out[(string) $locationId][] = [
+                    'coverage_area_id' => (string) $town->id,
+                    'name' => (string) $town->name,
+                    'state' => $town->state,
+                    'population' => (int) ($town->population ?? 0),
+                ];
+            }
+        }
+
+        return $out;
     }
 
     private function locationLabel(Location $location): string

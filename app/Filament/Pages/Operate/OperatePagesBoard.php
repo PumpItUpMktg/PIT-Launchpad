@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages\Operate;
 
+use App\Build\BuildManifestAssembler;
+use App\Build\PageMaterializer;
 use App\Build\PlanSync;
 use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
@@ -17,6 +19,7 @@ use App\KeywordGenerator\Pipeline\PositionPullEstimator;
 use App\Locations\CityKeywordTracker;
 use App\Models\BuildPage;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
@@ -248,6 +251,53 @@ abstract class OperatePagesBoard extends OperatePage
     }
 
     // ── Work-lane actions (Grow's proven paths, verbatim) ───────────────────
+
+    /**
+     * Build ONE eligible town: create its page from the manifest, then queue the draft.
+     *
+     * A selected town has no page until something makes one. Sync plan makes them all, which is the wrong
+     * unit when 27 towns are outstanding and the operator wants the next one — so this assembles the
+     * manifest, materializes that town's entry only, and generates it.
+     */
+    public function generateTown(string $coverageAreaId): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+
+        $town = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->whereKey($coverageAreaId)->first();
+        if ($town === null) {
+            return;
+        }
+
+        // The manifest is the source of a page's identity (title, slug, keyword, market) — assemble so this
+        // town has an entry, then materialize that entry alone.
+        app(BuildManifestAssembler::class)->assemble($site);
+        $pages = app(PageMaterializer::class)->materialize($site, onlyPageKey: (string) $town->id);
+        $page = $pages[0] ?? null;
+
+        if ($page === null) {
+            Notification::make()->warning()->title('Nothing to build')
+                ->body('This town has no plan entry — it may no longer be selected for a page.')->send();
+
+            return;
+        }
+
+        if (! app(GroundingReadiness::class)->ready($page)) {
+            Notification::make()->success()->title("{$town->name} added to the plan")
+                ->body('The page is created but not ready to write yet — its details are still coming together.')->send();
+
+            return;
+        }
+
+        GeneratePage::enqueue($page, actorId: Auth::id());
+
+        Notification::make()->success()
+            ->title("Building {$town->name}")
+            ->body('Queued on the worker — it appears in the work lane above as it drafts.')->send();
+    }
 
     public function generate(string $contentId): void
     {
