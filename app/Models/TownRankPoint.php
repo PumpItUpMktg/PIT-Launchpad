@@ -27,6 +27,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $ranking_url
  * @property list<array{position: int, url: string, domain: string}>|null $top_results
  * @property string|null $provider_task_id
+ * @property int $read_attempts reads that produced no answer; at the ceiling the point is closed unreadable
+ * @property string|null $read_error why it could never be read — set means "no data", never "not found"
  * @property Carbon|null $collected_at
  */
 class TownRankPoint extends Model
@@ -43,6 +45,7 @@ class TownRankPoint extends Model
             'lng' => 'decimal:7',
             'rank' => 'integer',
             'top_results' => 'array',
+            'read_attempts' => 'integer',
             'collected_at' => 'datetime',
         ];
     }

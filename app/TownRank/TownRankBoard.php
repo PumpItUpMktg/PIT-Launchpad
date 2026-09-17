@@ -213,6 +213,9 @@ final class TownRankBoard
             $rank = $row["{$prefix}_rank"] !== null ? (int) $row["{$prefix}_rank"] : null;
             $prev = $row["{$prefix}_prev_rank"] !== null ? (int) $row["{$prefix}_prev_rank"] : null;
             $change = $row["{$prefix}_change"];
+            // A town we could never read is violet on both views: no rank was learned, so neither the heat
+            // nor the movement colour means anything for it.
+            $unreadable = ($row["{$prefix}_state"] ?? null) === 'unreadable';
             [$x, $y] = $project($c['lat'], $c['lng']);
             $markers[] = [
                 'id' => (string) $row['coverage_area_id'],
@@ -221,8 +224,9 @@ final class TownRankBoard
                 'rank' => $rank,
                 'prev_rank' => $prev,
                 'change' => is_string($change) ? $change : null,
-                'color' => GeoGridPalette::absolute($rank),
-                'delta_color' => $change === null ? GeoGridPalette::ABSENT : GeoGridPalette::delta($rank, $prev),
+                'unreadable' => $unreadable,
+                'color' => $unreadable ? GeoGridPalette::UNREADABLE : GeoGridPalette::absolute($rank),
+                'delta_color' => $unreadable ? GeoGridPalette::UNREADABLE : ($change === null ? GeoGridPalette::ABSENT : GeoGridPalette::delta($rank, $prev)),
                 'label' => (string) $row['label'].($row['state'] !== null ? ', '.$row['state'] : ''),
                 'population' => (int) $row['population'],
                 'page' => $row['page_url'] !== null,

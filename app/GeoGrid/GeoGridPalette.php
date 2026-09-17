@@ -17,6 +17,13 @@ final class GeoGridPalette
     public const ABSENT = '#9ca3af';
 
     /**
+     * A point we could never READ — the vendor never answered for it. Violet, deliberately outside the
+     * green→red heat scale and distinct from absent grey: it is not a weak result, it is no result. Reading
+     * it as "not found" would state a fact nobody learned.
+     */
+    public const UNREADABLE = '#7c3aed';
+
+    /**
      * Background color for a point's absolute rank. rank null = not found within depth_cap.
      * Bucketed 1–3 / 4–7 / 8–10 / 11–15 / 16+ so a thumbnail reads at a glance.
      */

@@ -168,7 +168,7 @@ final class ServiceAreas
         }
         $prefix = $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town';
 
-        $summary = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'pending' => 0];
+        $summary = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'unreadable' => 0, 'pending' => 0];
         $markers = [];
         foreach ($data['rows'] as $row) {
             $id = (string) $row['coverage_area_id'];
@@ -180,7 +180,7 @@ final class ServiceAreas
                 $summary[$state]++;
             }
             $rank = $row["{$prefix}_rank"] !== null ? (int) $row["{$prefix}_rank"] : null;
-            $markers[] = self::marker($id, $coords[$id], $project, $rank, (string) $row['label'], $row['state'], (int) $row['population'], $row['page_url'] !== null);
+            $markers[] = self::marker($id, $coords[$id], $project, $rank, (string) $row['label'], $row['state'], (int) $row['population'], $row['page_url'] !== null, $state === 'unreadable');
         }
 
         return [
@@ -220,7 +220,7 @@ final class ServiceAreas
             return null;
         }
 
-        $summary = ['top3' => 0, 'top7' => 0, 'top10' => 0, 'beyond' => 0, 'absent' => 0, 'pending' => 0];
+        $summary = ['top3' => 0, 'top7' => 0, 'top10' => 0, 'beyond' => 0, 'absent' => 0, 'unreadable' => 0, 'pending' => 0];
         $markers = [];
         // Linked by GEOID, not by the stored row id: a coverage rebuild replaces every town row, which would
         // otherwise drop every marker off this map (see TownPointLinks).
@@ -232,10 +232,12 @@ final class ServiceAreas
             }
             $town = $siteTowns[$id] ?? null;
             $rank = $point->rank;
+            $unreadable = $point->read_error !== null;
             if ($point->collected_at === null && $scan->status === 'pending') {
                 $summary['pending']++;
             } else {
                 $summary[match (true) {
+                    $unreadable => 'unreadable',
                     $rank === null => 'absent',
                     $rank <= 3 => 'top3',
                     $rank <= 7 => 'top7',
@@ -246,6 +248,7 @@ final class ServiceAreas
             $markers[] = self::marker(
                 $id, $coords[$id], $project, $rank,
                 (string) ($town['name'] ?? $point->label ?? ''), $town['state'] ?? null, (int) ($town['population'] ?? 0), ($town['page_url'] ?? null) !== null,
+                $unreadable,
             );
         }
 
@@ -291,16 +294,17 @@ final class ServiceAreas
      * @param  callable(float, float): array{float, float}  $project
      * @return array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}
      */
-    private static function marker(string $id, array $c, callable $project, ?int $rank, string $name, ?string $state, int $population, bool $page): array
+    private static function marker(string $id, array $c, callable $project, ?int $rank, string $name, ?string $state, int $population, bool $page, bool $unreadable = false): array
     {
         [$x, $y] = $project($c['lat'], $c['lng']);
 
         return [
             'id' => $id,
+            'unreadable' => $unreadable,
             'x' => $x,
             'y' => $y,
             'rank' => $rank,
-            'color' => GeoGridPalette::absolute($rank),
+            'color' => $unreadable ? GeoGridPalette::UNREADABLE : GeoGridPalette::absolute($rank),
             'label' => $name.($state !== null && $state !== '' ? ", {$state}" : ''),
             'population' => $population,
             'page' => $page,

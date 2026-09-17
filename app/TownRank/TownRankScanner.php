@@ -158,14 +158,15 @@ final class TownRankScanner
                     continue;
                 }
 
-                $items = $this->readTask($taskId);
+                [$items, $error] = $this->readTask($taskId);
                 $spent++;
                 if ($items === null) {
                     $skipped++;
+                    $this->recordFailedRead($point, $error);
 
                     continue;
                 }
-                $point->forceFill([...$this->extract($items, $host), 'collected_at' => Carbon::now()])->save();
+                $point->forceFill([...$this->extract($items, $host), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
             }
         }
         if ($skipped > 0) {
@@ -197,7 +198,7 @@ final class TownRankScanner
             if ($deadline !== null && microtime(true) >= $deadline) {
                 break;
             }
-            $items = $this->readTask((string) $point->provider_task_id);
+            [$items] = $this->readTask((string) $point->provider_task_id);
             $out['read']++;
             if ($items === null) {
                 $out['skipped']++;
@@ -205,7 +206,7 @@ final class TownRankScanner
                 continue;
             }
             $fields = $this->extract($items, $host);
-            $point->forceFill([...$fields, 'collected_at' => Carbon::now()])->save();
+            $point->forceFill([...$fields, 'collected_at' => Carbon::now(), 'read_error' => null])->save();
             $out[$fields['rank'] !== null ? 'ranked' : 'not_found']++;
         }
 
@@ -233,28 +234,55 @@ final class TownRankScanner
             ->values();
     }
 
+    /** Reads that produced no answer before a town is closed as unreadable rather than retried forever. */
+    public const MAX_READ_ATTEMPTS = 2;
+
     /**
      * One task_get, classified: the organic items on success (an empty page — "No Search Results" — is an
-     * empty list, a real answer); null when the read did not produce an answer (rate-limited, still in
-     * queue, transport) so the caller leaves the town for a later read. A fatal auth/quota error propagates.
+     * empty list, a real answer); null plus a reason when the read did not produce an answer (rate-limited,
+     * still in queue, transport, a task the vendor rejects). A fatal auth/quota error propagates.
      *
-     * @return list<array{position: int, url: string, domain: string}>|null
+     * @return array{0: list<array{position: int, url: string, domain: string}>|null, 1: string|null}
      */
-    private function readTask(string $taskId): ?array
+    private function readTask(string $taskId): array
     {
         try {
-            return DataForSeoClient::parseOrganic($this->client->taskGet(self::ORGANIC_GET, $taskId));
+            return [DataForSeoClient::parseOrganic($this->client->taskGet(self::ORGANIC_GET, $taskId)), null];
         } catch (DataForSeoException $e) {
             if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
-                return [];       // Google returned an empty page for this query: genuinely not found
+                return [[], null];   // Google returned an empty page for this query: genuinely not found
             }
             if ($e->fatal) {
-                throw $e;        // auth / quota: stop the run, nothing here is collectable
+                throw $e;            // auth / quota: stop the run, nothing here is collectable
             }
 
-            return null;         // rate-limited, in queue, transport hiccup: NOT a result
-        } catch (Throwable) {
-            return null;
+            return [null, $e->getMessage()];
+        } catch (Throwable $e) {
+            return [null, $e->getMessage()];
+        }
+    }
+
+    /**
+     * A read that produced no answer. The first one is a hiccup and the town waits for the next pass; at
+     * {@see MAX_READ_ATTEMPTS} the town is closed as UNREADABLE — collected, no rank, the reason kept — so
+     * the scan can finalize instead of waiting forever on a task that will never answer, and the maps can
+     * colour "we never learned" apart from "we don't rank here".
+     */
+    private function recordFailedRead(TownRankPoint $point, ?string $error): void
+    {
+        $attempts = (int) $point->read_attempts + 1;
+        $terminal = $attempts >= self::MAX_READ_ATTEMPTS;
+
+        $point->forceFill([
+            'read_attempts' => $attempts,
+            'read_error' => $error ?? 'the read produced no answer',
+            'collected_at' => $terminal ? Carbon::now() : null,
+        ])->save();
+
+        if ($terminal) {
+            Log::warning('Town-rank collect: town closed as unreadable.', [
+                'scan_id' => $point->scan_id, 'point_id' => $point->id, 'label' => $point->label, 'error' => $error,
+            ]);
         }
     }
 

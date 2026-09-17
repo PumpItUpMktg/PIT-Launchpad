@@ -160,6 +160,7 @@
                                         <span>page-1 <b>{{ $s['top3'] + $s['page1'] }}</b></span>
                                         <span>page-2 <b>{{ $s['page2'] }}</b></span>
                                         <span>not found <b style="color:#9ca3af">{{ $s['not_found'] }}</b></span>
+                                        @if (($s['unreadable'] ?? 0) > 0)<span>no data <b style="color:#7c3aed">{{ $s['unreadable'] }}</b></span>@endif
                                         @if ($s['pending'] > 0)<span style="color:#2563eb">collecting {{ $s['pending'] }}</span>@endif
                                     </div>
                                     <div class="s-when">
@@ -212,6 +213,7 @@
                                         <span>4–7 <b>{{ $g['top7'] }}</b></span>
                                         <span>8–10 <b>{{ $g['top10'] }}</b></span>
                                         <span>absent <b style="color:#9ca3af">{{ $g['absent'] }}</b></span>
+                                        @if (($g['unreadable'] ?? 0) > 0)<span>no data <b style="color:#7c3aed">{{ $g['unreadable'] }}</b></span>@endif
                                         @if ($g['pending'] > 0)<span style="color:#2563eb">collecting {{ $g['pending'] }}</span>@endif
                                     </div>
                                     <div class="s-when">

@@ -27,7 +27,7 @@ final class TownRankReport
      *     keyword: string,
      *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>,
      *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, map_rank: int|null}>,
-     *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
+     *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
      * }
      */
     public function forKeyword(Site $site, Keyword $keyword): array
@@ -70,7 +70,7 @@ final class TownRankReport
         $rows = [];
         $summary = [];
         foreach (TownRankScan::MODES as $mode) {
-            $summary[$mode] = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'pending' => 0, 'up' => 0, 'down' => 0, 'new' => 0, 'lost' => 0, 'same' => 0];
+            $summary[$mode] = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'unreadable' => 0, 'pending' => 0, 'up' => 0, 'down' => 0, 'new' => 0, 'lost' => 0, 'same' => 0];
         }
 
         foreach ($towns as $town) {
@@ -127,7 +127,7 @@ final class TownRankReport
     }
 
     /**
-     * A point's bucket: top3 | page1 | page2 | beyond | not_found | pending | unscanned (no scan / no point).
+     * A point's bucket: top3 | page1 | page2 | beyond | not_found | unreadable | pending | unscanned.
      *
      * @param  array{status: string}|null  $scan
      */
@@ -138,6 +138,11 @@ final class TownRankReport
         }
         if ($point->collected_at === null) {
             return $scan !== null && $scan['status'] === 'pending' ? 'pending' : 'not_found';
+        }
+        // Closed without an answer: we know nothing about this town, which is not the same as knowing we
+        // don't rank in it.
+        if ($point->read_error !== null) {
+            return 'unreadable';
         }
         $rank = $point->rank;
         if ($rank === null) {
