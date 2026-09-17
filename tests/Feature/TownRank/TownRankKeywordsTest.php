@@ -5,6 +5,7 @@ use App\Jobs\RunTownRankKeyword;
 use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Location;
+use App\Models\Silo;
 use App\Models\Site;
 use App\Models\TownRankScan;
 use App\TownRank\TownRankBoard;
@@ -131,12 +132,16 @@ it('removes a keyword from the wall: both flags off, every collected scan kept',
         ->not->toBeNull();
 });
 
-it('orders the wall by the operator priority, scanned-first within a tie', function () {
+it('groups the wall by silo, silos A to Z, the unassigned last', function () {
     $site = trkSite();
-    $plain = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'aaa first alphabetically', 'track_town_rank' => true, 'priority' => 0]);
-    $important = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'zzz last alphabetically', 'track_town_rank' => true, 'priority' => 3]);
+    $waterproofing = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Waterproofing']);
+    $drainage = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Drainage']);
+    $inDrainage = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'french drain', 'silo_id' => $drainage->id, 'track_town_rank' => true]);
+    $inWaterproofing = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'basement waterproofing', 'silo_id' => $waterproofing->id, 'track_town_rank' => true]);
+    $homeless = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'aaa no silo at all', 'silo_id' => null, 'track_town_rank' => true]);
 
-    $order = collect(app(TownRankBoard::class)->keywords($site))->pluck('keyword_id')->all();
+    $wall = app(TownRankBoard::class)->keywords($site);
 
-    expect($order)->toBe([(string) $important->id, (string) $plain->id]);
+    expect(array_column($wall, 'keyword_id'))->toBe([(string) $inDrainage->id, (string) $inWaterproofing->id, (string) $homeless->id])
+        ->and(array_column($wall, 'silo'))->toBe(['Drainage', 'Waterproofing', null]);
 });

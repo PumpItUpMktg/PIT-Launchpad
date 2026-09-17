@@ -9,6 +9,7 @@ use App\Models\GeoGridScan;
 use App\Models\JobCounty;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
+use App\Models\Silo;
 use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
@@ -36,7 +37,7 @@ final class TownRankBoard
      * set). Scanned keywords first, most recent first; unscanned after, by query. `pending` = a scan is
      * still collecting. A removed keyword keeps its scans — re-add it and its history comes back.
      *
-     * @return list<array{keyword_id: string, query: string, priority: int, scanned_at: string|null, pending: bool}>
+     * @return list<array{keyword_id: string, query: string, silo_id: string|null, silo: string|null, scanned_at: string|null, pending: bool}>
      */
     public function keywords(Site $site): array
     {
@@ -53,8 +54,21 @@ final class TownRankBoard
             // `track_town_rank`, so removing it from the wall is a flag change, not a data deletion.
             ->where(fn ($q) => $q->where('track_town_rank', true)->orWhere('is_grid_keyword', true))
             ->orderBy('query')
-            ->get(['id', 'query', 'priority'])
+            ->get(['id', 'query', 'silo_id'])
             ->keyBy('id');
+
+        // The silo each keyword belongs to — the wall's grouping. §4 named these; the wall borrows the name
+        // rather than inventing a second taxonomy for the same thing.
+        $silos = Silo::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereIn('id', $keywords->pluck('silo_id')->filter()->unique()->all())
+            ->get(['id', 'name'])
+            ->keyBy(fn (Silo $s): string => (string) $s->id);
+        $siloName = function (?string $id) use ($silos): ?string {
+            $silo = $id === null ? null : $silos->get($id);
+
+            return $silo instanceof Silo ? (string) $silo->name : null;
+        };
 
         $out = [];
         foreach ($latest as $scan) {
@@ -65,7 +79,8 @@ final class TownRankBoard
             $out[] = [
                 'keyword_id' => (string) $scan->keyword_id,
                 'query' => (string) $keyword->query,
-                'priority' => (int) $keyword->priority,
+                'silo_id' => $keyword->silo_id !== null ? (string) $keyword->silo_id : null,
+                'silo' => $siloName($keyword->silo_id !== null ? (string) $keyword->silo_id : null),
                 'scanned_at' => $scan->scanned_at?->toDateTimeString(),
                 'pending' => $pendingIds->has($scan->keyword_id),
             ];
@@ -75,13 +90,24 @@ final class TownRankBoard
             if (isset($scannedIds[(string) $id])) {
                 continue;
             }
-            $out[] = ['keyword_id' => (string) $id, 'query' => (string) $keyword->query, 'priority' => (int) $keyword->priority, 'scanned_at' => null, 'pending' => false];
+            $out[] = [
+                'keyword_id' => (string) $id,
+                'query' => (string) $keyword->query,
+                'silo_id' => $keyword->silo_id !== null ? (string) $keyword->silo_id : null,
+                'silo' => $siloName($keyword->silo_id !== null ? (string) $keyword->silo_id : null),
+                'scanned_at' => null,
+                'pending' => false,
+            ];
         }
 
-        // Operator importance first — the same `priority` the §7b target queue promotes/demotes, so a keyword
-        // ranked up here is ranked up there. PHP's sort is stable, so equal priority keeps the order above:
-        // scanned first (most recent first), then unscanned by query.
-        usort($out, fn (array $a, array $b): int => $b['priority'] <=> $a['priority']);
+        // Grouped by silo, silos A→Z, the keywords with no silo last under their own heading. Within a silo
+        // the order above holds (scanned first, most recent first, then unscanned by query), so the wall
+        // reads as the content architecture §4 already defined rather than one flat list in no stated order.
+        usort($out, function (array $a, array $b): int {
+            $rank = fn (array $e): array => [$e['silo'] === null ? 1 : 0, mb_strtolower((string) $e['silo'])];
+
+            return $rank($a) <=> $rank($b);
+        });
 
         return $out;
     }
@@ -141,7 +167,7 @@ final class TownRankBoard
      * one). Click-through opens {@see for()} for the keyword.
      *
      * @return list<array{
-     *     keyword_id: string, query: string, priority: int, scanned_at: string|null, pending: bool, towns: int, thumbnail_mode: string, has_previous: bool,
+     *     keyword_id: string, query: string, silo_id: string|null, silo: string|null, scanned_at: string|null, pending: bool, towns: int, thumbnail_mode: string, has_previous: bool,
      *     modes: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}|null>,
      *     progress: array<string, array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null}|null>,
      *     uncollected: array<string, int|null>,
@@ -185,7 +211,8 @@ final class TownRankBoard
             $cards[] = [
                 'keyword_id' => (string) $keyword->id,
                 'query' => $data['keyword'],
-                'priority' => $entry['priority'],
+                'silo_id' => $entry['silo_id'],
+                'silo' => $entry['silo'],
                 'scanned_at' => $entry['scanned_at'],
                 'pending' => $entry['pending'],
                 'towns' => $towns,

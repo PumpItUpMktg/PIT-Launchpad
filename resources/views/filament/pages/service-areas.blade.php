@@ -64,6 +64,7 @@
     .sva .s-act { border-left:3px solid; padding:6px 10px; margin-top:8px; font-size:12.5px; background:var(--s-surface); border-radius:0 8px 8px 0; }
     .sva .s-act b { display:block; }
     .sva .s-act span { color:var(--s-muted); }
+    .sva .s-silo { font-size:11px; color:var(--s-faint); margin:-4px 0 8px; }
     .sva .s-actbtn { display:inline-block; margin-top:6px; padding:5px 11px; font-size:12px; font-weight:600; border-radius:7px; border:1px solid var(--s-line); background:var(--s-surface2); color:inherit; cursor:pointer; }
     .sva .s-actbtn:hover { border-color:#2563eb; color:#2563eb; }
     .sva .s-actbtn[disabled] { opacity:.6; cursor:progress; }
@@ -129,6 +130,8 @@
                 @foreach ($area['cards'] as $card)
                     <div class="s-card" wire:key="kw-{{ $card['keyword_id'] }}">
                         <h3>{{ $card['query'] }}</h3>
+                        {{-- Which silo this keyword belongs to — the cards arrive grouped by it from the wall. --}}
+                        <div class="s-silo">{{ $card['silo'] ?? 'No silo' }}</div>
                         <div class="s-cols">
                             {{-- Column 1: the website's town rank across this area's towns. --}}
                             <div class="s-col">

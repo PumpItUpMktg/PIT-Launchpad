@@ -44,7 +44,7 @@ class TownRankKeywordsCommand extends Command
         $keywords = Keyword::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where(fn ($q) => $q->where('track_town_rank', true)->orWhere('is_grid_keyword', true))
-            ->orderByDesc('priority')
+            ->with('silo:id,name')
             ->orderBy('query')
             ->get();
 
@@ -58,8 +58,8 @@ class TownRankKeywordsCommand extends Command
             $grid = (bool) $keyword->is_grid_keyword;
             $counts[$tracked && $grid ? 'both' : ($tracked ? 'tracked' : 'grid')]++;
             $rows[] = [
+                $keyword->silo_id !== null ? (string) $keyword->silo->name : '—',
                 $keyword->query,
-                (int) $keyword->priority,
                 $tracked ? 'yes' : '—',
                 $grid ? 'yes' : '—',
                 $keyword->source->value,
@@ -68,7 +68,8 @@ class TownRankKeywordsCommand extends Command
                 $scan !== null && $scan->last_scan !== null ? (string) $scan->last_scan : 'never',
             ];
         }
-        $this->table(['keyword', 'priority', 'town rank', 'geo grid', 'source', 'created', 'scans', 'last scan'], $rows);
+        usort($rows, fn (array $a, array $b): int => [$a[0] === '—', mb_strtolower((string) $a[0]), (string) $a[1]] <=> [$b[0] === '—', mb_strtolower((string) $b[0]), (string) $b[1]]);
+        $this->table(['silo', 'keyword', 'town rank', 'geo grid', 'source', 'created', 'scans', 'last scan'], $rows);
 
         $this->line(sprintf('Flags: %d both · %d town-rank only · %d geo-grid only.', $counts['both'], $counts['tracked'], $counts['grid']));
         $this->line('geo-grid only = flagged by the coverage plan (one keyword per top-level service page), never added on the wall.');
