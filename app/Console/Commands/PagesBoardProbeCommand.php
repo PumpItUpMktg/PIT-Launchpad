@@ -27,7 +27,7 @@ class PagesBoardProbeCommand extends Command
 
     protected $description = 'Time the pages board build stage by stage — work lane, live groups, per-location — with query counts. Read-only.';
 
-    public function handle(GrowDashboard $grow, LiveBoards $live, PagesBoard $board): int
+    public function handle(): int
     {
         $site = $this->site();
         if ($site === null) {
@@ -44,27 +44,29 @@ class PagesBoardProbeCommand extends Command
         $this->newLine();
 
         $rows = [];
-        $rows[] = $this->stage('work lane (GrowDashboard::sections)', function () use ($grow, $site): string {
-            $sections = $grow->sections($site);
+        // A FRESH instance per stage. These read models memoise per instance, so reusing one makes every
+        // stage after the first look free — the probe would flatter exactly the thing it exists to measure.
+        $rows[] = $this->stage('work lane (GrowDashboard::sections)', function () use ($site): string {
+            $sections = app(GrowDashboard::class)->sections($site);
             $town = collect($sections)->firstWhere('key', 'town');
 
             return collect($sections)->map(fn (array $s): string => $s['key'].' '.$s['count'])->implode(', ')
                 .'  · town rows rendered: '.(int) ($town['count'] ?? 0);
         });
 
-        $rows[] = $this->stage('live groups, ALL locations', fn (): string => 'groups: '.count($live->locations($site)['groups']));
+        $rows[] = $this->stage('live groups, ALL locations', fn (): string => 'groups: '.count(app(LiveBoards::class)->locations($site)['groups']));
 
         if ($location !== null) {
-            $rows[] = $this->stage('live groups, one location', function () use ($live, $site, $location): string {
-                $groups = $live->locations($site, (string) $location->id)['groups'];
+            $rows[] = $this->stage('live groups, one location', function () use ($site, $location): string {
+                $groups = app(LiveBoards::class)->locations($site, (string) $location->id)['groups'];
                 $built = collect($groups)->firstWhere('location.id', (string) $location->id);
 
                 return 'groups: '.count($groups).' · town cards built: '.count($built['towns'] ?? []);
             });
         }
 
-        $rows[] = $this->stage('whole board (PagesBoard::locations)', function () use ($board, $site, $location): string {
-            $data = $board->locations($site, $location !== null ? (string) $location->id : null);
+        $rows[] = $this->stage('whole board (PagesBoard::locations)', function () use ($site, $location): string {
+            $data = app(PagesBoard::class)->locations($site, $location !== null ? (string) $location->id : null);
 
             return 'work rows: '.count($data['work']).' · groups: '.count($data['live']['groups']);
         });
