@@ -16,6 +16,7 @@ use App\Models\ServiceProblem;
 use App\Models\Silo;
 use App\Models\Site;
 use App\Models\SiteBranding;
+use App\Models\TownFloodZone;
 use App\Models\VoiceProfile;
 use App\Models\WireframeKit;
 use Database\Seeders\WireframeKitSeeder;
@@ -373,4 +374,37 @@ it('grounds a TOWN page on its OWN town\'s Census housing, and still on nothing 
         'page_type' => PageType::Location, 'slot_payload' => ['hero' => 'x'],
     ]);
     expect(app(PageGroundingAssembler::class)->assemble($buckingham)->location)->not->toHaveKey('local_facts');
+});
+
+it('a TOWN page carries its own town\'s housing AND flood facts, from its own GEOID', function () {
+    $site = Site::factory()->create();
+    $parent = Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'Doylestown',
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Doylestown'],
+            ['types' => ['administrative_area_level_1'], 'short_name' => 'PA'],
+        ],
+        'served_towns' => [['name' => 'Warrington']],
+    ]);
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('page_type', 'location')->firstOrFail();
+
+    CensusHousing::query()->create(['geo_id' => '4201781048', 'name' => 'Warrington', 'state' => 'PA',
+        'acs_year' => '2022', 'median_year_built' => 1948, 'occupied_units' => 1000, 'owner_occupied_units' => 820,
+        'total_units' => 1100, 'single_family_units' => 990, 'pre_1960_units' => 660]);
+    TownFloodZone::query()->create(['geo_id' => '4201781048', 'name' => 'Warrington', 'state' => 'PA',
+        'mapped' => true, 'has_sfha' => true, 'zones' => [['zone' => 'AE', 'sfha' => true, 'polygons' => 43]]]);
+
+    $page = Content::factory()->page()->create([
+        'site_id' => $site->id, 'title' => 'Warrington, PA', 'parent_location_id' => $parent->id,
+        'location_id' => null, 'market_id' => null, 'wireframe_kit_id' => $kit->id, 'geo_id' => '4201781048',
+        'page_type' => PageType::Location, 'slot_payload' => ['hero' => 'x'],
+    ]);
+
+    $facts = app(PageGroundingAssembler::class)->assemble($page)->location['local_facts'];
+
+    // Housing first, then what the ground does — the order a writer would use them in.
+    expect($facts[0])->toContain('median home in Warrington was built in 1948')
+        ->and(implode(' ', $facts))->toContain('Special Flood Hazard Areas in parts of Warrington')
+        ->and(implode(' ', $facts))->toContain('depends on the address, not the town');
 });

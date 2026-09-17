@@ -8,7 +8,7 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\ServiceSiloRole;
 use App\Local\Grounding\LocationGrounding;
-use App\Local\Grounding\TownHousingFacts;
+use App\Local\Grounding\TownFacts;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
@@ -43,7 +43,7 @@ class PageGroundingAssembler
         private readonly VoiceResolver $voice = new VoiceResolver,
         private readonly Permalinks $permalinks = new Permalinks,
         private readonly LocationGrounding $grounding = new LocationGrounding,
-        private readonly TownHousingFacts $townFacts = new TownHousingFacts,
+        private readonly TownFacts $townFacts = new TownFacts,
     ) {}
 
     public function assemble(Content $page): PageGrounding
@@ -188,13 +188,14 @@ class PageGroundingAssembler
         // Doylestown's regional facts into a Buckingham page is exactly what drifted the copy to Allentown /
         // generic tri-state filler.
         //
-        // So a town page grounds on ITS OWN town — the housing stock the Census reports for its GEOID
-        // ({@see TownHousingFacts}), which is per-town by construction and cannot carry another town's
-        // colour. A town with no stored row still gets nothing: honest-by-omission, as before.
+        // So a town page grounds on ITS OWN town — everything {@see TownFacts} holds for its GEOID (the
+        // Census housing stock, FEMA's flood mapping), each keyed on that GEOID and so incapable of
+        // carrying another town's colour. A town with nothing stored still gets nothing: honest-by-
+        // omission, as before.
         $isTown = $subject !== null;
         $facts = [];
         if ($isTown) {
-            $facts = $this->townFacts->for($this->townFacts->row($page->geo_id));
+            $facts = $this->townFacts->for($page->geo_id);
         }
         if (! $isTown) {
             $trade = SiloBlueprint::withoutGlobalScope(SiteScope::class)
