@@ -64,6 +64,9 @@
     .sva .s-act { border-left:3px solid; padding:6px 10px; margin-top:8px; font-size:12.5px; background:var(--s-surface); border-radius:0 8px 8px 0; }
     .sva .s-act b { display:block; }
     .sva .s-act span { color:var(--s-muted); }
+    .sva .s-actbtn { display:inline-block; margin-top:6px; padding:5px 11px; font-size:12px; font-weight:600; border-radius:7px; border:1px solid var(--s-line); background:var(--s-surface2); color:inherit; cursor:pointer; }
+    .sva .s-actbtn:hover { border-color:#2563eb; color:#2563eb; }
+    .sva .s-actbtn[disabled] { opacity:.6; cursor:progress; }
     .sva .s-comp { font-size:12px; color:var(--s-muted); margin:6px 0 0; padding-left:16px; }
     .sva h6.s-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--s-muted); font-weight:700; margin:12px 0 4px; }
     .sva .s-towncols { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); gap:14px; }
@@ -276,7 +279,17 @@
                                     <div>
                                         <h6 class="s-h" style="margin-top:0">What to do</h6>
                                         @foreach ($town['actions'] as $a)
-                                            <div class="s-act" style="border-color:{{ $levelColor($a['level']) }}"><b>{{ $a['title'] }}</b><span>{{ $a['why'] }}</span></div>
+                                            <div class="s-act" style="border-color:{{ $levelColor($a['level']) }}">
+                                                <b>{{ $a['title'] }}</b><span>{{ $a['why'] }}</span>
+                                                {{-- The one action that can be done from the map: the town has no page, so make one. --}}
+                                                @if ($a['key'] === 'build_page')
+                                                    <button type="button" class="s-actbtn" wire:click="buildTownPage" wire:loading.attr="disabled" wire:target="buildTownPage"
+                                                            wire:confirm="Build a page for {{ $town['label'] }}? It is created and queued to draft; you review and publish it on Pages → Town.">
+                                                        <span wire:loading.remove wire:target="buildTownPage">Build this page</span>
+                                                        <span wire:loading wire:target="buildTownPage">Building…</span>
+                                                    </button>
+                                                @endif
+                                            </div>
                                         @endforeach
                                     </div>
                                 </div>
