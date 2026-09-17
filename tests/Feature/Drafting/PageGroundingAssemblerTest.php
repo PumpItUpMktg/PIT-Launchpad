@@ -5,6 +5,7 @@ use App\ContentEngine\Drafting\PageGroundingAssembler;
 use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Enums\StandardPageType;
+use App\Models\CensusHousing;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
@@ -328,4 +329,48 @@ it('renders each slot\'s CHARACTER BUDGET into the prompt — the model writes w
         ->toContain('8–120 chars — write to ~96')          // hero_headline's budget, with the write-to target
         ->toContain('120–900 chars — write to ~720')       // svc_intro's
         ->toContain('CHARACTER BUDGETS are hard limits');  // and the contract naming the rejection
+});
+
+it('grounds a TOWN page on its OWN town\'s Census housing, and still on nothing when there is no row', function () {
+    $site = Site::factory()->create();
+    $parent = Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'Doylestown',
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Doylestown'],
+            ['types' => ['administrative_area_level_1'], 'short_name' => 'PA'],
+        ],
+        'served_towns' => [['name' => 'Buckingham'], ['name' => 'Warrington']],
+        'grounding_cache' => [
+            'facts' => ['Serving the greater Allentown and Lehigh Valley region across PA, NJ, and MD.'],
+            'sources' => ['test'], 'fetched_at' => now()->toIso8601String(),
+        ],
+    ]);
+
+    (new WireframeKitSeeder)->run();
+    $kit = WireframeKit::where('page_type', 'location')->firstOrFail();
+
+    // Warrington's housing stock, keyed on the GEOID its page carries.
+    CensusHousing::query()->create(['geo_id' => '4201781720', 'name' => 'Warrington', 'state' => 'PA',
+        'county_geoid' => '42017', 'acs_year' => '2023', 'median_year_built' => 1948, 'occupied_units' => 1000,
+        'owner_occupied_units' => 820, 'total_units' => 1100, 'single_family_units' => 990, 'pre_1960_units' => 660]);
+
+    $warrington = Content::factory()->page()->create([
+        'site_id' => $site->id, 'title' => 'Warrington, PA', 'parent_location_id' => $parent->id,
+        'location_id' => null, 'market_id' => null, 'wireframe_kit_id' => $kit->id, 'geo_id' => '4201781720',
+        'page_type' => PageType::Location, 'slot_payload' => ['hero' => 'x'],
+    ]);
+    $grounding = app(PageGroundingAssembler::class)->assemble($warrington);
+
+    expect($grounding->location['local_facts'])->toContain('The median home in Warrington was built in 1948 (Census ACS 2023).')
+        ->and($grounding->location['local_facts'])->toContain('About 60% of the housing stock in Warrington was built before 1960.')
+        // Its own town only — the parent's Allentown region never reaches it.
+        ->and(implode(' ', $grounding->location['local_facts']))->not->toContain('Allentown');
+
+    // A town with no stored row keeps the honest-by-omission behaviour rather than borrowing a neighbour's.
+    $buckingham = Content::factory()->page()->create([
+        'site_id' => $site->id, 'title' => 'Buckingham, PA', 'parent_location_id' => $parent->id,
+        'location_id' => null, 'market_id' => null, 'wireframe_kit_id' => $kit->id, 'geo_id' => '4201709992',
+        'page_type' => PageType::Location, 'slot_payload' => ['hero' => 'x'],
+    ]);
+    expect(app(PageGroundingAssembler::class)->assemble($buckingham)->location)->not->toHaveKey('local_facts');
 });
