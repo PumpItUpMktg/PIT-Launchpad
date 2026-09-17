@@ -261,3 +261,28 @@ it('carries the map-pack position per town so the GBP map can write the number i
         // The number is drawn at the town's own projected centre — the same spot its shape occupies.
         ->and($byId[(string) $f['hack']->id])->toHaveKeys(['x', 'y']);
 });
+
+it('says how much of a collecting scan is left, and what a partial scan never got', function () {
+    $f = serviceAreaSite();
+    config(['services.dataforseo.read_rate_limit_per_min' => 600]);
+
+    // The website scan is still collecting: one of its three towns is in, two are owed.
+    $scan = TownRankScan::withoutGlobalScopes()->where('keyword_id', $f['keyword']->id)->where('mode', 'town_query')->sole();
+    $scan->forceFill(['status' => 'pending', 'points_count' => 3])->save();
+    $scan->points()->where('label', '!=', 'Hackettstown')->update(['collected_at' => null]);
+
+    $card = app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['cards'][0];
+
+    expect($card['web']['status'])->toBe('pending')
+        ->and($card['web']['progress'])->toMatchArray(['collected' => 1, 'points' => 3, 'remaining' => 2])
+        ->and($card['web']['progress']['eta'])->toBe('under a minute')
+        ->and($card['web']['uncollected'])->toBeNull();
+
+    // Closed without them: the number it never collected is stated, and no estimate is offered.
+    $scan->forceFill(['status' => 'partial'])->save();
+    $card = app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['cards'][0];
+
+    expect($card['web']['status'])->toBe('partial')
+        ->and($card['web']['progress'])->toBeNull()
+        ->and($card['web']['uncollected'])->toBe(2);
+});

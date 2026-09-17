@@ -142,3 +142,34 @@ it('adds a keyword from the wall, shows its card, and queues its ranking report 
     Livewire::test(TownRankPage::class)->set('siteId', $site->id)->set('newKeyword', '  ')->call('addKeyword');
     expect(Keyword::query()->withoutGlobalScopes()->where('site_id', $site->id)->count())->toBe(1);
 });
+
+it('shows how much of a collecting scan is left, and flags one that closed without every town', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    config(['services.dataforseo.read_rate_limit_per_min' => 600]);
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.85, 'lng' => -74.83]);
+    foreach ([['Hackettstown', 40.85], ['Mansfield', 40.80]] as [$name, $lat]) {
+        CoverageArea::factory()->create(['site_id' => $site->id, 'name' => $name, 'state' => 'NJ', 'geo_id' => '340411'.$lat,
+            'population' => 9000, 'lat' => $lat, 'lng' => -74.83, 'source_location_ids' => [$loc->id]]);
+    }
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service', 'track_town_rank' => true]);
+    $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'pending',
+        'points_count' => 2, 'found_count' => 0, 'scanned_at' => now()]);
+    $hack = CoverageArea::withoutGlobalScopes()->where('site_id', $site->id)->where('name', 'Hackettstown')->sole();
+    $mans = CoverageArea::withoutGlobalScopes()->where('site_id', $site->id)->where('name', 'Mansfield')->sole();
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown',
+        'state' => 'NJ', 'lat' => 40.85, 'lng' => -74.83, 'query' => 'q', 'rank' => 2, 'collected_at' => now()]);
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $mans->id, 'label' => 'Mansfield',
+        'state' => 'NJ', 'lat' => 40.80, 'lng' => -74.83, 'query' => 'q', 'provider_task_id' => 'task-1']);
+
+    // Collecting: the wall says what is left and the floor on the wait, not just "collecting".
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)
+        ->assertSee('collecting 1 / 2 towns')
+        ->assertSee('1 left, at least under a minute');
+
+    // Closed without it: the count it never got, and no estimate.
+    $scan->forceFill(['status' => 'partial'])->save();
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)
+        ->assertSee('partial: 1 town(s) never collected')
+        ->assertDontSee('at least');
+});

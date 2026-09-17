@@ -156,7 +156,7 @@ final class ServiceAreas
      * @param  array<string, true>  $areaIds
      * @param  array<string, array{lat: float, lng: float}>  $coords
      * @param  callable(float, float): array{float, float}  $project
-     * @return array{mode: string, status: string|null, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
+     * @return array{mode: string, status: string|null, scanned_at: string|null, progress: array<string, mixed>|null, uncollected: int|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
      */
     private function webMap(Site $site, Keyword $keyword, array $areaIds, array $coords, callable $project): ?array
     {
@@ -187,6 +187,13 @@ final class ServiceAreas
             'mode' => $mode,
             'status' => $scan['status'],
             'scanned_at' => $scan['scanned_at'],
+            // How much is left and how long that should take, and — once closed — what it never collected.
+            'progress' => $scan['status'] === 'pending'
+                ? CollectionProgress::for((int) $scan['collected'], (int) $scan['points'])
+                : null,
+            'uncollected' => $scan['status'] === 'partial'
+                ? max(0, (int) $scan['points'] - (int) $scan['collected'])
+                : null,
             'summary' => $summary,
             'markers' => $markers,
         ];
@@ -242,10 +249,15 @@ final class ServiceAreas
             );
         }
 
+        $points = $scan->points->count();
+        $collected = $scan->points->filter(fn ($p): bool => $p->collected_at !== null)->count();
+
         return [
             'scan_id' => (string) $scan->id,
             'status' => (string) $scan->status,
             'scanned_at' => $scan->scanned_at?->toDateTimeString(),
+            'progress' => $scan->status === 'pending' ? CollectionProgress::for($collected, $points) : null,
+            'uncollected' => $scan->status === 'partial' ? max(0, $points - $collected) : null,
             'summary' => $summary,
             'markers' => $markers,
         ];
