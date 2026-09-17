@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
+use App\Filament\Pages\Concerns\BuildsTownPage;
 use App\Jobs\RunCoverageScan;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
@@ -35,6 +36,8 @@ use Livewire\Attributes\Url;
  */
 class ServiceAreasPage extends Page
 {
+    use BuildsTownPage;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-map';
 
     protected static ?string $navigationLabel = 'Service areas';

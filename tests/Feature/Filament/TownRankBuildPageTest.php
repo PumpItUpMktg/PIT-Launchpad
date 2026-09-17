@@ -2,6 +2,7 @@
 
 use App\Enums\PageType;
 use App\Enums\UserRole;
+use App\Filament\Pages\ServiceAreasPage;
 use App\Filament\Pages\TownRankPage;
 use App\Jobs\GeneratePage;
 use App\Models\Content;
@@ -77,5 +78,24 @@ it('builds the page from the map: selects the town, creates the page, queues the
     expect($f['town']->fresh()->page_selected)->toBeTrue()
         ->and($page->page_type)->toBe(PageType::Location)
         ->and($page->slug)->toContain('warrington');
+    Queue::assertPushed(GeneratePage::class, fn (GeneratePage $j): bool => $j->contentId === (string) $page->id);
+});
+
+it('offers the same build on the Service Areas polygon map, and builds from there', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $f = buildPageSite();
+    $location = Location::withoutGlobalScopes()->where('site_id', $f['site']->id)->sole();
+
+    Livewire::test(ServiceAreasPage::class)->set('siteId', $f['site']->id)
+        ->call('openArea', (string) $location->id)
+        ->call('selectTown', (string) $f['keyword']->id, (string) $f['town']->id)
+        ->assertSee('Build a town page')
+        ->assertSeeHtml('wire:click="buildTownPage"')
+        ->call('buildTownPage')
+        ->assertOk();
+
+    $page = Content::withoutGlobalScopes()->where('title', 'like', 'Warrington%')->sole();
+    expect($f['town']->fresh()->page_selected)->toBeTrue();
     Queue::assertPushed(GeneratePage::class, fn (GeneratePage $j): bool => $j->contentId === (string) $page->id);
 });
