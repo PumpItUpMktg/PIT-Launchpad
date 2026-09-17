@@ -2,8 +2,13 @@
 
 namespace App\TownRank;
 
+use App\GeoGrid\CountyOutlines;
 use App\GeoGrid\GeoGridPalette;
+use App\GeoGrid\MapProjection;
+use App\GeoGrid\TownOutlines;
+use App\Jobs\WarmTownOutlines;
 use App\Models\GeoGridScan;
+use App\Models\JobCounty;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -25,6 +30,8 @@ final class TownRankBoard
     public function __construct(
         private readonly TownRankReport $report,
         private readonly TownRankPoints $points,
+        private readonly CountyOutlines $counties,
+        private readonly TownOutlines $townOutlines,
     ) {}
 
     /**
@@ -80,6 +87,8 @@ final class TownRankBoard
      * @return array{
      *     keyword_id: string, keyword: string, mode: string,
      *     scan: array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null,
+     *     outlines: list<array{geoid: string, label: string, paths: list<string>}>,
+     *     town_paths: array<string, list<string>>,
      *     progress: array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null}|null,
      *     uncollected: int|null,
      *     summary: array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int},
@@ -99,6 +108,7 @@ final class TownRankBoard
 
         $data = $this->report->forKeyword($site, $keyword);
         $coords = $this->coords($site);
+        $frame = $this->frame($site, $coords);
 
         $scan = $data['scans'][$mode];
 
@@ -115,7 +125,9 @@ final class TownRankBoard
                 : null,
             'summary' => $data['summary'][$mode],
             'has_previous' => $scan !== null && $scan['previous_scanned_at'] !== null,
-            'markers' => $this->markers($data['rows'], $prefix, $coords),
+            'markers' => $this->markers($data['rows'], $prefix, $coords, $frame['project']),
+            'outlines' => $frame['outlines'],
+            'town_paths' => $frame['town_paths'],
             'rows' => $data['rows'],
         ];
     }
@@ -193,11 +205,9 @@ final class TownRankBoard
      * @param  array<string, array{lat: float, lng: float}>  $coords
      * @return list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>
      */
-    private function markers(array $rows, string $prefix, array $coords): array
+    private function markers(array $rows, string $prefix, array $coords, ?callable $project = null): array
     {
-        $bbox = $this->boundingBox($coords);
-        $latSpan = $bbox['maxLat'] - $bbox['minLat'];
-        $lngSpan = $bbox['maxLng'] - $bbox['minLng'];
+        $project ??= MapProjection::projector(MapProjection::pointsExtent($coords));
 
         $markers = [];
         foreach ($rows as $row) {
@@ -208,12 +218,11 @@ final class TownRankBoard
             $rank = $row["{$prefix}_rank"] !== null ? (int) $row["{$prefix}_rank"] : null;
             $prev = $row["{$prefix}_prev_rank"] !== null ? (int) $row["{$prefix}_prev_rank"] : null;
             $change = $row["{$prefix}_change"];
-            $x = $lngSpan > 0 ? 6 + (($c['lng'] - $bbox['minLng']) / $lngSpan) * 88 : 50.0;
-            $y = $latSpan > 0 ? 6 + (($bbox['maxLat'] - $c['lat']) / $latSpan) * 88 : 50.0;
+            [$x, $y] = $project($c['lat'], $c['lng']);
             $markers[] = [
                 'id' => (string) $row['coverage_area_id'],
-                'x' => round($x, 2),
-                'y' => round($y, 2),
+                'x' => $x,
+                'y' => $y,
                 'rank' => $rank,
                 'prev_rank' => $prev,
                 'change' => is_string($change) ? $change : null,
@@ -226,6 +235,79 @@ final class TownRankBoard
         }
 
         return $markers;
+    }
+
+    /**
+     * The whole-site drawing frame: the served counties' outlines, each town's own boundary, and the shared
+     * projector — the same geography the Service Areas and Geo Grid maps draw on, so a town sits on the same
+     * spot everywhere.
+     *
+     * Counties are few and are fetched normally. Town boundaries are read CACHE-ONLY: a site covers ~700
+     * towns and fetching those inside a page render is the shape of request that used to time this page out.
+     * A town not cached yet keeps its dot, and {@see WarmTownOutlines} fills the gap off-request
+     * so its shape appears on a later view.
+     *
+     * @param  array<string, array{lat: float, lng: float}>  $coords
+     * @return array{project: callable(float, float): array{float, float}, outlines: list<array{geoid: string, label: string, paths: list<string>}>, town_paths: array<string, list<string>>, shaped: int}
+     */
+    private function frame(Site $site, array $coords): array
+    {
+        $townGeoIds = [];
+        $countyIds = [];
+        foreach ($this->points->forSite($site) as $town) {
+            $geoId = trim((string) ($town['geo_id'] ?? ''));
+            if ($geoId === '' || ! isset($coords[(string) $town['coverage_area_id']])) {
+                continue;
+            }
+            $townGeoIds[(string) $town['coverage_area_id']] = $geoId;
+            $countyIds[substr($geoId, 0, 5)] = substr($geoId, 0, 5);
+        }
+
+        $countyRings = $this->counties->for(array_values($countyIds));
+        $townRings = $this->townOutlines->for(array_values($townGeoIds), fetchMissing: false);
+
+        $project = MapProjection::projector(MapProjection::unionExtent([
+            MapProjection::ringsExtent($countyRings),
+            MapProjection::ringsExtent($townRings),
+            MapProjection::pointsExtent($coords),
+        ]));
+
+        $townPaths = [];
+        foreach ($townGeoIds as $id => $geoId) {
+            if (isset($townRings[$geoId])) {
+                $townPaths[(string) $id] = MapProjection::paths($townRings[$geoId], $project);
+            }
+        }
+
+        $labels = $this->countyLabels(array_values($countyIds));
+        $outlines = [];
+        foreach ($countyRings as $geoId => $rings) {
+            $outlines[] = ['geoid' => (string) $geoId, 'label' => $labels[$geoId] ?? "County {$geoId}", 'paths' => MapProjection::paths($rings, $project)];
+        }
+
+        return ['project' => $project, 'outlines' => $outlines, 'town_paths' => $townPaths, 'shaped' => count($townPaths)];
+    }
+
+    /**
+     * "Warren County, NJ" per GEOID, from the county registry, else the Census name that came with the
+     * outline plus the state read off the GEOID.
+     *
+     * @param  list<string>  $geoids
+     * @return array<string, string>
+     */
+    private function countyLabels(array $geoids): array
+    {
+        if ($geoids === []) {
+            return [];
+        }
+        $labels = [];
+        foreach (JobCounty::query()->withoutGlobalScope(SiteScope::class)->whereIn('county_geoid', $geoids)->get() as $county) {
+            $name = trim((string) $county->name);
+            $name .= preg_match('/county|parish|borough|census area|municipio/i', $name) ? '' : ' County';
+            $labels[(string) $county->county_geoid] = $name.($county->state !== null && $county->state !== '' ? ', '.$county->state : '');
+        }
+
+        return $labels;
     }
 
     /**
@@ -347,26 +429,5 @@ final class TownRankBoard
         }
 
         return $out;
-    }
-
-    /**
-     * One bounding box over every covered town, so a town sits in the same spot whichever mode is shown.
-     *
-     * @param  array<string, array{lat: float, lng: float}>  $coords
-     * @return array{minLat: float, maxLat: float, minLng: float, maxLng: float}
-     */
-    private function boundingBox(array $coords): array
-    {
-        $lats = [];
-        $lngs = [];
-        foreach ($coords as $c) {
-            $lats[] = $c['lat'];
-            $lngs[] = $c['lng'];
-        }
-        if ($lats === []) {
-            return ['minLat' => 0.0, 'maxLat' => 0.0, 'minLng' => 0.0, 'maxLng' => 0.0];
-        }
-
-        return ['minLat' => min($lats), 'maxLat' => max($lats), 'minLng' => min($lngs), 'maxLng' => max($lngs)];
     }
 }

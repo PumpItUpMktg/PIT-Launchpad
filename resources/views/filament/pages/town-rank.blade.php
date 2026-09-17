@@ -195,9 +195,22 @@
                     @php($r = $dotR($board['markers']))
                     <svg class="t-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Town rank map">
                         @foreach ($board['markers'] as $m)
-                            <circle class="t-dot {{ $m['id'] === $townId ? 'sel' : '' }} {{ $m['page'] ? '' : 'nopage' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $moveView ? $m['delta_color'] : $m['color'] }}" wire:click="selectTown('{{ $m['id'] }}')">
-                                <title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}{{ $m['prev_rank'] !== null ? ' (was #'.$m['prev_rank'].')' : ($m['change'] === 'new' ? ' (new)' : '') }}{{ $m['page'] ? '' : ' · no page' }}@if ($m['population'] > 0) · pop {{ number_format($m['population']) }}@endif</title>
-                            </circle>
+                            @php($title = $m['label'].' — '.($m['rank'] !== null ? '#'.$m['rank'] : 'not found').($m['prev_rank'] !== null ? ' (was #'.$m['prev_rank'].')' : ($m['change'] === 'new' ? ' (new)' : '')).($m['page'] ? '' : ' · no page').($m['population'] > 0 ? ' · pop '.number_format($m['population']) : ''))
+                            @if (isset($board['town_paths'][$m['id']]))
+                                {{-- The town's own boundary, coloured by its rank. --}}
+                                @foreach ($board['town_paths'][$m['id']] as $d)
+                                    <path class="t-shape {{ $m['id'] === $townId ? 'sel' : '' }}" d="{{ $d }}" fill="{{ $moveView ? $m['delta_color'] : $m['color'] }}" wire:click="selectTown('{{ $m['id'] }}')"><title>{{ $title }}</title></path>
+                                @endforeach
+                            @else
+                                {{-- No boundary cached yet — a dot until the warm pass fetches its shape. --}}
+                                <circle class="t-dot {{ $m['id'] === $townId ? 'sel' : '' }} {{ $m['page'] ? '' : 'nopage' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $moveView ? $m['delta_color'] : $m['color'] }}" wire:click="selectTown('{{ $m['id'] }}')"><title>{{ $title }}</title></circle>
+                            @endif
+                        @endforeach
+                        @foreach ($board['outlines'] as $o)
+                            <path class="t-county" d="{{ $o['paths'][0] ?? '' }}" pointer-events="none"><title>{{ $o['label'] }}</title></path>
+                            @foreach (array_slice($o['paths'], 1) as $d)
+                                <path class="t-county" d="{{ $d }}" pointer-events="none"></path>
+                            @endforeach
                         @endforeach
                     </svg>
                     @if ($moveView)
