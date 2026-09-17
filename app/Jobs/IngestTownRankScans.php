@@ -26,12 +26,14 @@ class IngestTownRankScans implements ShouldBeUnique, ShouldQueue
     /** Scheduled every minute; unique for the job's own timeout so runs queue behind one another, never beside. */
     public int $uniqueFor = 300;
 
-    public int $timeout = 280;   // a run stops at its deadline; ShouldBeUnique keeps the next minute's dispatch from stacking
+    public int $timeout = 120;   // a run stops at its deadline; ShouldBeUnique keeps the next minute's dispatch from stacking
 
     public int $tries = 1;
 
     /** Seconds kept back from the job timeout so a hung read and the finalize never race the kill. */
-    private const DEADLINE_MARGIN_SECONDS = 100;   // one hung read can take ~95s (3 tries × 30s + backoff)
+    // Reads fail fast now (one try, 15s ceiling), so the margin only has to cover the read in flight when
+    // the deadline lands plus the finalize — not the 95s a 3×30s retry used to be able to eat.
+    private const DEADLINE_MARGIN_SECONDS = 40;
 
     public function __construct()
     {

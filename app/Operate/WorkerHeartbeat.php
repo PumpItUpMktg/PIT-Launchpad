@@ -6,6 +6,7 @@ use App\Models\QueueWorker;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobTimedOut;
 use Illuminate\Queue\Events\Looping;
 use Illuminate\Queue\Events\WorkerStopping;
 use Illuminate\Queue\WorkerStopReason;
@@ -103,6 +104,27 @@ final class WorkerHeartbeat
                 'memory_mb' => self::memoryMb(),
             ])->save();
             $this->lastBeat = time();
+        });
+    }
+
+    /**
+     * A job that overran its timeout: Laravel KILLS the worker process for it, and that death is not a
+     * clean stop — {@see stopping()} never runs, so the row would sit there alive-looking, holding a job,
+     * with no reason recorded. That is exactly what a silent worker row has looked like all day. Stamp the
+     * cause here, while the process still exists.
+     */
+    public function timedOut(JobTimedOut $event): void
+    {
+        $this->guard(function () use ($event): void {
+            if ($this->worker === null) {
+                return;
+            }
+            $name = $event->job->resolveName();
+            $this->worker->forceFill([
+                'stopped_at' => now(),
+                'stop_reason' => "killed: {$name} ran past its timeout",
+                'last_seen_at' => now(),
+            ])->save();
         });
     }
 

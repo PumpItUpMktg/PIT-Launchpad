@@ -21,6 +21,11 @@ class DataForSeoClient
 {
     private const TRIES = 3;
 
+    /** A read is cheap to abandon: one try, short ceiling. See {@see pending()}. */
+    private const READ_TRIES = 1;
+
+    private const READ_TIMEOUT_SECONDS = 15;
+
     private const BACKOFF_MS = 400;
 
     /** Reactive backoff on a 40202 rate-limit envelope (proactive throttle below usually prevents it). */
@@ -495,16 +500,23 @@ class DataForSeoClient
      */
     private function requestGet(string $path): array
     {
-        return $this->send(fn (): array => $this->handle($this->pending()->get($this->url($path))), read: true);
+        return $this->send(fn (): array => $this->handle($this->pending(read: true)->get($this->url($path))), read: true);
     }
 
-    private function pending(): PendingRequest
+    /**
+     * A READ fails fast. A post spends credits, so it is worth three tries over 30s each; a task_get spends
+     * nothing and the town it belongs to is simply left for the next pass, so retrying hard inside the job
+     * buys nothing and costs the worker: at 3 × 30s a single stuck read can eat 90 seconds of a job's
+     * budget, which is what forces a collector to reserve a 100-second margin and stay large. One try at
+     * {@see READ_TIMEOUT_SECONDS} bounds the worst case to seconds, which is what lets the jobs be small.
+     */
+    private function pending(bool $read = false): PendingRequest
     {
         return $this->http
             ->withBasicAuth($this->login, $this->password)
-            ->timeout($this->timeout)
+            ->timeout($read ? self::READ_TIMEOUT_SECONDS : $this->timeout)
             ->acceptJson()
-            ->retry(self::TRIES, self::BACKOFF_MS, function (Throwable $e): bool {
+            ->retry($read ? self::READ_TRIES : self::TRIES, self::BACKOFF_MS, function (Throwable $e): bool {
                 return $e instanceof ConnectionException
                     || ($e instanceof RequestException && $e->response->serverError());
             }, throw: false);

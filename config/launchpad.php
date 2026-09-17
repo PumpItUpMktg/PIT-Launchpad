@@ -398,7 +398,10 @@ return [
         // in a few runs, not a day. task_get is a free call and the CLI poll collected 1,448 in ~2 min, so
         // 1,000 per five-minute run fits well inside the job's timeout (which sits under the schedule
         // interval so runs never stack). Lower it only if DataForSEO's 2,000 calls/min limit is shared.
-        'ingest_batch' => (int) env('LAUNCHPAD_TOWN_RANK_INGEST_BATCH', 1000),
+        // Reads run at 600/min, and a pass has ~80s of wall clock inside a 120s job — so ~800 is the most it
+        // could spend anyway. 400 keeps a pass comfortably short: a smaller bite finishes well inside its
+        // timeout, and the every-minute cadence carries the same throughput across more passes.
+        'ingest_batch' => (int) env('LAUNCHPAD_TOWN_RANK_INGEST_BATCH', 400),
         'pending_expiry_hours' => (int) env('LAUNCHPAD_TOWN_RANK_PENDING_EXPIRY_HOURS', 24),
         // Queue for the Run / sweep posting jobs AND the every-minute collector. Blank ⇒ the default queue. Set
         // it (e.g. "high") to give ranking work its own lane ahead of publishing — the worker must then be
@@ -444,7 +447,7 @@ return [
         // calls per sweep run — reads run under `services.dataforseo.read_rate_limit_per_min` (600/min), so
         // 500 fits in under a minute and a 72-town GBP report lands in one run; the remainder is collected on
         // the next run. `pending_expiry_hours` finalizes a scan as `partial` if some tasks never became ready.
-        'ingest_batch' => (int) env('LAUNCHPAD_GEO_GRID_INGEST_BATCH', 500),
+        'ingest_batch' => (int) env('LAUNCHPAD_GEO_GRID_INGEST_BATCH', 300),
         'pending_expiry_hours' => (int) env('LAUNCHPAD_GEO_GRID_PENDING_EXPIRY_HOURS', 24),
         // The coverage-plan keyword dropdown offers each silo's buyer-intent keywords (everything except
         // informational longtails), opportunity-ranked and capped to this many per silo — the main

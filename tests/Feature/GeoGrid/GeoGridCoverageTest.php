@@ -239,3 +239,29 @@ it('records a town whose Maps pack came back empty as absent, and never lets it 
         ->and($byLabel['limited']->collected_at)->toBeNull() // a rate-limited read is not an answer
         ->and($scan->fresh()->status)->toBe('pending');      // one town still owed
 });
+
+it('stops collecting at a wall-clock deadline instead of running past its timeout', function () {
+    config(['services.dataforseo.rate_limit_backoff_ms' => 0]);
+    $site = Site::factory()->create();
+    $location = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.85, 'lng' => -74.83, 'place_id' => 'ChIJ_us']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    $scan = GeoGridScan::create(['site_id' => $site->id, 'location_id' => $location->id, 'keyword_id' => $kw->id, 'provider' => 'dataforseo',
+        'mode' => 'coverage', 'grid_size' => 3, 'spacing_miles' => 0, 'center_lat' => 40.85, 'center_lng' => -74.83, 'zoom' => 13,
+        'depth_cap' => 20, 'status' => 'pending', 'scanned_at' => now()]);
+    foreach (range(0, 2) as $i) {
+        GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'row' => 0, 'col' => $i, 'lat' => 40.8, 'lng' => -74.8,
+            'label' => "t{$i}", 'provider_task_id' => "task-{$i}"]);
+    }
+    Http::fake([
+        '*/tasks_ready' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'r', 'status_code' => 20000, 'result' => [['id' => 'task-0'], ['id' => 'task-1'], ['id' => 'task-2']]]]]),
+        '*/task_get/*' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => []]]]]]),
+    ]);
+
+    // A deadline already past: the pass collects nothing and returns, rather than working through the towns
+    // and overrunning the job timeout (which kills the worker).
+    $spent = app(GeoGridScanner::class)->collectPending($scan, 100, microtime(true) - 1);
+
+    expect($spent)->toBe(0)
+        ->and($scan->points()->whereNull('collected_at')->count())->toBe(3)
+        ->and($scan->fresh()->status)->toBe('pending');   // still owed, picked up next sweep
+});

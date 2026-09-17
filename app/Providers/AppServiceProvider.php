@@ -141,6 +141,7 @@ use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobTimedOut;
 use Illuminate\Queue\Events\Looping;
 use Illuminate\Queue\Events\WorkerStopping;
 use Illuminate\Support\Facades\Auth;
@@ -764,6 +765,8 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(JobProcessed::class, [WorkerHeartbeat::class, 'processed']);
         Event::listen(JobFailed::class, [WorkerHeartbeat::class, 'failed']);
         Event::listen(WorkerStopping::class, [WorkerHeartbeat::class, 'stopping']);
+        // A timeout kill is not a clean stop: record it before the process dies, or the row goes silent.
+        Event::listen(JobTimedOut::class, [WorkerHeartbeat::class, 'timedOut']);
 
         // §9 audit: record RBAC role changes. (Publish — ContentPublished — is
         // emitted by the §2 publish pipeline; that call site attaches there.)
