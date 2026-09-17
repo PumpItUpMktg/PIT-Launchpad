@@ -76,6 +76,12 @@
     .trk .t-cardfoot { display:flex; align-items:center; gap:10px; margin-top:10px; padding-top:10px; border-top:1px solid var(--t-line); font-size:11.5px; color:var(--t-faint); }
     .trk .t-run { font-size:12px; border:1px solid #2563eb; color:#2563eb; background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; }
     .trk .t-run:disabled { opacity:.55; cursor:default; }
+    .trk .t-rm { font-size:12px; border:1px solid var(--t-line); color:var(--t-muted); background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; margin-left:auto; }
+    .trk .t-rm:hover { border-color:#c0392b; color:#c0392b; }
+    .trk .t-rank { display:inline-flex; border:1px solid var(--t-line); border-radius:8px; overflow:hidden; }
+    .trk .t-rank button { font-size:12px; line-height:1; padding:5px 8px; background:transparent; color:var(--t-muted); border:none; cursor:pointer; }
+    .trk .t-rank button:hover { color:#2563eb; }
+    .trk .t-prio { font-size:11px; color:var(--t-faint); font-variant-numeric:tabular-nums; }
     .trk .t-add { display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
     .trk .t-add input { font-size:13px; border:1px solid var(--t-line); border-radius:8px; padding:8px 12px; background:transparent; color:inherit; min-width:280px; }
     .trk .t-add button { font-size:13px; border:none; border-radius:8px; padding:8px 14px; background:#2563eb; color:#fff; cursor:pointer; }
@@ -151,6 +157,17 @@
                                 {{ $card['pending'] ? 'Collecting…' : 'Run ranking report' }}
                             </button>
                             <span>{{ $card['pending'] ? 'a report is collecting — the card updates as results land' : number_format($runRequests).' requests · ~$'.number_format($runCost, 2) }}</span>
+                            <button type="button" class="t-rm" wire:click="removeKeyword('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="removeKeyword"
+                                    wire:confirm="Remove “{{ $card['query'] }}” from the wall and the weekly sweep?{{ $card['scanned_at'] !== null ? ' Its collected scans are kept — add the keyword back and the history returns.' : '' }}">Remove</button>
+                        </div>
+                        {{-- Your order, not ours: the same operator priority the target queue promotes, so a keyword
+                             ranked up here is ranked up there. Equal priority keeps the scanned-first order. --}}
+                        <div class="t-cardfoot" style="border-top:none; padding-top:0">
+                            <div class="t-rank" role="group" aria-label="Rank {{ $card['query'] }}">
+                                <button type="button" wire:click="rankKeyword('{{ $card['keyword_id'] }}', 'up')" title="More important">▲</button>
+                                <button type="button" wire:click="rankKeyword('{{ $card['keyword_id'] }}', 'down')" title="Less important">▼</button>
+                            </div>
+                            <span class="t-prio">{{ $card['priority'] === 0 ? 'unranked' : 'priority '.$card['priority'] }}</span>
                         </div>
                     </div>
                 @endforeach

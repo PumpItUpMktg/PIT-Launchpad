@@ -31,11 +31,11 @@ final class TownRankSweep
         $cadence = max(1, (int) config('launchpad.town_rank.cadence_days', 7));
         $cutoff = Carbon::now()->subDays($cadence);
 
-        $scannedIds = TownRankScan::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)->distinct()->pluck('keyword_id')->all();
+        // The wall's set, by flag alone: a keyword removed from the wall stops being swept (that is the
+        // point of removing it), while its collected scans stay on record.
         $keywords = Keyword::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
-            ->where(fn ($q) => $q->where('is_grid_keyword', true)->orWhere('track_town_rank', true)->orWhereIn('id', $scannedIds))
+            ->where(fn ($q) => $q->where('is_grid_keyword', true)->orWhere('track_town_rank', true))
             ->orderBy('query')
             ->get();
 

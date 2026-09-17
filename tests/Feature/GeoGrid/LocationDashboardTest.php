@@ -194,7 +194,8 @@ it('rolls the town-rank picture up to the location: its towns only, per mode, wi
     $location = ldGbpLocation($site);
     $mine = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Mine', 'population' => 500, 'lat' => 40.7, 'lng' => -74.0, 'source_location_ids' => [$location->id]]);
     $other = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Elsewhere', 'population' => 500, 'lat' => 41.7, 'lng' => -75.0, 'source_location_ids' => []]);   // not this location's
-    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    // Scanned, so on the wall — the scanner flags what it spends requests on.
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service', 'track_town_rank' => true]);
     foreach ([['2026-09-01 10:00:00', 9, 2], ['2026-09-08 10:00:00', 3, 2]] as [$at, $mineRank, $otherRank]) {
         $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'complete', 'points_count' => 2, 'found_count' => 2, 'scanned_at' => $at]);
         TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $mine->id, 'label' => 'Mine', 'lat' => 40.7, 'lng' => -74.0, 'query' => 'q', 'rank' => $mineRank, 'collected_at' => $at]);

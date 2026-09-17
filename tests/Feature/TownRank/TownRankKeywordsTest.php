@@ -7,6 +7,7 @@ use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Site;
 use App\Models\TownRankScan;
+use App\TownRank\TownRankBoard;
 use App\TownRank\TownRankKeywords;
 use App\TownRank\TownRankScanner;
 use Illuminate\Support\Facades\Http;
@@ -103,4 +104,39 @@ it('the run job posts the other mode when one mode\'s post fails at the vendor',
     expect($scans)->toHaveCount(1)
         ->and($scans->first()->mode)->toBe('town_query')   // local failed and was logged; town_query still went out
         ->and($scans->first()->status)->toBe('pending');
+});
+
+it('removes a keyword from the wall: both flags off, every collected scan kept', function () {
+    $site = trkSite();
+    $keyword = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service',
+        'track_town_rank' => true, 'is_grid_keyword' => true]);
+    TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $keyword->id, 'mode' => 'town_query',
+        'status' => 'complete', 'points_count' => 2, 'found_count' => 1, 'scanned_at' => now()]);
+
+    $was = app(TownRankKeywords::class)->untrack($site, $keyword);
+
+    expect($was)->toBe(['tracked' => true, 'grid' => true, 'scans' => 1])
+        ->and($keyword->fresh()->track_town_rank)->toBeFalse()
+        ->and($keyword->fresh()->is_grid_keyword)->toBeFalse()
+        // Paid-for data is never deleted by a removal — re-adding the keyword brings the board back.
+        ->and(TownRankScan::withoutGlobalScopes()->where('keyword_id', $keyword->id)->count())->toBe(1);
+
+    // And it is gone from the wall, scans or not.
+    expect(collect(app(TownRankBoard::class)->keywords($site))->pluck('keyword_id'))
+        ->not->toContain((string) $keyword->id);
+
+    // Adding it back restores the card with its history.
+    app(TownRankKeywords::class)->track($site, 'sump pump service');
+    expect(collect(app(TownRankBoard::class)->keywords($site))->firstWhere('keyword_id', (string) $keyword->id))
+        ->not->toBeNull();
+});
+
+it('orders the wall by the operator priority, scanned-first within a tie', function () {
+    $site = trkSite();
+    $plain = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'aaa first alphabetically', 'track_town_rank' => true, 'priority' => 0]);
+    $important = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'zzz last alphabetically', 'track_town_rank' => true, 'priority' => 3]);
+
+    $order = collect(app(TownRankBoard::class)->keywords($site))->pluck('keyword_id')->all();
+
+    expect($order)->toBe([(string) $important->id, (string) $plain->id]);
 });
