@@ -78,7 +78,9 @@ it('posts one organic task per town — from the town\'s coordinate in local mod
         && count($request->data()) === 2
         && (isset($request->data()[0]['location_coordinate']) || isset($request->data()[0]['location_code'])));
     $posts = collect(Http::recorded())->filter(fn ($pair) => str_contains($pair[0]->url(), 'task_post'))->map(fn ($pair) => $pair[0]->data());
-    expect($posts->first()[0]['location_coordinate'])->toBe('40.8540000,-74.8290000')   // local: from the town
+    // All THREE parts: latitude, longitude, radius. A bare pair is not placed at the town — DataForSEO
+    // returns a national page for it, which is how every from-town scan came back empty.
+    expect($posts->first()[0]['location_coordinate'])->toBe('40.8540000,-74.8290000,1000')   // local: from the town
         ->and($posts->last()[0])->toHaveKey('location_code')                              // town query: national
         ->and($posts->last()[0])->not->toHaveKey('location_coordinate');
 });
@@ -241,4 +243,33 @@ it('finds a scan\'s phantom towns — "not found" with no results stored — and
         ->and($scan->fresh()->found_count)->toBe(2)
         ->and($scan->fresh()->status)->toBe('complete');
     Http::assertNotSent(fn ($req): bool => str_contains($req->url(), 'tasks_ready'));   // the reads never consult the ready list
+});
+
+it('places a from-town search at the town with a radius, never as a bare coordinate pair', function () {
+    [$site, $keyword] = townRankSite();
+    config(['launchpad.town_rank.coordinate_radius_m' => 2500]);
+    fakeOrganicQueue(2, 0, []);
+
+    app(TownRankScanner::class)->post($site, $keyword, 'local');
+
+    $task = collect(Http::recorded())
+        ->first(fn ($pair): bool => str_contains($pair[0]->url(), 'task_post'))[0]->data()[0];
+
+    // "latitude,longitude,radius" — the configured radius, in metres.
+    expect($task['location_coordinate'])->toBe('40.8540000,-74.8290000,2500')
+        ->and(substr_count($task['location_coordinate'], ','))->toBe(2)
+        ->and($task)->not->toHaveKey('location_code');   // a from-town search is placed by coordinate only
+});
+
+it('never sends a radius below the vendor floor, whatever it is configured to', function () {
+    [$site, $keyword] = townRankSite();
+    config(['launchpad.town_rank.coordinate_radius_m' => 5]);
+    fakeOrganicQueue(2, 0, []);
+
+    app(TownRankScanner::class)->post($site, $keyword, 'local');
+
+    $task = collect(Http::recorded())
+        ->first(fn ($pair): bool => str_contains($pair[0]->url(), 'task_post'))[0]->data()[0];
+
+    expect($task['location_coordinate'])->toEndWith(',200');
 });
