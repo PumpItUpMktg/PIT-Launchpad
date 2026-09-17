@@ -54,6 +54,9 @@
     .trk .t-act { border-left:3px solid; padding:6px 10px; margin-top:8px; font-size:12.5px; background:var(--t-surface2); border-radius:0 8px 8px 0; }
     .trk .t-act b { display:block; }
     .trk .t-act span { color:var(--t-muted); }
+    .trk .t-actbtn { display:inline-block; margin-top:6px; padding:5px 11px; font-size:12px; font-weight:600; border-radius:7px; border:1px solid var(--t-line); background:var(--t-surface); color:inherit; cursor:pointer; }
+    .trk .t-actbtn:hover { background:var(--t-surface2); }
+    .trk .t-actbtn[disabled] { opacity:.6; cursor:progress; }
     .trk .t-comp { font-size:12px; color:var(--t-muted); margin:6px 0 0; padding-left:16px; }
     .trk h4.t-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--t-muted); font-weight:700; margin:14px 0 6px; }
     .trk .t-tablewrap { margin-top:20px; }
@@ -232,7 +235,17 @@
 
                     <h4 class="t-h">What to do</h4>
                     @foreach ($town['actions'] as $a)
-                        <div class="t-act" style="border-color:{{ $levelColor($a['level']) }}"><b>{{ $a['title'] }}</b><span>{{ $a['why'] }}</span></div>
+                        <div class="t-act" style="border-color:{{ $levelColor($a['level']) }}">
+                            <b>{{ $a['title'] }}</b><span>{{ $a['why'] }}</span>
+                            {{-- The one action that can be done from here: the town has no page, so make one. --}}
+                            @if ($a['key'] === 'build_page')
+                                <button type="button" class="t-actbtn" wire:click="buildTownPage" wire:loading.attr="disabled" wire:target="buildTownPage"
+                                        wire:confirm="Build a page for {{ $town['label'] }}? It is created and queued to draft; you review and publish it on Pages → Town.">
+                                    <span wire:loading.remove wire:target="buildTownPage">Build this page</span>
+                                    <span wire:loading wire:target="buildTownPage">Building…</span>
+                                </button>
+                            @endif
+                        </div>
                     @endforeach
 
                     @if ($town['town_query']['competitors'] !== [])

@@ -2,9 +2,8 @@
 
 namespace App\Filament\Pages\Operate;
 
-use App\Build\BuildManifestAssembler;
-use App\Build\PageMaterializer;
 use App\Build\PlanSync;
+use App\Build\TownPageBuilder;
 use App\ContentEngine\Drafting\GroundingReadiness;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\AuditAction;
@@ -272,27 +271,21 @@ abstract class OperatePagesBoard extends OperatePage
             return;
         }
 
-        // The manifest is the source of a page's identity (title, slug, keyword, market) — assemble so this
-        // town has an entry, then materialize that entry alone.
-        app(BuildManifestAssembler::class)->assemble($site);
-        $pages = app(PageMaterializer::class)->materialize($site, onlyPageKey: (string) $town->id);
-        $page = $pages[0] ?? null;
+        $result = app(TownPageBuilder::class)->build($site, $town, Auth::id());
 
-        if ($page === null) {
+        if ($result['page'] === null) {
             Notification::make()->warning()->title('Nothing to build')
                 ->body('This town has no plan entry — it may no longer be selected for a page.')->send();
 
             return;
         }
 
-        if (! app(GroundingReadiness::class)->ready($page)) {
+        if (! $result['queued']) {
             Notification::make()->success()->title("{$town->name} added to the plan")
                 ->body('The page is created but not ready to write yet — its details are still coming together.')->send();
 
             return;
         }
-
-        GeneratePage::enqueue($page, actorId: Auth::id());
 
         Notification::make()->success()
             ->title("Building {$town->name}")
