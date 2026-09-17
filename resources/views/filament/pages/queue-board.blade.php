@@ -43,6 +43,11 @@
                 ⚠ No live worker on
                 @foreach ($h['silent_lanes'] as $lane)<code>{{ $lane }}</code>@if (! $loop->last), @endif @endforeach
                 — <b>{{ $h['pending'] }}</b> job(s) are waiting{{ $h['oldest_minutes'] > 0 ? ', the oldest for '.$h['oldest_minutes'].' minutes' : '' }}. The worker rows below say whether a process stopped (and why) or simply went silent.
+                <div style="font-weight:400; color:#64748b; margin-top:6px;">
+                    The scheduler covers a lane nothing is listening to, within a minute
+                    (<code>launchpad:queue-babysit</code>), so work still moves — slower than a real worker, and only
+                    while the scheduler itself is up. Start a worker to get back to full speed.
+                </div>
             </div>
         @endif
 
