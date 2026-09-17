@@ -78,3 +78,26 @@ it('reads Search Console and Bing from cache only on the render path', function 
     expect($board['live']['groups'][0]['towns'])->toHaveCount(1);
     Http::assertNothingSent();
 });
+
+it('builds only the tab it is about to show, never every location, on the first open', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    // Alphabetically first is Ambler; the view lands on it when nothing is selected, so the board must too.
+    foreach (['Montclair', 'Ambler', 'Trenton'] as $name) {
+        $loc = Location::factory()->create(['site_id' => $site->id, 'name' => $name, 'lat' => 40.31, 'lng' => -75.13]);
+        Content::factory()->page()->published()->create([
+            'site_id' => $site->id, 'page_type' => PageType::Location, 'status' => ContentStatus::Published,
+            'parent_location_id' => $loc->id, 'slug' => strtolower($name).'-town-pa', 'title' => $name.' Town',
+        ]);
+    }
+
+    $board = Livewire::test(OperatePages::class)->set('siteId', $site->id)->set('tab', 'town')->get('board');
+    $built = collect($board['live']['groups'])->reject(fn (array $g): bool => $g['deferred']);
+
+    // One location's cards built, not fifteen — and it is the one the view will display.
+    expect($built)->toHaveCount(1)
+        ->and($built->first()['location']['name'])->toBe('Ambler')
+        ->and($built->first()['towns'])->toHaveCount(1)
+        // Every location still appears, so the tab strip is whole.
+        ->and($board['live']['groups'])->toHaveCount(3);
+});

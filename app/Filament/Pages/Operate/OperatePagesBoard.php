@@ -17,6 +17,7 @@ use App\KeywordGenerator\Pipeline\PositionPullEstimator;
 use App\Locations\CityKeywordTracker;
 use App\Models\BuildPage;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -207,10 +208,33 @@ abstract class OperatePagesBoard extends OperatePage
         }
 
         // The locations family renders one location at a time — hand the board the tab being viewed so it
-        // builds that one's cards and no others.
+        // builds that one's cards and no others. Null would mean "build them all", which on a 15-location
+        // site is ~2,000 queries before a row renders: the first click on the tab, when nothing has been
+        // selected yet, is exactly when that would happen, so resolve the tab the view is about to show.
         return $this->family() === 'locations'
-            ? app(PagesBoard::class)->locations($site, is_string($this->locTab) && $this->locTab !== '' ? $this->locTab : null)
+            ? app(PagesBoard::class)->locations($site, $this->activeLocationTab($site))
             : app(PagesBoard::class)->{$this->family()}($site);
+    }
+
+    /**
+     * The location tab being viewed: the selected one, else the first the view will land on.
+     *
+     * The view picks its default tab by label, A→Z with "Unassigned" last, so this has to agree — pick a
+     * different one and the board builds cards for a location that is not on screen, leaving the visible tab
+     * empty. Same rule, same order, one source of truth.
+     */
+    private function activeLocationTab(Site $site): ?string
+    {
+        if (is_string($this->locTab) && $this->locTab !== '') {
+            return $this->locTab;
+        }
+
+        return Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->get()
+            ->sortBy(fn (Location $l): string => mb_strtolower(trim((string) $l->name) !== '' ? (string) $l->name : $l->cityState()['city']))
+            ->map(fn (Location $l): string => (string) $l->id)
+            ->first();
     }
 
     /** @return array<string, bool> */
