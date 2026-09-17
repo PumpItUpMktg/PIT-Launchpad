@@ -162,7 +162,14 @@
                                         <span>not found <b style="color:#9ca3af">{{ $s['not_found'] }}</b></span>
                                         @if ($s['pending'] > 0)<span style="color:#2563eb">collecting {{ $s['pending'] }}</span>@endif
                                     </div>
-                                    <div class="s-when">{{ $card['web']['status'] }} · {{ $when($card['web']['scanned_at']) }}</div>
+                                    <div class="s-when">
+                                        {{ $card['web']['status'] }} · {{ $when($card['web']['scanned_at']) }}
+                                        @if (($card['web']['progress'] ?? null) !== null && $card['web']['progress']['eta'] !== null)
+                                            · {{ number_format($card['web']['progress']['remaining']) }} town(s) left, at least {{ $card['web']['progress']['eta'] }}
+                                        @elseif (($card['web']['uncollected'] ?? 0) > 0)
+                                            · <span style="color:#b45309">{{ number_format($card['web']['uncollected']) }} town(s) never collected</span>
+                                        @endif
+                                    </div>
                                 @endif
                             </div>
 
@@ -207,7 +214,14 @@
                                         <span>absent <b style="color:#9ca3af">{{ $g['absent'] }}</b></span>
                                         @if ($g['pending'] > 0)<span style="color:#2563eb">collecting {{ $g['pending'] }}</span>@endif
                                     </div>
-                                    <div class="s-when">{{ $card['gbp']['status'] }} · {{ $when($card['gbp']['scanned_at']) }}</div>
+                                    <div class="s-when">
+                                        {{ $card['gbp']['status'] }} · {{ $when($card['gbp']['scanned_at']) }}
+                                        @if (($card['gbp']['progress'] ?? null) !== null && $card['gbp']['progress']['eta'] !== null)
+                                            · {{ number_format($card['gbp']['progress']['remaining']) }} town(s) left, at least {{ $card['gbp']['progress']['eta'] }}
+                                        @elseif (($card['gbp']['uncollected'] ?? 0) > 0)
+                                            · <span style="color:#b45309">{{ number_format($card['gbp']['uncollected']) }} town(s) never collected</span>
+                                        @endif
+                                    </div>
                                 @endif
                                 @php($gr = $card['gbp_run'])
                                 <div class="s-runrow">
