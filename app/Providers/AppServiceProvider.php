@@ -33,6 +33,7 @@ use App\Integrations\Census\CensusPopulation;
 use App\Integrations\Census\CensusProvider;
 use App\Integrations\Census\Geocoder;
 use App\Integrations\Census\GoogleGeocoder;
+use App\Integrations\Census\HousingStats;
 use App\Integrations\Census\MockCensusProvider;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Census\TigerwebGazetteer;
@@ -206,6 +207,13 @@ class AppServiceProvider extends ServiceProvider
         ));
         // ACS population for the county-coverage town grouping (keyed + cached; degrades
         // to ungrouped without CENSUS_API_KEY). Tests Http::fake the ACS array.
+        $this->app->bind(HousingStats::class, fn () => new HousingStats(
+            $this->app->make(Http::class),
+            $this->app->make(CacheRepository::class),
+            (string) config('services.census.key', ''),
+            (string) config('services.census.acs_year', '2022'),
+        ));
+
         $this->app->bind(CensusPopulation::class, fn () => new CensusPopulation(
             $this->app->make(Http::class),
             $this->app->make(CacheRepository::class),
