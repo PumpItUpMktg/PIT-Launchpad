@@ -3,6 +3,7 @@
 namespace App\GeoGrid;
 
 use App\Integrations\DataForSeo\DataForSeoClient;
+use App\Integrations\DataForSeo\DataForSeoException;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
@@ -11,6 +12,8 @@ use App\Models\Scopes\SiteScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Scans one (location × keyword) as a geo grid via DataForSEO Google-Maps SERP, standard queue (task_post →
@@ -251,6 +254,7 @@ final class GeoGridScanner
             ->get();
 
         $spent = 0;
+        $skipped = 0;
         if ($pending->isNotEmpty()) {
             $ready = array_flip($this->client->tasksReady(self::MAPS_READY));
 
@@ -263,20 +267,62 @@ final class GeoGridScanner
                     continue;   // not ready yet — leave for the next sweep
                 }
 
-                $items = DataForSeoClient::parseMaps($this->client->taskGet(self::MAPS_GET, $taskId));
+                $items = $this->readTask($taskId);
+                $spent++;
+                if ($items === null) {
+                    $skipped++;
+
+                    continue;   // not an answer — leave the town for the next sweep
+                }
                 $result = $this->extract($items, $placeId, $cid);
                 $point->forceFill([
                     'rank' => $result['rank'],
                     'competitors' => $result['competitors'],
                     'collected_at' => Carbon::now(),
                 ])->save();
-                $spent++;
             }
+        }
+
+        if ($skipped > 0) {
+            Log::warning('Coverage collect: some ready tasks could not be read this run; left for the next.', ['scan_id' => $scan->id, 'skipped' => $skipped]);
         }
 
         $this->finalizeIfComplete($scan);
 
         return $spent;
+    }
+
+    /**
+     * One Maps task_get, classified — the map-pack twin of the town-rank collector's read.
+     *
+     * A town where Google's Maps pack came back EMPTY answers with status 40102 ("No Search Results"). That
+     * is a result, not a fault: nobody is in the pack there. Letting it throw took the whole sweep down with
+     * it and lost every town collected in that run — three of those failures are what put IngestCoverageScans
+     * in failed_jobs. It is now an empty item list (rank null, no competitors), exactly as a town we are
+     * absent from is recorded.
+     *
+     * Anything else that is not an answer — rate limited, still queued, a transport hiccup — returns null so
+     * the town stays uncollected for the next sweep rather than being written down as "absent" on a read that
+     * never happened. A fatal auth/quota error still stops the run: nothing is collectable through it.
+     *
+     * @return list<array{rank: int|null, name: string, domain: string|null, place_id: string|null, cid: string|null}>|null
+     */
+    private function readTask(string $taskId): ?array
+    {
+        try {
+            return DataForSeoClient::parseMaps($this->client->taskGet(self::MAPS_GET, $taskId));
+        } catch (DataForSeoException $e) {
+            if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
+                return [];
+            }
+            if ($e->fatal) {
+                throw $e;
+            }
+
+            return null;
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /** Flip a pending scan to `complete` once every point carrying a task id has been collected. */
@@ -351,7 +397,10 @@ final class GeoGridScanner
                 if (! isset($ready[$taskId])) {
                     continue;
                 }
-                $items = DataForSeoClient::parseMaps($this->client->taskGet(self::MAPS_GET, $taskId));
+                $items = $this->readTask($taskId);
+                if ($items === null) {
+                    continue;   // not an answer — try again on the next poll attempt
+                }
                 $results[$index] = $this->extract($items, $placeId, $cid);
                 unset($pending[$taskId]);
             }
