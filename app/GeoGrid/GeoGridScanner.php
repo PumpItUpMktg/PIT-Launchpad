@@ -9,6 +9,7 @@ use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use App\TownRank\TownRankScanner;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -267,18 +268,20 @@ final class GeoGridScanner
                     continue;   // not ready yet — leave for the next sweep
                 }
 
-                $items = $this->readTask($taskId);
+                [$items, $error] = $this->readTask($taskId);
                 $spent++;
                 if ($items === null) {
                     $skipped++;
+                    $this->recordFailedRead($point, $error);
 
-                    continue;   // not an answer — leave the town for the next sweep
+                    continue;   // not an answer — the town waits, or is closed unreadable at the ceiling
                 }
                 $result = $this->extract($items, $placeId, $cid);
                 $point->forceFill([
                     'rank' => $result['rank'],
                     'competitors' => $result['competitors'],
                     'collected_at' => Carbon::now(),
+                    'read_error' => null,
                 ])->save();
             }
         }
@@ -305,23 +308,47 @@ final class GeoGridScanner
      * the town stays uncollected for the next sweep rather than being written down as "absent" on a read that
      * never happened. A fatal auth/quota error still stops the run: nothing is collectable through it.
      *
-     * @return list<array{rank: int|null, name: string, domain: string|null, place_id: string|null, cid: string|null}>|null
+     * @return array{0: list<array{rank: int|null, name: string, domain: string|null, place_id: string|null, cid: string|null}>|null, 1: string|null}
      */
-    private function readTask(string $taskId): ?array
+    private function readTask(string $taskId): array
     {
         try {
-            return DataForSeoClient::parseMaps($this->client->taskGet(self::MAPS_GET, $taskId));
+            return [DataForSeoClient::parseMaps($this->client->taskGet(self::MAPS_GET, $taskId)), null];
         } catch (DataForSeoException $e) {
             if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
-                return [];
+                return [[], null];
             }
             if ($e->fatal) {
                 throw $e;
             }
 
-            return null;
-        } catch (Throwable) {
-            return null;
+            return [null, $e->getMessage()];
+        } catch (Throwable $e) {
+            return [null, $e->getMessage()];
+        }
+    }
+
+    /**
+     * A read that produced no answer. The first is a hiccup and the town waits for the next sweep; at
+     * {@see TownRankScanner::MAX_READ_ATTEMPTS} it is closed as UNREADABLE — collected, no
+     * rank, the reason kept — so the scan can finalize and the map can colour "we never learned" apart from
+     * "absent from the pack".
+     */
+    private function recordFailedRead(GeoGridPoint $point, ?string $error): void
+    {
+        $attempts = (int) $point->read_attempts + 1;
+        $terminal = $attempts >= TownRankScanner::MAX_READ_ATTEMPTS;
+
+        $point->forceFill([
+            'read_attempts' => $attempts,
+            'read_error' => $error ?? 'the read produced no answer',
+            'collected_at' => $terminal ? Carbon::now() : null,
+        ])->save();
+
+        if ($terminal) {
+            Log::warning('Coverage collect: town closed as unreadable.', [
+                'scan_id' => $point->scan_id, 'point_id' => $point->id, 'label' => $point->label, 'error' => $error,
+            ]);
         }
     }
 
@@ -397,7 +424,7 @@ final class GeoGridScanner
                 if (! isset($ready[$taskId])) {
                     continue;
                 }
-                $items = $this->readTask($taskId);
+                [$items] = $this->readTask($taskId);
                 if ($items === null) {
                     continue;   // not an answer — try again on the next poll attempt
                 }

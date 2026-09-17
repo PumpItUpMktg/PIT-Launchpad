@@ -95,7 +95,7 @@ final class GeoGridBoard
     {
         $previousRanks = $previous === null ? [] : $this->ranksByTown($previous, $frame);
         $towns = [];
-        $summary = ['top3' => 0, 'top7' => 0, 'top10' => 0, 'beyond' => 0, 'absent' => 0, 'pending' => 0];
+        $summary = ['top3' => 0, 'top7' => 0, 'top10' => 0, 'beyond' => 0, 'absent' => 0, 'unreadable' => 0, 'pending' => 0];
 
         foreach (TownPointLinks::byTown($frame['towns'], $latest->points) as $townId => $point) {
             $id = (string) $townId;
@@ -105,12 +105,14 @@ final class GeoGridBoard
             }
             $rank = $point->rank !== null ? (int) $point->rank : null;
             $pending = $point->collected_at === null && $latest->status === 'pending';
+            $unreadable = $point->read_error !== null;
             [$x, $y] = $frame['project']($coords['lat'], $coords['lng']);
             $prevRank = $previousRanks[$id] ?? null;
             $town = collect($frame['towns'])->firstWhere('coverage_area_id', $id);
 
             $summary[match (true) {
                 $pending => 'pending',
+                $unreadable => 'unreadable',
                 $rank === null => 'absent',
                 $rank <= 3 => 'top3',
                 $rank <= 7 => 'top7',
@@ -127,8 +129,9 @@ final class GeoGridBoard
                 'prev_rank' => $prevRank,
                 'pending' => $pending,
                 'competitors' => is_array($point->competitors) ? $point->competitors : [],
-                'color' => GeoGridPalette::absolute($rank),
-                'delta_color' => GeoGridPalette::delta($rank, $prevRank),
+                'unreadable' => $unreadable,
+                'color' => $unreadable ? GeoGridPalette::UNREADABLE : GeoGridPalette::absolute($rank),
+                'delta_color' => $unreadable ? GeoGridPalette::UNREADABLE : GeoGridPalette::delta($rank, $prevRank),
                 'move' => GeoGridPalette::move($rank, $prevRank),
                 'population' => (int) ($town['population'] ?? 0),
             ];

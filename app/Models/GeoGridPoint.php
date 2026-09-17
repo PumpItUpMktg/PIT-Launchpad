@@ -26,6 +26,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $rank
  * @property list<array{name: string, place_id: string|null, rank: int|null}>|null $competitors
  * @property string|null $provider_task_id
+ * @property int $read_attempts reads that produced no answer; at the ceiling the point is closed unreadable
+ * @property string|null $read_error why it could never be read — set means "no data", never "not found"
  * @property Carbon|null $collected_at when this cell's DataForSEO task result was read (null = still pending); the async-collection marker
  */
 class GeoGridPoint extends Model
@@ -44,6 +46,7 @@ class GeoGridPoint extends Model
             'lng' => 'decimal:7',
             'rank' => 'integer',
             'competitors' => 'array',
+            'read_attempts' => 'integer',
             'collected_at' => 'datetime',
         ];
     }

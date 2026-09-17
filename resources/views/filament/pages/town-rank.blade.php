@@ -209,11 +209,11 @@
                     </svg>
                     @if ($moveView)
                         <div class="t-legend">
-                            <span><i style="background:#15803d"></i>moved up</span><span><i style="background:#c0392b"></i>slipped</span><span><i style="background:#2563eb"></i>newly ranking</span><span><i style="background:#7f1d1d"></i>lost</span><span><i style="background:#9ca3af"></i>unchanged / never ranked</span><span>dashed = no page</span>
+                            <span><i style="background:#15803d"></i>moved up</span><span><i style="background:#c0392b"></i>slipped</span><span><i style="background:#2563eb"></i>newly ranking</span><span><i style="background:#7f1d1d"></i>lost</span><span><i style="background:#9ca3af"></i>unchanged / never ranked</span><span><i style="background:#7c3aed"></i>no data</span><span>dashed = no page</span>
                         </div>
                     @else
                         <div class="t-legend">
-                            <span><i style="background:#15803d"></i>1–3</span><span><i style="background:#65a30d"></i>4–7</span><span><i style="background:#ca8a04"></i>8–10</span><span><i style="background:#c2410c"></i>11–15</span><span><i style="background:#c0392b"></i>16+</span><span><i style="background:#9ca3af"></i>not found</span><span>dashed = no page</span>
+                            <span><i style="background:#15803d"></i>1–3</span><span><i style="background:#65a30d"></i>4–7</span><span><i style="background:#ca8a04"></i>8–10</span><span><i style="background:#c2410c"></i>11–15</span><span><i style="background:#c0392b"></i>16+</span><span><i style="background:#9ca3af"></i>not found</span><span><i style="background:#7c3aed"></i>no data</span><span>dashed = no page</span>
                         </div>
                     @endif
                 </div>

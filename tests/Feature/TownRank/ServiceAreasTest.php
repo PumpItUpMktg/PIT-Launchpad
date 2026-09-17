@@ -286,3 +286,21 @@ it('says how much of a collecting scan is left, and what a partial scan never go
         ->and($card['web']['progress'])->toBeNull()
         ->and($card['web']['uncollected'])->toBe(2);
 });
+
+it('colours a town we could never read apart from one where we simply do not rank', function () {
+    $f = serviceAreaSite();
+    // Mansfield answered and we were absent; Bethlehem never answered at all.
+    TownRankPoint::withoutGlobalScopes()->where('label', 'Mansfield')
+        ->update(['read_attempts' => 2, 'read_error' => 'DataForSEO status_code 40501: Invalid Field', 'collected_at' => now()]);
+
+    $card = app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['cards'][0];
+    $byId = collect($card['web']['markers'])->keyBy('id');
+
+    expect($byId[(string) $f['mans']->id]['unreadable'])->toBeTrue()
+        ->and($byId[(string) $f['mans']->id]['color'])->toBe('#7c3aed')            // violet: no data
+        ->and($byId[(string) $f['hack']->id]['unreadable'])->toBeFalse()
+        ->and($byId[(string) $f['hack']->id]['color'])->toBe('#15803d')            // still a real rank
+        // and it is counted apart, so "not found" stays a fact we actually learned.
+        ->and($card['web']['summary']['unreadable'])->toBe(1)
+        ->and($card['web']['summary']['not_found'])->toBe(0);
+});

@@ -190,6 +190,7 @@
                         <span x-show="mode==='absolute'"><i style="background:#c2410c"></i>11–15</span>
                         <span x-show="mode==='absolute'"><i style="background:#c0392b"></i>16+</span>
                         <span x-show="mode==='absolute'"><i style="background:#9ca3af"></i>Not found</span>
+                        <span x-show="mode==='absolute'"><i style="background:#7c3aed"></i>No data</span>
                         <span x-show="mode==='delta'" x-cloak><i style="background:#15803d"></i>Improved</span>
                         <span x-show="mode==='delta'" x-cloak><i style="background:#c0392b"></i>Slipped</span>
                         <span x-show="mode==='delta'" x-cloak><i style="background:#2563eb"></i>New</span>
