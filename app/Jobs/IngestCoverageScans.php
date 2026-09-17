@@ -33,7 +33,15 @@ class IngestCoverageScans implements ShouldBeUnique, ShouldQueue
     use Queueable;
 
     /** Under the five-minute schedule; the batch (500 reads at 600/min) takes well under a minute. */
-    public int $timeout = 280;
+    public int $timeout = 120;
+
+    /**
+     * Stop taking new reads this long before the timeout. This sweep had NO wall clock at all: a budget of
+     * reads, but nothing stopping a pass that hit slow ones from running past its timeout — at which point
+     * Laravel kills the worker process, which is how a lane goes silent holding a job. The town-rank
+     * collector has had this since #876; this is the same guard.
+     */
+    private const DEADLINE_MARGIN_SECONDS = 40;
 
     public int $tries = 1;
 
@@ -49,6 +57,8 @@ class IngestCoverageScans implements ShouldBeUnique, ShouldQueue
 
     public function handle(GeoGridScanner $scanner, GeoGridMetrics $metrics): void
     {
+        $started = microtime(true);
+        $deadline = $started + max(20, $this->timeout - self::DEADLINE_MARGIN_SECONDS);
         $budget = max(1, (int) config('launchpad.geo_grid.ingest_batch', 40));
         $expiryHours = max(1, (int) config('launchpad.geo_grid.pending_expiry_hours', 24));
         $expiryCutoff = Carbon::now()->subHours($expiryHours);
@@ -60,8 +70,8 @@ class IngestCoverageScans implements ShouldBeUnique, ShouldQueue
             ->get();
 
         foreach ($pending as $scan) {
-            if ($budget > 0) {
-                $budget -= $scanner->collectPending($scan, $budget);
+            if ($budget > 0 && microtime(true) < $deadline) {
+                $budget -= $scanner->collectPending($scan, $budget, $deadline);
                 $scan->refresh();
             }
 

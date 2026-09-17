@@ -237,7 +237,7 @@ final class GeoGridScanner
      * flips `pending → complete`. Returns the number of task_get calls actually spent (so the sweep can share
      * one budget across scans). Aggregates are the caller's to recompute once the scan finalizes.
      */
-    public function collectPending(GeoGridScan $scan, int $budget): int
+    public function collectPending(GeoGridScan $scan, int $budget, ?float $deadline = null): int
     {
         if ($budget <= 0) {
             return 0;
@@ -259,8 +259,8 @@ final class GeoGridScanner
             $ready = array_flip($this->client->tasksReady(self::MAPS_READY));
 
             foreach ($pending as $point) {
-                if ($spent >= $budget) {
-                    break;
+                if ($spent >= $budget || ($deadline !== null && microtime(true) >= $deadline)) {
+                    break;   // the caller's budget or wall clock is spent; the rest waits for the next sweep
                 }
                 $taskId = (string) $point->provider_task_id;
                 if (! isset($ready[$taskId])) {

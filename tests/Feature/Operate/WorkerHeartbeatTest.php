@@ -6,6 +6,7 @@ use Illuminate\Contracts\Queue\Job;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobTimedOut;
 use Illuminate\Queue\Events\Looping;
 use Illuminate\Queue\Events\WorkerStopping;
 use Illuminate\Queue\WorkerOptions;
@@ -102,4 +103,25 @@ it('prunes rows older than the retention window when a worker starts', function 
 it('is wired to the queue events', function () {
     event(new Looping('database', 'high'));
     expect(QueueWorker::where('queues', 'high')->exists())->toBeTrue();
+});
+
+it('records a job that overran its timeout, because that kill is not a clean stop', function () {
+    $beat = app(WorkerHeartbeat::class);
+    $beat->looping(new Looping('database', 'high'));
+    $beat->processing(new JobProcessing('database', fakeJob('App\\Jobs\\IngestCoverageScans', 'high')));
+
+    // Laravel kills the worker process for an overrun — WorkerStopping never fires, so without this the row
+    // would sit alive-looking, holding a job, with no reason: the silent worker we kept seeing.
+    $beat->timedOut(new JobTimedOut('database', fakeJob('App\\Jobs\\IngestCoverageScans', 'high')));
+
+    $w = QueueWorker::sole();
+    expect($w->stopped_at)->not->toBeNull()
+        ->and($w->stop_reason)->toBe('killed: App\\Jobs\\IngestCoverageScans ran past its timeout');
+});
+
+it('is wired to the timeout event', function () {
+    app(WorkerHeartbeat::class)->looping(new Looping('database', 'high'));
+    event(new JobTimedOut('database', fakeJob('App\\Jobs\\PublishContent', 'high')));
+
+    expect(QueueWorker::sole()->stop_reason)->toContain('ran past its timeout');
 });
