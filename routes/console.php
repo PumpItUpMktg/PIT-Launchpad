@@ -4,6 +4,7 @@ use App\Integrations\Conversions\IngestConversions;
 use App\Integrations\DataForSeo\IngestSerpTasks;
 use App\Jobs\IngestCoverageScans;
 use App\Jobs\IngestTownRankScans;
+use App\Jobs\WarmTownOutlines;
 use App\KeywordGenerator\Pipeline\RefreshKeywordPipelines;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -73,6 +74,11 @@ Schedule::command('launchpad:expire-candidates --execute')->daily()->withoutOver
 // deferring every card to "Refreshing…". Hourly (well under the vendor caches' TTL); withoutOverlapping.
 // Also prunes any benign warm-cache failure a deploy/timeout left in failed_jobs.
 Schedule::command('launchpad:warm-live-metrics')->hourly()->withoutOverlapping()->onOneServer();
+
+// Town boundaries for the rank maps — fetched OFF the request, because a site covers ~700 towns and the
+// render reads cache-only (an uncached town draws as a dot until its shape lands). A boundary is cached for
+// 30 days and does not move, so after the first passes this finds nothing to do.
+Schedule::job(new WarmTownOutlines)->hourly()->withoutOverlapping()->onOneServer();
 
 // Per-page GA4 sessions warm — the GA4 half of the live-metrics cache, on a WEEKLY beat (the hourly warm
 // above skips GA4 to keep the Data API quota bounded). Force-refreshes each published page/job's cached

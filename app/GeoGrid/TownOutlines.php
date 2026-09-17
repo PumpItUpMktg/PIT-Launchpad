@@ -3,6 +3,7 @@
 namespace App\GeoGrid;
 
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Jobs\WarmTownOutlines;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
 
@@ -22,9 +23,13 @@ final class TownOutlines
      * Rings per town GEOID (lng/lat points, outer ring first), for the GEOIDs the gazetteer knows.
      *
      * @param  list<string>  $geoIds
+     * @param  bool  $fetchMissing  false = cache-only; a town not yet cached is simply absent, and the map
+     *                              draws it as a dot. The whole-site map reads this way: 722 towns' worth of
+     *                              gazetteer calls do not belong inside a page render, and {@see WarmTownOutlines}
+     *                              fills the gaps off-request so the shapes appear on a later view.
      * @return array<string, list<list<array{lat: float, lng: float}>>>
      */
-    public function for(array $geoIds): array
+    public function for(array $geoIds, bool $fetchMissing = true): array
     {
         $geoIds = array_values(array_unique(array_filter(array_map(fn ($g): string => trim((string) $g), $geoIds), fn (string $g): bool => $g !== '')));
         if ($geoIds === []) {
@@ -42,7 +47,7 @@ final class TownOutlines
             }
         }
 
-        if ($missing !== []) {
+        if ($missing !== [] && $fetchMissing) {
             try {
                 $polys = $this->gazetteer->townPolygons($missing);
             } catch (Throwable) {
@@ -55,6 +60,25 @@ final class TownOutlines
                 }
                 $out[$geoId] = $poly['rings'];
                 Cache::put(self::key($geoId), $poly['rings'], now()->addDays(self::CACHE_DAYS));
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The GEOIDs among these that are NOT cached yet — what the warm job has left to fetch.
+     *
+     * @param  list<string>  $geoIds
+     * @return list<string>
+     */
+    public function missing(array $geoIds): array
+    {
+        $out = [];
+        foreach (array_unique($geoIds) as $geoId) {
+            $geoId = trim((string) $geoId);
+            if ($geoId !== '' && ! is_array(Cache::get(self::key($geoId)))) {
+                $out[] = $geoId;
             }
         }
 
