@@ -100,19 +100,16 @@ it('offers the same build on the Service Areas polygon map, and builds from ther
     Queue::assertPushed(GeneratePage::class, fn (GeneratePage $j): bool => $j->contentId === (string) $page->id);
 });
 
-it('removes a keyword from the wall and ranks one up, from the card', function () {
+it('removes a keyword from the wall, from the card', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $f = buildPageSite();
     $keyword = $f['keyword'];
 
     Livewire::test(TownRankPage::class)->set('siteId', $f['site']->id)
-        ->assertSeeHtml('wire:click="rankKeyword(\''.$keyword->id.'\', \'up\')"')
-        ->call('rankKeyword', (string) $keyword->id, 'up')
         ->call('removeKeyword', (string) $keyword->id)
         ->assertOk();
 
-    expect($keyword->fresh()->priority)->toBe(1)
-        ->and($keyword->fresh()->track_town_rank)->toBeFalse()
+    expect($keyword->fresh()->track_town_rank)->toBeFalse()
         ->and($keyword->fresh()->is_grid_keyword)->toBeFalse()
         // The scan it was measured by is kept, not deleted with the card.
         ->and(TownRankScan::withoutGlobalScopes()->where('keyword_id', $keyword->id)->count())->toBe(1);

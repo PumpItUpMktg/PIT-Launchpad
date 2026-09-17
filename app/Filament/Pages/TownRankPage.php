@@ -9,7 +9,6 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankScan;
 use App\Operator\ActiveTenant;
-use App\Operator\Coverage\TargetQueue;
 use App\TownRank\TownRankBoard;
 use App\TownRank\TownRankKeywords;
 use BackedEnum;
@@ -133,18 +132,6 @@ class TownRankPage extends Page
                 ? sprintf('Off the wall and out of the weekly sweep. Its %s scan(s) are kept — add the keyword back and the history returns.', number_format($was['scans']))
                 : 'Off the wall and out of the weekly sweep.')
             ->send();
-    }
-
-    /** Rank a keyword up or down the wall — the same operator `priority` the §7b target queue uses. */
-    public function rankKeyword(string $id, string $direction): void
-    {
-        $site = $this->site();
-        $keyword = $site === null ? null : Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($id)->first();
-        if ($site === null || $keyword === null) {
-            return;
-        }
-        $queue = app(TargetQueue::class);
-        $direction === 'up' ? $queue->promote($keyword) : $queue->demote($keyword);
     }
 
     /** "Run ranking report" on a card: post both query modes for the keyword (queued, collected within minutes). */

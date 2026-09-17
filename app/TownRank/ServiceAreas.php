@@ -84,7 +84,7 @@ final class ServiceAreas
      *     outlines: list<array{geoid: string, label: string, paths: list<string>}>,
      *     town_paths: array<string, list<string>>,
      *     cards: list<array{
-     *         keyword_id: string, query: string,
+     *         keyword_id: string, query: string, silo: string|null,
      *         web: array{mode: string, status: string|null, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
      *         gbp: array{scan_id: string, status: string, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
      *         gbp_run: array{requests: int, cost: float, pending: bool},
@@ -125,6 +125,8 @@ final class ServiceAreas
             $cards[] = [
                 'keyword_id' => (string) $keyword->id,
                 'query' => (string) $keyword->query,
+                // The §4 silo, carried from the wall's own grouping so both surfaces read in the same terms.
+                'silo' => $entry['silo'],
                 'web' => $web,
                 'gbp' => $gbp,
                 // The GBP report is one Maps search per town from the town's own coordinates (a coverage scan).

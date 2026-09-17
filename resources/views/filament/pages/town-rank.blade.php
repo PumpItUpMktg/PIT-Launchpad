@@ -78,10 +78,11 @@
     .trk .t-run:disabled { opacity:.55; cursor:default; }
     .trk .t-rm { font-size:12px; border:1px solid var(--t-line); color:var(--t-muted); background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; margin-left:auto; }
     .trk .t-rm:hover { border-color:#c0392b; color:#c0392b; }
-    .trk .t-rank { display:inline-flex; border:1px solid var(--t-line); border-radius:8px; overflow:hidden; }
-    .trk .t-rank button { font-size:12px; line-height:1; padding:5px 8px; background:transparent; color:var(--t-muted); border:none; cursor:pointer; }
-    .trk .t-rank button:hover { color:#2563eb; }
-    .trk .t-prio { font-size:11px; color:var(--t-faint); font-variant-numeric:tabular-nums; }
+    .trk .t-silo { display:flex; align-items:baseline; gap:8px; margin:22px 0 10px; }
+    .trk .t-silo:first-of-type { margin-top:4px; }
+    .trk .t-silo h3 { font-size:13px; font-weight:800; margin:0; }
+    .trk .t-silo span { font-size:11px; color:var(--t-faint); }
+    .trk .t-silo hr { flex:1; border:none; border-top:1px solid var(--t-line); }
     .trk .t-add { display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
     .trk .t-add input { font-size:13px; border:1px solid var(--t-line); border-radius:8px; padding:8px 12px; background:transparent; color:inherit; min-width:280px; }
     .trk .t-add button { font-size:13px; border:none; border-radius:8px; padding:8px 14px; background:#2563eb; color:#fff; cursor:pointer; }
@@ -105,8 +106,18 @@
         @else
             @php($collecting = collect($cards)->contains(fn (array $c): bool => $c['pending']))
             {{-- While any card is collecting, refresh the wall every 30s so progress moves without a reload. --}}
-            <div class="t-cards" @if ($collecting) wire:poll.30s @endif>
-                @foreach ($cards as $card)
+            {{-- Grouped by the §4 silo the keyword belongs to, silos A→Z, "No silo" last — the content
+                 architecture already names these, so the wall reads in the same terms. --}}
+            @php($groups = collect($cards)->groupBy(fn (array $c): string => $c['silo'] ?? '')->all())
+            <div @if ($collecting) wire:poll.30s @endif>
+            @foreach ($groups as $siloName => $group)
+                <div class="t-silo">
+                    <h3>{{ $siloName !== '' ? $siloName : 'No silo' }}</h3>
+                    <span>{{ count($group) }} keyword{{ count($group) === 1 ? '' : 's' }}{{ $siloName === '' ? ' · not assigned to a silo yet' : '' }}</span>
+                    <hr>
+                </div>
+            <div class="t-cards">
+                @foreach ($group as $card)
                     @php($cr = $dotR($card['markers']))
                     @php($runRequests = $card['towns'] * 2)
                     @php($runCost = $runRequests * \App\TownRank\TownRankScanner::costPerRequest())
@@ -160,17 +171,10 @@
                             <button type="button" class="t-rm" wire:click="removeKeyword('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="removeKeyword"
                                     wire:confirm="Remove “{{ $card['query'] }}” from the wall and the weekly sweep?{{ $card['scanned_at'] !== null ? ' Its collected scans are kept — add the keyword back and the history returns.' : '' }}">Remove</button>
                         </div>
-                        {{-- Your order, not ours: the same operator priority the target queue promotes, so a keyword
-                             ranked up here is ranked up there. Equal priority keeps the scanned-first order. --}}
-                        <div class="t-cardfoot" style="border-top:none; padding-top:0">
-                            <div class="t-rank" role="group" aria-label="Rank {{ $card['query'] }}">
-                                <button type="button" wire:click="rankKeyword('{{ $card['keyword_id'] }}', 'up')" title="More important">▲</button>
-                                <button type="button" wire:click="rankKeyword('{{ $card['keyword_id'] }}', 'down')" title="Less important">▼</button>
-                            </div>
-                            <span class="t-prio">{{ $card['priority'] === 0 ? 'unranked' : 'priority '.$card['priority'] }}</span>
-                        </div>
                     </div>
                 @endforeach
+            </div>
+            @endforeach
             </div>
         @endif
     @else
