@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.44
+Stable tag: 0.9.45
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,15 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.45 =
+* Air quality: new `[lp_air_quality]` shortcode — a live local air-quality card for any widget area,
+  block or template. Reads the coordinates the control plane already pushes for the weather banner,
+  fetches Open-Meteo's air-quality API itself (free, no key) and holds the reading in a one-hour
+  transient, so a busy site makes one request an hour rather than one a visit. Shows the US AQI with the
+  EPA's own band and colour, PM2.5 and ozone, and the hour the reading was taken — an index is a
+  measurement with a timestamp, so the card says when, never "the air here is good" as a standing claim.
+  A failed fetch renders nothing and is cached briefly so a down API is not hammered.
 
 = 0.9.44 =
 * Redirects: disable WordPress core's 404 "guess permalink" redirect. It 301'd any unknown URL to a live
