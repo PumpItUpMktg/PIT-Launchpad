@@ -205,3 +205,37 @@ it('resolves many locations from ONE coverage-area load, each list identical to 
         ->and(array_column($many[(string) $b->id], 'label'))->toBe(['Newark'])
         ->and($areaQueries)->toBe(1);
 });
+
+it('records a town whose Maps pack came back empty as absent, and never lets it fail the sweep', function () {
+    config(['services.dataforseo.rate_limit_backoff_ms' => 0]);
+    $site = Site::factory()->create();
+    $location = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.85, 'lng' => -74.83, 'place_id' => 'ChIJ_us']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    $scan = GeoGridScan::create(['site_id' => $site->id, 'location_id' => $location->id, 'keyword_id' => $kw->id, 'provider' => 'dataforseo',
+        'mode' => 'coverage', 'grid_size' => 3, 'spacing_miles' => 0, 'center_lat' => 40.85, 'center_lng' => -74.83, 'zoom' => 13,
+        'depth_cap' => 20, 'status' => 'pending', 'scanned_at' => now()]);
+    foreach (['empty', 'limited', 'ok'] as $i => $label) {
+        GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'row' => 0, 'col' => $i, 'lat' => 40.8, 'lng' => -74.8,
+            'label' => $label, 'provider_task_id' => "task-{$label}"]);
+    }
+
+    Http::fake([
+        '*/tasks_ready' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'r', 'status_code' => 20000, 'result' => [['id' => 'task-empty'], ['id' => 'task-limited'], ['id' => 'task-ok']]]]]),
+        // Google's Maps pack was empty here — a real answer (nobody is in the pack), not a fault.
+        '*/task_get/advanced/task-empty' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'e', 'status_code' => 40102, 'status_message' => 'No Search Results']]]),
+        '*/task_get/advanced/task-limited' => Http::response(['status_code' => 40202, 'status_message' => 'Too many requests']),
+        '*/task_get/advanced/task-ok' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => [
+            ['type' => 'maps_search', 'rank_absolute' => 1, 'title' => 'Us', 'place_id' => 'ChIJ_us'],
+        ]]]]]]),
+    ]);
+
+    // Before this, the 40102 threw and took the whole sweep with it — including the town collected after it.
+    app(GeoGridScanner::class)->collectPending($scan, 10);
+
+    $byLabel = $scan->points()->get()->keyBy('label');
+    expect($byLabel['empty']->collected_at)->not->toBeNull()
+        ->and($byLabel['empty']->rank)->toBeNull()          // absent from the pack, recorded as such
+        ->and($byLabel['ok']->rank)->toBe(1)                // and the rest of the sweep still landed
+        ->and($byLabel['limited']->collected_at)->toBeNull() // a rate-limited read is not an answer
+        ->and($scan->fresh()->status)->toBe('pending');      // one town still owed
+});
