@@ -47,7 +47,7 @@ it('fetches every town in a county in one request and stores the raw counts', fu
 
     $result = app(TownHousingSync::class)->forSite($site);
 
-    expect($result)->toMatchArray(['towns' => 2, 'written' => 2, 'missing' => 0, 'requests' => 1]);
+    expect($result)->toMatchArray(['towns' => 2, 'written' => 2, 'missing' => [], 'requests' => 1]);
     Http::assertSentCount(1);   // 54 towns in a county would still be one call
 
     $warrington = CensusHousing::query()->where('geo_id', '4201781720')->sole();
@@ -76,7 +76,10 @@ it('degrades to nothing without an API key instead of erroring', function () {
     bindAcs('');
     $site = housingSite();
 
-    expect(app(TownHousingSync::class)->forSite($site))->toMatchArray(['written' => 0, 'missing' => 2]);
+    // A town the ACS never returned is NAMED, so the bad GEOID can be looked at — not just counted.
+    $missing = array_column(app(TownHousingSync::class)->forSite($site)['missing'], 'geo_id');
+    sort($missing);
+    expect($missing)->toBe(['4201754656', '4201781720']);
     Http::assertNothingSent();
 });
 
@@ -101,4 +104,18 @@ it('states only the numbers that carry information, and never what a house is ma
     expect($facts->for($middling))->toBe(['The median home in Middleton was built in 1975 (Census ACS 2023).']);
 
     expect($facts->for(null))->toBe([]);
+});
+
+it('names the town whose stored GEOID the ACS does not know', function () {
+    Http::fake(['*/2023/acs/acs5*' => Http::response(acsRows())]);
+    bindAcs();
+    $site = housingSite();
+    // A town carrying a GEOID that is not in its county's current ACS list — the South Orange case.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Ghost Town', 'state' => 'PA',
+        'geo_id' => '4201700000', 'population' => 1, 'source_location_ids' => []]);
+
+    $result = app(TownHousingSync::class)->forSite($site);
+
+    expect($result['missing'])->toBe([['name' => 'Ghost Town', 'geo_id' => '4201700000']])
+        ->and($result['written'])->toBe(2);
 });
