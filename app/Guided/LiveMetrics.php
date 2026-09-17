@@ -20,6 +20,7 @@ use App\Models\Site;
 use App\Operator\Coverage\PositionTracking;
 use App\Support\PublicUrl;
 use Illuminate\Support\Carbon;
+use Traversable;
 
 /**
  * One published page's tracking block for the Live boards — position (the §5 snapshot series via
@@ -30,12 +31,53 @@ use Illuminate\Support\Carbon;
  */
 class LiveMetrics
 {
+    /**
+     * Search Console figures for the pages of the board being built, primed in one pass.
+     *
+     * @var array<string, array{totals: array<string, mixed>|null, queries: list<array<string, mixed>>}>
+     */
+    private array $primed = [];
+
+    /**
+     * Prime from OUR OWN tables for a set of pages, so the cards stop asking the vendor client one page at
+     * a time for data the daily sync already stored. Two grouped queries, whatever the card count.
+     *
+     * @param  iterable<Content>  $pages
+     */
+    public function prime(Site $site, iterable $pages): void
+    {
+        $pages = $pages instanceof Traversable ? iterator_to_array($pages) : $pages;
+        $totals = $this->stored->totals($site, $pages);
+        $queries = $this->stored->queries($site, $pages);
+
+        foreach ($pages as $page) {
+            $id = (string) $page->id;
+            $this->primed[$id] = ['totals' => $totals[$id] ?? null, 'queries' => $queries[$id] ?? []];
+        }
+
+        // The target keywords in one query too — the position block looked each one up by id, per card.
+        $keywordIds = collect($pages)->pluck('target_keyword_id')->filter()->unique()->values()->all();
+        if ($keywordIds !== []) {
+            $this->keywords = Keyword::withoutGlobalScope(SiteScope::class)->whereKey($keywordIds)->get()
+                ->keyBy(fn (Keyword $k): string => (string) $k->id)
+                ->all();
+        }
+    }
+
+    /**
+     * Target keywords for the primed pages, loaded once.
+     *
+     * @var array<string, Keyword>
+     */
+    private array $keywords = [];
+
     public function __construct(
         private readonly PositionTracking $tracking,
         private readonly SearchConsoleProvider $searchConsole,
         private readonly PageTrafficProvider $traffic,
         private readonly BingWebmasterProvider $bing,
         private readonly IndexInspector $indexInspector,
+        private readonly StoredSearchMetrics $stored,
     ) {}
 
     /**
@@ -93,7 +135,7 @@ class LiveMetrics
 
         $site = $page->site;
         $keyword = $page->target_keyword_id !== null
-            ? Keyword::withoutGlobalScope(SiteScope::class)->find($page->target_keyword_id)
+            ? ($this->keywords[(string) $page->target_keyword_id] ?? Keyword::withoutGlobalScope(SiteScope::class)->find($page->target_keyword_id))
             : null;
 
         [$position, $local, $series, $refreshCount] = $this->positionBlock($page, $keyword);
@@ -142,6 +184,39 @@ class LiveMetrics
             'index' => ['state' => null, 'label' => null, 'indexed' => false, 'coverage_state' => null, 'canonical_mismatch' => false, 'last_crawled_at' => null, 'pending' => $refreshing],
             'bing' => ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_bing' => false, 'queries' => [], 'pending' => $refreshing],
             'traffic' => ['sessions' => null, 'pending' => $refreshing],
+        ];
+    }
+
+    /**
+     * The GSC block from the primed store. No rows for a page is the honest "collecting" — the sync writes
+     * a row the day a page earns its first impression.
+     *
+     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
+     */
+    private function primedGsc(string $pageId): array
+    {
+        $totals = $this->primed[$pageId]['totals'] ?? null;
+        if ($totals === null) {
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [],
+                'pending' => 'Collecting — first data in a few days'];
+        }
+
+        $queries = array_map(fn (array $q): array => [
+            'query' => $q['query'],
+            'clicks' => $q['clicks'],
+            'impressions' => $q['impressions'],
+            'ctr' => $q['impressions'] > 0 ? round($q['clicks'] / $q['impressions'], 4) : 0.0,
+            'position' => (float) ($q['position'] ?? 0),
+        ], $this->primed[$pageId]['queries'] ?? []);
+
+        return [
+            'impressions' => (int) $totals['impressions'],
+            'clicks' => (int) $totals['clicks'],
+            'ctr' => (float) $totals['ctr'],
+            // "In Google" = the page has earned impressions, so it is indexed and appearing.
+            'in_google' => (int) $totals['impressions'] > 0,
+            'queries' => $queries,
+            'pending' => null,
         ];
     }
 
@@ -295,8 +370,19 @@ class LiveMetrics
      */
     private function gscBlock(?Site $site, Content $page, bool $live = true): array
     {
+        // Primed for this board: our own stored rollups, loaded for every card in one query. Stored rows
+        // are data whatever the client's current connection state — the sync that wrote them was connected.
+        if ($site !== null && ($this->primed[(string) $page->id]['totals'] ?? null) !== null) {
+            return $this->primedGsc((string) $page->id);
+        }
+
         if ($site === null || ! $this->searchConsole->connected($site)) {
             return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => 'Connect Search Console'];
+        }
+
+        // Primed but empty: connected and simply has nothing for this page yet.
+        if (array_key_exists((string) $page->id, $this->primed)) {
+            return $this->primedGsc((string) $page->id);
         }
 
         $path = '/'.ltrim((string) $page->slug, '/');

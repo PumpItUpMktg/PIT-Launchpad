@@ -70,6 +70,7 @@ class LiveBoards
     public function locations(Site $site, ?string $onlyLocationId = null): array
     {
         $published = $this->published($site);
+        $this->metrics->prime($site, $published);
         $locations = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->orderBy('created_at')
@@ -137,8 +138,10 @@ class LiveBoards
     /** @return list<array<string, mixed>> hubs first, then spokes alphabetically */
     public function services(Site $site): array
     {
-        return $this->published($site)
-            ->filter(fn (Content $c) => in_array($c->page_type, [PageType::Hub, PageType::Service], true))
+        $cards = $this->published($site)->filter(fn (Content $c) => in_array($c->page_type, [PageType::Hub, PageType::Service], true));
+        $this->metrics->prime($site, $cards);
+
+        return $cards
             ->sortBy([
                 fn (Content $a, Content $b) => ($b->page_type === PageType::Hub ? 1 : 0) <=> ($a->page_type === PageType::Hub ? 1 : 0),
                 fn (Content $a, Content $b) => strcasecmp((string) $a->title, (string) $b->title),
@@ -151,8 +154,10 @@ class LiveBoards
     /** @return list<array<string, mixed>> home first, then standard pages alphabetically */
     public function core(Site $site): array
     {
-        return $this->published($site)
-            ->filter(fn (Content $c) => in_array($c->page_type, [PageType::Home, PageType::Utility], true))
+        $cards = $this->published($site)->filter(fn (Content $c) => in_array($c->page_type, [PageType::Home, PageType::Utility], true));
+        $this->metrics->prime($site, $cards);
+
+        return $cards
             ->sortBy([
                 fn (Content $a, Content $b) => ($b->page_type === PageType::Home ? 1 : 0) <=> ($a->page_type === PageType::Home ? 1 : 0),
                 fn (Content $a, Content $b) => strcasecmp((string) $a->title, (string) $b->title),
