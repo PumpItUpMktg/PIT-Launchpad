@@ -323,7 +323,18 @@ final class TownRankScanner
             $task['priority'] = self::HIGH_PRIORITY;
         }
         if ($mode === TownRankScan::MODE_LOCAL) {
-            $task['location_coordinate'] = sprintf('%.7f,%.7f', $town['lat'], $town['lng']);
+            // "latitude,longitude,radius" — all THREE parts. Sent as a bare pair, DataForSEO does not place
+            // the search at the town at all: it returns a generic national page. Queens is the proof —
+            // "sump pump replacement Queens NY" came back with queensnyplumber.com, riteplumbingnyc.com and
+            // citywideplumbers.com, while the same keyword "searched from" Queens returned homedepot.com,
+            // reddit.com and facebook.com. Not a weak local showing: no local search happened. Every
+            // from-town scan posted before this was measuring the wrong place.
+            $task['location_coordinate'] = sprintf(
+                '%.7f,%.7f,%d',
+                $town['lat'],
+                $town['lng'],
+                max(200, (int) config('launchpad.town_rank.coordinate_radius_m', 1000)),
+            );
         } else {
             $task['location_code'] = (int) config('services.dataforseo.location_code', 2840);
         }

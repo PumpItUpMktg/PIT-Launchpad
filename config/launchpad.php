@@ -403,6 +403,12 @@ return [
         // timeout, and the every-minute cadence carries the same throughput across more passes.
         'ingest_batch' => (int) env('LAUNCHPAD_TOWN_RANK_INGEST_BATCH', 400),
         'pending_expiry_hours' => (int) env('LAUNCHPAD_TOWN_RANK_PENDING_EXPIRY_HOURS', 24),
+
+        // The radius (METRES) sent with a from-town search's coordinate. DataForSEO's `location_coordinate`
+        // is "latitude,longitude,radius" and all three parts are required — without the radius the search is
+        // not placed at the town and comes back national. 1km reads as "standing in the town centre"; their
+        // documented floor is ~200m. Raise it to widen what counts as local around each town.
+        'coordinate_radius_m' => (int) env('LAUNCHPAD_TOWN_RANK_COORDINATE_RADIUS_M', 1000),
         // Queue for the Run / sweep posting jobs AND the every-minute collector. Blank ⇒ the default queue. Set
         // it (e.g. "high") to give ranking work its own lane ahead of publishing — the worker must then be
         // started `--queue=high,default`, or these silently never run.
