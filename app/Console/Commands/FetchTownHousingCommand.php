@@ -59,7 +59,19 @@ class FetchTownHousingCommand extends Command
 
         $result = $sync->forSite($site, (bool) $this->option('force'));
         $this->line(sprintf('Wrote %d town(s) over %d request(s). %d had no ACS row and were left without one.',
-            $result['written'], $result['requests'], $result['missing']));
+            $result['written'], $result['requests'], count($result['missing'])));
+
+        // Every town's own county was queried, so a town the ACS did not return is one whose stored GEOID
+        // is not in that county's current list — name it, because that GEOID is the thing to go fix.
+        if ($result['missing'] !== []) {
+            $this->warn('No ACS row for these — check the stored GEOID against the current Census vintage:');
+            foreach (array_slice($result['missing'], 0, 25) as $town) {
+                $this->line(sprintf('  · %s (%s, county %s)', $town['name'], $town['geo_id'], substr($town['geo_id'], 0, 5)));
+            }
+            if (count($result['missing']) > 25) {
+                $this->line(sprintf('  … and %d more.', count($result['missing']) - 25));
+            }
+        }
         if ($result['written'] === 0 && $result['fetched'] > 0) {
             $this->warn('Nothing written — check CENSUS_API_KEY is set (a keyless ACS request returns a "Missing Key" page).');
         }
@@ -83,17 +95,27 @@ class FetchTownHousingCommand extends Command
         }
     }
 
+    /** @param  Collection<int, Site>  $sites */
+    private function listSites(Collection $sites): void
+    {
+        foreach ($sites as $site) {
+            $this->line(sprintf('  · %s — %s (%s)', $site->brand_name, $site->domain_url ?? 'no domain', $site->id));
+        }
+    }
+
     private function site(): ?Site
     {
         $needle = (string) $this->argument('site');
         $matches = SiteFinder::matches($needle);
         if ($matches->isEmpty()) {
-            $this->error("No site matches [{$needle}].");
+            $this->error("No site matches [{$needle}]. Available sites:");
+            $this->listSites(SiteFinder::all());
 
             return null;
         }
         if ($matches->count() > 1) {
-            $this->error("[{$needle}] is ambiguous — it matches {$matches->count()} sites. Re-run with the id.");
+            $this->error("[{$needle}] is ambiguous — it matches {$matches->count()} sites. Re-run with the id or exact name:");
+            $this->listSites($matches);
 
             return null;
         }

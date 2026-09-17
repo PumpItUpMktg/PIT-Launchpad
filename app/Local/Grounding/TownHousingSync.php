@@ -26,7 +26,7 @@ final class TownHousingSync
     public function __construct(private readonly HousingStats $acs) {}
 
     /**
-     * @return array{towns: int, fetched: int, written: int, missing: int, requests: int}
+     * @return array{towns: int, fetched: int, written: int, missing: list<array{name: string, geo_id: string}>, requests: int}
      */
     public function forSite(Site $site, bool $force = false): array
     {
@@ -42,7 +42,7 @@ final class TownHousingSync
             }
         }
         if ($wanted === []) {
-            return ['towns' => 0, 'fetched' => 0, 'written' => 0, 'missing' => 0, 'requests' => 0];
+            return ['towns' => 0, 'fetched' => 0, 'written' => 0, 'missing' => [], 'requests' => 0];
         }
 
         $held = $force ? [] : CensusHousing::query()->whereIn('geo_id', array_keys($wanted))->pluck('geo_id')->flip()->all();
@@ -71,11 +71,14 @@ final class TownHousingSync
         }
 
         $written = 0;
-        $missing = 0;
+        $missing = [];
         foreach ($todo as $geoId => $town) {
             $row = $stats[$geoId] ?? null;
             if ($row === null) {
-                $missing++;
+                // Named, not counted: every town's own county WAS queried, so a town the ACS did not return
+                // is one whose stored GEOID no longer exists in that county — a bad row id to go look at,
+                // not an ACS gap. A count alone can't be acted on.
+                $missing[] = ['name' => (string) $town->name, 'geo_id' => (string) $geoId];
 
                 continue;
             }
@@ -98,7 +101,8 @@ final class TownHousingSync
 
         Log::info('Town housing: ACS sync complete.', [
             'site_id' => (string) $site->id, 'towns' => count($wanted), 'requests' => $requests,
-            'written' => $written, 'missing' => $missing,
+            'written' => $written, 'missing' => count($missing),
+            'missing_geoids' => array_column($missing, 'geo_id'),
         ]);
 
         return [

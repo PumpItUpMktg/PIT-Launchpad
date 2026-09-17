@@ -89,7 +89,10 @@ class TownRankKeywordsCommand extends Command
         $needle = (string) $this->argument('site');
         $matches = SiteFinder::matches($needle);
         if ($matches->isEmpty()) {
-            $this->error("No site matches [{$needle}].");
+            $this->error("No site matches [{$needle}]. Available sites:");
+            foreach (SiteFinder::all() as $option) {
+                $this->line(sprintf('  · %s — %s (%s)', $option->brand_name, $option->domain_url ?? 'no domain', $option->id));
+            }
 
             return null;
         }
