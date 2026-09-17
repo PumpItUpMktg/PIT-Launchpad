@@ -6,6 +6,7 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\MarketTier;
 use App\Enums\PageType;
+use App\Jobs\WarmLiveMetrics;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
@@ -40,9 +41,33 @@ class LiveBoards
     public function __construct(private readonly LiveMetrics $metrics) {}
 
     /**
+     * Per-page tracking block for the RENDER path, memoised for this request.
+     *
+     * Cache-only for GA4, Search Console and Bing: a render must never put an outbound call in the request
+     * (a cold board of fifty town pages was one Google round trip per page, which is what pushed the town
+     * tab past the gateway). {@see WarmLiveMetrics} fills these caches off-request.
+     *
+     * Memoised because a location's town page is read twice — once for the rollup, once for its card — and
+     * the block costs a dozen queries either way.
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    private array $blocks = [];
+
+    /**
+     * The render-path block for one page, computed at most once per request.
+     *
+     * @return array<string, mixed>
+     */
+    private function metricsFor(Content $page): array
+    {
+        return $this->blocks[(string) $page->id] ??= $this->metrics->for($page, liveTraffic: false, liveSearch: false);
+    }
+
+    /**
      * @return array{groups: list<array{location: array<string, mixed>|null, location_card: array<string, mixed>|null, rollup: array<string, mixed>, towns: list<array<string, mixed>>, city_services: list<array<string, mixed>>}>, orphans: list<array<string, mixed>>, location_options: array<string, string>}
      */
-    public function locations(Site $site): array
+    public function locations(Site $site, ?string $onlyLocationId = null): array
     {
         $published = $this->published($site);
         $locations = Location::withoutGlobalScope(SiteScope::class)
@@ -52,6 +77,23 @@ class LiveBoards
 
         $groups = [];
         foreach ($locations as $location) {
+            // The board shows ONE location at a time. Every location still yields a group so the tab strip
+            // is complete, but the cards — the expensive part, a tracking block per published page — are
+            // built only for the one being looked at. Rendering all of them was ~700 pages' worth of work
+            // for the ~50 on screen.
+            $wanted = $onlyLocationId === null || (string) $location->id === $onlyLocationId;
+            if (! $wanted) {
+                $groups[] = [
+                    'location' => $this->identity($location),
+                    'location_card' => null,
+                    'rollup' => ['towns_live' => 0, 'avg_rank' => null, 'impressions' => null, 'clicks' => null],
+                    'towns' => [],
+                    'city_services' => [],
+                    'deferred' => true,
+                ];
+
+                continue;
+            }
             $landing = $published->first(fn (Content $c) => (string) $c->location_id === (string) $location->id);
             $towns = $published
                 ->filter(fn (Content $c) => $c->page_type === PageType::Location
@@ -67,24 +109,12 @@ class LiveBoards
 
             // A location with nothing live yet still shows (the group is the business shape).
             $groups[] = [
-                'location' => [
-                    'id' => (string) $location->id,
-                    'name' => trim((string) $location->name),
-                    'city' => $location->cityState()['city'],
-                    'state' => $location->cityState()['state'],
-                    'address' => trim((string) $location->address),
-                    'phone' => trim((string) $location->phone),
-                    'category' => trim((string) $location->primary_category),
-                    'gbp_url' => trim((string) $location->gbp_url),
-                    'storefront' => (bool) $location->is_storefront,
-                    'served' => collect($location->served_towns ?? [])
-                        ->map(fn ($t) => trim((string) ($t['name'] ?? '')))
-                        ->filter()->values()->all(),
-                ],
+                'location' => $this->identity($location),
                 'location_card' => $landing !== null ? $this->card($landing, $site) : null,
                 'rollup' => $this->rollup($towns, $site),
                 'towns' => $towns->map(fn (Content $c) => $this->card($c, $site))->all(),
                 'city_services' => $cityServices->map(fn (Content $c) => $this->card($c, $site))->all(),
+                'deferred' => false,
             ];
         }
 
@@ -139,6 +169,29 @@ class LiveBoards
     }
 
     /**
+     * The GBP identity shown above the cards — always built, for every location, so the tab strip is whole.
+     *
+     * @return array<string, mixed>
+     */
+    private function identity(Location $location): array
+    {
+        return [
+            'id' => (string) $location->id,
+            'name' => trim((string) $location->name),
+            'city' => $location->cityState()['city'],
+            'state' => $location->cityState()['state'],
+            'address' => trim((string) $location->address),
+            'phone' => trim((string) $location->phone),
+            'category' => trim((string) $location->primary_category),
+            'gbp_url' => trim((string) $location->gbp_url),
+            'storefront' => (bool) $location->is_storefront,
+            'served' => collect($location->served_towns ?? [])
+                ->map(fn ($t) => trim((string) ($t['name'] ?? '')))
+                ->filter()->values()->all(),
+        ];
+    }
+
+    /**
      * One published page as a Live card: identity + dates + the tracking block.
      *
      * @return array<string, mixed>
@@ -147,7 +200,7 @@ class LiveBoards
     {
         // Render path: GA4/GSC read from the warmed cache only (never a live call on render); the warm
         // passes keep the caches fresh.
-        $m = $this->metrics->for($content, liveTraffic: false);
+        $m = $this->metricsFor($content);
         $gsc = is_array($m['gsc'] ?? null) ? $m['gsc'] : [];
         $position = is_array($m['position'] ?? null) ? $m['position'] : [];
         $index = is_array($m['index'] ?? null) ? $m['index'] : [];
@@ -277,7 +330,7 @@ class LiveBoards
      */
     private function rollup(Collection $towns, Site $site): array
     {
-        $blocks = $towns->map(fn (Content $c) => $this->metrics->for($c, liveTraffic: false));
+        $blocks = $towns->map(fn (Content $c) => $this->metricsFor($c));
 
         $ranks = $blocks->pluck('position.rank')->filter(fn ($r) => $r !== null);
         $impressions = $blocks->pluck('gsc.impressions')->filter(fn ($i) => $i !== null);

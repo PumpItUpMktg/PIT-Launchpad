@@ -76,8 +76,13 @@ class LiveMetrics
      *                             call), for a render path. GA4 is fetched off-request by the weekly
      *                             {@see WarmGa4Pages}; the other blocks are unaffected. True
      *                             (the default) keeps the legacy live fetch for any non-render caller.
+     * @param  bool  $liveSearch  false = the same rule for Search Console and Bing: cache-only, so a cold
+     *                            page costs nothing on render. These two fetch on a MISS by default, which
+     *                            put one Google round trip per uncached page inside the request — a board of
+     *                            fifty town pages then spent the whole gateway budget before rendering a
+     *                            row. {@see WarmLiveMetrics} fills these caches off-request.
      */
-    public function for(Content $page, bool $defer = false, bool $liveTraffic = true): array
+    public function for(Content $page, bool $defer = false, bool $liveTraffic = true, bool $liveSearch = true): array
     {
         // Over the board's live-metrics budget (or an off-screen card): return a fully-shaped, zero-cost
         // "refreshing" block — no DB, no external call. The WarmLiveMetrics worker fills the real values
@@ -99,9 +104,9 @@ class LiveMetrics
             'local' => $local,
             'series' => $series,
             'refresh_count' => $refreshCount,
-            'gsc' => $this->gscBlock($site, $page),
+            'gsc' => $this->gscBlock($site, $page, $liveSearch),
             'index' => $this->indexBlock($site, $page),
-            'bing' => $this->bingBlock($site, $page),
+            'bing' => $this->bingBlock($site, $page, $liveSearch),
             'traffic' => $this->trafficBlock($site, $page, $liveTraffic),
         ];
     }
@@ -288,23 +293,24 @@ class LiveMetrics
     /**
      * @return array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
      */
-    private function gscBlock(?Site $site, Content $page): array
+    private function gscBlock(?Site $site, Content $page, bool $live = true): array
     {
         if ($site === null || ! $this->searchConsole->connected($site)) {
             return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => 'Connect Search Console'];
         }
 
         $path = '/'.ltrim((string) $page->slug, '/');
-        $stats = $this->searchConsole->pageStats($site, $path);
+        $stats = $live ? $this->searchConsole->pageStats($site, $path) : $this->searchConsole->pageStatsCached($site, $path);
         if ($stats === null) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => 'Collecting — first data in a few days'];
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [],
+                'pending' => $live ? 'Collecting — first data in a few days' : 'Refreshing…'];
         }
 
         // The long tail this page is actually found for (free GSC signal — every "sump pump {city}" /
         // "near me" variant). Location pages own geo, which silo keyword tracking excludes by design.
         $queries = array_map(fn (PageQuery $q): array => [
             'query' => $q->query, 'clicks' => $q->clicks, 'impressions' => $q->impressions, 'ctr' => $q->ctr, 'position' => $q->position,
-        ], $this->searchConsole->pageQueries($site, $path));
+        ], $live ? $this->searchConsole->pageQueries($site, $path) : $this->searchConsole->pageQueriesCached($site, $path));
 
         // "In Google" = the page has earned Search impressions, so it is definitely indexed and
         // appearing. (A page indexed with zero impressions simply won't light up yet — we never claim
@@ -321,21 +327,22 @@ class LiveMetrics
      *
      * @return array{impressions: ?int, clicks: ?int, ctr: ?float, in_bing: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
      */
-    private function bingBlock(?Site $site, Content $page): array
+    private function bingBlock(?Site $site, Content $page, bool $live = true): array
     {
         if ($site === null || ! $this->bing->connected($site)) {
             return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_bing' => false, 'queries' => [], 'pending' => 'Connect Bing Webmaster'];
         }
 
         $path = '/'.ltrim((string) $page->slug, '/');
-        $stats = $this->bing->pageStats($site, $path);
+        $stats = $live ? $this->bing->pageStats($site, $path) : $this->bing->pageStatsCached($site, $path);
         if ($stats === null) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_bing' => false, 'queries' => [], 'pending' => 'Collecting — first Bing data in a few days'];
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_bing' => false, 'queries' => [],
+                'pending' => $live ? 'Collecting — first Bing data in a few days' : 'Refreshing…'];
         }
 
         $queries = array_map(fn (PageQuery $q): array => [
             'query' => $q->query, 'clicks' => $q->clicks, 'impressions' => $q->impressions, 'ctr' => $q->ctr, 'position' => $q->position,
-        ], $this->bing->pageQueries($site, $path));
+        ], $live ? $this->bing->pageQueries($site, $path) : $this->bing->pageQueriesCached($site, $path));
 
         return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(), 'in_bing' => $stats->impressions > 0, 'queries' => $queries, 'pending' => null];
     }

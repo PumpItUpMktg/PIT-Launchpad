@@ -19,10 +19,23 @@ final class NullBingWebmaster implements BingWebmasterProvider
         return null;
     }
 
+    public function pageStatsCached(Site $site, string $path, int $days = 28): ?PageSearchStats
+    {
+        return null;
+    }
+
     /**
      * @return list<PageQuery>
      */
     public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array
+    {
+        return [];
+    }
+
+    /**
+     * @return list<PageQuery>
+     */
+    public function pageQueriesCached(Site $site, string $path, int $days = 28, int $limit = 8): array
     {
         return [];
     }

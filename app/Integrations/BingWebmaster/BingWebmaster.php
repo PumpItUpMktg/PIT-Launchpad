@@ -47,7 +47,17 @@ class BingWebmaster implements BingWebmasterProvider
 
     public function pageStats(Site $site, string $path, int $days = 28): ?PageSearchStats
     {
-        $rows = $this->rows($site, $path, $days);
+        return $this->statsFrom($this->rows($site, $path, $days));
+    }
+
+    public function pageStatsCached(Site $site, string $path, int $days = 28): ?PageSearchStats
+    {
+        return $this->statsFrom($this->rows($site, $path, $days, live: false), $days);
+    }
+
+    /** @param  list<array<string, mixed>>|null  $rows */
+    private function statsFrom(?array $rows, int $days = 28): ?PageSearchStats
+    {
         if ($rows === null || $rows === []) {
             return null;
         }
@@ -64,8 +74,23 @@ class BingWebmaster implements BingWebmasterProvider
      */
     public function pageQueries(Site $site, string $path, int $days = 28, int $limit = 8): array
     {
-        $rows = $this->rows($site, $path, $days) ?? [];
+        return $this->queriesFrom($this->rows($site, $path, $days) ?? [], $limit);
+    }
 
+    /**
+     * @return list<PageQuery>
+     */
+    public function pageQueriesCached(Site $site, string $path, int $days = 28, int $limit = 8): array
+    {
+        return $this->queriesFrom($this->rows($site, $path, $days, live: false) ?? [], $limit);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<PageQuery>
+     */
+    private function queriesFrom(array $rows, int $limit): array
+    {
         return array_map(
             fn (array $r): PageQuery => new PageQuery($r['query'], $r['clicks'], $r['impressions'], $r['ctr'], $r['position']),
             array_slice($rows, 0, max(1, $limit)),
@@ -79,7 +104,7 @@ class BingWebmaster implements BingWebmasterProvider
      *
      * @return list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>|null
      */
-    private function rows(Site $site, string $path, int $days): ?array
+    private function rows(Site $site, string $path, int $days, bool $live = true): ?array
     {
         if (! $this->connected($site)) {
             return null;
@@ -93,13 +118,17 @@ class BingWebmaster implements BingWebmasterProvider
 
         $key = 'bing:pagequeries:'.md5($siteUrl.'|'.$pageUrl.'|'.$days);
 
-        $cached = $this->cache->remember($key, $this->cacheTtl, function () use ($siteUrl, $pageUrl): array {
-            $rows = $this->fetch($siteUrl, $pageUrl);
+        $cached = $live
+            ? $this->cache->remember($key, $this->cacheTtl, function () use ($siteUrl, $pageUrl): array {
+                $rows = $this->fetch($siteUrl, $pageUrl);
 
-            return $rows === null ? ['none' => true] : ['rows' => $rows];
-        });
+                return $rows === null ? ['none' => true] : ['rows' => $rows];
+            })
+            // Cache-only (render path): never call Bing inside a web request. A miss is indistinguishable
+            // from a warmed no-data sentinel by design — both read as pending.
+            : $this->cache->get($key);
 
-        if (isset($cached['none'])) {
+        if (! is_array($cached) || isset($cached['none']) || ! isset($cached['rows'])) {
             return null;
         }
 

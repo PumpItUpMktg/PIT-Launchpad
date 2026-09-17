@@ -42,15 +42,16 @@ class PagesBoard
 
     /**
      * Locations keeps the live side GROUPED (location card + its towns + city-service pages),
-     * exactly like the Live board it supersedes.
+     * exactly like the Live board it supersedes. `$locationId` is the tab being viewed: every location
+     * still yields a group so the tab strip is complete, but only that one's cards are built.
      *
      * @return array{work: list<array<string, mixed>>, live: array{groups: list<array<string, mixed>>, orphans: list<array<string, mixed>>, location_options: array<string, string>}}
      */
-    public function locations(Site $site): array
+    public function locations(Site $site, ?string $locationId = null): array
     {
         // The live side is already grouped under its location; the work lane is a flat list, so tag each
         // work card with the brick-and-mortar location it belongs to — a visual link for the operator.
-        return ['work' => $this->tagBrickMortar($site, $this->workLane($site, 'town')), 'live' => $this->live->locations($site)];
+        return ['work' => $this->tagBrickMortar($site, $this->workLane($site, 'town')), 'live' => $this->live->locations($site, $locationId)];
     }
 
     /**
