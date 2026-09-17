@@ -32,11 +32,11 @@ final class TownRankBoard
     ) {}
 
     /**
-     * The wall's keyword set: every keyword with a town-rank scan, plus the ones tracked for Town Rank or
-     * flagged for the geo grid (the sweep's set) that have not been scanned yet. Scanned keywords first, most
-     * recent first; unscanned after, by query. `pending` = a scan is still collecting.
+     * The wall's keyword set: the keywords tracked for Town Rank or flagged for the geo grid (the sweep's
+     * set). Scanned keywords first, most recent first; unscanned after, by query. `pending` = a scan is
+     * still collecting. A removed keyword keeps its scans — re-add it and its history comes back.
      *
-     * @return list<array{keyword_id: string, query: string, scanned_at: string|null, pending: bool}>
+     * @return list<array{keyword_id: string, query: string, priority: int, scanned_at: string|null, pending: bool}>
      */
     public function keywords(Site $site): array
     {
@@ -49,9 +49,11 @@ final class TownRankBoard
 
         $keywords = Keyword::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
-            ->where(fn ($q) => $q->where('track_town_rank', true)->orWhere('is_grid_keyword', true)->orWhereIn('id', $latest->pluck('keyword_id')->all()))
+            // Membership is the two flags alone — see the 2027_04_27 backfill. A scanned keyword carries
+            // `track_town_rank`, so removing it from the wall is a flag change, not a data deletion.
+            ->where(fn ($q) => $q->where('track_town_rank', true)->orWhere('is_grid_keyword', true))
             ->orderBy('query')
-            ->get(['id', 'query'])
+            ->get(['id', 'query', 'priority'])
             ->keyBy('id');
 
         $out = [];
@@ -63,6 +65,7 @@ final class TownRankBoard
             $out[] = [
                 'keyword_id' => (string) $scan->keyword_id,
                 'query' => (string) $keyword->query,
+                'priority' => (int) $keyword->priority,
                 'scanned_at' => $scan->scanned_at?->toDateTimeString(),
                 'pending' => $pendingIds->has($scan->keyword_id),
             ];
@@ -72,8 +75,13 @@ final class TownRankBoard
             if (isset($scannedIds[(string) $id])) {
                 continue;
             }
-            $out[] = ['keyword_id' => (string) $id, 'query' => (string) $keyword->query, 'scanned_at' => null, 'pending' => false];
+            $out[] = ['keyword_id' => (string) $id, 'query' => (string) $keyword->query, 'priority' => (int) $keyword->priority, 'scanned_at' => null, 'pending' => false];
         }
+
+        // Operator importance first — the same `priority` the §7b target queue promotes/demotes, so a keyword
+        // ranked up here is ranked up there. PHP's sort is stable, so equal priority keeps the order above:
+        // scanned first (most recent first), then unscanned by query.
+        usort($out, fn (array $a, array $b): int => $b['priority'] <=> $a['priority']);
 
         return $out;
     }
@@ -133,7 +141,7 @@ final class TownRankBoard
      * one). Click-through opens {@see for()} for the keyword.
      *
      * @return list<array{
-     *     keyword_id: string, query: string, scanned_at: string|null, pending: bool, towns: int, thumbnail_mode: string, has_previous: bool,
+     *     keyword_id: string, query: string, priority: int, scanned_at: string|null, pending: bool, towns: int, thumbnail_mode: string, has_previous: bool,
      *     modes: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}|null>,
      *     progress: array<string, array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null}|null>,
      *     uncollected: array<string, int|null>,
@@ -177,6 +185,7 @@ final class TownRankBoard
             $cards[] = [
                 'keyword_id' => (string) $keyword->id,
                 'query' => $data['keyword'],
+                'priority' => $entry['priority'],
                 'scanned_at' => $entry['scanned_at'],
                 'pending' => $entry['pending'],
                 'towns' => $towns,

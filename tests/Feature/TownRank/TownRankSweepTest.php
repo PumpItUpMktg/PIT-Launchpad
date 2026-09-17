@@ -42,7 +42,9 @@ function sweepFakeQueue(int $count): void
 it('a pair is due when never scanned or past the cadence; fresh and pending scans are not re-posted', function () {
     config()->set('launchpad.town_rank.cadence_days', 7);
     [$site, $grid, $scanned] = sweepSite();
-    // "repair" is in the set only because it was scanned before: local fresh (not due), town_query old (due).
+    // "repair" is in the set because it was scanned before — the scanner flags what it spends requests on,
+    // and the 2027_04_27 migration backfilled the keywords scanned before that rule existed.
+    $scanned->forceFill(['track_town_rank' => true])->save();
     TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $scanned->id, 'mode' => 'local', 'status' => 'complete', 'scanned_at' => now()->subDays(2)]);
     TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $scanned->id, 'mode' => 'town_query', 'status' => 'complete', 'scanned_at' => now()->subDays(9)]);
     // grid keyword: local pending (not due), town_query never scanned (due).

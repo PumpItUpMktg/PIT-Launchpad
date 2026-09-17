@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
+ * @property KeywordSource $source how the keyword entered the site (cast; the column is a non-null string defaulting to `seed`)
  * @property string|null $intent §5 search intent (transactional/commercial/informational — string, read by scoring; longtail routing keys on it)
  * @property int $priority
  * @property string|null $target_content_id

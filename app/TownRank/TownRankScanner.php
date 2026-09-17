@@ -92,6 +92,12 @@ final class TownRankScanner
         }
 
         return DB::transaction(function () use ($site, $keyword, $mode, $towns, $tasks, $taskIds): TownRankScan {
+            // Scanning a keyword IS tracking it: the wall's membership is the flag alone, so a keyword we
+            // spent requests on must never be able to land off the wall that shows what they bought.
+            if (! $keyword->track_town_rank) {
+                $keyword->forceFill(['track_town_rank' => true])->save();
+            }
+
             $scan = TownRankScan::create([
                 'site_id' => $site->id,
                 'keyword_id' => $keyword->id,

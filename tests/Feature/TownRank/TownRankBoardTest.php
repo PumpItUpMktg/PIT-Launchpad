@@ -24,7 +24,8 @@ function boardSite(): array
     $indy = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Independence', 'state' => 'NJ', 'population' => 5000, 'lat' => 40.90, 'lng' => -74.80, 'source_location_ids' => [$loc->id], 'geo_id' => '3404134110']);
     Content::factory()->page()->published()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'status' => ContentStatus::Published, 'geo_id' => '3404128590', 'slug' => 'hackettstown-nj']);
     Content::factory()->page()->published()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'status' => ContentStatus::Published, 'geo_id' => null, 'slug' => 'mansfield-nj']);
-    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    // A scanned keyword carries the flag (the scanner sets it; the 2027_04_27 migration backfilled the rest).
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service', 'track_town_rank' => true]);
 
     $tq = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'complete', 'points_count' => 3, 'found_count' => 2, 'scanned_at' => now()]);
     TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $tq->id, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown', 'state' => 'NJ', 'lat' => 40.85, 'lng' => -74.83, 'query' => 'sump pump service Hackettstown NJ', 'rank' => 4, 'ranking_url' => 'https://spg.com/hackettstown-nj/', 'collected_at' => now(),

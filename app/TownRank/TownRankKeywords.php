@@ -51,6 +51,34 @@ final class TownRankKeywords
     }
 
     /**
+     * Remove a keyword from the wall: the opposite of {@see track()}.
+     *
+     * Both flags come off — `track_town_rank` (this wall) and `is_grid_keyword` (the geo-grid coverage plan),
+     * because either one is enough to keep the card on the Town Rank wall and the Service Areas cards, and a
+     * "remove" that leaves the card there is a lie.
+     *
+     * Nothing collected is deleted. The scans and points stay on record, so adding the keyword back restores
+     * the card with its history rather than starting from an empty board — DataForSEO requests are paid for
+     * once, and a mis-click should not spend them again.
+     *
+     * @return array{tracked: bool, grid: bool, scans: int} which flags were actually on, and the scans kept
+     */
+    public function untrack(Site $site, Keyword $keyword): array
+    {
+        $was = ['tracked' => (bool) $keyword->track_town_rank, 'grid' => (bool) $keyword->is_grid_keyword];
+        $scans = TownRankScan::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->count();
+
+        $keyword->forceFill(['track_town_rank' => false, 'is_grid_keyword' => false])->save();
+        Log::info('Town-rank: keyword removed from the wall.', [
+            'site_id' => (string) $site->id, 'keyword_id' => (string) $keyword->id, 'query' => (string) $keyword->query,
+            'was_tracked' => $was['tracked'], 'was_grid' => $was['grid'], 'scans_kept' => $scans,
+        ]);
+
+        return $was + ['scans' => $scans];
+    }
+
+    /**
      * What a run for this keyword would post: one organic task per covered town per mode not already
      * collecting.
      *
