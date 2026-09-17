@@ -5,8 +5,6 @@ namespace App\TownRank;
 use App\GeoGrid\CountyOutlines;
 use App\GeoGrid\GeoGridPalette;
 use App\GeoGrid\MapProjection;
-use App\GeoGrid\TownOutlines;
-use App\Jobs\WarmTownOutlines;
 use App\Models\GeoGridScan;
 use App\Models\JobCounty;
 use App\Models\Keyword;
@@ -31,7 +29,6 @@ final class TownRankBoard
         private readonly TownRankReport $report,
         private readonly TownRankPoints $points,
         private readonly CountyOutlines $counties,
-        private readonly TownOutlines $townOutlines,
     ) {}
 
     /**
@@ -88,7 +85,6 @@ final class TownRankBoard
      *     keyword_id: string, keyword: string, mode: string,
      *     scan: array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null,
      *     outlines: list<array{geoid: string, label: string, paths: list<string>}>,
-     *     town_paths: array<string, list<string>>,
      *     progress: array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null}|null,
      *     uncollected: int|null,
      *     summary: array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int},
@@ -127,7 +123,6 @@ final class TownRankBoard
             'has_previous' => $scan !== null && $scan['previous_scanned_at'] !== null,
             'markers' => $this->markers($data['rows'], $prefix, $coords, $frame['project']),
             'outlines' => $frame['outlines'],
-            'town_paths' => $frame['town_paths'],
             'rows' => $data['rows'],
         ];
     }
@@ -238,46 +233,32 @@ final class TownRankBoard
     }
 
     /**
-     * The whole-site drawing frame: the served counties' outlines, each town's own boundary, and the shared
-     * projector — the same geography the Service Areas and Geo Grid maps draw on, so a town sits on the same
-     * spot everywhere.
+     * The whole-site drawing frame: the served counties' outlines and the shared projector.
      *
-     * Counties are few and are fetched normally. Town boundaries are read CACHE-ONLY: a site covers ~700
-     * towns and fetching those inside a page render is the shape of request that used to time this page out.
-     * A town not cached yet keeps its dot, and {@see WarmTownOutlines} fills the gap off-request
-     * so its shape appears on a later view.
+     * Counties only, deliberately. Colouring ~700 town shapes at site scale filled the frame edge to edge
+     * and buried the map — at that zoom a town is a few pixels, so the shape says nothing the dot doesn't
+     * and costs the reader the whole picture. The county outline is the background; the towns are dots
+     * sized by population and coloured by rank. Per-location maps (Service Areas, Geo Grid) still draw town
+     * shapes, where a county holds a few dozen towns and each one is big enough to read.
      *
      * @param  array<string, array{lat: float, lng: float}>  $coords
-     * @return array{project: callable(float, float): array{float, float}, outlines: list<array{geoid: string, label: string, paths: list<string>}>, town_paths: array<string, list<string>>, shaped: int}
+     * @return array{project: callable(float, float): array{float, float}, outlines: list<array{geoid: string, label: string, paths: list<string>}>}
      */
     private function frame(Site $site, array $coords): array
     {
-        $townGeoIds = [];
         $countyIds = [];
         foreach ($this->points->forSite($site) as $town) {
             $geoId = trim((string) ($town['geo_id'] ?? ''));
-            if ($geoId === '' || ! isset($coords[(string) $town['coverage_area_id']])) {
-                continue;
+            if ($geoId !== '' && isset($coords[(string) $town['coverage_area_id']])) {
+                $countyIds[substr($geoId, 0, 5)] = substr($geoId, 0, 5);
             }
-            $townGeoIds[(string) $town['coverage_area_id']] = $geoId;
-            $countyIds[substr($geoId, 0, 5)] = substr($geoId, 0, 5);
         }
 
         $countyRings = $this->counties->for(array_values($countyIds));
-        $townRings = $this->townOutlines->for(array_values($townGeoIds), fetchMissing: false);
-
         $project = MapProjection::projector(MapProjection::unionExtent([
             MapProjection::ringsExtent($countyRings),
-            MapProjection::ringsExtent($townRings),
             MapProjection::pointsExtent($coords),
         ]));
-
-        $townPaths = [];
-        foreach ($townGeoIds as $id => $geoId) {
-            if (isset($townRings[$geoId])) {
-                $townPaths[(string) $id] = MapProjection::paths($townRings[$geoId], $project);
-            }
-        }
 
         $labels = $this->countyLabels(array_values($countyIds));
         $outlines = [];
@@ -285,7 +266,7 @@ final class TownRankBoard
             $outlines[] = ['geoid' => (string) $geoId, 'label' => $labels[$geoId] ?? "County {$geoId}", 'paths' => MapProjection::paths($rings, $project)];
         }
 
-        return ['project' => $project, 'outlines' => $outlines, 'town_paths' => $townPaths, 'shaped' => count($townPaths)];
+        return ['project' => $project, 'outlines' => $outlines];
     }
 
     /**

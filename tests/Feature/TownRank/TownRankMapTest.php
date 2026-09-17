@@ -1,10 +1,8 @@
 <?php
 
-use App\GeoGrid\CountyOutlines;
 use App\GeoGrid\TownOutlines;
 use App\Integrations\Census\MockMunicipalityGazetteer;
 use App\Integrations\Census\MunicipalityGazetteer;
-use App\Jobs\WarmTownOutlines;
 use App\Models\CoverageArea;
 use App\Models\JobCounty;
 use App\Models\Keyword;
@@ -13,10 +11,9 @@ use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\TownRank\TownRankBoard;
-use App\TownRank\TownRankPoints;
 use Illuminate\Support\Facades\Cache;
 
-/** Two towns the Census has shapes for, one it does not; the county outline is known. */
+/** Three served towns in one county; the county outline is known to the gazetteer. */
 function shapeSite(): array
 {
     app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer(polygons: [
@@ -44,32 +41,20 @@ function shapeSite(): array
     return ['site' => $site, 'keyword' => $kw, 'towns' => $towns];
 }
 
-it('draws the county outline and only the town shapes already cached — the render never fetches', function () {
+it('draws the served county outlines as the background and every town as a dot', function () {
     $f = shapeSite();
 
-    // Nothing cached: the map is county outline + dots, and the page made no gazetteer call for towns.
     $board = app(TownRankBoard::class)->for($f['site'], (string) $f['keyword']->id, 'town_query');
 
-    expect($board['town_paths'])->toBe([])
-        ->and($board['outlines'])->toHaveCount(1)
+    // The county the towns sit in, labelled and drawn — and no town shapes at site scale, where ~700
+    // polygons fill the frame and bury the map.
+    expect($board['outlines'])->toHaveCount(1)
         ->and($board['outlines'][0]['label'])->toBe('Warren County, NJ')
         ->and($board['outlines'][0]['paths'])->not->toBeEmpty()
-        ->and($board['markers'])->toHaveCount(3);
-
-    // Warm the boundaries off-request, then the same render draws the two shapes the Census knows.
-    app(WarmTownOutlines::class, ['siteId' => (string) $f['site']->id])
-        ->handle(app(TownRankPoints::class), app(TownOutlines::class), app(CountyOutlines::class));
-    app(TownRankPoints::class)->forget();
-
-    $board = app(TownRankBoard::class)->for($f['site'], (string) $f['keyword']->id, 'town_query');
-    $shaped = array_keys($board['town_paths']);
-
-    expect($shaped)->toHaveCount(2)
-        ->and($shaped)->toContain((string) $f['towns']['Hackettstown']->id)
-        ->and($shaped)->toContain((string) $f['towns']['Mansfield']->id)
-        // The town with no Census shape keeps its dot rather than vanishing.
-        ->and($shaped)->not->toContain((string) $f['towns']['Shapeless']->id)
-        ->and($board['markers'])->toHaveCount(3);
+        ->and($board)->not->toHaveKey('town_paths')
+        // Every town is a marker, wherever the Census does or doesn't know its shape.
+        ->and($board['markers'])->toHaveCount(3)
+        ->and(collect($board['markers'])->pluck('rank')->all())->toBe([2, null, 5]);
 });
 
 it('reports what is left to warm, and finds nothing to do once the cache is full', function () {
