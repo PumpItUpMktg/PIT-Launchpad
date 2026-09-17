@@ -179,6 +179,11 @@ Schedule::command('launchpad:town-rank-sweep')->weeklyOn(1, '04:00')->withoutOve
 // minutes; withoutOverlapping so runs can't double-collect.
 Schedule::job(new IngestTownRankScans)->everyMinute()->withoutOverlapping()->onOneServer();   // ShouldBeUnique: never two at once
 
+// The fallback for a worker that is not there: if a lane has an ageing backlog and nothing able to consume
+// it, the scheduler drains that lane itself. Does nothing while a worker is healthy. withoutOverlapping(10)
+// because a pass can run up to its --max-time; onOneServer so only one host ever covers.
+Schedule::command('launchpad:queue-babysit')->everyMinute()->withoutOverlapping(10)->onOneServer();
+
 // Review Capture reminders — day-3 / day-10 nudges for unsubmitted review requests (capped at 2, per-tenant
 // toggle). Daily; the command itself decides which requests are due. Everything it sends is queued.
 Schedule::command('launchpad:send-review-reminders')->dailyAt('09:20')->onOneServer();
