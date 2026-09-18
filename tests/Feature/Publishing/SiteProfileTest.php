@@ -393,3 +393,25 @@ it('fingerprints the assembled profile deterministically — same data same hash
     ]);
     expect(SiteProfileAssembler::fingerprint($assembler->assemble($site->fresh())))->not->toBe($hash);
 });
+
+it('pushes the air-quality card config only for an opted-in tenant with coordinates', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://ductworks.example', 'air_card' => true]);
+    Location::factory()->create(['site_id' => $site->id, 'lat' => 40.3101, 'lng' => -75.1299]);
+
+    $air = app(SiteProfileAssembler::class)->assemble($site->fresh())['air'];
+
+    expect($air['enabled'])->toBeTrue()
+        ->and($air['lat'])->toBe(40.3101)
+        ->and($air['lng'])->toBe(-75.1299);
+
+    // Default off: the theme carries the part on every site, so the flag is what decides whether the
+    // card renders anything — an air reading earns its place on an HVAC tenant and is noise on a
+    // sump-pump one.
+    $optedOut = Site::factory()->create();
+    Location::factory()->create(['site_id' => $optedOut->id, 'lat' => 40.0, 'lng' => -75.0]);
+    expect(app(SiteProfileAssembler::class)->assemble($optedOut->fresh())['air']['enabled'])->toBeFalse();
+
+    // Opted in with nowhere to measure → still off.
+    $noCoords = Site::factory()->create(['air_card' => true]);
+    expect(app(SiteProfileAssembler::class)->assemble($noCoords->fresh())['air']['enabled'])->toBeFalse();
+});

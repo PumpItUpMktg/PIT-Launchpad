@@ -115,6 +115,9 @@ final class SiteProfileAssembler
             'legal_links' => $this->pagesBySlug($site, $home, ['privacy-policy', 'privacy', 'terms-of-service', 'terms']),
             // Severe-weather banner config — coords + on/off; the plugin fetches the live forecast itself.
             'alert' => $this->weatherAlert($site, $location, $home),
+            // Local air-quality card config — the theme's "Local conditions" part renders nothing unless
+            // this is on. Opt-in per tenant, same as the weather bar beside it.
+            'air' => $this->airCard($site, $location),
         ];
     }
 
@@ -170,6 +173,23 @@ final class SiteProfileAssembler
             'noun' => (string) config('launchpad.weather_alert.noun', 'sump pump'),
             'cta_label' => 'Book a check',
             'cta_url' => $contact[0]['url'] ?? $home,
+        ];
+    }
+
+    /**
+     * The local air-quality card config. Coordinates are the same ones the weather bar forecasts against;
+     * the plugin fetches the reading itself, so this only says whether to render and where to look.
+     *
+     * @return array{enabled: bool, lat: float|null, lng: float|null}
+     */
+    private function airCard(Site $site, ?Location $location): array
+    {
+        [$lat, $lng] = $this->alertCoords($site, $location);
+
+        return [
+            'enabled' => (bool) $site->air_card && $lat !== null && $lng !== null,
+            'lat' => $lat,
+            'lng' => $lng,
         ];
     }
 

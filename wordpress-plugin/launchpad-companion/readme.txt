@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.45
+Stable tag: 0.9.46
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,15 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.46 =
+* Air quality: the card is now per-tenant opt-in. The block theme carries a "Local conditions" template
+  part in the footer, so without a switch the card would appear on every site the theme updates —
+  including the ones an air reading says nothing useful to. The control plane pushes `air.enabled` on the
+  site profile (Console → Corrections → Local air quality card), and the shortcode renders nothing until
+  it is on. A shortcode carrying its own lat/lng is a deliberate placement and still renders.
+* Site profile: `air` added to the profile whitelist — an un-whitelisted key is dropped silently, and the
+  card would never have rendered.
 
 = 0.9.45 =
 * Air quality: new `[lp_air_quality]` shortcode — a live local air-quality card for any widget area,

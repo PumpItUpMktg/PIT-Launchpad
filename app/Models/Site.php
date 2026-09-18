@@ -35,6 +35,7 @@ use Illuminate\Support\Carbon;
  * @property string $brand_name
  * @property string|null $header_tone_override operator override for the header bar: 'light' | 'dark' | null (auto from logo)
  * @property bool $weather_alert per-tenant opt-in for the severe-weather (rain) header bar
+ * @property bool $air_card per-tenant opt-in for the local air-quality card (the theme's Local conditions part)
  * @property Carbon|null $chrome_synced_at when the header/footer chrome was last pushed to WordPress
  * @property string|null $chrome_synced_hash fingerprint of the last-pushed profile (drift detection)
  * @property bool $offers_emergency
@@ -286,6 +287,7 @@ class Site extends Model
             'product' => ProductPlan::class,
             'offers_emergency' => 'boolean',
             'weather_alert' => 'boolean',
+            'air_card' => 'boolean',
             'chrome_synced_at' => 'datetime',
             'chrome_stale' => 'boolean',
             'style_variation' => StyleVariation::class,

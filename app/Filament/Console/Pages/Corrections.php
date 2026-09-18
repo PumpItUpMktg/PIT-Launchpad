@@ -350,6 +350,38 @@ class Corrections extends ConsolePage
             ->success()->send();
     }
 
+    /** Whether the local air-quality card is turned on for the current tenant. */
+    public function getAirCardEnabledProperty(): bool
+    {
+        return $this->siteId !== null
+            && (bool) Site::withoutGlobalScopes()->whereKey($this->siteId)->value('air_card');
+    }
+
+    /**
+     * Toggle the per-tenant air-quality card. The theme carries the part on every site, so this is what
+     * decides whether it renders anything — opt-in, default off, because an air-quality reading is useful
+     * to an HVAC or mold tenant and noise to a sump-pump one. Reaches WordPress on the next
+     * "Sync header & footer" (the card rides the site profile, not a page publish).
+     */
+    public function toggleAirCard(): void
+    {
+        if (! $this->can(Capability::ManageEngineControls) || $this->siteId === null) {
+            return;
+        }
+        $site = Site::withoutGlobalScopes()->find($this->siteId);
+        if ($site === null) {
+            return;
+        }
+
+        $site->forceFill(['air_card' => ! $site->air_card])->save();
+
+        Notification::make()
+            ->title($site->air_card
+                ? 'Air-quality card ON — run “Sync header & footer” to push it live.'
+                : 'Air-quality card OFF — run “Sync header & footer” to push it live.')
+            ->success()->send();
+    }
+
     /** Clear a page's publish protection so a re-publish can overwrite it again. */
     public function unlock(string $contentId): void
     {
