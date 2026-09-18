@@ -13,8 +13,10 @@ use Illuminate\Foundation\Queue\Queueable;
  * Geocode a base location off the web request: the consolidated add-flow dispatches this
  * the moment a location is created, so the operator never sees a geocode step — just a
  * quiet "located" when it lands. Address → Census Geocoder → point, then the point's home
- * county (TIGERweb) is resolved and default-selected (county-based coverage). A miss flags
- * `geocode_failed` so the surface can offer a manual override (only then). Idempotent.
+ * county (TIGERweb) is resolved and default-selected (county-based coverage), along with the
+ * MUNICIPALITY the point stands in — the town the location is actually in, which its own name cannot
+ * settle where a borough and a township share one. A miss flags `geocode_failed` so the surface can
+ * offer a manual override (only then). Idempotent.
  */
 class GeocodeLocation implements ShouldQueue
 {
@@ -54,6 +56,12 @@ class GeocodeLocation implements ShouldQueue
 
         // Resolve the home county; default-select it if the owner hasn't chosen counties yet.
         $county = $gazetteer->countyAt($lat, $lng);
+
+        // …and the MUNICIPALITY the point falls in. The county alone cannot say whether the office
+        // stands in Doylestown borough or Doylestown township — two municipalities, one county, and no
+        // name match can choose between them. The point can. Without it the location's own town keeps
+        // appearing in its "no page yet" queue, because nothing ties the hub page to the town it is in.
+        $municipality = $gazetteer->placeAt($lat, $lng);
         $selected = is_array($location->county_geoids) ? $location->county_geoids : [];
         if ($county !== null && $selected === []) {
             $selected = [$county->geoId];
@@ -65,6 +73,7 @@ class GeocodeLocation implements ShouldQueue
             'lng' => $lng,
             'geocode_failed' => false,
             'home_county_geoid' => $county?->geoId,
+            'home_geo_id' => $municipality?->geoId,
             'county_geoids' => $selected,
         ])->save();
     }
