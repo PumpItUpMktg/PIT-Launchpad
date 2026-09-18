@@ -219,15 +219,7 @@ abstract class OperatePagesBoard extends OperatePage
     }
 
     /**
-     * The location tab being viewed: the selected one, else the first the view will land on.
-     *
-     * The view picks its default tab by label, A→Z with "Unassigned" last, so this has to agree — pick a
-     * different one and the board builds cards for a location that is not on screen, leaving the visible tab
-     * empty. Same rule, same order, one source of truth.
-     */
-    /**
-     * The location tabs in display order — the view renders them in exactly this order, so the tab it
-     * shows first is the tab this page built cards for.
+     * The location tabs in display order — the view renders them in exactly this order.
      *
      * @return list<array{id: string, label: string}>
      */
@@ -236,6 +228,22 @@ abstract class OperatePagesBoard extends OperatePage
         $site = $this->getSite();
 
         return $site === null ? [] : app(PagesBoard::class)->locationTabs($site);
+    }
+
+    /**
+     * WHICH location the board built cards for — the view reads this rather than deciding for itself.
+     *
+     * The page and the view each used to pick a tab, by orderings that agreed most of the time. When they
+     * disagreed the visible tab was a group the page never built, and the location looked empty until you
+     * clicked away and back (#919). Matching the two orderings fixed that instance; it left the duplicate
+     * decision in place, which is the thing that can drift again. There is one decision now, made here,
+     * and the view follows it.
+     */
+    public function getActiveLocationTabProperty(): ?string
+    {
+        $site = $this->getSite();
+
+        return $site === null ? null : $this->activeLocationTab($site);
     }
 
     private function activeLocationTab(Site $site): ?string

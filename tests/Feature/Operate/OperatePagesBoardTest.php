@@ -442,3 +442,24 @@ it('holds a town publish when its parent GBP hub page is unpublished (report fix
     Livewire::test(OperateLocationPages::class)->call('publish', $town->id)->assertSet('confirmingPublish', $town->id);
     Queue::assertNotPushed(PublishContent::class);
 });
+
+it('renders the tab the board actually built, even when the view is asked for another', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $montclair = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'served_towns' => []]);
+    $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'served_towns' => []]);
+    pbPage($site, PageType::Location, ContentStatus::Approved, 'Verona', ['parent_location_id' => $montclair->id]);
+    pbPage($site, PageType::Location, ContentStatus::Approved, 'Norristown', ['parent_location_id' => $trooper->id]);
+
+    $page = Livewire::test(OperateLocationPages::class);
+
+    // The page names the active location; the view no longer decides for itself, so the two cannot drift.
+    expect($page->instance()->activeLocationTab)->toBe((string) $montclair->id);
+
+    $page->call('setLocTab', (string) $trooper->id);
+    expect($page->instance()->activeLocationTab)->toBe((string) $trooper->id);
+    $page->assertSee('Norristown')->assertDontSee('Verona');
+
+    // An id that is not a tab at all falls back to the first tab rather than rendering nothing.
+    $page->call('setLocTab', 'not-a-location')->assertOk()->assertSee('Verona');
+});
