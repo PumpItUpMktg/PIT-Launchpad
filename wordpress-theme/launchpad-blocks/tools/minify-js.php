@@ -11,7 +11,6 @@
 
 $dir = dirname(__DIR__).'/assets';
 $targets = [
-    $dir.'/area-map.js' => $dir.'/area-map.min.js',
     $dir.'/nav.js' => $dir.'/nav.min.js',
 ];
 

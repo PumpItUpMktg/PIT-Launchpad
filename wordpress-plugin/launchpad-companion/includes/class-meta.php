@@ -55,10 +55,10 @@ final class Meta
      * matching this meta. Empty for a flat/top-level page. */
     public const PARENT_ID = '_lp_parent_id';
 
-    /** The "Areas we serve" interactive-map geometry (served-county polygons + tiered town
-     * points). Stored from the /content blob's `service_area_map` and printed as a
-     * `window.lpAreaMap` global for the block theme's Leaflet init — kept OUT of post_content
-     * because kses would strip the embedded geometry. */
+    /** The "Areas we serve" map geometry (served-county polygons + tiered town points). Stored from
+     * the /content blob's `service_area_map` and drawn into the page as inline SVG by
+     * {@see \Launchpad\Companion\Render\AreaMap} — kept OUT of post_content because kses would strip
+     * the embedded geometry. */
     public const AREA_MAP = '_lp_area_map';
 
     /** The page's lead-form embed (a GHL iframe, operator-configured per page on the control

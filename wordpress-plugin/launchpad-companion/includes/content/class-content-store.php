@@ -369,8 +369,8 @@ final class ContentStore
         update_post_meta($post_id, Meta::SILO_ID, (string) ($payload['silo_id'] ?? ''));
         update_post_meta($post_id, Meta::LOCKED, ! empty($payload['locked']) ? '1' : '0');
 
-        // "Areas we serve" map geometry — stored for the theme's Leaflet init (printed as
-        // window.lpAreaMap). Absent / null (no coverage, non-home) → cleared so a stale map
+        // "Areas we serve" map geometry — stored for {@see \Launchpad\Companion\Render\AreaMap} to
+        // draw server-side as inline SVG. Absent / null (no coverage, non-home) → cleared so a stale map
         // can't linger after coverage is removed.
         $area_map = $payload['service_area_map'] ?? null;
         if (is_array($area_map) && ! empty($area_map)) {

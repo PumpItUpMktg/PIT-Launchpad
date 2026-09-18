@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.46
+Stable tag: 0.9.47
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,16 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.47 =
+* "Areas we serve" map: drawn server-side as inline SVG from the pushed county/town geometry, replacing
+  Leaflet over CARTO basemap tiles. CARTO now requires an API key for those tiles and was stamping
+  "API KEY REQUIRED" across live customer maps. The geometry is ours (Census TIGERweb, on the meta blob),
+  so nothing is fetched to draw it: no 147KB script, no stylesheet, no tile CDN, no key. Counties and
+  towns take the brand's own colour tokens, town click-through becomes a real crawlable link rather than
+  a JS handler, and names ride as <title> for hover and screen readers alike. It renders into the mount
+  the control plane already publishes, so every existing page gets the new map on its next request with
+  no re-publish. A page with no geometry renders no figure and keeps its text town list.
 
 = 0.9.46 =
 * Air quality: the card is now per-tenant opt-in. The block theme carries a "Local conditions" template
