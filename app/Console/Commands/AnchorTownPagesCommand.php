@@ -3,9 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Locations\TownPageGeoAnchor;
-use App\Models\Scopes\VisibleSiteScope;
 use App\Models\Site;
+use App\Support\SiteFinder;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 
 /**
  * Anchor town pages to their census GEOID (`contents.geo_id`), derived from the current name-match — the
@@ -25,17 +26,36 @@ class AnchorTownPagesCommand extends Command
 
     protected $description = 'Anchor town pages to their census GEOID from the name-match (report-first; --execute writes).';
 
+    /** @param  Collection<int, Site>  $sites */
+    private function listSites(Collection $sites): void
+    {
+        foreach ($sites as $site) {
+            $this->line(sprintf('  · %s — %s (%s)', $site->brand_name, $site->domain_url ?? 'no domain', $site->id));
+        }
+    }
+
     public function handle(TownPageGeoAnchor $anchor): int
     {
+        // The same forgiving lookup every other launchpad command takes: an id, a brand name, a domain,
+        // or part of one. It used to demand an EXACT id or brand name and answer "No site matches [sump]"
+        // with no hint that "Sump Pump Gurus" was sitting right there — a dead end you can only escape by
+        // already knowing the answer.
         $opt = trim((string) $this->option('site'));
         if ($opt !== '') {
-            $site = Site::withoutGlobalScope(VisibleSiteScope::class)->where('id', $opt)->orWhere('brand_name', $opt)->first();
-            if ($site === null) {
-                $this->error("No site matches [{$opt}].");
+            $matches = SiteFinder::matches($opt);
+            if ($matches->isEmpty()) {
+                $this->error("No site matches [{$opt}]. Available sites:");
+                $this->listSites(SiteFinder::all());
 
                 return self::FAILURE;
             }
-            $sites = collect([$site]);
+            if ($matches->count() > 1) {
+                $this->error("[{$opt}] is ambiguous — it matches {$matches->count()} sites. Re-run with the id or exact name:");
+                $this->listSites($matches);
+
+                return self::FAILURE;
+            }
+            $sites = $matches;
         } else {
             $sites = Site::query()->get();
         }
