@@ -2,6 +2,7 @@
 
 namespace App\Operator\Nav;
 
+use App\Filament\Console\Pages\Corrections;
 use App\Filament\Pages\BrandBoard;
 use App\Filament\Pages\Citations\CitationsBoard;
 use App\Filament\Pages\Gathering\SetupEntry;
@@ -51,7 +52,7 @@ class ConsoleNav
      * The IA shape, independent of routing: four groups, each a list of items. `soon` marks a
      * placeholder (no admin surface yet); `surface` is the page/resource class (null for a gap).
      *
-     * @return list<array{group: string, items: list<array{label: string, surface: ?class-string, soon: bool}>}>
+     * @return list<array{group: string, items: list<array{label: string, surface: ?class-string, soon: bool, panel?: string}>}>
      */
     public function structure(): array
     {
@@ -93,6 +94,10 @@ class ConsoleNav
                 ['label' => 'Users', 'surface' => UsersBoard::class, 'soon' => false],
                 ['label' => 'Queue', 'surface' => QueueBoard::class, 'soon' => false],
                 ['label' => 'Recover', 'surface' => RebuildReadiness::class, 'soon' => false],
+                // The one item that leaves this panel: Corrections is a Console surface, and an operator
+                // who needs it is mid-incident — hunting for another panel's URL is the wrong moment for
+                // that. `panel` makes the URL resolve against the console rather than the current panel.
+                ['label' => 'Corrections', 'surface' => Corrections::class, 'soon' => false, 'panel' => 'console'],
             ]],
         ];
     }
@@ -102,7 +107,7 @@ class ConsoleNav
      * has a null URL (rendered greyed + non-clickable). Must run inside a request (Filament panel
      * context) so `::getUrl()` can resolve.
      *
-     * @return list<array{group: string, items: list<array{label: string, url: ?string, soon: bool}>}>
+     * @return list<array{group: string, items: list<array{label: string, url: ?string, soon: bool, external: bool}>}>
      */
     public function columns(): array
     {
@@ -110,8 +115,13 @@ class ConsoleNav
             'group' => $col['group'],
             'items' => array_map(fn (array $item): array => [
                 'label' => $item['label'],
-                'url' => $item['soon'] || $item['surface'] === null ? null : $item['surface']::getUrl(),
+                'url' => $item['soon'] || $item['surface'] === null
+                    ? null
+                    : $item['surface']::getUrl(panel: $item['panel'] ?? null),
                 'soon' => $item['soon'],
+                // A cross-panel link is a full page load: wire:navigate would swap another panel's
+                // document into this one's Livewire context.
+                'external' => isset($item['panel']),
             ], $col['items']),
         ], $this->structure());
     }
