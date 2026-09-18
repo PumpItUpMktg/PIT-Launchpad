@@ -64,7 +64,8 @@ final class TownSoilSync
                 continue;
             }
 
-            $classes = $this->usda->forRings($townRings);
+            $answer = $this->usda->forRings($townRings);
+            $classes = $answer['classes'];
             $poorly = 0.0;
             foreach ($classes as $class) {
                 if (in_array($class['class'], self::POORLY, true)) {
@@ -75,10 +76,12 @@ final class TownSoilSync
             TownSoilDrainage::query()->updateOrCreate(['geo_id' => (string) $geoId], [
                 'name' => (string) $town->name,
                 'state' => $town->state,
-                // Nothing back = this ground is not in the survey, which is NOT "it drains fine".
-                'surveyed' => $classes !== [],
+                // Nothing back = this ground is not in the survey, which is NOT "it drains fine". A town
+                // that IS surveyed but is all water counts as surveyed with nothing to say about drainage.
+                'surveyed' => $classes !== [] || $answer['water_share'] > 0.0,
                 'dominant' => $classes[0]['class'] ?? null,
                 'poorly_share' => $classes === [] ? null : round($poorly, 4),
+                'water_share' => $answer['water_share'],
                 'classes' => $classes,
                 'fetched_at' => Carbon::now(),
             ]);
