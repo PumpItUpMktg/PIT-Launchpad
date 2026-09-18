@@ -195,7 +195,7 @@ class PageGroundingAssembler
         $isTown = $subject !== null;
         $facts = [];
         if ($isTown) {
-            $facts = $this->townFacts->for($page->geo_id);
+            $facts = $this->townFacts->for($page->geo_id, (string) $page->site_id);
         }
         if (! $isTown) {
             $trade = SiloBlueprint::withoutGlobalScope(SiteScope::class)

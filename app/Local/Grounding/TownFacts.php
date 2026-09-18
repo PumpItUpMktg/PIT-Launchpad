@@ -20,12 +20,13 @@ final class TownFacts
     public function __construct(
         private readonly TownHousingFacts $housing = new TownHousingFacts,
         private readonly TownFloodFacts $flood = new TownFloodFacts,
+        private readonly TownElevationFacts $elevation = new TownElevationFacts,
     ) {}
 
     /**
      * @return list<string>
      */
-    public function for(?string $geoId): array
+    public function for(?string $geoId, ?string $siteId = null): array
     {
         $geoId = trim((string) $geoId);
         if ($geoId === '') {
@@ -35,6 +36,9 @@ final class TownFacts
         return [
             ...$this->housing->for($this->housing->row($geoId)),
             ...$this->flood->for($this->flood->row($geoId)),
+            // Elevation needs the site: a number of feet only means something against the range of the
+            // towns this business actually serves.
+            ...$this->elevation->for($this->elevation->row($geoId), $siteId),
         ];
     }
 }
