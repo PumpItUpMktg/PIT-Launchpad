@@ -859,13 +859,19 @@ final class BlockContentAssembler
         } else {
             $coverageByCounty = $this->serviceAreas->byCounty((string) $content->site_id, (string) $location->id);
             $coverageCounties = array_map(fn (array $g): string => (string) $g['county'], $coverageByCounty);
-            // The counties, then how far that actually reaches — the question a visitor is really asking
-            // ("do you come to me?"), answered from the coverage we already claim. Hub pages only: the same
-            // four extremities on every town page would be boilerplate by the second one.
-            $coverage = [
-                ...$this->coverageSentence($city, $coverageCounties),
-                ...$this->extent->sentences((string) $content->site_id, $location, $city),
-            ];
+            // ONE paragraph: what we cover, how far it runs, what is interesting about that range, and
+            // what to do if you are outside it — the question a visitor is really asking. Hub pages only;
+            // the same four extremities on every town page would be boilerplate by the second one.
+            $coverage = $this->extent->paragraph(
+                (string) $content->site_id,
+                $location,
+                $city,
+                $coverageCounties,
+                $this->locationCount((string) $content->site_id),
+            );
+            if ($coverage === []) {
+                $coverage = $this->coverageSentence($city, $coverageCounties);
+            }
         }
 
         return $this->composer->composeLocation(
@@ -960,6 +966,12 @@ final class BlockContentAssembler
      * @param  list<string>  $counties  the served county names (display-ready, the same source as the list)
      * @return list<string>
      */
+    /** How many physical locations this tenant has — a one-office business never offers "another of ours". */
+    private function locationCount(string $siteId): int
+    {
+        return Location::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->count();
+    }
+
     private function coverageSentence(string $city, array $counties): array
     {
         $counties = array_values(array_filter(array_map('trim', $counties), fn (string $c): bool => $c !== ''));

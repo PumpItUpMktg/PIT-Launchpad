@@ -116,7 +116,9 @@ it('composes the location page: formula H1, live-page link rule, a county covera
         ->toContain('French Drains')
         // Coverage prose is now ONE county-level sentence handing off to the structured list below — never
         // the town-by-town enumeration that read as keyword-stuffing.
-        ->toContain('From Trooper we serve Montgomery County and the surrounding communities')
+        // One paragraph now: what we cover, how far it runs, and what to do if you are outside it.
+        ->toContain('From our Trooper location we serve Montgomery County and the communities around it.')
+        ->toContain('call us')
         ->not->toContain('Norristown, Audubon, and Eagleville')
         // The CTA/hero carry the LOCATION's own phone.
         ->toContain('tel:6105550142')
@@ -865,7 +867,7 @@ it('the hub coverage sentence leads the areas block instead of heading a section
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
     // The sentence survives, inside the areas block…
-    expect($markup)->toContain('From Trooper we serve Montgomery County')
+    expect($markup)->toContain('From our Trooper location we serve Montgomery County')
         ->toContain('lp-areas-lead')
         ->toContain('Towns we serve from Trooper');
     // …and the second heading over the same subject is gone.
