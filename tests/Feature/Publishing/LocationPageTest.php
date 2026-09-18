@@ -834,3 +834,40 @@ it('never ships a location service card as a bare "Learn more" — every card ca
         ->toContain('Interior perimeter drains that move water out before it reaches the slab.')
         ->toContain('Crawl Space Encapsulation handled by a team you can count on');
 });
+
+it('answers "visit us" once: the map sits beside the details, not in a section of its own', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, ['is_storefront' => true, 'address' => '10 Trooper Rd, Trooper, PA 19403', 'lat' => 40.12, 'lng' => -75.34]);
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+    $page = locRelayPage($site, $location);
+    locScopedCoverage($site, $location);
+
+    // Through the blob, because that is what injects the location_map slot the section reads.
+    $markup = app(MetaBlobAssembler::class)->assemble($page->fresh(), collect())['post_content'];
+
+    // One block: the contact section carries the map shortcode in a two-column split…
+    expect($markup)->toContain('lp-contact--map')
+        ->toContain('lp-contact-split')
+        ->toContain('[lp_map key="location_map"]')
+        ->toContain('(610) 555-0142')
+        ->toContain('10 Trooper Rd');
+    // …and the standalone "Find us in {city}" section it replaced is gone, with its heading.
+    expect($markup)->not->toContain('Find us in')
+        ->and(substr_count($markup, 'lp-mapsection'))->toBe(0);
+});
+
+it('the hub coverage sentence leads the areas block instead of heading a section of its own', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site);
+    $page = locRelayPage($site, $location);
+    locScopedCoverage($site, $location);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    // The sentence survives, inside the areas block…
+    expect($markup)->toContain('From Trooper we serve Montgomery County')
+        ->toContain('lp-areas-lead')
+        ->toContain('Towns we serve from Trooper');
+    // …and the second heading over the same subject is gone.
+    expect($markup)->not->toContain('The towns we cover around Trooper');
+});

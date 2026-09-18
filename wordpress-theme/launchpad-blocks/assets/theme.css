@@ -1428,6 +1428,31 @@
 
 /* The second tier: every other served town that has a page. Quieter than the prominent line — it is the
    long tail, not the headline — but every name in it is a real link. */
+/* Coverage lead-in, folded into the areas block (it was its own "Coverage" section above — two headings
+   over one subject). Reads as the sentence before the list, not as a section of its own. */
+.lp-areas-lead {
+    margin: 0 0 1rem;
+    max-width: 62ch;
+}
+
+/* "Visit or call" with the map beside it: the details and the map are one answer, not two sections. */
+.lp-contact--map .lp-contact-split {
+    gap: clamp(1.25rem, 3vw, 2.5rem);
+    align-items: center;
+}
+
+.lp-contact--map .lp-map {
+    height: clamp(260px, 38vh, 420px);
+}
+
+.lp-contact--map .lp-contact-grid {
+    display: block;
+}
+
+.lp-contact--map .lp-contact-hours {
+    margin-top: 1rem;
+}
+
 .lp-areas-more {
     margin: 0.35rem 0 0;
     font-size: 0.8rem;

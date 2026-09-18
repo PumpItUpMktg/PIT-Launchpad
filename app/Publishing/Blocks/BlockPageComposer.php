@@ -1053,19 +1053,13 @@ final class BlockPageComposer
             address: $address,
             hours: $hours,
             preview: $preview,
+            // The map rides INSIDE this block, beside the details: "Visit or call" and "Find us in
+            // {city}" were two full-width sections with two headings answering one question, which read
+            // as redundant and pushed the page's real content down. One block, two columns.
+            mapSlotKey: $hasMap ? 'location_map' : '',
         );
 
-        // "Find us" map — a lazy Google embed of THIS location's GBP place, rendered via the plugin's
-        // [lp_map] shortcode from the location_map slot on the blob. Emitted only when the location has
-        // mappable coordinates (the assembler injects the slot under the same condition); it sits right
-        // after the NAP so contact truths + a map read as one "visit us" block.
-        $map = $hasMap
-            ? $this->sections->mapEmbed(
-                eyebrow: 'Find us',
-                heading: $city !== '' ? 'Find us in '.$city : 'Find us',
-                slotKey: 'location_map',
-            )
-            : '';
+        $map = '';
 
         // Local conditions — the trade-keyed local FACTS we already fetch (climate normals, elevation,
         // census) surfaced as a scannable section, not only woven into the drafted prose. Each fact is
@@ -1083,14 +1077,19 @@ final class BlockPageComposer
         $coverageHeading = $isTown
             ? ($city !== '' ? 'Towns near '.$city : 'Nearby towns')
             : ($city !== '' ? 'The towns we cover around '.$city : 'The towns we cover');
-        $coverageBlock = $this->sections->prose(
-            eyebrow: 'Coverage',
-            heading: $coverageHeading,
-            paragraphs: $coverage,
-            surface: true,
-            preview: $preview,
-            activates: 'appears when this location\'s served towns are captured',
-        );
+        // On a HUB the coverage prose folds INTO the areas block below as its lead-in — "Coverage" and
+        // "Areas we serve" were two headings over one subject. A TOWN page keeps its own short section,
+        // because its list beneath is the nearest-neighbour set, a different claim with a different head.
+        $coverageBlock = $isTown
+            ? $this->sections->prose(
+                eyebrow: 'Coverage',
+                heading: $coverageHeading,
+                paragraphs: $coverage,
+                surface: true,
+                preview: $preview,
+                activates: 'appears when this location\'s served towns are captured',
+            )
+            : '';
 
         // The coverage list. A HUB (market) page carries the full county-grouped list — the site's linked
         // "areas we serve" spine. A TOWN page instead carries a flat list of its NEAREST neighbours
@@ -1106,6 +1105,7 @@ final class BlockPageComposer
                 byCounty: $coverageByCounty,
                 preview: $preview,
                 mapAvailable: $areasMapAvailable,
+                lead: $coverage,
             );
 
         // Reviews + jobs are STRICTLY provider-gated — preview: false is deliberate (no "Example"

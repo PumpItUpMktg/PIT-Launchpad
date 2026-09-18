@@ -934,7 +934,7 @@ final class BlockSections
      * @param  list<string>  $counties  named counties served (gates the section; the names show as the group subheads)
      * @param  list<array{county: string, cities: list<array{label: string, url: string}>}>  $byCounty  major cities grouped by county, largest-first; a non-empty url is a REAL town page
      */
-    public function serviceAreas(string $eyebrow, string $heading, array $counties, array $byCounty, bool $preview = false, bool $mapAvailable = false): string
+    public function serviceAreas(string $eyebrow, string $heading, array $counties, array $byCounty, bool $preview = false, bool $mapAvailable = false, array $lead = []): string
     {
         $counties = array_values(array_filter(array_map('trim', $counties), fn (string $c): bool => $c !== ''));
 
@@ -955,6 +955,9 @@ final class BlockSections
         $children = [$this->sectionHead($eyebrow, $heading)];
         if ($placeholder) {
             $children[] = $this->placeholderNote('add your service areas to activate this section');
+        }
+        foreach (array_values(array_filter(array_map('trim', $lead), fn (string $p): bool => $p !== '')) as $paragraph) {
+            $children[] = $this->b->paragraph($this->text($paragraph), ['className' => 'lp-areas-lead']);
         }
 
         // The major-cities-by-county column (real geometry only draws the map; text always renders).
@@ -1244,6 +1247,7 @@ final class BlockSections
         ?string $address,
         array $hours,
         bool $preview = false,
+        string $mapSlotKey = '',
     ): string {
         $phoneDisplay = trim((string) $phoneDisplay);
         $email = trim((string) $email);
@@ -1291,13 +1295,31 @@ final class BlockSections
             $cols[] = $this->b->column([$this->b->group($hoursChildren, ['className' => 'lp-contact-hours'])]);
         }
 
-        $children = [$this->sectionHead($eyebrow, $heading, center: true)];
+        // With a map, the section is the whole "visit us" answer in one block: the map on one side, the
+        // details beside it. It used to be two full-width sections with two headings saying the same
+        // thing — "Visit or call" and then "Find us in {city}" — which read as redundant and pushed the
+        // page's real content further down.
+        $mapSlotKey = trim($mapSlotKey);
+        $withMap = $mapSlotKey !== '' && ! $placeholder;
+
+        // At least one column exists by here: an all-empty NAP returned above.
+        $details = $this->b->group(
+            [$this->b->columns($cols, ['className' => 'lp-contact-grid'])],
+            ['className' => 'lp-contact-details'],
+        );
+
+        $children = [$this->sectionHead($eyebrow, $heading, center: ! $withMap)];
         if ($placeholder) {
             $children[] = $this->placeholderNote('appears when you add your contact details');
         }
-        $children[] = $this->b->columns($cols, ['className' => 'lp-contact-grid']);
+        $children[] = $withMap
+            ? $this->b->columns([
+                $this->b->column(["<!-- wp:shortcode -->\n[lp_map key=\"".$mapSlotKey."\"]\n<!-- /wp:shortcode -->"]),
+                $this->b->column([$details]),
+            ], ['className' => 'lp-contact-split'])
+            : $this->b->columns($cols, ['className' => 'lp-contact-grid']);
 
-        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-contact', $placeholder)]);
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-contact', $placeholder).($withMap ? ' lp-contact--map' : '')]);
     }
 
     /**
