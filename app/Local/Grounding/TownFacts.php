@@ -21,6 +21,7 @@ final class TownFacts
         private readonly TownHousingFacts $housing = new TownHousingFacts,
         private readonly TownFloodFacts $flood = new TownFloodFacts,
         private readonly TownElevationFacts $elevation = new TownElevationFacts,
+        private readonly TownSoilFacts $soil = new TownSoilFacts,
     ) {}
 
     /**
@@ -39,6 +40,9 @@ final class TownFacts
             // Elevation needs the site: a number of feet only means something against the range of the
             // towns this business actually serves.
             ...$this->elevation->for($this->elevation->row($geoId), $siteId),
+            // What the ground does with water — the last of the four, and the one a basement trade
+            // cares about most.
+            ...$this->soil->for($this->soil->row($geoId)),
         ];
     }
 }
