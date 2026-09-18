@@ -898,7 +898,12 @@ final class BlockContentAssembler
             nearbyTowns: $nearbyTowns,
             isTown: $isTown,
             parentCity: $parentCity,
-            localConditions: $this->locationGroundingFacts($location),
+            // HUB PAGES ONLY. $location here is the town page's PARENT, so its facts describe the
+            // parent's city — rendering them under a heading naming the town ("About Buckingham") both
+            // repeats one identical block across every town page under the hub AND mislabels whose
+            // conditions they are. The town's own per-GEOID facts (housing, flood, elevation, soil) reach
+            // a town page through the drafter, not this section.
+            localConditions: $isTown ? [] : $this->locationGroundingFacts($location),
             hasMap: is_array($slots['location_map'] ?? null),
             areasMapAvailable: $areasMapAvailable,
             preview: $preview,
@@ -906,10 +911,12 @@ final class BlockContentAssembler
     }
 
     /**
-     * The location's cached local-grounding facts (climate normals, elevation, census — trade-keyed),
-     * surfaced as the "Local conditions" section. A cache-only read (no network at publish time): the
-     * facts were fetched when the page drafted ({@see LocationGrounding}). Every
-     * entry is a display-ready statement; a bad/absent cache yields [] and the section drops.
+     * The location's cached local-grounding facts (climate normals, summer dew point, elevation, census
+     * — trade-keyed), surfaced as the "Local conditions" section of ITS OWN hub page. A cache-only read
+     * (no network at publish time): the facts were fetched when the page drafted
+     * ({@see LocationGrounding}). Every entry is a display-ready statement; a bad/absent cache yields []
+     * and the section drops. These facts are regional — they belong to the hub's city and are not
+     * rendered on the town pages beneath it.
      *
      * @return list<string>
      */
