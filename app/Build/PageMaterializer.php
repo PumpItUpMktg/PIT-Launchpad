@@ -14,6 +14,7 @@ use App\Locations\LocationNesting;
 use App\Locations\TownLocationAssigner;
 use App\Models\BuildPage;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -111,6 +112,19 @@ final class PageMaterializer
                     ? $this->projector->marketForCoverageArea($entry->page_key, $site)
                     : null;
 
+                // …and anchor it to that town's census GEOID at birth. The page_key IS the CoverageArea id,
+                // so this is exact — no name match, no ambiguity to resolve later. Without it a freshly
+                // built town page carries a null geo_id, which means the board still counts the town as
+                // having no page, the per-town grounding (housing, flood) finds nothing to ground on, and
+                // the job→page join has nothing to join. It was left to `launchpad:anchor-town-pages` to
+                // derive by name afterwards; deriving a key we already hold is the wrong shape.
+                $geoId = $entry->source === BuildSource::Location
+                    ? CoverageArea::withoutGlobalScope(SiteScope::class)
+                        ->where('site_id', $site->id)
+                        ->whereKey($entry->page_key)
+                        ->value('geo_id')
+                    : null;
+
                 // Carry the spoke's Pass-D keyword onto the page (before create, so the rail + grounding
                 // read a real target). Resolve the string to a §5 Keyword — the single representation.
                 $targetKeyword = $this->keywords->forSpoke($site, $entry->spoke_id, $silo?->id);
@@ -127,6 +141,7 @@ final class PageMaterializer
                     'silo_id' => $silo?->id,
                     'primary_service_id' => $primaryService?->id,
                     'market_id' => $market?->id,
+                    'geo_id' => is_string($geoId) && trim($geoId) !== '' ? trim($geoId) : null,
                     'target_keyword_id' => $targetKeyword?->id,
                     'wireframe_kit_id' => $kit?->id,
                     'wireframe_kit_version' => $kit?->version,

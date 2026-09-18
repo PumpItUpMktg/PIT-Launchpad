@@ -1,5 +1,6 @@
 <?php
 
+use App\Build\TownPageBuilder;
 use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\ServiceAreasPage;
@@ -13,6 +14,7 @@ use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\Models\User;
+use App\Operate\PagesBoard;
 use App\TownRank\TownRankPoints;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
@@ -113,4 +115,29 @@ it('removes a keyword from the wall, from the card', function () {
         ->and($keyword->fresh()->is_grid_keyword)->toBeFalse()
         // The scan it was measured by is kept, not deleted with the card.
         ->and(TownRankScan::withoutGlobalScopes()->where('keyword_id', $keyword->id)->count())->toBe(1);
+});
+
+it('anchors a town page to its GEOID at birth, so the board sees it as built', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $f = buildPageSite();
+    $site = $f['site'];
+    $town = $f['town'];
+
+    // Selected for a page, so the board offers it — nothing carries its GEOID yet.
+    $town->forceFill(['page_selected' => true])->save();
+    expect(app(PagesBoard::class)->locations($site)['eligible'])->not->toBeEmpty();
+
+    app(TownPageBuilder::class)->build($site, $town);
+
+    // The page carries the town's census GEOID from the moment it is created: the page_key IS the
+    // CoverageArea, so nothing has to be derived from its title afterwards.
+    $page = Content::withoutGlobalScopes()->where('site_id', $site->id)
+        ->where('page_type', PageType::Location)->whereNotNull('geo_id')->sole();
+    expect($page->geo_id)->toBe('4201781720');
+
+    // And the board stops offering the town, which is what "still showing 43 towns with no page" was.
+    $eligible = collect(app(PagesBoard::class)->locations($site)['eligible'])->flatten(1)
+        ->pluck('coverage_area_id');
+    expect($eligible)->not->toContain((string) $town->id);
 });

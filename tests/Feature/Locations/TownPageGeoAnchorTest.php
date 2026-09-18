@@ -1,7 +1,9 @@
 <?php
 
+use App\Enums\BuildSource;
 use App\Enums\PageType;
 use App\Locations\TownPageGeoAnchor;
+use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -90,4 +92,35 @@ it('runs report-first by default (writes nothing) and writes under --execute', f
         ->expectsOutputToContain('anchored 1')
         ->assertSuccessful();
     expect($page->fresh()->geo_id)->toBe('3401732250');
+});
+
+it('anchors a page the plan built from its manifest entry — exactly, not by name', function () {
+    $site = Site::factory()->create();
+    $market = Location::factory()->for($site)->create(['name' => 'Doylestown']);
+
+    // Two same-named towns under the SAME parent: by name this is ambiguous and must not be guessed.
+    $washingtonA = CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3400111111',
+        'name' => 'Washington', 'population' => 9000, 'source_location_ids' => [$market->id]]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '3400122222',
+        'name' => 'Washington', 'population' => 8000, 'source_location_ids' => [$market->id]]);
+
+    $page = tpaTown($site, 'Washington', $market->id);
+
+    // Without the plan link, the name match is ambiguous — surfaced, never anchored.
+    expect(app(TownPageGeoAnchor::class)->plan($site)['ambiguous'])->toHaveCount(1);
+
+    // With it, the town is known: the manifest entry names the coverage area the page was built for.
+    BuildPage::factory()->create([
+        'site_id' => $site->id, 'source' => BuildSource::Location, 'page_key' => (string) $washingtonA->id,
+        'title' => 'Washington', 'content_id' => $page->id,
+    ]);
+
+    $plan = app(TownPageGeoAnchor::class)->plan($site);
+    expect($plan['ambiguous'])->toBeEmpty()
+        ->and($plan['anchorable'])->toHaveCount(1)
+        ->and($plan['anchorable'][0]['geo_id'])->toBe('3400111111')
+        ->and($plan['anchorable'][0]['via'])->toBe('plan');
+
+    expect(app(TownPageGeoAnchor::class)->execute($site))->toBe(1);
+    expect($page->fresh()->geo_id)->toBe('3400111111');
 });
