@@ -8,6 +8,7 @@ use App\Integrations\Census\MunicipalityGazetteer;
 use App\Jobs\GeocodeLocation;
 use App\Models\Location;
 use App\Models\Site;
+use Illuminate\Support\Facades\Http;
 
 /**
  * A location's own coordinates settle which municipality it stands in. That matters because the name
@@ -46,4 +47,25 @@ it('leaves the municipality null when the point resolves to none', function () {
         ->handle(app(Geocoder::class), $gazetteer);
 
     expect($location->fresh()->home_geo_id)->toBeNull();
+});
+
+/**
+ * Maryland's MCDs are numbered election districts and TIGERweb's BASENAME carries the number —
+ * "3, Bel Air", "6, Havre de Grace". CoverageName already strips that shape on the way into a
+ * CoverageArea, so the gazetteer has to strip it too or the same municipality has two names: the
+ * coverage row says "Bel Air" and the anchor report says "the building stands in 3, Bel Air".
+ */
+it('strips the numbered-district prefix from a census municipality name', function () {
+    Http::fake(['*' => Http::response(['features' => [[
+        'attributes' => [
+            'GEOID' => '2402590232', 'BASENAME' => '3, Bel Air', 'NAME' => '3, Bel Air',
+            'STATE' => '24', 'CENTLAT' => 39.53, 'CENTLON' => -76.34,
+        ],
+    ]]])]);
+
+    $municipality = app(MunicipalityGazetteer::class)->placeAt(39.53, -76.34);
+
+    expect($municipality?->name)->toBe('Bel Air')
+        ->and($municipality?->geoId)->toBe('2402590232')
+        ->and($municipality?->state)->toBe('MD');
 });
