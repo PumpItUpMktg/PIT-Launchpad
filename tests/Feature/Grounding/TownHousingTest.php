@@ -35,9 +35,9 @@ function housingSite(): Site
     return $site;
 }
 
-function bindAcs(string $key = 'test-key'): void
+function bindAcs(string $key = 'test-key', string $year = '2023'): void
 {
-    app()->bind(HousingStats::class, fn () => new HousingStats(app(Factory::class), app('cache.store'), $key, '2023'));
+    app()->bind(HousingStats::class, fn () => new HousingStats(app(Factory::class), app('cache.store'), $key, $year));
 }
 
 it('fetches every town in a county in one request and stores the raw counts', function () {
@@ -118,4 +118,25 @@ it('names the town whose stored GEOID the ACS does not know', function () {
 
     expect($result['missing'])->toBe([['name' => 'Ghost Town', 'geo_id' => '4201700000']])
         ->and($result['written'])->toBe(2);
+});
+
+it('reports whether the ACS answered at all, apart from whether it knew the town', function () {
+    Http::fake(['*/2023/acs/acs5*' => Http::response(acsRows())]);
+    bindAcs();
+    $site = housingSite();
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'South Orange', 'state' => 'NJ',
+        'geo_id' => '3401369270', 'population' => 16198, 'source_location_ids' => []]);
+
+    $result = app(TownHousingSync::class)->forSite($site);
+
+    // The API answered — with rows — it simply had no row for that GEOID. Those are different faults, and
+    // only the first is a key problem worth telling the operator to go check.
+    expect($result['rows'])->toBe(3)
+        ->and($result['missing'])->toBe([['name' => 'South Orange', 'geo_id' => '3401369270']]);
+
+    // A silent API: the ACS answers with nothing at all. A fresh client on a different vintage keeps the
+    // cache above out of it, so this exercises the fetch rather than the memo.
+    Http::fake(['*/2021/acs/acs5*' => Http::response([])]);
+    bindAcs(year: '2021');
+    expect(app(TownHousingSync::class)->forSite($site, force: true)['rows'])->toBe(0);
 });

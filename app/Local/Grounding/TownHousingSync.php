@@ -26,7 +26,7 @@ final class TownHousingSync
     public function __construct(private readonly HousingStats $acs) {}
 
     /**
-     * @return array{towns: int, fetched: int, written: int, missing: list<array{name: string, geo_id: string}>, requests: int}
+     * @return array{towns: int, fetched: int, written: int, missing: list<array{name: string, geo_id: string}>, requests: int, rows: int}
      */
     public function forSite(Site $site, bool $force = false): array
     {
@@ -42,7 +42,7 @@ final class TownHousingSync
             }
         }
         if ($wanted === []) {
-            return ['towns' => 0, 'fetched' => 0, 'written' => 0, 'missing' => [], 'requests' => 0];
+            return ['towns' => 0, 'fetched' => 0, 'written' => 0, 'missing' => [], 'requests' => 0, 'rows' => 0];
         }
 
         $held = $force ? [] : CensusHousing::query()->whereIn('geo_id', array_keys($wanted))->pluck('geo_id')->flip()->all();
@@ -111,6 +111,9 @@ final class TownHousingSync
             'written' => $written,
             'missing' => $missing,
             'requests' => $requests,
+            // How many town rows the ACS returned across every request — the honest test of whether the
+            // API answered at all, as opposed to answering without the town we asked about.
+            'rows' => count($stats),
         ];
     }
 }

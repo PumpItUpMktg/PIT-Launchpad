@@ -72,8 +72,11 @@ class FetchTownHousingCommand extends Command
                 $this->line(sprintf('  … and %d more.', count($result['missing']) - 25));
             }
         }
-        if ($result['written'] === 0 && $result['fetched'] > 0) {
-            $this->warn('Nothing written — check CENSUS_API_KEY is set (a keyless ACS request returns a "Missing Key" page).');
+        // Only a silent API is a key problem. Writing nothing because the one outstanding town is missing
+        // from the ACS is a different thing entirely, and saying "check your key" there sends you hunting
+        // for a fault that isn't real — it did, on the run that found South Orange.
+        if ($result['fetched'] > 0 && $result['rows'] === 0) {
+            $this->warn('The ACS returned no rows at all — check CENSUS_API_KEY is set (a keyless request returns a "Missing Key" page).');
         }
         $this->sample($towns->fresh(), $facts);
 

@@ -131,3 +131,32 @@ it('leaves a town with no Census boundary alone rather than recording a FEMA ans
         ->and(TownFloodZone::query()->count())->toBe(0);
     Http::assertNothingSent();
 });
+
+it('explains the coastal zone for a coastal town, not the floodplain it shares with everywhere else', function () {
+    // Brooklyn's real first-run answer: AE and VE. VE is why the town is mapped the way it is.
+    $brooklyn = new TownFloodZone(['name' => 'Brooklyn', 'mapped' => true, 'has_sfha' => true, 'zones' => [
+        ['zone' => 'AE', 'sfha' => true, 'polygons' => 120],
+        ['zone' => 'X', 'sfha' => false, 'polygons' => 80],
+        ['zone' => 'VE', 'sfha' => true, 'polygons' => 14],
+    ]]);
+
+    $facts = app(TownFloodFacts::class)->for($brooklyn);
+
+    expect($facts[0])->toBe('FEMA maps Special Flood Hazard Areas in parts of Brooklyn (zones AE and VE) — the regulatory floodplain.')
+        ->and($facts[1])->toBe('Zone VE is coastal floodplain with wave action, with base flood elevations published.');
+
+    // Queens came back A, AE and VE — the coastal zone still wins the one explanation on offer.
+    $queens = new TownFloodZone(['name' => 'Queens', 'mapped' => true, 'has_sfha' => true, 'zones' => [
+        ['zone' => 'A', 'sfha' => true, 'polygons' => 9],
+        ['zone' => 'AE', 'sfha' => true, 'polygons' => 200],
+        ['zone' => 'VE', 'sfha' => true, 'polygons' => 30],
+    ]]);
+    expect(app(TownFloodFacts::class)->for($queens)[1])->toContain('Zone VE is coastal floodplain');
+
+    // Inland, nothing changes: AE still outranks the bare A it is usually mapped beside.
+    $inland = new TownFloodZone(['name' => 'Warrington', 'mapped' => true, 'has_sfha' => true, 'zones' => [
+        ['zone' => 'A', 'sfha' => true, 'polygons' => 6],
+        ['zone' => 'AE', 'sfha' => true, 'polygons' => 43],
+    ]]);
+    expect(app(TownFloodFacts::class)->for($inland)[1])->toContain('Zone AE is the 1%-annual-chance floodplain');
+});
