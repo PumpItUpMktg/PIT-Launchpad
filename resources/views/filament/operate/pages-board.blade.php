@@ -194,8 +194,14 @@
                     $tabs['unassigned'] ??= ['id' => 'unassigned', 'label' => 'Unassigned', 'work' => [], 'live' => null, 'orphans' => []];
                     $tabs['unassigned']['orphans'] = $live['orphans'];
                 }
-                // Named locations A→Z, "Unassigned" always last.
-                $locTabs = collect($tabs)->sortBy(fn ($t) => $t['id'] === 'unassigned' ? '~~~~' : mb_strtolower((string) $t['label']))->values()->all();
+                // Order comes from the board (PagesBoard::locationTabs) so the tab shown is the tab whose
+                // cards were built; "Unassigned" and anything the board doesn't know are appended after.
+                $tabOrder = array_flip(array_column($this->locationTabs, 'id'));
+                $locTabs = collect($tabs)
+                    ->sortBy(fn ($t) => $t['id'] === 'unassigned'
+                        ? PHP_INT_MAX
+                        : ($tabOrder[$t['id']] ?? PHP_INT_MAX - 1))
+                    ->values()->all();
                 $ids = array_column($locTabs, 'id');
                 $activeTab = (is_string($this->locTab) && in_array($this->locTab, $ids, true))
                     ? collect($locTabs)->firstWhere('id', $this->locTab)
@@ -266,7 +272,7 @@
                     @php $tEligible = count($eligibleByLocation[$t['id']] ?? []); @endphp
                     <button type="button" class="pb-loctab {{ $tActive ? 'on' : '' }}" wire:click="setLocTab('{{ $t['id'] }}')" wire:key="lt-{{ $t['id'] }}">
                         @if ($t['id'] !== 'unassigned')<span class="pb-locpin">📍</span>@endif {{ $t['label'] }}
-                        <span class="pb-loctab-n">{{ count($t['work']) + ($t['live'] !== null ? ($t['live']['rollup']['towns_live'] ?? 0) : 0) + count($t['orphans']) }}</span>
+                        <span class="pb-loctab-n">{{ count($t['work']) + (is_array($t['live']['rollup'] ?? null) ? $t['live']['rollup']['towns_live'] : 0) + count($t['orphans']) }}</span>
                         @if ($tEligible > 0)<span class="pb-loctab-n pb-loctab-todo" title="{{ $tEligible }} selected town(s) with no page yet">+{{ $tEligible }}</span>@endif
                     </button>
                 @endforeach
@@ -335,9 +341,11 @@
                             @endif
                         </div>
                         <div class="lv-locstats">
-                            <div class="lv-locstat"><div class="n">{{ $group['rollup']['towns_live'] }}</div><div class="l">town pages live</div></div>
-                            <div class="lv-locstat"><div class="n">{{ $group['rollup']['avg_rank'] !== null ? '#'.$group['rollup']['avg_rank'] : '—' }}</div><div class="l">avg position</div></div>
-                            <div class="lv-locstat"><div class="n">{{ $group['rollup']['impressions'] !== null ? number_format($group['rollup']['impressions']) : '—' }}</div><div class="l">impressions · 28d</div></div>
+                            {{-- A deferred group was never counted, so it shows nothing rather than zero. --}}
+                            @php($roll = $group['rollup'])
+                            <div class="lv-locstat"><div class="n">{{ $roll !== null ? $roll['towns_live'] : '—' }}</div><div class="l">town pages live</div></div>
+                            <div class="lv-locstat"><div class="n">{{ $roll !== null && $roll['avg_rank'] !== null ? '#'.$roll['avg_rank'] : '—' }}</div><div class="l">avg position</div></div>
+                            <div class="lv-locstat"><div class="n">{{ $roll !== null && $roll['impressions'] !== null ? number_format($roll['impressions']) : '—' }}</div><div class="l">impressions · 28d</div></div>
                         </div>
                     </div>
                     @if ($group['location_card'] !== null)

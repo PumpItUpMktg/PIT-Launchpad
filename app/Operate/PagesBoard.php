@@ -163,6 +163,17 @@ class PagesBoard
         return $city !== '' && $state !== '' ? "{$city}, {$state}" : ($city !== '' ? $city : 'Location');
     }
 
+    /**
+     * The location tabs in display order — the one list both the page and the view read, so the tab that
+     * is shown is the tab whose cards were built.
+     *
+     * @return list<array{id: string, label: string}>
+     */
+    public function locationTabs(Site $site): array
+    {
+        return $this->live->locationTabs($site);
+    }
+
     /** The site-level data-source chips for the live cards. */
     public function sources(Site $site): array
     {
