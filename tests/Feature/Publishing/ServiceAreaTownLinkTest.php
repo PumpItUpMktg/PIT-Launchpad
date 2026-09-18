@@ -87,3 +87,34 @@ it('renders an unbuilt town as PLAIN TEXT (empty url), not a self-referencing Ar
     // plan has a real target to attach to (rule 3: this asserts the exact behavior that changed).
     expect($marple['url'])->toBe('');
 });
+
+it('links every served town that has a page — the largest few prominently, the rest in a second tier', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $location = Location::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown', 'county_geoids' => ['42017']]);
+
+    // Eight served towns, all with published pages. Six is the prominent tier; the other two used to be
+    // invisible in text — reachable only as an unlabelled dot on the map.
+    $towns = ['Bensalem' => 60000, 'Bristol' => 55000, 'Middletown' => 45000, 'Northampton' => 39000,
+        'Falls' => 34000, 'Warminster' => 32000, 'Chalfont' => 4200, 'Silverdale' => 1000];
+    $i = 0;
+    foreach ($towns as $name => $population) {
+        $geoId = '420179'.str_pad((string) (++$i), 4, '0', STR_PAD_LEFT);
+        CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => $geoId, 'name' => $name,
+            'type' => 'county_subdivision', 'state' => 'PA', 'lat' => 40.3, 'lng' => -75.1, 'population' => $population,
+            'size_tier' => $population > 30000 ? 'large' : 'small', 'source' => 'county', 'source_location_ids' => [$location->id]]);
+        Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page,
+            'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null,
+            'primary_service_id' => null, 'title' => $name.', PA', 'slug' => strtolower($name).'-pa', 'geo_id' => $geoId]);
+    }
+
+    $byCounty = app(ServiceAreaResolver::class)->byCounty((string) $site->id, (string) $location->id);
+    $group = collect($byCounty)->firstWhere('county', 'Bucks') ?? $byCounty[0];
+
+    expect($group['cities'])->toHaveCount(6)
+        ->and(array_column($group['cities'], 'label'))->toContain('Bensalem')
+        // The overflow is linked, not dropped — and only towns with a real page are in it.
+        ->and(array_column($group['more'], 'label'))->toBe(['Chalfont', 'Silverdale']);
+    foreach ($group['more'] as $city) {
+        expect($city['url'])->not->toBe('');
+    }
+});

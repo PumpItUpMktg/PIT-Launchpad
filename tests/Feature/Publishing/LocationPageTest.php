@@ -484,18 +484,24 @@ it('forLocation builds a scoped areas map — its served towns as LINKED points 
     $site = locRelaySite();
     $location = locRelayLocation($site, ['lat' => 40.12, 'lng' => -75.34, 'county_geoids' => ['42091']]);
 
-    // A geocoded coverage town + its published town page under this location → a clickable point.
-    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209153000', 'name' => 'Norristown', 'type' => 'county_subdivision', 'state' => 'PA', 'lat' => 40.12, 'lng' => -75.34, 'size_tier' => 'large', 'population' => 35000, 'source' => 'county']);
-    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Norristown, PA', 'slug' => 'norristown']);
+    // A geocoded coverage town THIS location serves + its published page → a clickable point. (The
+    // coverage row names its serving locations, exactly as CoverageWriter writes them; the map is scoped
+    // by that, like the county list beside it.)
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209153000', 'name' => 'Norristown', 'type' => 'county_subdivision', 'state' => 'PA', 'lat' => 40.12, 'lng' => -75.34, 'size_tier' => 'large', 'population' => 35000, 'source' => 'county', 'source_location_ids' => [$location->id]]);
+    Content::factory()->published()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'parent_location_id' => $location->id, 'location_id' => null, 'primary_service_id' => null, 'title' => 'Norristown, PA', 'slug' => 'norristown', 'geo_id' => '4209153000']);
     // A geocoded town with NO page → not a point (every pin must link).
-    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209199999', 'name' => 'Audubon', 'type' => 'county_subdivision', 'state' => 'PA', 'lat' => 40.13, 'lng' => -75.44, 'size_tier' => 'small', 'population' => 3000, 'source' => 'county']);
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '4209199999', 'name' => 'Audubon', 'type' => 'county_subdivision', 'state' => 'PA', 'lat' => 40.13, 'lng' => -75.44, 'size_tier' => 'small', 'population' => 3000, 'source' => 'county', 'source_location_ids' => [$location->id]]);
+    // A same-named town in a territory this location does NOT serve: the old name-only join plotted it
+    // miles outside the drawn county (the Northampton PA / Middletown NJ pins).
+    CoverageArea::withoutGlobalScopes()->create(['site_id' => $site->id, 'geo_id' => '3402547500', 'name' => 'Norristown', 'type' => 'county_subdivision', 'state' => 'NJ', 'lat' => 40.41, 'lng' => -74.21, 'size_tier' => 'large', 'population' => 30000, 'source' => 'county', 'source_location_ids' => []]);
 
     $map = app(ServiceAreaMap::class)->forLocation($location->fresh());
 
     expect($map)->not->toBeNull()
-        ->and($map['cities'])->toHaveCount(1)                       // only the town with a page
+        ->and($map['cities'])->toHaveCount(1)                       // the served town with a page, and only it
         ->and($map['cities'][0]['name'])->toBe('Norristown')        // ", PA" stripped
         ->and($map['cities'][0]['url'])->toBe('/norristown/')        // links its town page
+        ->and($map['cities'][0]['lat'])->toBe(40.12)                // the SERVED one, not its NJ namesake
         ->and($map['pin']['lat'])->toBe(40.12);                     // the location pin
 });
 

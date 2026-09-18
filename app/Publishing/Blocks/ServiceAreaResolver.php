@@ -39,8 +39,19 @@ final class ServiceAreaResolver
 
     private const MAX_CITIES = 18;
 
-    /** Largest towns shown per county in the grouped "major cities" column. */
+    /** Largest towns shown per county as PROMINENT links in the grouped "major cities" column. */
     private const PER_COUNTY = 6;
+
+    /**
+     * The second tier: every OTHER served town in that county that has a real page, up to this many.
+     *
+     * Six per county was the whole list, which left a page that serves fifty towns claiming six and a
+     * column of white space beside the map — and left two dozen built town pages with no text link from
+     * their own hub, reachable only as an unlabelled dot. The tier is capped because a service area can
+     * run to hundreds, and it carries ONLY towns with a page: a name we cannot send a reader to is
+     * decoration, and a list of them is the enumeration this design already rejected once.
+     */
+    private const MORE_PER_COUNTY = 24;
 
     /** The most neighbours a town page's "nearby towns" list carries (nearest-first, within the radius). */
     private const NEIGHBOUR_MAX = 6;
@@ -56,7 +67,11 @@ final class ServiceAreaResolver
      * (offline, using the same cached polygons the map draws). Largest-first, capped per county; counties
      * ordered by name to match the county list. Best-effort: any gazetteer failure yields [].
      *
-     * @return list<array{county: string, cities: list<array{label: string, url: string}>}>
+     * `cities` is the prominent tier (the largest few); `more` is every other served town in that county
+     * that has a real page, so a built town page is linked from its hub in text rather than only as an
+     * unlabelled dot on the map.
+     *
+     * @return list<array{county: string, cities: list<array{label: string, url: string}>, more: list<array{label: string, url: string}>}>
      */
     public function byCounty(string $siteId, ?string $locationId = null): array
     {
@@ -139,7 +154,14 @@ final class ServiceAreaResolver
             foreach (array_slice($towns, 0, self::PER_COUNTY) as $town) {
                 $kept[] = ['name' => $town['name'], 'url' => $town['url'], 'type' => $town['type'], 'label' => $town['name']];
             }
-            $groups[] = ['county' => $names[$geoId], 'towns' => $kept];
+            $more = [];
+            foreach (array_slice($towns, self::PER_COUNTY) as $town) {
+                if (trim($town['url']) === '') {
+                    continue;   // no page to send anyone to
+                }
+                $more[] = ['name' => $town['name'], 'url' => $town['url'], 'type' => $town['type'], 'label' => $town['name']];
+            }
+            $groups[] = ['county' => $names[$geoId], 'towns' => $kept, 'more' => array_slice($more, 0, self::MORE_PER_COUNTY)];
         }
 
         $groups = $this->disambiguateLabels($groups);
@@ -147,6 +169,7 @@ final class ServiceAreaResolver
         return array_map(fn (array $g): array => [
             'county' => $g['county'],
             'cities' => array_map(fn (array $t): array => ['label' => $t['label'], 'url' => $t['url']], $g['towns']),
+            'more' => array_map(fn (array $t): array => ['label' => $t['label'], 'url' => $t['url']], $g['more']),
         ], $groups);
     }
 
@@ -309,14 +332,18 @@ final class ServiceAreaResolver
      * The old municipal-type tie-breaker ("(County, Twp/Boro)") is gone: it leaked an internal model
      * distinction into public copy, which is never something a customer should read.
      *
-     * @param  list<array{county: string, towns: list<array{name: string, url: string, type: MunicipalityType, label: string}>}>  $groups
-     * @return list<array{county: string, towns: list<array{name: string, url: string, type: MunicipalityType, label: string}>}>
+     * Both tiers are counted and qualified together: a name repeated across counties is ambiguous to a
+     * reader wherever it appears, and a qualifier that showed up in one tier but not the other would read
+     * as two different towns.
+     *
+     * @param  list<array{county: string, towns: list<array{name: string, url: string, type: MunicipalityType, label: string}>, more: list<array{name: string, url: string, type: MunicipalityType, label: string}>}>  $groups
+     * @return list<array{county: string, towns: list<array{name: string, url: string, type: MunicipalityType, label: string}>, more: list<array{name: string, url: string, type: MunicipalityType, label: string}>}>
      */
     private function disambiguateLabels(array $groups): array
     {
         $nameCounts = [];
         foreach ($groups as $g) {
-            foreach ($g['towns'] as $t) {
+            foreach ([...$g['towns'], ...$g['more']] as $t) {
                 $nameCounts[$this->key($t['name'])] = ($nameCounts[$this->key($t['name'])] ?? 0) + 1;
             }
         }
@@ -324,9 +351,11 @@ final class ServiceAreaResolver
         // County qualifier for a name that appears in more than one county (after the within-county
         // collapse, any remaining repeat of a name is necessarily in a DIFFERENT county).
         foreach ($groups as $gi => $g) {
-            foreach ($g['towns'] as $ti => $t) {
-                if (($nameCounts[$this->key($t['name'])] ?? 0) > 1 && trim($g['county']) !== '') {
-                    $groups[$gi]['towns'][$ti]['label'] = $t['name'].' ('.$g['county'].')';
+            foreach (['towns', 'more'] as $tier) {
+                foreach ($g[$tier] as $ti => $t) {
+                    if (($nameCounts[$this->key($t['name'])] ?? 0) > 1 && trim($g['county']) !== '') {
+                        $groups[$gi][$tier][$ti]['label'] = $t['name'].' ('.$g['county'].')';
+                    }
                 }
             }
         }
