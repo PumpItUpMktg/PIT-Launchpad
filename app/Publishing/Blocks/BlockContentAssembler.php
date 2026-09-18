@@ -53,6 +53,7 @@ final class BlockContentAssembler
     public function __construct(
         private readonly BlockPageComposer $composer,
         private readonly ServiceAreaResolver $serviceAreas,
+        private readonly ServiceAreaExtent $extent,
         private readonly ServiceCardBlurb $cardBlurb,
         private readonly SiteContact $contact,
         private readonly LocalReviewProvider $localReviews,
@@ -858,7 +859,13 @@ final class BlockContentAssembler
         } else {
             $coverageByCounty = $this->serviceAreas->byCounty((string) $content->site_id, (string) $location->id);
             $coverageCounties = array_map(fn (array $g): string => (string) $g['county'], $coverageByCounty);
-            $coverage = $this->coverageSentence($city, $coverageCounties);
+            // The counties, then how far that actually reaches — the question a visitor is really asking
+            // ("do you come to me?"), answered from the coverage we already claim. Hub pages only: the same
+            // four extremities on every town page would be boilerplate by the second one.
+            $coverage = [
+                ...$this->coverageSentence($city, $coverageCounties),
+                ...$this->extent->sentences((string) $content->site_id, $location, $city),
+            ];
         }
 
         return $this->composer->composeLocation(
