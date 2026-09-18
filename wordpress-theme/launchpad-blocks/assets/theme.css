@@ -1369,8 +1369,24 @@
 }
 
 /* ------------------------------------------------------------------ *
- * Service Areas — pill tags of the towns served.
+ * Service Areas — the map beside the towns it covers.
  * ------------------------------------------------------------------ */
+/* This block carries a map AND a town list side by side, so it runs wider than a reading-width section:
+   at 1200px the heading broke over two lines and the list wrapped into a narrow ragged column beside a
+   much wider map. */
+.lp-areas {
+    --lp-max: min(1440px, 94vw);
+}
+
+/* …and its head is not held to reading width — "Towns we serve from {City}" belongs on one line. */
+.lp-areas .lp-section-head {
+    max-width: 100%;
+}
+
+.lp-areas .lp-section-head h2 {
+    text-wrap: balance;
+}
+
 /* The 50/50 map | major-cities block, with the county list beneath. */
 .wp-block-columns.lp-areas-split {
     gap: clamp(1.5rem, 4vw, 3rem);
@@ -1381,14 +1397,17 @@
 .lp-areas-split > .wp-block-column {
     flex-basis: 0;
     flex-grow: 1;
+    align-self: center; /* the text column reads level with the map, not pinned to its top edge */
 }
 
-/* Major cities grouped by county — the block beside the map. */
+/* Major cities grouped by county — the block beside the map. A fixed two-column grid left a
+   single-county tenant using half the width beside a full-width map; auto-fit lets one county span the
+   column and two share it. */
 .lp-areas-cities {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
     gap: 1rem 1.5rem;
-    align-content: start;
+    align-content: center;
     align-items: start;
 }
 
@@ -1403,16 +1422,18 @@
 }
 
 .lp-areas-county {
-    margin: 0 0 0.25rem;
+    margin: 0 0 0.4rem;
     font-family: var(--wp--preset--font-family--heading);
-    font-size: 0.95rem;
+    font-size: clamp(1.05rem, 0.95rem + 0.45vw, 1.3rem);
     font-weight: 700;
+    line-height: 1.25;
 }
 
 .lp-areas-towns {
     margin: 0;
-    font-size: 0.9rem;
-    line-height: 1.5;
+    max-width: none;
+    font-size: 0.95rem;
+    line-height: 1.6;
 }
 
 .lp-areas-towns a {
@@ -1431,8 +1452,8 @@
 /* Coverage lead-in, folded into the areas block (it was its own "Coverage" section above — two headings
    over one subject). Reads as the sentence before the list, not as a section of its own. */
 .lp-areas-lead {
-    margin: 0 0 1rem;
-    max-width: 62ch;
+    margin: 0 auto clamp(1.25rem, 3vw, 2rem);
+    max-width: 88ch;
 }
 
 /* "Visit or call" with the map beside it: the details and the map are one answer, not two sections. */
@@ -1454,9 +1475,10 @@
 }
 
 .lp-areas-more {
-    margin: 0.35rem 0 0;
-    font-size: 0.8rem;
-    line-height: 1.6;
+    margin: 0.5rem 0 0;
+    max-width: none;
+    font-size: 0.85rem;
+    line-height: 1.7;
     opacity: 0.85;
 }
 
