@@ -18,6 +18,16 @@ use App\Models\TownFloodZone;
  */
 final class TownFloodFacts
 {
+    /**
+     * Which zone earns the explanation when a town has several, most distinctive first.
+     *
+     * A coastal town mapped V/VE is mapped that way BECAUSE of wave action, and nearly every coastal town
+     * carries AE alongside it — so explaining AE there says the ordinary thing about the extraordinary
+     * town. Brooklyn and Queens both came back `AE, VE` on the first real run and got the generic
+     * floodplain line; this is that fix.
+     */
+    private const GLOSS_ORDER = ['VE', 'V', 'AE', 'A', 'AO', 'AH', 'AR', 'A99'];
+
     /** What the common Special Flood Hazard Area codes mean, in the words FEMA itself uses. */
     private const MEANING = [
         'A' => 'the 1%-annual-chance floodplain, mapped without a base flood elevation',
@@ -56,8 +66,15 @@ final class TownFloodFacts
             $this->list($sfha),
         )];
 
-        // One plain-English gloss, for the zone FEMA publishes elevations for where there is a choice.
-        $primary = in_array('AE', $sfha, true) ? 'AE' : $sfha[0];
+        // One plain-English gloss, for the most distinctive zone the town actually carries.
+        $primary = $sfha[0];
+        foreach (self::GLOSS_ORDER as $code) {
+            if (in_array($code, $sfha, true)) {
+                $primary = $code;
+
+                break;
+            }
+        }
         if (isset(self::MEANING[$primary])) {
             $facts[] = sprintf('Zone %s is %s.', $primary, self::MEANING[$primary]);
         }
