@@ -167,6 +167,15 @@
         </div>
 
         <div class="cr-card">
+            <h3>Local air quality card</h3>
+            <div class="cr-empty">The “Local conditions” card in the footer — the local US AQI, refreshed hourly by the plugin. Off by default: useful to an HVAC or mold tenant, noise to a sump-pump one. Needs coordinates, and goes live on the next “Sync header &amp; footer”.</div>
+            <label class="cr-lock" style="cursor:pointer;">
+                <span>Show the air-quality card on this tenant</span>
+                <input type="checkbox" wire:click="toggleAirCard" @checked($this->airCardEnabled) @disabled($this->siteId === null)>
+            </label>
+        </div>
+
+        <div class="cr-card">
             <h3>Locked pages</h3>
             @forelse ($locked as $l)
                 <div class="cr-lock" wire:key="lock-{{ $l['id'] }}">

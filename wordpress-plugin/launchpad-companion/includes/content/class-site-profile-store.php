@@ -80,6 +80,9 @@ final class SiteProfileStore
             'legal_links' => self::links($p['legal_links'] ?? []),
             'nav_menu' => self::navMenu($p['nav_menu'] ?? []),
             'alert' => self::alert($p['alert'] ?? []),
+            // Air-quality card config. On the whitelist deliberately — an un-whitelisted key is dropped
+            // silently here, and the card would simply never render (the header_tone regression again).
+            'air' => self::air($p['air'] ?? []),
         ];
     }
 
@@ -125,6 +128,28 @@ final class SiteProfileStore
             'noun' => sanitize_text_field((string) ($raw['noun'] ?? 'sump pump')),
             'cta_label' => sanitize_text_field((string) ($raw['cta_label'] ?? 'Learn more')),
             'cta_url' => isset($raw['cta_url']) ? (string) esc_url_raw((string) $raw['cta_url']) : '',
+        ];
+    }
+
+    /**
+     * The air-quality card config {@see \Launchpad\Companion\Render\AirQuality} reads. Same coordinate
+     * discipline as the alert: garbage coordinates force the card off rather than pointing a fetch at
+     * nonsense.
+     *
+     * @param  mixed  $raw
+     * @return array{enabled: bool, lat: float, lng: float}
+     */
+    private static function air(mixed $raw): array
+    {
+        $raw = is_array($raw) ? $raw : [];
+        $lat = isset($raw['lat']) && is_numeric($raw['lat']) ? (float) $raw['lat'] : null;
+        $lng = isset($raw['lng']) && is_numeric($raw['lng']) ? (float) $raw['lng'] : null;
+        $hasCoords = $lat !== null && $lng !== null && abs($lat) <= 90 && abs($lng) <= 180;
+
+        return [
+            'enabled' => ! empty($raw['enabled']) && $hasCoords,
+            'lat' => $hasCoords ? (float) $lat : 0.0,
+            'lng' => $hasCoords ? (float) $lng : 0.0,
         ];
     }
 

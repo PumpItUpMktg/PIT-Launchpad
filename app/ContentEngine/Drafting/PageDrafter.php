@@ -195,7 +195,21 @@ class PageDrafter
             .'facts you may use: name only the city and served_towns given; cite local_facts naturally '
             .'in prose (never as a data dump); treat market_notes as the owner\'s own local knowledge '
             .'and work it in faithfully. NEVER invent local details — no water tables, soil types, '
-            .'weather patterns, landmarks, or years-serving-this-town beyond what is here:'
+            .'weather patterns, landmarks, or years-serving-this-town beyond what is here. '
+            // The facts are measurements of a place; what they MEAN for the work is the writing. A median
+            // build year of 1948 implies an older housing stock and the materials that go with it, and
+            // saying so is the whole value of having the number — but the implication must stay about the
+            // stock, never about the reader's own house.
+            .'WORK THE local_facts INTO THE REASONING, not a list: a fact about the housing stock or the '
+            .'flood mapping is there so the copy can say what it means for the work in THIS town (an older '
+            .'stock implies the materials and failure modes of its era; a mapped floodplain implies what '
+            .'crews meet there). Draw that implication about the town\'s housing or land — NEVER about the '
+            .'reader\'s own property, and never state or imply that a particular home is in a flood zone, '
+            .'needs insurance, or has any specific condition. '
+            // The facts differ town to town; the sentences must too, or 200 town pages read as one page.
+            .'These facts are DIFFERENT for every town, so let them drive the copy: two towns with '
+            .'different housing ages or flood mapping must not end up with interchangeable paragraphs, and '
+            .'a fact that is absent here must not be filled in with a neighbouring town\'s:'
             ."\n".$this->json($grounding->location);
     }
 

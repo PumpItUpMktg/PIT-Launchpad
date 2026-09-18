@@ -2,10 +2,12 @@
 /**
  * Local air-quality card — a LIVE, self-updating widget for any widget area, block or template.
  *
- * Placed deliberately with [lp_air_quality], so placement IS the opt-in; there is no trade gate to keep
- * in sync. Coordinates come from the site profile the control plane pushes (the same ones the weather
- * banner uses), and this fetches Open-Meteo's air-quality API ITSELF — free, no key, and verified to
- * carry US AQI (the pollen fields in that API are Europe-only and are deliberately not read here).
+ * Rendered by the theme's "Local conditions" part (and by [lp_air_quality] anywhere else), but only when
+ * the control plane says this tenant wants it: the part ships to every site, so `air.enabled` on the site
+ * profile is the switch. A shortcode carrying its own lat/lng is a deliberate placement and renders
+ * regardless. Coordinates are the ones the weather banner already uses, and this fetches Open-Meteo's
+ * air-quality API ITSELF — free, no key, and verified to carry US AQI (the pollen fields in that API are
+ * Europe-only and are deliberately not read here).
  *
  * Cached in a one-hour transient because the upstream index is hourly: a busy site makes one request an
  * hour, not one a visit. Every failure is quiet and renders nothing — a down API never breaks a page.
@@ -46,9 +48,19 @@ final class AirQuality
     {
         $atts = shortcode_atts(['lat' => '', 'lng' => '', 'title' => 'Local air quality'], is_array($atts) ? $atts : []);
 
-        $cfg = SiteProfileStore::get()['alert'] ?? [];
-        $lat = $atts['lat'] !== '' ? (float) $atts['lat'] : (isset($cfg['lat']) ? (float) $cfg['lat'] : null);
-        $lng = $atts['lng'] !== '' ? (float) $atts['lng'] : (isset($cfg['lng']) ? (float) $cfg['lng'] : null);
+        $profile = SiteProfileStore::get();
+        $cfg = is_array($profile['air'] ?? null) ? $profile['air'] : [];
+        $override = $atts['lat'] !== '' && $atts['lng'] !== '';
+
+        // The theme carries this part on every site, so the tenant flag is what decides whether it renders
+        // anything at all — an air-quality reading earns its place on an HVAC or mold site and is noise on
+        // a sump-pump one. An explicit lat/lng in the shortcode is a deliberate placement and stands alone.
+        if (! $override && empty($cfg['enabled'])) {
+            return '';
+        }
+
+        $lat = $override ? (float) $atts['lat'] : (isset($cfg['lat']) ? (float) $cfg['lat'] : null);
+        $lng = $override ? (float) $atts['lng'] : (isset($cfg['lng']) ? (float) $cfg['lng'] : null);
         if ($lat === null || $lng === null || ($lat === 0.0 && $lng === 0.0)) {
             return '';
         }
