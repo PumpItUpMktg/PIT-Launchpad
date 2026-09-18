@@ -2,8 +2,10 @@
 
 namespace App\Locations;
 
+use App\Enums\BuildSource;
 use App\Enums\ContentKind;
 use App\Enums\PageType;
+use App\Models\BuildPage;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Scopes\SiteScope;
@@ -32,7 +34,7 @@ final class TownPageGeoAnchor
      *
      * @return array{
      *   total: int, already: int,
-     *   anchorable: list<array{page_id: string, title: string, geo_id: string, coverage: string}>,
+     *   anchorable: list<array{page_id: string, title: string, geo_id: string, coverage: string, via: string}>,
      *   ambiguous: list<array{page_id: string, title: string, key: string, candidates: list<array{geo_id: string, name: string}>}>,
      *   unreachable: list<array{page_id: string, title: string, key: string, candidates: list<array{geo_id: string, name: string}>}>,
      *   no_coverage: list<array{page_id: string, title: string, key: string}>,
@@ -41,6 +43,7 @@ final class TownPageGeoAnchor
     public function plan(Site $site): array
     {
         $coverageByKey = $this->coverageByKey($site);
+        $byPlan = $this->coverageByBuiltPage($site);
         $pages = $this->townPages($site);
 
         $out = ['total' => $pages->count(), 'already' => 0, 'anchorable' => [], 'ambiguous' => [], 'unreachable' => [], 'no_coverage' => []];
@@ -55,6 +58,18 @@ final class TownPageGeoAnchor
             $key = TownName::key((string) $page->title);
             $title = (string) $page->title;
             $pageId = (string) $page->id;
+
+            // EXACT first: a page the plan built carries its CoverageArea in the manifest entry, so its
+            // GEOID is known rather than derived. Nothing here is a guess, so no ambiguity can arise.
+            if (isset($byPlan[$pageId])) {
+                $out['anchorable'][] = [
+                    'page_id' => $pageId, 'title' => $title,
+                    'geo_id' => $byPlan[$pageId]['geo_id'], 'coverage' => $byPlan[$pageId]['name'], 'via' => 'plan',
+                ];
+
+                continue;
+            }
+
             $matches = $coverageByKey[$key] ?? [];
 
             if ($matches === []) {
@@ -71,7 +86,7 @@ final class TownPageGeoAnchor
             $candidates = fn (array $set): array => array_map(fn (array $c): array => ['geo_id' => $c['geo_id'], 'name' => $c['name']], $set);
 
             match (true) {
-                count($reachable) === 1 => $out['anchorable'][] = ['page_id' => $pageId, 'title' => $title, 'geo_id' => $reachable[0]['geo_id'], 'coverage' => $reachable[0]['name']],
+                count($reachable) === 1 => $out['anchorable'][] = ['page_id' => $pageId, 'title' => $title, 'geo_id' => $reachable[0]['geo_id'], 'coverage' => $reachable[0]['name'], 'via' => 'name'],
                 count($reachable) > 1 => $out['ambiguous'][] = ['page_id' => $pageId, 'title' => $title, 'key' => $key, 'candidates' => $candidates($reachable)],
                 // Name matches coverage, but none is reachable from the page's parent — a mis-parent/drift
                 // signal, not a clean anchor. Surface with the matched-but-unreachable candidates.
@@ -94,6 +109,40 @@ final class TownPageGeoAnchor
         }
 
         return $anchored;
+    }
+
+    /**
+     * Pages the build plan created, mapped to the coverage area their manifest entry names. A location
+     * entry's `page_key` IS the CoverageArea id — the exact link, kept from when the page was planned.
+     *
+     * @return array<string, array{geo_id: string, name: string}>
+     */
+    private function coverageByBuiltPage(Site $site): array
+    {
+        $entries = BuildPage::query()
+            ->where('site_id', $site->id)
+            ->where('source', BuildSource::Location)
+            ->whereNotNull('content_id')
+            ->get(['content_id', 'page_key']);
+        if ($entries->isEmpty()) {
+            return [];
+        }
+
+        $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereKey($entries->pluck('page_key')->all())
+            ->get(['id', 'geo_id', 'name'])
+            ->keyBy(fn (CoverageArea $a): string => (string) $a->id);
+
+        $out = [];
+        foreach ($entries as $entry) {
+            $area = $areas->get((string) $entry->page_key);
+            if ($area !== null && trim((string) $area->geo_id) !== '') {
+                $out[(string) $entry->content_id] = ['geo_id' => (string) $area->geo_id, 'name' => (string) $area->name];
+            }
+        }
+
+        return $out;
     }
 
     /** @return Collection<int, Content> the site's town pages (town-level location pages) */
