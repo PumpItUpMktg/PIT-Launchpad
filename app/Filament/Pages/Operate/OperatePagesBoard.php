@@ -225,18 +225,29 @@ abstract class OperatePagesBoard extends OperatePage
      * different one and the board builds cards for a location that is not on screen, leaving the visible tab
      * empty. Same rule, same order, one source of truth.
      */
+    /**
+     * The location tabs in display order — the view renders them in exactly this order, so the tab it
+     * shows first is the tab this page built cards for.
+     *
+     * @return list<array{id: string, label: string}>
+     */
+    public function getLocationTabsProperty(): array
+    {
+        $site = $this->getSite();
+
+        return $site === null ? [] : app(PagesBoard::class)->locationTabs($site);
+    }
+
     private function activeLocationTab(Site $site): ?string
     {
         if (is_string($this->locTab) && $this->locTab !== '') {
             return $this->locTab;
         }
 
-        return Location::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->get()
-            ->sortBy(fn (Location $l): string => mb_strtolower(trim((string) $l->name) !== '' ? (string) $l->name : $l->cityState()['city']))
-            ->map(fn (Location $l): string => (string) $l->id)
-            ->first();
+        // The view's first tab, from the view's own list — not a second ordering that happens to agree
+        // most of the time. When they disagreed, the tab on screen was a deferred placeholder reporting
+        // nothing, and the location looked empty until you clicked away and back.
+        return app(PagesBoard::class)->locationTabs($site)[0]['id'] ?? null;
     }
 
     /** @return array<string, bool> */

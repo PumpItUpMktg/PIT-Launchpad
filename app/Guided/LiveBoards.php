@@ -87,7 +87,10 @@ class LiveBoards
                 $groups[] = [
                     'location' => $this->identity($location),
                     'location_card' => null,
-                    'rollup' => ['towns_live' => 0, 'avg_rank' => null, 'impressions' => null, 'clicks' => null],
+                    // NOT zero: nothing was counted. A deferred group reporting "0 town pages live" reads
+                    // as a location with nothing live, which is how a tab-selection bug looked like data
+                    // loss. Null is the honest answer to a question we did not ask.
+                    'rollup' => null,
                     'towns' => [],
                     'city_services' => [],
                     'deferred' => true,
@@ -178,6 +181,30 @@ class LiveBoards
      *
      * @return array<string, mixed>
      */
+    /**
+     * The location tabs in DISPLAY order — identity only, no cards, no counting.
+     *
+     * The board builds cards for one location, and both the page (choosing which) and the view (choosing
+     * which tab is active) have to agree on WHICH ONE. They each had their own ordering; when the two
+     * disagreed the visible tab was a deferred placeholder and the location looked empty until you
+     * clicked away and back. One list, read by both.
+     *
+     * @return list<array{id: string, label: string}>
+     */
+    public function locationTabs(Site $site): array
+    {
+        return Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->get()
+            ->map(fn (Location $l): array => [
+                'id' => (string) $l->id,
+                'label' => trim((string) $l->name) !== '' ? trim((string) $l->name) : $l->cityState()['city'],
+            ])
+            ->sortBy(fn (array $t): string => mb_strtolower($t['label']))
+            ->values()
+            ->all();
+    }
+
     private function identity(Location $location): array
     {
         return [

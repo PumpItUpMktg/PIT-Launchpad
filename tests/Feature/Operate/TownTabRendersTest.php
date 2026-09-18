@@ -132,3 +132,49 @@ it('lists the towns selected for this location that have no page yet, each with 
         ->assertDontSee('Riegelsville')     // never selected
         ->assertSeeHtml('wire:click="generateTown(\''.$warrington->id.'\')"');
 });
+
+it('shows the tab whose cards it built — the storefront-named location no longer lands on a placeholder', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+
+    // Created FIRST but named late in the alphabet: the two orderings (creation vs label) disagree here,
+    // which is exactly when the visible tab used to be a deferred placeholder reporting nothing.
+    $storefront = Location::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Gurus', 'lat' => 40.31, 'lng' => -75.13]);
+    $doylestown = Location::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown', 'lat' => 40.31, 'lng' => -75.13]);
+
+    Content::factory()->page()->published()->create([
+        'site_id' => $site->id, 'page_type' => PageType::Location, 'status' => ContentStatus::Published,
+        'parent_location_id' => $doylestown->id, 'slug' => 'chalfont-pa', 'title' => 'Chalfont',
+    ]);
+    Content::factory()->page()->published()->create([
+        'site_id' => $site->id, 'page_type' => PageType::Location, 'status' => ContentStatus::Published,
+        'parent_location_id' => $storefront->id, 'slug' => 'warrington-pa', 'title' => 'Warrington',
+    ]);
+
+    // Both read one list: the first tab the view renders is the one the page built.
+    $tabs = app(PagesBoard::class)->locationTabs($site);
+    expect(array_column($tabs, 'label'))->toBe(['Doylestown', 'Sump Pump Gurus']);
+
+    // Landing with no tab chosen shows Doylestown's cards, not an empty placeholder.
+    Livewire::test(OperatePages::class)
+        ->set('siteId', $site->id)
+        ->set('tab', 'town')
+        ->assertOk()
+        ->assertSee('Chalfont')
+        ->assertDontSee('Warrington');
+});
+
+it('a deferred location reports nothing rather than zero', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $shown = Location::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown']);
+    $deferred = Location::factory()->create(['site_id' => $site->id, 'name' => 'Newtown']);
+
+    $groups = app(PagesBoard::class)->locations($site, (string) $shown->id)['live']['groups'];
+    $byId = collect($groups)->keyBy(fn (array $g): string => (string) $g['location']['id']);
+
+    // "0 town pages live" on a group nobody counted is how a selection bug reads as data loss.
+    expect($byId[(string) $deferred->id]['rollup'])->toBeNull()
+        ->and($byId[(string) $deferred->id]['deferred'])->toBeTrue()
+        ->and($byId[(string) $shown->id]['rollup'])->toBeArray()
+        ->and($byId[(string) $shown->id]['deferred'])->toBeFalse();
+});
