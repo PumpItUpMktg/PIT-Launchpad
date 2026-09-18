@@ -53,41 +53,10 @@ add_action('wp_enqueue_scripts', function (): void {
 });
 
 /**
- * "Areas we serve" interactive map — LAZY loaded. Leaflet (~147KB JS + its CSS) is the heaviest thing
- * on a page that has one, and the map lives below the fold, so instead of enqueuing it on load we print
- * a tiny loader that fetches Leaflet + area-map only when the map scrolls near the viewport
- * (IntersectionObserver, 300px margin). This cuts the request count and initial page weight for every
- * map page; pages without the `_lp_area_map` meta load nothing (the section shows its text fallback).
+ * "Areas we serve" map — nothing to load.
  *
- * The companion plugin prints the geometry as `window.lpAreaMap` at wp_footer priority 1; this loader
- * runs later (priority 20) and injects area-map.js, which self-inits (readyState-aware) once Leaflet is
- * present. Minified builds are served when available (area-map.min.js / leaflet.min.css).
+ * It was Leaflet (~147KB) plus a stylesheet plus CARTO's basemap tiles, lazily fetched when the map
+ * scrolled into view. CARTO now requires an API key for those tiles and stamped "API KEY REQUIRED"
+ * across live customer maps, so the companion plugin draws the map server-side as inline SVG from the
+ * same geometry instead — no script, no stylesheet, no tile CDN, no key. The loader is gone with it.
  */
-add_action('wp_footer', function (): void {
-    if (! (is_singular() && get_post_meta(get_queried_object_id(), '_lp_area_map', true))) {
-        return;
-    }
-
-    $path = get_stylesheet_directory();
-    $uri = get_stylesheet_directory_uri();
-    $version = (string) wp_get_theme()->get('Version');
-
-    $leafletCss = is_file($path.'/assets/vendor/leaflet/leaflet.min.css') ? 'leaflet.min.css' : 'leaflet.css';
-    $areaMap = is_file($path.'/assets/area-map.min.js') ? 'area-map.min.js' : 'area-map.js';
-
-    $urls = wp_json_encode([
-        'css' => esc_url_raw($uri.'/assets/vendor/leaflet/'.$leafletCss.'?ver=1.9.4'),
-        'leaflet' => esc_url_raw($uri.'/assets/vendor/leaflet/leaflet.js?ver=1.9.4'),
-        'map' => esc_url_raw($uri.'/assets/'.$areaMap.'?ver='.$version),
-    ]);
-
-    // wp_json_encode escapes "</" and "/", so the URLs can't break out of the <script>.
-    echo '<script id="lp-area-map-loader">(function(){var el=document.querySelector(".lp-areas-map");if(!el)return;'
-        .'var u='.$urls.',done=false;function load(){if(done)return;done=true;'
-        .'var l=document.createElement("link");l.rel="stylesheet";l.href=u.css;document.head.appendChild(l);'
-        .'var s=document.createElement("script");s.src=u.leaflet;s.onload=function(){'
-        .'var m=document.createElement("script");m.src=u.map;document.body.appendChild(m);};document.body.appendChild(s);}'
-        ."if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){"
-        .'es.forEach(function(e){if(e.isIntersecting){load();io.disconnect();}});},{rootMargin:"300px"});io.observe(el);}'
-        ."else{load();}})();</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-}, 20);

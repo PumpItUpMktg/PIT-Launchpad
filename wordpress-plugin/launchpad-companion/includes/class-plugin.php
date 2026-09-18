@@ -18,6 +18,7 @@ use Launchpad\Companion\Render\JobRender;
 use Launchpad\Companion\Render\BrandPaint;
 use Launchpad\Companion\Render\ScriptDelay;
 use Launchpad\Companion\Render\AirQuality;
+use Launchpad\Companion\Render\AreaMap;
 use Launchpad\Companion\Render\WeatherAlert;
 use Launchpad\Companion\Render\Shortcodes;
 use Launchpad\Companion\Render\SiteChrome;
@@ -90,6 +91,9 @@ final class Plugin
 
         // Local air-quality card — [lp_air_quality] in any widget area; fetches and caches its own reading.
         ( new AirQuality() )->register();
+
+        // "Areas we serve" map — drawn server-side as SVG from the pushed geometry (no tiles, no key).
+        ( new AreaMap() )->register();
         // Performance: delay heavy third-party scripts (Maps JS / LeadConnector chat / GTM / Cloudflare
         // Insights) until first interaction so they stop starving the critical path on throttled links.
         ( new ScriptDelay() )->register();

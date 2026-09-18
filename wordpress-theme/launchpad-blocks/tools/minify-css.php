@@ -14,10 +14,8 @@
 $dir = dirname(__DIR__).'/assets';
 
 // Every readable source stylesheet the theme serves → its .min build. theme.css is the design system;
-// vendor/leaflet is the map lib (its shipped .css is unminified). Both are enqueued minified.
 $targets = [
     $dir.'/theme.css' => $dir.'/theme.min.css',
-    $dir.'/vendor/leaflet/leaflet.css' => $dir.'/vendor/leaflet/leaflet.min.css',
 ];
 
 // PCRE limits: the alternation below scans the whole ~58KB file; the JIT stack overruns on it, and the

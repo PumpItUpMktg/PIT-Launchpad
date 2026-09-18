@@ -1440,7 +1440,7 @@
 }
 
 /* Location hub "Areas we serve" — a legible, comma-flowing line of town links (largest town first),
-   optionally sitting beneath the interactive county map (.lp-areas-map, which the Leaflet init fills;
+   optionally sitting beneath the county map (.lp-areas-map, which the plugin fills with inline SVG;
    the list is the crawlable, no-JS fallback). Replaces the old size-banded block. */
 .lp-areas-townblock {
     max-width: 62rem;
@@ -2488,35 +2488,62 @@ header.wp-block-template-part {
 }
 
 /* ------------------------------------------------------------------
- * "Areas we serve" interactive map (assets/area-map.js + Leaflet).
- * The .lp-areas-map div is an empty mount on the server; the script
- * adds .lp-areas-map--live only once it confirms JS + geometry, so a
- * no-JS visitor never sees an empty box — they get the text fallback
- * below, which stays present for SEO + screen readers either way.
+ * "Areas we serve" map — inline SVG, drawn server-side by the
+ * companion plugin from the pushed county/town geometry. No script,
+ * no tiles, no key (CARTO's basemaps now demand one and stamped
+ * "API KEY REQUIRED" across live maps). The .lp-areas-map div is an
+ * empty mount until the plugin fills it, so a page without geometry
+ * shows the text fallback below — which stays present for SEO and
+ * screen readers either way.
  * ------------------------------------------------------------------ */
 .lp-areas-map {
     width: 100%;
 }
 
 .lp-areas-map--live {
-    height: clamp(320px, 46vh, 520px);
     border-radius: 14px;
     overflow: hidden;
     margin: 0.5rem 0 1.25rem;
     border: 1px solid color-mix(in srgb, var(--wp--preset--color--contrast, #172a2f) 12%, transparent);
-    z-index: 0; /* keep Leaflet panes under the site header/menus */
-}
-
-.lp-areas-map .leaflet-container {
-    font: inherit;
     background: var(--wp--preset--color--surface, #f1f5f9);
 }
 
-.lp-map-tip {
-    font-weight: 600;
-    font-size: 0.8rem;
-    border: 0;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+.lp-map-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Brand roles, so the map tracks the active style variation rather than carrying its own palette. */
+.lp-map-county {
+    fill: color-mix(in srgb, var(--wp--preset--color--primary, #123b6b) 12%, transparent);
+    stroke: var(--wp--preset--color--primary, #123b6b);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.lp-map-town {
+    fill: #fff;
+    stroke: var(--wp--preset--color--accent, #1d6fd6);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+}
+
+.lp-map-link .lp-map-town {
+    cursor: pointer;
+}
+
+.lp-map-link:hover .lp-map-town,
+.lp-map-link:focus-visible .lp-map-town {
+    fill: var(--wp--preset--color--accent, #1d6fd6);
+}
+
+.lp-map-pin {
+    fill: var(--wp--preset--color--accent, #1d6fd6);
+    stroke: #fff;
+    stroke-width: 3;
+    vector-effect: non-scaling-stroke;
 }
 
 /* The location "find us" embed ([lp_map] → .lp-map iframe): fills the section, sized + rounded like
