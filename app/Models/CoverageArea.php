@@ -44,7 +44,12 @@ class CoverageArea extends Model
      * Grace" → "Havre de Grace") so no write path (import, served-towns sync, manual add) can land the
      * junk that leaked the "6-havre-de-grace-md" page title + slug. See {@see CoverageName}.
      *
-     * @return Attribute<never, string>
+     * Set-only: with no `get`, Eloquent hands back the stored string, so the read type is `string`.
+     * It was annotated `Attribute<never, string>`, which told PHPStan that reading `->name` never
+     * returns — every branch after a read was then "unreachable", and callers worked around it by
+     * reaching for `getAttribute('name')` instead.
+     *
+     * @return Attribute<string, string>
      */
     protected function name(): Attribute
     {
