@@ -3,6 +3,7 @@
 namespace App\Integrations\Census;
 
 use App\Enums\MunicipalityType;
+use App\Locations\CoverageName;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -429,7 +430,12 @@ final class TigerwebGazetteer implements MunicipalityGazetteer
 
             $out[] = new Municipality(
                 geoId: $geoId,
-                name: trim((string) ($a['BASENAME'] ?? $a['NAME'] ?? '')),
+                // Maryland's MCDs are numbered election districts, and TIGERweb's BASENAME carries the
+                // number: "3, Bel Air", "6, Havre de Grace". {@see CoverageName} already strips that on
+                // the way into a CoverageArea, so cleaning here is what makes a gazetteer name and a
+                // stored coverage name the SAME string — otherwise the two can never be compared, and
+                // a report reads "the building stands in 3, Bel Air".
+                name: CoverageName::clean(trim((string) ($a['BASENAME'] ?? $a['NAME'] ?? ''))),
                 type: $type,
                 state: $this->stateAbbr($a, $geoId),
                 lat: isset($a['CENTLAT']) ? (float) $a['CENTLAT'] : null,
