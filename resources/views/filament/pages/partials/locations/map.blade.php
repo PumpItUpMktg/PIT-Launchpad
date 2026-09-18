@@ -1,83 +1,54 @@
-{{-- Shared coverage map (pins per base + county outlines + flagged directed towns) — ONE view of
-     everywhere the business works, across all locations. Leaflet loads lazily; failures degrade
-     to "no map" without breaking Livewire. --}}
+{{-- Shared coverage map (base pins + county outlines + flagged directed towns) — ONE view of everywhere
+     the business works, across all locations.
+
+     Inline SVG over App\Locations\CoverageMapSvg, drawn with the same projector as every other town map
+     in the admin, so a county lands on the same spot here as on Town Rank and Service Areas. It replaced
+     Leaflet over CARTO tiles, which now demand an API key and stamp "API KEY REQUIRED" across the
+     picture. No script, so nothing to guard and nothing to break Livewire: a coverage change re-renders
+     the component and the map with it. --}}
+@php($cov = $this->coverageSvg)
 <div class="lp-card" style="padding:8px">
-    <div wire:ignore
-        x-data="coverageMap(@js($this->mapData), @js($this->manualMarkers), @js($this->countyPolygons))"
-        x-init="init()"
-        x-on:locations-updated.window="render($event.detail.data ?? [], $event.detail.manual ?? [], $event.detail.polygons ?? [])">
-        <div x-ref="map" class="lp-map"></div>
-    </div>
+    @if ($cov === null)
+        <div class="lp-cov-empty">Add a location and tick the counties it serves — the map draws once there is coverage to show.</div>
+    @else
+        <svg class="lp-cov-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"
+             role="img" aria-label="Coverage map: served counties, base locations and added towns">
+            @foreach ($cov['counties'] as $county)
+                @foreach ($county['paths'] as $d)
+                    <path d="{{ $d }}" class="lp-cov-county">
+                        @if ($county['name'] !== '')<title>{{ $county['name'] }} County</title>@endif
+                    </path>
+                @endforeach
+            @endforeach
+
+            @foreach ($cov['pins'] as $pin)
+                <circle cx="{{ $pin['x'] }}" cy="{{ $pin['y'] }}" r="1.6" class="lp-cov-pin"
+                        style="fill:{{ $pin['color'] }};stroke:{{ $pin['color'] }}">
+                    @if ($pin['name'] !== '')<title>{{ $pin['name'] }}</title>@endif
+                </circle>
+            @endforeach
+
+            {{-- A town added by hand, drawn as a flag rather than a dot so it reads as an override. --}}
+            @foreach ($cov['flags'] as $flag)
+                <g class="lp-cov-flag">
+                    <path d="M{{ $flag['x'] }} {{ $flag['y'] }} l0 -4.2" />
+                    <path d="M{{ $flag['x'] }} {{ $flag['y'] - 4.2 }} l3 1.2 -3 1.2 z" />
+                    @if ($flag['name'] !== '')<title>{{ $flag['name'] }} (added)</title>@endif
+                </g>
+            @endforeach
+        </svg>
+    @endif
 </div>
 
-{{-- Leaflet (OSM/CARTO tiles, no API key) --}}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script>
-    // Defined as a plain global at parse time (NOT via alpine:init) so x-data can never
-    // evaluate `coverageMap` before it exists — a throw in x-data would halt Alpine and,
-    // with it, ALL Livewire interactivity. Every Leaflet touch is guarded so a failure
-    // degrades to "no map", never a thrown init.
-    window.coverageMap = (initial, initialManual, initialPolygons) => ({
-            map: null,
-            group: null,
-            init() {
-                try {
-                    this.ensureLeaflet(() => {
-                        try {
-                            const el = this.$refs.map;
-                            if (el._lpMap) {
-                                this.map = el._lpMap;
-                            } else {
-                                this.map = L.map(el, { scrollWheelZoom: false }).setView([40.3, -74.6], 8);
-                                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                                    attribution: '© OpenStreetMap, © CARTO', maxZoom: 19,
-                                }).addTo(this.map);
-                                el._lpMap = this.map;
-                            }
-                            this.render(initial, initialManual, initialPolygons);
-                        } catch (e) { console.error('coverage map init', e); }
-                    });
-                } catch (e) { console.error('coverage map', e); }
-            },
-            ensureLeaflet(cb) {
-                if (window.L) return cb();
-                const existing = document.getElementById('lp-leaflet-js');
-                if (existing) { existing.addEventListener('load', cb); return; }
-                const s = document.createElement('script');
-                s.id = 'lp-leaflet-js';
-                s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-                s.onload = cb;
-                s.onerror = () => console.error('Leaflet failed to load');
-                document.head.appendChild(s);
-            },
-            render(data, manual, polygons) {
-                if (!this.map || !window.L) return;
-                if (this.group) this.map.removeLayer(this.group);
-                this.group = L.layerGroup().addTo(this.map);
-                const pts = [];
-                (polygons || []).forEach((c) => {
-                    (c.rings || []).forEach((ring) => {
-                        if (!ring || !ring.length) return;
-                        const latlngs = ring.map((p) => [p.lat, p.lng]);
-                        L.polygon(latlngs, { color: '#0E6B6B', weight: 2, fillColor: '#0E6B6B', fillOpacity: 0.07 })
-                            .bindTooltip((c.name ? c.name + ' County' : 'County'), { permanent: false }).addTo(this.group);
-                        latlngs.forEach((ll) => pts.push(ll));
-                    });
-                });
-                (data || []).forEach((d) => {
-                    if (d.lat == null || d.lng == null) return;
-                    L.circleMarker([d.lat, d.lng], { radius: 6, color: d.color, fillColor: d.color, fillOpacity: 1 })
-                        .bindTooltip(d.name, { permanent: false }).addTo(this.group);
-                    pts.push([d.lat, d.lng]);
-                });
-                (manual || []).forEach((d) => {
-                    if (d.lat == null || d.lng == null) return;
-                    L.marker([d.lat, d.lng], {
-                        icon: L.divIcon({ html: '🚩', className: 'lp-flag', iconSize: [18, 18], iconAnchor: [4, 16] }),
-                    }).bindTooltip(d.name + ' (added)', { permanent: false }).addTo(this.group);
-                    pts.push([d.lat, d.lng]);
-                });
-                if (pts.length) this.map.fitBounds(L.latLngBounds(pts).pad(0.3));
-            },
-    });
-</script>
+<style>
+    /* Deliberately NOT .lp-map: that class carries a fixed 380px height from the locations stylesheet,
+       which would crop or stretch a figure that is sized by its own viewBox. */
+    .lp-cov-map { display:block; width:100%; height:auto; background:#f8fafc; border-radius:10px; }
+    .dark .lp-cov-map { background:#0b1017; }
+    .lp-cov-empty { display:flex; align-items:center; justify-content:center; text-align:center; padding:28px 16px;
+        font-size:12.5px; color:#64748b; background:#f8fafc; border-radius:10px; }
+    .dark .lp-cov-empty { background:#0b1017; color:#94a3b8; }
+    .lp-cov-county { fill:rgba(14,107,107,.07); stroke:#0E6B6B; stroke-width:.35; stroke-linejoin:round; }
+    .lp-cov-pin { stroke-width:.4; }
+    .lp-cov-flag path { fill:#b45309; stroke:#b45309; stroke-width:.35; }
+</style>
