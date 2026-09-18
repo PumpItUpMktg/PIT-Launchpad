@@ -873,3 +873,39 @@ it('the hub coverage sentence leads the areas block instead of heading a section
     // …and the second heading over the same subject is gone.
     expect($markup)->not->toContain('The towns we cover around Trooper');
 });
+
+/**
+ * Local conditions are REGIONAL — a climate normal, a summer dew point, a county census figure. They are
+ * fetched for a physical GBP Location and describe that location's city. A town page grounds on its
+ * PARENT location, so rendering the section there would have stamped one identical block onto every town
+ * page under the hub, headed "About {town}" while describing the parent's city. Hub pages only.
+ */
+it('renders Local conditions on the hub but not on the town pages beneath it', function () {
+    $site = locRelaySite();
+    $parent = locRelayLocation($site, [
+        'grounding_cache' => [
+            'facts' => ['Summer dew points here average 67°F.'],
+            'sources' => ['noaa hourly normals 1991-2020'],
+            'fetched_at' => now()->toIso8601String(),
+        ],
+    ]);
+
+    $hub = locRelayPage($site, $parent);
+    $hubMarkup = app(BlockContentAssembler::class)->compose($hub->fresh(), $hub->slot_payload, []);
+
+    expect($hubMarkup)->toContain('Local conditions')
+        ->and($hubMarkup)->toContain('Summer dew points here average 67°F.');
+
+    $town = locRelayPage($site, $parent, [
+        'location_id' => null,
+        'parent_location_id' => $parent->id,
+        'title' => 'Pequannock, NJ',
+        'slug' => 'pequannock-nj',
+    ]);
+    $townMarkup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+
+    // The town page still composes — it just does not inherit the parent's regional block.
+    expect($townMarkup)->toContain('Pequannock')
+        ->and($townMarkup)->not->toContain('Local conditions')
+        ->and($townMarkup)->not->toContain('Summer dew points here average 67°F.');
+});

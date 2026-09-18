@@ -12,7 +12,8 @@ use Throwable;
  * fire (config launchpad.grounding.trade_map); results cache on the Location record
  * (grounding_cache: {facts, sources, fetched_at}) so regeneration inside the staleness window
  * (default 90 days) never refetches. Every provider failure is skip-log-continue — grounding is
- * NEVER a generation blocker. Drafter input only; never rendered as live page widgets.
+ * NEVER a generation blocker. Primarily drafter input; a HUB page also renders the facts as its
+ * "Local conditions" section (hub only — the towns beneath it would repeat one regional block).
  */
 final class LocationGrounding
 {

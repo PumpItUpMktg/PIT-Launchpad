@@ -4,6 +4,7 @@ use App\Local\Grounding\AirQualityProvider;
 use App\Local\Grounding\CensusAcsProvider;
 use App\Local\Grounding\ClimateNormalsProvider;
 use App\Local\Grounding\GoogleElevationProvider;
+use App\Local\Grounding\HumidityProvider;
 use App\Local\Grounding\PollenProvider;
 use App\Local\Grounding\WaterProvider;
 
@@ -734,14 +735,20 @@ return [
             'air_quality' => AirQualityProvider::class,    // stub seam
             'pollen' => PollenProvider::class,             // stub seam
             'census' => CensusAcsProvider::class,          // population / households / housing age
+            'humidity' => HumidityProvider::class,         // NOAA summer dew point — the dehumidification case
             'water' => WaterProvider::class,               // stub seam (no Google source for hardness)
         ],
 
         'trade_map' => [
+            // Deliberately NO 'humidity': a waterproofing tenant's offices sit inside one metro, where
+            // every hub resolves to the same one or two NOAA stations and prints the same dew point.
+            // The sentence is true and says nothing new by the second page. It stays available to the
+            // trades below, whose tenants can span real climate contrast.
             'waterproofing' => ['climate', 'elevation', 'census'],
             'plumbing' => ['climate', 'census'],
-            'mold_testing' => ['air_quality', 'climate', 'census'],
-            'hvac' => ['climate', 'air_quality', 'pollen', 'census'],
+            'mold_testing' => ['humidity', 'air_quality', 'climate', 'census'],
+            'hvac' => ['humidity', 'climate', 'air_quality', 'pollen', 'census'],
+            'dehumidification' => ['humidity', 'climate', 'census'],
             'water_treatment' => ['water', 'census'],
             '_default' => ['census'],
         ],
