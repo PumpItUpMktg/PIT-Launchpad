@@ -9,6 +9,7 @@ use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Places\PlacesProvider;
 use App\Jobs\GeocodeLocation;
 use App\Locations\CountyCoverage;
+use App\Locations\CoverageMapSvg;
 use App\Locations\CoveragePanels;
 use App\Locations\CoverageWriter;
 use App\Locations\LocationPublishHold;
@@ -39,6 +40,7 @@ use Livewire\Attributes\Url;
  * @property-read list<array{name: string, lat: float, lng: float, color: string}> $mapData
  * @property-read list<array{name: string, lat: float, lng: float}> $manualMarkers
  * @property-read list<array{geo_id: string, name: string, rings: list<list<array{lat: float, lng: float}>>}> $countyPolygons
+ * @property-read array{counties: list<array{name: string, paths: list<string>}>, pins: list<array{name: string, x: float, y: float, color: string}>, flags: list<array{name: string, x: float, y: float}>}|null $coverageSvg
  * @property-read array{totals: array{covered: int, selected: int, overlap: int, tiers: array<string, int>}, panels: array<string, array<string, mixed>>} $panels
  */
 trait ManagesLocationCoverage
@@ -589,6 +591,19 @@ trait ManagesLocationCoverage
         return app(MunicipalityGazetteer::class)->countyPolygons(array_keys($geoIds));
     }
 
+    /**
+     * The coverage map, projected for the inline SVG the partial draws.
+     *
+     * Computed per render, so Livewire re-rendering after a coverage change redraws the map — the
+     * `locations-updated` broadcast that fed the old Leaflet init is gone with it.
+     *
+     * @return array{counties: list<array{name: string, paths: list<string>}>, pins: list<array{name: string, x: float, y: float, color: string}>, flags: list<array{name: string, x: float, y: float}>}|null
+     */
+    public function getCoverageSvgProperty(): ?array
+    {
+        return CoverageMapSvg::build($this->countyPolygons, $this->mapData, $this->manualMarkers);
+    }
+
     /** Enter the coverage workspace for the current site: locate pending bases + compute. */
     protected function enterCoverageWorkspace(): void
     {
@@ -605,7 +620,6 @@ trait ManagesLocationCoverage
         }
 
         $result = app(CountyCoverage::class)->coverage($site);
-        $this->dispatch('locations-updated', data: $this->mapData, manual: $this->manualMarkers, polygons: $this->countyPolygons);
 
         if ($result->perBase === []) {
             $this->computed = false;

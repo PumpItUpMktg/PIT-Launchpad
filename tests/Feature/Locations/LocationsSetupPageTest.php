@@ -138,12 +138,15 @@ it('sets the counties a location serves (whole array), persists it, and recomput
     $site = Site::factory()->create();
     $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'HQ', 'lat' => 40.80, 'lng' => -74.20, 'home_county_geoid' => '34013', 'county_geoids' => []]);
 
-    Livewire::test(LocationsSetup::class)
+    // The map is now server-rendered SVG that Livewire redraws on its own re-render, so there is no
+    // broadcast to a JS init any more — the recompute is proven by what it WROTE, and by the map the
+    // component then hands the view.
+    $page = Livewire::test(LocationsSetup::class)
         ->set('siteId', $site->id)
-        ->call('setCounties', $loc->id, ['34013'])
-        ->assertDispatched('locations-updated');
+        ->call('setCounties', $loc->id, ['34013']);
 
-    expect(Location::withoutGlobalScope(SiteScope::class)->where('id', $loc->id)->value('county_geoids'))->toBe(['34013']);
+    expect(Location::withoutGlobalScope(SiteScope::class)->where('id', $loc->id)->value('county_geoids'))->toBe(['34013'])
+        ->and($page->instance()->coverageSvg)->not->toBeNull();
 });
 
 it('adds a directed town to a location (priority page candidate) and marks it on the map', function () {
