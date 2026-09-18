@@ -39,12 +39,15 @@ final class HumidityProvider implements GroundingProvider
         }
 
         $nearest = $this->stations->for((float) $lat, (float) $lng);
-        $dewPoint = $nearest['station']->summer_dew_point_f ?? null;
-        if ($nearest === null || $dewPoint === null) {
+        if ($nearest === null) {
             return ['facts' => [], 'source' => $source];
         }
 
         $station = $nearest['station'];
+        $dewPoint = $station->summer_dew_point_f;
+        if ($dewPoint === null) {
+            return ['facts' => [], 'source' => $source];
+        }
         $where = sprintf('%s, %.0f miles away', $this->stationName($station->name), $nearest['miles']);
 
         $facts = [sprintf(
