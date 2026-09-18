@@ -740,7 +740,11 @@ return [
         ],
 
         'trade_map' => [
-            'waterproofing' => ['climate', 'elevation', 'humidity', 'census'],
+            // Deliberately NO 'humidity': a waterproofing tenant's offices sit inside one metro, where
+            // every hub resolves to the same one or two NOAA stations and prints the same dew point.
+            // The sentence is true and says nothing new by the second page. It stays available to the
+            // trades below, whose tenants can span real climate contrast.
+            'waterproofing' => ['climate', 'elevation', 'census'],
             'plumbing' => ['climate', 'census'],
             'mold_testing' => ['humidity', 'air_quality', 'climate', 'census'],
             'hvac' => ['humidity', 'climate', 'air_quality', 'pollen', 'census'],

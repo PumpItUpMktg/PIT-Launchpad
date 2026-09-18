@@ -93,3 +93,19 @@ it('carries the whole station network, so no region falls back to a distant stat
             ->and(strlen((string) $row[3]))->toBe(2);
     }
 });
+
+/**
+ * The trade map is the ship-it-but-not-here decision, pinned so it cannot drift back by accident.
+ *
+ * Dew point is regional over tens of miles. A waterproofing tenant's offices sit inside one metro, so
+ * every hub resolves to the same one or two NOAA stations and prints the same sentence — true, and
+ * saying nothing new by the second page. Trades whose tenants can span real climate contrast keep it.
+ */
+it('fires humidity for the moisture trades and not for waterproofing', function () {
+    $map = config('launchpad.grounding.trade_map');
+
+    expect($map['waterproofing'])->not->toContain('humidity')
+        ->and($map['dehumidification'])->toContain('humidity')
+        ->and($map['mold_testing'])->toContain('humidity')
+        ->and($map['hvac'])->toContain('humidity');
+});
