@@ -75,3 +75,36 @@ it('skips an anchored location without --force', function () {
 
     expect($f['location']->fresh()->home_geo_id)->toBe('4201720328');
 });
+
+/**
+ * The office's mailing town is often not the municipality it stands in — SPG's "Doylestown" office is
+ * in Plumstead township, "Trooper" in Lower Providence. Both facts are true and they are used for
+ * different things, so the report says when they part company rather than letting one pass for the other.
+ */
+it('names the difference when the mailing town is not the municipality', function () {
+    anchorLocSite([
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Doylestown', 'short_name' => 'Doylestown'],
+            ['types' => ['administrative_area_level_1'], 'long_name' => 'Pennsylvania', 'short_name' => 'PA'],
+        ],
+    ]);
+    fakeGazetteer(new Municipality('4201761616', 'Plumstead', MunicipalityType::CountySubdivision, 'PA'));
+
+    $this->artisan('launchpad:anchor-locations', ['--site' => 'SPG'])
+        ->expectsOutputToContain('the building stands in Plumstead')
+        ->assertSuccessful();
+});
+
+it('says nothing when the mailing town and the municipality agree', function () {
+    anchorLocSite([
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Hoboken', 'short_name' => 'Hoboken'],
+            ['types' => ['administrative_area_level_1'], 'long_name' => 'New Jersey', 'short_name' => 'NJ'],
+        ],
+    ]);
+    fakeGazetteer(new Municipality('3401732250', 'Hoboken', MunicipalityType::CountySubdivision, 'NJ'));
+
+    $this->artisan('launchpad:anchor-locations', ['--site' => 'SPG'])
+        ->doesntExpectOutputToContain('mailing town differs')
+        ->assertSuccessful();
+});

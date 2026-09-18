@@ -117,16 +117,24 @@ class PagesBoard
      * so the operator builds one when they choose to.
      *
      * A town counts as built when a page carries its GEOID (the anchor join), whatever its status — and
-     * ALSO when it is the municipality a GBP location physically stands in, because that location's hub
-     * page already is that town's page. Nothing used to say so: a hub is pinned through `location_id`
-     * with a null `geo_id`, so every location's own town sat in its own build queue asking to be built
-     * a second time.
+     * ALSO when it is the town a GBP location's hub page is ABOUT, because that hub page already is that
+     * town's page. Nothing used to say so: a hub is pinned through `location_id` with a null `geo_id`, so
+     * every location's own town sat in its own build queue asking to be built a second time.
      *
-     * Same-NAME siblings of a covered municipality are suppressed too. Doylestown borough and Doylestown
-     * township are two real municipalities with two GEOIDs, but one name to a searcher — and the public
-     * areas grid already collapses them to a single row ({@see ServiceAreaResolver::byCounty()}), so a
-     * second page could only compete with the first for the same name. Suppression is by (name, state),
-     * and only ever against a municipality that HAS a page; two unbuilt same-name towns both still show.
+     * The hub's town is its own city — `Location::cityState()`, the name the page is titled and targeted
+     * on — NOT `home_geo_id`, the municipality its building physically stands in. Those differ more often
+     * than they agree: of SPG's fourteen offices, four sit in a municipality their mailing address does
+     * not name (a "Doylestown" office standing in Plumstead township, "Trooper" in Lower Providence).
+     * The polygon under the building is a real-estate fact; what the page covers is its city. Plumstead
+     * still deserves its own page, and gets to keep asking for one.
+     *
+     * Same-NAME siblings of a covered town are suppressed too. Doylestown borough and Doylestown township
+     * are two real municipalities with two GEOIDs, but one name to a searcher — and the public areas grid
+     * already collapses them to a single row ({@see ServiceAreaResolver::byCounty()}), so a second page
+     * could only compete with the first for the same name. Matching a hub by name rather than GEOID is
+     * right here for the same reason: the hub covers "Doylestown", not one of its two polygons.
+     *
+     * Suppression only ever fires against a town that HAS a page; two unbuilt same-name towns both show.
      *
      * @return array<string, list<array{coverage_area_id: string, name: string, state: string|null, population: int}>>
      */
@@ -140,43 +148,39 @@ class PagesBoard
             ->pluck('geo_id')
             ->flip();
 
-        // The municipality each GBP location stands in — resolved from its coordinates at geocode time,
-        // MCD-first, so it names the borough OR the township rather than guessing between them.
-        $homes = Location::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->pluck('home_geo_id')
-            ->map(fn ($geoId): string => trim((string) $geoId))
-            ->filter(fn (string $geoId): bool => $geoId !== '')
-            ->flip();
-
-        // Every municipality, not only the selected ones: a town whose page exists may since have been
-        // deselected, and a location's home town need never have been selected at all. Both still count
-        // as covered.
-        $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->orderByDesc('population')
-            ->get();
-
-        $isCovered = function (CoverageArea $area) use ($built, $homes): bool {
-            $geoId = trim((string) $area->geo_id);
-
-            return $geoId !== '' && ($built->has($geoId) || $homes->has($geoId));
-        };
-
+        // The town each hub page is about — the location's own city, which is the name that page is
+        // titled and targeted on.
         $coveredNames = [];
-        foreach ($areas as $area) {
-            if ($isCovered($area)) {
-                $coveredNames[$this->townNameKey($area)] = true;
+        foreach (Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get() as $location) {
+            ['city' => $city, 'state' => $state] = $location->cityState();
+            $city = trim($city) !== '' ? trim($city) : trim((string) $location->name);
+            if ($city !== '') {
+                // An ungeocoded location has a name but no state ({@see Location::cityState()} returns
+                // empty strings); its key then carries no state and matches the name alone. Within one
+                // site's own service area that is the intended reach, not a cross-state accident.
+                $coveredNames[$this->nameKey($city, $state)] = true;
             }
         }
 
+        // …and the name of every town that already has a page, whether or not it is still selected.
+        $builtTowns = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->whereIn('geo_id', $built->keys()->all())
+            ->get();
+        foreach ($builtTowns as $area) {
+            $coveredNames[$this->nameKey((string) $area->name, (string) $area->state)] = true;
+        }
+
         $out = [];
-        foreach ($areas as $town) {
-            if (! $town->page_selected || $isCovered($town)) {
+        $selected = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('page_selected', true)
+            ->orderByDesc('population')
+            ->get();
+
+        foreach ($selected as $town) {
+            if ($this->alreadyCovered($town, $built->all(), $coveredNames)) {
                 continue;
-            }
-            if (isset($coveredNames[$this->townNameKey($town)])) {
-                continue;   // a same-name municipality already has a page
             }
             foreach (is_array($town->source_location_ids) ? $town->source_location_ids : [] as $locationId) {
                 $out[(string) $locationId][] = [
@@ -191,10 +195,28 @@ class PagesBoard
         return $out;
     }
 
-    /** A municipality's identity for same-name matching: its name and state, case- and space-insensitive. */
-    private function townNameKey(CoverageArea $area): string
+    /**
+     * Whether a selected town already has a page — by its own GEOID, or because its NAME is covered
+     * (a hub page about that city, or a same-name municipality that has been built). The stateless key
+     * is how an ungeocoded location, which has a name but no state, still claims its own town.
+     *
+     * @param  array<string, mixed>  $builtGeoIds
+     * @param  array<string, true>  $coveredNames
+     */
+    private function alreadyCovered(CoverageArea $town, array $builtGeoIds, array $coveredNames): bool
     {
-        return mb_strtolower(trim((string) $area->name)).'|'.mb_strtolower(trim((string) $area->state));
+        $geoId = trim((string) $town->geo_id);
+        $name = (string) $town->name;
+
+        return ($geoId !== '' && isset($builtGeoIds[$geoId]))
+            || isset($coveredNames[$this->nameKey($name, (string) $town->state)])
+            || isset($coveredNames[$this->nameKey($name, '')]);
+    }
+
+    /** A town's identity for same-name matching: name and state, case- and space-insensitive. */
+    private function nameKey(string $name, string $state): string
+    {
+        return mb_strtolower(trim($name)).'|'.mb_strtolower(trim($state));
     }
 
     private function locationLabel(Location $location): string

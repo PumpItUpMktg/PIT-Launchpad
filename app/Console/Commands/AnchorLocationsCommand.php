@@ -100,6 +100,15 @@ class AnchorLocationsCommand extends Command
 
                 $this->line("  · {$label} → {$municipality->name} [{$municipality->geoId}] ({$municipality->type->label()})");
 
+                // The office's mailing town is often NOT the municipality it stands in — a "Doylestown"
+                // office in Plumstead township, "Trooper" in Lower Providence. Both facts are true and
+                // they are used for different things: the hub PAGE is about the city, while this GEOID is
+                // where the building is. Naming the difference keeps them from being mistaken for one
+                // another (they were once, and the build queue kept offering a page that existed).
+                if ($this->differs($label, $municipality->name)) {
+                    $this->line("      <fg=yellow>mailing town differs from the municipality — the page covers {$label}, the building stands in {$municipality->name}</>");
+                }
+
                 if ($execute) {
                     $location->forceFill(['home_geo_id' => $municipality->geoId])->save();
                     $written++;
@@ -113,6 +122,14 @@ class AnchorLocationsCommand extends Command
             : "{$skipped} location(s) could not be resolved. Re-run with --execute to write the rest.");
 
         return self::SUCCESS;
+    }
+
+    /** True when a location's mailing city is not the municipality its point falls in. */
+    private function differs(string $label, string $municipality): bool
+    {
+        $city = mb_strtolower(trim((string) preg_replace('/,\s*[A-Za-z]{2}$/', '', $label)));
+
+        return $city !== '' && $city !== mb_strtolower(trim($municipality));
     }
 
     /** The coverage row behind an already-stored GEOID, so the report reads as a name rather than digits. */
