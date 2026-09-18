@@ -6,11 +6,13 @@ use App\Integrations\Claude\ClaudeClient;
 use App\Models\Content;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
+use App\Models\Service;
 use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Resolves the one-line description for a service card on the home page — NEVER null. The card pattern
+ * Resolves the one-line description for a service card — NEVER null, on the home grid (from a child
+ * page) or the location grid (from the service catalog, via {@see forService()}). The card pattern
  * has a blurb slot; this fills it, honouring "bring it in if it exists, else generate before publish":
  *
  *   1. The child service page's OWN description (its SEO meta, else its hero/intro slots) — when the
@@ -30,6 +32,24 @@ final class ServiceCardBlurb
     private const LIMIT = 155;
 
     public function __construct(private readonly ClaudeClient $claude) {}
+
+    /**
+     * The blurb for a SERVICE card (the location-page grid, which builds from the catalog rather than
+     * from child pages). The operator's own words win; then the service page's, through the same path
+     * the home grid uses; then a deterministic line — so a location card is never the bare "Learn more"
+     * it used to ship as when a service carried no description.
+     */
+    public function forService(Service $service, ?Content $page): string
+    {
+        foreach ([$service->short_description, $service->description] as $own) {
+            $text = $this->oneLine(strip_tags(trim((string) $own)));
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return $page !== null ? $this->for($page) : $this->template(trim((string) $service->name), '');
+    }
 
     public function for(Content $page): string
     {

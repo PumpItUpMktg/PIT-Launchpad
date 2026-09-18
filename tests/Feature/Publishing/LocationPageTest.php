@@ -799,3 +799,32 @@ it('a HUB page NAP heading stays "Our {city} location" (its own office)', functi
 
     expect($markup)->toContain('Our Trooper location');
 });
+
+it('never ships a location service card as a bare "Learn more" — every card carries a line', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site);
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+
+    // The operator's own words win.
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Installation', 'description' => 'Reliable sump systems.']);
+
+    // No description at all, but a live service page whose meta carries one → the card borrows it,
+    // exactly as the home grid does. This is the case that used to ship blank.
+    $drains = Service::factory()->create(['site_id' => $site->id, 'name' => 'French Drains', 'description' => '']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service,
+        'title' => 'French Drains', 'slug' => 'french-drains', 'primary_service_id' => $drains->id, 'wp_post_id' => 78,
+        'meta' => ['seo' => ['meta_description' => 'Interior perimeter drains that move water out before it reaches the slab.']],
+    ]);
+
+    // No description and no page → a deterministic line rather than nothing.
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Crawl Space Encapsulation', 'description' => '']);
+
+    $page = locRelayPage($site, $location);
+    locScopedCoverage($site, $location);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toContain('Reliable sump systems.')
+        ->toContain('Interior perimeter drains that move water out before it reaches the slab.')
+        ->toContain('Crawl Space Encapsulation handled by a team you can count on');
+});

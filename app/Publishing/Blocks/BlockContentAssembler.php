@@ -1045,22 +1045,29 @@ final class BlockContentAssembler
             ? rtrim((string) $site->domain_url, '/').'/'
             : '/';
 
+        // The page columns the blurb resolver reads (meta / slots / target keyword) come along, so a card
+        // can borrow its service page's own description instead of shipping blank.
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Service->value)
             ->whereNotNull('slug')
             ->whereNotNull('wp_post_id')
-            ->get(['title', 'slug', 'primary_service_id']);
+            ->get(['id', 'title', 'slug', 'primary_service_id', 'meta', 'slot_payload', 'target_keyword_id']);
 
         $byService = [];
         $byTitle = [];
+        $pageByService = [];
+        $pageByTitle = [];
         foreach ($pages as $page) {
             $url = $home.Permalinks::slugPath((string) $page->slug);
+            $title = mb_strtolower(trim((string) $page->title));
             if ($page->primary_service_id !== null) {
                 $byService[(string) $page->primary_service_id] = $url;
+                $pageByService[(string) $page->primary_service_id] = $page;
             }
-            $byTitle[mb_strtolower(trim((string) $page->title))] = $url;
+            $byTitle[$title] = $url;
+            $pageByTitle[$title] = $page;
         }
 
         $services = Service::withoutGlobalScope(SiteScope::class)
@@ -1075,10 +1082,19 @@ final class BlockContentAssembler
             if ($name === '') {
                 continue;
             }
+            // A location card used to take the service description RAW, so a service with none shipped a
+            // bare "Learn more" — while the home grid guaranteed a line through the same resolver. Same
+            // guarantee here now: the operator's words, else the service page's, else a deterministic
+            // line. The copy is per SERVICE, not per town: the service does not change town to town, and
+            // a line that differed only by town name across hundreds of pages is the doorway pattern.
+            $key = mb_strtolower($name);
             $cards[] = [
                 'title' => $name,
-                'blurb' => trim((string) $service->description),
-                'url' => $byService[(string) $service->id] ?? $byTitle[mb_strtolower($name)] ?? '',
+                'blurb' => $this->cardBlurb->forService(
+                    $service,
+                    $pageByService[(string) $service->id] ?? $pageByTitle[$key] ?? null,
+                ),
+                'url' => $byService[(string) $service->id] ?? $byTitle[$key] ?? '',
             ];
         }
 
