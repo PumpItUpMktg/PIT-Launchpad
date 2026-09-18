@@ -103,15 +103,21 @@ final class ServiceAreaMap
     }
 
     /**
-     * The location's served towns as tiered, LINKED map points — only towns that have a live (published)
-     * town page under this location AND a geocoded coverage row, matched by name. Largest-first, capped.
+     * The location's served towns as tiered, LINKED map points — only towns THIS location serves that have
+     * a live (published) town page under it and a geocoded coverage row, joined on GEOID (name only while
+     * a page is still un-anchored). Largest-first, capped.
      *
      * @return list<array{name: string, lat: float, lng: float, tier: string, url: string}>
      */
     private function locationCities(Location $location): array
     {
-        // town name (normalized) => the published town page URL under this location.
+        // The page's own GEOID => its URL, with the name as a fallback while a page is un-anchored.
+        // Matching by NAME ALONE put pins in other counties: a "Northampton" page under this location
+        // matched Northampton in Northampton County, and "Middletown" matched Middletown NJ — towns this
+        // business does not serve, plotted miles outside the drawn county. Same name-keyed join that made
+        // the anchoring ambiguous; the GEOID is the identity.
         $urls = [];
+        $urlsByName = [];
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $location->site_id)
             ->where('kind', ContentKind::Page->value)
@@ -121,27 +127,38 @@ final class ServiceAreaMap
             ->whereNull('location_id')
             ->whereNull('primary_service_id')
             ->whereNotNull('slug')
-            ->get(['title', 'slug']);
+            ->get(['title', 'slug', 'geo_id']);
         foreach ($pages as $page) {
+            $url = '/'.Permalinks::slugPath((string) $page->slug);
+            $geoId = trim((string) $page->geo_id);
+            if ($geoId !== '') {
+                $urls[$geoId] ??= $url;
+            }
             $key = $this->townKey((string) $page->title);
-            if ($key !== '' && ! isset($urls[$key])) {
-                $urls[$key] = '/'.Permalinks::slugPath((string) $page->slug);
+            if ($key !== '') {
+                $urlsByName[$key] ??= $url;
             }
         }
-        if ($urls === []) {
+        if ($urls === [] && $urlsByName === []) {
             return [];
         }
 
+        // And only the towns THIS location serves: the coverage row says which, so a same-named town in
+        // another territory can no longer be pulled in by its name.
         $areas = CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $location->site_id)
             ->whereNotNull('lat')->whereNotNull('lng')
-            ->get(['name', 'lat', 'lng', 'size_tier', 'population']);
+            ->get(['name', 'geo_id', 'lat', 'lng', 'size_tier', 'population', 'source_location_ids'])
+            ->filter(fn (CoverageArea $a): bool => is_array($a->source_location_ids)
+                && in_array((string) $location->id, array_map('strval', $a->source_location_ids), true));
 
         $items = [];
         $seen = [];
         foreach ($areas as $area) {
             $key = $this->townKey((string) $area->name);
-            if ($key === '' || ! isset($urls[$key]) || isset($seen[$key])) {
+            $geoId = trim((string) $area->geo_id);
+            $url = ($geoId !== '' ? ($urls[$geoId] ?? null) : null) ?? ($urlsByName[$key] ?? null);
+            if ($key === '' || $url === null || isset($seen[$key])) {
                 continue;
             }
             $seen[$key] = true;
@@ -152,7 +169,7 @@ final class ServiceAreaMap
                     'lat' => (float) $area->lat,
                     'lng' => (float) $area->lng,
                     'tier' => $tier !== '' ? $tier : 'small',
-                    'url' => $urls[$key],
+                    'url' => $url,
                 ],
                 'key' => [self::TIER_RANK[$tier] ?? 4, -1 * (int) ($area->population ?? 0), $key],
             ];

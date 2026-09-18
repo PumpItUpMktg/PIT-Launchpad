@@ -1422,7 +1422,12 @@ final class BlockSections
      * towns on a middot-separated line (a town with a real location page links; never an invented URL).
      * Returns '' when there's nothing to show.
      *
-     * @param  list<array{county: string, cities: list<array{label: string, url: string}>}>  $byCounty
+     * Two tiers per county: the largest few as the prominent line, then every other served town that has
+     * a page as a quieter "also serving" row. The second tier exists because six towns beside a map of
+     * fifty reads as "we only serve these six", and because a built town page deserves a text link from
+     * its own hub — a map dot carries a URL but no anchor text.
+     *
+     * @param  list<array{county: string, cities: list<array{label: string, url: string}>, more?: list<array{label: string, url: string}>}>  $byCounty
      */
     private function areaCitiesColumn(array $byCounty): string
     {
@@ -1446,10 +1451,29 @@ final class BlockSections
                 continue;
             }
 
-            $blocks[] = $this->b->group([
+            $children = [
                 $this->b->heading(3, $county, ['className' => 'lp-areas-county']),
                 $this->b->paragraph(implode(' · ', $parts), ['className' => 'lp-areas-towns', 'textColor' => 'muted']),
-            ], ['className' => 'lp-areas-countyblock']);
+            ];
+
+            // The second tier links only — a town without a page is not listed here (it is already either
+            // in the prominent line or nowhere), so every name in this row goes somewhere.
+            $more = [];
+            foreach ($group['more'] ?? [] as $city) {
+                $label = trim($city['label']);
+                $url = trim($city['url']);
+                if ($label !== '' && $url !== '') {
+                    $more[] = '<a href="'.$this->attr($url).'">'.$this->text($label).'</a>';
+                }
+            }
+            if ($more !== []) {
+                $children[] = $this->b->paragraph(
+                    'Also serving '.implode(' · ', $more),
+                    ['className' => 'lp-areas-more', 'textColor' => 'muted'],
+                );
+            }
+
+            $blocks[] = $this->b->group($children, ['className' => 'lp-areas-countyblock']);
         }
 
         return $blocks === [] ? '' : $this->b->group($blocks, ['className' => 'lp-areas-cities']);
