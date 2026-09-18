@@ -37,7 +37,7 @@
                             $path = rtrim(parse_url($item['url'], PHP_URL_PATH) ?? '', '/');
                             $active = $path !== '' && ($current === $path || str_starts_with($current, $path.'/'));
                         @endphp
-                        <a href="{{ $item['url'] }}" wire:navigate class="lp-cn-item {{ $active ? 'is-active' : '' }}">{{ $item['label'] }}</a>
+                        <a href="{{ $item['url'] }}" @if (! ($item['external'] ?? false)) wire:navigate @endif class="lp-cn-item {{ $active ? 'is-active' : '' }}">{{ $item['label'] }}</a>
                     @endif
                 @endforeach
             </div>
