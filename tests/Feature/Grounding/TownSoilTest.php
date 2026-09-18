@@ -64,7 +64,8 @@ it('weights drainage by AREA and sends the town\'s own boundary', function () {
         // Somewhat poorly + poorly, over the CLASSED ground only — the unclassed row is not in the
         // denominator, so a town half-covered by water is not reported as half-draining-well.
         ->and(round((float) $row->poorly_share, 2))->toBe(0.62)
-        ->and($row->classes)->toHaveCount(5);   // the null-class row is not a class
+        ->and($row->classes)->toHaveCount(5)    // the null-class row is not a class
+        ->and($row->water_share)->toBe(0.0);
 });
 
 it('keeps "not surveyed" apart from "drains well"', function () {
@@ -121,4 +122,48 @@ it('drops holes rather than counting them as land', function () {
         return str_contains($sql, '-75.000000 40.000000')
             && ! str_contains($sql, '-74.960000 40.040000');
     });
+});
+
+it('never counts seabed as ground: a coastal town is described by its LAND', function () {
+    // Brooklyn's real shape from the first production run: its largest mapped class is Subaqueous —
+    // soil under the harbour. Counting that as ground had it "draining freely", which it does not.
+    Http::fake(['*sdmdataaccess*' => Http::response(sdaTable([
+        ['Subaqueous', 6.0],
+        ['Poorly drained', 1.0],
+        ['Well drained', 3.0],
+    ]))]);
+    $site = Site::factory()->create();
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Brooklyn', 'state' => 'NY',
+        'geo_id' => '3604710022', 'population' => 2600000, 'source_location_ids' => []]);
+    Cache::put('lp.town_outline.3604710022', [[
+        ['lat' => 40.6, 'lng' => -74.0], ['lat' => 40.7, 'lng' => -74.0],
+        ['lat' => 40.7, 'lng' => -73.9], ['lat' => 40.6, 'lng' => -73.9], ['lat' => 40.6, 'lng' => -74.0],
+    ]], now()->addDay());
+
+    app(TownSoilSync::class)->forSite($site);
+
+    $row = TownSoilDrainage::query()->where('geo_id', '3604710022')->sole();
+    expect($row->water_share)->toBe(0.6)                 // six parts of ten are harbour
+        ->and($row->dominant)->toBe('Well drained')       // the dominant LAND class, not the seabed
+        ->and(round((float) $row->poorly_share, 2))->toBe(0.25)   // 1 of the 4 land parts
+        ->and(collect($row->classes)->pluck('class')->all())->not->toContain('Subaqueous');
+});
+
+it('a town that is all water is surveyed and still says nothing', function () {
+    Http::fake(['*sdmdataaccess*' => Http::response(sdaTable([['Subaqueous', 9.0]]))]);
+    $site = Site::factory()->create();
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Bay', 'geo_id' => '3604700099',
+        'population' => 10, 'source_location_ids' => []]);
+    Cache::put('lp.town_outline.3604700099', [[
+        ['lat' => 40.5, 'lng' => -74.1], ['lat' => 40.6, 'lng' => -74.1],
+        ['lat' => 40.6, 'lng' => -74.0], ['lat' => 40.5, 'lng' => -74.0], ['lat' => 40.5, 'lng' => -74.1],
+    ]], now()->addDay());
+
+    app(TownSoilSync::class)->forSite($site);
+
+    $row = TownSoilDrainage::query()->where('geo_id', '3604700099')->sole();
+    expect($row->surveyed)->toBeTrue()          // the survey covers it …
+        ->and($row->water_share)->toBe(1.0)
+        ->and($row->poorly_share)->toBeNull()   // … and there is no ground to describe
+        ->and(app(TownSoilFacts::class)->for($row))->toBe([]);
 });

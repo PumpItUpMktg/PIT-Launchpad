@@ -33,18 +33,28 @@ class SoilDrainage
     ) {}
 
     /**
-     * Drainage classes under these boundary rings, with each class's share of the mapped ground (0–1),
-     * largest first. Rows the survey has no class for are excluded from the shares but prove the town
-     * was surveyed.
+     * The one class in the survey that is not land: soil under a bay or an estuary. A coastal town's
+     * boundary takes in open water, and counting seabed as ground is how Brooklyn came back "drains
+     * freely" — most of what was measured was harbour.
+     */
+    public const WATER = 'Subaqueous';
+
+    /**
+     * Drainage classes under these boundary rings, with each class's share of the mapped LAND (0–1),
+     * largest first, plus the share of the mapped area that is underwater.
+     *
+     * Rows the survey has no class for are excluded from both — they prove the town was surveyed and
+     * say nothing about its drainage.
      *
      * @param  list<list<array{lat: float, lng: float}>>  $rings
-     * @return list<array{class: string, share: float}>
+     * @return array{classes: list<array{class: string, share: float}>, water_share: float}
      */
     public function forRings(array $rings): array
     {
+        $empty = ['classes' => [], 'water_share' => 0.0];
         $wkt = $this->wkt($rings);
         if ($wkt === null) {
-            return [];
+            return $empty;
         }
 
         $sql = sprintf(
@@ -63,16 +73,17 @@ class SoilDrainage
                 'query' => $sql,
             ]);
         } catch (Throwable) {
-            return [];
+            return $empty;
         }
 
         $rows = $response->successful() ? $response->json('Table') : null;
         if (! is_array($rows)) {
-            return [];
+            return $empty;
         }
 
         $areas = [];
-        $total = 0.0;
+        $land = 0.0;
+        $water = 0.0;
         foreach ($rows as $row) {
             if (! is_array($row) || count($row) < 2) {
                 continue;
@@ -80,22 +91,28 @@ class SoilDrainage
             $class = trim((string) ($row[0] ?? ''));
             $area = (float) ($row[1] ?? 0);
             if ($class === '' || $area <= 0) {
-                continue;   // water, or ground the survey gives no class — not a drainage answer
+                continue;   // ground the survey gives no class — not a drainage answer either way
+            }
+            if ($class === self::WATER) {
+                $water += $area;
+
+                continue;   // seabed is not drainage; it is not ground
             }
             $areas[$class] = ($areas[$class] ?? 0.0) + $area;
-            $total += $area;
+            $land += $area;
         }
-        if ($total <= 0.0) {
-            return [];
+        if ($land <= 0.0) {
+            // All water, or nothing classed: surveyed, but with no ground to describe.
+            return ['classes' => [], 'water_share' => $water > 0.0 ? 1.0 : 0.0];
         }
 
         arsort($areas);
         $out = [];
         foreach ($areas as $class => $area) {
-            $out[] = ['class' => $class, 'share' => round($area / $total, 4)];
+            $out[] = ['class' => $class, 'share' => round($area / $land, 4)];
         }
 
-        return $out;
+        return ['classes' => $out, 'water_share' => round($water / ($land + $water), 4)];
     }
 
     /**

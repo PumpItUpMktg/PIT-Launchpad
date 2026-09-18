@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property bool $surveyed
  * @property string|null $dominant
  * @property float|null $poorly_share
+ * @property float|null $water_share share of the town's mapped area that is seabed, not ground
  * @property list<array{class: string, share: float}>|null $classes
  * @property Carbon|null $fetched_at
  */
@@ -34,6 +35,7 @@ class TownSoilDrainage extends Model
             'classes' => 'array',
             'surveyed' => 'boolean',
             'poorly_share' => 'float',
+            'water_share' => 'float',
             'fetched_at' => 'datetime',
         ];
     }
