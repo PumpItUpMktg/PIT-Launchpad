@@ -21,7 +21,7 @@ function extentSite(array $towns): array
     return [$site, $location];
 }
 
-it('names the furthest town each way and the widest reach, from the coverage we already claim', function () {
+it('writes ONE paragraph: what we cover, how far it runs, and what to do if you are outside it', function () {
     [$site, $location] = extentSite([
         'Quakertown' => [40.44, -75.34, 14.0, '4201762808'],
         'Yardley, PA' => [40.24, -74.84, 17.0, '4201787032'],
@@ -29,15 +29,21 @@ it('names the furthest town each way and the widest reach, from the coverage we 
         'Souderton' => [40.31, -75.32, 11.0, '4209172664'],
     ]);
 
-    $sentences = app(ServiceAreaExtent::class)->sentences((string) $site->id, $location, 'Doylestown');
+    $paragraphs = app(ServiceAreaExtent::class)->paragraph((string) $site->id, $location, 'Doylestown', ['Bucks County']);
 
-    expect($sentences[0])
-        ->toBe('From Doylestown that reaches north to Quakertown, east to Yardley, south to Bensalem and west to Souderton — about 22 miles at the widest point.');
+    // One paragraph, not a stack of one-line statements.
+    expect($paragraphs)->toHaveCount(1);
+    expect($paragraphs[0])
+        ->toStartWith('From our Doylestown location we serve Bucks County and the communities around it.')
+        ->toContain('That territory runs from Quakertown in the north to Bensalem in the south, and from Souderton in the west to Yardley in the east — about 22 miles at its widest.')
+        // A single-location tenant never offers an office it does not have.
+        ->toContain('call us and we will tell you straight whether we cover it')
+        ->not->toContain('one of our other locations');
     // ", PA" is the data model's suffix, not something a reader needs mid-sentence.
-    expect($sentences[0])->not->toContain('Yardley, PA');
+    expect($paragraphs[0])->not->toContain('Yardley, PA');
 });
 
-it('adds at most one local detail, and only a distinguishing one', function () {
+it('contrasts the ends of the territory rather than quoting one town at it', function () {
     [$site, $location] = extentSite([
         'Quakertown' => [40.44, -75.34, 14.0, '4201762808'],
         'Yardley' => [40.24, -74.84, 17.0, '4201787032'],
@@ -54,24 +60,28 @@ it('adds at most one local detail, and only a distinguishing one', function () {
         'median_year_built' => 1948, 'occupied_units' => 1000, 'owner_occupied_units' => 820,
         'total_units' => 1100, 'single_family_units' => 990, 'pre_1960_units' => 660]);
 
-    $sentences = app(ServiceAreaExtent::class)->sentences((string) $site->id, $location, 'Doylestown');
+    $paragraph = app(ServiceAreaExtent::class)->paragraph((string) $site->id, $location, 'Doylestown', ['Bucks County'])[0];
 
-    expect($sentences)->toHaveCount(2)
-        ->and($sentences[1])->toBe('About 60% of the housing stock in Yardley was built before 1960.')
-        ->and($sentences[1])->not->toContain('median home');
+    // The range is the interesting thing, not one number from one town.
+    expect($paragraph)->toContain('The housing varies as much as the distance: about 60% of homes in Yardley were built before 1960, against 20% in Quakertown.')
+        ->not->toContain('median home');
 });
 
-it('says nothing when the footprint is too tight to describe by compass, or the base has no coordinates', function () {
+it('drops only the reach sentence when the footprint is too tight or the base has no coordinates', function () {
     // Two towns, both north-west: fewer than three directions, so the sentence would say less than the
     // list already does.
     [$site, $location] = extentSite([
         'Quakertown' => [40.44, -75.34, 14.0, '4201762808'],
         'Souderton' => [40.33, -75.32, 11.0, '4209172664'],
     ]);
-    expect(app(ServiceAreaExtent::class)->sentences((string) $site->id, $location, 'Doylestown'))->toBe([]);
+    // The county opening and the invitation still stand; only the reach sentence drops.
+    $tight = app(ServiceAreaExtent::class)->paragraph((string) $site->id, $location, 'Doylestown', ['Bucks County'])[0];
+    expect($tight)->toContain('we serve Bucks County')
+        ->not->toContain('That territory runs');
 
     $blind = Location::factory()->create(['site_id' => $site->id, 'name' => 'Nowhere', 'lat' => null, 'lng' => null]);
-    expect(app(ServiceAreaExtent::class)->sentences((string) $site->id, $blind, 'Nowhere'))->toBe([]);
+    $noCoords = app(ServiceAreaExtent::class)->paragraph((string) $site->id, $blind, 'Nowhere', ['Bucks County'])[0];
+    expect($noCoords)->not->toContain('That territory runs');
 });
 
 it('spends a corner town on one direction only, so four directions name four towns', function () {
@@ -83,8 +93,21 @@ it('spends a corner town on one direction only, so four directions name four tow
         'Souderton' => [40.31, -75.32, 11.0, '4209172664'],
     ]);
 
-    $sentence = app(ServiceAreaExtent::class)->sentences((string) $site->id, $location, 'Doylestown')[0];
+    $paragraph = app(ServiceAreaExtent::class)->paragraph((string) $site->id, $location, 'Doylestown', ['Bucks County'])[0];
 
-    expect(substr_count($sentence, 'Corner'))->toBe(1)
-        ->and($sentence)->toContain('east to Yardley');   // the next town out takes the direction it lost
+    expect(substr_count($paragraph, 'Corner'))->toBe(1)
+        ->and($paragraph)->toContain('to Yardley in the east');   // the next town out takes the direction it lost
+});
+
+it('offers another office only when the tenant has one', function () {
+    [$site, $location] = extentSite([
+        'Quakertown' => [40.44, -75.34, 14.0, '4201762808'],
+        'Yardley' => [40.24, -74.84, 17.0, '4201787032'],
+        'Bensalem' => [40.10, -74.94, 22.0, '4201705616'],
+        'Souderton' => [40.31, -75.32, 11.0, '4209172664'],
+    ]);
+
+    $paragraph = app(ServiceAreaExtent::class)->paragraph((string) $site->id, $location, 'Doylestown', ['Bucks County'], locationCount: 2)[0];
+
+    expect($paragraph)->toContain('if we cannot reach you from Doylestown, one of our other locations may');
 });
