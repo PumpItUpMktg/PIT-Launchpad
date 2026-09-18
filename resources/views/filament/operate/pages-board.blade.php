@@ -202,9 +202,13 @@
                         ? PHP_INT_MAX
                         : ($tabOrder[$t['id']] ?? PHP_INT_MAX - 1))
                     ->values()->all();
+                // The PAGE decides which location is active — it is the one whose cards were built, and a
+                // second decision here is what drifted before. The view only falls back when that id is
+                // not a tab at all (an unassigned-only board), never to "re-choose" a different location.
                 $ids = array_column($locTabs, 'id');
-                $activeTab = (is_string($this->locTab) && in_array($this->locTab, $ids, true))
-                    ? collect($locTabs)->firstWhere('id', $this->locTab)
+                $wanted = $this->activeLocationTab;
+                $activeTab = (is_string($wanted) && in_array($wanted, $ids, true))
+                    ? collect($locTabs)->firstWhere('id', $wanted)
                     : ($locTabs[0] ?? null);
             }
         @endphp
