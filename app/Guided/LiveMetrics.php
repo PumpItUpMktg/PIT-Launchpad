@@ -107,7 +107,7 @@ class LiveMetrics
      *   local: array{rank: ?int, market: ?string},
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
-     *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
+     *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, position: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   index: array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, last_crawled_at: ?string, pending: ?string},
      *   bing: array{impressions: ?int, clicks: ?int, ctr: ?float, in_bing: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   traffic: array{sessions: ?int, pending: ?string}
@@ -164,7 +164,7 @@ class LiveMetrics
      *   local: array{rank: ?int, market: ?string},
      *   series: list<array{captured_at: string, rank: ?int}>,
      *   refresh_count: int,
-     *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
+     *   gsc: array{impressions: ?int, clicks: ?int, ctr: ?float, position: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   index: array{state: ?string, label: ?string, indexed: bool, coverage_state: ?string, canonical_mismatch: bool, last_crawled_at: ?string, pending: ?string},
      *   bing: array{impressions: ?int, clicks: ?int, ctr: ?float, in_bing: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string},
      *   traffic: array{sessions: ?int, pending: ?string}
@@ -180,7 +180,7 @@ class LiveMetrics
             'local' => ['rank' => null, 'market' => null],
             'series' => [],
             'refresh_count' => 0,
-            'gsc' => ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => $refreshing],
+            'gsc' => ['impressions' => null, 'clicks' => null, 'ctr' => null, 'position' => null, 'in_google' => false, 'queries' => [], 'pending' => $refreshing],
             'index' => ['state' => null, 'label' => null, 'indexed' => false, 'coverage_state' => null, 'canonical_mismatch' => false, 'last_crawled_at' => null, 'pending' => $refreshing],
             'bing' => ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_bing' => false, 'queries' => [], 'pending' => $refreshing],
             'traffic' => ['sessions' => null, 'pending' => $refreshing],
@@ -191,13 +191,13 @@ class LiveMetrics
      * The GSC block from the primed store. No rows for a page is the honest "collecting" — the sync writes
      * a row the day a page earns its first impression.
      *
-     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
+     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, position: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
      */
     private function primedGsc(string $pageId): array
     {
         $totals = $this->primed[$pageId]['totals'] ?? null;
         if ($totals === null) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [],
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'position' => null, 'in_google' => false, 'queries' => [],
                 'pending' => 'Collecting — first data in a few days'];
         }
 
@@ -213,6 +213,10 @@ class LiveMetrics
             'impressions' => (int) $totals['impressions'],
             'clicks' => (int) $totals['clicks'],
             'ctr' => (float) $totals['ctr'],
+            // Google's own blended rank for this page: the average position across every query it was
+            // seen for, weighted by how often each was seen. Not the same thing as a tracked rank for one
+            // keyword, and labelled separately on the card for exactly that reason.
+            'position' => $totals['position'] ?? null,
             // "In Google" = the page has earned impressions, so it is indexed and appearing.
             'in_google' => (int) $totals['impressions'] > 0,
             'queries' => $queries,
@@ -366,7 +370,7 @@ class LiveMetrics
     }
 
     /**
-     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
+     * @return array{impressions: ?int, clicks: ?int, ctr: ?float, position: ?float, in_google: bool, queries: list<array{query: string, clicks: int, impressions: int, ctr: float, position: float}>, pending: ?string}
      */
     private function gscBlock(?Site $site, Content $page, bool $live = true): array
     {
@@ -377,7 +381,7 @@ class LiveMetrics
         }
 
         if ($site === null || ! $this->searchConsole->connected($site)) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [], 'pending' => 'Connect Search Console'];
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'position' => null, 'in_google' => false, 'queries' => [], 'pending' => 'Connect Search Console'];
         }
 
         // Primed but empty: connected and simply has nothing for this page yet.
@@ -388,7 +392,7 @@ class LiveMetrics
         $path = '/'.ltrim((string) $page->slug, '/');
         $stats = $live ? $this->searchConsole->pageStats($site, $path) : $this->searchConsole->pageStatsCached($site, $path);
         if ($stats === null) {
-            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'in_google' => false, 'queries' => [],
+            return ['impressions' => null, 'clicks' => null, 'ctr' => null, 'position' => null, 'in_google' => false, 'queries' => [],
                 'pending' => $live ? 'Collecting — first data in a few days' : 'Refreshing…'];
         }
 
@@ -401,7 +405,17 @@ class LiveMetrics
         // "In Google" = the page has earned Search impressions, so it is definitely indexed and
         // appearing. (A page indexed with zero impressions simply won't light up yet — we never claim
         // "not indexed", only the positive.)
-        return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(), 'in_google' => $stats->impressions > 0, 'queries' => $queries, 'pending' => null];
+        // PageStats carries no position, but each query does — so the page's blended position is the same
+        // impression-weighted average the stored rollup computes, derived here rather than left null.
+        $seen = array_sum(array_column($queries, 'impressions'));
+        $weighted = 0.0;
+        foreach ($queries as $q) {
+            $weighted += (float) $q['position'] * (int) $q['impressions'];
+        }
+
+        return ['impressions' => $stats->impressions, 'clicks' => $stats->clicks, 'ctr' => $stats->ctr(),
+            'position' => $seen > 0 ? round($weighted / $seen, 1) : null,
+            'in_google' => $stats->impressions > 0, 'queries' => $queries, 'pending' => null];
     }
 
     /**

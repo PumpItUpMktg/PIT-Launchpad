@@ -73,9 +73,21 @@
              render a row of "—" dashes for data it structurally never fetched. Index chip + actions still show. --}}
         @elseif (empty($row['lean']))
             <div class="lp-cc-metrics">
-                <span>Rank <b>{{ $row['rank'] ?? '—' }}</b>@if (($row['delta'] ?? 0) != 0)<span class="{{ $row['delta'] > 0 ? 'up' : 'down' }}"> {{ $row['delta'] > 0 ? '▲' : '▼' }}{{ abs($row['delta']) }}</span>@endif</span>
+                {{-- A tracked rank is one keyword's position, measured on purpose. When there isn't one yet
+                     the card says WHY — "pending first snapshot", "not ranking" — rather than a bare dash,
+                     which reads as a rank of zero and is the one thing this vocabulary exists to avoid. --}}
+                <span>Rank <b>{{ $row['rank'] ?? ($row['position_pending'] ?? '—') }}</b>@if (($row['delta'] ?? 0) != 0)<span class="{{ $row['delta'] > 0 ? 'up' : 'down' }}"> {{ $row['delta'] > 0 ? '▲' : '▼' }}{{ abs($row['delta']) }}</span>@endif</span>
+                {{-- Google's own blended position, from the impressions it already reports: an average
+                     across every query this page was seen for, weighted by how often. A different measure
+                     from the tracked rank above, so it carries a different name. --}}
+                @if (($row['search_position'] ?? null) !== null)
+                    <span>Search position <b>{{ number_format((float) $row['search_position'], 1) }}</b></span>
+                @endif
                 <span>Impressions <b>{{ $metricCell($row['impressions'] ?? null, $row['gsc_pending'] ?? null) }}</b></span>
                 <span>Clicks <b>{{ $metricCell($row['clicks'] ?? null, $row['gsc_pending'] ?? null) }}</b></span>
+                @if (($row['ctr'] ?? null) !== null && ($row['impressions'] ?? 0) > 0)
+                    <span>CTR <b>{{ number_format((float) $row['ctr'] * 100, 2) }}%</b></span>
+                @endif
                 <span>Sessions <b>{{ $metricCell($row['sessions'] ?? null, $row['traffic_pending'] ?? null) }}</b></span>
                 @if (! empty($row['keyword'])) <span>Target <b style="font-size:12.5px">{{ $row['keyword'] }}</b></span> @endif
             </div>
