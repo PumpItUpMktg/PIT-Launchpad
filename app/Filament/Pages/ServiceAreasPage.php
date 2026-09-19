@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
 use App\Filament\Pages\Concerns\BuildsTownPage;
+use App\GeoGrid\CoverageRunAll;
 use App\Jobs\RunCoverageScan;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
@@ -18,6 +19,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 
 /**
@@ -123,6 +125,67 @@ class ServiceAreasPage extends Page
      * (the same scan the coverage plans run), unless one is already collecting. Results land through the
      * IngestCoverageScans sweep; the card's GBP column fills as they do.
      */
+    /**
+     * What a whole-office GBP run would cost. Same plan() the run uses, so the figure beside the button is
+     * the figure that gets posted — and a keyword already collecting is excluded from both.
+     *
+     * @return array{towns: int, runnable: int, tracked: int, pending: int, requests: int, cost: float, over_ceiling: bool, ceiling: int}|null
+     */
+    #[Computed]
+    public function gbpPlan(): ?array
+    {
+        $site = $this->site();
+        $location = $site === null || $this->locationId === null ? null
+            : Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($this->locationId)->first();
+        if ($site === null || $location === null) {
+            return null;
+        }
+
+        $plan = app(CoverageRunAll::class)->plan($site, $location);
+
+        return [
+            'towns' => $plan['towns'],
+            'runnable' => count($plan['keywords']),
+            'tracked' => $plan['tracked'],
+            'pending' => $plan['pending'],
+            'requests' => $plan['requests'],
+            'cost' => $plan['cost'],
+            'over_ceiling' => $plan['over_ceiling'],
+            'ceiling' => $plan['ceiling'],
+        ];
+    }
+
+    /** Queue the GBP report for every tracked keyword at THIS office — one button per location. */
+    public function runAllGbp(): void
+    {
+        $site = $this->site();
+        $location = $site === null || $this->locationId === null ? null
+            : Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($this->locationId)->first();
+        if ($site === null || $location === null) {
+            return;
+        }
+
+        $result = app(CoverageRunAll::class)->run($site, $location);
+        unset($this->gbpPlan);
+
+        if ($result['over_ceiling']) {
+            Notification::make()->warning()->title('Not queued')
+                ->body(sprintf('%s requests is over the ceiling — narrow the tracked keywords or raise launchpad.geo_grid.request_ceiling.', number_format($result['requests'])))->send();
+
+            return;
+        }
+        if ($result['queued'] === 0) {
+            Notification::make()->warning()->title('Nothing to queue')
+                ->body('Every tracked keyword here is already collecting.')->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title(sprintf('Posting %s GBP report(s) · %s requests (~$%s)', number_format($result['queued']), number_format($result['requests']), number_format($result['cost'], 2)))
+            ->body('One Maps search per town per keyword; each card fills in as results land.')->send();
+    }
+
     public function runGbp(string $keywordId): void
     {
         $site = $this->site();

@@ -11,11 +11,13 @@ use App\Models\TownRankScan;
 use App\Operator\ActiveTenant;
 use App\TownRank\TownRankBoard;
 use App\TownRank\TownRankKeywords;
+use App\TownRank\TownRankSweep;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 
 /**
@@ -135,6 +137,70 @@ class TownRankPage extends Page
     }
 
     /** "Run ranking report" on a card: post both query modes for the keyword (queued, collected within minutes). */
+    /**
+     * What a sitewide run would cost, computed the same way the run itself computes it — one plan(), so
+     * the number beside the button is the number that gets spent.
+     *
+     * The set is what is DUE, not every tracked keyword: a keyword scanned inside the cadence window has
+     * its answer already, and re-posting it buys the same data twice. When nothing is due the button says
+     * so rather than offering a run that would spend for no new information.
+     *
+     * @return array{towns: int, due: int, tracked: int, requests: int, cost: float, over_ceiling: bool, ceiling: int}|null
+     */
+    #[Computed]
+    public function sweepPlan(): ?array
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return null;
+        }
+
+        $plan = app(TownRankSweep::class)->plan($site);
+        $tracked = Keyword::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where(fn ($q) => $q->where('is_grid_keyword', true)->orWhere('track_town_rank', true))
+            ->count();
+
+        return [
+            'towns' => $plan['towns'],
+            'due' => count($plan['due']),
+            'tracked' => $tracked,
+            'requests' => $plan['requests'],
+            'cost' => $plan['cost'],
+            'over_ceiling' => $plan['over_ceiling'],
+            'ceiling' => $plan['ceiling'],
+        ];
+    }
+
+    /** Post every due (keyword × mode) pair across the whole site — the manual form of the Monday sweep. */
+    public function runAllKeywords(): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+
+        $result = app(TownRankSweep::class)->run($site);
+        unset($this->sweepPlan);
+
+        if ($result['over_ceiling']) {
+            Notification::make()->warning()->title('Not queued')
+                ->body(sprintf('%s requests is over the site ceiling — narrow the tracked keywords or raise launchpad.town_rank.request_ceiling.', number_format($result['requests'])))->send();
+
+            return;
+        }
+        if ($result['posted'] === 0) {
+            Notification::make()->warning()->title('Nothing due')
+                ->body('Every tracked keyword has been scanned inside the cadence window. Run a single card to force one.')->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title(sprintf('Posting %s scan(s) · %s requests', number_format($result['posted']), number_format($result['requests'])))
+            ->body('Results collect over the next few minutes; each card updates as they land.')->send();
+    }
+
     public function runKeyword(string $id): void
     {
         $site = $this->site();

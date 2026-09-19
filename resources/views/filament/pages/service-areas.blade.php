@@ -92,6 +92,9 @@
     .sva .s-legend b { color:inherit; font-variant-numeric:tabular-nums; }
     .sva .s-when { font-size:11px; color:var(--s-faint); margin-top:4px; }
     .sva .s-runrow { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:11.5px; color:var(--s-faint); flex-wrap:wrap; }
+    .sva .s-runall { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; font-size:11.5px; color:var(--s-muted); }
+    .sva .s-runall button { font-size:12px; border:1px solid #2563eb; color:#2563eb; background:transparent; border-radius:8px; padding:6px 12px; cursor:pointer; font-weight:600; }
+    .sva .s-runall button:disabled { opacity:.5; cursor:default; }
     .sva .s-run { font-size:12px; border:1px solid #2563eb; color:#2563eb; background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; }
     .sva .s-run:disabled { opacity:.55; cursor:default; }
     .sva .s-metrics { border:1px dashed var(--s-line); border-radius:12px; padding:10px 12px; background:var(--s-surface2); }
@@ -137,6 +140,26 @@
                 <span class="s-county">no counties assigned</span>
             @endforelse
         </div>
+        {{-- One button per office: the GBP report for every tracked keyword here, priced before it spends.
+             Coverage is one request per town PER KEYWORD, so the total is worth seeing before clicking. --}}
+        @php($gbp = $this->gbpPlan)
+        @if ($gbp !== null && $gbp['tracked'] > 0)
+            <div class="s-runall">
+                <button type="button" wire:click="runAllGbp" wire:loading.attr="disabled" wire:target="runAllGbp"
+                        @disabled($gbp['runnable'] === 0 || $gbp['over_ceiling'])
+                        wire:confirm="Post {{ number_format($gbp['requests']) }} DataForSEO Maps requests (~${{ number_format($gbp['cost'], 2) }}) for {{ $area['location']['name'] }}? One search per town for each of {{ $gbp['runnable'] }} keywords.">
+                    <span wire:loading.remove wire:target="runAllGbp">Run all GBP reports</span>
+                    <span wire:loading wire:target="runAllGbp">Posting…</span>
+                </button>
+                @if ($gbp['over_ceiling'])
+                    <span style="color:#c0392b">{{ number_format($gbp['requests']) }} requests is over the {{ number_format($gbp['ceiling']) }} ceiling — narrow the tracked keywords.</span>
+                @elseif ($gbp['runnable'] === 0)
+                    <span>All {{ $gbp['tracked'] }} keywords here are already collecting.</span>
+                @else
+                    <span>{{ $gbp['runnable'] }} of {{ $gbp['tracked'] }} keywords · {{ number_format($gbp['towns']) }} towns · <b>{{ number_format($gbp['requests']) }} requests</b> · ~${{ number_format($gbp['cost'], 2) }}@if ($gbp['pending'] > 0) · {{ $gbp['pending'] }} already collecting @endif</span>
+                @endif
+            </div>
+        @endif
 
         @if ($area['cards'] === [])
             <div class="s-empty">No keywords tracked for Town Rank yet — add them on the Town Rank page.</div>

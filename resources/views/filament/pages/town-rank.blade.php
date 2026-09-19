@@ -43,6 +43,9 @@
     .trk .t-dot { stroke:rgba(0,0,0,.25); stroke-width:.4; cursor:pointer; }
     .trk .t-dot.sel { stroke:#2563eb; stroke-width:1.2; }
     .trk .t-dot.nopage { stroke-dasharray:1 .6; }
+    .trk .t-runall { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:-4px 0 14px; }
+    .trk .t-runall button { font-size:12px; border:1px solid #2563eb; color:#2563eb; background:transparent; border-radius:8px; padding:6px 12px; cursor:pointer; font-weight:600; }
+    .trk .t-runall button:disabled { opacity:.5; cursor:default; }
     .trk .t-legend { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--t-muted); margin-top:8px; }
     .trk .t-legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:middle; }
     .trk .t-panel { border:1px solid var(--t-line); border-radius:14px; padding:14px; background:var(--t-surface); }
@@ -101,6 +104,26 @@
             <button type="button" wire:click="addKeyword" wire:loading.attr="disabled" wire:target="addKeyword">Add keyword</button>
             <span class="t-note" style="margin:0">A tracked keyword gets a card, a Run button, and joins the Monday sweep.</span>
         </div>
+        {{-- Sitewide run: every keyword DUE for a re-scan, priced before it spends. The count and cost come
+             from the same plan the run itself uses, so what is agreed to is what is posted. --}}
+        @php($sweep = $this->sweepPlan)
+        @if ($sweep !== null && $sweep['tracked'] > 0)
+            <div class="t-runall">
+                <button type="button" wire:click="runAllKeywords" wire:loading.attr="disabled" wire:target="runAllKeywords"
+                        @disabled($sweep['due'] === 0 || $sweep['over_ceiling'])
+                        wire:confirm="Post {{ number_format($sweep['requests']) }} DataForSEO requests (~${{ number_format($sweep['cost'], 2) }}) across {{ $sweep['towns'] }} towns? This runs every keyword due for a re-scan, both modes.">
+                    <span wire:loading.remove wire:target="runAllKeywords">Run all website rankings</span>
+                    <span wire:loading wire:target="runAllKeywords">Posting…</span>
+                </button>
+                @if ($sweep['over_ceiling'])
+                    <span class="t-note" style="margin:0;color:#c0392b">{{ number_format($sweep['requests']) }} requests is over the {{ number_format($sweep['ceiling']) }} ceiling — narrow the tracked keywords.</span>
+                @elseif ($sweep['due'] === 0)
+                    <span class="t-note" style="margin:0">All {{ $sweep['tracked'] }} keywords scanned inside the cadence window — nothing due.</span>
+                @else
+                    <span class="t-note" style="margin:0">{{ $sweep['due'] }} of {{ $sweep['tracked'] * 2 }} keyword-modes due · {{ $sweep['towns'] }} towns · <b>{{ number_format($sweep['requests']) }} requests</b> · ~${{ number_format($sweep['cost'], 2) }}</span>
+                @endif
+            </div>
+        @endif
         @if ($cards === [])
             <div class="t-empty">No keywords tracked for Town Rank yet. Add one above, or run <code>launchpad:town-rank {site} --keyword="…" --scan --yes</code>.</div>
         @else
