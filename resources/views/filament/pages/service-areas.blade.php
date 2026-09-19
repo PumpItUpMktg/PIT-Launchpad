@@ -49,6 +49,15 @@
     .dark .sva .s-shape { stroke:rgba(0,0,0,.45); }
     .sva .s-shape:hover { stroke:#2563eb; stroke-width:.9; }
     .sva .s-shape.sel { stroke:#2563eb; stroke-width:1.2; }
+    /* A town we have a page for, hatched OVER its rank fill rather than recoloured. Rank and coverage are
+       independent facts — "where do we stand here" and "do we even have a page here" — and the fill is
+       already spoken for by the first. The overlay never takes a click; the shape beneath still does. */
+    .sva .s-haspage { pointer-events:none; }
+    /* The legend swatch shows the hatch itself over a neutral fill — a key that says "hatched" in words
+       makes the reader hunt for what hatching looks like. */
+    .sva .s-key { display:inline-flex; align-items:center; gap:5px; }
+    .sva .s-key i { width:14px; height:10px; border-radius:2px; background:#9ca3af;
+                    background-image:repeating-linear-gradient(45deg, rgba(255,255,255,.8) 0 1.4px, transparent 1.4px 4px); }
     /* The map-pack position, drawn into the town it belongs to: white numerals carrying a dark outline via
        paint-order, so they stay readable on a green, amber, red or grey fill in either theme. */
     .sva .s-rank { font-size:2.6px; font-weight:700; fill:#fff; stroke:rgba(0,0,0,.65); stroke-width:.55px;
@@ -142,15 +151,25 @@
                                     @php($r = $dotR($card['web']['markers']))
                                     <div class="s-mapwrap">
                                         <svg class="s-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Website rank by town">
+                                            <defs>
+                                                <pattern id="hp-web-{{ $card['keyword_id'] }}" width="2.4" height="2.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                                                    <line x1="0" y1="0" x2="0" y2="2.4" stroke="#fff" stroke-width=".6" stroke-opacity=".75" />
+                                                </pattern>
+                                            </defs>
                                             @foreach ($card['web']['markers'] as $m)
                                                 @php($sel = $keywordId === $card['keyword_id'] && $townId === $m['id'])
                                                 @if (isset($area['town_paths'][$m['id']]))
                                                     {{-- The town's own boundary, coloured by its rank. --}}
                                                     @foreach ($area['town_paths'][$m['id']] as $d)
-                                                        <path class="s-shape {{ $sel ? 'sel' : '' }}" d="{{ $d }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}</title></path>
+                                                        <path class="s-shape {{ $sel ? 'sel' : '' }}" d="{{ $d }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}{{ $m['page'] ? '' : ' · no page' }}</title></path>
                                                     @endforeach
+                                                    @if ($m['page'])
+                                                        @foreach ($area['town_paths'][$m['id']] as $d)
+                                                            <path class="s-haspage" d="{{ $d }}" fill="url(#hp-web-{{ $card['keyword_id'] }})" />
+                                                        @endforeach
+                                                    @endif
                                                 @else
-                                                    <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $sel ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}</title></circle>
+                                                    <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $sel ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}{{ $m['page'] ? '' : ' · no page' }}</title></circle>
                                                 @endif
                                             @endforeach
                                             @foreach ($area['outlines'] as $o)
@@ -168,6 +187,7 @@
                                         <span>not found <b style="color:#9ca3af">{{ $s['not_found'] }}</b></span>
                                         @if (($s['unreadable'] ?? 0) > 0)<span>no data <b style="color:#7c3aed">{{ $s['unreadable'] }}</b></span>@endif
                                         @if ($s['pending'] > 0)<span style="color:#2563eb">collecting {{ $s['pending'] }}</span>@endif
+                                        <span class="s-key"><i></i>has a page</span>
                                     </div>
                                     <div class="s-when">
                                         {{ $card['web']['status'] }} · {{ $when($card['web']['scanned_at']) }}
@@ -189,14 +209,24 @@
                                     @php($r = $dotR($card['gbp']['markers']))
                                     <div class="s-mapwrap">
                                         <svg class="s-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="GBP map-pack rank by town">
+                                            <defs>
+                                                <pattern id="hp-gbp-{{ $card['keyword_id'] }}" width="2.4" height="2.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                                                    <line x1="0" y1="0" x2="0" y2="2.4" stroke="#fff" stroke-width=".6" stroke-opacity=".75" />
+                                                </pattern>
+                                            </defs>
                                             @foreach ($card['gbp']['markers'] as $m)
                                                 @php($sel = $keywordId === $card['keyword_id'] && $townId === $m['id'])
                                                 @if (isset($area['town_paths'][$m['id']]))
                                                     @foreach ($area['town_paths'][$m['id']] as $d)
-                                                        <path class="s-shape {{ $sel ? 'sel' : '' }}" d="{{ $d }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}</title></path>
+                                                        <path class="s-shape {{ $sel ? 'sel' : '' }}" d="{{ $d }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}{{ $m['page'] ? '' : ' · no page' }}</title></path>
                                                     @endforeach
+                                                    @if ($m['page'])
+                                                        @foreach ($area['town_paths'][$m['id']] as $d)
+                                                            <path class="s-haspage" d="{{ $d }}" fill="url(#hp-gbp-{{ $card['keyword_id'] }})" />
+                                                        @endforeach
+                                                    @endif
                                                 @else
-                                                    <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $sel ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}</title></circle>
+                                                    <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $sel ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'absent' }}{{ $m['page'] ? '' : ' · no page' }}</title></circle>
                                                 @endif
                                             @endforeach
                                             @foreach ($area['outlines'] as $o)
@@ -221,6 +251,7 @@
                                         <span>absent <b style="color:#9ca3af">{{ $g['absent'] }}</b></span>
                                         @if (($g['unreadable'] ?? 0) > 0)<span>no data <b style="color:#7c3aed">{{ $g['unreadable'] }}</b></span>@endif
                                         @if ($g['pending'] > 0)<span style="color:#2563eb">collecting {{ $g['pending'] }}</span>@endif
+                                        <span class="s-key"><i></i>has a page</span>
                                     </div>
                                     <div class="s-when">
                                         {{ $card['gbp']['status'] }} · {{ $when($card['gbp']['scanned_at']) }}
