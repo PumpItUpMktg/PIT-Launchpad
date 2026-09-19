@@ -15,6 +15,11 @@
         default => '#'.(int) $rank,
     };
     $levelColor = fn (string $level): string => match ($level) { 'do' => '#c0392b', 'watch' => '#ca8a04', default => '#15803d' };
+    // Each lane is scanned on its own schedule, so one town's three numbers can be days apart. A rank
+    // with no date beside it reads as current, which is the one thing it may not be.
+    $measured = fn (?string $at): string => $at !== null
+        ? \Illuminate\Support\Carbon::parse($at)->diffForHumans()
+        : 'never measured';
 @endphp
 
 <style>
@@ -70,6 +75,7 @@
     .sva .s-krow { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--s-line); }
     .sva .s-krow:last-child { border-bottom:none; }
     .sva .s-krow b { font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .sva .s-krow small { color:var(--s-faint); font-size:11px; margin-left:6px; white-space:nowrap; }
     .sva .s-act { border-left:3px solid; padding:6px 10px; margin-top:8px; font-size:12.5px; background:var(--s-surface); border-radius:0 8px 8px 0; }
     .sva .s-act b { display:block; }
     .sva .s-act span { color:var(--s-muted); }
@@ -294,9 +300,9 @@
                                 <div class="sub">{{ $town['population'] > 0 ? 'pop '.number_format($town['population']).' · ' : '' }}{{ $town['page_state'] === 'anchored' ? 'page: '.$town['page_url'] : ($town['page_state'] === 'slug' ? 'page found by slug (GEOID differs): '.$town['page_url'] : 'no page') }}</div>
                                 <div class="s-towncols">
                                     <div>
-                                        <div class="s-krow"><span>Town search</span><b>{{ $rankCell($town['town_query']['rank'], $town['town_query']['state']) ?: '—' }}{{ $town['town_query']['prev_rank'] !== null && $town['town_query']['change'] !== null ? ' (was #'.$town['town_query']['prev_rank'].')' : '' }}</b></div>
-                                        <div class="s-krow"><span>Searched from town</span><b>{{ $rankCell($town['local']['rank'], $town['local']['state']) ?: '—' }}{{ $town['local']['prev_rank'] !== null && $town['local']['change'] !== null ? ' (was #'.$town['local']['prev_rank'].')' : '' }}</b></div>
-                                        <div class="s-krow"><span>GBP map pack</span><b>{{ $town['map_rank'] !== null ? '#'.$town['map_rank'] : ($town['map_scanned'] ? 'absent' : '—') }}</b></div>
+                                        <div class="s-krow"><span>Town search <small>{{ $measured($town['town_query']['measured_at']) }}</small></span><b>{{ $rankCell($town['town_query']['rank'], $town['town_query']['state']) ?: '—' }}{{ $town['town_query']['prev_rank'] !== null && $town['town_query']['change'] !== null ? ' (was #'.$town['town_query']['prev_rank'].')' : '' }}</b></div>
+                                        <div class="s-krow"><span>Searched from town <small>{{ $measured($town['local']['measured_at']) }}</small></span><b>{{ $rankCell($town['local']['rank'], $town['local']['state']) ?: '—' }}{{ $town['local']['prev_rank'] !== null && $town['local']['change'] !== null ? ' (was #'.$town['local']['prev_rank'].')' : '' }}</b></div>
+                                        <div class="s-krow"><span>GBP map pack <small>{{ $measured($town['map_measured_at']) }}</small></span><b>{{ $town['map_rank'] !== null ? '#'.$town['map_rank'] : ($town['map_scanned'] ? 'absent' : '—') }}</b></div>
                                         @if ($town['town_query']['competitors'] !== [])
                                             <h6 class="s-h">Above you for the town search</h6>
                                             <ol class="s-comp">

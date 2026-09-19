@@ -381,6 +381,9 @@ final class TownRankBoard
                 'prev_rank' => $row["{$prefix}_prev_rank"] !== null ? (int) $row["{$prefix}_prev_rank"] : null,
                 'change' => is_string($row["{$prefix}_change"]) ? $row["{$prefix}_change"] : null,
                 'competitors' => $competitors,
+                // When THIS town was read, not when the scan was started: a scan collects incrementally,
+                // so a rank on screen can be hours older than the scan it belongs to.
+                'measured_at' => $point?->collected_at?->toIso8601String(),
             ];
         }
 
@@ -399,6 +402,7 @@ final class TownRankBoard
             'town_query' => $modes[TownRankScan::MODE_TOWN_QUERY],
             'map_rank' => $row['map_rank'],
             'map_scanned' => $mapScanned,
+            'map_measured_at' => $row['map_measured_at']?->toIso8601String(),
         ];
         $detail['actions'] = TownDiagnosis::for($detail);
 

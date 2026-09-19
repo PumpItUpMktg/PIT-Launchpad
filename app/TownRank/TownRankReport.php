@@ -8,6 +8,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
+use Illuminate\Support\Carbon;
 
 /**
  * The town-rank read-model (§ Town Rank): for one (site × keyword), the latest scan per mode joined onto the
@@ -26,7 +27,7 @@ final class TownRankReport
      * @return array{
      *     keyword: string,
      *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>,
-     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, map_rank: int|null}>,
+     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, map_rank: int|null, map_measured_at: Carbon|null}>,
      *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
      * }
      */
@@ -81,7 +82,8 @@ final class TownRankReport
                 'population' => $town['population'],
                 'page_url' => $town['page_url'],
                 'page_match' => $town['page_match'],
-                'map_rank' => $mapRanks[$town['coverage_area_id']] ?? null,
+                'map_rank' => $mapRanks[$town['coverage_area_id']]['rank'] ?? null,
+                'map_measured_at' => $mapRanks[$town['coverage_area_id']]['measured_at'] ?? null,
             ];
             foreach (TownRankScan::MODES as $mode) {
                 $prefix = $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town';
@@ -162,7 +164,7 @@ final class TownRankReport
      * location — a town belongs to the scan of whichever location serves it; the newest wins).
      *
      * @param  list<array<string, mixed>>  $towns  the site's town list, to link each scan point to its town
-     * @return array<string, int|null> coverage_area_id => rank
+     * @return array<string, array{rank: int|null, measured_at: Carbon|null}> keyed by coverage_area_id
      */
     private function mapPackRanks(Site $site, Keyword $keyword, array $towns): array
     {
@@ -177,7 +179,10 @@ final class TownRankReport
         foreach ($scans as $scan) {
             foreach (TownPointLinks::byTown($towns, $scan->points) as $areaId => $point) {
                 if (! array_key_exists($areaId, $ranks)) {
-                    $ranks[$areaId] = $point->rank;
+                    // The POINT's own collected_at, not the scan's scanned_at: a coverage scan collects
+                    // incrementally over several sweeps, so towns in one scan are measured minutes or
+                    // hours apart. The town's own read is the honest answer to "when is this from".
+                    $ranks[$areaId] = ['rank' => $point->rank, 'measured_at' => $point->collected_at];
                 }
             }
         }
