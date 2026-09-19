@@ -1,10 +1,12 @@
 <?php
 
+use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\ServiceAreasPage;
 use App\Integrations\Census\MockMunicipalityGazetteer;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Jobs\RunCoverageScan;
+use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
@@ -108,4 +110,56 @@ it('queues a GBP report (coverage scan) for the area\'s location × keyword from
         ->assertSee('Collecting…')
         ->call('runGbp', $kw->id);
     Queue::assertPushed(RunCoverageScan::class, 1);
+});
+
+/**
+ * Rank and coverage are two independent facts about a town, and the map has to carry both: the fill says
+ * where we stand, the hatch says whether a page exists there at all. A town can rank nowhere BECAUSE it
+ * has no page, and colour alone can never show that — every unranked town is the same grey whether it is
+ * a gap in the plan or a page that is losing.
+ */
+it('hatches the towns that have a page and says so on the ones that do not', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer(polygons: [
+        '34041' => [[['lat' => 40.95, 'lng' => -74.95], ['lat' => 40.95, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.95]]],
+        '3404128590' => [[['lat' => 40.87, 'lng' => -74.85], ['lat' => 40.87, 'lng' => -74.81], ['lat' => 40.83, 'lng' => -74.81], ['lat' => 40.83, 'lng' => -74.85]]],
+        '3404128591' => [[['lat' => 40.92, 'lng' => -74.90], ['lat' => 40.92, 'lng' => -74.86], ['lat' => 40.88, 'lng' => -74.86], ['lat' => 40.88, 'lng' => -74.90]]],
+    ]));
+
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    JobCounty::factory()->create(['county_geoid' => '34041', 'name' => 'Warren', 'state' => 'NJ']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office', 'lat' => 40.85, 'lng' => -74.83, 'home_county_geoid' => '34041', 'county_geoids' => []]);
+
+    $covered = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown', 'state' => 'NJ', 'geo_id' => '3404128590', 'population' => 10000, 'lat' => 40.85, 'lng' => -74.83, 'source_location_ids' => []]);
+    $bare = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Allamuchy', 'state' => 'NJ', 'geo_id' => '3404128591', 'population' => 4000, 'lat' => 40.90, 'lng' => -74.88, 'source_location_ids' => []]);
+
+    // Only the first town has a published page — matched on GEOID, the anchor the whole chain now uses.
+    Content::factory()->page()->published()->create([
+        'site_id' => $site->id, 'page_type' => PageType::Location,
+        'geo_id' => '3404128590', 'slug' => 'hackettstown-nj', 'title' => 'Hackettstown, NJ',
+    ]);
+
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service', 'track_town_rank' => true]);
+    $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'complete', 'points_count' => 2, 'found_count' => 1, 'scanned_at' => now()]);
+    foreach ([[$covered, 'Hackettstown', 40.85, -74.83, 2], [$bare, 'Allamuchy', 40.90, -74.88, null]] as [$area, $label, $lat, $lng, $rank]) {
+        TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $area->id,
+            'label' => $label, 'state' => 'NJ', 'lat' => $lat, 'lng' => $lng, 'query' => 'q', 'rank' => $rank, 'collected_at' => now()]);
+    }
+
+    $html = Livewire::test(ServiceAreasPage::class)
+        ->set('siteId', $site->id)
+        ->call('openArea', $loc->id)
+        ->assertOk()
+        // The hatch is defined once per map and keyed to its card, so two cards on a page cannot collide.
+        ->assertSeeHtml('<pattern id="hp-web-'.$kw->id.'"')
+        ->assertSeeHtml('fill="url(#hp-web-'.$kw->id.')"')
+        // Hover tells the truth even where the hatch is too small to read.
+        ->assertSeeHtml('Allamuchy, NJ — not found · no page')
+        ->assertDontSeeHtml('Hackettstown, NJ — #2 · no page')
+        ->html();
+
+    // Exactly one town is hatched: the one with a page. The overlay never swallows the click that
+    // selects a town, so the shape beneath it stays the only interactive element.
+    expect(substr_count($html, 'class="s-haspage"'))->toBe(1)
+        ->and($html)->toContain('.sva .s-haspage { pointer-events:none; }');
 });
