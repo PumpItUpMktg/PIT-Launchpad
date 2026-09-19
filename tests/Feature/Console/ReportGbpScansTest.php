@@ -90,3 +90,42 @@ it('filters to only the stalled scans on demand', function () {
         ->expectsOutputToContain('No coverage scans match')
         ->assertSuccessful();
 });
+
+/**
+ * Ranks are the evidence that a scan was read, not the collection stamp alone. Real scans exist with
+ * ranks recorded and no `collected_at` — an older write path, or a run interrupted between writing the
+ * rank and stamping the row. Calling those "never collected" sends an operator to re-run a report whose
+ * answers are already sitting in the table, and to pay for it twice.
+ */
+it('does not call a scan stalled when it has ranks but no collection stamp', function () {
+    $f = gbpScanSite();
+    gbpScan($f, 'complete', [['task' => 'abc', 'rank' => 3], ['task' => 'def', 'rank' => 7]]);
+
+    $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG'])
+        ->expectsOutputToContain('ranks recorded without a collection stamp')
+        ->doesntExpectOutputToContain('POSTED BUT NEVER COLLECTED')
+        ->assertSuccessful();
+});
+
+it('leaves a scan with ranks out of the stalled filter', function () {
+    $f = gbpScanSite();
+    gbpScan($f, 'complete', [['task' => 'abc', 'rank' => 3]]);
+
+    $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG', '--stalled' => true])
+        ->expectsOutputToContain('No coverage scans match')
+        ->assertSuccessful();
+});
+
+/** The brand repeats on every location name; the city is the only part that identifies the row. */
+it('labels each scan by its location city rather than the brand-prefixed name', function () {
+    $f = gbpScanSite();
+    $f['location']->forceFill(['name' => 'Sump Pump Gurus | Downingtown', 'address_components' => [
+        ['types' => ['locality'], 'long_name' => 'Downingtown', 'short_name' => 'Downingtown'],
+        ['types' => ['administrative_area_level_1'], 'long_name' => 'Pennsylvania', 'short_name' => 'PA'],
+    ]])->save();
+    gbpScan($f, 'complete', [['task' => 'abc', 'collected' => true, 'rank' => 1]]);
+
+    $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG'])
+        ->expectsOutputToContain('Downingtown, PA')
+        ->assertSuccessful();
+});

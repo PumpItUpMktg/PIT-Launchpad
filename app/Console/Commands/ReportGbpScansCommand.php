@@ -62,7 +62,14 @@ class ReportGbpScansCommand extends Command
             // Plain name maps rather than model collections: a scan outlives the keyword or location it
             // was run for, and a missing one should read as "unknown", never explode on a null model.
             $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()
-                ->mapWithKeys(fn (Location $l): array => [(string) $l->id => trim((string) $l->name)])->all();
+                ->mapWithKeys(function (Location $l): array {
+                    // Location NAMES carry the brand ("Sump Pump Gurus | Downingtown"), which is the same
+                    // on every row and crowds out the only part that differs. The city is the identity.
+                    ['city' => $city, 'state' => $state] = $l->cityState();
+                    $label = trim($city) !== '' ? trim($city).(trim($state) !== '' ? ', '.trim($state) : '') : trim((string) $l->name);
+
+                    return [(string) $l->id => $label];
+                })->all();
             $keywords = Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()
                 ->mapWithKeys(fn (Keyword $k): array => [(string) $k->id => trim((string) $k->query)])->all();
 
@@ -79,9 +86,14 @@ class ReportGbpScansCommand extends Command
                 $ranked = $points->filter(fn ($p): bool => $p->rank !== null)->count();
                 $unreadable = $points->filter(fn ($p): bool => $p->read_error !== null)->count();
                 $posted = $points->filter(fn ($p): bool => $p->provider_task_id !== null)->count();
-                // Posted to the provider and never read back: the collector is not running. A scan that was
-                // never posted at all is a different fault and says so separately.
-                $stalled = $collected === 0 && $posted > 0;
+                // Posted to the provider and never read back: the collector is not running.
+                //
+                // Ranks are the evidence, not collected_at alone. Real scans exist with ranks recorded and
+                // no collection stamp — an older write path, or a run interrupted between the two — and
+                // calling those "never collected" sends an operator to re-run a report whose answers are
+                // already in the table. A scan that was never POSTED at all is a different fault again.
+                $stalled = $collected === 0 && $ranked === 0 && $posted > 0;
+                $unstamped = $collected === 0 && $ranked > 0;
                 if ($stalledOnly && ! $stalled) {
                     continue;
                 }
@@ -97,6 +109,8 @@ class ReportGbpScansCommand extends Command
                     $total, $collected, $ranked, $unreadable, $posted, $scan->id);
                 if ($stalled) {
                     $lines[] = '      <fg=yellow>POSTED BUT NEVER COLLECTED — the IngestCoverageScans sweep is not running. Re-running the report will not help.</>';
+                } elseif ($unstamped) {
+                    $lines[] = '      <fg=cyan>ranks recorded without a collection stamp — the data is here; only the marker is missing.</>';
                 } elseif ($total > 0 && $posted === 0) {
                     $lines[] = '      <fg=red>NOTHING POSTED — the scan row exists but no provider task was created for any town.</>';
                 }
