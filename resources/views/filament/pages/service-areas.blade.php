@@ -142,7 +142,7 @@
         </div>
         {{-- One button per office: the GBP report for every tracked keyword here, priced before it spends.
              Coverage is one request per town PER KEYWORD, so the total is worth seeing before clicking. --}}
-        @php($gbp = $this->gbpPlan)
+        @php $gbp = $this->gbpPlan; @endphp
         @if ($gbp !== null && $gbp['tracked'] > 0)
             <div class="s-runall">
                 <button type="button" wire:click="runAllGbp" wire:loading.attr="disabled" wire:target="runAllGbp"
