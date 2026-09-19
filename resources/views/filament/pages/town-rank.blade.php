@@ -106,22 +106,32 @@
         </div>
         {{-- Sitewide run: every keyword DUE for a re-scan, priced before it spends. The count and cost come
              from the same plan the run itself uses, so what is agreed to is what is posted. --}}
-        @php($sweep = $this->sweepPlan)
+        @php $sweep = $this->sweepPlan; @endphp
         @if ($sweep !== null && $sweep['tracked'] > 0)
             <div class="t-runall">
                 <button type="button" wire:click="runAllKeywords" wire:loading.attr="disabled" wire:target="runAllKeywords"
-                        @disabled($sweep['due'] === 0 || $sweep['over_ceiling'])
-                        wire:confirm="Post {{ number_format($sweep['requests']) }} DataForSEO requests (~${{ number_format($sweep['cost'], 2) }}) across {{ $sweep['towns'] }} towns? This runs every keyword due for a re-scan, both modes.">
+                        @disabled($sweep['runnable'] === 0)
+                        wire:confirm="Queue {{ $sweep['runnable'] }} keyword(s) — {{ number_format($sweep['requests']) }} DataForSEO requests (~${{ number_format($sweep['cost'], 2) }}) across {{ number_format($sweep['towns']) }} towns? One job per keyword; a scan covers the whole site, so this runs once for every area at the same time.">
                     <span wire:loading.remove wire:target="runAllKeywords">Run all website rankings</span>
-                    <span wire:loading wire:target="runAllKeywords">Posting…</span>
+                    <span wire:loading wire:target="runAllKeywords">Queueing…</span>
                 </button>
-                @if ($sweep['over_ceiling'])
-                    <span class="t-note" style="margin:0;color:#c0392b">{{ number_format($sweep['requests']) }} requests is over the {{ number_format($sweep['ceiling']) }} ceiling — narrow the tracked keywords.</span>
-                @elseif ($sweep['due'] === 0)
-                    <span class="t-note" style="margin:0">All {{ $sweep['tracked'] }} keywords scanned inside the cadence window — nothing due.</span>
-                @else
-                    <span class="t-note" style="margin:0">{{ $sweep['due'] }} of {{ $sweep['tracked'] * 2 }} keyword-modes due · {{ $sweep['towns'] }} towns · <b>{{ number_format($sweep['requests']) }} requests</b> · ~${{ number_format($sweep['cost'], 2) }}</span>
-                @endif
+                @php
+                    // Built here rather than as inline conditionals: the note is one sentence with two
+                    // optional clauses, and Blade directives spliced mid-sentence compile badly.
+                    $bits = [];
+                    if ($sweep['pending'] > 0) { $bits[] = $sweep['pending'].' already collecting'; }
+                    if ($sweep['blocked'] > 0) { $bits[] = $sweep['blocked'].' over the request ceiling'; }
+                    $note = $sweep['runnable'] === 0
+                        ? 'All '.$sweep['tracked'].' tracked keywords are already collecting or refused by the request ceiling.'
+                        : $sweep['runnable'].' of '.$sweep['tracked'].' keywords · '.number_format($sweep['towns']).' towns'
+                            .($bits === [] ? '' : ' · '.implode(' · ', $bits));
+                @endphp
+                <span class="t-note" style="margin:0">
+                    {{ $note }}
+                    @if ($sweep['runnable'] > 0)
+                        · <b>{{ number_format($sweep['requests']) }} requests</b> · ~${{ number_format($sweep['cost'], 2) }}
+                    @endif
+                </span>
             </div>
         @endif
         @if ($cards === [])

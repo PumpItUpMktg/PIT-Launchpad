@@ -11,7 +11,7 @@ use App\Models\TownRankScan;
 use App\Operator\ActiveTenant;
 use App\TownRank\TownRankBoard;
 use App\TownRank\TownRankKeywords;
-use App\TownRank\TownRankSweep;
+use App\TownRank\TownRankRunAll;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -141,11 +141,10 @@ class TownRankPage extends Page
      * What a sitewide run would cost, computed the same way the run itself computes it — one plan(), so
      * the number beside the button is the number that gets spent.
      *
-     * The set is what is DUE, not every tracked keyword: a keyword scanned inside the cadence window has
-     * its answer already, and re-posting it buys the same data twice. When nothing is due the button says
-     * so rather than offering a run that would spend for no new information.
+     * A keyword already collecting is excluded from both, so an in-flight answer is never bought twice,
+     * and one refused by the per-keyword request ceiling is counted apart rather than silently dropped.
      *
-     * @return array{towns: int, due: int, tracked: int, requests: int, cost: float, over_ceiling: bool, ceiling: int}|null
+     * @return array{towns: int, runnable: int, tracked: int, pending: int, blocked: int, requests: int, cost: float}|null
      */
     #[Computed]
     public function sweepPlan(): ?array
@@ -155,24 +154,25 @@ class TownRankPage extends Page
             return null;
         }
 
-        $plan = app(TownRankSweep::class)->plan($site);
-        $tracked = Keyword::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where(fn ($q) => $q->where('is_grid_keyword', true)->orWhere('track_town_rank', true))
-            ->count();
+        $plan = app(TownRankRunAll::class)->plan($site);
 
         return [
             'towns' => $plan['towns'],
-            'due' => count($plan['due']),
-            'tracked' => $tracked,
+            'runnable' => count($plan['runnable']),
+            'tracked' => $plan['tracked'],
+            'pending' => $plan['pending'],
+            'blocked' => $plan['blocked'],
             'requests' => $plan['requests'],
             'cost' => $plan['cost'],
-            'over_ceiling' => $plan['over_ceiling'],
-            'ceiling' => $plan['ceiling'],
         ];
     }
 
-    /** Post every due (keyword × mode) pair across the whole site — the manual form of the Monday sweep. */
+    /**
+     * Queue the website rankings for every tracked keyword — one job per keyword, never posted inline.
+     *
+     * Each keyword's scan covers the site's WHOLE town list, so this runs once for the site rather than
+     * once per office: running it per area would re-scan every shared town again for each area.
+     */
     public function runAllKeywords(): void
     {
         $site = $this->site();
@@ -180,25 +180,19 @@ class TownRankPage extends Page
             return;
         }
 
-        $result = app(TownRankSweep::class)->run($site);
+        $result = app(TownRankRunAll::class)->run($site);
         unset($this->sweepPlan);
 
-        if ($result['over_ceiling']) {
-            Notification::make()->warning()->title('Not queued')
-                ->body(sprintf('%s requests is over the site ceiling — narrow the tracked keywords or raise launchpad.town_rank.request_ceiling.', number_format($result['requests'])))->send();
-
-            return;
-        }
-        if ($result['posted'] === 0) {
-            Notification::make()->warning()->title('Nothing due')
-                ->body('Every tracked keyword has been scanned inside the cadence window. Run a single card to force one.')->send();
+        if ($result['queued'] === 0) {
+            Notification::make()->warning()->title('Nothing queued')
+                ->body('Every tracked keyword is already collecting, or is refused by the request ceiling.')->send();
 
             return;
         }
 
         Notification::make()->success()
-            ->title(sprintf('Posting %s scan(s) · %s requests', number_format($result['posted']), number_format($result['requests'])))
-            ->body('Results collect over the next few minutes; each card updates as they land.')->send();
+            ->title(sprintf('Queued %s keyword(s) · %s requests (~$%s)', number_format($result['queued']), number_format($result['requests']), number_format($result['cost'], 2)))
+            ->body('One job per keyword; results collect over the next few minutes and each card updates as they land.')->send();
     }
 
     public function runKeyword(string $id): void

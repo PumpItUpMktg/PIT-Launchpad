@@ -7,13 +7,16 @@ use App\GeoGrid\CoverageRunAll;
 use App\Integrations\Census\MockMunicipalityGazetteer;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Jobs\RunCoverageScan;
+use App\Jobs\RunTownRankKeyword;
 use App\Models\CoverageArea;
 use App\Models\GeoGridScan;
 use App\Models\JobCounty;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Site;
+use App\Models\TownRankScan;
 use App\Models\User;
+use App\TownRank\TownRankRunAll;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -116,6 +119,38 @@ it('shows the sitewide website run with its own cost', function () {
         ->assertOk()
         ->assertSee('Run all website rankings')
         ->assertSeeHtml('wire:click="runAllKeywords"')
-        // Both modes per keyword: two keywords are four keyword-modes due.
-        ->assertSee('4 of 4 keyword-modes due');
+        ->assertSee('2 of 2 keywords');
+});
+
+/**
+ * The sitewide run QUEUES one job per keyword; it must never post inline. TownRankSweep::run() posts
+ * every scan in a loop — correct on a console clock, fatal in a Livewire request, where hundreds of
+ * DataForSEO batches would hit the FPM timeout having already paid for the half that went out.
+ */
+it('queues one job per keyword rather than posting inline', function () {
+    Queue::fake();
+    $f = runAllFixture(3);
+
+    $result = app(TownRankRunAll::class)->run($f['site']);
+
+    expect($result['queued'])->toBe(3);
+    Queue::assertPushed(RunTownRankKeyword::class, 3);
+});
+
+/** A keyword already collecting is left out of the quote and the run — its requests are already bought. */
+it('excludes a collecting keyword from the sitewide quote and run', function () {
+    Queue::fake();
+    $f = runAllFixture(3);
+    TownRankScan::create(['site_id' => $f['site']->id, 'keyword_id' => $f['keywords'][0]->id, 'mode' => 'town_query',
+        'status' => 'pending', 'points_count' => 2, 'found_count' => 0, 'scanned_at' => now()]);
+    TownRankScan::create(['site_id' => $f['site']->id, 'keyword_id' => $f['keywords'][0]->id, 'mode' => 'local',
+        'status' => 'pending', 'points_count' => 2, 'found_count' => 0, 'scanned_at' => now()]);
+
+    $plan = app(TownRankRunAll::class)->plan($f['site']);
+    expect($plan['tracked'])->toBe(3)
+        ->and($plan['pending'])->toBe(1)
+        ->and(count($plan['runnable']))->toBe(2);
+
+    app(TownRankRunAll::class)->run($f['site']);
+    Queue::assertPushed(RunTownRankKeyword::class, 2);
 });
