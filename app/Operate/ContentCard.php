@@ -71,6 +71,8 @@ final class ContentCard
         public ?string $indexCoverageState = null,
         public bool $indexCanonicalMismatch = false,
         // ── Optional rich display (a board renders these only when present) ──
+        /** Google's own blended position for this page (impression-weighted across every query it was seen for). */
+        public ?float $searchPosition = null,
         public ?string $positionPending = null,
         public ?string $positionState = null,
         public ?int $localRank = null,
@@ -182,6 +184,7 @@ final class ContentCard
             'impressions' => $this->impressions,
             'clicks' => $this->clicks,
             'sessions' => $this->sessions,
+            'ctr' => $this->ctr,
             'keyword' => $this->keyword,
             // Rich optional blocks the shared component renders only when present (absent on Live).
             'local_rank' => $this->localRank,
@@ -189,6 +192,7 @@ final class ContentCard
             'series' => $this->series,
             'refresh_count' => $this->refreshCount,
             'queries' => $this->queries,
+            'search_position' => $this->searchPosition,
             'position_pending' => $this->positionPending,
             'gsc_pending' => $this->gscPending,
             'traffic_pending' => $this->trafficPending,
