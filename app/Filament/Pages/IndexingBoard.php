@@ -3,9 +3,15 @@
 namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
+use App\Jobs\SyncSiteMetrics;
+use App\Metrics\Providers\IndexMetricProvider;
+use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
 use BackedEnum;
+use Carbon\Carbon;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 
@@ -37,6 +43,58 @@ class IndexingBoard extends Page
     public function mount(): void
     {
         $this->siteId = app(ActiveTenant::class)->id();
+    }
+
+    /**
+     * "Re-check indexing now" — an on-demand run of the same bounded inspection the daily sync does.
+     *
+     * It costs no money and spends GSC URL-Inspection QUOTA, which is the scarcer thing: Google allows a
+     * couple of thousand inspections per property per day, and the run stops at
+     * `launchpad.metrics.index_budget_seconds` and falls back to cached verdicts for the rest. A large
+     * site therefore completes over several runs rather than in one, and pressing this twice in a row
+     * mostly re-reads the cache.
+     *
+     * Queued, not inline: the inspection is minutes of HTTP against Google and has no business holding a
+     * web request open.
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('recheckIndexing')
+                ->label('Re-check indexing now')
+                ->icon('heroicon-o-arrow-path')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Re-inspect published URLs with Search Console')
+                ->modalDescription('Runs the same bounded URL Inspection the daily sync runs. No cost in credits; it spends Search Console inspection quota, stops after about '.max(1, (int) round((float) config('launchpad.metrics.index_budget_seconds', 240) / 60)).' minute(s) of live checks, and uses cached verdicts beyond that. A large site finishes over several runs.')
+                ->modalSubmitActionLabel('Yes, re-check now')
+                ->action(fn () => $this->recheckIndexing()),
+        ];
+    }
+
+    private function recheckIndexing(): void
+    {
+        $site = $this->siteId === null ? null : Site::query()->whereKey($this->siteId)->first();
+        if ($site === null) {
+            Notification::make()->warning()->title('No site selected')->send();
+
+            return;
+        }
+
+        // The same range shape the scheduled sync passes; the index provider inspects current URLs and
+        // does not read the window, but the job's contract takes one.
+        $today = Carbon::today();
+        SyncSiteMetrics::dispatch(
+            (string) $site->id,
+            IndexMetricProvider::PROVIDER,
+            $today->toDateString(),
+            $today->toDateString(),
+        );
+
+        Notification::make()->success()
+            ->title('Re-checking indexing with Search Console')
+            ->body('Queued. Verdicts update on this board as URLs are inspected — refresh in a few minutes.')
+            ->send();
     }
 
     public function getTitle(): string
