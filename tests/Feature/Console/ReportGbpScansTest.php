@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\CoverageArea;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
@@ -127,5 +128,40 @@ it('labels each scan by its location city rather than the brand-prefixed name', 
 
     $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG'])
         ->expectsOutputToContain('Downingtown, PA')
+        ->assertSuccessful();
+});
+
+/**
+ * The silent failure the grid cannot show. A scan can be complete, collected and full of ranks, and
+ * still render an empty map: TownPointLinks joins each point to a CURRENT coverage area, and
+ * CoverageWriter deletes and re-inserts every computed row on each rebuild. A point whose town no
+ * longer resolves is dropped — so the operator sees grey over data that is perfectly intact, and the
+ * obvious response (re-run the report) spends money to change nothing.
+ */
+it('names a complete scan whose points no longer land on the current map', function () {
+    $f = gbpScanSite();
+    // Collected, ranked — and measuring a town this site no longer covers.
+    gbpScan($f, 'complete', [['task' => 'abc', 'collected' => true, 'rank' => 2]]);
+
+    $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG'])
+        ->expectsOutputToContain('0 on the current map')
+        ->expectsOutputToContain('NOT ON THE MAP')
+        ->doesntExpectOutputToContain('POSTED BUT NEVER COLLECTED')
+        ->assertSuccessful();
+});
+
+/** A point that still resolves by GEOID is reported as on the map, and raises no warning. */
+it('counts points that still resolve to a covered town', function () {
+    $f = gbpScanSite();
+    CoverageArea::factory()->create([
+        'site_id' => $f['site']->id, 'name' => 'Hackettstown', 'state' => 'NJ', 'geo_id' => '3404128590',
+        'population' => 9000, 'lat' => 40.85, 'lng' => -74.83, 'source_location_ids' => [$f['location']->id],
+    ]);
+    $scan = gbpScan($f, 'complete', [['task' => 'abc', 'collected' => true, 'rank' => 2]]);
+    $scan->points()->update(['geo_id' => '3404128590']);
+
+    $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG'])
+        ->expectsOutputToContain('1 on the current map')
+        ->doesntExpectOutputToContain('NOT ON THE MAP')
         ->assertSuccessful();
 });

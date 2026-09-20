@@ -2,6 +2,7 @@
 
 namespace App\GeoGrid;
 
+use App\Integrations\DataForSeo\AccountBalance;
 use App\Jobs\RunCoverageScan;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
@@ -27,10 +28,11 @@ final class CoverageRunAll
     public function __construct(
         private readonly CoverageGrid $coverage,
         private readonly TownRankBoard $board,
+        private readonly AccountBalance $balance,
     ) {}
 
     /**
-     * @return array{towns: int, keywords: list<Keyword>, tracked: int, pending: int, requests: int, cost: float, ceiling: int, over_ceiling: bool}
+     * @return array{towns: int, keywords: list<Keyword>, tracked: int, pending: int, requests: int, cost: float, ceiling: int, over_ceiling: bool, balance: float|null, affordable: bool}
      */
     public function plan(Site $site, Location $location): array
     {
@@ -58,6 +60,7 @@ final class CoverageRunAll
         }
 
         $requests = $towns * count($keywords);
+        $cost = round($requests * (float) config('launchpad.geo_grid.cost_per_request', 0.002), 2);
         $ceiling = max(0, (int) config('launchpad.geo_grid.request_ceiling', 5000));
 
         return [
@@ -66,9 +69,14 @@ final class CoverageRunAll
             'tracked' => $tracked,
             'pending' => $tracked - count($keywords),
             'requests' => $requests,
-            'cost' => round($requests * (float) config('launchpad.geo_grid.cost_per_request', 0.002), 2),
+            'cost' => $cost,
             'ceiling' => $ceiling,
             'over_ceiling' => $ceiling > 0 && $requests > $ceiling,
+            // Priced AND affordable: a run the account cannot pay for fails at the POST and leaves no
+            // scan row behind, so the card goes on reading "no scan yet" — the least informative way a
+            // run can fail.
+            'balance' => $this->balance->current(),
+            'affordable' => $this->balance->covers($cost),
         ];
     }
 
@@ -76,19 +84,22 @@ final class CoverageRunAll
      * Queue one coverage scan per runnable keyword. Nothing is posted over the ceiling — the whole run is
      * refused rather than trimmed, so a partial spend can never be mistaken for the full picture.
      *
-     * @return array{queued: int, requests: int, cost: float, over_ceiling: bool}
+     * @return array{queued: int, requests: int, cost: float, over_ceiling: bool, affordable: bool, balance: float|null}
      */
     public function run(Site $site, Location $location): array
     {
         $plan = $this->plan($site, $location);
-        if ($plan['over_ceiling'] || $plan['keywords'] === [] || $plan['towns'] === 0) {
-            return ['queued' => 0, 'requests' => $plan['requests'], 'cost' => $plan['cost'], 'over_ceiling' => $plan['over_ceiling']];
+        if ($plan['over_ceiling'] || ! $plan['affordable'] || $plan['keywords'] === [] || $plan['towns'] === 0) {
+            return ['queued' => 0, 'requests' => $plan['requests'], 'cost' => $plan['cost'],
+                'over_ceiling' => $plan['over_ceiling'], 'affordable' => $plan['affordable'], 'balance' => $plan['balance']];
         }
 
         foreach ($plan['keywords'] as $keyword) {
             RunCoverageScan::dispatch((string) $location->id, (string) $keyword->id);
         }
+        $this->balance->forget();   // the next read should reflect what this just committed to spend
 
-        return ['queued' => count($plan['keywords']), 'requests' => $plan['requests'], 'cost' => $plan['cost'], 'over_ceiling' => false];
+        return ['queued' => count($plan['keywords']), 'requests' => $plan['requests'], 'cost' => $plan['cost'],
+            'over_ceiling' => false, 'affordable' => true, 'balance' => $plan['balance']];
     }
 }

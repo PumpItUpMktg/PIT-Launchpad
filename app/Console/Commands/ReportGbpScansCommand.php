@@ -9,6 +9,8 @@ use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Support\SiteFinder;
+use App\TownRank\TownPointLinks;
+use App\TownRank\TownRankPoints;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 
@@ -35,6 +37,11 @@ class ReportGbpScansCommand extends Command
         {--stalled : Only scans with points posted but never collected}';
 
     protected $description = 'What GBP coverage scans exist per location × keyword, and how far each one collected. Read-only.';
+
+    public function __construct(private readonly TownRankPoints $points)
+    {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -73,6 +80,10 @@ class ReportGbpScansCommand extends Command
             $keywords = Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()
                 ->mapWithKeys(fn (Keyword $k): array => [(string) $k->id => trim((string) $k->query)])->all();
 
+            // The site's CURRENT towns. A scan's points are joined to these the same way the map joins
+            // them, so the report can see what the map sees — including the case where it sees nothing.
+            $towns = $this->points->forSite($site);
+
             $lines = [];
             foreach ($scans as $scan) {
                 $name = $locations[(string) $scan->location_id] ?? 'unknown location';
@@ -86,6 +97,11 @@ class ReportGbpScansCommand extends Command
                 $ranked = $points->filter(fn ($p): bool => $p->rank !== null)->count();
                 $unreadable = $points->filter(fn ($p): bool => $p->read_error !== null)->count();
                 $posted = $points->filter(fn ($p): bool => $p->provider_task_id !== null)->count();
+                // How many of those points still resolve to a town on the current map. CoverageWriter
+                // deletes and re-inserts every computed coverage row on each rebuild, and a point whose
+                // town no longer resolves is DROPPED by the map — silently, so a complete scan full of
+                // ranks can render as an empty grid.
+                $linked = TownPointLinks::byTown($towns, $points)->count();
                 // Posted to the provider and never read back: the collector is not running.
                 //
                 // Ranks are the evidence, not collected_at alone. Real scans exist with ranks recorded and
@@ -105,10 +121,14 @@ class ReportGbpScansCommand extends Command
                 $query = $keywords[(string) $scan->keyword_id] ?? 'unknown keyword';
                 $when = $scan->scanned_at !== null ? $scan->scanned_at->diffForHumans() : 'never scanned';
                 $lines[] = sprintf('  · %-26s %-38s %-10s %s', mb_strimwidth($name, 0, 26, ''), mb_strimwidth($query, 0, 38, '…'), $scan->status, $when);
-                $lines[] = sprintf('      %d point(s) · %d collected · %d ranked · %d unreadable · %d posted to provider  [%s]',
-                    $total, $collected, $ranked, $unreadable, $posted, $scan->id);
+                $lines[] = sprintf('      %d point(s) · %d collected · %d ranked · %d unreadable · %d posted · %d on the current map  [%s]',
+                    $total, $collected, $ranked, $unreadable, $posted, $linked, $scan->id);
                 if ($stalled) {
                     $lines[] = '      <fg=yellow>POSTED BUT NEVER COLLECTED — the IngestCoverageScans sweep is not running. Re-running the report will not help.</>';
+                } elseif ($collected > 0 && $linked === 0) {
+                    $lines[] = '      <fg=red>NOT ON THE MAP — the data is intact but none of its points resolve to a current town, so the grid renders empty. Coverage was rebuilt under it; re-running buys nothing.</>';
+                } elseif ($linked > 0 && $linked < $collected) {
+                    $lines[] = sprintf('      <fg=yellow>only %d of %d collected points land on the current map — the rest measured towns no longer covered.</>', $linked, $collected);
                 } elseif ($unstamped) {
                     $lines[] = '      <fg=cyan>ranks recorded without a collection stamp — the data is here; only the marker is missing.</>';
                 } elseif ($total > 0 && $posted === 0) {

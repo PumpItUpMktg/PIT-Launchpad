@@ -2,6 +2,7 @@
 
 namespace App\TownRank;
 
+use App\Integrations\DataForSeo\AccountBalance;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -19,10 +20,13 @@ use App\Models\Site;
  */
 final class TownRankRunAll
 {
-    public function __construct(private readonly TownRankKeywords $keywords) {}
+    public function __construct(
+        private readonly TownRankKeywords $keywords,
+        private readonly AccountBalance $balance,
+    ) {}
 
     /**
-     * @return array{towns: int, runnable: list<Keyword>, tracked: int, pending: int, blocked: int, requests: int, cost: float}
+     * @return array{towns: int, runnable: list<Keyword>, tracked: int, pending: int, blocked: int, requests: int, cost: float, balance: float|null, affordable: bool}
      */
     public function plan(Site $site): array
     {
@@ -65,6 +69,9 @@ final class TownRankRunAll
             'blocked' => $blocked,
             'requests' => $requests,
             'cost' => round($cost, 2),
+            // A run the account cannot pay for fails at the POST and leaves nothing behind.
+            'balance' => $this->balance->current(),
+            'affordable' => $this->balance->covers(round($cost, 2)),
         ];
     }
 
@@ -77,6 +84,10 @@ final class TownRankRunAll
     public function run(Site $site): array
     {
         $plan = $this->plan($site);
+        if (! $plan['affordable']) {
+            return ['queued' => 0, 'skipped' => count($plan['runnable']), 'requests' => $plan['requests'], 'cost' => $plan['cost']];
+        }
+
         $queued = 0;
         $skipped = 0;
 
@@ -87,6 +98,10 @@ final class TownRankRunAll
                 continue;
             }
             $skipped++;
+        }
+
+        if ($queued > 0) {
+            $this->balance->forget();
         }
 
         return ['queued' => $queued, 'skipped' => $skipped, 'requests' => $plan['requests'], 'cost' => $plan['cost']];
