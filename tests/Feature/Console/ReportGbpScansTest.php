@@ -16,13 +16,13 @@ function gbpScanSite(): array
     return ['site' => $site, 'location' => $loc, 'keyword' => $kw];
 }
 
-function gbpScan(array $f, string $status, array $points): GeoGridScan
+function gbpScan(array $f, string $status, array $points, int $ageMinutes = 60): GeoGridScan
 {
     $scan = GeoGridScan::create([
         'site_id' => $f['site']->id, 'location_id' => $f['location']->id, 'keyword_id' => $f['keyword']->id,
         'provider' => 'dataforseo', 'mode' => 'coverage', 'grid_size' => 1, 'spacing_miles' => 0,
         'center_lat' => 40.31, 'center_lng' => -75.13, 'zoom' => 13, 'depth_cap' => 20,
-        'status' => $status, 'scanned_at' => now(),
+        'status' => $status, 'scanned_at' => now()->subMinutes($ageMinutes),
     ]);
     foreach ($points as $i => $p) {
         GeoGridPoint::create([
@@ -163,5 +163,42 @@ it('counts points that still resolve to a covered town', function () {
     $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG'])
         ->expectsOutputToContain('1 on the current map')
         ->doesntExpectOutputToContain('NOT ON THE MAP')
+        ->assertSuccessful();
+});
+
+/**
+ * The false alarm this guard exists for. Twenty-three Montclair scans posted eight minutes ago were
+ * labelled "POSTED BUT NEVER COLLECTED — the sweep is not running", while the sweep was at that moment
+ * finishing the scan next to them. IngestCoverageScans runs every five minutes in bounded batches, so a
+ * run of thirty scans is several sweeps from done by design; uncollected and young is not stalled.
+ */
+it('calls a freshly posted scan collecting, not stalled', function () {
+    $f = gbpScanSite();
+    gbpScan($f, 'pending', [['task' => 'abc'], ['task' => 'def']], ageMinutes: 8);
+
+    $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG'])
+        ->expectsOutputToContain('collecting — posted 8 minute(s) ago')
+        ->doesntExpectOutputToContain('POSTED BUT NEVER COLLECTED')
+        ->assertSuccessful();
+});
+
+/** Past the window with nothing collected, it is stalled and says so. */
+it('still names a scan stalled once the sweep has had time to reach it', function () {
+    $f = gbpScanSite();
+    gbpScan($f, 'pending', [['task' => 'abc']], ageMinutes: 240);
+
+    $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG'])
+        ->expectsOutputToContain('POSTED BUT NEVER COLLECTED')
+        ->assertSuccessful();
+});
+
+/** And the young ones are counted apart in the tail, so the headline figure is not inflated by them. */
+it('counts collecting scans separately from stalled ones', function () {
+    $f = gbpScanSite();
+    gbpScan($f, 'pending', [['task' => 'abc']], ageMinutes: 5);
+    gbpScan($f, 'pending', [['task' => 'def']], ageMinutes: 300);
+
+    $this->artisan('launchpad:report-gbp-scans', ['--site' => 'SPG'])
+        ->expectsOutputToContain('2 coverage scan(s), 1 still collecting, 1 posted but never collected')
         ->assertSuccessful();
 });
