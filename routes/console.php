@@ -98,6 +98,14 @@ Schedule::command('sandhog:sync-ga4')->daily()->withoutOverlapping()->onOneServe
 // is what stops the rolling 16-month window from erasing history.
 Schedule::command('launchpad:sync-gsc')->daily()->withoutOverlapping()->onOneServer();
 
+// Observed rainfall — NOAA daily summaries for every site's stations into the metric spine, so a result
+// trend can be read against the weather it happened in (demand for a sump-pump or waterproofing client
+// is partly weather; "clicks doubled" means something different in a week that saw four inches). Daily,
+// and the one sync that costs neither credits nor a vendor quota: NOAA is keyless and answers a station
+// in a single request whatever the range, so the trailing window absorbs its ~3-day publication lag for
+// free. withoutOverlapping so a slow multi-tenant pull can't stack.
+Schedule::command('launchpad:sync-weather')->daily()->withoutOverlapping()->onOneServer();
+
 // Index-coverage audit — run a Google URL Inspection for every published URL on
 // each GSC-connected site so the Published cards read the REAL index verdict +
 // crawl date from cache (rather than the impressions>0 proxy). Weekly: index
