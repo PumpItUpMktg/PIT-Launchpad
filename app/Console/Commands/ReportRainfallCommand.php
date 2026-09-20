@@ -116,18 +116,23 @@ class ReportRainfallCommand extends Command
      */
     private function weeks(array $rain, array $clicks): array
     {
+        /** @var array<string, array{rain: float, peak: float, peak_on: string, clicks: float|null}> $buckets */
         $buckets = [];
         foreach ($rain as $date => $inches) {
             $week = Carbon::parse($date)->startOfWeek()->toDateString();
-            $buckets[$week]['rain'] = ($buckets[$week]['rain'] ?? 0.0) + $inches;
-            // Peak BEFORE the running max is updated, or every day beats it and the label lands on the last.
-            if ($inches > ($buckets[$week]['peak'] ?? -1.0)) {
+            // clicks starts NULL, not 0.0 — a week GSC has no rows for must print as unknown, not as a
+            // week nobody clicked. Filling it with a zero would be the same lie as zero-filling the rain.
+            $buckets[$week] ??= ['rain' => 0.0, 'peak' => 0.0, 'peak_on' => $date, 'clicks' => null];
+            $buckets[$week]['rain'] += $inches;
+            // Compare BEFORE the running max is raised, or every day beats it and the label lands on the last.
+            if ($inches > $buckets[$week]['peak']) {
                 $buckets[$week]['peak'] = $inches;
                 $buckets[$week]['peak_on'] = $date;
             }
         }
         foreach ($clicks as $date => $count) {
             $week = Carbon::parse($date)->startOfWeek()->toDateString();
+            // Only weeks the weather covers: a clicks-only week would draw as a dry week that was never measured.
             if (isset($buckets[$week])) {
                 $buckets[$week]['clicks'] = ($buckets[$week]['clicks'] ?? 0.0) + $count;
             }
@@ -136,12 +141,11 @@ class ReportRainfallCommand extends Command
 
         $rows = [];
         foreach ($buckets as $week => $bucket) {
-            $peak = (float) ($bucket['peak'] ?? 0.0);
             $rows[] = [
-                (string) $week,
-                sprintf('%5.2f', (float) ($bucket['rain'] ?? 0.0)),
-                $peak > 0.0 ? sprintf('%.2f on %s', $peak, (string) ($bucket['peak_on'] ?? $week)) : '—',
-                isset($bucket['clicks']) ? sprintf('%d', (int) $bucket['clicks']) : '—',
+                $week,
+                sprintf('%5.2f', $bucket['rain']),
+                $bucket['peak'] > 0.0 ? sprintf('%.2f on %s', $bucket['peak'], $bucket['peak_on']) : '—',
+                $bucket['clicks'] === null ? '—' : sprintf('%d', (int) $bucket['clicks']),
             ];
         }
 
