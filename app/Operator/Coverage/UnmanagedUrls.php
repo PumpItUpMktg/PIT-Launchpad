@@ -33,6 +33,7 @@ class UnmanagedUrls
     /**
      * @return array{
      *     managed: int,
+     *     managed_impressions: int,
      *     unmanaged: int,
      *     unmanaged_impressions: int,
      *     buckets: array<string, array{urls: int, impressions: int}>,
@@ -55,6 +56,7 @@ class UnmanagedUrls
         }
 
         $managed = 0;
+        $managedImpressions = 0;
         $unmanaged = 0;
         $impressions = 0;
         $buckets = [];
@@ -64,12 +66,13 @@ class UnmanagedUrls
             $path = UrlNormalizer::path($row['url']);
             if (isset($ours[$path])) {
                 $managed++;
+                $managedImpressions += $row['impressions'];
 
                 continue;
             }
             $unmanaged++;
             $impressions += $row['impressions'];
-            $bucket = $this->classify($path);
+            $bucket = $this->classify($path, $ours);
             $buckets[$bucket]['urls'] = ($buckets[$bucket]['urls'] ?? 0) + 1;
             $buckets[$bucket]['impressions'] = ($buckets[$bucket]['impressions'] ?? 0) + $row['impressions'];
             $rows[] = ['url' => $row['url'], 'bucket' => $bucket, 'impressions' => $row['impressions']];
@@ -79,6 +82,7 @@ class UnmanagedUrls
 
         return [
             'managed' => $managed,
+            'managed_impressions' => $managedImpressions,
             'unmanaged' => $unmanaged,
             'unmanaged_impressions' => $impressions,
             'buckets' => $buckets,
@@ -89,11 +93,28 @@ class UnmanagedUrls
     /**
      * The shape of a URL WordPress generates, from its path alone.
      *
-     * Deliberately conservative: anything not matching a known archive shape is reported as "other page"
-     * rather than guessed at. A wrong label here would send someone hunting a problem that is not there.
+     * The two duplicate buckets are the point. WordPress appends `-2`, `-3`, `-10` when a slug it is asked
+     * to create already exists, so a numbered twin is never a coincidence — it is the same title published
+     * more than once. Which KIND of duplicate decides who owns the problem:
+     *
+     *   • "duplicate of a published page" — strip the suffix and the result is a page Launchpad publishes.
+     *     That means WordPress refused our slug and served the content somewhere we do not know about, so
+     *     the URL we believe in and the URL Google indexed are different strings. Ours to fix.
+     *   • "numbered twin (not ours)" — a numbered duplicate whose base is not a page we publish. Legacy
+     *     content duplicated before Launchpad, competing with itself.
+     *
+     * Everything else is deliberately conservative: an unrecognised path reports as "other page" rather
+     * than being guessed at, because a wrong label sends someone hunting a problem that is not there.
+     *
+     * @param  array<string, true>  $ours  normalized paths of the pages Launchpad publishes
      */
-    private function classify(string $path): string
+    private function classify(string $path, array $ours): string
     {
+        $base = $this->stripNumberedSuffix($path);
+        if ($base !== null) {
+            return isset($ours[$base]) ? 'duplicate of a published page' : 'numbered twin (not ours)';
+        }
+
         return match (true) {
             str_contains($path, '/category/') => 'category archive',
             str_contains($path, '/tag/') => 'tag archive',
@@ -105,5 +126,30 @@ class UnmanagedUrls
             $path === '' || $path === '/' => 'home',
             default => 'other page',
         };
+    }
+
+    /**
+     * The path with WordPress's collision suffix removed, or null when the last segment does not carry one.
+     *
+     * Only a suffix on the LAST segment counts, and only where something remains in front of it — `/page/2`
+     * is pagination, not a twin of `/page`, and a slug that is nothing but a number is not a duplicate of
+     * the empty string.
+     */
+    private function stripNumberedSuffix(string $path): ?string
+    {
+        $cut = strrpos($path, '/');
+        if ($cut === false) {
+            return null;
+        }
+        $segment = substr($path, $cut + 1);
+        if (! preg_match('/^(.+)-\d+$/', $segment, $m)) {
+            return null;
+        }
+        // /page/2, /blog/page/3 — pagination, already its own shape.
+        if (str_ends_with(substr($path, 0, $cut), '/page')) {
+            return null;
+        }
+
+        return substr($path, 0, $cut + 1).$m[1];
     }
 }

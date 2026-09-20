@@ -41,9 +41,12 @@ class ReportUnmanagedUrlsCommand extends Command
 
         $this->info($site->brand_name.' — URLs Google has shown that Launchpad did not publish');
         $this->newLine();
-        $this->line(sprintf('%d URL(s) Google has shown map to a page we published; <info>%d do not</info>, '
-            .'carrying %s impression(s) between them.',
-            $r['managed'], $r['unmanaged'], number_format($r['unmanaged_impressions'])));
+        $this->line(sprintf('%d URL(s) Google has shown map to a page we published, carrying %s impression(s).',
+            $r['managed'], number_format($r['managed_impressions'])));
+        $total = $r['managed_impressions'] + $r['unmanaged_impressions'];
+        $this->line(sprintf('<info>%d do not</info>, carrying %s — <info>%d%%</info> of everything this property has earned.',
+            $r['unmanaged'], number_format($r['unmanaged_impressions']),
+            $total > 0 ? (int) round($r['unmanaged_impressions'] / $total * 100) : 0));
         $this->line('Search Console counts the whole property. The Indexing board counts what Launchpad published,');
         $this->line('on purpose — so the two totals are not meant to match, and the difference lives here.');
         $this->newLine();
@@ -64,6 +67,19 @@ class ReportUnmanagedUrlsCommand extends Command
         $this->line('<comment>Examples, most impressions first</comment>');
         foreach ($r['examples'] as $row) {
             $this->line(sprintf('  · %-18s %6s  %s', $row['bucket'], number_format($row['impressions']), $row['url']));
+        }
+
+        $dupes = ($r['buckets']['duplicate of a published page']['urls'] ?? 0)
+            + ($r['buckets']['numbered twin (not ours)']['urls'] ?? 0);
+        if ($dupes > 0) {
+            $this->newLine();
+            $this->line(sprintf('<comment>%d of these are numbered duplicates.</comment> WordPress appends -2, -3, -10 when a slug it is '
+                .'asked to create already exists, so a numbered twin is never a coincidence — it is the same title published more than once.',
+                $dupes));
+            if (($r['buckets']['duplicate of a published page']['urls'] ?? 0) > 0) {
+                $this->line('  "duplicate of a published page" is OURS: strip the suffix and it is a page Launchpad publishes, which');
+                $this->line('  means WordPress refused our slug and the URL we believe in is not the URL Google indexed.');
+            }
         }
 
         $this->newLine();
