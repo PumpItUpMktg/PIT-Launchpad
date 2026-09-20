@@ -285,6 +285,7 @@ class LiveBoards
             series: is_array($m['series'] ?? null) ? $m['series'] : [],
             refreshCount: (int) ($m['refresh_count'] ?? 0),
             ctr: isset($gsc['ctr']) ? (float) $gsc['ctr'] : null,
+            searchPosition: isset($gsc['position']) ? (float) $gsc['position'] : null,
             gscPending: $gsc['pending'] ?? null,
             queries: is_array($gsc['queries'] ?? null) ? $gsc['queries'] : [],
             trafficPending: $traffic['pending'] ?? null,
