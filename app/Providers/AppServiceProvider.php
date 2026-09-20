@@ -120,6 +120,7 @@ use App\Metrics\Providers\DataForSeoMetricProvider;
 use App\Metrics\Providers\Ga4MetricProvider;
 use App\Metrics\Providers\GscMetricProvider;
 use App\Metrics\Providers\IndexMetricProvider;
+use App\Metrics\Providers\WeatherMetricProvider;
 use App\Models\User;
 use App\Onboarding\MissionPolisher;
 use App\Operate\WorkerHeartbeat;
@@ -171,6 +172,7 @@ class AppServiceProvider extends ServiceProvider
             $registry->register($app->make(IndexMetricProvider::class));
             $registry->register(new DataForSeoMetricProvider);
             $registry->register($app->make(Ga4MetricProvider::class));
+            $registry->register($app->make(WeatherMetricProvider::class));
 
             return $registry;
         });
