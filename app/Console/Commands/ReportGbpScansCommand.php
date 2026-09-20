@@ -38,6 +38,16 @@ class ReportGbpScansCommand extends Command
 
     protected $description = 'What GBP coverage scans exist per location × keyword, and how far each one collected. Read-only.';
 
+    /**
+     * How long a scan may sit uncollected before it counts as stalled rather than simply young.
+     *
+     * IngestCoverageScans sweeps every five minutes and collects in bounded batches, so a run of thirty
+     * scans is several sweeps from finished by design. Calling a scan posted eight minutes ago "never
+     * collected" sends an operator to hunt a worker that is at that moment collecting the scan next to
+     * it — the first version of this report did exactly that, across twenty-three rows.
+     */
+    private const STALLED_AFTER_MINUTES = 30;
+
     public function __construct(private readonly TownRankPoints $points)
     {
         parent::__construct();
@@ -53,6 +63,7 @@ class ReportGbpScansCommand extends Command
         $needle = mb_strtolower(trim((string) $this->option('location')));
         $stalledOnly = (bool) $this->option('stalled');
         $grandStalled = 0;
+        $grandCollecting = 0;
         $grandScans = 0;
 
         foreach ($sites as $site) {
@@ -108,7 +119,9 @@ class ReportGbpScansCommand extends Command
                 // no collection stamp — an older write path, or a run interrupted between the two — and
                 // calling those "never collected" sends an operator to re-run a report whose answers are
                 // already in the table. A scan that was never POSTED at all is a different fault again.
-                $stalled = $collected === 0 && $ranked === 0 && $posted > 0;
+                $age = $scan->scanned_at?->diffInMinutes(now());
+                $young = $age !== null && $age < self::STALLED_AFTER_MINUTES;
+                $stalled = $collected === 0 && $ranked === 0 && $posted > 0 && ! $young;
                 $unstamped = $collected === 0 && $ranked > 0;
                 if ($stalledOnly && ! $stalled) {
                     continue;
@@ -116,6 +129,9 @@ class ReportGbpScansCommand extends Command
                 $grandScans++;
                 if ($stalled) {
                     $grandStalled++;
+                }
+                if ($young && $collected === 0) {
+                    $grandCollecting++;
                 }
 
                 $query = $keywords[(string) $scan->keyword_id] ?? 'unknown keyword';
@@ -125,6 +141,8 @@ class ReportGbpScansCommand extends Command
                     $total, $collected, $ranked, $unreadable, $posted, $linked, $scan->id);
                 if ($stalled) {
                     $lines[] = '      <fg=yellow>POSTED BUT NEVER COLLECTED — the IngestCoverageScans sweep is not running. Re-running the report will not help.</>';
+                } elseif ($collected === 0 && $ranked === 0 && $posted > 0) {
+                    $lines[] = sprintf('      <fg=cyan>collecting — posted %d minute(s) ago; the sweep runs every five minutes and works in batches.</>', (int) $age);
                 } elseif ($collected > 0 && $linked === 0) {
                     $lines[] = '      <fg=red>NOT ON THE MAP — the data is intact but none of its points resolve to a current town, so the grid renders empty. Coverage was rebuilt under it; re-running buys nothing.</>';
                 } elseif ($linked > 0 && $linked < $collected) {
@@ -152,9 +170,11 @@ class ReportGbpScansCommand extends Command
 
             return self::SUCCESS;
         }
-        $this->line("{$grandScans} coverage scan(s)".($grandStalled > 0
-            ? ", <fg=yellow>{$grandStalled} posted but never collected</> — start a worker on the lane, then they fill in on the next sweep."
-            : ' — none stalled.'));
+        $this->line("{$grandScans} coverage scan(s)"
+            .($grandCollecting > 0 ? ", <fg=cyan>{$grandCollecting} still collecting</>" : '')
+            .($grandStalled > 0
+                ? ", <fg=yellow>{$grandStalled} posted but never collected</> — start a worker on the lane, then they fill in on the next sweep."
+                : ' — none stalled.'));
 
         return self::SUCCESS;
     }
