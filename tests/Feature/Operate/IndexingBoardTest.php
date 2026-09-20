@@ -4,6 +4,8 @@ use App\Enums\ContentStatus;
 use App\Enums\IndexCoverageState;
 use App\Enums\UserRole;
 use App\Filament\Pages\IndexingBoard;
+use App\Jobs\SyncSiteMetrics;
+use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\Content;
 use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
@@ -12,6 +14,7 @@ use App\Models\User;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -184,4 +187,39 @@ it('renders the all-known reason breakdown once the capture is enabled', functio
     expect($html)->toContain('Discovered — not indexed')
         ->and($html)->not->toContain('All-known capture not yet enabled')
         ->and($html)->not->toContain('<select');
+});
+
+/**
+ * The re-check button. Indexing verdicts came only from the daily sync, so an operator who had just
+ * fixed the thing that was blocking indexing — a robots.txt Disallow, a stray noindex — had no way to
+ * ask Google again except to wait a day and hope.
+ *
+ * It queues rather than inspecting inline: the run is minutes of HTTP against Search Console and has no
+ * business holding a web request open.
+ */
+it('queues a Search Console re-inspection from the indexing board', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+
+    Livewire::test(IndexingBoard::class)
+        ->set('siteId', $site->id)
+        ->callAction('recheckIndexing')
+        ->assertOk();
+
+    Queue::assertPushed(SyncSiteMetrics::class, fn (SyncSiteMetrics $j): bool => $j->siteId === (string) $site->id
+        && $j->provider === IndexMetricProvider::PROVIDER);
+});
+
+/** No site selected posts nothing — a re-check with no tenant would inspect someone else's URLs or none. */
+it('queues nothing when no site is selected', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+
+    Livewire::test(IndexingBoard::class)
+        ->set('siteId', null)
+        ->callAction('recheckIndexing')
+        ->assertOk();
+
+    Queue::assertNothingPushed();
 });
