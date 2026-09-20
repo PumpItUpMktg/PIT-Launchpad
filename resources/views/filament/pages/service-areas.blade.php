@@ -146,17 +146,19 @@
         @if ($gbp !== null && $gbp['tracked'] > 0)
             <div class="s-runall">
                 <button type="button" wire:click="runAllGbp" wire:loading.attr="disabled" wire:target="runAllGbp"
-                        @disabled($gbp['runnable'] === 0 || $gbp['over_ceiling'])
+                        @disabled($gbp['runnable'] === 0 || $gbp['over_ceiling'] || ! $gbp['affordable'])
                         wire:confirm="Post {{ number_format($gbp['requests']) }} DataForSEO Maps requests (~${{ number_format($gbp['cost'], 2) }}) for {{ $area['location']['name'] }}? One search per town for each of {{ $gbp['runnable'] }} keywords.">
                     <span wire:loading.remove wire:target="runAllGbp">Run all GBP reports</span>
                     <span wire:loading wire:target="runAllGbp">Posting…</span>
                 </button>
-                @if ($gbp['over_ceiling'])
+                @if (! $gbp['affordable'])
+                    <span style="color:#c0392b">DataForSEO balance ${{ number_format((float) $gbp['balance'], 2) }} — this run needs ~${{ number_format($gbp['cost'], 2) }}. Top up before running.</span>
+                @elseif ($gbp['over_ceiling'])
                     <span style="color:#c0392b">{{ number_format($gbp['requests']) }} requests is over the {{ number_format($gbp['ceiling']) }} ceiling — narrow the tracked keywords.</span>
                 @elseif ($gbp['runnable'] === 0)
                     <span>All {{ $gbp['tracked'] }} keywords here are already collecting.</span>
                 @else
-                    <span>{{ $gbp['runnable'] }} of {{ $gbp['tracked'] }} keywords · {{ number_format($gbp['towns']) }} towns · <b>{{ number_format($gbp['requests']) }} requests</b> · ~${{ number_format($gbp['cost'], 2) }}@if ($gbp['pending'] > 0) · {{ $gbp['pending'] }} already collecting @endif</span>
+                    <span>{{ $gbp['runnable'] }} of {{ $gbp['tracked'] }} keywords · {{ number_format($gbp['towns']) }} towns · <b>{{ number_format($gbp['requests']) }} requests</b> · ~${{ number_format($gbp['cost'], 2) }}@if ($gbp['pending'] > 0) · {{ $gbp['pending'] }} already collecting @endif@if ($gbp['balance'] !== null) · balance ${{ number_format((float) $gbp['balance'], 2) }}@endif</span>
                 @endif
             </div>
         @endif

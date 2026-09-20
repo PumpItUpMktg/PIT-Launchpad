@@ -6,6 +6,7 @@ use App\Filament\Pages\TownRankPage;
 use App\GeoGrid\CoverageRunAll;
 use App\Integrations\Census\MockMunicipalityGazetteer;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Jobs\RunCoverageScan;
 use App\Jobs\RunTownRankKeyword;
 use App\Models\CoverageArea;
@@ -18,10 +19,34 @@ use App\Models\TownRankScan;
 use App\Models\User;
 use App\TownRank\TownRankRunAll;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 beforeEach(fn () => Filament::setCurrentPanel(Filament::getPanel('admin')));
+
+/**
+ * Fix the balance by stubbing the CLIENT, not the reader: AccountBalance is final by design, and the
+ * seam that matters is the vendor call anyway. Passing null makes userData() throw, which is what an
+ * unreadable account endpoint looks like from here.
+ */
+function fakeBalance(?float $dollars): void
+{
+    Cache::forget('dataforseo.balance');
+    app()->instance(DataForSeoClient::class, new class($dollars) extends DataForSeoClient
+    {
+        public function __construct(private readonly ?float $dollars) {}
+
+        public function userData(): array
+        {
+            if ($this->dollars === null) {
+                throw new RuntimeException('account endpoint unreachable');
+            }
+
+            return ['login' => 'test', 'balance' => $this->dollars];
+        }
+    });
+}
 
 function runAllFixture(int $keywords = 3): array
 {
@@ -153,4 +178,62 @@ it('excludes a collecting keyword from the sitewide quote and run', function () 
 
     app(TownRankRunAll::class)->run($f['site']);
     Queue::assertPushed(RunTownRankKeyword::class, 2);
+});
+
+/**
+ * The failure that started this: DataForSEO ran out of credit, the POST failed, and because a coverage
+ * scan's row is written only AFTER its tasks post, nothing was left behind — the card went on reading
+ * "no scan for this keyword yet", which looks exactly like never having run one. The buttons priced the
+ * work and never asked whether the account could pay for it.
+ */
+it('refuses to post a run the account cannot pay for', function () {
+    Queue::fake();
+    $f = runAllFixture(3);
+    fakeBalance(0.0);   // nothing left at all — the state that started this
+
+    $plan = app(CoverageRunAll::class)->plan($f['site'], $f['location']);
+    expect($plan['affordable'])->toBeFalse()
+        ->and($plan['balance'])->toBe(0.0);
+
+    $result = app(CoverageRunAll::class)->run($f['site'], $f['location']);
+    expect($result['queued'])->toBe(0);
+    Queue::assertNothingPushed();
+});
+
+/** A balance that comfortably covers the run changes nothing — it posts exactly as before. */
+it('posts normally when the balance covers the run', function () {
+    Queue::fake();
+    $f = runAllFixture(3);
+    fakeBalance(500.00);
+
+    expect(app(CoverageRunAll::class)->plan($f['site'], $f['location'])['affordable'])->toBeTrue();
+    app(CoverageRunAll::class)->run($f['site'], $f['location']);
+    Queue::assertPushed(RunCoverageScan::class, 3);
+});
+
+/**
+ * An unreadable balance must never block work the account can afford. A vendor outage on the account
+ * endpoint is not a reason to stop scanning.
+ */
+it('proceeds when the balance cannot be read at all', function () {
+    Queue::fake();
+    $f = runAllFixture(2);
+    fakeBalance(null);
+
+    expect(app(CoverageRunAll::class)->plan($f['site'], $f['location'])['affordable'])->toBeTrue();
+    app(CoverageRunAll::class)->run($f['site'], $f['location']);
+    Queue::assertPushed(RunCoverageScan::class, 2);
+});
+
+it('tells the operator the balance is short rather than queueing silently', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $f = runAllFixture(3);
+    fakeBalance(0.0);
+
+    Livewire::test(ServiceAreasPage::class)
+        ->set('siteId', $f['site']->id)
+        ->call('openArea', $f['location']->id)
+        ->assertOk()
+        ->assertSee('DataForSEO balance')
+        ->assertSee('Top up before running');
 });

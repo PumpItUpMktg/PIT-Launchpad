@@ -144,7 +144,7 @@ class TownRankPage extends Page
      * A keyword already collecting is excluded from both, so an in-flight answer is never bought twice,
      * and one refused by the per-keyword request ceiling is counted apart rather than silently dropped.
      *
-     * @return array{towns: int, runnable: int, tracked: int, pending: int, blocked: int, requests: int, cost: float}|null
+     * @return array{towns: int, runnable: int, tracked: int, pending: int, blocked: int, requests: int, cost: float, balance: float|null, affordable: bool}|null
      */
     #[Computed]
     public function sweepPlan(): ?array
@@ -164,6 +164,8 @@ class TownRankPage extends Page
             'blocked' => $plan['blocked'],
             'requests' => $plan['requests'],
             'cost' => $plan['cost'],
+            'balance' => $plan['balance'],
+            'affordable' => $plan['affordable'],
         ];
     }
 
@@ -184,6 +186,14 @@ class TownRankPage extends Page
         unset($this->sweepPlan);
 
         if ($result['queued'] === 0) {
+            $plan = app(TownRankRunAll::class)->plan($site);
+            if (! $plan['affordable']) {
+                Notification::make()->danger()->title('Not queued — DataForSEO balance too low')
+                    ->body(sprintf('This run needs ~$%s and the account holds $%s. Top up, then run it again; nothing was posted.',
+                        number_format($plan['cost'], 2), number_format((float) $plan['balance'], 2)))->send();
+
+                return;
+            }
             Notification::make()->warning()->title('Nothing queued')
                 ->body('Every tracked keyword is already collecting, or is refused by the request ceiling.')->send();
 

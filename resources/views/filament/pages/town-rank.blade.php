@@ -110,7 +110,7 @@
         @if ($sweep !== null && $sweep['tracked'] > 0)
             <div class="t-runall">
                 <button type="button" wire:click="runAllKeywords" wire:loading.attr="disabled" wire:target="runAllKeywords"
-                        @disabled($sweep['runnable'] === 0)
+                        @disabled($sweep['runnable'] === 0 || ! $sweep['affordable'])
                         wire:confirm="Queue {{ $sweep['runnable'] }} keyword(s) — {{ number_format($sweep['requests']) }} DataForSEO requests (~${{ number_format($sweep['cost'], 2) }}) across {{ number_format($sweep['towns']) }} towns? One job per keyword; a scan covers the whole site, so this runs once for every area at the same time.">
                     <span wire:loading.remove wire:target="runAllKeywords">Run all website rankings</span>
                     <span wire:loading wire:target="runAllKeywords">Queueing…</span>
@@ -121,14 +121,17 @@
                     $bits = [];
                     if ($sweep['pending'] > 0) { $bits[] = $sweep['pending'].' already collecting'; }
                     if ($sweep['blocked'] > 0) { $bits[] = $sweep['blocked'].' over the request ceiling'; }
-                    $note = $sweep['runnable'] === 0
+                    if ($sweep['balance'] !== null) { $bits[] = 'balance $'.number_format((float) $sweep['balance'], 2); }
+                    $note = ! $sweep['affordable']
+                        ? 'DataForSEO balance $'.number_format((float) $sweep['balance'], 2).' — this run needs ~$'.number_format($sweep['cost'], 2).'. Top up before running.'
+                        : ($sweep['runnable'] === 0
                         ? 'All '.$sweep['tracked'].' tracked keywords are already collecting or refused by the request ceiling.'
                         : $sweep['runnable'].' of '.$sweep['tracked'].' keywords · '.number_format($sweep['towns']).' towns'
-                            .($bits === [] ? '' : ' · '.implode(' · ', $bits));
+                            .($bits === [] ? '' : ' · '.implode(' · ', $bits)));
                 @endphp
                 <span class="t-note" style="margin:0">
                     {{ $note }}
-                    @if ($sweep['runnable'] > 0)
+                    @if ($sweep['runnable'] > 0 && $sweep['affordable'])
                         · <b>{{ number_format($sweep['requests']) }} requests</b> · ~${{ number_format($sweep['cost'], 2) }}
                     @endif
                 </span>

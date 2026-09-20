@@ -129,7 +129,7 @@ class ServiceAreasPage extends Page
      * What a whole-office GBP run would cost. Same plan() the run uses, so the figure beside the button is
      * the figure that gets posted — and a keyword already collecting is excluded from both.
      *
-     * @return array{towns: int, runnable: int, tracked: int, pending: int, requests: int, cost: float, over_ceiling: bool, ceiling: int}|null
+     * @return array{towns: int, runnable: int, tracked: int, pending: int, requests: int, cost: float, over_ceiling: bool, ceiling: int, balance: float|null, affordable: bool}|null
      */
     #[Computed]
     public function gbpPlan(): ?array
@@ -152,6 +152,8 @@ class ServiceAreasPage extends Page
             'cost' => $plan['cost'],
             'over_ceiling' => $plan['over_ceiling'],
             'ceiling' => $plan['ceiling'],
+            'balance' => $plan['balance'],
+            'affordable' => $plan['affordable'],
         ];
     }
 
@@ -171,6 +173,13 @@ class ServiceAreasPage extends Page
         if ($result['over_ceiling']) {
             Notification::make()->warning()->title('Not queued')
                 ->body(sprintf('%s requests is over the ceiling — narrow the tracked keywords or raise launchpad.geo_grid.request_ceiling.', number_format($result['requests'])))->send();
+
+            return;
+        }
+        if (! $result['affordable']) {
+            Notification::make()->danger()->title('Not queued — DataForSEO balance too low')
+                ->body(sprintf('This run needs ~$%s and the account holds $%s. Top up, then run it again; nothing was posted.',
+                    number_format($result['cost'], 2), number_format((float) $result['balance'], 2)))->send();
 
             return;
         }
