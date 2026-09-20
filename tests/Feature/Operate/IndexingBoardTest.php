@@ -42,8 +42,10 @@ it('is operator-only', function () {
 
 it('splits published (in-sitemap) from all-known', function () {
     $site = Site::factory()->create();
-    $p1 = Content::factory()->create(['site_id' => $site->id]);
-    $p2 = Content::factory()->create(['site_id' => $site->id]);
+    // Actually published — the panel counts the pages a visitor can reach, so a draft carrying a leftover
+    // verdict row does not belong in it. The fixture said "published" in a comment and never set it.
+    $p1 = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    $p2 = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
 
     // Two published pages: one indexed, one not.
     indexRow($site, $p1, 'PASS', 'https://x/a');

@@ -8,6 +8,7 @@ use App\Filament\Pages\IndexingBoard;
 use App\Models\Content;
 use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
+use App\Models\Site;
 use App\Support\Cadence;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -44,7 +45,8 @@ class IndexStandings
      *     coverage_gap: int,
      *     data_through: ?string,
      *     last_inspected_at: ?string,
-     *     freshness: array{oldest: ?string, newest: ?string, stale: int, total: int, interval_days: ?float}
+     *     freshness: array{oldest: ?string, newest: ?string, stale: int, total: int, interval_days: ?float},
+     *     orphan_rows: int
      * }
      */
     public function for(?string $siteId): array
@@ -63,6 +65,7 @@ class IndexStandings
                 'inspected_count' => 0, 'published_content_count' => 0, 'coverage_gap' => 0, 'data_through' => null,
                 'last_inspected_at' => null,
                 'freshness' => ['oldest' => null, 'newest' => null, 'stale' => 0, 'total' => 0, 'interval_days' => null],
+                'orphan_rows' => 0,
             ];
         }
 
@@ -71,18 +74,38 @@ class IndexStandings
             ->where('site_id', $siteId)
             ->get(['content_id', 'index_verdict', 'last_inspected_at']);
 
-        $publishedRows = $rows->filter(fn (PageIndexState $r): bool => $r->content_id !== null);
-        $published = $this->summarize($publishedRows);
-        $allKnown = $this->summarize($rows);
+        // The published panel counts CURRENTLY PUBLISHED pages — not every row that happens to carry a
+        // content_id. A page that was unpublished, retired or replaced leaves its verdict row behind, and
+        // counting those inflates both the indexed number and the denominator with pages nobody can visit.
+        // Measured on Sump Pump Gurus: 11 such orphans, all PASS, which is why the board read 525 of 609
+        // while the page cards read 524 of 598.
+        $site = Site::withoutGlobalScopes()->find($siteId);
+        $publishedPages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->where('status', ContentStatus::Published->value)
+            ->get(['id', 'title', 'slug', 'kind', 'page_type']);
+        $publishedIds = $publishedPages->pluck('id')->map(fn ($id): string => (string) $id)->flip();
+
+        $publishedRows = $rows->filter(
+            fn (PageIndexState $r): bool => $r->content_id !== null && $publishedIds->has((string) $r->content_id),
+        );
+        $orphanRows = $rows->filter(
+            fn (PageIndexState $r): bool => $r->content_id !== null && ! $publishedIds->has((string) $r->content_id),
+        )->count();
+
+        // The other half of the verdict: impressions. A page earning them is in the index whatever a stale
+        // inspection says, which is exactly how the page cards and the client dashboard already read it —
+        // this board was the last surface counting PASS alone, and undercounting by that difference.
+        $seen = $site === null ? [] : app(PageImpressions::class)->recent($site, $publishedPages);
+
+        $published = $this->summarize($publishedRows, $seen);
+        $allKnown = $this->summarize($rows, $seen);
 
         // Coverage lag made visible: the inspector is daily and budget-capped, so it reaches only part of
         // the published set each run. "inspected of published" (362 of 474) is a real fact about how much
         // of the site the panel actually describes — never let the inspected count read as the whole site.
         $inspected = $published['total'];
-        $publishedContent = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)
-            ->where('status', ContentStatus::Published->value)
-            ->count();
+        $publishedContent = $publishedPages->count();
 
         // Freshness: a daily sync that fails silently would leave the panel confidently showing week-old
         // verdicts. Stamp the panel with the newest verdict's as-of date so staleness is visible.
@@ -101,6 +124,7 @@ class IndexStandings
             'data_through' => $lastInspected !== null ? Carbon::parse($lastInspected)->toDateString() : null,
             'last_inspected_at' => $lastInspected !== null ? (string) $lastInspected : null,
             'freshness' => $this->vintage($publishedRows),
+            'orphan_rows' => $orphanRows,
         ];
     }
 
@@ -145,20 +169,28 @@ class IndexStandings
 
     /**
      * @param  Collection<int, PageIndexState>  $rows
+     * @param  array<string, true>  $seen  content ids earning Search impressions — indexed whatever the verdict says
      * @return array{total: int, indexed: int, not_indexed: int, excluded: int, reasons: list<array{state: string, label: string, count: int}>}
      */
-    private function summarize(Collection $rows): array
+    private function summarize(Collection $rows, array $seen = []): array
     {
         $verdict = fn (PageIndexState $r): string => $r->index_verdict !== null && $r->index_verdict !== ''
             ? $r->index_verdict
             : IndexCoverageState::NotInspected->value;
 
-        $indexed = $rows->filter(fn (PageIndexState $r): bool => $r->index_verdict === 'PASS')->count();
-        $excluded = $rows->filter(fn (PageIndexState $r): bool => in_array($verdict($r), self::EXCLUDED, true))->count();
+        // The same union ContentCard::resolveIndex applies: PASS *or* earning impressions. An impression is
+        // proof of being in the index; the absence of one proves nothing, so this can never be an AND.
+        $isIndexed = fn (PageIndexState $r): bool => $r->index_verdict === 'PASS'
+            || ($r->content_id !== null && isset($seen[(string) $r->content_id]));
+
+        $indexed = $rows->filter($isIndexed)->count();
+        $excluded = $rows->filter(
+            fn (PageIndexState $r): bool => ! $isIndexed($r) && in_array($verdict($r), self::EXCLUDED, true),
+        )->count();
 
         // Reasons: every non-indexed row grouped by its verdict, resolved to a label, biggest first.
         $reasons = $rows
-            ->filter(fn (PageIndexState $r): bool => $r->index_verdict !== 'PASS')
+            ->filter(fn (PageIndexState $r): bool => ! $isIndexed($r))
             ->groupBy($verdict)
             ->map(fn (Collection $group, string $state): array => [
                 'state' => $state,

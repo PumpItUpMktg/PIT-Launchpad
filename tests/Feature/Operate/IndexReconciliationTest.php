@@ -9,6 +9,7 @@ use App\Models\PageIndexState;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\Coverage\IndexReconciliation;
+use App\Operator\Coverage\IndexStandings;
 use App\Support\CurrentSite;
 use App\Support\PublicUrl;
 use Illuminate\Support\Str;
@@ -69,13 +70,15 @@ it('counts a page the cards call indexed and the board does not', function () {
 
     $r = app(IndexReconciliation::class)->for($site);
 
-    expect($r['disagreements'])->toBe(1)
+    expect($r['stale_verdicts'])->toBe(1)
         ->and($r['causes']['impressions_but_verdict_says_no'])->toHaveCount(1)
         ->and($r['causes']['impressions_but_verdict_says_no'][0]['title'])->toBe('Sump-pump-repair')
         ->and($r['causes']['impressions_but_never_inspected'])->toBe([])
-        // The board counts the PASS verdicts it has; the card ORs in the impressions.
-        ->and($r['board']['indexed'])->toBe(0)
-        ->and($r['cards']['indexed'])->toBe(1);
+        // Both surfaces now OR the impressions in, so they land on the same number — the verdict is what
+        // is stale, not the page.
+        ->and($r['board']['indexed'])->toBe(1)
+        ->and($r['cards']['indexed'])->toBe(1)
+        ->and($r['surfaces_agree'])->toBeTrue();
 });
 
 it('separates a page the board cannot see at all from one it judged wrongly', function () {
@@ -90,7 +93,7 @@ it('separates a page the board cannot see at all from one it judged wrongly', fu
 
     $r = app(IndexReconciliation::class)->for($site);
 
-    expect($r['disagreements'])->toBe(2)
+    expect($r['stale_verdicts'])->toBe(2)
         ->and($r['causes']['impressions_but_verdict_says_no'])->toHaveCount(1)
         ->and($r['causes']['impressions_but_never_inspected'])->toHaveCount(1)
         ->and($r['causes']['impressions_but_never_inspected'][0]['verdict'])->toBe('never inspected')
@@ -107,7 +110,7 @@ it('does not call a PASS verdict with no impressions a disagreement', function (
     $r = app(IndexReconciliation::class)->for($site);
 
     // Both surfaces say indexed — the card ORs, so PASS alone is enough. Nothing to reconcile.
-    expect($r['disagreements'])->toBe(0)
+    expect($r['stale_verdicts'])->toBe(0)
         ->and($r['board']['indexed'])->toBe(1)
         ->and($r['cards']['indexed'])->toBe(1)
         ->and($r['causes']['pass_without_recent_impressions'])->toBe(1);
@@ -123,7 +126,7 @@ it('flags impressions that fall outside the card window', function () {
     // The card no longer counts it as in Google; the client dashboard (all-time) still would. Named as
     // its own line rather than folded into the disagreement count — it is a different question.
     expect($r['causes']['impressions_outside_window'])->toBe(1)
-        ->and($r['disagreements'])->toBe(0)
+        ->and($r['stale_verdicts'])->toBe(0)
         ->and($r['cards']['unchecked'])->toBe(1);
 });
 
@@ -135,7 +138,7 @@ it('reports a site where the two surfaces agree as having nothing to explain', f
 
     $r = app(IndexReconciliation::class)->for($site);
 
-    expect($r['disagreements'])->toBe(0)
+    expect($r['stale_verdicts'])->toBe(0)
         ->and($r['causes']['never_inspected_total'])->toBe(0);
 });
 
@@ -147,11 +150,49 @@ it('prints the two surfaces side by side and names the cause', function () {
 
     $this->artisan('launchpad:report-index-mismatch', ['--site' => $site->id])
         ->expectsOutputToContain('Indexing board vs per-page chips')
-        ->expectsOutputToContain('1 page(s) the cards call indexed and the board does not')
+        ->expectsOutputToContain('The two surfaces agree.')
         ->expectsOutputToContain('Impressions, but the verdict is not PASS')
         ->assertSuccessful();
 });
 
 it('refuses to guess which site', function () {
     $this->artisan('launchpad:report-index-mismatch')->assertFailed();
+});
+
+it('leaves a verdict row behind when a page is unpublished, and stops counting it', function () {
+    $site = Site::factory()->create();
+    $live = reconPage($site, 'sump-pump-replacement');
+    reconVerdict($site, $live, 'PASS');
+
+    // Retired: the page is gone from the site, its verdict row is not. This is the 11 orphans on SPG —
+    // every one a PASS, which is why the board read 525 of 609 against the cards' 524 of 598.
+    $retired = reconPage($site, 'old-promo-page');
+    reconVerdict($site, $retired, 'PASS');
+    $retired->forceFill(['status' => ContentStatus::Drafted])->save();
+
+    $r = app(IndexReconciliation::class)->for($site);
+
+    expect($r['causes']['orphan_verdict_rows'])->toBe(1)
+        // Counted over what a visitor can actually reach: one page, indexed.
+        ->and($r['board']['inspected'])->toBe(1)
+        ->and($r['board']['indexed'])->toBe(1)
+        ->and($r['cards']['published'])->toBe(1)
+        ->and($r['surfaces_agree'])->toBeTrue();
+});
+
+it('reports the coverage gap as a real number instead of clamping it to zero', function () {
+    $site = Site::factory()->create();
+    $inspected = reconPage($site, 'basement-dehumidifier');
+    reconVerdict($site, $inspected, 'PASS');
+    reconPage($site, 'never-looked-at');   // published, no verdict row
+
+    $board = app(IndexStandings::class)->for($site->id);
+
+    // Two published, one inspected. The old max(0, …) clamp hid a NEGATIVE gap once orphan rows pushed
+    // the inspected count past the published count — it read a clean "0 not yet inspected" while the
+    // denominator was wrong.
+    expect($board['published_content_count'])->toBe(2)
+        ->and($board['inspected_count'])->toBe(1)
+        ->and($board['coverage_gap'])->toBe(1)
+        ->and($board['orphan_rows'])->toBe(0);
 });

@@ -5,14 +5,11 @@ namespace App\Operator\Coverage;
 use App\Enums\ContentStatus;
 use App\Guided\StoredSearchMetrics;
 use App\Models\Content;
-use App\Models\GscUrlDaily;
 use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\ContentCard;
 use App\Support\PublicUrl;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 
 /**
  * Why the Indexing board and the per-page cards disagree about the same site — counted, not guessed.
@@ -47,11 +44,13 @@ class IndexReconciliation
      * @return array{
      *     board: array{inspected: int, indexed: int, not_indexed: int, excluded: int, gap: int},
      *     cards: array{published: int, indexed: int, not_indexed: int, unchecked: int},
-     *     disagreements: int,
+     *     stale_verdicts: int,
+     *     surfaces_agree: bool,
      *     causes: array{
      *         impressions_but_verdict_says_no: list<array{title: string, url: ?string, verdict: string}>,
      *         impressions_but_never_inspected: list<array{title: string, url: ?string, verdict: string}>,
      *         never_inspected_total: int,
+     *         orphan_verdict_rows: int,
      *         pass_without_recent_impressions: int,
      *         impressions_outside_window: int
      *     },
@@ -70,7 +69,7 @@ class IndexReconciliation
             ->whereNotNull('content_id')
             ->pluck('index_verdict', 'content_id');
 
-        [$recent, $everSeen] = $this->impressionIds($site, $published);
+        [$recent, $everSeen] = app(PageImpressions::class)->resolve($site, $published);
 
         $board = app(IndexStandings::class)->for($site->id);
 
@@ -79,6 +78,7 @@ class IndexReconciliation
         $withoutRow = [];
         $passNoImpressions = 0;
         $outsideWindow = 0;
+        $neverInspected = 0;
 
         foreach ($published as $page) {
             $id = (string) $page->id;
@@ -89,6 +89,9 @@ class IndexReconciliation
             [, $state] = ContentCard::resolveIndex($isPass, $verdict !== null, $inGoogle);
             $cards[$state === 'indexed' ? 'indexed' : ($state === 'not_indexed' ? 'not_indexed' : 'unchecked')]++;
 
+            if ($verdict === null) {
+                $neverInspected++;
+            }
             if ($isPass && ! $inGoogle) {
                 $passNoImpressions++;
             }
@@ -121,66 +124,24 @@ class IndexReconciliation
                 'gap' => $board['coverage_gap'],
             ],
             'cards' => $cards,
-            'disagreements' => count($withRow) + count($withoutRow),
+            'stale_verdicts' => count($withRow) + count($withoutRow),
+            // The verification: once the board counts the same union over the same population, these two
+            // columns are the same number. A false here means a cause this report does not yet name.
+            'surfaces_agree' => $board['published']['indexed'] === $cards['indexed']
+                && $board['inspected_count'] === $cards['published'] - $cards['unchecked'],
             'causes' => [
                 'impressions_but_verdict_says_no' => array_slice($withRow, 0, $examples),
                 'impressions_but_never_inspected' => array_slice($withoutRow, 0, $examples),
-                'never_inspected_total' => $published->count() - $verdicts->count(),
+                'never_inspected_total' => $neverInspected,
+                // Verdict rows for content that is no longer published: the board used to count these,
+                // the cards never could. Measured at 11 on Sump Pump Gurus, all PASS.
+                'orphan_verdict_rows' => $verdicts->reject(
+                    fn ($v, $contentId): bool => $published->contains('id', $contentId),
+                )->count(),
                 'pass_without_recent_impressions' => $passNoImpressions,
                 'impressions_outside_window' => $outsideWindow,
             ],
             'window_days' => StoredSearchMetrics::WINDOW_DAYS,
         ];
-    }
-
-    /**
-     * Which published pages earned Search impressions — inside the card's window, and ever.
-     *
-     * Both forms of every URL are looked up (slash and slashless) for the same reason
-     * {@see StoredSearchMetrics} does it: Search Console stores the canonical URL as it comes back, and
-     * which form a site's permalinks settled on is not ours to assume.
-     *
-     * @param  Collection<int, Content>  $published
-     * @return array{0: array<string, true>, 1: array<string, true>}
-     */
-    private function impressionIds(Site $site, $published): array
-    {
-        $byUrl = [];
-        foreach ($published as $page) {
-            $url = PublicUrl::forContent($site->domain_url, $page);
-            if ($url === null) {
-                continue;
-            }
-            $id = (string) $page->id;
-            $byUrl[rtrim($url, '/')] = $id;
-            $byUrl[rtrim($url, '/').'/'] = $id;
-        }
-        if ($byUrl === []) {
-            return [[], []];
-        }
-
-        $rows = GscUrlDaily::query()->withoutGlobalScope(SiteScope::class)->toBase()
-            ->where('site_id', $site->id)
-            ->whereIn('url', array_keys($byUrl))
-            ->where('impressions', '>', 0)
-            ->selectRaw('url, max(date) as newest')
-            ->groupBy('url')
-            ->get();
-
-        $cutoff = Carbon::now()->subDays(StoredSearchMetrics::WINDOW_DAYS)->toDateString();
-        $recent = [];
-        $ever = [];
-        foreach ($rows as $row) {
-            $id = $byUrl[(string) $row->url] ?? null;
-            if ($id === null) {
-                continue;
-            }
-            $ever[$id] = true;
-            if (Carbon::parse((string) $row->newest)->toDateString() >= $cutoff) {
-                $recent[$id] = true;
-            }
-        }
-
-        return [$recent, $ever];
     }
 }
