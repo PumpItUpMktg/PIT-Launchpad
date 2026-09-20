@@ -223,3 +223,80 @@ it('queues nothing when no site is selected', function () {
 
     Queue::assertNothingPushed();
 });
+
+it('reports the vintage RANGE, not just the newest verdict', function () {
+    $site = Site::factory()->create();
+    $recent = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    $old = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    indexRow($site, $recent, 'PASS', 'https://x/fresh');
+    indexRow($site, $old, 'PASS', 'https://x/old');
+
+    // The shape a budget-capped inspector actually leaves behind: one URL re-checked this morning, one
+    // last touched three weeks ago.
+    PageIndexState::withoutGlobalScope(SiteScope::class)->where('url', 'https://x/fresh')
+        ->update(['last_inspected_at' => now()->subHour()]);
+    PageIndexState::withoutGlobalScope(SiteScope::class)->where('url', 'https://x/old')
+        ->update(['last_inspected_at' => now()->subWeeks(3)]);
+
+    $fresh = app(IndexStandings::class)->for($site->id)['freshness'];
+
+    expect($fresh['newest'])->toBe(now()->toDateString())
+        ->and($fresh['oldest'])->toBe(now()->subWeeks(3)->toDateString())
+        ->and($fresh['total'])->toBe(2)
+        // Index cadence is daily, so the three-week-old verdict is overdue and the hour-old one is not.
+        ->and($fresh['stale'])->toBe(1)
+        ->and($fresh['interval_days'])->toBe(1.0);
+});
+
+it('does not count a never-inspected row as stale — that is the coverage gap, already reported', function () {
+    $site = Site::factory()->create();
+    $p = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    indexRow($site, $p, 'PASS', 'https://x/unstamped');   // no last_inspected_at at all
+
+    $board = app(IndexStandings::class)->for($site->id);
+
+    expect($board['freshness']['total'])->toBe(0)
+        ->and($board['freshness']['stale'])->toBe(0)
+        ->and($board['freshness']['newest'])->toBeNull();
+});
+
+it('collapses the range to one date when every verdict was checked together', function () {
+    $site = Site::factory()->create();
+    foreach (['a', 'b'] as $slug) {
+        $c = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+        indexRow($site, $c, 'PASS', 'https://x/'.$slug);
+    }
+    PageIndexState::withoutGlobalScope(SiteScope::class)->update(['last_inspected_at' => now()->subHours(2)]);
+    app(ActiveTenant::class)->set($site->id);
+
+    $board = app(IndexStandings::class)->for($site->id);
+    expect($board['freshness']['oldest'])->toBe($board['freshness']['newest']);
+
+    // A site small enough to inspect in one pass says so plainly rather than drawing a range of one day.
+    expect(Livewire::test(IndexingBoard::class)->assertOk()->html())
+        ->toContain('All 2 verdicts checked today');
+});
+
+it('shows the spread and the overdue count on the board', function () {
+    $site = Site::factory()->create();
+    $a = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    $b = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    indexRow($site, $a, 'PASS', 'https://x/a');
+    indexRow($site, $b, 'PASS', 'https://x/b');
+    PageIndexState::withoutGlobalScope(SiteScope::class)->where('url', 'https://x/a')
+        ->update(['last_inspected_at' => now()->subHour()]);
+    PageIndexState::withoutGlobalScope(SiteScope::class)->where('url', 'https://x/b')
+        ->update(['last_inspected_at' => now()->subDays(10)]);
+    app(ActiveTenant::class)->set($site->id);
+
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+
+    expect($html)->toContain('Verdicts checked between')
+        ->toContain(now()->subDays(10)->format('j M'))
+        ->toContain('older than a day');
+});
+
+it('stays quiet about vintage with no tenant selected', function () {
+    expect(app(IndexStandings::class)->for(null)['freshness'])
+        ->toBe(['oldest' => null, 'newest' => null, 'stale' => 0, 'total' => 0, 'interval_days' => null]);
+});

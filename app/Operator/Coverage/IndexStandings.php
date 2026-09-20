@@ -8,6 +8,7 @@ use App\Filament\Pages\IndexingBoard;
 use App\Models\Content;
 use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
+use App\Support\Cadence;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -42,7 +43,8 @@ class IndexStandings
      *     published_content_count: int,
      *     coverage_gap: int,
      *     data_through: ?string,
-     *     last_inspected_at: ?string
+     *     last_inspected_at: ?string,
+     *     freshness: array{oldest: ?string, newest: ?string, stale: int, total: int, interval_days: ?float}
      * }
      */
     public function for(?string $siteId): array
@@ -60,15 +62,17 @@ class IndexStandings
                 'all_known_available' => $allKnownAvailable,
                 'inspected_count' => 0, 'published_content_count' => 0, 'coverage_gap' => 0, 'data_through' => null,
                 'last_inspected_at' => null,
+                'freshness' => ['oldest' => null, 'newest' => null, 'stale' => 0, 'total' => 0, 'interval_days' => null],
             ];
         }
 
         /** @var Collection<int, PageIndexState> $rows */
         $rows = PageIndexState::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
-            ->get(['content_id', 'index_verdict']);
+            ->get(['content_id', 'index_verdict', 'last_inspected_at']);
 
-        $published = $this->summarize($rows->filter(fn (PageIndexState $r): bool => $r->content_id !== null));
+        $publishedRows = $rows->filter(fn (PageIndexState $r): bool => $r->content_id !== null);
+        $published = $this->summarize($publishedRows);
         $allKnown = $this->summarize($rows);
 
         // Coverage lag made visible: the inspector is daily and budget-capped, so it reaches only part of
@@ -96,6 +100,46 @@ class IndexStandings
             'coverage_gap' => max(0, $publishedContent - $inspected),
             'data_through' => $lastInspected !== null ? Carbon::parse($lastInspected)->toDateString() : null,
             'last_inspected_at' => $lastInspected !== null ? (string) $lastInspected : null,
+            'freshness' => $this->vintage($publishedRows),
+        ];
+    }
+
+    /**
+     * How old the verdicts on this board actually are — oldest, newest, and how many have gone past the
+     * expected cadence.
+     *
+     * The newest stamp alone OVERSTATES freshness, and does so worst on exactly the sites that need it
+     * most. The inspector is budget-capped, so a large site is re-checked a slice at a time: a run that
+     * touched forty of five hundred URLs an hour ago leaves the panel reading "as of today" over four
+     * hundred verdicts that are weeks old. The range is the honest answer to "when are these from" —
+     * one date can only answer it for a site small enough to be inspected in a single pass.
+     *
+     * Rows with no inspection stamp are not counted as stale: an un-stamped row was never checked, which
+     * the coverage gap already reports, and folding the two together would double-count it.
+     *
+     * @param  Collection<int, PageIndexState>  $rows
+     * @return array{oldest: ?string, newest: ?string, stale: int, total: int, interval_days: ?float}
+     */
+    private function vintage(Collection $rows): array
+    {
+        $stamped = $rows->filter(fn (PageIndexState $r): bool => $r->last_inspected_at !== null);
+        $intervalSeconds = Cadence::intervalSeconds('index');
+        $intervalDays = $intervalSeconds !== null ? round($intervalSeconds / 86400, 1) : null;
+
+        if ($stamped->isEmpty()) {
+            return ['oldest' => null, 'newest' => null, 'stale' => 0, 'total' => 0, 'interval_days' => $intervalDays];
+        }
+
+        /** @var Collection<int, Carbon> $stamps */
+        $stamps = $stamped->map(fn (PageIndexState $r): Carbon => Carbon::parse($r->last_inspected_at));
+        $cutoff = $intervalSeconds !== null ? Carbon::now()->subSeconds($intervalSeconds) : null;
+
+        return [
+            'oldest' => $stamps->min()?->toDateString(),
+            'newest' => $stamps->max()?->toDateString(),
+            'stale' => $cutoff === null ? 0 : $stamps->filter(fn (Carbon $at): bool => $at->lessThan($cutoff))->count(),
+            'total' => $stamped->count(),
+            'interval_days' => $intervalDays,
         ];
     }
 

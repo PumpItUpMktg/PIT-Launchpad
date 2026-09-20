@@ -60,6 +60,22 @@
                     <div class="d" style="margin-top:2px"><x-lp.freshness-stamp
                         :last-checked="$board['last_inspected_at'] ? \Illuminate\Support\Carbon::parse($board['last_inspected_at']) : null"
                         :interval="\App\Support\Cadence::intervalSeconds('index')" noun="index data" /></div>
+                    {{-- The stamp above is the NEWEST verdict, which overstates freshness on any site too big
+                         to inspect in one budget-capped pass. The vintage range is the honest answer to "when
+                         are these from": a spread means most verdicts are older than the newest one. --}}
+                    @php($fresh = $board['freshness'] ?? null)
+                    @if ($fresh && $fresh['newest'])
+                        <div class="d" style="margin-top:2px">
+                            @if ($fresh['oldest'] === $fresh['newest'])
+                                All {{ number_format($fresh['total']) }} verdict{{ $fresh['total'] === 1 ? '' : 's' }} checked {{ \Illuminate\Support\Carbon::parse($fresh['newest'])->isToday() ? 'today' : 'on '.\Illuminate\Support\Carbon::parse($fresh['newest'])->format('j M') }}
+                            @else
+                                Verdicts checked between {{ \Illuminate\Support\Carbon::parse($fresh['oldest'])->format('j M') }} and {{ \Illuminate\Support\Carbon::parse($fresh['newest'])->format('j M') }}
+                            @endif
+                            @if ($fresh['stale'] > 0 && $fresh['interval_days'])
+                                · <strong>{{ number_format($fresh['stale']) }}</strong> of {{ number_format($fresh['total']) }} older than {{ $fresh['interval_days'] == 1 ? 'a day' : $fresh['interval_days'].' days' }}
+                            @endif
+                        </div>
+                    @endif
                 </div>
                 <div class="ix-nums">
                     <div class="ix-num"><div class="n good">{{ number_format($pub['indexed']) }}</div><div class="l">Indexed</div></div>
