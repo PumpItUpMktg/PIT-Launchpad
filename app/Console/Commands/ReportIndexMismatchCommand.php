@@ -44,28 +44,43 @@ class ReportIndexMismatchCommand extends Command
             ['Page cards', $cards['published'].' published', $cards['indexed'], $cards['not_indexed'], '—', $cards['unchecked']],
         ]);
 
-        $this->line('The board counts URL-Inspection PASS verdicts over the pages it has INSPECTED.');
-        $this->line('A card calls a page indexed on PASS <comment>or</comment> Search impressions, over EVERY published page —');
-        $this->line('impressions are proof a page is in the index; their absence proves nothing, so it is an OR.');
+        $this->line('Both surfaces call a page indexed on a PASS verdict <comment>or</comment> Search impressions, over the');
+        $this->line('pages that are currently published. Impressions are proof a page is in the index; their');
+        $this->line('absence proves nothing, so it is an OR and never an AND.');
         $this->newLine();
 
-        $this->line(sprintf('<info>%d page(s)</info> the cards call indexed and the board does not.', $r['disagreements']));
+        if ($r['surfaces_agree']) {
+            $this->line('<info>The two surfaces agree.</info>');
+        } else {
+            $this->warn('The two surfaces still differ — a cause this report does not yet name.');
+        }
+
+        $this->newLine();
+        $this->line(sprintf('<info>%d page(s)</info> are earning impressions while their stored verdict says otherwise — '
+            .'the verdict is stale, not the page.', $r['stale_verdicts']));
 
         $this->explain(
             'Impressions, but the verdict is not PASS',
-            'Inspected, and Google says something other than PASS — yet the page is earning impressions. '
-                .'Usually a stale verdict: it was inspected before it got indexed.',
+            'Inspected, and Google recorded something other than PASS — yet the page is earning impressions. '
+                .'It was inspected before it got indexed, and the budget-capped inspector has not been back.',
             $r['causes']['impressions_but_verdict_says_no'],
         );
 
         $this->explain(
             'Impressions, but never inspected',
-            'Invisible to the board entirely — it has no verdict row, so it is not in the denominator. '
-                .'The cards see it, because impressions do not need an inspection.',
+            'No verdict row at all. Both surfaces count it as indexed on the impressions alone; it is listed '
+                .'so the inspection gap is visible.',
             $r['causes']['impressions_but_never_inspected'],
         );
 
         $this->newLine();
+        if ($r['causes']['orphan_verdict_rows'] > 0) {
+            $this->line(sprintf(
+                '<comment>%d verdict row(s)</comment> belong to content that is no longer published — retired, unpublished or '
+                .'replaced. They leave their verdict behind, so the board counted pages nobody can visit; the cards never could.',
+                $r['causes']['orphan_verdict_rows'],
+            ));
+        }
         $this->line(sprintf('Context — %d published page(s) have never been inspected at all (the coverage gap); '
             .'%d have a PASS verdict but no impressions in the last %d days (indexed, just not earning); '
             .'%d earned impressions only OUTSIDE that window, so the cards no longer count them as in Google.',
