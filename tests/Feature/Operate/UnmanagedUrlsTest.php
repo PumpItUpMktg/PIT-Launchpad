@@ -91,3 +91,49 @@ it('reports a site with nothing outside the published set', function () {
 it('refuses to guess which site', function () {
     $this->artisan('launchpad:report-unmanaged-urls')->assertFailed();
 });
+
+it('tells our own numbered duplicate apart from a legacy one', function () {
+    $site = Site::factory()->create();
+    $ours = Content::factory()->create([
+        'site_id' => $site->id, 'slug' => 'how-to-install-a-sump-pump-correctly', 'status' => ContentStatus::Published,
+    ]);
+    gscUrl($site, (string) PublicUrl::forContent($site->domain_url, $ours), 500);
+
+    $root = rtrim((string) $site->domain_url, '/');
+    // WordPress refused our slug and served the content at -2. The URL we believe in is not the one
+    // Google indexed — that is ours to fix.
+    gscUrl($site, $root.'/how-to-install-a-sump-pump-correctly-2/', 87949);
+    // A numbered duplicate of something we never published: legacy content competing with itself.
+    gscUrl($site, $root.'/sump-pump-installation-cost-breakdown-3/', 189317);
+
+    $r = app(UnmanagedUrls::class)->for($site);
+
+    expect($r['buckets']['duplicate of a published page']['urls'])->toBe(1)
+        ->and($r['buckets']['numbered twin (not ours)']['urls'])->toBe(1)
+        ->and($r['managed'])->toBe(1)
+        ->and($r['managed_impressions'])->toBe(500);
+});
+
+it('does not mistake pagination for a numbered duplicate', function () {
+    $site = Site::factory()->create();
+    gscUrl($site, rtrim((string) $site->domain_url, '/').'/blog/page/2/', 12);
+
+    // /blog/page/2 is not a twin of /blog/page.
+    expect(app(UnmanagedUrls::class)->for($site)['buckets'])
+        ->toHaveKey('pagination')
+        ->not->toHaveKey('numbered twin (not ours)');
+});
+
+it('gives the unmanaged impressions a denominator', function () {
+    $site = Site::factory()->create();
+    $ours = Content::factory()->create([
+        'site_id' => $site->id, 'slug' => 'managed', 'status' => ContentStatus::Published,
+    ]);
+    gscUrl($site, (string) PublicUrl::forContent($site->domain_url, $ours), 250);
+    gscUrl($site, rtrim((string) $site->domain_url, '/').'/legacy-thing/', 750);
+
+    // A big unmanaged number means nothing without what the managed set earned beside it.
+    $this->artisan('launchpad:report-unmanaged-urls', ['--site' => $site->id])
+        ->expectsOutputToContain('75% of everything this property has earned')
+        ->assertSuccessful();
+});
