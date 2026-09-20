@@ -21,7 +21,7 @@ afterEach(function () {
     CurrentSite::clear();
 });
 
-function publishedPage(Site $site, string $slug): Content
+function reconPage(Site $site, string $slug): Content
 {
     return Content::factory()->create([
         'site_id' => $site->id,
@@ -31,7 +31,7 @@ function publishedPage(Site $site, string $slug): Content
     ]);
 }
 
-function verdictFor(Site $site, Content $page, string $verdict): void
+function reconVerdict(Site $site, Content $page, string $verdict): void
 {
     $url = (string) PublicUrl::forContent($site->domain_url, $page);
     PageIndexState::withoutGlobalScopes()->create([
@@ -45,7 +45,7 @@ function verdictFor(Site $site, Content $page, string $verdict): void
     ]);
 }
 
-function impressionsFor(Site $site, Content $page, int $daysAgo = 3, int $impressions = 40): void
+function reconImpressions(Site $site, Content $page, int $daysAgo = 3, int $impressions = 40): void
 {
     GscUrlDaily::withoutGlobalScopes()->create([
         'id' => (string) Str::ulid(),
@@ -63,9 +63,9 @@ it('counts a page the cards call indexed and the board does not', function () {
     $site = Site::factory()->create();
 
     // The disagreement in miniature: inspected BEFORE it got indexed, and now earning impressions.
-    $stale = publishedPage($site, 'sump-pump-repair');
-    verdictFor($site, $stale, IndexCoverageState::CrawledNotIndexed->value);
-    impressionsFor($site, $stale);
+    $stale = reconPage($site, 'sump-pump-repair');
+    reconVerdict($site, $stale, IndexCoverageState::CrawledNotIndexed->value);
+    reconImpressions($site, $stale);
 
     $r = app(IndexReconciliation::class)->for($site);
 
@@ -81,12 +81,12 @@ it('counts a page the cards call indexed and the board does not', function () {
 it('separates a page the board cannot see at all from one it judged wrongly', function () {
     $site = Site::factory()->create();
 
-    $judged = publishedPage($site, 'basement-waterproofing');
-    verdictFor($site, $judged, IndexCoverageState::DiscoveredNotIndexed->value);
-    impressionsFor($site, $judged);
+    $judged = reconPage($site, 'basement-waterproofing');
+    reconVerdict($site, $judged, IndexCoverageState::DiscoveredNotIndexed->value);
+    reconImpressions($site, $judged);
 
-    $unseen = publishedPage($site, 'french-drain');   // never inspected, but earning impressions
-    impressionsFor($site, $unseen);
+    $unseen = reconPage($site, 'french-drain');   // never inspected, but earning impressions
+    reconImpressions($site, $unseen);
 
     $r = app(IndexReconciliation::class)->for($site);
 
@@ -101,8 +101,8 @@ it('separates a page the board cannot see at all from one it judged wrongly', fu
 
 it('does not call a PASS verdict with no impressions a disagreement', function () {
     $site = Site::factory()->create();
-    $quiet = publishedPage($site, 'crawl-space-encapsulation');
-    verdictFor($site, $quiet, 'PASS');
+    $quiet = reconPage($site, 'crawl-space-encapsulation');
+    reconVerdict($site, $quiet, 'PASS');
 
     $r = app(IndexReconciliation::class)->for($site);
 
@@ -115,8 +115,8 @@ it('does not call a PASS verdict with no impressions a disagreement', function (
 
 it('flags impressions that fall outside the card window', function () {
     $site = Site::factory()->create();
-    $lapsed = publishedPage($site, 'sewer-line-repair');
-    impressionsFor($site, $lapsed, daysAgo: 120);   // earned impressions last quarter, none since
+    $lapsed = reconPage($site, 'sewer-line-repair');
+    reconImpressions($site, $lapsed, daysAgo: 120);   // earned impressions last quarter, none since
 
     $r = app(IndexReconciliation::class)->for($site);
 
@@ -129,9 +129,9 @@ it('flags impressions that fall outside the card window', function () {
 
 it('reports a site where the two surfaces agree as having nothing to explain', function () {
     $site = Site::factory()->create();
-    $page = publishedPage($site, 'radon-mitigation');
-    verdictFor($site, $page, 'PASS');
-    impressionsFor($site, $page);
+    $page = reconPage($site, 'radon-mitigation');
+    reconVerdict($site, $page, 'PASS');
+    reconImpressions($site, $page);
 
     $r = app(IndexReconciliation::class)->for($site);
 
@@ -141,9 +141,9 @@ it('reports a site where the two surfaces agree as having nothing to explain', f
 
 it('prints the two surfaces side by side and names the cause', function () {
     $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
-    $stale = publishedPage($site, 'sump-pump-installation');
-    verdictFor($site, $stale, IndexCoverageState::CrawledNotIndexed->value);
-    impressionsFor($site, $stale);
+    $stale = reconPage($site, 'sump-pump-installation');
+    reconVerdict($site, $stale, IndexCoverageState::CrawledNotIndexed->value);
+    reconImpressions($site, $stale);
 
     $this->artisan('launchpad:report-index-mismatch', ['--site' => $site->id])
         ->expectsOutputToContain('Indexing board vs per-page chips')
