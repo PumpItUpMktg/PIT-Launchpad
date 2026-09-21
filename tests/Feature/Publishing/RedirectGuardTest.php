@@ -10,6 +10,7 @@ use App\Publishing\Redirects\GscUrlInventory;
 use App\Publishing\Redirects\LegacyContentReviver;
 use App\Publishing\Redirects\LegacyRedirectPlanner;
 use App\Publishing\Redirects\RedirectGuard;
+use App\Publishing\Redirects\RevivalBrief;
 use App\Publishing\Redirects\RevivalEligibility;
 use App\Support\CurrentSite;
 use Illuminate\Support\Str;
@@ -189,7 +190,7 @@ it('diverts a high-value top_query family to revival instead of redirecting it',
         }
     };
 
-    $families = (new LegacyContentReviver($stub, app(RevivalEligibility::class)))->plan($site);
+    $families = (new LegacyContentReviver($stub, app(RevivalEligibility::class), app(RevivalBrief::class)))->plan($site);
 
     // 159,957 across the family, well over divert_floor — kept as its own post rather than funnelled into
     // a service page that could never rank for "how to install a sump pump".
