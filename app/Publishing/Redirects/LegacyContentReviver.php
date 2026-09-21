@@ -63,7 +63,8 @@ class LegacyContentReviver
      *
      * @return array{
      *     unresolved: int, divertable: int, claimed: int, families: int,
-     *     below_floor: int, below_divert_floor: int, capped: int,
+     *     below_floor: int, below_floor_impressions: int, below_floor_bands: array<string, array{families: int, impressions: int}>,
+     *     below_divert_floor: int, capped: int,
      *     floor: int, divert_floor: int, cap: int
      * }
      */
@@ -73,7 +74,14 @@ class LegacyContentReviver
     }
 
     /**
-     * @return array{families: list<array{key: string, from_urls: list<string>, query: ?string, impressions: int}>, stats: array<string, int>}
+     * @return array{
+     *     families: list<array{key: string, from_urls: list<string>, query: ?string, impressions: int}>,
+     *     stats: array{
+     *         unresolved: int, divertable: int, claimed: int, families: int,
+     *         below_floor: int, below_floor_impressions: int, below_floor_bands: array<string, array{families: int, impressions: int}>,
+     *         below_divert_floor: int, capped: int, floor: int, divert_floor: int, cap: int
+     *     }
+     * }
      */
     private function compute(Site $site, ?int $minImpressions = null, ?int $limit = null): array
     {
@@ -117,10 +125,19 @@ class LegacyContentReviver
 
         $out = [];
         $belowFloor = 0;
+        $belowFloorImpressions = 0;
+        $belowFloorBands = [];
         $belowDivertFloor = 0;
         foreach ($families as $fam) {
             if ($fam['impressions'] < $floor) {
+                // How much is in the tail, and how it is distributed — "274 families fell below the floor"
+                // is 274 x 50 impressions or 274 x 4,900, and those are opposite decisions about whether
+                // to lower it. A count alone cannot be acted on.
                 $belowFloor++;
+                $belowFloorImpressions += $fam['impressions'];
+                $band = $this->band($fam['impressions'], $floor);
+                $belowFloorBands[$band]['families'] = ($belowFloorBands[$band]['families'] ?? 0) + 1;
+                $belowFloorBands[$band]['impressions'] = ($belowFloorBands[$band]['impressions'] ?? 0) + $fam['impressions'];
 
                 continue;
             }
@@ -151,6 +168,8 @@ class LegacyContentReviver
                 ->count(),
             'families' => count($families),
             'below_floor' => $belowFloor,
+            'below_floor_impressions' => $belowFloorImpressions,
+            'below_floor_bands' => $belowFloorBands,
             'below_divert_floor' => $belowDivertFloor,
             'capped' => max(0, count($out) - $cap),
             'floor' => $floor,
@@ -159,6 +178,22 @@ class LegacyContentReviver
         ];
 
         return ['families' => array_slice($out, 0, $cap), 'stats' => $stats];
+    }
+
+    /**
+     * Where a below-floor family sits, in fractions of the floor itself so the bands mean something
+     * whatever the floor is set to.
+     */
+    private function band(int $impressions, int $floor): string
+    {
+        $floor = max(1, $floor);
+
+        return match (true) {
+            $impressions >= (int) ($floor * 0.5) => 'half the floor to the floor',
+            $impressions >= (int) ($floor * 0.2) => 'a fifth to a half',
+            $impressions >= (int) ($floor * 0.05) => 'a twentieth to a fifth',
+            default => 'negligible',
+        };
     }
 
     /**
