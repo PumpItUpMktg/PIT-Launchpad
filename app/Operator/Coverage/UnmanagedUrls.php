@@ -3,8 +3,10 @@
 namespace App\Operator\Coverage;
 
 use App\Enums\ContentStatus;
+use App\Guided\StoredSearchMetrics;
 use App\Metrics\UrlNormalizer;
 use App\Models\Content;
+use App\Models\GscUrlDaily;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\Redirects\GscUrlInventory;
@@ -34,8 +36,11 @@ class UnmanagedUrls
      * @return array{
      *     managed: int,
      *     managed_impressions: int,
+     *     managed_clicks: int,
      *     unmanaged: int,
      *     unmanaged_impressions: int,
+     *     unmanaged_clicks: int,
+     *     position_bands: array<string, array{urls: int, impressions: int, clicks: int}>,
      *     buckets: array<string, array{urls: int, impressions: int}>,
      *     examples: list<array{url: string, bucket: string, impressions: int}>
      * }
@@ -55,10 +60,18 @@ class UnmanagedUrls
             }
         }
 
+        $positions = $this->weightedPositions($site);
+
         $managed = 0;
         $managedImpressions = 0;
+        $managedClicks = 0;
         $unmanaged = 0;
         $impressions = 0;
+        $clicks = 0;
+        // Where the unmanaged traffic actually sits. Impressions alone cannot tell a page-one winner from
+        // a page-three also-ran, and the two want opposite treatment: one must not be touched carelessly,
+        // the other is the cheapest win on the site.
+        $bands = [];
         $buckets = [];
         $rows = [];
 
@@ -67,11 +80,19 @@ class UnmanagedUrls
             if (isset($ours[$path])) {
                 $managed++;
                 $managedImpressions += $row['impressions'];
+                $managedClicks += $row['clicks'];
 
                 continue;
             }
             $unmanaged++;
             $impressions += $row['impressions'];
+            $clicks += $row['clicks'];
+
+            $band = $this->band($positions[UrlNormalizer::url($row['url'])] ?? null);
+            $bands[$band]['urls'] = ($bands[$band]['urls'] ?? 0) + 1;
+            $bands[$band]['impressions'] = ($bands[$band]['impressions'] ?? 0) + $row['impressions'];
+            $bands[$band]['clicks'] = ($bands[$band]['clicks'] ?? 0) + $row['clicks'];
+
             $bucket = $this->classify($path, $ours);
             $buckets[$bucket]['urls'] = ($buckets[$bucket]['urls'] ?? 0) + 1;
             $buckets[$bucket]['impressions'] = ($buckets[$bucket]['impressions'] ?? 0) + $row['impressions'];
@@ -80,14 +101,62 @@ class UnmanagedUrls
 
         uasort($buckets, fn (array $a, array $b): int => $b['urls'] <=> $a['urls']);
 
+        $order = ['1–3', '4–10', '11–20', '21+', 'unknown'];
+        uksort($bands, fn (string $a, string $b): int => array_search($a, $order, true) <=> array_search($b, $order, true));
+
         return [
             'managed' => $managed,
             'managed_impressions' => $managedImpressions,
+            'managed_clicks' => $managedClicks,
             'unmanaged' => $unmanaged,
             'unmanaged_impressions' => $impressions,
+            'unmanaged_clicks' => $clicks,
+            'position_bands' => $bands,
             'buckets' => $buckets,
             'examples' => array_slice($rows, 0, $examples),
         ];
+    }
+
+    /**
+     * Impression-weighted average position per URL, keyed by canonical URL.
+     *
+     * Weighted by impressions, because a flat mean across days lets one quiet day at position 3 outvote a
+     * busy week at 25. This is the same rule {@see StoredSearchMetrics} uses, so a URL reads
+     * the same position here as it does on its own card.
+     *
+     * @return array<string, float>
+     */
+    private function weightedPositions(Site $site): array
+    {
+        $rows = GscUrlDaily::query()->withoutGlobalScope(SiteScope::class)->toBase()
+            ->where('site_id', $site->id)
+            ->where('impressions', '>', 0)
+            ->whereNotNull('position')
+            ->selectRaw('url, sum(position * impressions) as weighted, sum(impressions) as impressions')
+            ->groupBy('url')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $impressions = (int) $row->impressions;
+            if ($impressions > 0) {
+                $out[UrlNormalizer::url((string) $row->url)] = round((float) $row->weighted / $impressions, 1);
+            }
+        }
+
+        return $out;
+    }
+
+    /** The page of results a URL lives on, in the bands that imply different action. */
+    private function band(?float $position): string
+    {
+        return match (true) {
+            $position === null => 'unknown',
+            $position <= 3.0 => '1–3',
+            $position <= 10.0 => '4–10',
+            $position <= 20.0 => '11–20',
+            default => '21+',
+        };
     }
 
     /**

@@ -41,11 +41,17 @@ class ReportUnmanagedUrlsCommand extends Command
 
         $this->info($site->brand_name.' — URLs Google has shown that Launchpad did not publish');
         $this->newLine();
-        $this->line(sprintf('%d URL(s) Google has shown map to a page we published, carrying %s impression(s).',
-            $r['managed'], number_format($r['managed_impressions'])));
+        $ctr = fn (int $clicks, int $impressions): string => $impressions > 0
+            ? number_format($clicks / $impressions * 100, 2).'%'
+            : '—';
+
+        $this->line(sprintf('%d URL(s) Google has shown map to a page we published: %s impression(s), %s click(s), %s CTR.',
+            $r['managed'], number_format($r['managed_impressions']), number_format($r['managed_clicks']),
+            $ctr($r['managed_clicks'], $r['managed_impressions'])));
         $total = $r['managed_impressions'] + $r['unmanaged_impressions'];
-        $this->line(sprintf('<info>%d do not</info>, carrying %s — <info>%d%%</info> of everything this property has earned.',
-            $r['unmanaged'], number_format($r['unmanaged_impressions']),
+        $this->line(sprintf('<info>%d do not</info>: %s impression(s), %s click(s), %s CTR — <info>%d%%</info> of everything this property has earned.',
+            $r['unmanaged'], number_format($r['unmanaged_impressions']), number_format($r['unmanaged_clicks']),
+            $ctr($r['unmanaged_clicks'], $r['unmanaged_impressions']),
             $total > 0 ? (int) round($r['unmanaged_impressions'] / $total * 100) : 0));
         $this->line('Search Console counts the whole property. The Indexing board counts what Launchpad published,');
         $this->line('on purpose — so the two totals are not meant to match, and the difference lives here.');
@@ -62,6 +68,16 @@ class ReportUnmanagedUrlsCommand extends Command
             $rows[] = [$bucket, $stats['urls'], number_format($stats['impressions'])];
         }
         $this->table(['Shape', 'URLs', 'Impressions'], $rows);
+
+        // Where the unmanaged traffic sits decides what to do with it. A page-one winner must not be
+        // touched carelessly; a page-three also-ran with real impressions is the cheapest win on the site.
+        $bands = [];
+        foreach ($r['position_bands'] as $band => $stats) {
+            $bands[] = [$band, $stats['urls'], number_format($stats['impressions']), number_format($stats['clicks']),
+                $ctr($stats['clicks'], $stats['impressions'])];
+        }
+        $this->newLine();
+        $this->table(['Avg position', 'URLs', 'Impressions', 'Clicks', 'CTR'], $bands);
 
         $this->newLine();
         $this->line('<comment>Examples, most impressions first</comment>');
