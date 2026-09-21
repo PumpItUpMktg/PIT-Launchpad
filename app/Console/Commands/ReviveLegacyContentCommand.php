@@ -70,7 +70,7 @@ class ReviveLegacyContentCommand extends Command
     /**
      * Say which filter emptied the plan, not that one of several might have.
      *
-     * @param  array{unresolved: int, divertable: int, claimed: int, families: int, below_floor: int, below_divert_floor: int, capped: int, floor: int, divert_floor: int, cap: int}  $s
+     * @param  array{unresolved: int, divertable: int, claimed: int, families: int, below_floor: int, below_floor_impressions: int, below_floor_bands: array<string, array{families: int, impressions: int}>, below_divert_floor: int, capped: int, floor: int, divert_floor: int, cap: int}  $s
      */
     private function explainEmpty(array $s): void
     {
@@ -92,8 +92,15 @@ class ReviveLegacyContentCommand extends Command
             return;
         }
         if ($s['below_floor'] > 0) {
-            $this->comment(sprintf('  %d family(ies) fell below the %s-impression floor. Lower it with --min-impressions=.',
-                $s['below_floor'], number_format($s['floor'])));
+            $this->comment(sprintf('  %d family(ies) fell below the %s-impression floor, carrying %s impression(s) between them.',
+                $s['below_floor'], number_format($s['floor']), number_format($s['below_floor_impressions'])));
+            // A count alone cannot be acted on: 274 families is 274 x 50 impressions or 274 x 4,900, and
+            // those are opposite answers to "is it worth lowering the floor".
+            foreach ($s['below_floor_bands'] as $band => $stats) {
+                $this->line(sprintf('     %-28s %4d family(ies), %s impression(s)',
+                    $band, $stats['families'], number_format($stats['impressions'])));
+            }
+            $this->line('     Lower the floor with <info>--min-impressions=</info> only if a band above is worth the drafts it costs.');
         }
         if ($s['below_divert_floor'] > 0) {
             $this->comment(sprintf('  %d family(ies) matched a live page and were under the %s-impression divert floor, so they stay redirects.',

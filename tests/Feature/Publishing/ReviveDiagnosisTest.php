@@ -47,6 +47,21 @@ it('reports the pool it started from', function () {
         ->assertSuccessful();
 });
 
+it('sizes the tail instead of only counting it', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    legacyHit($site, '/almost-worth-it', 4000);    // half the floor to the floor
+    legacyHit($site, '/marginal', 1200);           // a fifth to a half
+    legacyHit($site, '/noise', 30);                // negligible
+
+    // 274 families is 274 x 50 impressions or 274 x 4,900, and those are opposite answers to "is it
+    // worth lowering the floor". The count alone cannot be acted on.
+    $this->artisan('launchpad:revive-legacy-content', ['--site' => $site->id])
+        ->expectsOutputToContain('carrying 5,230 impression(s) between them')
+        ->expectsOutputToContain('half the floor to the floor')
+        ->expectsOutputToContain('negligible')
+        ->assertSuccessful();
+});
+
 it('says so when everything is already claimed', function () {
     $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
     legacyHit($site, '/how-often-should-sump-pump-cycle', 78107);
