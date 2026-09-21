@@ -48,6 +48,35 @@ class LegacyContentReviver
      */
     public function plan(Site $site, ?int $minImpressions = null, ?int $limit = null): array
     {
+        return $this->compute($site, $minImpressions, $limit)['families'];
+    }
+
+    /**
+     * Why a run produced what it produced — the pool it started from, the families it formed, and how many
+     * fell to each filter with the thresholds that did it.
+     *
+     * An empty plan has at least five different causes (nothing unresolved, everything already claimed, a
+     * raised floor, the divert floor, a limit of zero) and "nothing above the impression floor (or all
+     * already revived)" distinguishes none of them. On Sump Pump Gurus the redirect plan showed 458
+     * unresolved URLs, several above 70,000 impressions, and this returned nothing — a sentence that says
+     * "or" cannot be acted on.
+     *
+     * @return array{
+     *     unresolved: int, divertable: int, claimed: int, families: int,
+     *     below_floor: int, below_divert_floor: int, capped: int,
+     *     floor: int, divert_floor: int, cap: int
+     * }
+     */
+    public function diagnose(Site $site, ?int $minImpressions = null, ?int $limit = null): array
+    {
+        return $this->compute($site, $minImpressions, $limit)['stats'];
+    }
+
+    /**
+     * @return array{families: list<array{key: string, from_urls: list<string>, query: ?string, impressions: int}>, stats: array<string, int>}
+     */
+    private function compute(Site $site, ?int $minImpressions = null, ?int $limit = null): array
+    {
         $floor = $minImpressions ?? (int) config('launchpad.legacy_revival.min_impressions', 5000);
         $divertFloor = (int) config('launchpad.legacy_revival.divert_floor', 20000);
         $cap = $limit ?? (int) config('launchpad.legacy_revival.limit', 100);
@@ -87,11 +116,17 @@ class LegacyContentReviver
         }
 
         $out = [];
+        $belowFloor = 0;
+        $belowDivertFloor = 0;
         foreach ($families as $fam) {
             if ($fam['impressions'] < $floor) {
+                $belowFloor++;
+
                 continue;
             }
             if (! $fam['has_unresolved'] && $fam['impressions'] < $divertFloor) {
+                $belowDivertFloor++;
+
                 continue; // a pillar match that isn't high-value enough to steal from the redirect
             }
 
@@ -107,7 +142,23 @@ class LegacyContentReviver
 
         usort($out, fn (array $a, array $b): int => $b['impressions'] <=> $a['impressions']);
 
-        return array_slice($out, 0, $cap);
+        $stats = [
+            'unresolved' => count($planned['unresolved']),
+            'divertable' => count($pool) - count($planned['unresolved']),
+            'claimed' => Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)
+                ->whereNotNull('meta->revived_from_urls')
+                ->count(),
+            'families' => count($families),
+            'below_floor' => $belowFloor,
+            'below_divert_floor' => $belowDivertFloor,
+            'capped' => max(0, count($out) - $cap),
+            'floor' => $floor,
+            'divert_floor' => $divertFloor,
+            'cap' => $cap,
+        ];
+
+        return ['families' => array_slice($out, 0, $cap), 'stats' => $stats];
     }
 
     /**

@@ -50,7 +50,7 @@ class ReviveLegacyContentCommand extends Command
         }
 
         if ($plan === []) {
-            $this->comment('  Nothing above the impression floor (or all already revived).');
+            $this->explainEmpty($reviver->diagnose($site, $floor, $limit));
 
             return self::SUCCESS;
         }
@@ -65,5 +65,39 @@ class ReviveLegacyContentCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Say which filter emptied the plan, not that one of several might have.
+     *
+     * @param  array{unresolved: int, divertable: int, claimed: int, families: int, below_floor: int, below_divert_floor: int, capped: int, floor: int, divert_floor: int, cap: int}  $s
+     */
+    private function explainEmpty(array $s): void
+    {
+        $this->newLine();
+        $this->line(sprintf('  Pool: <info>%d</info> unresolved + <info>%d</info> divertable URL(s) → <info>%d</info> family(ies).',
+            $s['unresolved'], $s['divertable'], $s['families']));
+        $this->line(sprintf('  Already claimed by an earlier revival: <info>%d</info> candidate(s).', $s['claimed']));
+
+        if ($s['cap'] < 1) {
+            $this->error(sprintf('  The per-run limit is %d, so nothing can ever be returned. Pass --limit= or raise LAUNCHPAD_REVIVE_LIMIT.', $s['cap']));
+
+            return;
+        }
+        if ($s['families'] === 0) {
+            $this->comment($s['claimed'] > 0
+                ? '  Every candidate URL is already claimed by a revival — there is nothing left to revive.'
+                : '  The redirect planner returned nothing revivable. Run launchpad:plan-legacy-redirects to see why.');
+
+            return;
+        }
+        if ($s['below_floor'] > 0) {
+            $this->comment(sprintf('  %d family(ies) fell below the %s-impression floor. Lower it with --min-impressions=.',
+                $s['below_floor'], number_format($s['floor'])));
+        }
+        if ($s['below_divert_floor'] > 0) {
+            $this->comment(sprintf('  %d family(ies) matched a live page and were under the %s-impression divert floor, so they stay redirects.',
+                $s['below_divert_floor'], number_format($s['divert_floor'])));
+        }
     }
 }
