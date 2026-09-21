@@ -42,6 +42,7 @@ class LegacyContentReviver
     public function __construct(
         private readonly LegacyRedirectPlanner $planner,
         private readonly RevivalEligibility $eligibility,
+        private readonly RevivalBrief $brief,
     ) {}
 
     /**
@@ -247,6 +248,11 @@ class LegacyContentReviver
             $title = Str::title($query);
             $count = count($family['from_urls']);
 
+            // Every query the family earns on, not just its best. The post REPLACES the cluster and 301s
+            // the originals onto it, so anything the brief omits is traffic with no way back.
+            $queries = $this->brief->for($site, $family['from_urls']);
+            $coverage = $this->brief->sentence($queries);
+
             $created[] = Content::create([
                 'site_id' => $site->id,
                 'kind' => ContentKind::Post,
@@ -257,18 +263,20 @@ class LegacyContentReviver
                 'slug' => $this->uniqueSlug($site->id, $title),
                 'source_name' => 'Legacy revival (GSC)',
                 'source_url' => $family['from_urls'][0],
-                'angle_hint' => sprintf(
-                    'Revive a top-performing legacy article. Write a comprehensive, up-to-date post targeting the query “%s” (the old %s earned %s impressions for it). On publish, %s 301%s to this post.',
+                'angle_hint' => trim(sprintf(
+                    'Revive a top-performing legacy article. Write a comprehensive, up-to-date post that owns the query “%s” (the old %s earned %s impressions). %s On publish, %s 301%s to this post, so anything these pages rank for and the new post does not cover is lost.',
                     $query,
                     $count === 1 ? 'URL' : "{$count} URLs",
                     number_format($family['impressions']),
+                    $coverage,
                     $count === 1 ? 'the old URL' : "all {$count} old URLs",
                     $count === 1 ? 's' : '',
-                ),
+                )),
                 'version' => 1,
                 'meta' => [
                     'revived_from_urls' => $family['from_urls'],
                     'revived_query' => $query,
+                    'revived_queries' => $queries,
                     'revived_impressions' => $family['impressions'],
                 ],
             ]);
