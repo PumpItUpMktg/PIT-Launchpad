@@ -851,6 +851,17 @@ return [
         // its specific ranking instead of consolidating — only when its total impressions clear this.
         'divert_floor' => (int) env('LAUNCHPAD_REVIVE_DIVERT_FLOOR', 20000),
         'limit' => (int) env('LAUNCHPAD_REVIVE_LIMIT', 100),
+
+        // Revival is for abandoned ARTICLES. A legacy URL is "unresolved" when Launchpad publishes nothing
+        // that looks like it — a statement about our catalogue, not about the page — so a live Contact
+        // page is unresolved for the same reason a dead 2019 post is. These say which paths are structural
+        // so they are never rewritten as blog posts and 301'd away.
+        'reserved_paths' => [
+            'about', 'about-us', 'contact', 'contact-us', 'services', 'service-areas', 'areas-we-serve',
+            'blog', 'privacy-policy', 'privacy', 'terms', 'terms-of-service', 'sitemap', 'careers',
+            'reviews', 'testimonials', 'financing', 'faq', 'gallery',
+        ],
+        'service_prefixes' => ['services'],
     ],
 
     /*

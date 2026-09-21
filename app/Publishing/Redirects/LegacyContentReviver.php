@@ -39,7 +39,10 @@ class LegacyContentReviver
     /** Cascade rungs that matched on resemblance, so a high-value family may be kept rather than routed. */
     private const DIVERTABLE = ['slug_overlap', 'top_query'];
 
-    public function __construct(private readonly LegacyRedirectPlanner $planner) {}
+    public function __construct(
+        private readonly LegacyRedirectPlanner $planner,
+        private readonly RevivalEligibility $eligibility,
+    ) {}
 
     /**
      * The revival families a run WOULD create (dry view), highest total impressions first, capped.
@@ -74,13 +77,26 @@ class LegacyContentReviver
     }
 
     /**
+     * Families that cleared the floor but are NOT articles — held back from revival, with what each one
+     * actually is. They are reported rather than hidden: a live Contact page ranking for the brand is not
+     * a problem, but an old service URL in this list still needs a redirect.
+     *
+     * @return list<array{from: string, impressions: int, kind: string, reason: string}>
+     */
+    public function notArticles(Site $site, ?int $minImpressions = null, ?int $limit = null): array
+    {
+        return $this->compute($site, $minImpressions, $limit)['not_articles'];
+    }
+
+    /**
      * @return array{
      *     families: list<array{key: string, from_urls: list<string>, query: ?string, impressions: int}>,
      *     stats: array{
      *         unresolved: int, divertable: int, claimed: int, families: int,
      *         below_floor: int, below_floor_impressions: int, below_floor_bands: array<string, array{families: int, impressions: int}>,
      *         below_divert_floor: int, capped: int, floor: int, divert_floor: int, cap: int
-     *     }
+     *     },
+     *     not_articles: list<array{from: string, impressions: int, kind: string, reason: string}>
      * }
      */
     private function compute(Site $site, ?int $minImpressions = null, ?int $limit = null): array
@@ -124,6 +140,7 @@ class LegacyContentReviver
         }
 
         $out = [];
+        $notArticles = [];
         $belowFloor = 0;
         $belowFloorImpressions = 0;
         $belowFloorBands = [];
@@ -149,6 +166,23 @@ class LegacyContentReviver
 
             // Order members by impressions so the top one names the family (query + primary URL).
             usort($fam['members'], fn (array $a, array $b): int => $b['impressions'] <=> $a['impressions']);
+
+            // Revival rewrites the page and 301s the original onto the new post. That is right for an
+            // abandoned article and destructive for anything else — a Contact page would be replaced by
+            // a blog post about contacting. Excluded families are SURFACED rather than silently dropped,
+            // because most of them still need something, just not this.
+            $primary = (string) $fam['members'][0]['from'];
+            $kind = $this->eligibility->classify($site, $primary, $fam['members'][0]['query'] ?? null);
+            if ($kind !== RevivalEligibility::ARTICLE) {
+                $notArticles[] = [
+                    'from' => $primary,
+                    'impressions' => $fam['impressions'],
+                    'kind' => $kind,
+                    'reason' => RevivalEligibility::REASONS[$kind] ?? $kind,
+                ];
+
+                continue;
+            }
             $out[] = [
                 'key' => $fam['key'],
                 'from_urls' => array_map(fn (array $m): string => (string) $m['from'], $fam['members']),
@@ -177,7 +211,9 @@ class LegacyContentReviver
             'cap' => $cap,
         ];
 
-        return ['families' => array_slice($out, 0, $cap), 'stats' => $stats];
+        usort($notArticles, fn (array $a, array $b): int => $b['impressions'] <=> $a['impressions']);
+
+        return ['families' => array_slice($out, 0, $cap), 'stats' => $stats, 'not_articles' => $notArticles];
     }
 
     /**
