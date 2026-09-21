@@ -8,6 +8,7 @@ use App\Models\Content;
 use App\Models\GscUrlDaily;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Publishing\Redirects\CollisionSuffix;
 use App\Publishing\Redirects\GscUrlInventory;
 use App\Support\PublicUrl;
 
@@ -213,7 +214,10 @@ class UnmanagedUrls
             return null;
         }
         $segment = substr($path, $cut + 1);
-        if (! preg_match('/^(.+)-\d+$/', $segment, $m)) {
+        // A large trailing number is a title, not WordPress's collision counter — the same rule the
+        // redirect planner applies, so the two cannot disagree about what a duplicate is.
+        $base = CollisionSuffix::strip($segment);
+        if ($base === null) {
             return null;
         }
         // /page/2, /blog/page/3 — pagination, already its own shape.
@@ -221,6 +225,6 @@ class UnmanagedUrls
             return null;
         }
 
-        return substr($path, 0, $cut + 1).$m[1];
+        return substr($path, 0, $cut + 1).$base;
     }
 }

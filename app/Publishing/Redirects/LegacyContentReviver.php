@@ -22,9 +22,10 @@ use Illuminate\Support\Str;
  *
  *  - an unresolved family revives once its total clears the `min_impressions`
  *    floor (no pillar wanted it anyway);
- *  - a slug_overlap-only family (the planner would 301 it to a pillar) is revived
- *    only when it's high-value — total ≥ `divert_floor` — otherwise it stays a
- *    redirect.
+ *  - a family the planner matched by RESEMBLANCE (`slug_overlap` or `top_query`)
+ *    is revived only when it's high-value — total ≥ `divert_floor` — otherwise it
+ *    stays a redirect. Both rungs guess; `top_query` simply guesses more
+ *    confidently, which is what makes it the more dangerous of the two.
  *
  * Each revived candidate carries the family's winning GSC query as the brief and
  * remembers ALL its source URLs in `meta.revived_from_urls`; the operator
@@ -35,6 +36,9 @@ use Illuminate\Support\Str;
  */
 class LegacyContentReviver
 {
+    /** Cascade rungs that matched on resemblance, so a high-value family may be kept rather than routed. */
+    private const DIVERTABLE = ['slug_overlap', 'top_query'];
+
     public function __construct(private readonly LegacyRedirectPlanner $planner) {}
 
     /**
@@ -55,16 +59,26 @@ class LegacyContentReviver
         foreach ($planned['unresolved'] as $u) {
             $pool[] = ['from' => $u['from'], 'query' => $u['top_query'], 'impressions' => $u['impressions'], 'unresolved' => true];
         }
+        // Divertable: the rungs of the cascade that matched on RESEMBLANCE rather than identity.
+        //
+        // `slug_overlap` is an approximate token match. `top_query` looks more confident and is the more
+        // dangerous of the two: "how to install a sump pump correctly" matching the installation page's
+        // target keyword is exactly where high keyword similarity hides an intent mismatch — the query
+        // wants an article and the successor is a hire-us page. Sump Pump Gurus had 172,970 impressions
+        // in that shape, confidently routed onto a service page that could never have ranked for them.
+        //
+        // `town` and `numbered_duplicate` are NOT divertable: a town URL genuinely belongs on the town
+        // page, and a true copy of a live page genuinely should collapse onto its original.
         foreach ($planned['redirect'] as $r) {
-            if ($r['reason'] === 'slug_overlap') {
+            if (in_array($r['reason'], self::DIVERTABLE, true)) {
                 $pool[] = ['from' => $r['from'], 'query' => $r['top_query'], 'impressions' => $r['impressions'], 'unresolved' => false];
             }
         }
 
-        // Group into families by base path (numeric suffix stripped) so a numbered dup set is one post.
+        // Group into families by base path (collision suffix stripped) so a numbered dup set is one post.
         $families = [];
         foreach ($pool as $row) {
-            $key = (string) preg_replace('/-\d+$/', '', $row['from']);
+            $key = CollisionSuffix::strip((string) $row['from']) ?? (string) $row['from'];
             $fam = $families[$key] ?? ['key' => $key, 'members' => [], 'impressions' => 0, 'has_unresolved' => false];
             $fam['members'][] = ['from' => $row['from'], 'query' => $row['query'], 'impressions' => $row['impressions']];
             $fam['impressions'] += $row['impressions'];

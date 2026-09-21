@@ -387,13 +387,13 @@ class LegacyRedirectPlanner
     private function route(string $path, ?string $topQuery, array $livePaths, array $leafToPath, array $keywordToPath, array $locationPages): ?array
     {
         $leaf = $this->leaf($path);
-        // Old-site duplicate copies carry a numeric suffix (`-2`…`-10`). Strip it so a dup routes
-        // wherever its base would — and so the trailing digit doesn't drag slug-overlap under the floor.
-        $core = (string) preg_replace('/-\d+$/', '', $leaf);
-        if ($core === '') {
-            $core = $leaf;
-        }
-        $numbered = $core !== $leaf;
+        // Old-site duplicate copies carry a numeric suffix (`-2`…`-10`). Strip it so a dup routes wherever
+        // its base would — and so the trailing digit doesn't drag slug-overlap under the floor. A LARGE
+        // number is not a collision ({@see CollisionSuffix}): "…-maintenance-101" is a title, and
+        // collapsing it retires an article that was never a copy.
+        $stripped = CollisionSuffix::strip($leaf);
+        $core = $stripped ?? $leaf;
+        $numbered = $stripped !== null;
 
         // 1. Numbered-duplicate collapse: /foo-3 → the live /…/foo, when the base itself is a live page.
         if ($numbered && isset($leafToPath[$core])) {
