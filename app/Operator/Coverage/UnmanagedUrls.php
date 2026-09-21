@@ -3,7 +3,6 @@
 namespace App\Operator\Coverage;
 
 use App\Enums\ContentStatus;
-use App\Guided\StoredSearchMetrics;
 use App\Metrics\UrlNormalizer;
 use App\Models\Content;
 use App\Models\GscUrlDaily;
@@ -60,7 +59,10 @@ class UnmanagedUrls
             }
         }
 
-        $positions = $this->weightedPositions($site);
+        // Unmanaged URLs have no Content row, so the shared per-page helper cannot key them — position
+        // here is read straight off the series by URL. The weighting rule is the same one PagePositions
+        // applies, for the same reason: a quiet day at 3 must not outvote a busy week at 25.
+        $positions = $this->positionsByUrl($site);
 
         $managed = 0;
         $managedImpressions = 0;
@@ -118,15 +120,15 @@ class UnmanagedUrls
     }
 
     /**
-     * Impression-weighted average position per URL, keyed by canonical URL.
+     * Impression-weighted average position per URL.
      *
-     * Weighted by impressions, because a flat mean across days lets one quiet day at position 3 outvote a
-     * busy week at 25. This is the same rule {@see StoredSearchMetrics} uses, so a URL reads
-     * the same position here as it does on its own card.
+     * The URL-keyed sibling of {@see PagePositions}, which keys on Content — these
+     * rows are by definition pages we do not have a Content row for, so there is nothing to key on but the
+     * URL itself.
      *
      * @return array<string, float>
      */
-    private function weightedPositions(Site $site): array
+    private function positionsByUrl(Site $site): array
     {
         $rows = GscUrlDaily::query()->withoutGlobalScope(SiteScope::class)->toBase()
             ->where('site_id', $site->id)

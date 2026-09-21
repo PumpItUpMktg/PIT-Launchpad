@@ -186,6 +186,18 @@ return [
         // The inbound floor mesh fills to (not a hard cap on stronger sources): a page already carrying this
         // many inbound links gets no mesh edge — mesh feeds the starved, it doesn't circulate among winners.
         'max_inbound_per_target' => (int) env('LAUNCHPAD_LINK_PLAN_MAX_INBOUND', 3),
+
+        // The STRENGTHEN pass (App\Publishing\Links\StrengthenPlanner) — links for pages already found
+        // but not yet winning, the inverse of the mesh's unindexed-target rule. The band's floor is the
+        // existing top-3 skip drawn wider: inside it a page needs no help, past the ceiling a link is not
+        // what is wrong. Demand is required because lifting a page nobody searches for from 18 to 8 spends
+        // equity a page it would move never gets.
+        'strengthen' => [
+            'position_min' => (float) env('LAUNCHPAD_STRENGTHEN_POSITION_MIN', 8),
+            'position_max' => (float) env('LAUNCHPAD_STRENGTHEN_POSITION_MAX', 20),
+            'min_volume' => (int) env('LAUNCHPAD_STRENGTHEN_MIN_VOLUME', 20),
+            'max_inbound_per_target' => (int) env('LAUNCHPAD_STRENGTHEN_MAX_INBOUND', 3),
+        ],
     ],
 
     /*
