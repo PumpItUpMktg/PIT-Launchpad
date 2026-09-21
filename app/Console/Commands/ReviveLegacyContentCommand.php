@@ -49,6 +49,8 @@ class ReviveLegacyContentCommand extends Command
             $this->line(sprintf('    %8s  %s%s  →  “%s”', number_format($row['impressions']), $primary, $extra, $row['query'] ?? '—'));
         }
 
+        $this->reportHeldBack($reviver->notArticles($site, $floor, $limit));
+
         if ($plan === []) {
             $this->explainEmpty($reviver->diagnose($site, $floor, $limit));
 
@@ -106,5 +108,25 @@ class ReviveLegacyContentCommand extends Command
             $this->comment(sprintf('  %d family(ies) matched a live page and were under the %s-impression divert floor, so they stay redirects.',
                 $s['below_divert_floor'], number_format($s['divert_floor'])));
         }
+    }
+
+    /**
+     * @param  list<array{from: string, impressions: int, kind: string, reason: string}>  $rows
+     */
+    private function reportHeldBack(array $rows): void
+    {
+        if ($rows === []) {
+            return;
+        }
+
+        $this->newLine();
+        $this->line(sprintf('  <comment>%d held back — cleared the floor but are not articles:</comment>', count($rows)));
+        foreach ($rows as $row) {
+            $this->line(sprintf('    %8s  %-56s %s',
+                number_format($row['impressions']), $row['from'], $row['reason']));
+        }
+        $this->line('    Revival rewrites the page and 301s the original onto the new post, which is right for an');
+        $this->line('    abandoned article and destructive for anything else. Old service URLs here still want a');
+        $this->line('    redirect; town slugs belong to the location tree; core pages want leaving alone.');
     }
 }
