@@ -22,9 +22,10 @@ use Illuminate\Support\Str;
  *
  *  - an unresolved family revives once its total clears the `min_impressions`
  *    floor (no pillar wanted it anyway);
- *  - a slug_overlap-only family (the planner would 301 it to a pillar) is revived
- *    only when it's high-value — total ≥ `divert_floor` — otherwise it stays a
- *    redirect.
+ *  - a family the planner matched by RESEMBLANCE (`slug_overlap` or `top_query`)
+ *    is revived only when it's high-value — total ≥ `divert_floor` — otherwise it
+ *    stays a redirect. Both rungs guess; `top_query` simply guesses more
+ *    confidently, which is what makes it the more dangerous of the two.
  *
  * Each revived candidate carries the family's winning GSC query as the brief and
  * remembers ALL its source URLs in `meta.revived_from_urls`; the operator
@@ -35,6 +36,9 @@ use Illuminate\Support\Str;
  */
 class LegacyContentReviver
 {
+    /** Cascade rungs that matched on resemblance, so a high-value family may be kept rather than routed. */
+    private const DIVERTABLE = ['slug_overlap', 'top_query'];
+
     public function __construct(private readonly LegacyRedirectPlanner $planner) {}
 
     /**
@@ -43,6 +47,35 @@ class LegacyContentReviver
      * @return list<array{key: string, from_urls: list<string>, query: ?string, impressions: int}>
      */
     public function plan(Site $site, ?int $minImpressions = null, ?int $limit = null): array
+    {
+        return $this->compute($site, $minImpressions, $limit)['families'];
+    }
+
+    /**
+     * Why a run produced what it produced — the pool it started from, the families it formed, and how many
+     * fell to each filter with the thresholds that did it.
+     *
+     * An empty plan has at least five different causes (nothing unresolved, everything already claimed, a
+     * raised floor, the divert floor, a limit of zero) and "nothing above the impression floor (or all
+     * already revived)" distinguishes none of them. On Sump Pump Gurus the redirect plan showed 458
+     * unresolved URLs, several above 70,000 impressions, and this returned nothing — a sentence that says
+     * "or" cannot be acted on.
+     *
+     * @return array{
+     *     unresolved: int, divertable: int, claimed: int, families: int,
+     *     below_floor: int, below_divert_floor: int, capped: int,
+     *     floor: int, divert_floor: int, cap: int
+     * }
+     */
+    public function diagnose(Site $site, ?int $minImpressions = null, ?int $limit = null): array
+    {
+        return $this->compute($site, $minImpressions, $limit)['stats'];
+    }
+
+    /**
+     * @return array{families: list<array{key: string, from_urls: list<string>, query: ?string, impressions: int}>, stats: array<string, int>}
+     */
+    private function compute(Site $site, ?int $minImpressions = null, ?int $limit = null): array
     {
         $floor = $minImpressions ?? (int) config('launchpad.legacy_revival.min_impressions', 5000);
         $divertFloor = (int) config('launchpad.legacy_revival.divert_floor', 20000);
@@ -55,16 +88,26 @@ class LegacyContentReviver
         foreach ($planned['unresolved'] as $u) {
             $pool[] = ['from' => $u['from'], 'query' => $u['top_query'], 'impressions' => $u['impressions'], 'unresolved' => true];
         }
+        // Divertable: the rungs of the cascade that matched on RESEMBLANCE rather than identity.
+        //
+        // `slug_overlap` is an approximate token match. `top_query` looks more confident and is the more
+        // dangerous of the two: "how to install a sump pump correctly" matching the installation page's
+        // target keyword is exactly where high keyword similarity hides an intent mismatch — the query
+        // wants an article and the successor is a hire-us page. Sump Pump Gurus had 172,970 impressions
+        // in that shape, confidently routed onto a service page that could never have ranked for them.
+        //
+        // `town` and `numbered_duplicate` are NOT divertable: a town URL genuinely belongs on the town
+        // page, and a true copy of a live page genuinely should collapse onto its original.
         foreach ($planned['redirect'] as $r) {
-            if ($r['reason'] === 'slug_overlap') {
+            if (in_array($r['reason'], self::DIVERTABLE, true)) {
                 $pool[] = ['from' => $r['from'], 'query' => $r['top_query'], 'impressions' => $r['impressions'], 'unresolved' => false];
             }
         }
 
-        // Group into families by base path (numeric suffix stripped) so a numbered dup set is one post.
+        // Group into families by base path (collision suffix stripped) so a numbered dup set is one post.
         $families = [];
         foreach ($pool as $row) {
-            $key = (string) preg_replace('/-\d+$/', '', $row['from']);
+            $key = CollisionSuffix::strip((string) $row['from']) ?? (string) $row['from'];
             $fam = $families[$key] ?? ['key' => $key, 'members' => [], 'impressions' => 0, 'has_unresolved' => false];
             $fam['members'][] = ['from' => $row['from'], 'query' => $row['query'], 'impressions' => $row['impressions']];
             $fam['impressions'] += $row['impressions'];
@@ -73,11 +116,17 @@ class LegacyContentReviver
         }
 
         $out = [];
+        $belowFloor = 0;
+        $belowDivertFloor = 0;
         foreach ($families as $fam) {
             if ($fam['impressions'] < $floor) {
+                $belowFloor++;
+
                 continue;
             }
             if (! $fam['has_unresolved'] && $fam['impressions'] < $divertFloor) {
+                $belowDivertFloor++;
+
                 continue; // a pillar match that isn't high-value enough to steal from the redirect
             }
 
@@ -93,7 +142,23 @@ class LegacyContentReviver
 
         usort($out, fn (array $a, array $b): int => $b['impressions'] <=> $a['impressions']);
 
-        return array_slice($out, 0, $cap);
+        $stats = [
+            'unresolved' => count($planned['unresolved']),
+            'divertable' => count($pool) - count($planned['unresolved']),
+            'claimed' => Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)
+                ->whereNotNull('meta->revived_from_urls')
+                ->count(),
+            'families' => count($families),
+            'below_floor' => $belowFloor,
+            'below_divert_floor' => $belowDivertFloor,
+            'capped' => max(0, count($out) - $cap),
+            'floor' => $floor,
+            'divert_floor' => $divertFloor,
+            'cap' => $cap,
+        ];
+
+        return ['families' => array_slice($out, 0, $cap), 'stats' => $stats];
     }
 
     /**

@@ -19,7 +19,7 @@ afterEach(function () {
     CurrentSite::clear();
 });
 
-function gscUrl(Site $site, string $url, int $impressions): void
+function gscUrl(Site $site, string $url, int $impressions, float $position = 11.0, int $clicks = 1): void
 {
     GscUrlDaily::withoutGlobalScopes()->create([
         'id' => (string) Str::ulid(),
@@ -28,8 +28,8 @@ function gscUrl(Site $site, string $url, int $impressions): void
         'date' => now()->subDays(3)->toDateString(),
         'url' => $url,
         'impressions' => $impressions,
-        'clicks' => 1,
-        'position' => 11.0,
+        'clicks' => $clicks,
+        'position' => $position,
     ]);
 }
 
@@ -136,4 +136,47 @@ it('gives the unmanaged impressions a denominator', function () {
     $this->artisan('launchpad:report-unmanaged-urls', ['--site' => $site->id])
         ->expectsOutputToContain('75% of everything this property has earned')
         ->assertSuccessful();
+});
+
+it('bands the unmanaged traffic by where it actually ranks', function () {
+    $site = Site::factory()->create();
+    $root = rtrim((string) $site->domain_url, '/');
+
+    gscUrl($site, $root.'/page-one-winner/', 1000, position: 2.4, clicks: 90);
+    gscUrl($site, $root.'/near-miss/', 5000, position: 14.0, clicks: 20);
+    gscUrl($site, $root.'/deep-also-ran/', 8000, position: 26.5, clicks: 3);
+
+    $bands = app(UnmanagedUrls::class)->for($site)['position_bands'];
+
+    expect(array_keys($bands))->toBe(['1–3', '11–20', '21+'])
+        ->and($bands['1–3']['clicks'])->toBe(90)
+        ->and($bands['11–20']['impressions'])->toBe(5000)
+        ->and($bands['21+']['urls'])->toBe(1);
+});
+
+it('weights position by impressions, not by day', function () {
+    $site = Site::factory()->create();
+    $url = rtrim((string) $site->domain_url, '/').'/volatile/';
+
+    // One quiet day at position 3 must not outvote a busy day at 23.
+    gscUrl($site, $url, 10, position: 3.0, clicks: 0);
+    GscUrlDaily::withoutGlobalScopes()->create([
+        'id' => (string) Str::ulid(), 'site_id' => $site->id, 'grain_hash' => Str::random(32),
+        'date' => now()->subDays(4)->toDateString(), 'url' => $url,
+        'impressions' => 990, 'clicks' => 5, 'position' => 23.0,
+    ]);
+
+    expect(array_keys(app(UnmanagedUrls::class)->for($site)['position_bands']))->toBe(['21+']);
+});
+
+it('reports a URL with no stored position as unknown rather than guessing a band', function () {
+    $site = Site::factory()->create();
+    GscUrlDaily::withoutGlobalScopes()->create([
+        'id' => (string) Str::ulid(), 'site_id' => $site->id, 'grain_hash' => Str::random(32),
+        'date' => now()->subDays(2)->toDateString(),
+        'url' => rtrim((string) $site->domain_url, '/').'/no-position/',
+        'impressions' => 40, 'clicks' => 0, 'position' => null,
+    ]);
+
+    expect(app(UnmanagedUrls::class)->for($site)['position_bands'])->toHaveKey('unknown');
 });

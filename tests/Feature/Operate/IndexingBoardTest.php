@@ -263,6 +263,11 @@ it('does not count a never-inspected row as stale — that is the coverage gap, 
 });
 
 it('collapses the range to one date when every verdict was checked together', function () {
+    // Frozen mid-afternoon: "checked today" is a claim about the calendar day, and a fixture that stamps
+    // now()->subHours(2) silently crosses midnight when the suite runs just after it — which is exactly
+    // how this first failed.
+    $this->travelTo('2026-09-20 14:00:00');
+
     $site = Site::factory()->create();
     foreach (['a', 'b'] as $slug) {
         $c = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);

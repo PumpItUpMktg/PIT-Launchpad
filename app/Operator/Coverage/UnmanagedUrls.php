@@ -5,8 +5,10 @@ namespace App\Operator\Coverage;
 use App\Enums\ContentStatus;
 use App\Metrics\UrlNormalizer;
 use App\Models\Content;
+use App\Models\GscUrlDaily;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Publishing\Redirects\CollisionSuffix;
 use App\Publishing\Redirects\GscUrlInventory;
 use App\Support\PublicUrl;
 
@@ -34,8 +36,11 @@ class UnmanagedUrls
      * @return array{
      *     managed: int,
      *     managed_impressions: int,
+     *     managed_clicks: int,
      *     unmanaged: int,
      *     unmanaged_impressions: int,
+     *     unmanaged_clicks: int,
+     *     position_bands: array<string, array{urls: int, impressions: int, clicks: int}>,
      *     buckets: array<string, array{urls: int, impressions: int}>,
      *     examples: list<array{url: string, bucket: string, impressions: int}>
      * }
@@ -55,10 +60,21 @@ class UnmanagedUrls
             }
         }
 
+        // Unmanaged URLs have no Content row, so the shared per-page helper cannot key them — position
+        // here is read straight off the series by URL. The weighting rule is the same one PagePositions
+        // applies, for the same reason: a quiet day at 3 must not outvote a busy week at 25.
+        $positions = $this->positionsByUrl($site);
+
         $managed = 0;
         $managedImpressions = 0;
+        $managedClicks = 0;
         $unmanaged = 0;
         $impressions = 0;
+        $clicks = 0;
+        // Where the unmanaged traffic actually sits. Impressions alone cannot tell a page-one winner from
+        // a page-three also-ran, and the two want opposite treatment: one must not be touched carelessly,
+        // the other is the cheapest win on the site.
+        $bands = [];
         $buckets = [];
         $rows = [];
 
@@ -67,11 +83,19 @@ class UnmanagedUrls
             if (isset($ours[$path])) {
                 $managed++;
                 $managedImpressions += $row['impressions'];
+                $managedClicks += $row['clicks'];
 
                 continue;
             }
             $unmanaged++;
             $impressions += $row['impressions'];
+            $clicks += $row['clicks'];
+
+            $band = $this->band($positions[UrlNormalizer::url($row['url'])] ?? null);
+            $bands[$band]['urls'] = ($bands[$band]['urls'] ?? 0) + 1;
+            $bands[$band]['impressions'] = ($bands[$band]['impressions'] ?? 0) + $row['impressions'];
+            $bands[$band]['clicks'] = ($bands[$band]['clicks'] ?? 0) + $row['clicks'];
+
             $bucket = $this->classify($path, $ours);
             $buckets[$bucket]['urls'] = ($buckets[$bucket]['urls'] ?? 0) + 1;
             $buckets[$bucket]['impressions'] = ($buckets[$bucket]['impressions'] ?? 0) + $row['impressions'];
@@ -80,14 +104,62 @@ class UnmanagedUrls
 
         uasort($buckets, fn (array $a, array $b): int => $b['urls'] <=> $a['urls']);
 
+        $order = ['1–3', '4–10', '11–20', '21+', 'unknown'];
+        uksort($bands, fn (string $a, string $b): int => array_search($a, $order, true) <=> array_search($b, $order, true));
+
         return [
             'managed' => $managed,
             'managed_impressions' => $managedImpressions,
+            'managed_clicks' => $managedClicks,
             'unmanaged' => $unmanaged,
             'unmanaged_impressions' => $impressions,
+            'unmanaged_clicks' => $clicks,
+            'position_bands' => $bands,
             'buckets' => $buckets,
             'examples' => array_slice($rows, 0, $examples),
         ];
+    }
+
+    /**
+     * Impression-weighted average position per URL.
+     *
+     * The URL-keyed sibling of {@see PagePositions}, which keys on Content — these
+     * rows are by definition pages we do not have a Content row for, so there is nothing to key on but the
+     * URL itself.
+     *
+     * @return array<string, float>
+     */
+    private function positionsByUrl(Site $site): array
+    {
+        $rows = GscUrlDaily::query()->withoutGlobalScope(SiteScope::class)->toBase()
+            ->where('site_id', $site->id)
+            ->where('impressions', '>', 0)
+            ->whereNotNull('position')
+            ->selectRaw('url, sum(position * impressions) as weighted, sum(impressions) as impressions')
+            ->groupBy('url')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $impressions = (int) $row->impressions;
+            if ($impressions > 0) {
+                $out[UrlNormalizer::url((string) $row->url)] = round((float) $row->weighted / $impressions, 1);
+            }
+        }
+
+        return $out;
+    }
+
+    /** The page of results a URL lives on, in the bands that imply different action. */
+    private function band(?float $position): string
+    {
+        return match (true) {
+            $position === null => 'unknown',
+            $position <= 3.0 => '1–3',
+            $position <= 10.0 => '4–10',
+            $position <= 20.0 => '11–20',
+            default => '21+',
+        };
     }
 
     /**
@@ -142,7 +214,10 @@ class UnmanagedUrls
             return null;
         }
         $segment = substr($path, $cut + 1);
-        if (! preg_match('/^(.+)-\d+$/', $segment, $m)) {
+        // A large trailing number is a title, not WordPress's collision counter — the same rule the
+        // redirect planner applies, so the two cannot disagree about what a duplicate is.
+        $base = CollisionSuffix::strip($segment);
+        if ($base === null) {
             return null;
         }
         // /page/2, /blog/page/3 — pagination, already its own shape.
@@ -150,6 +225,6 @@ class UnmanagedUrls
             return null;
         }
 
-        return substr($path, 0, $cut + 1).$m[1];
+        return substr($path, 0, $cut + 1).$base;
     }
 }
