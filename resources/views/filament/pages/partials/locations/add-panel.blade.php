@@ -16,8 +16,11 @@
             </button>
         @endforeach
     @else
-        <input type="text" wire:model="addName" placeholder="Location name (e.g. Montclair)" class="lp-input" />
-        <input type="text" wire:model="addAddress" placeholder="Where you are (address)" class="lp-input" />
+        {{-- Two boxes, and the address is the one that matters: it is the only thing the geocoder reads.
+             On a fresh tenant the full street address went into the name box, the address stayed empty,
+             and the location could never be located. Label both so that cannot happen by accident. --}}
+        <input type="text" wire:model="addName" placeholder="Name — how you refer to it (e.g. Perkasie shop)" class="lp-input" />
+        <input type="text" wire:model="addAddress" placeholder="Street address, town, state, ZIP — required, this is what gets located" class="lp-input" />
     @endif
 
     <p class="lp-muted" style="margin:0">We’ll locate it and pre-tick its home county — adjust the counties you serve on the tab.</p>

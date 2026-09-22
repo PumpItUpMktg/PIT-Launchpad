@@ -23,8 +23,11 @@
             </div>
         </div>
         @php
-            $statusClass = $located ? 'ok' : ($activeLoc->geocode_failed ? 'bad' : 'wait');
-            $statusText = $located ? '● Located' : ($activeLoc->geocode_failed ? 'Couldn’t locate' : 'locating…');
+            // A location with no address cannot be located — the geocoder reads the address, never the
+            // name — so "locating…" would be a promise nothing can keep. Say what is actually missing.
+            $noAddress = ! $located && trim((string) $activeLoc->address) === '';
+            $statusClass = $located ? 'ok' : (($activeLoc->geocode_failed || $noAddress) ? 'bad' : 'wait');
+            $statusText = $located ? '● Located' : ($noAddress ? 'No address to locate' : ($activeLoc->geocode_failed ? 'Couldn’t locate' : 'locating…'));
         @endphp
         <span class="lp-status {{ $statusClass }}">{{ $statusText }}</span>
     </div>

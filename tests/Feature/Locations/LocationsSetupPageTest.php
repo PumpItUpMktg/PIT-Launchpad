@@ -11,12 +11,14 @@ use App\Integrations\Census\Municipality;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Places\MockPlacesProvider;
 use App\Integrations\Places\PlacesProvider;
+use App\Jobs\GeocodeLocation;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\Support\CoverageFixture;
 
@@ -325,4 +327,35 @@ it('summary reflects overlap once coverage is computed', function () {
         ->call('compute')
         ->assertSet('computed', true)
         ->assertSee('overlapping'); // all 3 subdivisions shared across A + B
+});
+
+it('refuses a manual add with no address, and says the address is what gets located', function () {
+    Queue::fake();
+    $site = Site::factory()->create();
+
+    // The street address went into the name box on a fresh tenant; the address stayed empty; the row sat
+    // at "locating…" with nothing the geocoder could read. Refuse it here, with the reason.
+    Livewire::test(LocationsSetup::class)
+        ->set('siteId', $site->id)
+        ->call('startAdd')
+        ->set('addName', '1004 Blue School Road Perkasie PA 18944')
+        ->set('addAddress', '')
+        ->call('addManual')
+        ->assertNotified('An address is needed to locate it');
+
+    expect(Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0);
+    Queue::assertNotPushed(GeocodeLocation::class);
+});
+
+it('shows an address-less location as unlocatable, not as locating', function () {
+    $site = Site::factory()->create();
+    Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'Perkasie shop', 'address' => null, 'lat' => null, 'lng' => null,
+    ]);
+
+    // "locating…" is a promise nothing can keep when there is no address to geocode.
+    Livewire::test(LocationsSetup::class)
+        ->set('siteId', $site->id)
+        ->assertSee('No address to locate')
+        ->assertDontSee('locating…');
 });
