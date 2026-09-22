@@ -67,9 +67,16 @@ class SuggestRedirectTargetCommand extends Command
             switch ($result['kind']) {
                 case 'core_page':
                 case 'brand_query':
-                    $this->line('    <info>Leave it.</info> A live page people search for by name — the URL is the destination, not a legacy path.');
+                    if ($result['candidates'] === []) {
+                        $this->line('    <info>Leave it.</info> A core page with no published successor — nothing to route it to. If it 404s,');
+                        $this->line('    the page needs building under its Launchpad slug, not redirecting elsewhere.');
 
-                    continue 2;
+                        continue 2;
+                    }
+                    // The same page under its new slug. On Sump Pump Gurus /contact-us returned 404 while
+                    // /contact returned 200 — the URL was dead, not live, and "leave it" was the wrong call.
+                    $this->line('    A core page whose successor is published under its Launchpad slug.');
+                    break;
                 case 'town_page':
                     $this->line('    <comment>A town slug.</comment> It belongs to the location tree: anchor it to an existing town page with');
                     $this->line('    launchpad:anchor-town-pages, or build the town. A redirect to anything else loses the local intent.');
