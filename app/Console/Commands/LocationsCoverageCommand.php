@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
-use App\Locations\CountyCoverage;
 use App\Locations\CoverageResult;
 use App\Locations\CoverageWriter;
+use App\Locations\SiteCoverage;
 use App\Models\Site;
 use Illuminate\Console\Command;
 
@@ -24,9 +24,9 @@ class LocationsCoverageCommand extends Command
         {--json : emit the raw coverage set as JSON}
         {--persist : write the union as the site CoverageArea set (default is dry-run)}';
 
-    protected $description = 'Enumerate a site\'s county-based service-area coverage (Census), dry-run by default.';
+    protected $description = 'Enumerate a site\'s service-area coverage (county or distance rings per location, Census), dry-run by default.';
 
-    public function handle(CountyCoverage $coverage, CoverageWriter $writer): int
+    public function handle(SiteCoverage $coverage, CoverageWriter $writer): int
     {
         $site = Site::query()->find($this->argument('site'));
         if ($site === null) {
@@ -38,7 +38,7 @@ class LocationsCoverageCommand extends Command
         $result = $coverage->coverage($site);
 
         if ($result->perBase === []) {
-            $this->error('No coverage — each base location needs a geocoded point and at least one selected county.');
+            $this->error('No coverage — each base location needs a geocoded point and either a selected county or a distance reach.');
 
             return self::FAILURE;
         }

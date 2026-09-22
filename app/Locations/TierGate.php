@@ -8,6 +8,7 @@ use App\Enums\SizeTier;
 use App\Metrics\UrlNormalizer;
 use App\Models\Content;
 use App\Models\CoverageArea;
+use App\Models\Location;
 use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -15,10 +16,11 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * The tiered-rollout gate (advisory). Towns build tier-by-tier WITHIN a market — major → large → medium →
- * small → ungrouped(null) — and a tier is buildable only once the tier ABOVE it clears an indexing
- * threshold: build the largest tier, get it indexed, then let its internal links pull the next tier in
- * faster. The gate is consulted by {@see LocalRelevance::dripGraduate()} so it shapes what the build plan
+ * The tiered-rollout gate (advisory). Towns build band-by-band WITHIN a market — the market's
+ * {@see CoverageBand} chain: major → large → medium → small → ungrouped for a county-drawn territory,
+ * ring5 → ring10 → ring15 for a distance-drawn one — and a band is buildable only once the band ABOVE it
+ * clears an indexing threshold: build the first band, get it indexed, then let its internal links pull
+ * the next band in faster. The gate is consulted by {@see LocalRelevance::dripGraduate()} so it shapes what the build plan
  * SELECTS, not just what a screen shows. It never hard-stops an operator: a manual town toggle overrides it.
  *
  * "Buildable" for a (market, tier): the nearest NON-EMPTY tier above it in that market has ≥ `indexed_pct`
@@ -31,9 +33,6 @@ use Illuminate\Support\Collection;
  */
 class TierGate
 {
-    /** Buildability order — a tier waits on the nearest non-empty tier to its LEFT. Null = ungrouped, last. */
-    private const CHAIN = [SizeTier::Major, SizeTier::Large, SizeTier::Medium, SizeTier::Small, null];
-
     /** @var array<string, Collection<int, CoverageArea>> */
     private array $coverage = [];
 
@@ -43,30 +42,37 @@ class TierGate
     /** @var array<string, array<string, true>> the site's indexed (PASS) url_normalized set */
     private array $indexedUrls = [];
 
-    /** @var array<string, string> normalized town name => size_tier value, per site */
+    /** @var array<string, string> normalized town name => band, per site */
     private array $tierByTown = [];
+
+    /** @var array<string, Collection<int, Location>> the site's locations keyed by id (the per-market band chain) */
+    private array $locations = [];
 
     /** May this reserve town be auto-selected for building now? The drip gate. */
     public function allowsTown(Site $site, CoverageArea $town): bool
     {
-        return $this->status($site, $this->marketOf($town), $this->tierOf($town))->buildable;
+        return $this->status($site, $this->marketOf($town), $this->bandOf($town))->buildable;
     }
 
     /**
-     * Buildability of one (market, tier) with a human reason and the tier-above figures behind it.
-     * `$marketId` null = gate site-wide (a town with no serving location).
+     * Buildability of one (market, band) with a human reason and the band-above figures behind it.
+     * `$band` is a {@see CoverageBand} key (a SizeTier value, a ring, or null/'ungrouped'); `$marketId`
+     * null = gate site-wide (a town with no serving location — read as a county chain).
      */
-    public function status(Site $site, ?string $marketId, ?SizeTier $tier): TierStatus
+    public function status(Site $site, ?string $marketId, SizeTier|string|null $band): TierStatus
     {
-        $above = $this->nearestNonEmptyAbove($site, $marketId, $tier);
+        $band = $band instanceof SizeTier ? $band->value : ($band ?? CoverageBand::UNGROUPED);
+        $chain = $this->chain($site, $marketId);
+        $above = $this->nearestNonEmptyAbove($site, $marketId, $band, $chain);
         if ($above === null) {
             return TierStatus::buildable('Top tier — always buildable');
         }
+        $aboveLabel = CoverageBand::label($above, $chain);
 
         $built = $this->builtInMarketTier($site, $marketId, $above);
         $builtCount = $built->count();
         if ($builtCount === 0) {
-            return TierStatus::locked("Build {$above->label()} first");
+            return TierStatus::locked("Build {$aboveLabel} first");
         }
 
         $indexed = $this->indexedCount($site, $built);
@@ -74,33 +80,39 @@ class TierGate
         $pct = $indexed / $builtCount;
 
         if ($pct >= $cfg['indexed_pct']) {
-            return TierStatus::buildable(sprintf('%s %d%% indexed', $above->label(), (int) round($pct * 100)), $builtCount, $indexed);
+            return TierStatus::buildable(sprintf('%s %d%% indexed', $aboveLabel, (int) round($pct * 100)), $builtCount, $indexed);
         }
 
         $staleDays = $this->staleDays($built);
         if ($staleDays !== null && $staleDays >= $cfg['stale_days']) {
-            return TierStatus::buildable(sprintf('%d days since last %s submission', $staleDays, $above->label()), $builtCount, $indexed);
+            return TierStatus::buildable(sprintf('%d days since last %s submission', $staleDays, $aboveLabel), $builtCount, $indexed);
         }
 
         $need = (int) ceil($builtCount * $cfg['indexed_pct']);
         $toGo = max(1, $need - $indexed);
 
         return TierStatus::locked(
-            sprintf('Unlocks when %s is %d%% indexed — %d to go', $above->label(), (int) round($cfg['indexed_pct'] * 100), $toGo),
+            sprintf('Unlocks when %s is %d%% indexed — %d to go', $aboveLabel, (int) round($cfg['indexed_pct'] * 100), $toGo),
             $builtCount,
             $indexed,
         );
     }
 
-    /** The nearest tier above `$tier` that has ANY coverage in the market, or null when `$tier` is the top. */
-    private function nearestNonEmptyAbove(Site $site, ?string $marketId, ?SizeTier $tier): ?SizeTier
+    /**
+     * The nearest band above `$band` that has ANY coverage in the market, or null when `$band` is the top.
+     * The ungrouped band is never "above" anything.
+     *
+     * @param  list<string>  $chain
+     */
+    private function nearestNonEmptyAbove(Site $site, ?string $marketId, string $band, array $chain): ?string
     {
-        $idx = $this->chainIndex($tier);
-        $present = $this->tiersPresentInMarket($site, $marketId);
+        $idx = array_search($band, $chain, true);
+        $idx = $idx === false ? count($chain) - 1 : $idx; // defensive — an unknown band reads as the bottom
+        $present = $this->bandsPresentInMarket($site, $marketId);
 
         for ($j = $idx - 1; $j >= 0; $j--) {
-            $candidate = self::CHAIN[$j];
-            if ($candidate !== null && isset($present[$candidate->value])) {
+            $candidate = $chain[$j];
+            if ($candidate !== CoverageBand::UNGROUPED && isset($present[$candidate])) {
                 return $candidate;
             }
         }
@@ -108,24 +120,22 @@ class TierGate
         return null;
     }
 
-    private function chainIndex(?SizeTier $tier): int
+    /** @return list<string> the market's band chain — its serving location's mode decides */
+    private function chain(Site $site, ?string $marketId): array
     {
-        foreach (self::CHAIN as $i => $t) {
-            if ($t === $tier) {
-                return $i;
-            }
-        }
+        $location = $marketId === null ? null : ($this->locations($site)[$marketId] ?? null);
 
-        return count(self::CHAIN) - 1; // defensive — treat an unknown tier as the bottom (ungrouped)
+        return CoverageBand::chain($location);
     }
 
-    /** @return array<string, true> the size_tier values that have ≥1 coverage row in this market */
-    private function tiersPresentInMarket(Site $site, ?string $marketId): array
+    /** @return array<string, true> the bands that have ≥1 coverage row in this market */
+    private function bandsPresentInMarket(Site $site, ?string $marketId): array
     {
         $present = [];
         foreach ($this->coverageInMarket($site, $marketId) as $area) {
-            if (is_string($area->size_tier) && $area->size_tier !== '') {
-                $present[$area->size_tier] = true;
+            $band = $this->bandOf($area);
+            if ($band !== CoverageBand::UNGROUPED) {
+                $present[$band] = true;
             }
         }
 
@@ -143,18 +153,18 @@ class TierGate
         return $all->filter(fn (CoverageArea $a): bool => in_array($marketId, (array) $a->source_location_ids, true))->values();
     }
 
-    /** @return Collection<int, Content> built town pages of `$tier` in this market */
-    private function builtInMarketTier(Site $site, ?string $marketId, SizeTier $tier): Collection
+    /** @return Collection<int, Content> built town pages of `$band` in this market */
+    private function builtInMarketTier(Site $site, ?string $marketId, string $band): Collection
     {
         $tierByTown = $this->tierByTown($site);
 
         return $this->builtPages($site)
-            ->filter(function (Content $c) use ($marketId, $tier, $tierByTown): bool {
+            ->filter(function (Content $c) use ($marketId, $band, $tierByTown): bool {
                 if ($marketId !== null && (string) $c->parent_location_id !== $marketId) {
                     return false;
                 }
 
-                return ($tierByTown[$this->townKey((string) $c->title)] ?? null) === $tier->value;
+                return ($tierByTown[$this->townKey((string) $c->title)] ?? null) === $band;
             })
             ->values();
     }
@@ -190,9 +200,10 @@ class TierGate
         return isset($ids[0]) ? (string) $ids[0] : null;
     }
 
-    private function tierOf(CoverageArea $town): ?SizeTier
+    /** The town's roll-out band; a row with none is ungrouped. */
+    private function bandOf(CoverageArea $town): string
     {
-        return is_string($town->size_tier) ? SizeTier::tryFrom($town->size_tier) : null;
+        return is_string($town->band) && $town->band !== '' ? $town->band : CoverageBand::UNGROUPED;
     }
 
     /** Normalize a town name for matching (drop a trailing ", ST", lower) — mirrors the town sweeper/directory. */
@@ -208,7 +219,16 @@ class TierGate
     {
         return $this->coverage[$site->id] ??= CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
-            ->get(['id', 'name', 'size_tier', 'source_location_ids']);
+            ->get(['id', 'name', 'size_tier', 'band', 'source_location_ids']);
+    }
+
+    /** @return Collection<int, Location> keyed by id */
+    private function locations(Site $site): Collection
+    {
+        return $this->locations[$site->id] ??= Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->get(['id', 'coverage_mode', 'coverage_radius'])
+            ->keyBy('id');
     }
 
     /** @return Collection<int, Content> */
@@ -242,12 +262,12 @@ class TierGate
         return $this->indexedUrls[$site->id] = $set;
     }
 
-    /** @return array<string, string> normalized town name => size_tier value */
+    /** @return array<string, string> normalized town name => band */
     private function tierByTown(Site $site): array
     {
         return $this->tierByTown[$site->id] ??= $this->coverage($site)
-            ->filter(fn (CoverageArea $a): bool => is_string($a->size_tier) && $a->size_tier !== '')
-            ->mapWithKeys(fn (CoverageArea $a): array => [$this->townKey((string) $a->name) => (string) $a->size_tier])
+            ->filter(fn (CoverageArea $a): bool => $this->bandOf($a) !== CoverageBand::UNGROUPED)
+            ->mapWithKeys(fn (CoverageArea $a): array => [$this->townKey((string) $a->name) => $this->bandOf($a)])
             ->all();
     }
 }

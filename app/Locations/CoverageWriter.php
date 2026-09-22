@@ -4,6 +4,7 @@ namespace App\Locations;
 
 use App\Enums\SizeTier;
 use App\Models\CoverageArea;
+use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,8 @@ use Illuminate\Support\Facades\DB;
  *    goes with it — correct).
  *  - **size_tier is (re)derived** from population + the tenant's current thresholds on every
  *    write — for the freshly written county rows AND, in a cheap pass, the manual rows.
+ *  - **band is (re)derived** the same way ({@see CoverageBand}): the size tier for a town whose
+ *    market is a county-mode location, its distance ring for a proximity-mode one.
  */
 final class CoverageWriter
 {
@@ -27,6 +30,7 @@ final class CoverageWriter
     {
         return DB::transaction(function () use ($site, $result): int {
             $thresholds = $site->coverageThresholds();
+            $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('id');
 
             // Snapshot the drip-pool selection by GEOID so it survives the rebuild.
             /** @var array<string, bool> $selectedByGeoId */
@@ -57,6 +61,7 @@ final class CoverageWriter
                 ->delete();
 
             foreach ($rows as $m) {
+                $tier = SizeTier::forPopulation($m->population, $thresholds)?->value;
                 CoverageArea::create([
                     'site_id' => $site->id, // explicit: no current-site scope in console/job context
                     'geo_id' => $m->geoId,
@@ -68,7 +73,8 @@ final class CoverageWriter
                     'distance_miles' => $m->distanceMiles,
                     'source_location_ids' => $m->sourceLocationIds,
                     'population' => $m->population,
-                    'size_tier' => SizeTier::forPopulation($m->population, $thresholds)?->value,
+                    'size_tier' => $tier,
+                    'band' => CoverageBand::forArea($locations[$m->sourceLocationIds[0] ?? ''] ?? null, $m->distanceMiles, $tier),
                     'page_selected' => $selectedByGeoId[$m->geoId] ?? false,
                     'source' => 'county',
                 ]);
@@ -80,8 +86,10 @@ final class CoverageWriter
                 ->where('source', 'manual')
                 ->get() as $manual) {
                 $tier = SizeTier::forPopulation($manual->population, $thresholds)?->value;
-                if ($manual->size_tier !== $tier) {
-                    $manual->forceFill(['size_tier' => $tier])->save();
+                $ids = is_array($manual->source_location_ids) ? $manual->source_location_ids : [];
+                $band = CoverageBand::forArea($locations[$ids[0] ?? ''] ?? null, (float) ($manual->distance_miles ?? 0), $tier);
+                if ($manual->size_tier !== $tier || $manual->band !== $band) {
+                    $manual->forceFill(['size_tier' => $tier, 'band' => $band])->save();
                 }
             }
 

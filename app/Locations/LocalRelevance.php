@@ -5,6 +5,7 @@ namespace App\Locations;
 use App\Integrations\Local\LocalSignalProvider;
 use App\Integrations\Local\LocalSignals;
 use App\Models\CoverageArea;
+use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
@@ -17,9 +18,10 @@ use Illuminate\Support\Collection;
  * per (site, town), so two sites covering the same town drip in a different order.
  *
  * Three operations:
- *  - {@see seedInitialSelection()} — first-run population seed: the auto-select tiers (major/large
- *    by default) build now; everything else is reserve. Runs only while the pool is untouched, so
- *    it never stomps an operator's curation.
+ *  - {@see seedInitialSelection()} — first-run seed: each market's auto-select bands build now
+ *    ({@see CoverageBand::autoSelect()}: major/large for a county-drawn territory, ONLY the innermost
+ *    ring for a distance-drawn one); everything else is reserve. Runs only while the pool is
+ *    untouched, so it never stomps an operator's curation.
  *  - {@see dripGraduate()} — promote reserve towns whose relevance score clears the threshold
  *    (the scheduled/triggered drip).
  *  - {@see forSite()} — the readiness read-model (every town with its score, tier, and state).
@@ -35,8 +37,8 @@ final class LocalRelevance
     ) {}
 
     /**
-     * First-run population seed. Selects the auto-select tiers into the build pool, but only while
-     * no county-derived town is selected yet — so re-running (or running after an operator has
+     * First-run seed. Selects each market's auto-select bands into the build pool, but only while
+     * no auto-derived town is selected yet — so re-running (or running after an operator has
      * curated) is a no-op. Returns the number of towns newly selected.
      */
     public function seedInitialSelection(Site $site): int
@@ -48,7 +50,7 @@ final class LocalRelevance
             return 0;
         }
 
-        $autoTiers = (array) config('launchpad.drip.auto_select_tiers', ['major', 'large']);
+        $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('id');
         $locationCities = $this->physicalCities->forSite($site);
 
         $count = 0;
@@ -59,7 +61,10 @@ final class LocalRelevance
             if ($this->physicalCities->matches((string) $town->name, $town->state, $locationCities)) {
                 continue;
             }
-            if (in_array($town->size_tier, $autoTiers, true)) {
+            // The market decides which bands build first: its size tiers or its innermost ring.
+            $ids = is_array($town->source_location_ids) ? $town->source_location_ids : [];
+            $autoBands = CoverageBand::autoSelect($locations[$ids[0] ?? ''] ?? null);
+            if (in_array($town->band ?? CoverageBand::UNGROUPED, $autoBands, true)) {
                 $town->forceFill(['page_selected' => true])->save();
                 $count++;
             }
@@ -175,7 +180,7 @@ final class LocalRelevance
         return max(0.0, min(1.0, $score));
     }
 
-    /** @return Collection<int, CoverageArea> county-derived towns (manual rows are priority, untouched) */
+    /** @return Collection<int, CoverageArea> auto-derived towns (manual rows are priority, untouched) */
     private function countyTowns(Site $site): Collection
     {
         return CoverageArea::withoutGlobalScope(SiteScope::class)

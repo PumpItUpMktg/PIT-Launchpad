@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\GeoGrid\GeoGridGeometry;
+use App\Locations\CoverageBand;
 use App\Models\Concerns\BelongsToSite;
 use App\Models\Scopes\ActiveLocationScope;
 use Database\Factories\LocationFactory;
@@ -22,7 +23,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $phone
  * @property float|null $lat
  * @property float|null $lng
- * @property int|null $coverage_radius service radius in miles (preset {10,15,25}) for the Locations coverage engine
+ * @property int|null $coverage_radius the outer reach in miles of a proximity-mode territory (rings step up to it)
+ * @property string $coverage_mode how the territory is drawn: `county` (selected counties) or `proximity` (distance rings)
  * @property bool $geocode_failed background geocoding couldn't resolve the address — surface a manual override
  * @property string|null $home_county_geoid 5-digit county FIPS the geocoded point falls in
  * @property string|null $home_geo_id census GEOID of the municipality the geocoded point falls in (MCD-first)
@@ -41,6 +43,10 @@ class Location extends Model
 {
     /** @use HasFactory<LocationFactory> */
     use BelongsToSite, HasFactory, HasUlids;
+
+    public const MODE_COUNTY = 'county';
+
+    public const MODE_PROXIMITY = 'proximity';
 
     protected $guarded = [];
 
@@ -161,6 +167,20 @@ class Location extends Model
         }
 
         return ['city' => $city, 'state' => $state];
+    }
+
+    /** Whether this location's territory is drawn by distance rings rather than by county. */
+    public function isProximity(): bool
+    {
+        return $this->coverage_mode === self::MODE_PROXIMITY;
+    }
+
+    /** The outer reach (miles) of a proximity territory — the saved radius, else the platform default. */
+    public function coverageRadiusMiles(): int
+    {
+        $radius = (int) ($this->coverage_radius ?? 0);
+
+        return $radius > 0 ? $radius : CoverageBand::DEFAULT_RADIUS;
     }
 
     /** @return BelongsTo<Site, $this> */
