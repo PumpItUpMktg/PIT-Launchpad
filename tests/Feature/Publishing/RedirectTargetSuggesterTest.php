@@ -3,6 +3,7 @@
 use App\Enums\ContentStatus;
 use App\Metrics\UrlNormalizer;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\GscUrlDaily;
 use App\Models\GscUrlQueryDaily;
 use App\Models\Site;
@@ -93,7 +94,8 @@ it('marks a resemblance-only suggestion as weak', function () {
 
     $this->artisan('launchpad:suggest-redirect-target', ['--site' => $site->id, '--from' => $legacy])
         ->expectsOutputToContain('resemblance only')
-        ->expectsOutputToContain('the traffic is the thing being guessed with')
+        ->expectsOutputToContain('Weak — not offered.')
+        ->doesntExpectOutputToContain('Write it:')
         ->assertSuccessful();
 });
 
@@ -118,4 +120,106 @@ it('needs somewhere to start', function () {
 
     $this->artisan('launchpad:suggest-redirect-target', ['--site' => $site->id])->assertFailed();
     $this->artisan('launchpad:suggest-redirect-target')->assertFailed();
+});
+
+it('does not let one stray impression on the homepage beat every real candidate', function () {
+    $site = Site::factory()->create();
+    $legacy = '/sump-pump-installation-diy-costs-more-long-run';
+    suggestUrl($site, $legacy, 9152);
+    suggestQuery($site, $legacy, 'sump pump installation cost', 9152);
+
+    // The homepage picks up a stray impression on nearly everything. On the real site this was enough to
+    // get "/ already ranks for it (1 impression)" a write line over a topical page.
+    $home = suggestPage($site, '', 'Home');
+    suggestUrl($site, '/', 97908);
+    suggestQuery($site, '/', 'sump pump installation cost', 1);
+
+    $topical = suggestPage($site, 'sump-pump-installation', 'Sump Pump Installation');
+    suggestUrl($site, UrlNormalizer::path((string) PublicUrl::forContent($site->domain_url, $topical)), 104);
+
+    $result = app(RedirectTargetSuggester::class)->for($site, $legacy);
+
+    expect(collect($result['candidates'])->pluck('path')->all())->not->toContain('/')
+        ->and($result['strong'])->toBeFalse();
+    expect($home)->toBeInstanceOf(Content::class);
+});
+
+it('needs a real share of the query before calling a page a shared ranking', function () {
+    $site = Site::factory()->create();
+    $legacy = '/services/sewage-pump-services/sewage-pump-replacement';
+    suggestUrl($site, $legacy, 33487);
+    suggestQuery($site, $legacy, 'sewage ejector pump replacement', 33487);
+
+    // The sump-pump replacement page picked up 32 impressions for a sewage query — a tenth of a percent
+    // of what the source earns. That is noise, and on the real site it was offered as the destination.
+    $sump = suggestPage($site, 'sump-pump-replacement', 'Sump Pump Replacement');
+    $sumpPath = UrlNormalizer::path((string) PublicUrl::forContent($site->domain_url, $sump));
+    suggestUrl($site, $sumpPath, 225);
+    suggestQuery($site, $sumpPath, 'sewage ejector pump replacement', 32);
+
+    $result = app(RedirectTargetSuggester::class)->for($site, $legacy);
+
+    $candidate = collect($result['candidates'])->firstWhere('path', $sumpPath);
+    expect($candidate['shares_query'] ?? 0)->toBe(0)
+        ->and($result['strong'])->toBeFalse();
+});
+
+it('tells you to leave a core page alone instead of routing it', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    suggestUrl($site, '/contact-us', 4724);
+    suggestQuery($site, '/contact-us', 'sump pump gurus', 4724);
+    suggestPage($site, '', 'Home');
+    suggestUrl($site, '/', 97908);
+    suggestQuery($site, '/', 'sump pump gurus', 1145);
+
+    // On the real site this printed a fix-redirect line pointing the Contact page at the homepage.
+    $this->artisan('launchpad:suggest-redirect-target', ['--site' => $site->id, '--from' => '/contact-us'])
+        ->expectsOutputToContain('Leave it.')
+        ->doesntExpectOutputToContain('Write it:')
+        ->assertSuccessful();
+});
+
+it('sends a town slug to the location tree, not to the homepage', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    CoverageArea::withoutGlobalScopes()->create([
+        'site_id' => $site->id, 'name' => 'Jenkintown', 'state' => 'PA', 'geo_id' => Str::random(7),
+    ]);
+    suggestUrl($site, '/jenkintown', 4146);
+    suggestQuery($site, '/jenkintown', 'sump pump repair jenkintown', 4146);
+
+    $this->artisan('launchpad:suggest-redirect-target', ['--site' => $site->id, '--from' => '/jenkintown'])
+        ->expectsOutputToContain('A town slug.')
+        ->doesntExpectOutputToContain('Write it:')
+        ->assertSuccessful();
+});
+
+it('does not route on a site: operator query', function () {
+    $site = Site::factory()->create();
+    suggestUrl($site, '/poconos-article', 2657);
+    suggestQuery($site, '/poconos-article', 'site:sumppumpgurus.com', 2657);
+    suggestPage($site, '', 'Home');
+    suggestUrl($site, '/', 97908);
+    suggestQuery($site, '/', 'site:sumppumpgurus.com', 137);
+
+    $result = app(RedirectTargetSuggester::class)->for($site, '/poconos-article');
+
+    // Every page "ranks" for a site: search. It carries no information about where the traffic belongs.
+    expect($result['top_query'])->toBeNull()
+        ->and($result['candidates'])->toBe([]);
+});
+
+it('keeps articles out of the unrouted sweep unless asked', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    suggestUrl($site, '/how-long-do-sump-pumps-last', 13894);
+    suggestQuery($site, '/how-long-do-sump-pumps-last', 'how long do sump pumps last', 13894);
+    suggestUrl($site, '/services/rain-water-management/dry-well-installation', 6945);
+    suggestQuery($site, '/services/rain-water-management/dry-well-installation', 'dry well installation', 6945);
+
+    $suggester = app(RedirectTargetSuggester::class);
+
+    // An unresolved article belongs in revival; only the service URL is this sweep's business.
+    expect(collect($suggester->unrouted($site))->pluck('from')->all())
+        ->toBe(['/services/rain-water-management/dry-well-installation'])
+        ->and(collect($suggester->unrouted($site, articles: true))->pluck('from')->all())
+        ->toContain('/how-long-do-sump-pumps-last');
 });
