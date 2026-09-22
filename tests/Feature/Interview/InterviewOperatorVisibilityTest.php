@@ -101,7 +101,10 @@ test('the operator can send, resend, and revoke the client link from the Intervi
         ->and($first->recipient_email)->toBe('owner@example.com')
         ->and($first->issued_by)->toBe((string) $operator->id)
         ->and($page->instance()->issuedLink)->toContain('/interview/');
-    Mail::assertQueued(InterviewInviteMail::class, fn (InterviewInviteMail $m) => $m->inviteId === (string) $first->id);
+    // Sent, not queued: the operator is on the page to learn whether it went, and queued it sat behind
+    // page generation while the page claimed "Link sent".
+    Mail::assertSent(InterviewInviteMail::class, fn (InterviewInviteMail $m) => $m->inviteId === (string) $first->id);
+    Mail::assertNotQueued(InterviewInviteMail::class);
 
     // Resend → a new live link, the first one dead.
     $page->call('sendLink');
@@ -146,4 +149,40 @@ test('finishing on the client link emails the operator who issued it', function 
     // Finishing twice never emails twice — the second finish is a no-op on a completed interview.
     $this->post(route('interview.finish', $issued->plaintext))->assertRedirect();
     Mail::assertQueued(InterviewCompletedMail::class, 1);
+});
+
+test('a failed invite email is reported as a failure, and the link is still issued', function () {
+    $operator = User::factory()->create(['role' => UserRole::Operator]);
+    $this->actingAs($operator);
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    session(['guided_site_id' => $site->id]);
+
+    // The mail API is down. "Link sent" would be a lie; the link itself is still good.
+    Mail::shouldReceive('to')->once()->andReturnUsing(function (): never {
+        throw new RuntimeException('Connection refused by mail API');
+    });
+
+    $page = Livewire::test(InterviewStep::class)
+        ->set('inviteEmail', 'owner@example.com')
+        ->call('sendLink')
+        ->assertNotified('Could not email owner@example.com');
+
+    expect(app(InterviewInvites::class)->live($site))->not->toBeNull()
+        ->and($page->instance()->issuedLink)->toContain('/interview/');
+});
+
+test('an invite "sent" to the log mailer is called out as sent nowhere', function () {
+    Mail::fake();
+    config(['mail.default' => 'log']);
+    $operator = User::factory()->create(['role' => UserRole::Operator]);
+    $this->actingAs($operator);
+    $site = Site::factory()->create(['brand_name' => 'SPG']);
+    session(['guided_site_id' => $site->id]);
+
+    // MAIL_MAILER=log is the framework default and this repo's .env.example. It succeeds silently and
+    // nobody receives anything — the exact shape of "the owner never got the email".
+    Livewire::test(InterviewStep::class)
+        ->set('inviteEmail', 'owner@example.com')
+        ->call('sendLink')
+        ->assertNotified('Mail is set to log — nothing was actually emailed');
 });
