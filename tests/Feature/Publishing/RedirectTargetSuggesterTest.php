@@ -164,7 +164,7 @@ it('needs a real share of the query before calling a page a shared ranking', fun
         ->and($result['strong'])->toBeFalse();
 });
 
-it('tells you to leave a core page alone instead of routing it', function () {
+it('leaves a core page alone when nothing succeeds it', function () {
     $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
     suggestUrl($site, '/contact-us', 4724);
     suggestQuery($site, '/contact-us', 'sump pump gurus', 4724);
@@ -172,10 +172,34 @@ it('tells you to leave a core page alone instead of routing it', function () {
     suggestUrl($site, '/', 97908);
     suggestQuery($site, '/', 'sump pump gurus', 1145);
 
-    // On the real site this printed a fix-redirect line pointing the Contact page at the homepage.
+    // No /contact is published, so there is nothing to route to. On the real site this once printed a
+    // fix-redirect line pointing the Contact page at the homepage.
     $this->artisan('launchpad:suggest-redirect-target', ['--site' => $site->id, '--from' => '/contact-us'])
         ->expectsOutputToContain('Leave it.')
         ->doesntExpectOutputToContain('Write it:')
+        ->assertSuccessful();
+});
+
+it('routes a dead core page to the same page under its new slug', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    suggestUrl($site, '/contact-us', 4724);
+    suggestQuery($site, '/contact-us', 'sump pump gurus', 4724);
+
+    // /contact-us returned 404 on the live site while /contact returned 200: the old URL was dead, its
+    // successor published, and 4,724 impressions were landing on nothing. "Leave it" was the wrong call.
+    $contact = suggestPage($site, 'contact', 'Contact');
+    $path = UrlNormalizer::path((string) PublicUrl::forContent($site->domain_url, $contact));
+    suggestUrl($site, $path, 173);
+
+    $result = app(RedirectTargetSuggester::class)->for($site, '/contact-us');
+
+    expect($result['kind'])->toBe('brand_query')
+        ->and($result['strong'])->toBeTrue()
+        ->and($result['candidates'][0]['path'])->toBe($path);
+
+    $this->artisan('launchpad:suggest-redirect-target', ['--site' => $site->id, '--from' => '/contact-us'])
+        ->expectsOutputToContain('successor is published under its Launchpad slug')
+        ->expectsOutputToContain('Write it:')
         ->assertSuccessful();
 });
 

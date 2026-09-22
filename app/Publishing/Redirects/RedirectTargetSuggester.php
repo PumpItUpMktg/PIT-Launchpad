@@ -53,6 +53,30 @@ class RedirectTargetSuggester
     private const MIN_OVERLAP = 0.25;
 
     /**
+     * Old core-page slugs and the slug the same page carries on a Launchpad site. A core page is never
+     * an article, so it is held out of revival — but that does not make it live. On Sump Pump Gurus
+     * /contact-us, /about-us and /services all returned 404 while /contact and /about returned 200:
+     * 13,857 impressions landing on nothing, and the right answer was a redirect to the successor, not
+     * "leave it". The map is deliberately literal; a guessed alias for a core page is worse than none.
+     *
+     * @var array<string, list<string>>
+     */
+    private const CORE_SUCCESSORS = [
+        'contact-us' => ['contact'],
+        'contact' => ['contact-us'],
+        'about-us' => ['about', 'about-us'],
+        'about' => ['about-us'],
+        'privacy-policy' => ['privacy'],
+        'privacy' => ['privacy-policy'],
+        'terms-of-service' => ['terms'],
+        'terms' => ['terms-of-service'],
+        'testimonials' => ['reviews'],
+        'reviews' => ['testimonials'],
+        'service-areas' => ['areas-we-serve'],
+        'areas-we-serve' => ['service-areas'],
+    ];
+
+    /**
      * Ranked candidate targets for one legacy path, best first.
      *
      * `kind` is what the source URL IS ({@see RevivalEligibility}). A core page or a brand-query URL gets no
@@ -75,10 +99,17 @@ class RedirectTargetSuggester
         $sourceImpressions = $this->impressionsFor($site, $fromPath);
         $kind = $this->eligibility->classify($site, $fromPath, $rawQuery);
 
-        // Live pages people search for by name. There is nothing to route; the URL is the destination.
+        // A core page is not an article, but it is not necessarily live either. If the same page exists
+        // under its Launchpad slug, that is the successor and the only sensible destination; if not, there
+        // is nothing to route and the URL stays where it is.
         if (in_array($kind, ['core_page', 'brand_query'], true)) {
-            return ['from' => $fromPath, 'kind' => $kind, 'top_query' => $rawQuery, 'impressions' => $sourceImpressions,
-                'strong' => false, 'candidates' => []];
+            $successor = $this->coreSuccessor($site, $fromPath);
+
+            return [
+                'from' => $fromPath, 'kind' => $kind, 'top_query' => $rawQuery, 'impressions' => $sourceImpressions,
+                'strong' => $successor !== null,
+                'candidates' => $successor === null ? [] : [$successor],
+            ];
         }
 
         $pages = Content::withoutGlobalScope(SiteScope::class)
@@ -163,6 +194,53 @@ class RedirectTargetSuggester
         }
 
         return $out;
+    }
+
+    /**
+     * The published Launchpad page that succeeds an old core slug, or null when none is published.
+     *
+     * @return array{path: string, title: string, shares_query: int, overlap: float, impressions: int}|null
+     */
+    private function coreSuccessor(Site $site, string $fromPath): ?array
+    {
+        $slug = trim($fromPath, '/');
+        $aliases = self::CORE_SUCCESSORS[$slug] ?? [];
+        if ($aliases === []) {
+            return null;
+        }
+
+        $earning = $this->impressionsByPath($site);
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('status', ContentStatus::Published->value)
+            ->whereIn('slug', $aliases)
+            ->get(['id', 'title', 'slug', 'kind', 'page_type']);
+
+        foreach ($aliases as $alias) {
+            foreach ($pages as $page) {
+                if ((string) $page->slug !== $alias) {
+                    continue;
+                }
+                $url = PublicUrl::forContent($site->domain_url, $page);
+                if ($url === null) {
+                    continue;
+                }
+                $path = UrlNormalizer::path($url);
+                if ($path === $fromPath) {
+                    continue;
+                }
+
+                return [
+                    'path' => $path,
+                    'title' => (string) $page->title,
+                    'shares_query' => 0,
+                    'overlap' => 1.0,
+                    'impressions' => $earning[$path] ?? 0,
+                ];
+            }
+        }
+
+        return null;
     }
 
     /** @return array{unresolved: list<array{from: string, impressions: int, top_query: ?string}>} */

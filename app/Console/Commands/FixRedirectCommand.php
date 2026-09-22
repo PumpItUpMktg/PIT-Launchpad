@@ -7,7 +7,9 @@ use App\Jobs\PublishRedirects;
 use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Publishing\PublishRedirectsService;
 use Illuminate\Console\Command;
+use Throwable;
 
 /**
  * Repoint (or deactivate) a single 301 for a tenant — the fix for a stale redirect left behind by an old
@@ -28,11 +30,12 @@ class FixRedirectCommand extends Command
         {--gone : Emit 410 Gone for --from (flush a dead / out-of-footprint legacy URL from the index; no --to needed)}
         {--delete : Deactivate the redirect for --from instead of repointing it}
         {--apply : Actually write the change (default is a preview)}
-        {--push : After applying, queue the redirect push to WordPress}';
+        {--push : After applying, queue the redirect push to WordPress}
+        {--now : After applying, push to WordPress immediately from this process instead of queueing}';
 
     protected $description = 'Repoint or deactivate a stale 301 for a tenant (e.g. /hoboken/ → /hoboken-nj). Preview by default; --apply to write, --push to send to WP.';
 
-    public function handle(): int
+    public function handle(PublishRedirectsService $redirects): int
     {
         $site = $this->resolveSite();
         if ($site === null) {
@@ -97,11 +100,32 @@ class FixRedirectCommand extends Command
 
         $this->info('Redirect updated.');
 
+        // --now pushes from THIS process. The redirect push is one HTTP call to the plugin — seconds, on the
+        // console with no FPM clock — and queueing it puts that call behind whatever else is on `default`.
+        // On Sump Pump Gurus that was twenty-six GeneratePage jobs, a Sonnet draft and a render each, and
+        // a fix written at the operator's desk had not reached WordPress eleven minutes later. "Queued" is
+        // not the finish line; a 301 on the live URL is.
+        if ($this->option('now')) {
+            try {
+                $redirects->publish($site);
+            } catch (Throwable $e) {
+                $this->error('Push to WordPress failed: '.$e->getMessage());
+                $this->comment('The control-plane row is written; re-run with --now once the site answers, or --push to queue it.');
+
+                return self::FAILURE;
+            }
+            $this->info(sprintf('Pushed to WordPress now. Confirm with: curl -sI https://%s%s  → expect %d → %s',
+                parse_url((string) $site->domain_url, PHP_URL_HOST) ?: 'the-site', $from, $code, $to !== '' ? $to : '(gone)'));
+
+            return self::SUCCESS;
+        }
+
         if ($this->option('push')) {
             PublishRedirects::dispatch((string) $site->id);
             $this->info('Queued the redirect push to WordPress (the plugin upserts by from_url, overriding the stale rule).');
+            $this->comment('Queued is not live. A busy default lane can hold this behind page generation — --now pushes immediately.');
         } else {
-            $this->comment('Not pushed — run with --push, or repush redirects, to send it to the live site.');
+            $this->comment('Not pushed — run with --push to queue it, or --now to send it to the live site immediately.');
         }
 
         return self::SUCCESS;
