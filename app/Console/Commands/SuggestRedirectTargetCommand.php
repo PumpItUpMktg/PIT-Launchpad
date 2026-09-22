@@ -22,7 +22,8 @@ class SuggestRedirectTargetCommand extends Command
     protected $signature = 'launchpad:suggest-redirect-target
         {--site= : Site id or brand name (required)}
         {--from= : The legacy path to route}
-        {--unrouted : Instead of one path, work through every unresolved URL above the floor}
+        {--unrouted : Instead of one path, work through every unresolved service and town URL above the floor}
+        {--articles : With --unrouted, include unresolved articles too (they normally belong in revival)}
         {--min-impressions=2500 : Floor for --unrouted}
         {--limit=5 : Candidates to show per URL}';
 
@@ -44,7 +45,7 @@ class SuggestRedirectTargetCommand extends Command
         $targets = $from !== ''
             ? [['from' => $from, 'impressions' => 0]]
             : ($this->option('unrouted')
-                ? $suggester->unrouted($site, max(0, (int) $this->option('min-impressions')))
+                ? $suggester->unrouted($site, max(0, (int) $this->option('min-impressions')), (bool) $this->option('articles'))
                 : []);
 
         if ($targets === []) {
@@ -60,13 +61,30 @@ class SuggestRedirectTargetCommand extends Command
 
             $this->newLine();
             $this->line(sprintf('<comment>%s</comment>  %s impression(s)', $result['from'], number_format($result['impressions'])));
-            $this->line(sprintf('    ranks for: %s', $result['top_query'] ?? '(no query data)'));
+            $this->line(sprintf('    ranks for: %s', $result['top_query'] ?? '(no usable query)'));
+
+            // What the URL IS decides what can be done with it before any candidate is weighed.
+            switch ($result['kind']) {
+                case 'core_page':
+                case 'brand_query':
+                    $this->line('    <info>Leave it.</info> A live page people search for by name — the URL is the destination, not a legacy path.');
+
+                    continue 2;
+                case 'town_page':
+                    $this->line('    <comment>A town slug.</comment> It belongs to the location tree: anchor it to an existing town page with');
+                    $this->line('    launchpad:anchor-town-pages, or build the town. A redirect to anything else loses the local intent.');
+
+                    continue 2;
+                case 'service_page':
+                    $this->line('    An old service URL — commercial intent. Its successor is a service page or nothing; never an article.');
+                    break;
+            }
 
             if ($result['candidates'] === []) {
                 // The honest answer, and usually the right one for a service URL: nothing on the new site
                 // serves this intent.
-                $this->line('    <error>No candidate.</error> No live page ranks for that query or resembles this URL —');
-                $this->line('    which means nothing serves this intent. Build the page rather than redirecting the traffic away.');
+                $this->line('    <error>No candidate.</error> No live page earns a real share of that query or resembles this URL —');
+                $this->line('    nothing serves this intent. Build the page rather than redirecting the traffic away.');
 
                 continue;
             }
@@ -82,9 +100,13 @@ class SuggestRedirectTargetCommand extends Command
             }
 
             $best = $result['candidates'][0];
-            if ($best['shares_query'] === 0) {
-                $this->line('    <comment>Weak:</comment> the best candidate only resembles this URL. A 301 onto a page that has never');
-                $this->line('    ranked for the query is a guess, and the traffic is the thing being guessed with.');
+            if (! $result['strong']) {
+                // No write line. A command under a "weak" label is an invitation to run it, and the
+                // traffic is the thing being guessed with.
+                $this->line('    <comment>Weak — not offered.</comment> The best candidate only resembles this URL; nothing earns a real share of');
+                $this->line('    its query. Build the page, or write the redirect by hand with launchpad:fix-redirect if you judge the match.');
+
+                continue;
             }
             $this->line(sprintf('    Write it: <info>launchpad:fix-redirect --site=%s --from=%s --to=%s --apply --push</info>',
                 $site->id, $result['from'], $best['path']));

@@ -34,21 +34,52 @@ use Illuminate\Support\Facades\DB;
  */
 class RedirectTargetSuggester
 {
-    public function __construct(private readonly GscUrlInventory $inventory) {}
+    public function __construct(
+        private readonly GscUrlInventory $inventory,
+        private readonly RevivalEligibility $eligibility,
+    ) {}
+
+    /**
+     * A candidate "already ranks" for the query only when it earns a real share of what the source earns.
+     * The homepage picks up a stray impression on nearly every query a site is known for — on Sump Pump
+     * Gurus, one impression was enough to beat every topical candidate and get a write line. A share this
+     * small is noise, not evidence the page can hold the ranking.
+     */
+    private const MIN_SHARED_FRACTION = 0.02;
+
+    private const MIN_SHARED_IMPRESSIONS = 10;
+
+    /** Below this, a resemblance-only candidate is not a candidate. */
+    private const MIN_OVERLAP = 0.25;
 
     /**
      * Ranked candidate targets for one legacy path, best first.
      *
+     * `kind` is what the source URL IS ({@see RevivalEligibility}). A core page or a brand-query URL gets no
+     * candidates at all: it is a live page someone is searching for by name, and a redirect would retire it.
+     * `strong` is whether the best candidate earned its place on a shared ranking rather than on resemblance —
+     * only a strong suggestion is safe to write without a human weighing it first.
+     *
      * @return array{
-     *     from: string, top_query: ?string, impressions: int,
+     *     from: string, kind: string, top_query: ?string, impressions: int, strong: bool,
      *     candidates: list<array{path: string, title: string, shares_query: int, overlap: float, impressions: int}>
      * }
      */
     public function for(Site $site, string $from, int $limit = 8): array
     {
         $fromPath = UrlNormalizer::path($from);
-        $topQuery = $this->topQueryFor($site, $fromPath);
+        $rawQuery = $this->topQueryFor($site, $fromPath);
+        // A site: or inurl: query is an SEO's diagnostic, not demand — it says nothing about where the
+        // traffic should go, and every page on the site "ranks" for it.
+        $topQuery = $rawQuery !== null && preg_match('/\b(site|inurl|intitle|cache):/i', $rawQuery) ? null : $rawQuery;
         $sourceImpressions = $this->impressionsFor($site, $fromPath);
+        $kind = $this->eligibility->classify($site, $fromPath, $rawQuery);
+
+        // Live pages people search for by name. There is nothing to route; the URL is the destination.
+        if (in_array($kind, ['core_page', 'brand_query'], true)) {
+            return ['from' => $fromPath, 'kind' => $kind, 'top_query' => $rawQuery, 'impressions' => $sourceImpressions,
+                'strong' => false, 'candidates' => []];
+        }
 
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -66,13 +97,17 @@ class RedirectTargetSuggester
                 continue;
             }
             $path = UrlNormalizer::path($url);
-            if ($path === $fromPath) {
-                continue;
+            if ($path === $fromPath || $path === '/') {
+                continue;   // never the homepage: a content URL 301'd to / reads as a soft 404
             }
 
-            $shares = $sharing[$path] ?? 0;
+            $shared = $sharing[$path] ?? 0;
+            // Only a REAL share of the source's traffic counts as "already ranks for it".
+            $shares = $shared >= max(self::MIN_SHARED_IMPRESSIONS, (int) ($sourceImpressions * self::MIN_SHARED_FRACTION))
+                ? $shared
+                : 0;
             $overlap = $this->jaccard($sourceTokens, $this->tokens($path));
-            if ($shares === 0 && $overlap < 0.25) {
+            if ($shares === 0 && $overlap < self::MIN_OVERLAP) {
                 continue;   // neither a shared ranking nor a recognisable name — not a candidate at all
             }
 
@@ -89,28 +124,42 @@ class RedirectTargetSuggester
         usort($candidates, fn (array $a, array $b): int => [$b['shares_query'], $b['overlap'], $b['impressions']]
             <=> [$a['shares_query'], $a['overlap'], $a['impressions']]);
 
+        $top = array_slice($candidates, 0, max(1, $limit));
+
         return [
             'from' => $fromPath,
+            'kind' => $kind,
             'top_query' => $topQuery,
             'impressions' => $sourceImpressions,
-            'candidates' => array_slice($candidates, 0, max(1, $limit)),
+            'strong' => $top !== [] && $top[0]['shares_query'] > 0,
+            'candidates' => $top,
         ];
     }
 
     /**
-     * The legacy URLs worth routing that the planner left unresolved, biggest first — the set this exists
-     * for.
+     * The unresolved legacy URLs that are NOT articles — old service paths and town slugs — biggest first.
      *
-     * @return list<array{from: string, impressions: int}>
+     * Articles are deliberately left out: an unresolved article belongs in revival, where it is rewritten
+     * and 301'd onto its replacement. Offering it a redirect here would route it onto whatever page is
+     * nearest and lose the ranking the article held. On Sump Pump Gurus the first sweep listed eighty of
+     * them, most released back to unresolved when their revival candidates were deleted. `$articles`
+     * includes them anyway for the case where that is what the operator wants to see.
+     *
+     * @return list<array{from: string, impressions: int, kind: string}>
      */
-    public function unrouted(Site $site, int $minImpressions = 2500): array
+    public function unrouted(Site $site, int $minImpressions = 2500, bool $articles = false): array
     {
         $plan = $this->planFor($site);
         $out = [];
         foreach ($plan['unresolved'] as $row) {
-            if ((int) $row['impressions'] >= $minImpressions) {
-                $out[] = ['from' => (string) $row['from'], 'impressions' => (int) $row['impressions']];
+            if ((int) $row['impressions'] < $minImpressions) {
+                continue;
             }
+            $kind = $this->eligibility->classify($site, (string) $row['from'], $row['top_query']);
+            if (! $articles && $kind === RevivalEligibility::ARTICLE) {
+                continue;
+            }
+            $out[] = ['from' => (string) $row['from'], 'impressions' => (int) $row['impressions'], 'kind' => $kind];
         }
 
         return $out;
