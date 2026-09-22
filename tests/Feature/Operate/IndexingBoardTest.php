@@ -227,6 +227,11 @@ it('queues nothing when no site is selected', function () {
 });
 
 it('reports the vintage RANGE, not just the newest verdict', function () {
+    // Frozen: the fixture stamps now()->subHour() and the assertion reads now()->toDateString(). Run in
+    // the hour after midnight UTC those are DIFFERENT DAYS and the test fails on the calendar rather
+    // than on anything it is testing — which is exactly how CI caught it at 00:06.
+    $this->travelTo('2026-09-20 14:00:00');
+
     $site = Site::factory()->create();
     $recent = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
     $old = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
@@ -285,6 +290,9 @@ it('collapses the range to one date when every verdict was checked together', fu
 });
 
 it('shows the spread and the overdue count on the board', function () {
+    // Same hazard: a stamp and an assertion both derived from now(), either side of a midnight boundary.
+    $this->travelTo('2026-09-20 14:00:00');
+
     $site = Site::factory()->create();
     $a = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
     $b = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);

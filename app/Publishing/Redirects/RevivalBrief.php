@@ -27,8 +27,16 @@ class RevivalBrief
     /** Enough to describe what a cluster covers; past this the tail is noise a drafter cannot act on. */
     public const MAX_QUERIES = 12;
 
-    /** A query below this share of the family's best is not shaping the article. */
+    /**
+     * A query below this share of the family's best is not shaping the article — but never prune below
+     * {@see MIN_IMPRESSIONS}, or a family with one dominant term loses the tail that made it big.
+     * Sump Pump Gurus' largest family, eleven URLs and 361,049 impressions, came back with three queries
+     * under a share-only rule: the biggest cluster on the site got the thinnest brief.
+     */
     private const MIN_SHARE = 0.02;
+
+    /** Absolute floor. A query earning this much is worth a sentence whatever the family's best is. */
+    private const MIN_IMPRESSIONS = 500;
 
     /**
      * The family's queries, biggest first.
@@ -61,7 +69,10 @@ class RevivalBrief
                     continue;
                 }
                 $query = trim((string) $row->query);
-                if ($query === '') {
+                // A site: or inurl: query is an SEO running a diagnostic. It earned real impressions and
+                // is real data, and it must never reach a drafter — "write a post covering
+                // site:sumppumpgurus.com" is not an instruction anyone can follow.
+                if ($query === '' || preg_match('/\b(site|inurl|intitle|cache):/i', $query)) {
                     continue;
                 }
                 $totals[$query] = ($totals[$query] ?? 0) + (int) $row->impressions;
@@ -74,7 +85,7 @@ class RevivalBrief
 
         arsort($totals);
         $best = (int) reset($totals);
-        $floor = (int) max(1, $best * self::MIN_SHARE);
+        $floor = (int) max(1, min($best * self::MIN_SHARE, self::MIN_IMPRESSIONS));
 
         $out = [];
         foreach ($totals as $query => $impressions) {
