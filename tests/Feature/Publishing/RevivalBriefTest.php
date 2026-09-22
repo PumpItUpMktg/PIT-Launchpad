@@ -120,3 +120,36 @@ it('is read-only without --apply', function () {
 
     expect($candidate->fresh()->angle_hint)->toBe('original');
 });
+
+it('never puts a site: operator into a brief', function () {
+    $site = Site::factory()->create();
+    briefQuery($site, '/winterize-sump-pump', 'winterize sump pump', 30000);
+    briefQuery($site, '/winterize-sump-pump', 'site:sumppumpgurus.com', 12000);
+    briefQuery($site, '/winterize-sump-pump', 'sump pump winter', 9000);
+
+    // Real impressions, real data — and "write a post covering site:sumppumpgurus.com" is not an
+    // instruction anyone can follow.
+    $queries = app(RevivalBrief::class)->for($site, ['/winterize-sump-pump']);
+
+    expect(collect($queries)->pluck('query')->all())->toBe(['winterize sump pump', 'sump pump winter']);
+});
+
+it('does not starve the biggest family of its tail', function () {
+    $site = Site::factory()->create();
+    // One dominant term plus a long tail — the shape of an 11-URL cluster. A share-only floor would cut
+    // everything under 2% of 200,000, taking the tail that made the family big in the first place.
+    briefQuery($site, '/cost-breakdown', 'sump pump installation cost', 200000);
+    foreach (['sump pump replacement cost', 'sump pump cost', 'cost to install sump pump', 'sump pump price'] as $i => $query) {
+        briefQuery($site, '/cost-breakdown', $query, 3000 - ($i * 200));
+    }
+
+    expect(app(RevivalBrief::class)->for($site, ['/cost-breakdown']))->toHaveCount(5);
+});
+
+it('still drops a query too small to shape anything', function () {
+    $site = Site::factory()->create();
+    briefQuery($site, '/a', 'sump pump alarm going off', 78000);
+    briefQuery($site, '/a', 'why is my sump pump', 4);
+
+    expect(app(RevivalBrief::class)->for($site, ['/a']))->toHaveCount(1);
+});
