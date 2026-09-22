@@ -14,7 +14,7 @@ use Illuminate\Console\Command;
 
 class GeneratePostCommand extends Command
 {
-    protected $signature = 'launchpad:generate-post {content? : The routed candidate Content id} {--title= : Resolve the candidate by its exact title within --site (case-insensitive)} {--market= : Market id for local injection} {--directed : pull the top queued blog target instead of a candidate id} {--site= : the tenant id or brand name (required with --directed or --title)} {--silo= : limit the directed pull to one silo}';
+    protected $signature = 'launchpad:generate-post {content? : The routed candidate Content id} {--title= : Resolve the candidate by its exact title, or its original revival label, within --site (case-insensitive)} {--regenerate : Allow --title to overwrite an already-drafted post} {--market= : Market id for local injection} {--directed : pull the top queued blog target instead of a candidate id} {--site= : the tenant id or brand name (required with --directed or --title)} {--silo= : limit the directed pull to one silo}';
 
     protected $description = 'Generate a blog post from a routed candidate (or, with --directed, the top queued blog target): draft (Sonnet) + image (fal) → review queue.';
 
@@ -98,15 +98,24 @@ class GeneratePostCommand extends Command
             return null;
         }
 
+        // Match the current title OR the revival's original label. A candidate is titled from its winning
+        // query at creation, and the drafter replaces that with a generated SEO title the moment it is
+        // drafted — so the name an operator read off the board yesterday can stop resolving today. The
+        // original label is kept in meta.revived_query and matches too.
+        $needle = mb_strtolower($title);
         $matches = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Post->value)
-            ->whereRaw('lower(title) = ?', [mb_strtolower($title)])
+            ->where(function ($q) use ($needle): void {
+                $q->whereRaw('lower(title) = ?', [$needle])
+                    ->orWhereRaw("lower(meta->>'revived_query') = ?", [$needle]);
+            })
             ->orderBy('created_at')
             ->get();
 
         if ($matches->isEmpty()) {
             $this->error(sprintf('No post titled "%s" on %s.', $title, $site->brand_name));
+            $this->listRevivals($site);
 
             return null;
         }
@@ -121,6 +130,45 @@ class GeneratePostCommand extends Command
             return null;
         }
 
-        return $matches->first();
+        // Non-empty is guaranteed by the guard above.
+        $match = $matches->first();
+        if ($match->hasDraft() && ! $this->option('regenerate')) {
+            $this->error(sprintf('"%s" is already drafted (%s). Generating again would overwrite that draft — pass --regenerate to mean it.',
+                $match->title, $match->status->value));
+
+            return null;
+        }
+
+        return $match;
+    }
+
+    /**
+     * What IS here, when a title did not resolve — the revival candidates on this site with their current
+     * titles, ids and state. The board never shows ids, so this is the only place an operator can get one.
+     */
+    private function listRevivals(Site $site): void
+    {
+        $rows = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Post->value)
+            ->whereNotNull('meta->revived_from_urls')
+            ->orderByDesc('created_at')
+            ->limit(40)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            $this->line('  No revival candidates exist on this site. Create them with launchpad:revive-legacy-content --apply.');
+
+            return;
+        }
+
+        $this->line(sprintf('  Revival candidates on %s (newest first) — pass the exact title, or the id as the argument:', $site->brand_name));
+        foreach ($rows as $r) {
+            $meta = is_array($r->meta) ? $r->meta : [];
+            $label = is_string($meta['revived_query'] ?? null) && mb_strtolower($meta['revived_query']) !== mb_strtolower((string) $r->title)
+                ? sprintf(' (was “%s”)', $meta['revived_query'])
+                : '';
+            $this->line(sprintf('  %s  %-12s %-9s %s%s', $r->id, $r->status->value, $r->hasDraft() ? 'drafted' : 'undrafted', $r->title, $label));
+        }
     }
 }

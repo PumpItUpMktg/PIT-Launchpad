@@ -92,3 +92,36 @@ it('insists on a tenant, because titles are only unique inside one', function ()
         ->expectsOutputToContain('--title needs --site')
         ->assertFailed();
 });
+
+it('still resolves the original label after the drafter has retitled the post', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    $post = revivalCandidate($site, 'Sump Pump Renovation Cost', '/sump-pump-installation-cost-breakdown-3');
+    // Drafted once already: the title is now the generated SEO title, the label lives in meta.
+    $post->forceFill([
+        'title' => 'How Much Does a Sump Pump Cost to Install in 2026?',
+        'body' => '<p>drafted</p>',
+        'status' => ContentStatus::NeedsReview,
+    ])->save();
+    fakeGeneration();
+
+    // Without --regenerate it must not overwrite the draft — and must say that is why.
+    test()->artisan('launchpad:generate-post', ['--title' => 'Sump Pump Renovation Cost', '--site' => $site->id])
+        ->expectsOutputToContain('already drafted')
+        ->assertFailed();
+
+    test()->artisan('launchpad:generate-post', ['--title' => 'Sump Pump Renovation Cost', '--site' => $site->id, '--regenerate' => true])
+        ->expectsOutputToContain("Generated '")
+        ->assertSuccessful();
+});
+
+it('lists the revival candidates with ids when the title does not resolve', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    $a = revivalCandidate($site, 'Sump Pump Alarm Going Off', '/sump-pump-alarm-system-troubleshooting-guide');
+
+    // A dead end that names nothing to try instead is not an error message.
+    test()->artisan('launchpad:generate-post', ['--title' => 'Sump Pump Renovation Cost', '--site' => $site->id])
+        ->expectsOutputToContain('No post titled')
+        ->expectsOutputToContain('Revival candidates on Sump Pump Gurus')
+        ->expectsOutputToContain((string) $a->id)
+        ->assertFailed();
+});
