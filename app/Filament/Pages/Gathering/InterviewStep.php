@@ -59,8 +59,8 @@ class InterviewStep extends GatheringPage
     }
 
     /**
-     * Issue (or re-issue) the client link — the previous one dies — and queue the invite email when an
-     * address is given. The plaintext link is shown ONCE on this page (it is stored hashed).
+     * Issue (or re-issue) the client link — the previous one dies — and send the invite email, now, when
+     * an address is given. The plaintext link is shown ONCE on this page (it is stored hashed).
      */
     public function sendLink(): void
     {
@@ -79,12 +79,47 @@ class InterviewStep extends GatheringPage
         $issued = app(InterviewInvites::class)->issue($site, $email !== '' ? $email : null, $this->operatorId());
         $this->issuedLink = route('interview.show', ['token' => $issued->plaintext]);
 
-        if ($email !== '') {
-            Mail::to($email)->queue(new InterviewInviteMail((string) $issued->invite->id, $issued->plaintext));
+        if ($email === '') {
+            Notification::make()->success()
+                ->title('Link issued')
+                ->body('Any earlier link no longer works. The link below is shown once — copy it now if you need it.')
+                ->send();
+
+            return;
+        }
+
+        // Sent NOW, from this request, not queued. An invite is one call to the mail API — well under a
+        // second — and the operator is standing on this page to learn whether it went. Queued, it rode the
+        // `default` lane behind twenty-six page generations on one worker while the page said "Link sent";
+        // the owner never got it, and nobody could tell. sendNow() bypasses the mailable's ShouldQueue.
+        // A failure is reported as a failure, and the link is still issued: copy it and send it by hand.
+        try {
+            Mail::to($email)->sendNow(new InterviewInviteMail((string) $issued->invite->id, $issued->plaintext));
+        } catch (\Throwable $e) {
+            report($e);
+            Notification::make()->danger()
+                ->title("Could not email {$email}")
+                ->body('The link is live — copy it below and send it yourself. Mail error: '.$e->getMessage())
+                ->persistent()
+                ->send();
+
+            return;
+        }
+
+        // "Sent" to the log mailer is sent nowhere. Say so, rather than let the operator wait on an owner
+        // who was never emailed.
+        if ((string) config('mail.default') === 'log') {
+            Notification::make()->warning()
+                ->title('Mail is set to log — nothing was actually emailed')
+                ->body("MAIL_MAILER is 'log' on this environment, so the invite went to the log file, not to {$email}. Copy the link below and send it yourself, or set a real mailer.")
+                ->persistent()
+                ->send();
+
+            return;
         }
 
         Notification::make()->success()
-            ->title($email !== '' ? "Link sent to {$email}" : 'Link issued')
+            ->title("Link sent to {$email}")
             ->body('Any earlier link no longer works. The link below is shown once — copy it now if you need it.')
             ->send();
     }
