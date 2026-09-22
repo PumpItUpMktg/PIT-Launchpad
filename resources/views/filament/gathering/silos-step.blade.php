@@ -56,8 +56,17 @@
                 <h3>Your website plan</h3>
                 @if (! $this->hasSeed)
                     <div class="g-empty">Nothing to plan yet — first tell us your trade on the Business step (or run the interview). We build the plan from that plus the services you list.</div>
+                @elseif ($this->structureStatus === 'building')
+                    {{-- The build runs on a worker; poll until it stamps ready or failed. --}}
+                    <div class="g-hint" wire:poll.5s>
+                        <strong>Building your plan…</strong> Grouping your services into topics and sizing them by what people
+                        search for. This takes a few minutes and the page updates itself — you can leave and come back.
+                    </div>
                 @elseif (! $this->hasSpokes)
                     <p class="g-hint">Ready to go ({{ $this->structureStatus === 'failed' ? 'last attempt didn\'t finish — try again below' : 'your trade + services are in' }}). We'll turn your services into a set of topic groups and pages, sized by what people search for.</p>
+                    @if ($this->structureStatus === 'failed' && $this->structureError)
+                        <div class="g-empty" style="margin-bottom:10px"><strong>Last attempt:</strong> {{ $this->structureError }}</div>
+                    @endif
                     <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;cursor:pointer">
                         <input type="checkbox" wire:click="toggleBoundToServices" @checked($this->boundToServices)>
                         Only use the services I listed — don't add ones I don't offer
