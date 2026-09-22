@@ -94,6 +94,15 @@ class SilosStep extends GatheringPage
     }
 
     /** The structure engine's building/ready/failed state (shared with the guided Plan step). */
+    /** Why the last build failed, for the blade — the job stamps it beside `failed`. */
+    public function getStructureErrorProperty(): ?string
+    {
+        $site = $this->getSite();
+        $reason = $site === null ? null : app(StepGate::class)->state($site)->structure_error;
+
+        return is_string($reason) && trim($reason) !== '' ? $reason : null;
+    }
+
     public function getStructureStatusProperty(): ?string
     {
         $site = $this->getSite();
@@ -151,15 +160,17 @@ class SilosStep extends GatheringPage
         $this->regenArmed = false;
 
         app(StepGate::class)->state($site)->update(['structure_status' => 'building']);
-        BuildStructure::dispatchSync($site->id); // stamps ready/failed itself
 
-        if ($this->getHasSpokesProperty()) {
-            $this->syncBoardToTree($site); // §4 silos follow the freshly-built tree (not just at materialize)
-        }
-        $status = $this->getStructureStatusProperty();
-        Notification::make()
-            ->{$status === 'ready' ? 'success' : 'warning'}()
-            ->title($status === 'ready' ? 'Structure generated' : 'Generation failed — check the logs and retry.')
+        // Queued, not run here. The build is Claude clustering plus DataForSEO volume grounding — minutes
+        // on a real catalogue — and inside a web request it dies on the FPM clock with nothing caught: on
+        // Miller Auto & Tire the operator got Livewire's blank "error while loading" and a status stuck at
+        // building. The job stamps ready/failed itself and projects the board on success; the page polls
+        // that status while it works.
+        BuildStructure::dispatch($site->id);
+
+        Notification::make()->info()
+            ->title('Building your plan')
+            ->body('This runs in the background and can take a few minutes. The page updates itself when it finishes.')
             ->send();
 
         // A regenerate invalidates any in-progress decision-set view.
@@ -255,19 +266,12 @@ class SilosStep extends GatheringPage
 
         app(StructureResetter::class)->reset($site);        // clears spokes/queued targets, keeps the seed (incl. the bound flag)
         app(StepGate::class)->state($site)->update(['structure_status' => 'building']);
-        BuildStructure::dispatchSync($site->id);            // fresh expand → honors bound_to_services
+        BuildStructure::dispatch($site->id);                // fresh expand → honors bound_to_services; queued, see generate()
 
-        if ($this->getHasSpokesProperty()) {
-            $this->syncBoardToTree($site); // §4 silos follow the rebuilt tree so the board isn't stale
-        }
-        $status = $this->getStructureStatusProperty();
-        $note = Notification::make()->{$status === 'ready' ? 'success' : 'warning'}()
-            ->title($status === 'ready' ? 'Structure rebuilt from scratch' : 'Rebuild failed');
-        if ($status !== 'ready') {
-            $reason = (string) (app(StepGate::class)->state($site)->structure_error ?? '');
-            $note->body($reason !== '' ? $reason : 'The structure build did not finish — retry, and if it persists check the logs.');
-        }
-        $note->send();
+        Notification::make()->info()
+            ->title('Rebuilding your plan from scratch')
+            ->body('This runs in the background and can take a few minutes. The page updates itself when it finishes.')
+            ->send();
 
         $this->reset(['pruneMode', 'started', 'finalized', 'spokeDecisions', 'siloDecisions', 'regenArmed']);
     }

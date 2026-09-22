@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Build\GuidedEntityProjector;
 use App\Build\ServiceStructureWriter;
 use App\Interview\Arrange\AutoArrangeRunner;
 use App\Interview\Expansion\ExpansionPersister;
@@ -79,6 +80,14 @@ class BuildStructure implements ShouldQueue
             }
 
             $state->update(['structure_status' => 'ready', 'structure_error' => null]);
+
+            // Bring the §4 board (Silo + rule_sets) into line with the tree just built. This used to run
+            // on the page after a synchronous build; now the build runs wherever it runs — a worker, the
+            // console — and the board must follow it from here, or a regenerate that renamed silos
+            // leaves the board stale until materialize.
+            if (Spoke::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->exists()) {
+                app(GuidedEntityProjector::class)->project($site);
+            }
         } catch (Throwable $e) {
             // A failure to PRODUCE the tree (expand/write threw) — surface the reason, not a bare "failed".
             report($e);
