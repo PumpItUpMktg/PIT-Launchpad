@@ -165,12 +165,26 @@ trait ManagesLocationCoverage
             return;
         }
 
+        // The address is the only thing the geocoder reads — never the name. A location added without one
+        // can never be located, never gets a home county, and never reaches the coverage engine; on a
+        // fresh tenant the street address went into the name box and the row sat at "locating…" with
+        // nothing to locate. Refuse it here, with the reason, rather than create a row that cannot work.
         $address = trim($this->addAddress);
+        if ($address === '') {
+            Notification::make()
+                ->title('An address is needed to locate it')
+                ->body('The address is what gets geocoded — the name is only a label. Put the street address, town, state and ZIP in the address box.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         $location = new Location;
         $location->forceFill([
             'site_id' => $site->id,
             'name' => $name,
-            'address' => $address === '' ? null : $address,
+            'address' => $address,
         ])->save();
 
         GeocodeLocation::dispatch($location->id); // located + home county resolved in the background
