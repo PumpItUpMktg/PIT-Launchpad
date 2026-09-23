@@ -15,7 +15,9 @@
         "laravel/tinker": "^3.0",
         "league/flysystem-aws-s3-v3": "^3.34",
         "lsolesen/pel": "^0.9",
-        "sentry/sentry-laravel": "^4.25"
+        "sentry/sentry-laravel": "^4.25",
+        "symfony/http-client": "^8.1",
+        "symfony/postmark-mailer": "^8.1"
     },
     "require-dev": {
         "larastan/larastan": "^3.10",

@@ -55,10 +55,12 @@ return [
 
         'postmark' => [
             'transport' => 'postmark',
-            // 'message_stream_id' => env('POSTMARK_MESSAGE_STREAM_ID'),
-            // 'client' => [
-            //     'timeout' => 5,
-            // ],
+            // Postmark's transactional stream ("outbound" on a fresh server). Invites, review requests,
+            // and reports are all transactional — never the broadcast stream.
+            'message_stream_id' => env('POSTMARK_MESSAGE_STREAM_ID', 'outbound'),
+            'client' => [
+                'timeout' => 10, // the Users board and Interview step send inline; a hung API must not hang the page
+            ],
         ],
 
         'resend' => [
