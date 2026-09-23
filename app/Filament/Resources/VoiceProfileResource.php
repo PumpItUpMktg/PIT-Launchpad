@@ -7,6 +7,7 @@ use App\Filament\Resources\VoiceProfileResource\Pages\ListVoiceProfiles;
 use App\Models\Site;
 use App\Models\VoiceProfile;
 use App\Operator\Controls\VoiceControl;
+use App\Security\Capability;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -15,6 +16,7 @@ use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * VoiceProfile control: view the versioned profiles per tenant, the active
@@ -28,6 +30,12 @@ class VoiceProfileResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-megaphone';
 
     protected static ?string $navigationLabel = 'Voice';
+
+    /** Voice activation is an engine control ({@see Capability::ManageEngineControls}) — Super-Admin-only. */
+    public static function canAccess(): bool
+    {
+        return Auth::user()?->hasCapability(Capability::ManageEngineControls) ?? false;
+    }
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 

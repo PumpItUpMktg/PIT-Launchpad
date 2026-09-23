@@ -64,7 +64,7 @@ class LocationGeoGrid extends Page
     /** Operator-only: this is an internal, uncalibrated test build — not for admins or clients. */
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public function mount(): void

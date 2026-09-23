@@ -32,8 +32,9 @@ test('adding the console panel does not change existing panel access', function 
         ->and($operator->canAccessPanel($client))->toBeFalse()
         ->and($clientUser->canAccessPanel($client))->toBeTrue()
         ->and($clientUser->canAccessPanel($admin))->toBeFalse()
-        // The new Site Admin role reaches neither existing panel — only the console.
-        ->and($siteAdmin->canAccessPanel($admin))->toBeFalse()
+        // A Site Admin reaches the admin panel (locked to their membership sites) and the console — never
+        // the client portal.
+        ->and($siteAdmin->canAccessPanel($admin))->toBeTrue()
         ->and($siteAdmin->canAccessPanel($client))->toBeFalse();
 });
 

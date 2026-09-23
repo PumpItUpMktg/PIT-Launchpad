@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Operator\ActiveTenant;
@@ -62,7 +61,7 @@ class MarketsBoard extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /** @return array{markets: list<array<string, mixed>>, summary: array<string, int>} */

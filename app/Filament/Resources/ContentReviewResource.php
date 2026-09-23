@@ -7,7 +7,6 @@ use App\ContentEngine\Review\ReviewQueue;
 use App\Enums\ContentKind;
 use App\Enums\DraftTrigger;
 use App\Enums\ReviewFlag;
-use App\Enums\UserRole;
 use App\Filament\Resources\Concerns\ContentReviewActions;
 use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
 use App\Filament\Resources\ContentReviewResource\Pages\ListContentReviews;
@@ -61,7 +60,7 @@ class ContentReviewResource extends Resource
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public static function getEloquentQuery(): Builder

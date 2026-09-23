@@ -2,7 +2,6 @@
 
 namespace App\Filament\Widgets;
 
-use App\Enums\UserRole;
 use App\Geo\GeoCheckStatus;
 use App\Integrations\AiSearch\AiEngineRegistry;
 use App\Models\GeoPrompt;
@@ -28,7 +27,7 @@ class GeoCheckStatusWidget extends Widget
 
     public static function canView(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /**

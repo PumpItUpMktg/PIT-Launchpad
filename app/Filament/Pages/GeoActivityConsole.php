@@ -3,7 +3,6 @@
 namespace App\Filament\Pages;
 
 use App\Enums\GeoCheckAction;
-use App\Enums\UserRole;
 use App\Geo\GeoCheckStatus;
 use App\Integrations\AiSearch\AiEngineRegistry;
 use App\Models\GeoCheckEvent;
@@ -43,7 +42,7 @@ class GeoActivityConsole extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /** Menu-map family tag: a GEO operator surface whose final placement is pending (with the rest of GEO). */

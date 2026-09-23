@@ -3,7 +3,6 @@
 namespace App\Filament\Widgets;
 
 use App\Enums\GeoCheckAction;
-use App\Enums\UserRole;
 use App\Models\GeoCheckEvent;
 use App\Models\Scopes\SiteScope;
 use Filament\Widgets\Widget;
@@ -25,7 +24,7 @@ class GeoCheckActivityWidget extends Widget
 
     public static function canView(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /**

@@ -5,7 +5,6 @@ namespace App\Filament\Resources;
 use App\ContentEngine\Review\AlertFlags;
 use App\Enums\ContentStatus;
 use App\Enums\ReviewFlag;
-use App\Enums\UserRole;
 use App\Filament\Resources\AiContentResource\Pages\EditAiContent;
 use App\Filament\Resources\AiContentResource\Pages\ListAiContent;
 use App\Filament\Resources\Concerns\ContentReviewActions;
@@ -76,7 +75,7 @@ class AiContentResource extends Resource
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public static function getEloquentQuery(): Builder

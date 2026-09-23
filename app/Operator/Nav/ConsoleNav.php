@@ -111,18 +111,46 @@ class ConsoleNav
      */
     public function columns(): array
     {
-        return array_map(fn (array $col): array => [
-            'group' => $col['group'],
-            'items' => array_map(fn (array $item): array => [
-                'label' => $item['label'],
-                'url' => $item['soon'] || $item['surface'] === null
-                    ? null
-                    : $item['surface']::getUrl(panel: $item['panel'] ?? null),
-                'soon' => $item['soon'],
-                // A cross-panel link is a full page load: wire:navigate would swap another panel's
-                // document into this one's Livewire context.
-                'external' => isset($item['panel']),
-            ], $col['items']),
-        ], $this->structure());
+        $columns = [];
+        foreach ($this->structure() as $col) {
+            $items = [];
+            foreach ($col['items'] as $item) {
+                if (! $this->visible($item)) {
+                    continue;
+                }
+                $items[] = [
+                    'label' => $item['label'],
+                    'url' => $item['soon'] || $item['surface'] === null
+                        ? null
+                        : $item['surface']::getUrl(panel: $item['panel'] ?? null),
+                    'soon' => $item['soon'],
+                    // A cross-panel link is a full page load: wire:navigate would swap another panel's
+                    // document into this one's Livewire context.
+                    'external' => isset($item['panel']),
+                ];
+            }
+            if ($items !== []) {
+                $columns[] = ['group' => $col['group'], 'items' => $items];
+            }
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Whether the signed-in user may open an item's surface — a Site Admin sees the same header minus
+     * the system surfaces their capabilities don't reach (users, queue, credentials, engine controls,
+     * recover). The surface's own `canAccess()` is the one gate; the header only mirrors it.
+     *
+     * @param  array{label: string, surface: ?class-string, soon: bool, panel?: string}  $item
+     */
+    private function visible(array $item): bool
+    {
+        $surface = $item['surface'];
+        if ($surface === null || ! method_exists($surface, 'canAccess')) {
+            return true;
+        }
+
+        return (bool) $surface::canAccess();
     }
 }

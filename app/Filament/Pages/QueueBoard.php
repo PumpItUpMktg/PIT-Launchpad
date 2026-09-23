@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Operate\QueueHealth;
 use App\Operate\WorkerHeartbeat;
 use BackedEnum;
@@ -35,7 +34,7 @@ class QueueBoard extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->isSuperAdmin() ?? false;
     }
 
     /** @return array<string, mixed> */

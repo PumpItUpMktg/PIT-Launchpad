@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Operate\LocationDashboard as LocationDashboardReader;
@@ -55,7 +54,7 @@ class LocationDashboard extends Page
     /** Operator-only: internal, uncalibrated test build. */
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public function mount(): void

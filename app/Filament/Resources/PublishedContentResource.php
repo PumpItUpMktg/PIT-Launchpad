@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Enums\ContentStatus;
-use App\Enums\UserRole;
 use App\Filament\Resources\PublishedContentResource\Pages\ListPublishedContent;
 use App\Jobs\PublishContent;
 use App\Models\Content;
@@ -43,7 +42,7 @@ class PublishedContentResource extends Resource
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public static function getEloquentQuery(): Builder

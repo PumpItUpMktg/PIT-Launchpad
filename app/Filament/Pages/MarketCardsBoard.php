@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Models\Site;
 use App\Operate\MarketCard;
 use App\Operate\MarketCards;
@@ -63,7 +62,7 @@ class MarketCardsBoard extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /** @return list<MarketCard> */

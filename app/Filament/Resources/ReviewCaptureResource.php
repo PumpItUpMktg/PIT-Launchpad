@@ -4,7 +4,6 @@ namespace App\Filament\Resources;
 
 use App\Enums\ReviewSource;
 use App\Enums\ReviewStatus;
-use App\Enums\UserRole;
 use App\Filament\Resources\ReviewCaptureResource\Pages\EditReview;
 use App\Filament\Resources\ReviewCaptureResource\Pages\ListReviews;
 use App\Models\Location;
@@ -57,7 +56,7 @@ class ReviewCaptureResource extends Resource
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public static function getEloquentQuery(): Builder

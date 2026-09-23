@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Jobs\SyncSiteMetrics;
 use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\Site;
@@ -109,7 +108,7 @@ class IndexingBoard extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /** @return array{published: array<string, mixed>, all_known: array<string, mixed>, discovered_only: int} */

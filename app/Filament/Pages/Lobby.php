@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Filament\Pages\Citations\CitationsBoard;
 use App\Filament\Pages\Gathering\InterviewStep;
 use App\Filament\Pages\Gathering\SetupEntry;
@@ -54,7 +53,7 @@ class Lobby extends Page
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->role === UserRole::Operator;
+        return auth()->user()?->canOperate() ?? false;
     }
 
     public function getTitle(): string

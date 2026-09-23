@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Filament\Pages\UsersBoard;
+use App\Mail\UserInviteMail;
 use App\Models\Account;
 use App\Models\Membership;
 use App\Models\Site;
@@ -10,6 +11,8 @@ use App\Operator\Access\TenantUsers;
 use App\Operator\ActiveTenant;
 use App\Support\CurrentSite;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -137,4 +140,49 @@ it('renders the tenant-locked board and no site picker', function () {
 
     expect($html)->toContain('Dana Client')
         ->and($html)->not->toContain('<select'); // access is the locked tenant's, never a page picker
+});
+
+it('emails a new user a set-your-password invite for the locked tenant, and re-sends on demand', function () {
+    Mail::fake();
+    $this->actingAs(usersOperator());
+    $acc = Account::factory()->create();
+    $site = Site::factory()->for($acc)->create(['brand_name' => 'Miller Auto & Tire']);
+    app(ActiveTenant::class)->set($site->id);
+
+    Livewire::test(UsersBoard::class)->call('grant', 'Sam Miller', 'sam@miller.example', UserRole::SiteAdmin->value);
+
+    $user = User::query()->where('email', 'sam@miller.example')->first();
+    Mail::assertSent(UserInviteMail::class, function (UserInviteMail $mail) use ($user, $site): bool {
+        return $mail->hasTo('sam@miller.example')
+            && $mail->userId === $user->id
+            && $mail->siteId === $site->id
+            && str_contains($mail->resetUrl, '/admin/password-reset/reset')
+            && str_contains($mail->resetUrl, 'token=');
+    });
+    expect(DB::table('password_reset_tokens')->where('email', 'sam@miller.example')->exists())->toBeTrue();
+
+    // The rendered email names the site, the role, and carries the link.
+    $sent = Mail::sent(UserInviteMail::class)->first();
+    $html = $sent->render();
+    expect($html)->toContain('Miller Auto &amp; Tire')
+        ->and($html)->toContain('Site Admin')
+        ->and($html)->toContain('Set your password');
+
+    // Re-send from the row: a second invite, a fresh token.
+    Livewire::test(UsersBoard::class)->call('sendInvite', $user->id);
+    Mail::assertSent(UserInviteMail::class, 2);
+});
+
+it('never invites from a tenant the user is not a member of', function () {
+    Mail::fake();
+    $this->actingAs(usersOperator());
+    $site = Site::factory()->create();
+    $other = Site::factory()->create();
+    $user = User::factory()->create(['role' => UserRole::SiteAdmin]);
+    Membership::create(['user_id' => $user->id, 'account_id' => $other->account_id, 'site_id' => $other->id, 'role' => 'site_admin']);
+    app(ActiveTenant::class)->set($site->id);
+
+    Livewire::test(UsersBoard::class)->call('sendInvite', $user->id);
+
+    Mail::assertNothingSent();
 });
