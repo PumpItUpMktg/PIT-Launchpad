@@ -2,9 +2,9 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
 use App\Models\Connection;
 use App\Models\User;
+use App\Security\Capability;
 
 /**
  * Least-privilege access to per-tenant credentials: only operators may view,
@@ -35,6 +35,6 @@ class ConnectionPolicy
 
     private function isOperator(User $user): bool
     {
-        return $user->role === UserRole::Operator;
+        return $user->hasCapability(Capability::ManageCredentials);
     }
 }

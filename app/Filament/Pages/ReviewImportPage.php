@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Jobs\ImportReviews;
 use App\Models\ReviewImport;
 use App\Reviews\Import\ReviewImporter;
@@ -57,7 +56,7 @@ class ReviewImportPage extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /** Livewire finished receiving the file: validate it here so a bad pick is named on the page, not swallowed. */

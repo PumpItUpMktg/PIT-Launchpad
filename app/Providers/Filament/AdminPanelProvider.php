@@ -39,6 +39,10 @@ class AdminPanelProvider extends PanelProvider
             ->navigation(false)
             ->path('admin')
             ->login()
+            // A granted Site Admin arrives with a temporary password; the reset link lets them set their
+            // own without an operator in the loop (delivery needs a real mailer — see MAIL_MAILER).
+            ->passwordReset()
+            ->authPasswordBroker('admin')
             ->colors([
                 'primary' => Color::Amber,
             ])

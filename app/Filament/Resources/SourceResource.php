@@ -10,6 +10,7 @@ use App\Filament\Resources\SourceResource\Pages\CreateSource;
 use App\Filament\Resources\SourceResource\Pages\ListSources;
 use App\Models\Source;
 use App\Operator\Controls\FeedControl;
+use App\Security\Capability;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -24,6 +25,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * §6a feeds control: view / add / remove / enable a tenant's news & source
@@ -37,6 +39,12 @@ class SourceResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-rss';
 
     protected static ?string $navigationLabel = 'Feeds';
+
+    /** Feeds are an engine control ({@see Capability::ManageEngineControls}) — Super-Admin-only. */
+    public static function canAccess(): bool
+    {
+        return Auth::user()?->hasCapability(Capability::ManageEngineControls) ?? false;
+    }
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 

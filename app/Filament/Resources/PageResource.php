@@ -5,7 +5,6 @@ namespace App\Filament\Resources;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
-use App\Enums\UserRole;
 use App\Filament\Resources\ContentReviewResource\Pages\EditContentReview;
 use App\Filament\Resources\PageResource\Pages\ListPages;
 use App\Jobs\GeneratePage;
@@ -54,7 +53,7 @@ class PageResource extends Resource
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public static function getEloquentQuery(): Builder

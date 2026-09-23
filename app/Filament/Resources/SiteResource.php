@@ -36,6 +36,7 @@ use App\Publishing\LaunchOrchestrator;
 use App\Publishing\LinkRepublisher;
 use App\Publishing\OrphanScanner;
 use App\Publishing\SitePreviewService;
+use App\Security\Capability;
 use App\Security\GateCheck;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -83,6 +84,12 @@ class SiteResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-office-2';
 
     protected static ?string $navigationLabel = 'Portfolio';
+
+    /** Creating a tenant is lifecycle ({@see Capability::ManageTenantLifecycle}) — Super-Admin-only. */
+    public static function canCreate(): bool
+    {
+        return Auth::user()?->hasCapability(Capability::ManageTenantLifecycle) ?? false;
+    }
 
     // Nav-final: Portfolio is a top-level entry (Dashboard · Portfolio · Setup), above the
     // Operate group of pages boards.
@@ -222,7 +229,8 @@ class SiteResource extends Resource
             ->label('Delete site')
             ->icon('heroicon-o-trash')
             ->color('danger')
-            ->visible(fn (Site $record): bool => $record->status !== SiteStatus::Live)
+            ->visible(fn (Site $record): bool => $record->status !== SiteStatus::Live
+                && (Auth::user()?->hasCapability(Capability::ManageTenantLifecycle) ?? false))
             ->requiresConfirmation()
             ->modalHeading('Delete this tenant?')
             ->modalDescription(fn (Site $record): string => self::deleteSummary($record))
@@ -1057,6 +1065,7 @@ class SiteResource extends Resource
     private static function budgetAction(): Action
     {
         return Action::make('budget')
+            ->visible(fn (): bool => Auth::user()?->hasCapability(Capability::ManageEngineControls) ?? false)
             ->label('Budget & cadence')
             ->icon('heroicon-o-banknotes')
             ->fillForm(fn (Site $record): array => ['budget_ceiling' => app(BudgetControl::class)->ceiling($record)])
@@ -1091,6 +1100,7 @@ class SiteResource extends Resource
     private static function handoverAction(): Action
     {
         return Action::make('handover')
+            ->visible(fn (): bool => Auth::user()?->hasCapability(Capability::ManageTenantLifecycle) ?? false)
             ->label('Hand over → Live')
             ->icon('heroicon-o-rocket-launch')
             ->visible(fn (Site $record): bool => $record->status !== SiteStatus::Live)

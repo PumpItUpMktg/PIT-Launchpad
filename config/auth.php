@@ -99,6 +99,16 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
+
+        // The admin panel's broker: the same table, a 24-hour window. An invited Site Admin gets a
+        // set-your-password link by email and may not open it for hours; a 60-minute token would have
+        // expired before most people read the message.
+        'admin' => [
+            'provider' => 'users',
+            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+            'expire' => 1440,
+            'throttle' => 60,
+        ],
     ],
 
     /*

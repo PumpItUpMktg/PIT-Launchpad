@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\GeoGrid\CoverageMap;
 use App\GeoGrid\GeoGridScanner;
 use App\Models\GeoGridScan;
@@ -54,7 +53,7 @@ class LocationCoverage extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public function mount(): void

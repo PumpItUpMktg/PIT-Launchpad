@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
+use App\Mail\UserInviteMail;
 use App\Models\Membership;
 use App\Models\Site;
 use App\Models\User;
@@ -11,12 +12,15 @@ use App\Operator\ActiveTenant;
 use App\Security\Capability;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 
 /**
@@ -64,7 +68,7 @@ class UsersBoard extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->isSuperAdmin() ?? false;
     }
 
     /** @return array<string, mixed>|null */
@@ -137,14 +141,65 @@ class UsersBoard extends Page
             return;
         }
 
-        $tempPassword = Str::password(16);
-        $user = User::create(['name' => $name, 'email' => $email, 'role' => $role, 'password' => Hash::make($tempPassword)]);
+        // The account exists from this moment; the password is whatever the invite link sets. The random
+        // one here is never shown — a user who never opens the link simply cannot sign in.
+        $user = User::create(['name' => $name, 'email' => $email, 'role' => $role, 'password' => Hash::make(Str::password(32))]);
         $this->attach($user, $site);
+        $this->sendInvite($user->id);
+    }
 
-        Notification::make()
-            ->title('User created and granted access')
-            ->body("Temporary password for {$email}: {$tempPassword}")
-            ->success()->persistent()->send();
+    /**
+     * Email a member of the LOCKED tenant their access: role, what it lets them do, and a set-your-password
+     * link (a fresh 24-hour token on the admin broker; any earlier link stops working). Used on grant and
+     * as the per-row "Send invite" — a lost email is one click, never a password read out over the phone.
+     */
+    public function sendInvite(string $userId): void
+    {
+        if (! $this->canManage()) {
+            return;
+        }
+        $site = $this->lockedSite();
+        if ($site === null) {
+            return;
+        }
+        $user = User::query()->find($userId);
+        if ($user === null || ! Membership::query()->where('user_id', $userId)->where('site_id', $site->id)->exists()) {
+            return; // only a member of THIS tenant is invited from this surface
+        }
+
+        $token = Password::broker('admin')->createToken($user);
+        $url = Filament::getResetPasswordUrl($token, $user);
+        $email = (string) $user->email;
+
+        // Sent NOW, not queued — the operator is standing here to learn whether it went (the interview
+        // invite lesson: queued behind page generation, "sent" meant nothing). A failure is reported as one.
+        try {
+            Mail::to($email)->sendNow(new UserInviteMail($user->id, $site->id, $url));
+        } catch (\Throwable $e) {
+            report($e);
+            Notification::make()->danger()
+                ->title("Could not email {$email}")
+                ->body('The account is ready — they can use “Forgot password” on the sign-in page once mail works. Mail error: '.$e->getMessage())
+                ->persistent()->send();
+
+            return;
+        }
+
+        // "Sent" to the log mailer is sent nowhere. Say so rather than let a client wait on an email
+        // that never left.
+        if ((string) config('mail.default') === 'log') {
+            Notification::make()->warning()
+                ->title('Mail is set to log — nothing was actually emailed')
+                ->body("MAIL_MAILER is 'log' on this environment, so the invite for {$email} went to the log file. Set a real mailer, then use “Send invite” on their row.")
+                ->persistent()->send();
+
+            return;
+        }
+
+        Notification::make()->success()
+            ->title("Invite emailed to {$email}")
+            ->body('A set-your-password link, valid for 24 hours. Any earlier link no longer works.')
+            ->send();
     }
 
     /**

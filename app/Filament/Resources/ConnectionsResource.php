@@ -13,6 +13,7 @@ use App\Operator\ActiveTenant;
 use App\Operator\Controls\WordpressConnector;
 use App\Policies\ConnectionPolicy;
 use App\Security\Audit;
+use App\Security\Capability;
 use App\Security\ConnectionRotator;
 use App\Security\CredentialMasker;
 use App\Security\CredentialRevealer;
@@ -46,6 +47,12 @@ class ConnectionsResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-key';
 
     protected static ?string $navigationLabel = 'Connections';
+
+    /** Credentials are Super-Admin-only ({@see Capability::ManageCredentials}) — a Site Admin never sees a connection. */
+    public static function canAccess(): bool
+    {
+        return Auth::user()?->hasCapability(Capability::ManageCredentials) ?? false;
+    }
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 

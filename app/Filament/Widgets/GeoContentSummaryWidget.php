@@ -2,7 +2,6 @@
 
 namespace App\Filament\Widgets;
 
-use App\Enums\UserRole;
 use App\Geo\GeoContentSummary;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Auth;
@@ -19,7 +18,7 @@ class GeoContentSummaryWidget extends Widget
 
     public static function canView(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /**

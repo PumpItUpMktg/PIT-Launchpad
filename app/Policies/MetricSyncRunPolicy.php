@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
 use App\Models\MetricSyncRun;
 use App\Models\User;
 
@@ -40,6 +39,6 @@ class MetricSyncRunPolicy
 
     private function isOperator(User $user): bool
     {
-        return $user->role === UserRole::Operator;
+        return $user->canOperate();
     }
 }

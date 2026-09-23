@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Filament\Pages\Concerns\BuildsTownPage;
 use App\GeoGrid\CoverageRunAll;
 use App\Jobs\RunCoverageScan;
@@ -71,7 +70,7 @@ class ServiceAreasPage extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public function mount(): void

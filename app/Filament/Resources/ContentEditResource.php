@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Enums\EditReason;
-use App\Enums\UserRole;
 use App\Filament\Resources\ContentEditResource\Pages\ListContentEdits;
 use App\Models\ContentEdit;
 use App\Operator\ActiveTenant;
@@ -35,7 +34,7 @@ class ContentEditResource extends Resource
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->role === UserRole::Operator;
+        return auth()->user()?->canOperate() ?? false;
     }
 
     /** The admin tick: how many corrections have been captured for the LOCKED tenant. */

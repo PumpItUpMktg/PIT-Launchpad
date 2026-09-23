@@ -6,8 +6,10 @@ use App\ContentEngine\Reconcile\RebuildReadiness as ReadinessModel;
 use App\ContentEngine\Reconcile\RebuildReconciler;
 use App\Models\Site;
 use App\Operator\ActiveTenant;
+use App\Security\Capability;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * Operate · Readiness (§B slice 5) — the per-tenant build-stage checklist. Shows, in dependency order,
@@ -24,6 +26,12 @@ class RebuildReadiness extends OperatePage
     protected static ?string $slug = 'operate/readiness';
 
     protected static ?string $navigationLabel = 'Readiness';
+
+    /** Rebuild + reconcile are recover powers — Super-Admin-only ({@see Capability::ResetPublishing} tier). */
+    public static function canAccess(): bool
+    {
+        return Auth::user()?->isSuperAdmin() ?? false;
+    }
 
     protected static ?int $navigationSort = 7;
 

@@ -3,7 +3,6 @@
 namespace App\Policies;
 
 use App\Client\ClientAccess;
-use App\Enums\UserRole;
 use App\Models\ClientMilestone;
 use App\Models\Site;
 use App\Models\User;
@@ -58,6 +57,6 @@ class ClientMilestonePolicy
 
     private function isOperator(User $user): bool
     {
-        return $user->role === UserRole::Operator;
+        return $user->canOperate();
     }
 }

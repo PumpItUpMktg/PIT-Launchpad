@@ -3,7 +3,6 @@
 namespace App\Policies;
 
 use App\Client\ClientAccess;
-use App\Enums\UserRole;
 use App\Models\PageIndexState;
 use App\Models\Site;
 use App\Models\User;
@@ -53,6 +52,6 @@ class PageIndexStatePolicy
 
     private function isOperator(User $user): bool
     {
-        return $user->role === UserRole::Operator;
+        return $user->canOperate();
     }
 }

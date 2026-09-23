@@ -3,7 +3,6 @@
 namespace App\Filament\Pages;
 
 use App\Enums\JobStatus;
-use App\Enums\UserRole;
 use App\JobCapture\Review\JobReviewActions;
 use App\Jobs\PublishJob;
 use App\Jobs\UnpublishJob;
@@ -66,7 +65,7 @@ class JobsBoard extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /** @return array{summary: array<string, int>, queue: list<array<string, mixed>>, published: list<array<string, mixed>>, pipeline: list<array<string, mixed>>} */

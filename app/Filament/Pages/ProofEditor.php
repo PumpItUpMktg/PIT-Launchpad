@@ -10,7 +10,6 @@ use App\Enums\ContentStatus;
 use App\Enums\EditReason;
 use App\Enums\MediaKind;
 use App\Enums\RenderStatus;
-use App\Enums\UserRole;
 use App\Filament\Pages\Guided\Grow;
 use App\Jobs\RenderImage;
 use App\Models\Content;
@@ -73,7 +72,7 @@ class ProofEditor extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public static function shouldRegisterNavigation(): bool

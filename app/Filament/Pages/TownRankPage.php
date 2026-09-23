@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Filament\Pages\Concerns\BuildsTownPage;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
@@ -80,7 +79,7 @@ class TownRankPage extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     public function mount(): void

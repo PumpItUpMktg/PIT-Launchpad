@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\UserRole;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\RankingStandings;
 use BackedEnum;
@@ -51,7 +50,7 @@ class RankingsBoard extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /** @return array{summary: array<string, int>, movers: list<array<string, mixed>>, cannibalized: list<array<string, mixed>>, local: list<array<string, mixed>>} */

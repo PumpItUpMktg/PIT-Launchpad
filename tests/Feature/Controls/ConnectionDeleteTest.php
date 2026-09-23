@@ -2,6 +2,7 @@
 
 use App\Enums\AuditAction;
 use App\Enums\UserRole;
+use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\ConnectionsResource\Pages\ListConnections;
 use App\Models\AuditLog;
 use App\Models\Connection;
@@ -33,9 +34,10 @@ test('an operator can delete a WordPress connection, and the removal is audited'
         ->and(json_encode($log->metadata))->not->toContain('secret');
 });
 
-test('the delete action is hidden from a non-operator (client)', function () {
+test('the connections surface is closed to anyone without the credentials capability', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Client]));
-    $connection = Connection::factory()->create(['site_id' => Site::factory(), 'provider' => 'wp_app_password']);
+    expect(ConnectionsResource::canAccess())->toBeFalse();
 
-    Livewire::test(ListConnections::class)->assertTableActionHidden('delete', $connection);
+    $this->actingAs(User::factory()->create(['role' => UserRole::SiteAdmin]));
+    expect(ConnectionsResource::canAccess())->toBeFalse();
 });

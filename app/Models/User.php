@@ -55,7 +55,10 @@ class User extends Authenticatable implements FilamentUser, HasTenants
             // The stand-alone Operations Console: the internal Super Admin tier AND a client-side
             // Site Admin. (Existing panels are unchanged — a Site Admin reaches neither.)
             'console' => $this->isSuperAdmin() || $this->isSiteAdmin(),
-            default => $this->role->isStaff(), // admin + operator reach the operator panel
+            // The operator cockpit: the Super Admin tier (all sites) AND a client-side Site Admin, who
+            // reaches the same panel locked to their membership site(s) — the system surfaces (users,
+            // queue, credentials, engine controls, tenant lifecycle) hide behind their capabilities.
+            default => $this->role->isStaff() || $this->isSiteAdmin(),
         };
     }
 
@@ -79,7 +82,17 @@ class User extends Authenticatable implements FilamentUser, HasTenants
     /** The internal Super Admin tier (full authority incl. backend corrections). */
     public function isSuperAdmin(): bool
     {
-        return $this->role->isSuperAdmin();
+        return $this->role->isSuperAdmin() || $this->isPlatformSuperUser();
+    }
+
+    /**
+     * Whether this user may operate a tenant in the admin panel: the Super Admin tier, or a Site Admin
+     * (within their membership sites). The gate every operate surface uses; system surfaces gate on
+     * {@see isSuperAdmin()} or a specific {@see Capability} instead.
+     */
+    public function canOperate(): bool
+    {
+        return $this->isSuperAdmin() || $this->isSiteAdmin();
     }
 
     /** A client-side Site Admin (the limited operating role). */
@@ -95,8 +108,8 @@ class User extends Authenticatable implements FilamentUser, HasTenants
     }
 
     /**
-     * The site ids this user may see, or NULL for unrestricted (all sites). Admin is always
-     * unrestricted; an operator is unrestricted UNTIL they carry membership rows (back-compat —
+     * The site ids this user may see, or NULL for unrestricted (all sites). Admin and the platform
+     * super-users are always unrestricted; an operator is unrestricted UNTIL they carry membership rows (back-compat —
      * "operators seeded manually", so no memberships means the pre-gating behavior), then limited to:
      *  - every site named directly by a per-site membership (`site_id` set), plus
      *  - every site under an account granted account-wide (a membership with `site_id` null).
@@ -122,7 +135,9 @@ class User extends Authenticatable implements FilamentUser, HasTenants
     /** @return list<string>|null */
     private function resolvePermittedSiteIds(): ?array
     {
-        if ($this->isAdmin()) {
+        // Admin and the platform owner(s) are unrestricted whatever memberships they carry — a grant
+        // made for convenience can never narrow the owner's view.
+        if ($this->isAdmin() || $this->isPlatformSuperUser()) {
             return null;
         }
 

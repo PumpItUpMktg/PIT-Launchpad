@@ -5,7 +5,6 @@ namespace App\Filament\Pages;
 use App\Branding\BrandStudio;
 use App\Branding\BrandVariationBuilder;
 use App\Enums\ConnectionProvider;
-use App\Enums\UserRole;
 use App\Filament\Concerns\ManagesBrandKit;
 use App\Guided\StepGate;
 use App\Models\Connection;
@@ -69,7 +68,7 @@ class BrandBoard extends Page
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->role === UserRole::Operator;
+        return Auth::user()?->canOperate() ?? false;
     }
 
     /** @return array<string, mixed>|null */
