@@ -8,6 +8,10 @@
     $countyOptions = $located ? $this->countyOptions($activeLoc) : [];
     $selectedCounties = is_array($activeLoc->county_geoids) ? array_values($activeLoc->county_geoids) : [];
     $color = $colors[$activeLoc->id] ?? '#2563eb';
+    $proximity = $activeLoc->isProximity();
+    $reach = $activeLoc->coverageRadiusMiles();
+    $ringPresets = \App\Locations\CoverageBand::rings();
+    $chain = $activePanel['chain'] ?? array_keys($tierMeta);
 @endphp
 <div class="lp-card lp-panel">
     {{-- Located header --}}
@@ -56,9 +60,35 @@
         @endif
     </div>
 
+    {{-- Territory mode: by county (the default — largest towns first) or by distance (rings of miles
+         from the shop, nearest first — no head start for larger towns). An auto shop draws from
+         10–15 miles, not a county. --}}
+    @if ($located)
+        <div class="lp-rule" wire:key="mode-{{ $activeLoc->id }}">
+            <div class="lp-seclbl">How you draw your territory</div>
+            <div class="lp-seg">
+                <button type="button" class="{{ $proximity ? '' : 'on' }}" wire:click="setCoverageMode('{{ $activeLoc->id }}', 'county')">By county</button>
+                <button type="button" class="{{ $proximity ? 'on' : '' }}" wire:click="setCoverageMode('{{ $activeLoc->id }}', 'proximity')">By distance</button>
+            </div>
+            @if ($proximity)
+                <div class="lp-row" style="margin-top:10px; align-items:center">
+                    <span class="lp-seclbl" style="margin:0">Reach</span>
+                    <div class="lp-seg">
+                        @foreach ($ringPresets as $mi)
+                            <button type="button" class="{{ $reach === $mi ? 'on' : '' }}" wire:click="setCoverageRadius('{{ $activeLoc->id }}', {{ $mi }})">{{ $mi }} mi</button>
+                        @endforeach
+                    </div>
+                    <input type="number" min="1" max="100" wire:model="radiusInput.{{ $activeLoc->id }}" wire:keydown.enter="applyRadius('{{ $activeLoc->id }}')" placeholder="{{ $reach }}" class="lp-input" style="max-width:90px" />
+                    <button type="button" wire:click="applyRadius('{{ $activeLoc->id }}')" class="lp-btn ghost">Apply</button>
+                </div>
+                <div class="lp-muted" style="font-size:12px; margin-top:6px">Every town within {{ $reach }} miles is covered. The nearest ring builds first; each further ring unlocks once the closer one is indexed. Town size plays no part.</div>
+            @endif
+        </div>
+    @endif
+
     {{-- Counties served — compact searchable multi-select (sends the whole array,
          so adds accumulate natively; home is the initial seed, never a floor) --}}
-    @if ($located)
+    @if ($located && ! $proximity)
         <div>
             <div class="lp-seclbl">Counties you serve</div>
             @if ($countyOptions === [])
@@ -110,8 +140,8 @@
             <span class="n">{{ $activePanel['town_count'] }} towns</span>
             <span class="lp-pill">{{ $activePanel['selected_count'] }} selected</span>
             <div class="lp-mini">
-                @foreach ($tierMeta as $key => $meta)
-                    @php $n = $pt[$key] ?? 0; $pct = $activePanel['town_count'] > 0 ? ($n / $activePanel['town_count']) * 100 : 0; @endphp
+                @foreach ($chain as $key)
+                    @php $meta = $tierMeta[$key] ?? ['label' => $key, 'color' => '#C3CCD6']; $n = $pt[$key] ?? 0; $pct = $activePanel['town_count'] > 0 ? ($n / $activePanel['town_count']) * 100 : 0; @endphp
                     @if ($n > 0)
                         <span style="width: {{ $pct }}%; background: {{ $meta['color'] }}"></span>
                     @endif
@@ -119,10 +149,10 @@
             </div>
         </div>
 
-        {{-- Town groups by tier --}}
+        {{-- Town groups by band: size tiers for a county territory, distance rings for a proximity one --}}
         <div style="display:flex; flex-direction:column; gap:9px">
-            @foreach ($tierMeta as $key => $meta)
-                @php $towns = $activePanel['groups'][$key] ?? []; @endphp
+            @foreach ($chain as $key)
+                @php $meta = $tierMeta[$key] ?? ['label' => $key, 'color' => '#C3CCD6']; $towns = $activePanel['groups'][$key] ?? []; @endphp
                 @if (count($towns) > 0)
                     @php
                         $selInTier = collect($towns)->where('page_selected', true)->count();
@@ -145,10 +175,15 @@
                         </div>
                         <div class="lp-towns" x-show="open">
                             @foreach ($towns as $town)
-                                @php $pop = $town['population'] !== null ? number_format($town['population']) : '—'; @endphp
+                                @php
+                                    // A distance ring shows how far the town is; a size tier shows how big it is.
+                                    $stat = $proximity
+                                        ? (($town['distance_miles'] ?? null) !== null ? number_format((float) $town['distance_miles'], 1).' mi' : '—')
+                                        : ($town['population'] !== null ? number_format($town['population']) : '—');
+                                @endphp
                                 <button type="button" wire:key="lp-town-{{ $town['geo_id'] }}" wire:click="togglePageSelection('{{ $town['geo_id'] }}')" class="lp-town {{ $town['page_selected'] ? 'on' : '' }}">
                                     {{ $town['page_selected'] ? '✓' : '+' }} {{ $town['name'] }}@if ($town['manual']) 🚩 @endif
-                                    <span class="lp-town-pop">{{ $pop }}</span>
+                                    <span class="lp-town-pop">{{ $stat }}</span>
                                 </button>
                             @endforeach
                         </div>
@@ -157,13 +192,13 @@
             @endforeach
         </div>
     @elseif ($located)
-        <div class="lp-rule lp-muted">Tick a county above to enumerate its towns.</div>
+        <div class="lp-rule lp-muted">{{ $proximity ? 'No towns found within '.$reach.' miles — widen the reach.' : 'Tick a county above to enumerate its towns.' }}</div>
     @endif
 
     {{-- Add a town beyond the served counties --}}
     @if ($located)
         <div class="lp-rule">
-            <div class="lp-seclbl">Add a town (beyond the served counties)</div>
+            <div class="lp-seclbl">{{ $proximity ? 'Add a town (beyond the reach)' : 'Add a town (beyond the served counties)' }}</div>
             <div class="lp-row">
                 <input type="text" wire:model="townQuery.{{ $activeLoc->id }}" wire:keydown.enter="searchTowns('{{ $activeLoc->id }}')" placeholder="town name" class="lp-input" style="max-width:260px" />
                 <button type="button" wire:click="searchTowns('{{ $activeLoc->id }}')" class="lp-btn ghost">Search</button>

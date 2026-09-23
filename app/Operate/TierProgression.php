@@ -4,7 +4,7 @@ namespace App\Operate;
 
 use App\Enums\ContentKind;
 use App\Enums\PageType;
-use App\Enums\SizeTier;
+use App\Locations\CoverageBand;
 use App\Locations\TierGate;
 use App\Metrics\UrlNormalizer;
 use App\Models\Content;
@@ -30,9 +30,6 @@ use Illuminate\Support\Collection;
  */
 class TierProgression
 {
-    /** Tier bands top-to-bottom; null = the ungrouped band (no ACS population) shown last. */
-    private const TIERS = [SizeTier::Major, SizeTier::Large, SizeTier::Medium, SizeTier::Small, null];
-
     public function __construct(
         private readonly TierGate $gate,
         private readonly InternalLinkGraph $graph,
@@ -86,10 +83,12 @@ class TierProgression
         $builtTotal = 0;
         $servedTotal = 0;
         $problem = 0;
-        foreach (self::TIERS as $tier) {
-            $tierValue = $tier?->value;
-            $servedInTier = $served->filter(fn (CoverageArea $a): bool => $this->tierValue($a) === $tierValue)->count();
-            $builtInTier = $built->filter(fn (Content $c): bool => ($tierByTown[$this->townKey((string) $c->title)] ?? null) === $tierValue)->values();
+        // The market's own band chain: size tiers for a county-drawn territory, distance rings for a
+        // proximity one — the bands the gate unlocks in that order.
+        $chain = CoverageBand::chain($location);
+        foreach ($chain as $band) {
+            $servedInTier = $served->filter(fn (CoverageArea $a): bool => $this->tierValue($a) === $band)->count();
+            $builtInTier = $built->filter(fn (Content $c): bool => ($tierByTown[$this->townKey((string) $c->title)] ?? null) === $band)->values();
 
             if ($servedInTier === 0 && $builtInTier->isEmpty()) {
                 continue; // an empty tier for this market — nothing to show
@@ -104,11 +103,11 @@ class TierProgression
 
             $builtCount = count($pills);
             $indexed = count(array_filter($pills, fn (array $p): bool => $p['index_state'] === 'indexed'));
-            $status = $this->gate->status($site, $marketId, $tier);
+            $status = $this->gate->status($site, $marketId, $band);
 
             $bands[] = [
-                'tier' => $tierValue ?? 'ungrouped',
-                'label' => $tier?->label() ?? 'Ungrouped',
+                'tier' => $band,
+                'label' => CoverageBand::label($band, $chain),
                 'served' => $servedInTier,
                 'built' => $builtCount,
                 'indexed' => $indexed,
@@ -159,9 +158,10 @@ class TierProgression
         };
     }
 
-    private function tierValue(CoverageArea $area): ?string
+    /** The row's roll-out band; a row with none is ungrouped. */
+    private function tierValue(CoverageArea $area): string
     {
-        return is_string($area->size_tier) && $area->size_tier !== '' ? $area->size_tier : null;
+        return is_string($area->band) && $area->band !== '' ? $area->band : CoverageBand::UNGROUPED;
     }
 
     private function marketName(Location $location): string
@@ -190,10 +190,7 @@ class TierProgression
     {
         $map = [];
         foreach ($coverage as $area) {
-            $tier = $this->tierValue($area);
-            if ($tier !== null) {
-                $map[$this->townKey((string) $area->name)] = $tier;
-            }
+            $map[$this->townKey((string) $area->name)] = $this->tierValue($area);
         }
 
         return $map;
@@ -204,7 +201,7 @@ class TierProgression
     {
         return CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
-            ->get(['id', 'name', 'size_tier', 'source_location_ids']);
+            ->get(['id', 'name', 'size_tier', 'band', 'source_location_ids']);
     }
 
     /** @return Collection<int, Content> */

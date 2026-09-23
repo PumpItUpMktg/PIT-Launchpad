@@ -13,17 +13,12 @@
         @include('filament.pages.partials.locations.styles')
 
         @php
-            $tierMeta = [
-                'major' => ['label' => 'Major', 'color' => '#0A4F4F'],
-                'large' => ['label' => 'Large', 'color' => '#0E6B6B'],
-                'medium' => ['label' => 'Medium', 'color' => '#4E9A98'],
-                'small' => ['label' => 'Small', 'color' => '#A6CFCD'],
-                'ungrouped' => ['label' => 'Ungrouped', 'color' => '#C3CCD6'],
-            ];
+            $tierMeta = \App\Locations\CoverageBand::meta(\App\Locations\CoverageBand::COUNTY_CHAIN); // replaced by the view-model's band_meta once the panels are read
             $locations = $this->locations;
             $colors = $this->colors;
             $locating = $locations->contains(fn ($l) => $l->lat === null && ! $l->geocode_failed);
             $vm = $this->panels;
+            $tierMeta = $vm['band_meta'] ?? $tierMeta;
             $totals = $vm['totals'];
             $tierTotals = $totals['tiers'] ?? [];
             $activeLoc = $locations->firstWhere('id', $activeTab) ?? $locations->first();

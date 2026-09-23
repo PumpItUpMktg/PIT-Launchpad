@@ -2,33 +2,42 @@
 
 namespace App\Locations;
 
+use App\Enums\MunicipalityType;
+use App\Integrations\Census\CensusPopulation;
+use App\Integrations\Census\Municipality;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
- * The headless coverage engine: each base Location's geocoded point + radius →
+ * The proximity coverage engine: each base Location's geocoded point + outer reach (miles) →
  * Census enumeration (places + MCDs) → exact Haversine distance filter → deduplicated
- * union across all base locations = the authoritative service-area coverage set. This
- * is the Phase-3 dependency. Reads existing point data (lat/lng captured by the
- * Places/GBP import); a base with no coordinates or no radius is skipped.
+ * union across all base locations = the authoritative service-area coverage set for a
+ * DISTANCE-drawn territory (an auto shop's 10–15 miles, not a county). Reads existing point
+ * data; a base with no coordinates or no radius is skipped. County subdivisions are joined to
+ * ACS population like the county engine so the drip's relevance score has its anchor.
  */
 final class LocationCoverage
 {
     public function __construct(
         private readonly MunicipalityGazetteer $gazetteer,
+        private readonly ?CensusPopulation $population = null,
     ) {}
 
     /**
      * @param  int|null  $radiusOverride  apply this radius (miles) to every base for this
      *                                    run instead of each Location's saved radius — the
      *                                    CLI's --radius calibration path (no DB write).
+     * @param  Collection<int, Location>|null  $locations  the bases to enumerate (default: all of
+     *                                                     the site's; {@see SiteCoverage} passes the
+     *                                                     proximity-mode ones)
      */
-    public function coverage(Site $site, ?int $radiusOverride = null): CoverageResult
+    public function coverage(Site $site, ?int $radiusOverride = null, ?Collection $locations = null): CoverageResult
     {
-        $locations = Location::withoutGlobalScope(SiteScope::class)
+        $locations ??= Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->get();
 
@@ -43,6 +52,8 @@ final class LocationCoverage
         $perBase = [];
         /** @var array<string, CoverageMunicipality> $union */
         $union = [];
+        /** @var array<string, array<string, int>> $popCache  "ss:ccc" => geoId => population */
+        $popCache = [];
 
         foreach ($locations as $location) {
             $lat = $location->lat === null ? null : (float) $location->lat;
@@ -64,11 +75,13 @@ final class LocationCoverage
                         continue; // centroid outside the radius
                     }
 
-                    $found[] = CoverageMunicipality::fromMunicipality($m, $distance, $location->id);
+                    $municipality = CoverageMunicipality::fromMunicipality($m, $distance, $location->id)
+                        ->withPopulation($this->populationOf($m, $popCache));
+                    $found[] = $municipality;
 
                     $union[$m->geoId] = isset($union[$m->geoId])
                         ? $union[$m->geoId]->mergedWith($location->id, $distance)
-                        : CoverageMunicipality::fromMunicipality($m, $distance, $location->id);
+                        : $municipality;
                 }
 
                 usort($found, fn (CoverageMunicipality $a, CoverageMunicipality $b) => $a->distanceMiles <=> $b->distanceMiles);
@@ -101,5 +114,23 @@ final class LocationCoverage
         usort($unionList, fn (CoverageMunicipality $a, CoverageMunicipality $b) => strcmp($a->name, $b->name));
 
         return new CoverageResult($perBase, $unionList);
+    }
+
+    /**
+     * ACS population for a county subdivision (its GEOID carries the county: STATE(2)+COUNTY(3)+COUSUB(5));
+     * a place GEOID has no county, and without a population client nothing is fetched.
+     *
+     * @param  array<string, array<string, int>>  $cache
+     */
+    private function populationOf(Municipality $m, array &$cache): ?int
+    {
+        if ($this->population === null || $m->type !== MunicipalityType::CountySubdivision || strlen($m->geoId) !== 10) {
+            return null;
+        }
+        $stateFips = substr($m->geoId, 0, 2);
+        $countyFips = substr($m->geoId, 2, 3);
+        $pop = $cache["{$stateFips}:{$countyFips}"] ??= $this->population->forCounty($stateFips, $countyFips);
+
+        return $pop[$m->geoId] ?? null;
     }
 }

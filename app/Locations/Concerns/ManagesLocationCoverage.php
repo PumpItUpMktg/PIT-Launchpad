@@ -8,12 +8,13 @@ use App\Integrations\Census\Municipality;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Places\PlacesProvider;
 use App\Jobs\GeocodeLocation;
-use App\Locations\CountyCoverage;
+use App\Locations\CoverageBand;
 use App\Locations\CoverageMapSvg;
 use App\Locations\CoveragePanels;
 use App\Locations\CoverageWriter;
 use App\Locations\LocationPublishHold;
 use App\Locations\ManualCoverage;
+use App\Locations\SiteCoverage;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -80,6 +81,9 @@ trait ManagesLocationCoverage
 
     /** @var array<string, list<array{geo_id: string, name: string, type: string, state: string|null, lat: float|null, lng: float|null}>> */
     public array $townResults = [];
+
+    /** @var array<string, string> locationId => a typed outer reach in miles (proximity mode) awaiting Apply */
+    public array $radiusInput = [];
 
     /** Per-request memo: stateFips => the state's counties (avoids re-querying on each render). */
     private array $countyOptionsCache = [];
@@ -314,6 +318,57 @@ trait ManagesLocationCoverage
         $this->buildCoverage(notify: false);
     }
 
+    /**
+     * How a location draws its territory: by county (its selected counties' towns, largest first) or by
+     * distance (rings of miles from the shop, nearest first — no head start for larger towns). Switching
+     * recomputes; a proximity location with no reach yet gets the platform default.
+     */
+    public function setCoverageMode(string $locationId, string $mode): void
+    {
+        $location = $this->coverageLocation($locationId);
+        if ($location === null || ! in_array($mode, [Location::MODE_COUNTY, Location::MODE_PROXIMITY], true)) {
+            return;
+        }
+
+        $fill = ['coverage_mode' => $mode];
+        if ($mode === Location::MODE_PROXIMITY && (int) ($location->coverage_radius ?? 0) <= 0) {
+            $fill['coverage_radius'] = CoverageBand::DEFAULT_RADIUS;
+        }
+        $location->forceFill($fill)->save();
+        $this->buildCoverage(notify: true);
+    }
+
+    /** The outer reach (miles) of a proximity territory — a preset click. Persists + recomputes. */
+    public function setCoverageRadius(string $locationId, int $miles): void
+    {
+        $location = $this->coverageLocation($locationId);
+        if ($location === null) {
+            return;
+        }
+        if ($miles < 1 || $miles > 100) {
+            Notification::make()->title('Reach must be between 1 and 100 miles')->warning()->send();
+
+            return;
+        }
+
+        $location->forceFill(['coverage_radius' => $miles, 'coverage_mode' => Location::MODE_PROXIMITY])->save();
+        unset($this->radiusInput[$locationId]);
+        $this->buildCoverage(notify: true);
+    }
+
+    /** The typed reach (the free-miles box) — applied through the same path as a preset. */
+    public function applyRadius(string $locationId): void
+    {
+        $typed = trim((string) ($this->radiusInput[$locationId] ?? ''));
+        if ($typed === '' || ! is_numeric($typed)) {
+            Notification::make()->title('Type the reach in miles first')->warning()->send();
+
+            return;
+        }
+
+        $this->setCoverageRadius($locationId, (int) round((float) $typed));
+    }
+
     public function compute(): void
     {
         $this->buildCoverage(notify: true);
@@ -404,8 +459,9 @@ trait ManagesLocationCoverage
     }
 
     /**
-     * Select / deselect every town in one tier for one location (the per-tier "select all").
-     * `$tier` is a SizeTier value or 'ungrouped' (size_tier null). Pool-only — no ordering.
+     * Select / deselect every town in one band for one location (the per-band "select all").
+     * `$tier` is a {@see CoverageBand} key — a SizeTier value, a distance ring, or 'ungrouped'.
+     * Pool-only — no ordering.
      */
     public function selectTier(string $locationId, string $tier, bool $selected): void
     {
@@ -421,7 +477,7 @@ trait ManagesLocationCoverage
             if (! in_array($locationId, $ids, true)) {
                 continue;
             }
-            if (($area->size_tier ?? 'ungrouped') !== $tier) {
+            if (($area->band ?? CoverageBand::UNGROUPED) !== $tier) {
                 continue;
             }
             if ((bool) $area->page_selected !== $selected) {
@@ -633,12 +689,12 @@ trait ManagesLocationCoverage
             return;
         }
 
-        $result = app(CountyCoverage::class)->coverage($site);
+        $result = app(SiteCoverage::class)->coverage($site);
 
         if ($result->perBase === []) {
             $this->computed = false;
             if ($notify) {
-                Notification::make()->title('Nothing to map yet')->body('Add a location and tick the counties it serves.')->warning()->send();
+                Notification::make()->title('Nothing to map yet')->body('Add a location and tick the counties it serves, or set its reach in miles.')->warning()->send();
             }
 
             return;

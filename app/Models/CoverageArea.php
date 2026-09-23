@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MunicipalityType;
+use App\Locations\CoverageBand;
 use App\Locations\CoverageName;
 use App\Models\Concerns\BelongsToSite;
 use Database\Factories\CoverageAreaFactory;
@@ -29,6 +30,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property list<string>|null $source_location_ids
  * @property int|null $population ACS5 total population (for Large/Medium/Small grouping)
  * @property string|null $size_tier major|large|medium|small (derived from population; null = ungrouped)
+ * @property string|null $band the roll-out band ({@see CoverageBand}): the size tier for a county market, a distance ring (ring5…) for a proximity one; null = ungrouped
  * @property bool $page_selected in the location-page drip pool
  * @property string $source county (auto) | manual (owner-added, directed → priority page candidate)
  */
@@ -38,6 +40,20 @@ class CoverageArea extends Model
     use BelongsToSite, HasFactory, HasUlids;
 
     protected $guarded = [];
+
+    /**
+     * A row created without an explicit band is a county-mode row, whose band IS its size tier — the
+     * one creation seam, so every legacy write path (and every fixture) lands a band the gate can read.
+     * The coverage writer sets the band explicitly (a distance ring for a proximity market).
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (CoverageArea $area): void {
+            if (! array_key_exists('band', $area->getAttributes())) {
+                $area->band = $area->size_tier;
+            }
+        });
+    }
 
     /**
      * Normalize the town name on the way in — strips a leading numbered-list artifact ("6, Havre de

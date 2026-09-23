@@ -8,9 +8,10 @@ use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
- * County-based coverage (replaces the radius engine): each base location carries a set of
+ * County-based coverage (the default territory mode): each base location carries a set of
  * selected county GEOIDs; coverage is every county subdivision (municipality) in those
  * counties, joined to ACS population for the Large/Medium/Small grouping, unioned +
  * GEOID-deduped across counties and locations. Owner-directed manual towns
@@ -24,9 +25,17 @@ final class CountyCoverage
         private readonly CensusPopulation $population,
     ) {}
 
-    public function coverage(Site $site): CoverageResult
+    /**
+     * @param  Collection<int, Location>|null  $locations  the bases to enumerate; default = the site's
+     *                                                     county-mode locations (a proximity base is
+     *                                                     {@see LocationCoverage}'s — see {@see SiteCoverage})
+     */
+    public function coverage(Site $site, ?Collection $locations = null): CoverageResult
     {
-        $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
+        $locations ??= Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('coverage_mode', '!=', Location::MODE_PROXIMITY)
+            ->get();
 
         $manualByLocation = CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)

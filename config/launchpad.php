@@ -669,6 +669,11 @@ return [
             'large' => (int) env('LAUNCHPAD_TIER_LARGE', 30000),
             'medium' => (int) env('LAUNCHPAD_TIER_MEDIUM', 15000),
         ],
+
+        // Proximity mode: a location drawn by DISTANCE builds through these ring steps (miles, ascending)
+        // up to its outer reach — the nearest ring first, each further ring unlocking through the same
+        // indexing gate the size tiers use. Town size plays no part in a proximity territory.
+        'proximity_rings' => [5, 10, 15, 25],
     ],
 
     /*
@@ -682,7 +687,8 @@ return [
     | review footprint, and local demand resolved per (site, town) through the
     | LocalSignalProvider seam, so no two sites use the same data.
     |
-    | - auto_select_tiers: which size tiers are built immediately on first setup.
+    | - auto_select_tiers: which size tiers are built immediately on first setup
+    |   (county-drawn territories only — a proximity territory seeds its innermost ring).
     | - drip_threshold: the 0–1 relevance score a reserve town must reach to graduate.
     | - weights: how the normalized signals blend into the relevance score.
     |
