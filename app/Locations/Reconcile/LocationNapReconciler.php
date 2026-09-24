@@ -24,6 +24,11 @@ use Illuminate\Support\Facades\DB;
  * cleared). Non-destructive: the retired row stays in the table (hidden by {@see ActiveLocationScope},
  * reversible by nulling the column) and never grows a duplicate hub page.
  *
+ * A second pass folds SAME-KIND duplicates — one GBP listing imported twice (identical place_id), or two
+ * bare rows for one shop (same phone and the same name or address) — under the same exactly-two rule,
+ * keeping the row a live hub is pinned to (else the one with more pages, then the richer NAP, then the
+ * older row).
+ *
  * Dry-run computes the plan without touching anything; apply runs it in one transaction per merge.
  */
 class LocationNapReconciler
@@ -47,6 +52,8 @@ class LocationNapReconciler
         [$bare, $enriched] = $locations->partition(fn (Location $l) => $l->place_id === null || trim((string) $l->place_id) === '');
 
         $usedEnriched = [];
+        /** @var array<string, true> $claimed every row a pass-1 fold touched (survivor or dupe) */
+        $claimed = [];
         $merges = [];
 
         foreach ($bare as $bareRow) {
@@ -56,30 +63,109 @@ class LocationNapReconciler
             }
             [$enrichedRow, $matchedOn] = $match;
             $usedEnriched[$enrichedRow->id] = true;
+            $claimed[$bareRow->id] = true;
+            $claimed[$enrichedRow->id] = true;
 
             // Survivor = whichever row a live hub page is already pinned to (keep the URL); else the
             // richer enriched row. The other is the duplicate that gets folded in.
             $survivor = $this->hasLiveHub($bareRow) ? $bareRow : $enrichedRow;
             $dupe = $survivor->is($bareRow) ? $enrichedRow : $bareRow;
 
-            $backfilled = $this->backfillFields($survivor, $dupe);
+            $merges[] = $this->fold($survivor, $dupe, $matchedOn, $apply);
+        }
 
-            $repointed = $apply
-                ? $this->apply($survivor, $dupe, $backfilled)
-                : $this->countPins($dupe);
-
-            $merges[] = new LocationMerge(
-                survivorId: $survivor->id,
-                survivorName: (string) $survivor->name,
-                dupeId: $dupe->id,
-                dupeName: (string) $dupe->name,
-                matchedOn: $matchedOn,
-                backfilled: array_keys($backfilled),
-                contentRepointed: $repointed,
-            );
+        // Pass 2 — same-KIND duplicates: the same GBP listing imported twice (identical place_id), or two
+        // bare rows for one shop (same phone AND the same name or address). Pass 1 cannot see these —
+        // it only pairs a bare row with an enriched one — so a portfolio import run twice left "Trooper"
+        // and "Hackensack" as two live rows each. Same precision rule: a group of EXACTLY two folds;
+        // three or more is ambiguous and left for a person.
+        foreach ($this->sameKindPairs($locations->reject(fn (Location $l): bool => isset($claimed[$l->id]))) as [$a, $b, $matchedOn]) {
+            [$survivor, $dupe] = $this->rankSurvivor($a, $b);
+            $merges[] = $this->fold($survivor, $dupe, $matchedOn, $apply);
         }
 
         return $merges;
+    }
+
+    /** Plan (or apply) one fold and describe it. */
+    private function fold(Location $survivor, Location $dupe, string $matchedOn, bool $apply): LocationMerge
+    {
+        $backfilled = $this->backfillFields($survivor, $dupe);
+
+        $repointed = $apply
+            ? $this->apply($survivor, $dupe, $backfilled)
+            : $this->countPins($dupe);
+
+        return new LocationMerge(
+            survivorId: $survivor->id,
+            survivorName: (string) $survivor->name,
+            dupeId: $dupe->id,
+            dupeName: (string) $dupe->name,
+            matchedOn: $matchedOn,
+            backfilled: array_keys($backfilled),
+            contentRepointed: $repointed,
+        );
+    }
+
+    /**
+     * Pairs of same-kind rows that are one shop: two enriched rows with an identical place_id, or two bare
+     * rows with identical phone digits and the same normalized name or address. A row joins at most one
+     * pair; a key shared by three or more rows is skipped as ambiguous.
+     *
+     * @param  Collection<int, Location>  $rows
+     * @return list<array{0: Location, 1: Location, 2: string}>
+     */
+    private function sameKindPairs(Collection $rows): array
+    {
+        $pairs = [];
+        $taken = [];
+
+        // Two ENRICHED rows are one shop only when they are the same Google listing (identical place_id):
+        // two distinct listings on one phone or address are two listings, never guessed into one. The
+        // phone/name/address keys apply to BARE rows only, where no listing id exists to be sure with.
+        $isBare = fn (Location $l): bool => trim((string) $l->place_id) === '';
+        $keyed = [
+            'place_id' => fn (Location $l): string => trim((string) $l->place_id),
+            'phone+name' => fn (Location $l): string => ! $isBare($l) || $this->digits($l->phone) === '' ? '' : $this->digits($l->phone).'|'.$this->normName($l->name),
+            'phone+address' => fn (Location $l): string => ! $isBare($l) || $this->digits($l->phone) === '' || $this->normAddress($l->address) === '' ? '' : $this->digits($l->phone).'|'.$this->normAddress($l->address),
+        ];
+
+        foreach ($keyed as $matchedOn => $keyOf) {
+            $groups = $rows
+                ->reject(fn (Location $l): bool => isset($taken[$l->id]))
+                ->groupBy(fn (Location $l): string => $keyOf($l))
+                ->filter(fn ($group, $key): bool => (string) $key !== ''); // rows with no key never pair
+
+            foreach ($groups as $group) {
+                if ($group->count() !== 2) {
+                    continue; // singleton, or ambiguous (3+) — never guess
+                }
+                [$a, $b] = $group->values()->all();
+                $taken[$a->id] = true;
+                $taken[$b->id] = true;
+                $pairs[] = [$a, $b, $matchedOn];
+            }
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * Which of two same-kind rows survives: the one a LIVE hub page is pinned to (the URL never changes);
+     * else the one more pages are pinned to; else the richer NAP; else the older row.
+     *
+     * @return array{0: Location, 1: Location} [survivor, dupe]
+     */
+    private function rankSurvivor(Location $a, Location $b): array
+    {
+        $score = fn (Location $l): array => [
+            $this->hasLiveHub($l) ? 1 : 0,
+            $this->countPins($l),
+            count(array_filter(self::BACKFILL_FIELDS, fn (string $f): bool => ! $this->isEmpty($l->getAttribute($f)))),
+            -(int) ($l->created_at?->getTimestamp() ?? PHP_INT_MAX),
+        ];
+
+        return $score($a) >= $score($b) ? [$a, $b] : [$b, $a];
     }
 
     /**

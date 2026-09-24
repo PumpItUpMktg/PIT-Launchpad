@@ -122,3 +122,71 @@ it('dry-run reports the fold without mutating anything', function () {
     expect($bare->fresh()->merged_into_id)->toBeNull(); // nothing written
     expect(Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(2);
 });
+
+it('folds two bare rows for one shop (same phone + name), keeping the row with more pages', function () {
+    $site = Site::factory()->create();
+    $first = bareLocation($site, ['name' => 'Sump Pump Gurus | Trooper', 'phone' => '(484) 808-2225', 'address' => '1 Ridge Pike, Trooper PA']);
+    $second = bareLocation($site, ['name' => 'Sump Pump Gurus | Trooper', 'phone' => '484-808-2225', 'address' => null]);
+    $page = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => $second->id, 'status' => ContentStatus::NeedsReview, 'slug' => 'trooper',
+    ]);
+
+    $merges = app(LocationNapReconciler::class)->reconcile($site, apply: true);
+
+    expect($merges)->toHaveCount(1)
+        ->and($merges[0]->matchedOn)->toBe('phone+name')
+        ->and($merges[0]->survivorId)->toBe($second->id)   // more pages pinned → survives
+        ->and($merges[0]->backfilled)->toContain('address') // and inherits the address the other row had
+        ->and($page->fresh()->location_id)->toBe($second->id)
+        ->and(Location::withoutGlobalScopes()->find($first->id)->merged_into_id)->toBe($second->id)
+        ->and($second->fresh()->address)->toBe('1 Ridge Pike, Trooper PA');
+});
+
+it('folds the same Google listing imported twice (identical place_id), keeping the live hub', function () {
+    $site = Site::factory()->create();
+    $a = gbpLocation($site, ['place_id' => 'ChIJsame']);
+    $b = gbpLocation($site, ['place_id' => 'ChIJsame']);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => $b->id, 'status' => ContentStatus::Published, 'wp_post_id' => 9, 'slug' => 'trooper-pa',
+    ]);
+
+    $merges = app(LocationNapReconciler::class)->reconcile($site, apply: true);
+
+    expect($merges)->toHaveCount(1)
+        ->and($merges[0]->matchedOn)->toBe('place_id')
+        ->and($merges[0]->survivorId)->toBe($b->id)
+        ->and(Location::withoutGlobalScopes()->find($a->id)->merged_into_id)->toBe($b->id);
+});
+
+it('never folds two DISTINCT Google listings that share a phone or address, nor a bare trio', function () {
+    $site = Site::factory()->create();
+    gbpLocation($site, ['place_id' => 'ChIJaaa']);
+    gbpLocation($site, ['place_id' => 'ChIJbbb']); // same phone + address, different listing → two listings
+    foreach (range(1, 3) as $i) {
+        bareLocation($site, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '862-289-7867', 'address' => null]); // three → ambiguous
+    }
+
+    expect(app(LocationNapReconciler::class)->reconcile($site, apply: true))->toBe([])
+        ->and(Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(5);
+});
+
+it('never pairs rows across tenants — an identical location on another client is invisible to the fold', function () {
+    $siteA = Site::factory()->create();
+    $siteB = Site::factory()->create();
+    // The same shop, same listing, same phone, same name — on TWO clients (a franchise, or a copied site).
+    $a = gbpLocation($siteA, ['place_id' => 'ChIJshared', 'name' => 'Sump Pump Gurus | Trooper']);
+    $b = gbpLocation($siteB, ['place_id' => 'ChIJshared', 'name' => 'Sump Pump Gurus | Trooper']);
+    bareLocation($siteA, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '862-289-7867', 'address' => null]);
+    bareLocation($siteB, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '862-289-7867', 'address' => null]);
+
+    $reconciler = app(LocationNapReconciler::class);
+    expect($reconciler->reconcile($siteA, apply: true))->toBe([])
+        ->and($reconciler->reconcile($siteB, apply: true))->toBe([]);
+
+    // Nothing tombstoned on either tenant; every row still belongs to the site it was created on.
+    expect(Location::withoutGlobalScopes()->whereNotNull('merged_into_id')->count())->toBe(0)
+        ->and($a->fresh()->site_id)->toBe($siteA->id)
+        ->and($b->fresh()->site_id)->toBe($siteB->id);
+});
