@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Http\Middleware\EnsureTenantSelected;
+use App\Http\Middleware\ResolveCurrentSite;
 use App\Models\Account;
 use App\Models\Content;
 use App\Models\Membership;
@@ -11,6 +12,7 @@ use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Livewire\Mechanisms\PersistentMiddleware\PersistentMiddleware;
 
 function operatorFor(array $siteIds = [], ?string $accountWide = null): User
 {
@@ -173,4 +175,14 @@ it('admin reaches the operator panel; client never does', function () {
     $panel = Filament::getPanel('admin');
     expect($admin->canAccessPanel($panel))->toBeTrue()
         ->and($client->canAccessPanel($panel))->toBeFalse();
+});
+
+it('re-binds the working tenant on Livewire update requests — the resolver is persistent middleware', function () {
+    // A table's search / sort / page change / wire:click is a separate POST that Filament runs only PERSISTENT
+    // panel middleware on. If the tenant resolver is not in that list, CurrentSite is null on every such
+    // request, SiteScope is a no-op, and a locked Locations list paged to every tenant's rows.
+    Filament::getPanel('admin');
+
+    expect(app(PersistentMiddleware::class)->getPersistentMiddleware())
+        ->toContain(ResolveCurrentSite::class);
 });

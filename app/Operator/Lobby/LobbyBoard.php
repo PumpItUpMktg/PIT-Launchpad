@@ -18,6 +18,7 @@ use App\Models\BlogTarget;
 use App\Models\CitationStatus;
 use App\Models\Connection;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\CoverageScanPlan;
 use App\Models\Interview;
 use App\Models\Job;
@@ -241,10 +242,9 @@ class LobbyBoard
     }
 
     /**
-     * Per-site readiness-gap count for LIVE tenants: no service / has locations but none serve towns / no
-     * active voice / no WP connection. A fixed set of grouped queries (constant, tenant-count-independent);
-     * served_towns is a JSON column, so the "serves towns" test is grouped in PHP from a single pluck rather
-     * than a non-portable JSON SQL predicate. Only non-onboarding cards read this (onboarding shows progress).
+     * Per-site readiness-gap count for LIVE tenants: no service / has a location but its territory was never
+     * drawn (no coverage rows) / no active voice / no WP connection. A fixed set of grouped queries (constant,
+     * tenant-count-independent). Only non-onboarding cards read this (onboarding shows progress).
      *
      * @param  list<string>  $ids
      * @return array<string, int> site_id => gap count (sites with zero gaps are omitted)
@@ -257,9 +257,11 @@ class LobbyBoard
         $hasWp = $this->countMap(Connection::withoutGlobalScope(SiteScope::class)
             ->whereIn('site_id', $ids)->where('provider', ConnectionProvider::WpAppPassword->value));
 
-        // One query for the towns test (served_towns is JSON → grouped in PHP, not in SQL).
-        $locationsBySite = Location::withoutGlobalScope(SiteScope::class)
-            ->whereIn('site_id', $ids)->get(['site_id', 'served_towns'])->groupBy('site_id');
+        // The towns gap: a site with a location but NO coverage rows has never had its territory drawn
+        // (county or distance). It used to test the GBP-era `served_towns` list, which county-drawn
+        // and distance-drawn territories never fill — so every set-up site read as "missing setup".
+        $hasLocation = $this->countMap(Location::withoutGlobalScope(SiteScope::class)->whereIn('site_id', $ids));
+        $hasCoverage = $this->countMap(CoverageArea::withoutGlobalScope(SiteScope::class)->whereIn('site_id', $ids));
 
         $gaps = [];
         foreach ($ids as $id) {
@@ -267,9 +269,7 @@ class LobbyBoard
             if (! isset($hasService[$id])) {
                 $count++;
             }
-            $locations = $locationsBySite->get($id);
-            if ($locations !== null && $locations->isNotEmpty()
-                && $locations->every(fn (Location $l): bool => collect($l->served_towns ?? [])->isEmpty())) {
+            if (isset($hasLocation[$id]) && ! isset($hasCoverage[$id])) {
                 $count++;
             }
             if (! isset($hasVoice[$id])) {
