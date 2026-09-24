@@ -83,9 +83,15 @@ class AdminPanelProvider extends PanelProvider
                 Authenticate::class,
                 // Hard tenant gate: an operator with no active tenant is sent to the Portfolio picker.
                 EnsureTenantSelected::class,
-                // Bind the resolved tenant into CurrentSite so SiteScope is live in /admin — runs AFTER
-                // the gate so a single-site operator's auto-select is already in the session to read.
-                ResolveCurrentSite::class,
-            ]);
+            ])
+            // Bind the resolved tenant into CurrentSite so SiteScope is live in /admin — runs AFTER the
+            // gate so a single-site operator's auto-select is already in the session to read.
+            //
+            // PERSISTENT: Filament runs panel middleware on the page load only; a Livewire update (a
+            // table's search, sort, page change, deferred load, any wire:click) is a separate POST that
+            // skips non-persistent middleware. Without this flag CurrentSite was null on every such
+            // request, SiteScope was a no-op, and a tenant-locked list (Locations, page 2) showed every
+            // tenant's rows to an unrestricted operator. Livewire re-applies this on each update.
+            ->authMiddleware([ResolveCurrentSite::class], isPersistent: true);
     }
 }

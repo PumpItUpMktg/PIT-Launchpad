@@ -15,6 +15,7 @@ use App\Models\BlogTarget;
 use App\Models\CitationStatus;
 use App\Models\Connection;
 use App\Models\Content;
+use App\Models\CoverageArea;
 use App\Models\Job;
 use App\Models\Keyword;
 use App\Models\Location;
@@ -99,7 +100,8 @@ it('flips a card to Blocked on a Tier-1 condition and suppresses lower tiers int
 it('shows up to three tier-ordered badges then "+N more"; colour is the tier, never the count (acceptance 13)', function () {
     $site = Site::factory()->create(['status' => SiteStatus::Active]);
     completeSetup($site); // no setup_gaps badge — this test is about tier ordering, not setup
-    $loc = Location::factory()->for($site)->create(['served_towns' => [['name' => 'Trenton', 'state' => 'NJ']]]);
+    $loc = Location::factory()->for($site)->create();
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Trenton', 'source_location_ids' => [$loc->id]]); // territory drawn → no towns gap
     // Four non-Tier-1 conditions across tiers 2-4.
     Market::factory()->create(['site_id' => $site->id, 'on_hold' => true, 'release_at' => now()->subDay()]); // T2
     CitationStatus::factory()->create(['site_id' => $site->id, 'location_id' => $loc->id, 'presence' => CitationPresence::PresentMismatch, 'covered_by_sibling' => false]); // T2
@@ -191,10 +193,11 @@ it('badges a live site whose blog queue has run dry — tier 4, degrading (from 
 });
 
 it('badges a live site missing setup — tier 2, wrong data reaching the public (from the retired dashboard)', function () {
-    // A launched tenant with NO service, NO active voice, NO WP connection, and a location that serves no
-    // towns → four readiness gaps. This is "publishing while incomplete", not onboarding progress.
+    // A launched tenant with NO service, NO active voice, NO WP connection, and a location whose territory
+    // was never drawn (no coverage rows) → four readiness gaps. This is "publishing while incomplete", not
+    // onboarding progress.
     $live = Site::factory()->create(['status' => SiteStatus::Active]);
-    Location::factory()->for($live)->create(['served_towns' => []]);
+    Location::factory()->for($live)->create();
 
     $card = lobbyCard($live->id);
     $badge = collect($card->badges)->firstWhere('key', 'setup_gaps');
