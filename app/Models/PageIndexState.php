@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $canonical_url
  * @property Carbon|null $last_crawled_at
  * @property Carbon|null $last_inspected_at
+ * @property Carbon|null $indexed_at when the URL first reached the index (PASS); null while it is not indexed
  */
 class PageIndexState extends Model
 {
@@ -35,6 +36,7 @@ class PageIndexState extends Model
         return [
             'last_crawled_at' => 'datetime',
             'last_inspected_at' => 'datetime',
+            'indexed_at' => 'datetime',
         ];
     }
 

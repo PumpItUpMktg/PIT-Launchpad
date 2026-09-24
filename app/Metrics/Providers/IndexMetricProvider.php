@@ -94,6 +94,7 @@ class IndexMetricProvider implements MetricProvider
             );
         }
 
+        $this->stampIndexedAt($site, array_keys($rows), $now);
         $this->pruneOrphanRows($site, $rows);
 
         $this->writeDailySnapshot($site, $now);
@@ -128,6 +129,28 @@ class IndexMetricProvider implements MetricProvider
             ->whereIn('content_id', array_keys($current))
             ->whereNotIn('url_normalized', array_values($current))
             ->delete();
+    }
+
+    /**
+     * `indexed_at` = when a URL FIRST reached the index. Stamped once, the first run a verdict reads PASS
+     * (never moved by a re-inspection — that is what `last_inspected_at` is for); cleared when a later run
+     * drops the URL from the index, so a return re-stamps it. Only the URLs this run touched.
+     *
+     * @param  list<string>  $urlsNormalized
+     */
+    private function stampIndexedAt(Site $site, array $urlsNormalized, Carbon $now): void
+    {
+        foreach (array_chunk($urlsNormalized, self::UPSERT_CHUNK) as $chunk) {
+            DB::table('page_index_states')
+                ->where('site_id', $site->id)->whereIn('url_normalized', $chunk)
+                ->where('index_verdict', 'PASS')->whereNull('indexed_at')
+                ->update(['indexed_at' => $now]);
+
+            DB::table('page_index_states')
+                ->where('site_id', $site->id)->whereIn('url_normalized', $chunk)
+                ->where('index_verdict', '!=', 'PASS')->whereNotNull('indexed_at')
+                ->update(['indexed_at' => null]);
+        }
     }
 
     /** The two site-level daily counts the dashboard trends, read from the durable page_index_states table. */
