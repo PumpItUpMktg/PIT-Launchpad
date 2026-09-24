@@ -61,6 +61,10 @@ return [
         // "all-known" panel as NOT YET ENABLED rather than a panel that silently mirrors the published set.
         // The all-known capture item flips this on when it ships. Default OFF (honest for production today).
         'all_known_capture' => (bool) env('LAUNCHPAD_ALL_KNOWN_CAPTURE', false),
+
+        // The Indexing board's watchlist: every published page until it is indexed, then a few more days
+        // as a green "landed" row before it falls off. Days after the index date a page stays listed.
+        'watch_days' => (int) env('LAUNCHPAD_INDEX_WATCH_DAYS', 5),
     ],
 
     'geo' => [

@@ -7,6 +7,7 @@ use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
+use App\Operator\Coverage\IndexWatchlist;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -24,6 +25,7 @@ use Illuminate\Support\Facades\Auth;
  * live GSC / URL-Inspection call at render (that provider sits behind the `sandhog:sync-index` capture).
  *
  * @property-read array{published: array<string, mixed>, all_known: array<string, mixed>, discovered_only: int} $board
+ * @property-read array{rows: list<array<string, mixed>>, waiting: int, inspected: int, landed: int, watch_days: int} $watchlist
  */
 class IndexingBoard extends Page
 {
@@ -115,5 +117,18 @@ class IndexingBoard extends Page
     public function getBoardProperty(): array
     {
         return app(IndexStandings::class)->for($this->siteId);
+    }
+
+    /**
+     * The watchlist: every published page not yet indexed (with its publish date), plus the pages that
+     * landed in the last few days.
+     *
+     * @return array{rows: list<array<string, mixed>>, waiting: int, inspected: int, landed: int, watch_days: int}
+     */
+    public function getWatchlistProperty(): array
+    {
+        $site = $this->siteId === null ? null : Site::query()->whereKey($this->siteId)->first();
+
+        return app(IndexWatchlist::class)->for($site);
     }
 }

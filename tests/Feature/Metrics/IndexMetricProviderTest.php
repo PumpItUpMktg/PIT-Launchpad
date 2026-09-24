@@ -205,3 +205,35 @@ it('sync-index dispatches an index sync per site', function () {
 
     Queue::assertPushed(SyncSiteMetrics::class, fn (SyncSiteMetrics $j): bool => $j->provider === 'index' && $j->siteId === $site->id && $j->queue === 'metrics:index');
 });
+
+it('stamps indexed_at the first time a URL reads PASS, keeps it across re-inspections, and clears it when the URL drops out', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    $page = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'stamped', 'title' => 'Stamped']);
+    $url = PublicUrl::forContent($site->domain_url, $page);
+    $inspector = fakeInspector();
+    $row = fn () => PageIndexState::withoutGlobalScopes()->where('content_id', $page->id)->first();
+
+    // Not indexed yet → no stamp.
+    $inspector->verdicts = [$url => indexStatus($url, IndexCoverageState::CrawledNotIndexed)];
+    $this->travelTo('2026-09-20 03:00:00');
+    providerWith($inspector)->sync($site, CarbonPeriod::create('2026-09-20', '2026-09-20'));
+    expect($row()->indexed_at)->toBeNull();
+
+    // First PASS → stamped now.
+    $inspector->verdicts = [$url => indexStatus($url, IndexCoverageState::Indexed)];
+    $this->travelTo('2026-09-21 03:00:00');
+    providerWith($inspector)->sync($site, CarbonPeriod::create('2026-09-21', '2026-09-21'));
+    expect($row()->indexed_at?->toDateTimeString())->toBe('2026-09-21 03:00:00');
+
+    // Re-inspected still PASS → the stamp does not move (last_inspected_at does).
+    $this->travelTo('2026-09-23 03:00:00');
+    providerWith($inspector)->sync($site, CarbonPeriod::create('2026-09-23', '2026-09-23'));
+    expect($row()->indexed_at?->toDateTimeString())->toBe('2026-09-21 03:00:00')
+        ->and($row()->last_inspected_at?->toDateTimeString())->toBe('2026-09-23 03:00:00');
+
+    // Dropped out → cleared, so a return re-stamps.
+    $inspector->verdicts = [$url => indexStatus($url, IndexCoverageState::CrawledNotIndexed)];
+    $this->travelTo('2026-09-24 03:00:00');
+    providerWith($inspector)->sync($site, CarbonPeriod::create('2026-09-24', '2026-09-24'));
+    expect($row()->indexed_at)->toBeNull();
+});

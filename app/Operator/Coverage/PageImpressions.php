@@ -56,6 +56,42 @@ class PageImpressions
     }
 
     /**
+     * The date each page FIRST earned an impression — the day it was demonstrably in the index — keyed by
+     * content id. Pages with no impression ever are absent.
+     *
+     * @param  Collection<int, Content>  $pages
+     * @return array<string, string> content id => Y-m-d
+     */
+    public function firstSeen(Site $site, Collection $pages): array
+    {
+        $byUrl = $this->urlIndex($site, $pages);
+        if ($byUrl === []) {
+            return [];
+        }
+
+        $rows = GscUrlDaily::query()->withoutGlobalScope(SiteScope::class)->toBase()
+            ->where('site_id', $site->id)
+            ->whereIn('url', array_keys($byUrl))
+            ->where('impressions', '>', 0)
+            ->selectRaw('url, min(date) as first')
+            ->groupBy('url')
+            ->get();
+
+        $first = [];
+        foreach ($rows as $row) {
+            $id = $byUrl[(string) $row->url] ?? null;
+            if ($id === null) {
+                continue;
+            }
+            $date = Carbon::parse((string) $row->first)->toDateString();
+            // Both URL forms map to one page — keep the earlier date.
+            $first[$id] = isset($first[$id]) && $first[$id] < $date ? $first[$id] : $date;
+        }
+
+        return $first;
+    }
+
+    /**
      * Both horizons in one pass — callers that need the pair (the reconciliation report) get them without
      * querying twice.
      *
@@ -64,16 +100,7 @@ class PageImpressions
      */
     public function resolve(Site $site, Collection $pages): array
     {
-        $byUrl = [];
-        foreach ($pages as $page) {
-            $url = PublicUrl::forContent($site->domain_url, $page);
-            if ($url === null) {
-                continue;
-            }
-            $id = (string) $page->id;
-            $byUrl[rtrim($url, '/')] = $id;
-            $byUrl[rtrim($url, '/').'/'] = $id;
-        }
+        $byUrl = $this->urlIndex($site, $pages);
         if ($byUrl === []) {
             return [[], []];
         }
@@ -101,5 +128,27 @@ class PageImpressions
         }
 
         return [$recent, $ever];
+    }
+
+    /**
+     * Both URL forms (slash and slashless) of every page, mapped to its content id.
+     *
+     * @param  Collection<int, Content>  $pages
+     * @return array<string, string>
+     */
+    private function urlIndex(Site $site, Collection $pages): array
+    {
+        $byUrl = [];
+        foreach ($pages as $page) {
+            $url = PublicUrl::forContent($site->domain_url, $page);
+            if ($url === null) {
+                continue;
+            }
+            $id = (string) $page->id;
+            $byUrl[rtrim($url, '/')] = $id;
+            $byUrl[rtrim($url, '/').'/'] = $id;
+        }
+
+        return $byUrl;
     }
 }
