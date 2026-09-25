@@ -2,6 +2,8 @@
 
 use App\Enums\JobSource;
 use App\Enums\JobStatus;
+use App\Integrations\Census\Geocoder;
+use App\Integrations\Census\MockCensusGeocoder;
 use App\JobCapture\Capture\CaptureData;
 use App\JobCapture\Capture\CaptureIntake;
 use App\Jobs\EnhanceJob;
@@ -75,4 +77,43 @@ test('it caps photos and job types at three', function () {
 
     expect($job->photos)->toHaveCount(3)
         ->and($job->jobTypes()->count())->toBe(3);
+});
+
+test('a PAST job with a typed address is placed at the address — not the phone — with the date the work was done, and the photos stay clean of the street', function () {
+    Storage::fake('r2');
+    Queue::fake();
+    app()->instance(Geocoder::class, new MockCensusGeocoder(40.3101, -75.1299)); // Doylestown, PA
+    $device = TechDevice::factory()->create();
+
+    $job = app(CaptureIntake::class)->capture($device, new CaptureData(
+        clientNameDisplay: 'Sam M.',
+        rawDescription: 'Replaced a failed sump pump last spring.',
+        lat: 40.66, lng: -74.65,                          // the phone is at the office today — ignored
+        photos: [['bytes' => tinyJpeg(), 'filename' => '1.jpg']],
+        address: '12 Main St, Doylestown, PA 18901',
+        performedAt: '2026-04-14',
+    ));
+
+    expect((float) $job->lat_true)->toBe(40.3101)
+        ->and((float) $job->lng_true)->toBe(-75.1299)
+        ->and($job->address_true)->toBe('12 Main St, Doylestown, PA 18901')
+        ->and($job->performed_at?->toDateString())->toBe('2026-04-14')
+        ->and($job->photos)->toHaveCount(1);
+    Queue::assertPushed(ResolveJobGeography::class, fn (ResolveJobGeography $j): bool => $j->jobId === $job->id);
+});
+
+test('a PAST job whose address will not geocode still lands — address kept for the office, no point, deferred to review', function () {
+    Storage::fake('r2');
+    Queue::fake();
+    app()->instance(Geocoder::class, new MockCensusGeocoder(unmatchable: ['nowhere at all']));
+    $device = TechDevice::factory()->create();
+
+    $job = app(CaptureIntake::class)->capture($device, new CaptureData(
+        rawDescription: 'Old job.', lat: 40.66, lng: -74.65, address: 'nowhere at all', performedAt: '2026-04-14',
+    ));
+
+    expect($job->lat_true)->toBeNull()
+        ->and($job->lng_true)->toBeNull()
+        ->and($job->address_true)->toBe('nowhere at all');
+    Queue::assertNotPushed(ResolveJobGeography::class);
 });

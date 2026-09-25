@@ -7,7 +7,9 @@ namespace App\JobCapture\Capture;
  * downscaled in-browser before entering the offline queue). GPS coordinates are optional: the device
  * supplies them when geolocation is available (even for a walk-in), and their presence is what triggers
  * geography resolution — a walk-in with no coordinates defers its address to operator review (the locked
- * decision). Job types are snapshot pairs (label + slug) with an optional soft ref to the vocabulary row.
+ * decision). A PAST job carries a typed `address` instead (the tech is not standing at it): the intake
+ * geocodes it to the true point and prefers it over any device fix, and `performedAt` records when the
+ * work was really done. Job types are snapshot pairs (label + slug) with an optional soft ref to the vocabulary row.
  */
 final class CaptureData
 {
@@ -24,5 +26,9 @@ final class CaptureData
         public readonly array $photos = [],
         public readonly array $jobTypes = [],
         public readonly int $primaryPhotoIndex = 0,
+        /** A typed street address for a PAST job — geocoded server-side and preferred over the device fix. */
+        public readonly ?string $address = null,
+        /** When the work was actually done (Y-m-d) — a past job's real date, not the capture date. */
+        public readonly ?string $performedAt = null,
     ) {}
 }
