@@ -1,7 +1,12 @@
 @verbatim
-// Job Capture service worker (§5). Precaches the app shell so the PWA launches offline;
+// Job Capture service worker (§5). Keeps a copy of the app shell so the PWA launches offline;
 // the offline UPLOAD queue is IndexedDB in the page, not here. API calls are never cached.
-const CACHE = 'job-capture-v2';
+//
+// The shell is NETWORK-FIRST: an online launch always fetches the current screen and refreshes the
+// cached copy; the cache is only served when the network is unreachable. (A cache-first shell froze
+// every phone on whatever screen it first installed — a deploy was invisible until site data was
+// cleared by hand.) The cache name is versioned so an updated worker discards the old copy on activate.
+const CACHE = 'job-capture-v3';
 const SHELL = ['/capture', '/capture/manifest.webmanifest', '/capture-icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -16,6 +21,19 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Fetch from the network, refresh the cached copy on success; fall back to the cache when offline.
+function networkFirst(request, cacheKey) {
+  return fetch(request)
+    .then((response) => {
+      if (response && response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE).then((cache) => cache.put(cacheKey, copy)).catch(() => {});
+      }
+      return response;
+    })
+    .catch(() => caches.match(cacheKey).then((cached) => cached || Response.error()));
+}
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -24,17 +42,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App navigations: serve the cached shell first so a cold, offline launch still works.
+  // App navigations: the live shell when online, the cached shell for a cold offline launch.
   if (event.request.mode === 'navigate' && url.pathname.startsWith('/capture')) {
-    event.respondWith(
-      caches.match('/capture').then((cached) => cached || fetch(event.request))
-    );
+    event.respondWith(networkFirst(event.request, '/capture'));
     return;
   }
 
-  // Static shell assets: cache-first, fall back to network.
+  // Static shell assets: same network-first, cache-fallback.
   if (SHELL.includes(url.pathname)) {
-    event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
+    event.respondWith(networkFirst(event.request, url.pathname));
   }
 });
 @endverbatim
