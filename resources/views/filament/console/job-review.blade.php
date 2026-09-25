@@ -177,6 +177,28 @@
                 @if ($editingId === $job['id'])
                     {{-- Inline edit: the source seed feeds re-enhance; title/meta ship as SEO. --}}
                     <div>
+                        @php $editTypeOptions = $this->jobTypeOptions; @endphp
+                        <div class="jr-add-grid">
+                            <div>
+                                <div class="jr-lbl">Client name (internal — published as “First L.”)</div>
+                                <input type="text" class="jr-field" wire:model="editClientName">
+                            </div>
+                            <div>
+                                <div class="jr-lbl">Date performed</div>
+                                <input type="date" class="jr-field" wire:model="editPerformedAt">
+                            </div>
+                        </div>
+                        <div class="jr-lbl">Service type(s) — up to 3</div>
+                        @if (count($editTypeOptions) > 0)
+                            <div class="jr-row" style="gap:12px;">
+                                @foreach ($editTypeOptions as $opt)
+                                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                                        <input type="checkbox" wire:model="editJobTypeLabels" value="{{ $opt }}"> {{ $opt }}
+                                    </label>
+                                @endforeach
+                            </div>
+                        @endif
+                        <input type="text" class="jr-field" wire:model="editJobTypesOther" placeholder="Other service(s), comma separated">
                         <div class="jr-lbl">Source (the AI seed — edit, then Re-enhance)</div>
                         <textarea class="jr-field" wire:model="editSource"></textarea>
                         <div class="jr-lbl">Post title</div>

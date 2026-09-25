@@ -8,6 +8,7 @@ use App\Http\Middleware\AuthenticateTechDevice;
 use App\JobCapture\Auth\DeviceAuthenticator;
 use App\JobCapture\Capture\CaptureData;
 use App\JobCapture\Capture\CaptureIntake;
+use App\JobCapture\Types\JobTypeVocabulary;
 use App\Models\Job;
 use App\Models\Scopes\SiteScope;
 use App\Models\TechDevice;
@@ -69,6 +70,17 @@ class CaptureController extends Controller
             ->all();
 
         return response()->json(['jobs' => $jobs]);
+    }
+
+    /**
+     * GET /capture/api/options — the site's pickable service list for the capture form (synced from the
+     * Service catalog), so the tech tags a job with the services performed instead of free-typing them.
+     */
+    public function options(Request $request, JobTypeVocabulary $vocabulary): JsonResponse
+    {
+        $device = $this->device($request);
+
+        return response()->json(['job_types' => $vocabulary->options((string) $device->site_id)]);
     }
 
     /** POST /capture/api/jobs — submit a captured job. */

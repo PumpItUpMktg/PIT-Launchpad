@@ -36,6 +36,9 @@
   .card .meta { font-size:13px; color:var(--muted); }
   .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
   .chip { font-size:12px; font-weight:600; padding:2px 9px; border-radius:99px; background:rgba(56,189,248,.14); color:var(--sky); }
+  .picks { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .pick { font-size:14px; font-weight:600; padding:9px 14px; border-radius:99px; border:1px solid var(--line); background:var(--panel); color:var(--ink); }
+  .pick.on { background:var(--sky); border-color:var(--sky); color:#04263a; }
   .slots { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
   .slot { position:relative; aspect-ratio:1; border:2px dashed var(--line); border-radius:14px; overflow:hidden; display:flex; align-items:center; justify-content:center; color:var(--muted); }
   .slot.filled { border-style:solid; border-color:var(--sky); }
@@ -96,6 +99,11 @@
     <div id="manual-fields">
       <label for="client">Customer name <span class="subtle">(optional)</span></label>
       <input type="text" id="client" placeholder="First name + last initial" autocomplete="off">
+    </div>
+
+    <div id="service-fields" hidden>
+      <label>Services performed <span class="subtle">(tap up to 3)</span></label>
+      <div class="picks" id="service-picks"></div>
     </div>
 
     <label class="check-row"><input type="checkbox" id="past-job"> <span>This is a past job — I’m not at the address</span></label>
@@ -207,10 +215,44 @@
   }
   const b64 = (dataUrl) => (dataUrl || '').split(',')[1] || '';
 
+  // ---- services (the site's pickable list, fetched when online and remembered for offline captures) ----
+  const TYPES_KEY = 'capture.job_types';
+  function knownTypes() { try { return JSON.parse(localStorage.getItem(TYPES_KEY) || '[]') || []; } catch (e) { return []; } }
+  async function loadOptions() {
+    if (!token()) return;
+    try {
+      const r = await api('/options'); if (!r.ok) return;
+      const data = await r.json();
+      if (data && Array.isArray(data.job_types)) localStorage.setItem(TYPES_KEY, JSON.stringify(data.job_types));
+    } catch (e) {}
+  }
+  function renderPicks() {
+    const wrap = $('#service-picks'); wrap.innerHTML = '';
+    const types = knownTypes();
+    $('#service-fields').hidden = types.length === 0;
+    types.forEach((t) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'pick' + (capture.types.some((x) => x.slug === t.slug) ? ' on' : ''); b.textContent = t.label;
+      b.addEventListener('click', () => {
+        const i = capture.types.findIndex((x) => x.slug === t.slug);
+        if (i >= 0) capture.types.splice(i, 1);
+        else if (capture.types.length >= 3) return toast('Up to 3 services per job.');
+        else capture.types.push({ label: t.label, slug: t.slug, job_type_id: t.id });
+        renderPicks();
+      });
+      wrap.appendChild(b);
+    });
+  }
+
   // ---- capture state ----
   let capture = null;
   function startCapture(job) {
-    capture = { job: job || null, photos: [null, null, null] };
+    capture = { job: job || null, photos: [null, null, null], types: [] };
+    // An assigned job already names its services — pre-tick them so the tech only adjusts.
+    if (job && Array.isArray(job.job_types)) {
+      const known = knownTypes();
+      job.job_types.forEach((label) => { const t = known.find((k) => k.label === label); if (t && capture.types.length < 3) capture.types.push({ label: t.label, slug: t.slug, job_type_id: t.id }); });
+    }
     $('#capture-title').textContent = job ? (job.client || 'Job') : 'New job';
     $('#manual-fields').hidden = !!job;
     const joby = $('#joby-fields'); joby.innerHTML = '';
@@ -222,6 +264,7 @@
     $('#client').value = ''; $('#desc').value = ''; $('#gps-msg').textContent = '';
     $('#past-job').checked = false; $('#past-fields').hidden = true; $('#address').value = ''; $('#performed').value = '';
     renderSlots();
+    renderPicks();
     show('capture');
     // Best-effort GPS — works offline; a walk-in with no fix defers its address to review.
     capture.lat = null; capture.lng = null;
@@ -259,6 +302,7 @@
       photos: photos,
     };
     if (!capture.job) { payload.client_name_display = $('#client').value.trim() || null; }
+    if (capture.types.length) { payload.job_types = capture.types.slice(0, 3); }
     if (capture.lat != null && capture.lng != null) { payload.lat = capture.lat; payload.lng = capture.lng; }
     // A past job: the typed address places it (the server prefers it over the fix above) and the date is
     // the day the work was done. Blank address → the office places it in review.
@@ -377,7 +421,7 @@
       if (!r.ok) { $('#login-msg').textContent = 'That code didn’t work. Try again.'; return; }
       const { token: t, tech } = await r.json();
       localStorage.setItem(K.token, t); if (tech) localStorage.setItem(K.tech, tech);
-      show('list'); loadJobs(); drainQueue();
+      show('list'); loadJobs(); loadOptions(); drainQueue();
     });
     $('#sign-out').addEventListener('click', () => logout());
     $('#new-job').addEventListener('click', () => startCapture(null));
@@ -400,7 +444,7 @@
 
     window.addEventListener('online', () => drainQueue());   // reconnect → quiet background drain
 
-    if (token()) { show('list'); loadJobs(); drainQueue(); } else { show('login'); }
+    if (token()) { show('list'); loadJobs(); loadOptions(); drainQueue(); } else { show('login'); }
 
     if ('serviceWorker' in navigator) {
       // When an updated worker takes over (a deploy), reload once so the screen is the new shell —

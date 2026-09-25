@@ -14,12 +14,15 @@ enum JobTypeSource: string
 {
     case Silo = 'silo';
     case Native = 'native';
+    /** Mirrored from the tenant's Service catalog ({@see JobType::$service_id} soft ref) — kept in sync by JobTypeVocabulary. */
+    case Service = 'service';
 
     public function label(): string
     {
         return match ($this) {
             self::Silo => 'From silo',
             self::Native => 'Native',
+            self::Service => 'From service catalog',
         };
     }
 }

@@ -6,11 +6,11 @@ use App\Enums\JobSource;
 use App\Enums\JobStatus;
 use App\Integrations\Census\Geocoder;
 use App\JobCapture\Photos\JobPhotoStore;
+use App\JobCapture\Types\JobTypeVocabulary;
 use App\Jobs\EnhanceJob;
 use App\Jobs\ResolveJobGeography;
 use App\Models\Job;
 use App\Models\Site;
-use Illuminate\Support\Str;
 
 /**
  * Operator-side counterpart to {@see CaptureIntake}: turns a {@see ManualJobData} entry into a persisted
@@ -26,6 +26,7 @@ final class ManualJobIntake
     public function __construct(
         private readonly Geocoder $geocoder,
         private readonly JobPhotoStore $photos,
+        private readonly JobTypeVocabulary $vocabulary,
     ) {}
 
     /**
@@ -47,7 +48,7 @@ final class ManualJobIntake
             'status' => JobStatus::Captured,
             'tech_id' => null,
             'client_name_full' => trim($data->clientName) !== '' ? trim($data->clientName) : null,
-            'client_name_display' => $this->displayName($data->clientName),
+            'client_name_display' => ClientDisplayName::from($data->clientName),
             'address_true' => $address,
             'lat_true' => $point->lat,
             'lng_true' => $point->lng,
@@ -71,24 +72,6 @@ final class ManualJobIntake
         return $job;
     }
 
-    /** The pushed "First L." display name, derived from the internal-only full name (privacy contract §4). */
-    private function displayName(string $full): ?string
-    {
-        $full = trim($full);
-        if ($full === '') {
-            return null;
-        }
-
-        $parts = preg_split('/\s+/', $full) ?: [$full];
-        if (count($parts) === 1) {
-            return $parts[0];
-        }
-
-        $last = (string) end($parts);
-
-        return $parts[0].' '.mb_strtoupper(mb_substr($last, 0, 1)).'.';
-    }
-
     /**
      * @param  list<array{bytes: string, filename?: string}>  $photos
      */
@@ -102,22 +85,15 @@ final class ManualJobIntake
     }
 
     /**
+     * Snapshot the applied types, linked to the vocabulary where a label matches (so a CSV / form label
+     * such as "Sump Pump Replacement" lands on the catalog's row, not a free-floating twin).
+     *
      * @param  list<array{label: string, slug?: string, job_type_id?: string|null}>  $jobTypes
      */
     private function snapshotJobTypes(Job $job, array $jobTypes): void
     {
-        foreach (array_slice($jobTypes, 0, Job::MAX_JOB_TYPES) as $type) {
-            $label = trim($type['label']);
-            if ($label === '') {
-                continue;
-            }
-
-            $slug = trim((string) ($type['slug'] ?? ''));
-            $job->jobTypes()->create([
-                'job_type_id' => $type['job_type_id'] ?? null,
-                'label' => $label,
-                'slug' => $slug !== '' ? $slug : Str::slug($label),
-            ]);
+        foreach ($this->vocabulary->resolve((string) $job->site_id, $jobTypes) as $type) {
+            $job->jobTypes()->create($type);
         }
     }
 }

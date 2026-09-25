@@ -106,3 +106,25 @@ test('saveEdits writes the source seed (not raw), title, primary photo, and alts
         ->and($job->photos[0]['alt'])->toBe('front pipe')
         ->and($job->photos[1]['alt'])->toBe('cleared pit');
 });
+
+test('saveEdits rewrites the client name (display re-derived), the work date, and the applied services', function () {
+    $job = Job::factory()->create(['status' => JobStatus::Review, 'enhanced_description' => 'enh', 'client_name_full' => 'Old Name']);
+    $job->jobTypes()->create(['label' => 'Old Type', 'slug' => 'old-type']);
+
+    app(JobReviewActions::class)->saveEdits($job, [
+        'client_name_full' => 'Jane Homeowner',
+        'performed_at' => '2025-04-14',
+        'job_types' => ['Sump Pump Replacement', 'French Drain'],
+    ]);
+    $job->refresh();
+
+    expect($job->client_name_full)->toBe('Jane Homeowner')
+        ->and($job->client_name_display)->toBe('Jane H.')
+        ->and($job->performed_at->toDateString())->toBe('2025-04-14')
+        ->and($job->jobTypes()->orderBy('label')->pluck('label')->all())->toBe(['French Drain', 'Sump Pump Replacement']);
+
+    // A blank date clears it; an edit that omits job_types leaves them alone.
+    app(JobReviewActions::class)->saveEdits($job, ['performed_at' => '', 'post_title' => 'T']);
+    expect($job->refresh()->performed_at)->toBeNull()
+        ->and($job->jobTypes()->count())->toBe(2);
+});
