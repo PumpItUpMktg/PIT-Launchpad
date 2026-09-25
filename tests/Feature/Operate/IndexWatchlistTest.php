@@ -111,3 +111,16 @@ it('renders the watchlist block on the Indexing board, and an empty state when n
     PageIndexState::withoutGlobalScopes()->update(['index_verdict' => 'PASS', 'indexed_at' => '2026-09-10 00:00:00']); // long indexed → off the list
     expect(Livewire::test(IndexingBoard::class)->html())->toContain('Nothing waiting');
 });
+
+it('lists a published post — which has no page type — without failing', function () {
+    $site = watchSite();
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'page_type' => null, 'status' => ContentStatus::Published,
+        'title' => 'A Blog Post', 'slug' => 'a-blog-post', 'published_at' => '2026-09-22 09:00:00', 'wp_post_id' => 7,
+    ]);
+
+    $rows = collect(app(IndexWatchlist::class)->for($site)['rows'])->keyBy('title');
+
+    expect($rows['A Blog Post']['kind'])->toBe('post')
+        ->and($rows['A Blog Post']['state'])->toBe('published');
+});
