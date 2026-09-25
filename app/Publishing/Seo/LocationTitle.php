@@ -11,7 +11,8 @@ use App\Publishing\Blocks\LocationSubject;
 use App\Support\SeoTitle;
 
 /**
- * The DETERMINISTIC location-page title — "{Trade} in {Town}, {ST}" — composed from the page's authoritative
+ * The DETERMINISTIC location-page title — "{Trade} in {Town}, {ST}" ("{Town}, {County} County" when another
+ * town in the tenant shares the name) — composed from the page's authoritative
  * structured subject (LocationSubject) and the site's pillar-service head term, NOT from the drafter-authored
  * (sometimes hallucinated) stored title. This is the PAGE PORTION only; the brand suffix + length guard are
  * applied downstream by MetaBlobAssembler::withBrand(), so the value stays brand-free and obeys the shared
@@ -26,13 +27,15 @@ final class LocationTitle
 
     public function compose(Content $content): ?string
     {
-        ['city' => $city, 'state' => $state, 'anchored' => $anchored] = $this->subject->resolve($content);
+        ['label' => $label, 'state' => $state, 'anchored' => $anchored] = $this->subject->resolve($content);
 
-        if (! $anchored || $city === '') {
+        if (! $anchored || $label === '') {
             return null;
         }
 
-        return SeoTitle::normalize($this->leadWithPlace($content, $city, $state), $content->source_name);
+        // The label, not the bare city: a town that shares its name with another in this tenant carries its
+        // county here, so two real towns never publish under one identical title.
+        return SeoTitle::normalize($this->leadWithPlace($content, $label, $state), $content->source_name);
     }
 
     /**

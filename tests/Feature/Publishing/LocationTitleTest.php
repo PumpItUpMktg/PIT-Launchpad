@@ -4,6 +4,8 @@ use App\Enums\ContentKind;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Enums\ServiceSiloRole;
+use App\Integrations\Census\County;
+use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -11,7 +13,9 @@ use App\Models\Service;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Publishing\Blocks\BlockContentAssembler;
+use App\Publishing\Blocks\LocationSubject;
 use App\Publishing\MetaBlobAssembler;
+use Illuminate\Support\Facades\Cache;
 
 function locTitleSite(): Site
 {
@@ -210,4 +214,48 @@ it('drops the trade to the bare place when even its first clause plus a long tow
     // No trade form fits alongside the long town, so the title is the place alone — the town is kept.
     expect(app(MetaBlobAssembler::class)->documentTitle($town->fresh()))
         ->toBe('Parsippany-Troy Hills, NJ | Sump Pump Gurus');
+});
+
+it('two real towns with one name get county-qualified titles and H1s, so neither is a duplicate of the other', function () {
+    $site = locTitleSite();
+    locTitlePillar($site);
+    $doylestown = Location::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown office']);
+    $downingtown = Location::factory()->create(['site_id' => $site->id, 'name' => 'Downingtown office']);
+    // Newtown, Bucks County (42017) and Newtown, Chester County (42029) — same name, same state, different towns.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4201753424', 'name' => 'Newtown', 'state' => 'PA', 'type' => MunicipalityType::CountySubdivision, 'source_location_ids' => [$doylestown->id]]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4202953424', 'name' => 'Newtown', 'state' => 'PA', 'type' => MunicipalityType::CountySubdivision, 'source_location_ids' => [$downingtown->id]]);
+    // An unrelated town keeps its plain title.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4201718000', 'name' => 'Chalfont', 'state' => 'PA', 'type' => MunicipalityType::CountySubdivision, 'source_location_ids' => [$doylestown->id]]);
+
+    Cache::flush();
+    $gaz = Mockery::mock(MunicipalityGazetteer::class)->shouldIgnoreMissing([]);
+    $gaz->shouldReceive('countiesInState')->with('42')->andReturn([
+        new County('42017', 'Bucks', '42', '017'),
+        new County('42029', 'Chester County', '42', '029'),
+    ]);
+    app()->instance(MunicipalityGazetteer::class, $gaz);
+
+    $page = fn (Location $parent, string $geo, string $slug): Content => Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => $geo, 'title' => 'Newtown, PA', 'slug' => $slug, 'slot_payload' => [],
+    ]);
+    $bucks = $page($doylestown, '4201753424', 'doylestown-pa/newtown-pa');
+    $chester = $page($downingtown, '4202953424', 'downingtown-pa/newtown-pa');
+    $chalfont = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $doylestown->id, 'geo_id' => '4201718000', 'title' => 'Chalfont, PA', 'slug' => 'chalfont-pa',
+    ]);
+
+    $titles = app(MetaBlobAssembler::class);
+    expect($titles->documentTitle($bucks->fresh()))->toBe('Sump Pump Services in Newtown, Bucks County, PA | Sump Pump Gurus')
+        ->and($titles->documentTitle($chester->fresh()))->toBe('Sump Pump Services in Newtown, Chester County, PA | Sump Pump Gurus')
+        ->and($titles->documentTitle($chalfont->fresh()))->toBe('Sump Pump Services in Chalfont, PA | Sump Pump Gurus');
+
+    $subject = app(LocationSubject::class)->resolve($bucks->fresh());
+    expect($subject['city'])->toBe('Newtown')          // the bare name still keys the neighbour / post lookups
+        ->and($subject['label'])->toBe('Newtown, Bucks County')
+        ->and($subject['county'])->toBe('Bucks County');
+
+    $markup = app(BlockContentAssembler::class)->compose($bucks->fresh(), [], []);
+    expect($markup)->toBeString()->toContain('Newtown, Bucks County');
 });
