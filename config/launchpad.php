@@ -66,6 +66,9 @@ return [
         // as a green "landed" row before it falls off. Days after the index date a page stays listed.
         'watch_days' => (int) env('LAUNCHPAD_INDEX_WATCH_DAYS', 5),
 
+        // A published page still not indexed after this many days is "stuck" — the count the operator acts on.
+        'stuck_days' => (int) env('LAUNCHPAD_INDEX_STUCK_DAYS', 10),
+
         // Hosts Google will never index: the build/staging domains a site lives on before its real one.
         // A site whose domain matches one of these is told so on the Indexing board rather than left
         // "waiting on Google" for data that cannot come.

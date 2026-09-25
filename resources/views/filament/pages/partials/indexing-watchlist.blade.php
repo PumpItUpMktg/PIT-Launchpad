@@ -24,6 +24,13 @@
             <b style="color:#2E7D6B">{{ number_format($watch['landed']) }}</b> indexed in the last {{ $watch['watch_days'] }} days (they drop off after that)
         </div>
     </div>
+    @php($m = $watch['metrics'])
+    <div class="ix-nums">
+        <div class="ix-num"><div class="n neutral">{{ number_format($m['published_week']) }}</div><div class="l">Published, past week</div></div>
+        <div class="ix-num"><div class="n {{ $m['indexed_week'] > 0 ? 'good' : 'neutral' }}">{{ number_format($m['indexed_week']) }}</div><div class="l">Indexed, past week</div></div>
+        <div class="ix-num"><div class="n {{ $m['not_indexed'] > 0 ? 'warn' : 'neutral' }}">{{ number_format($m['not_indexed']) }}</div><div class="l">Not indexed</div></div>
+        <div class="ix-num"><div class="n {{ $m['stuck'] > 0 ? 'bad' : 'neutral' }}">{{ number_format($m['stuck']) }}</div><div class="l">Not indexed, over {{ $m['stuck_days'] }} days</div></div>
+    </div>
     @if ($watch['rows'] === [])
         <div class="ix-none">{{ $ready['connected'] && ! $ready['test_domain'] ? 'Nothing waiting — every published page is indexed.' : 'Nothing on the list.' }}</div>
     @else

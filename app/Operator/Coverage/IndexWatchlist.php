@@ -11,6 +11,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operate\ContentCard;
 use App\Support\PublicUrl;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 
 /**
@@ -46,7 +47,8 @@ class IndexWatchlist
      * @return array{
      *     rows: list<array{content_id: string, title: string, url: ?string, kind: string, published_at: ?string, inspected_at: ?string, indexed_at: ?string, state: string, reason: ?string, days_waiting: ?int}>,
      *     waiting: int, inspected: int, landed: int, watch_days: int,
-     *     readiness: array{connected: bool, test_domain: bool, host: ?string}
+     *     readiness: array{connected: bool, test_domain: bool, host: ?string},
+     *     metrics: array{published_week: int, indexed_week: int, not_indexed: int, stuck: int, stuck_days: int}
      * }
      */
     /** The sortable columns, in the order the header shows them. */
@@ -61,7 +63,11 @@ class IndexWatchlist
     {
         $watchDays = max(1, (int) config('launchpad.indexing.watch_days', 5));
         if ($site === null) {
-            return ['rows' => [], 'waiting' => 0, 'inspected' => 0, 'landed' => 0, 'watch_days' => $watchDays, 'readiness' => ['connected' => false, 'test_domain' => false, 'host' => null]];
+            return [
+                'rows' => [], 'waiting' => 0, 'inspected' => 0, 'landed' => 0, 'watch_days' => $watchDays,
+                'readiness' => ['connected' => false, 'test_domain' => false, 'host' => null],
+                'metrics' => ['published_week' => 0, 'indexed_week' => 0, 'not_indexed' => 0, 'stuck' => 0, 'stuck_days' => (int) config('launchpad.indexing.stuck_days', 10)],
+            ];
         }
 
         $pages = Content::withoutGlobalScope(SiteScope::class)
@@ -83,6 +89,8 @@ class IndexWatchlist
 
         $waiting = [];
         $landed = [];
+        /** @var array<string, Carbon> $indexedAtById every indexed page's index date (the metrics count past the watch window) */
+        $indexedAtById = [];
         foreach ($pages as $page) {
             $id = (string) $page->id;
             /** @var PageIndexState|null $verdict */
@@ -108,8 +116,9 @@ class IndexWatchlist
 
             if ($pass || $inGoogle) {
                 $indexedAt = $this->indexDate($pass ? $verdict->indexed_at : null, $firstSeen[$id] ?? null);
-                // No date at all (a PASS row from before the stamp existed with nothing else to go on) reads
-                // as long indexed — it has nothing to show on a "just landed" list.
+                // An indexed page with no date (a PASS row from before the stamp existed) is long indexed.
+                $indexedAtById[$id] = $indexedAt ?? Carbon::createFromTimestamp(0);
+                // No date at all reads as long indexed — it has nothing to show on a "just landed" list.
                 if ($indexedAt === null || $indexedAt->lessThan($cutoff)) {
                     continue;
                 }
@@ -138,6 +147,56 @@ class IndexWatchlist
             'landed' => count($landed),
             'watch_days' => $watchDays,
             'readiness' => $this->readiness($site),
+            'metrics' => $this->metrics($pages, $indexedAtById, $today),
+        ];
+    }
+
+    /**
+     * The four numbers above the list, all from the same rows and the same index-date rule:
+     *  - published_week: pages published in the last 7 days;
+     *  - indexed_week:   pages whose index date is in the last 7 days (whatever their publish date);
+     *  - not_indexed:    every published page not in the index today;
+     *  - stuck:          of those, published more than `stuck_days` (10) days ago — the ones to act on.
+     *
+     * @param  Collection<int, Content>  $pages
+     * @param  array<string, Carbon>  $indexedAtById  content id => index date, for every indexed page
+     * @return array{published_week: int, indexed_week: int, not_indexed: int, stuck: int, stuck_days: int}
+     */
+    private function metrics(Collection $pages, array $indexedAtById, Carbon $today): array
+    {
+        $stuckDays = max(1, (int) config('launchpad.indexing.stuck_days', 10));
+        $weekAgo = $today->copy()->subDays(7);
+        $stuckBefore = $today->copy()->subDays($stuckDays);
+
+        $publishedWeek = 0;
+        $indexedWeek = 0;
+        $notIndexed = 0;
+        $stuck = 0;
+        foreach ($pages as $page) {
+            $id = (string) $page->id;
+            $published = $page->published_at instanceof Carbon ? $page->published_at->copy()->startOfDay() : null;
+            if ($published !== null && $published->greaterThanOrEqualTo($weekAgo)) {
+                $publishedWeek++;
+            }
+            if (isset($indexedAtById[$id])) {
+                if ($indexedAtById[$id]->greaterThanOrEqualTo($weekAgo)) {
+                    $indexedWeek++;
+                }
+
+                continue;
+            }
+            $notIndexed++;
+            if ($published !== null && $published->lessThanOrEqualTo($stuckBefore)) {
+                $stuck++;
+            }
+        }
+
+        return [
+            'published_week' => $publishedWeek,
+            'indexed_week' => $indexedWeek,
+            'not_indexed' => $notIndexed,
+            'stuck' => $stuck,
+            'stuck_days' => $stuckDays,
         ];
     }
 

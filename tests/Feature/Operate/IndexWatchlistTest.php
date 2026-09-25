@@ -245,3 +245,27 @@ it('renders the test-domain and not-connected notes on the board, and neither wh
     expect($html)->not->toContain('Search Console is not connected')
         ->toContain('Nothing waiting — every published page is indexed.');
 });
+
+it('reports the four metrics: published past week, indexed past week, not indexed, and stuck past 10 days', function () {
+    $site = watchSite();
+    // Published this week, not indexed.
+    watchPage($site, 'New Waiting', '2026-09-21 09:00:00', 'new-waiting');
+    // Published this week AND indexed this week.
+    $fresh = watchPage($site, 'New Landed', '2026-09-20 09:00:00', 'new-landed');
+    watchVerdict($site, $fresh, 'PASS', '2026-09-23 03:00:00', indexedAt: '2026-09-23 03:00:00');
+    // Published a month ago, indexed this week (a slow one landing) — counts as indexed this week, not stuck.
+    $slow = watchPage($site, 'Slow Landed', '2026-08-20 09:00:00', 'slow-landed');
+    watchVerdict($site, $slow, 'PASS', '2026-09-22 03:00:00', indexedAt: '2026-09-22 03:00:00');
+    // Long indexed, long ago — off every weekly count and off the list.
+    $old = watchPage($site, 'Old Indexed', '2026-07-01 09:00:00', 'old-indexed');
+    watchVerdict($site, $old, 'PASS', '2026-09-23 03:00:00', indexedAt: '2026-07-05 03:00:00');
+    // Published 12 days ago, inspected, still not indexed → stuck.
+    $stuck = watchPage($site, 'Stuck', '2026-09-12 09:00:00', 'stuck');
+    watchVerdict($site, $stuck, IndexCoverageState::CrawledNotIndexed->value, '2026-09-23 03:00:00');
+    // Published 9 days ago, never inspected → not indexed but not yet stuck.
+    watchPage($site, 'Nine Days', '2026-09-15 09:00:00', 'nine-days');
+
+    $m = app(IndexWatchlist::class)->for($site)['metrics'];
+
+    expect($m)->toBe(['published_week' => 2, 'indexed_week' => 2, 'not_indexed' => 3, 'stuck' => 1, 'stuck_days' => 10]);
+});
