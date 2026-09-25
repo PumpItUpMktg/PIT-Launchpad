@@ -814,6 +814,42 @@ final class BlockPageComposer
     }
 
     /**
+     * Composes the BLOG index page — the drafted hero + every published post as a linked row, grouped by
+     * silo, newest first. A plain crawlable list, deliberately: this page is the one every post is reachable
+     * from, so a post that has fallen out of every six-card feed is never more than two clicks from home.
+     * With nothing published yet it says so instead of rendering an empty page.
+     *
+     * @param  array<string, mixed>  $slots
+     * @param  list<array{silo: string, posts: list<array{title: string, url: string, date: string}>}>  $groups
+     */
+    public function composeBlogIndex(array $slots, PageContext $ctx, array $groups, bool $preview = false): string
+    {
+        $hero = $this->sections->hero(
+            eyebrow: 'From the blog',
+            headline: $this->str($slots['hero_headline'] ?? '') ?: 'Articles',
+            subhead: $this->str($slots['intro'] ?? $slots['hero_subhead'] ?? ''),
+            imageUrl: null,
+            imageAlt: '',
+            assessmentText: 'Get in touch',
+            assessmentUrl: '#contact',
+            trust: [],
+            ctx: $ctx,
+        );
+
+        $index = $this->sections->postIndex('Every article', 'Browse by topic', $groups, $preview);
+
+        $cta = $this->sections->cta(
+            heading: 'Have a question we haven’t answered?',
+            body: 'Ask us directly — a real person replies.',
+            actionText: 'Get in touch',
+            actionUrl: '#contact',
+            ctx: $ctx,
+        );
+
+        return $this->join([$hero, $index, $cta]);
+    }
+
+    /**
      * Composes a LEGAL page (Privacy Policy / Terms of Service) — just the {@see BlockSections::legalDocument}
      * render of a template-driven document. No marketing hero, no CTA: a legal page is a plain,
      * readable document, not a conversion surface. The drafted hero_headline (if any) overrides the

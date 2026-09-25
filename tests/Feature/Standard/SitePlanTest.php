@@ -21,7 +21,7 @@ test('the site plan renders all four sources: fixed, offerable optionals, servic
 
     $plan = app(SitePlan::class)->for($site->fresh());
 
-    expect($plan['fixed'])->toHaveCount(6)
+    expect($plan['fixed'])->toHaveCount(7)
         ->and(collect($plan['optionals'])->firstWhere('type', 'faq')['accepted'])->toBeTrue()
         ->and($plan['service'])->not->toBeEmpty()
         ->and($plan['service'][0]['name'])->toBe('Pumps')

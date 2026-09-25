@@ -23,6 +23,7 @@ class WireframeKitSeeder extends Seeder
         'about-page',
         'why-choose-us-page',
         'areas-we-serve-page',
+        'blog-page',
         'faq-page',
         'contact-page',
         'privacy-page',

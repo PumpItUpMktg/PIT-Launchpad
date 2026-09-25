@@ -22,6 +22,7 @@ enum StandardPageType: string
     case About = 'about';
     case Contact = 'contact';
     case AreasWeServe = 'areas_we_serve';
+    case Blog = 'blog';
     case Privacy = 'privacy';
     case Terms = 'terms';
 
@@ -41,6 +42,7 @@ enum StandardPageType: string
             self::About => 'About',
             self::Contact => 'Contact',
             self::AreasWeServe => 'Areas We Serve',
+            self::Blog => 'Blog',
             self::Privacy => 'Privacy Policy',
             self::Terms => 'Terms of Service',
             self::Reviews => 'Reviews',
@@ -56,7 +58,7 @@ enum StandardPageType: string
     /** @return list<self> */
     public static function fixed(): array
     {
-        return [self::Home, self::About, self::Contact, self::AreasWeServe, self::Privacy, self::Terms];
+        return [self::Home, self::About, self::Contact, self::AreasWeServe, self::Blog, self::Privacy, self::Terms];
     }
 
     /** @return list<self> */
@@ -89,6 +91,7 @@ enum StandardPageType: string
             self::About, self::WhyChooseUs => 'VoiceKit + intake USPs',
             self::Contact => 'business info + hours + GBP + form',
             self::AreasWeServe => 'the town / location layer',
+            self::Blog => 'every published post, newest first, grouped by silo',
             self::Reviews => 'GS Reviews',
             self::Gallery => 'Job Capture photos',
             self::Financing, self::Warranty, self::Team => 'intake config',
@@ -117,7 +120,7 @@ enum StandardPageType: string
     {
         return in_array($this, [
             self::About, self::WhyChooseUs, self::Faq,
-            self::AreasWeServe, self::Contact, self::Privacy, self::Terms,
+            self::AreasWeServe, self::Blog, self::Contact, self::Privacy, self::Terms,
         ], true);
     }
 }

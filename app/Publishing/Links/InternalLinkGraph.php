@@ -5,10 +5,12 @@ namespace App\Publishing\Links;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Enums\StandardPageType;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
+use App\Publishing\Blocks\BlogFeeds;
 use App\Publishing\Chrome\SiteProfileAssembler;
 use Illuminate\Support\Collection;
 
@@ -47,7 +49,10 @@ final class InternalLinkGraph
     /** @var array<string, string> slug → content id (published pages) */
     private array $slugToId = [];
 
-    public function __construct(private readonly SiteProfileAssembler $profile) {}
+    public function __construct(
+        private readonly SiteProfileAssembler $profile,
+        private readonly BlogFeeds $feeds,
+    ) {}
 
     public function build(Site $site): self
     {
@@ -72,6 +77,7 @@ final class InternalLinkGraph
             $this->siloEdges($page, $site);
             $this->locationGridEdges($page, $site);
             $this->postEdges($page, $site);
+            $this->feedEdges($page, $site);
             $this->inlineEdges($page, $site);
         }
 
@@ -208,6 +214,35 @@ final class InternalLinkGraph
                     $this->edge((string) $page->id, (string) $candidate->id);
                     break;
                 }
+            }
+        }
+    }
+
+    /**
+     * The links a page carries to blog POSTS — the same feeds the renderer draws ({@see BlogFeeds}), so the
+     * graph counts what the live site actually links: a service/hub page's silo feed, a location page's
+     * local feed, a post's related articles, and the Blog index's list of every post.
+     */
+    private function feedEdges(Content $page, Site $site): void
+    {
+        $siteId = (string) $site->id;
+        $targets = new Collection;
+
+        if ($page->kind === ContentKind::Post) {
+            $targets = $this->feeds->related($page);
+        } elseif ($page->standard_type === StandardPageType::Blog) {
+            foreach ($this->feeds->index($siteId) as $group) {
+                $targets = $targets->merge($group['posts']);
+            }
+        } elseif (in_array($page->page_type, [PageType::Service, PageType::Hub], true)) {
+            $targets = $this->feeds->siloPosts($siteId, $page->silo_id);
+        } elseif ($page->page_type === PageType::Location) {
+            $targets = $this->feeds->localPosts($siteId, $this->townKey((string) $page->title));
+        }
+
+        foreach ($targets as $post) {
+            if ($this->pages->has((string) $post->id)) {
+                $this->edge((string) $page->id, (string) $post->id);
             }
         }
     }

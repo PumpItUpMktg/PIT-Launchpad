@@ -178,6 +178,7 @@ it('resolves a kit only for the standard pages whose composer has shipped', func
         ->and(StandardKit::isComposable(StandardPageType::Faq))->toBeTrue()
         ->and(StandardKit::isComposable(StandardPageType::WhyChooseUs))->toBeTrue()
         ->and(StandardKit::isComposable(StandardPageType::AreasWeServe))->toBeTrue()
+        ->and(StandardKit::isComposable(StandardPageType::Blog))->toBeTrue()
         ->and(StandardKit::isComposable(StandardPageType::Contact))->toBeTrue()
         ->and(StandardKit::isComposable(StandardPageType::Privacy))->toBeTrue()
         ->and(StandardKit::isComposable(StandardPageType::Terms))->toBeTrue()

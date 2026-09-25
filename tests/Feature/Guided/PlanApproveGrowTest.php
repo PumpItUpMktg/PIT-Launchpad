@@ -68,9 +68,9 @@ test('Plan approve persists build config, materializes the manifest, and hands o
         ->and($state->town_page_pace)->toBe(8)
         ->and($state->fresh_content)->toBeFalse()
         ->and($this->site->fresh()->status)->toBe(SiteStatus::Active)
-        ->and(BuildPage::query()->where('site_id', $this->site->id)->count())->toBe(8); // fixed core + the 2 seeded optionals (faq, why_choose_us)
+        ->and(BuildPage::query()->where('site_id', $this->site->id)->count())->toBe(9); // 7 fixed core (incl. the blog index) + the 2 seeded optionals (faq, why_choose_us)
     // materialized into one planned page per manifest entry (no AI)
-    expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->where('kind', ContentKind::Page->value)->count())->toBe(8);
+    expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->site->id)->where('kind', ContentKind::Page->value)->count())->toBe(9);
 });
 
 test('Plan approve projects the silo tree to WP categories (queued, same trigger as materialize)', function () {

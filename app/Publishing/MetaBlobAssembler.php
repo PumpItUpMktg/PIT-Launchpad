@@ -27,6 +27,7 @@ use App\PageBuilder\Native\NativeComposer;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\PublishEligibility;
 use App\Publishing\Blocks\BlockContentAssembler;
+use App\Publishing\Blocks\BlogFeeds;
 use App\Publishing\Blocks\NapPin;
 use App\Publishing\Blocks\ServiceAreaMap;
 use App\Publishing\Breadcrumbs\SiloIndexResolver;
@@ -74,7 +75,23 @@ class MetaBlobAssembler
         private readonly NapPin $napPin,
         private readonly SiloIndexResolver $siloIndex,
         private readonly LocationTitle $locationTitle,
+        private readonly BlogFeeds $feeds,
     ) {}
+
+    /**
+     * "Related articles" HTML for a post — its silo siblings ({@see BlogFeeds::related}), or '' when it has
+     * none. Plain list markup in the body's own idiom (the post body is classic HTML, not blocks).
+     */
+    private function relatedArticles(Content $content): string
+    {
+        $related = $this->feeds->related($content);
+        if ($related->isEmpty()) {
+            return '';
+        }
+        $items = $related->map(fn (Content $p): string => '<li><a href="/'.e(Permalinks::slugPath((string) $p->slug)).'">'.e((string) $p->title).'</a></li>')->implode('');
+
+        return "\n<h2 class=\"lp-related-heading\">Related articles</h2>\n<ul class=\"lp-related-articles\">{$items}</ul>";
+    }
 
     /**
      * The page's user-owned config (operator overrides). Read by content_id on every
@@ -249,7 +266,10 @@ class MetaBlobAssembler
         // already normalized into the `body` slot; kses-safe (no iframes/scripts).
         if ($postContent === null && $content->kind === ContentKind::Post) {
             $body = is_string($slots['body'] ?? null) ? trim((string) $slots['body']) : '';
-            $postContent = $body !== '' ? $body : null;
+            // Related articles under the body — three silo siblings, assembled at push time (never stored),
+            // so every post links onward and an older post keeps collecting inbound links as newer ones
+            // publish. Idempotent by construction: rebuilt from the body on each push.
+            $postContent = $body !== '' ? $body.$this->relatedArticles($content) : null;
         }
 
         return [
