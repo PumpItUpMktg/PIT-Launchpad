@@ -4,6 +4,7 @@ namespace App\Operator\Coverage;
 
 use App\Enums\ContentStatus;
 use App\Enums\IndexCoverageState;
+use App\Integrations\UrlInspection\IndexInspector;
 use App\Models\Content;
 use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
@@ -32,12 +33,20 @@ use Illuminate\Support\Carbon;
  */
 class IndexWatchlist
 {
-    public function __construct(private readonly PageImpressions $impressions) {}
+    public function __construct(
+        private readonly PageImpressions $impressions,
+        private readonly IndexInspector $inspector,
+    ) {}
 
     /**
+     * `readiness` says whether any of this can move: `connected` is the Search Console connection (a
+     * Google grant + a property on the site — without it nothing here is ever inspected); `test_domain`
+     * flags a build/staging host Google will never index ({@see config('launchpad.indexing.test_domain_suffixes')}).
+     *
      * @return array{
      *     rows: list<array{content_id: string, title: string, url: ?string, kind: string, published_at: ?string, inspected_at: ?string, indexed_at: ?string, state: string, reason: ?string, days_waiting: ?int}>,
-     *     waiting: int, inspected: int, landed: int, watch_days: int
+     *     waiting: int, inspected: int, landed: int, watch_days: int,
+     *     readiness: array{connected: bool, test_domain: bool, host: ?string}
      * }
      */
     /** The sortable columns, in the order the header shows them. */
@@ -52,7 +61,7 @@ class IndexWatchlist
     {
         $watchDays = max(1, (int) config('launchpad.indexing.watch_days', 5));
         if ($site === null) {
-            return ['rows' => [], 'waiting' => 0, 'inspected' => 0, 'landed' => 0, 'watch_days' => $watchDays];
+            return ['rows' => [], 'waiting' => 0, 'inspected' => 0, 'landed' => 0, 'watch_days' => $watchDays, 'readiness' => ['connected' => false, 'test_domain' => false, 'host' => null]];
         }
 
         $pages = Content::withoutGlobalScope(SiteScope::class)
@@ -128,6 +137,33 @@ class IndexWatchlist
             'inspected' => count(array_filter($waiting, fn (array $r): bool => $r['state'] === 'inspected')),
             'landed' => count($landed),
             'watch_days' => $watchDays,
+            'readiness' => $this->readiness($site),
+        ];
+    }
+
+    /**
+     * Whether the watchlist can ever move for this site: Search Console connected, and a real domain.
+     *
+     * @return array{connected: bool, test_domain: bool, host: ?string}
+     */
+    public function readiness(Site $site): array
+    {
+        $host = strtolower((string) parse_url((string) $site->domain_url, PHP_URL_HOST));
+        $host = $host !== '' ? $host : null;
+
+        $test = false;
+        foreach ((array) config('launchpad.indexing.test_domain_suffixes', []) as $suffix) {
+            $suffix = strtolower(trim((string) $suffix));
+            if ($host !== null && $suffix !== '' && ($host === ltrim($suffix, '.') || str_ends_with($host, $suffix) || str_ends_with($host, '.'.ltrim($suffix, '.')))) {
+                $test = true;
+                break;
+            }
+        }
+
+        return [
+            'connected' => $this->inspector->connected($site),
+            'test_domain' => $test,
+            'host' => $host,
         ];
     }
 

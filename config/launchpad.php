@@ -65,6 +65,11 @@ return [
         // The Indexing board's watchlist: every published page until it is indexed, then a few more days
         // as a green "landed" row before it falls off. Days after the index date a page stays listed.
         'watch_days' => (int) env('LAUNCHPAD_INDEX_WATCH_DAYS', 5),
+
+        // Hosts Google will never index: the build/staging domains a site lives on before its real one.
+        // A site whose domain matches one of these is told so on the Indexing board rather than left
+        // "waiting on Google" for data that cannot come.
+        'test_domain_suffixes' => ['flywp.xyz', '.test', '.local', 'localhost'],
     ],
 
     'geo' => [

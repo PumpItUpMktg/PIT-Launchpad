@@ -43,6 +43,10 @@
         .ix-watch .why { font-size:11.5px; color:#B5731A; margin-top:2px; }
         .ix-watch .ix-sort { background:none; border:0; padding:0; cursor:pointer; font:inherit; font-size:10px; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:var(--ink-soft); white-space:nowrap; }
         .ix-watch .ix-sort:hover, .ix-watch .ix-sort.on { color:var(--ink); }
+        .ix-readiness { margin:10px 0 4px; padding:10px 12px; border-radius:9px; background:#FBEFD9; color:#7A4E0F; font-size:12.5px; line-height:1.5; }
+        .ix-readiness code { font-size:12px; }
+        .ix-readiness a { color:inherit; text-decoration:underline; }
+        @media (prefers-color-scheme: dark){ .ix-readiness { background:rgba(181,115,26,.18); color:#e6b877; } }
         @media (prefers-color-scheme: dark){ .ix-watch tr.is-inspected td { background:rgba(181,115,26,.12); } .ix-watch tr.is-indexed td { background:rgba(46,125,107,.14); } }
     </style>
 

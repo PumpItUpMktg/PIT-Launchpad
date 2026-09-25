@@ -6,6 +6,18 @@
 <div class="ix-card ix-watch">
     <div class="ix-head">
         <div class="t">Waiting on Google <span style="color:var(--ink-soft);font-weight:600">— published pages not yet indexed</span></div>
+        @php($ready = $watch['readiness'])
+        @if ($ready['test_domain'])
+            <div class="ix-readiness">
+                <b>Test domain — nothing here can be indexed.</b> This site is on <code>{{ $ready['host'] }}</code>, a build host Google will never index.
+                These pages start waiting on Google once the site moves to its real domain{{ $ready['connected'] ? '' : ' and Search Console is connected' }}. No data is expected until then.
+            </div>
+        @elseif (! $ready['connected'])
+            <div class="ix-readiness">
+                <b>Search Console is not connected — nothing here will be inspected.</b> Inspection verdicts and impressions both come from Search Console.
+                Connect the Google account and pick this site's property under <a href="{{ \App\Filament\Resources\ConnectionsResource::getUrl('index') }}" wire:navigate>System → Connections</a>; until then the list only shows what was published.
+            </div>
+        @endif
         <div class="d">
             <b>{{ number_format($watch['waiting']) }}</b> published, not yet inspected ·
             <b style="color:#B5731A">{{ number_format($watch['inspected']) }}</b> inspected, not indexed ·
@@ -13,7 +25,7 @@
         </div>
     </div>
     @if ($watch['rows'] === [])
-        <div class="ix-none">Nothing waiting — every published page is indexed.</div>
+        <div class="ix-none">{{ $ready['connected'] && ! $ready['test_domain'] ? 'Nothing waiting — every published page is indexed.' : 'Nothing on the list.' }}</div>
     @else
         <table>
             @php($arrow = fn (string $col): string => $watchSort === $col ? ($watchDir === 'asc' ? ' ▲' : ' ▼') : '')
