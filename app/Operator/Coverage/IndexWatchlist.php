@@ -79,7 +79,8 @@ class IndexWatchlist
                 'content_id' => $id,
                 'title' => trim((string) $page->title),
                 'url' => PublicUrl::forContent($site->domain_url, $page),
-                'kind' => $page->page_type->value,
+                // A post has no page type — it is just its kind.
+                'kind' => $page->page_type->value ?? $page->kind->value,
                 'published_at' => $published?->toDateString(),
                 'inspected_at' => $inspected ? $verdict->last_inspected_at->toDateString() : null,
                 'indexed_at' => null,
