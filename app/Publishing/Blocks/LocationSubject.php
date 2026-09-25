@@ -2,10 +2,12 @@
 
 namespace App\Publishing\Blocks;
 
+use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * The authoritative {city, state} subject of a location page — the town/city the page is actually about,
@@ -24,14 +26,25 @@ use App\Models\Scopes\SiteScope;
  */
 final class LocationSubject
 {
+    private const COUNTY_CACHE_DAYS = 30;
+
+    public function __construct(private readonly MunicipalityGazetteer $gazetteer) {}
+
     /**
-     * @return array{city: string, state: string, anchored: bool}
+     * `city` is the bare town name (what name-keyed lookups — neighbours, local posts — match on); `label` is
+     * the name to SHOW in the title and H1: the same as `city` unless another town in this tenant's coverage
+     * carries the same name in the same state, in which case it is qualified with its county ("Newtown,
+     * Bucks County") so two real towns never publish under one identical title — Google treats identical
+     * titles at two URLs as duplicates and indexes only one. `county` is that qualifier, or null.
+     *
+     * @return array{city: string, state: string, anchored: bool, label: string, county: ?string}
      */
     public function resolve(Content $content): array
     {
         $isTown = $content->location_id === null && $content->parent_location_id !== null;
+        $subject = $isTown ? $this->town($content) : $this->hub($content);
 
-        return $isTown ? $this->town($content) : $this->hub($content);
+        return ['label' => $subject['city'], 'county' => null, ...$subject];
     }
 
     /**
@@ -74,15 +87,60 @@ final class LocationSubject
                 ->first(['name', 'state']);
 
             if ($area !== null && trim((string) $area->name) !== '') {
+                $city = trim((string) $area->name);
+                $state = strtoupper(trim((string) $area->state));
+                $county = $this->collisionCounty((string) $content->site_id, $geoId, $city, $state);
+
                 return [
-                    'city' => trim((string) $area->name),
-                    'state' => strtoupper(trim((string) $area->state)),
+                    'city' => $city,
+                    'state' => $state,
                     'anchored' => true,
+                    'label' => $county !== null ? $city.', '.$county : $city,
+                    'county' => $county,
                 ];
             }
         }
 
         return $this->titleParse($content);
+    }
+
+    /**
+     * The county to qualify a town with, when — and only when — another coverage row in this tenant has the
+     * same name in the same state under a different GEOID (two real towns, one name: Newtown in Bucks and
+     * Newtown in Chester). A county subdivision's GEOID carries its county (STATE(2)+COUNTY(3)); a place
+     * GEOID does not, and an unknown county is no qualifier at all rather than a guess. Null = no collision.
+     */
+    private function collisionCounty(string $siteId, string $geoId, string $city, string $state): ?string
+    {
+        $twin = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->where('geo_id', '!=', $geoId)
+            ->whereRaw('lower(name) = ?', [mb_strtolower($city)])
+            ->whereRaw('upper(coalesce(state, \'\')) = ?', [$state])
+            ->exists();
+        if (! $twin || strlen($geoId) !== 10) {
+            return null;
+        }
+
+        $stateFips = substr($geoId, 0, 2);
+        $names = Cache::remember(
+            "lp.county_names.{$stateFips}",
+            now()->addDays(self::COUNTY_CACHE_DAYS),
+            function () use ($stateFips): array {
+                $map = [];
+                foreach ($this->gazetteer->countiesInState($stateFips) as $county) {
+                    $map[$county->geoId] = $county->name;
+                }
+
+                return $map;
+            },
+        );
+        $name = trim((string) ($names[substr($geoId, 0, 5)] ?? ''));
+        if ($name === '') {
+            return null;
+        }
+
+        return preg_match('/\bcounty$/i', $name) === 1 ? $name : $name.' County';
     }
 
     /**

@@ -817,7 +817,9 @@ final class BlockContentAssembler
         // by its geo_id. An un-anchored town degrades to the legacy title-parse (anchored=false) so nothing
         // regresses. This is the parent-city / hallucinated-town fix at its source — the county sentence,
         // neighbour framing, and H1 formula-fallback below all read $city/$state.
-        ['city' => $city, 'state' => $state] = $this->locationSubject->resolve($content);
+        // `label` is the name to SHOW (qualified with its county when another town in the tenant shares the
+        // name); `city` stays the bare name for the lookups keyed on it (neighbours, local posts).
+        ['city' => $city, 'state' => $state, 'label' => $cityLabel] = $this->locationSubject->resolve($content);
 
         // A TOWN page's NAP shows the PARENT office's contact info, so its heading names that office
         // ("Serving {town} from our {parentCity} office") rather than claiming an office in the town itself.
@@ -878,7 +880,7 @@ final class BlockContentAssembler
             slots: $slots,
             images: $images,
             ctx: $this->locationContext($content, $location),
-            city: $city,
+            city: $cityLabel,
             state: $state,
             trade: $this->trade($content),
             intro: $this->storyParagraphs($this->slotString($slots, 'loc_intro')),
