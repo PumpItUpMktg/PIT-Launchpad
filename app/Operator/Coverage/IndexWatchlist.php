@@ -40,7 +40,15 @@ class IndexWatchlist
      *     waiting: int, inspected: int, landed: int, watch_days: int
      * }
      */
-    public function for(?Site $site): array
+    /** The sortable columns, in the order the header shows them. */
+    public const SORTS = ['published', 'inspected', 'status', 'indexed'];
+
+    /**
+     * @param  string  $sort  one of {@see SORTS}: `status` (waiting → inspected → landed, then oldest published),
+     *                        `published`, `inspected` or `indexed` (a page with no such date sorts last)
+     * @param  string  $dir  `asc` | `desc`
+     */
+    public function for(?Site $site, string $sort = 'status', string $dir = 'asc'): array
     {
         $watchDays = max(1, (int) config('launchpad.indexing.watch_days', 5));
         if ($site === null) {
@@ -111,16 +119,47 @@ class IndexWatchlist
             $waiting[] = $row;
         }
 
-        usort($waiting, fn (array $a, array $b): int => [$a['published_at'] ?? '9999', $a['title']] <=> [$b['published_at'] ?? '9999', $b['title']]);
-        usort($landed, fn (array $a, array $b): int => [$b['indexed_at'], $a['title']] <=> [$a['indexed_at'], $b['title']]);
+        $rows = [...$waiting, ...$landed];
+        usort($rows, $this->comparator(in_array($sort, self::SORTS, true) ? $sort : 'status', $dir === 'desc'));
 
         return [
-            'rows' => [...$waiting, ...$landed],
+            'rows' => $rows,
             'waiting' => count(array_filter($waiting, fn (array $r): bool => $r['state'] === 'published')),
             'inspected' => count(array_filter($waiting, fn (array $r): bool => $r['state'] === 'inspected')),
             'landed' => count($landed),
             'watch_days' => $watchDays,
         ];
+    }
+
+    /**
+     * The row order for one sort column. A date column sorts by that date with the undated rows LAST in
+     * either direction (an absent date is not "earliest", it is "not yet"); `status` walks the states in
+     * roll-out order (waiting → inspected → landed) with the oldest published first inside each; the
+     * title is the final tiebreak so the order is stable across refreshes.
+     *
+     * @return callable(array<string, mixed>, array<string, mixed>): int
+     */
+    private function comparator(string $sort, bool $desc): callable
+    {
+        $rank = ['published' => 0, 'inspected' => 1, 'indexed' => 2];
+        $flip = $desc ? -1 : 1;
+
+        return function (array $a, array $b) use ($sort, $rank, $flip): int {
+            if ($sort === 'status') {
+                $cmp = ($rank[$a['state']] <=> $rank[$b['state']]) * $flip;
+
+                return $cmp !== 0 ? $cmp : ([$a['published_at'] ?? '9999', $a['title']] <=> [$b['published_at'] ?? '9999', $b['title']]);
+            }
+            $key = $sort.'_at';
+            $da = $a[$key];
+            $db = $b[$key];
+            if (($da === null) !== ($db === null)) {
+                return $da === null ? 1 : -1; // undated last, whatever the direction
+            }
+            $cmp = (($da ?? '') <=> ($db ?? '')) * $flip;
+
+            return $cmp !== 0 ? $cmp : ($a['title'] <=> $b['title']);
+        };
     }
 
     /** The earlier of the first PASS and the first impression — whichever proved the page indexed first. */
