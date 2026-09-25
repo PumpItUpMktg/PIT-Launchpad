@@ -411,3 +411,38 @@ test('classification: a candidate is stamped with orthogonal shelf_life and scop
         ->and($rows['Evergreen general water heater guide']->meta['shelf_life'])->toBe('evergreen')
         ->and($rows['Evergreen general water heater guide']->meta['scope'])->toBe('general');
 });
+
+test('a moderate near-duplicate is HELD in review naming its twin — never a draft-ready candidate with only an alert', function () {
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create([
+        'site_id' => $site->id, 'name' => 'Sump Pumps',
+        'rule_set' => ['include_patterns' => ['sump pump'], 'exclude_patterns' => []],
+    ]);
+    $live = Content::factory()->post()->create([
+        'site_id' => $site->id, 'silo_id' => $silo->id, 'status' => ContentStatus::Published,
+        'title' => 'Sump Pump Maintenance Tips to Keep Wildlife Out', 'slug' => 'sump-pump-maintenance-tips-to-keep-wildlife-out',
+        'body' => '<p>Seal the discharge line so raccoons and water stay out of the pit.</p>',
+    ]);
+
+    $claude = (new ScriptedClaudeClient)->on('Raccoon found', relevanceJson(0.8, 'Sump Pumps'));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    // The intake text is a news article, not the drafted post — the detector's FLAG tier (≥0.7, <0.9).
+    $this->app->instance(EmbeddingProvider::class, new class implements EmbeddingProvider
+    {
+        public function embed(string $text): array
+        {
+            return str_contains(mb_strtolower($text), 'sump pit after the storm') ? [0.8, 0.6] : [1.0, 0.0]; // the news item vs the live post: cosine 0.8
+        }
+    });
+
+    $result = app(CandidateFunnel::class)->process($site, [
+        News::item('Raccoon found in a sump pit after the storm', summary: 'Homeowners urged to seal discharge lines.'),
+    ]);
+
+    expect($result->created)->toBe([])
+        ->and($result->parked)->toHaveCount(1)
+        ->and($result->parked[0]->status)->toBe(ContentStatus::InReview)
+        ->and($result->parked[0]->near_dup_of_content_id)->toBe($live->id);
+    $alertTypes = array_map(fn ($a) => $a->type, $result->alerts);
+    expect($alertTypes)->toContain(AlertType::NearDuplicateFlag);
+});
