@@ -213,3 +213,33 @@ test('flags a missing business phone before publish so it is never silently drop
     expect(collect(reviewActions()->warnings($content->fresh()))->implode(' '))
         ->not->toContain('No business phone');
 });
+
+test('a hard title twin of a LIVE post blocks approve; a softer likeness, or a twin that is only a draft, warns', function () {
+    Bus::fake();
+    $site = Site::factory()->create();
+    $live = Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'title' => 'Sump Pump Maintenance Tips to Keep Wildlife Out', 'body' => '<p>x</p>']);
+
+    $same = Content::factory()->post()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'body' => '<p>drafted</p>',
+        'near_dup_of_content_id' => $live->id, 'meta' => ['near_dup' => ['twin_title' => $live->title, 'similarity' => 0.96, 'hard' => true, 'on' => 'title']],
+    ]);
+    $blocked = reviewActions()->approve($same);
+    expect($blocked->isBlocked())->toBeTrue()
+        ->and($blocked->blockedReason)->toContain('the same post as the live "Sump Pump Maintenance Tips to Keep Wildlife Out"')
+        ->and($same->fresh()->status)->toBe(ContentStatus::NeedsReview);
+
+    $alike = Content::factory()->post()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'body' => '<p>drafted</p>',
+        'near_dup_of_content_id' => $live->id, 'meta' => ['near_dup' => ['twin_title' => $live->title, 'similarity' => 0.78, 'hard' => false, 'on' => 'title']],
+    ]);
+    $warned = reviewActions()->approve($alike);
+    expect($warned->approved)->toBeTrue()
+        ->and(implode(' ', $warned->warnings))->toContain('Reads like the live post');
+
+    $draftTwin = Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'title' => 'Another draft', 'body' => '<p>y</p>']);
+    $hardOfDraft = Content::factory()->post()->create([
+        'site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'body' => '<p>drafted</p>',
+        'near_dup_of_content_id' => $draftTwin->id, 'meta' => ['near_dup' => ['twin_title' => 'Another draft', 'similarity' => 0.95, 'hard' => true, 'on' => 'title']],
+    ]);
+    expect(reviewActions()->approve($hardOfDraft)->approved)->toBeTrue(); // nothing live to duplicate yet — warn, don't block
+});

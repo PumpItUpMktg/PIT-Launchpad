@@ -213,23 +213,30 @@ class CandidateFunnel
                 continue;
             }
 
-            $status = $relevance->band === RelevanceBand::Borderline ? ContentStatus::InReview : ContentStatus::Candidate;
-            $content = $this->createCandidate($site, $item, $relevance, $status);
+            // A moderate near-duplicate (the flag tier) is HELD in review naming its twin, like the refresh
+            // tier — not created as a draft-ready candidate with an alert nobody reads. A queue of a dozen
+            // "sump pump maintenance" posts was built one informational flag at a time; the operator now
+            // decides "merge or keep distinct" BEFORE a draft is generated, not after it is published.
+            $flagged = $dup->tier === NearDupTier::OperatorFlag;
+            $status = $relevance->band === RelevanceBand::Borderline || $flagged ? ContentStatus::InReview : ContentStatus::Candidate;
+            $content = $this->createCandidate($site, $item, $relevance, $status, $flagged ? $dup->similarToContentId : null);
             // Both candidate + in_review are "unreviewed" — count this new row toward the silo's backlog.
             $backlog[$siloId] = $siloBacklog + 1;
 
-            if ($relevance->band === RelevanceBand::Borderline) {
+            if ($status === ContentStatus::InReview) {
                 $parked[] = $content;
-                $alerts[] = new OperatorAlert(AlertType::BorderlineRelevance, $content->id, "Borderline relevance parked: {$item->title}");
             } else {
                 $created[] = $content;
             }
+            if ($relevance->band === RelevanceBand::Borderline) {
+                $alerts[] = new OperatorAlert(AlertType::BorderlineRelevance, $content->id, "Borderline relevance parked: {$item->title}");
+            }
 
-            if ($dup->tier === NearDupTier::OperatorFlag) {
+            if ($flagged) {
                 $alerts[] = new OperatorAlert(
                     AlertType::NearDuplicateFlag,
                     $content->id,
-                    "Possible duplicate — merge or keep distinct: {$item->title}",
+                    "Possible duplicate — held for a merge-or-keep decision: {$item->title}",
                     ['similar_to' => $dup->similarToContentId, 'similarity' => $dup->signal()],
                 );
             }

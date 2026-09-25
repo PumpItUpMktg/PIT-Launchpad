@@ -261,7 +261,40 @@ class ReviewActions
             return 'A required image failed to render — reset/retry it before approving.';
         }
 
+        // The same post twice: a drafted title that IS another live post's title (or as good as) never
+        // publishes beside it — Google indexes one and files the other as a duplicate. Refresh the live
+        // post instead, or reject this draft. A softer likeness is a warning below.
+        $twin = $this->nearDupTwin($content);
+        if ($twin !== null && $twin['hard'] && $twin['published']) {
+            return sprintf('This draft is the same post as the live "%s" (title similarity %.2f) — refresh that post instead, or reject this draft.', $twin['title'], $twin['similarity']);
+        }
+
         return null;
+    }
+
+    /**
+     * The row's near-duplicate twin, resolved for the gate: its title, whether it is live, and whether
+     * the likeness is the hard tier (same post) or a flag.
+     *
+     * @return array{title: string, published: bool, hard: bool, similarity: float}|null
+     */
+    private function nearDupTwin(Content $content): ?array
+    {
+        if ($content->near_dup_of_content_id === null) {
+            return null;
+        }
+        $twin = Content::withoutGlobalScopes()->find($content->near_dup_of_content_id);
+        if ($twin === null) {
+            return null;
+        }
+        $note = is_array($content->meta['near_dup'] ?? null) ? $content->meta['near_dup'] : [];
+
+        return [
+            'title' => trim((string) $twin->title),
+            'published' => $twin->status === ContentStatus::Published,
+            'hard' => (bool) ($note['hard'] ?? false),
+            'similarity' => (float) ($note['similarity'] ?? 0.0),
+        ];
     }
 
     /**
@@ -275,6 +308,12 @@ class ReviewActions
 
         if (in_array(ReviewFlag::UnsupportedClaim, AlertFlags::for($content), true)) {
             $warnings[] = 'This draft has an unsupported claim that did not trace to the Claims set.';
+        }
+
+        $twin = $this->nearDupTwin($content);
+        if ($twin !== null && ! ($twin['hard'] && $twin['published'])) {
+            $warnings[] = sprintf('Reads like %s "%s" — approve only if the angle is genuinely distinct; otherwise refresh that post and reject this one.',
+                $twin['published'] ? 'the live post' : 'the draft', $twin['title']);
         }
 
         // The wrong-service catch: a page pinned to a subject whose draft never mentions it.

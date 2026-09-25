@@ -7,6 +7,7 @@ use App\Integrations\Embedding\MockEmbeddingProvider;
 use App\Models\Content;
 use App\Models\Silo;
 use App\Models\Site;
+use Tests\Support\TopicEmbeddings;
 
 /** A live-or-in-flight post to collide against. */
 function guardPost(Site $s, string $title, string $slug, ?string $siloId = null, string $status = 'published'): Content
@@ -91,4 +92,39 @@ it('semantic: no silo → the semantic pass is skipped (base-slug still applies)
 
     // Different title (no base-slug hit) + null silo → nothing to compare semantically → null.
     expect(app(DuplicateGuard::class)->duplicateOf($site, 'Keeping Your Cellar Dry', null))->toBeNull();
+});
+
+it('title twin: a drafted title that means the same as a same-silo post is a HARD twin; a related-but-distinct title is a flag; another silo is not compared', function () {
+    $this->app->instance(EmbeddingProvider::class, new TopicEmbeddings([
+        'wildlife' => 'wildlife-maintenance',
+        'backup systems before' => 'backup-before-floods',
+    ]));
+    $site = Site::factory()->create();
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $other = Silo::factory()->create(['site_id' => $site->id]);
+    $live = guardPost($site, 'Sump Pump Maintenance Tips to Keep Wildlife and Water Out', 'sump-pump-maintenance-tips-to-keep-wildlife-and-water-out', $silo->id);
+    guardPost($site, 'Sump Pump Maintenance: Keep Wildlife Out of Your Basement', 'sump-pump-maintenance-keep-wildlife-out-of-your-basement', $other->id);
+
+    $guard = app(DuplicateGuard::class);
+
+    // Same meaning (cosine 1.0) → hard twin, the live post named.
+    $twin = $guard->titleTwin($site, 'Sump Pump Maintenance to Stop Wildlife and Water Damage', $silo->id);
+    expect($twin)->not->toBeNull()
+        ->and($twin['id'])->toBe($live->id)
+        ->and($twin['hard'])->toBeTrue()
+        ->and($twin['similarity'])->toBe(1.0);
+
+    // Identical base slug is hard even when the embedding says "other" (a re-titled re-report).
+    $twin = $guard->titleTwin($site, 'Sump pump maintenance tips to keep wildlife and water out', $silo->id);
+    expect($twin['hard'])->toBeTrue();
+
+    // A different topic in the same silo: only the word overlap speaks — below the flag tier → null.
+    expect($guard->titleTwin($site, 'Sump Pump Maintenance and Backup Systems Before NJ Floods', $silo->id))->toBeNull();
+
+    // The wildlife post in ANOTHER silo is never compared (silo-scoped, like the semantic pass).
+    expect($guard->titleTwin($site, 'Keep Wildlife Out: A Sump Pump Guide', $other->id))->not->toBeNull()
+        ->and($guard->titleTwin($site, 'Keep Wildlife Out: A Sump Pump Guide', $silo->id)['id'])->toBe($live->id);
+
+    // The row itself is excluded on a re-check.
+    expect($guard->titleTwin($site, $live->title, $silo->id, $live->id))->toBeNull();
 });

@@ -91,6 +91,49 @@ final class DuplicateGuard
     }
 
     /** Title → slug base with a trailing "-N" removed (matches the resolver's dup-grouping key exactly). */
+    /**
+     * The TITLE-level twin of a drafted post, or null: the same-silo post whose TITLE reads like this one.
+     * The intake pass compares a news article against drafted articles — different texts, so two drafts
+     * that end up being the same piece (twelve "Sump pump maintenance …" posts) pass it; their titles do
+     * not. `hard` is a title so alike it is the same post (≥ the detector's refresh tier, or an identical
+     * base slug) — a publish blocker; below that it is a flag the operator decides.
+     *
+     * @return array{id: string, title: string, similarity: float, hard: bool}|null
+     */
+    public function titleTwin(Site $site, string $title, ?string $siloId, ?string $exceptId = null): ?array
+    {
+        $title = trim($title);
+        if ($siloId === null || $title === '') {
+            return null;
+        }
+
+        $existing = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Post->value)
+            ->where('silo_id', $siloId)
+            ->where('status', '!=', ContentStatus::Rejected->value)
+            ->when($exceptId !== null, fn ($q) => $q->where('id', '!=', $exceptId))
+            ->get(['id', 'title']); // title only — the detector reads title + body + slug, and body/slug are unloaded here
+
+        if ($existing->isEmpty()) {
+            return null;
+        }
+
+        $result = $this->nearDup->detect($title, $existing);
+        if ($result->tier === NearDupTier::Proceed || $result->similarToContentId === null) {
+            return null;
+        }
+        $twin = $existing->firstWhere('id', $result->similarToContentId);
+        $sameSlug = $twin !== null && $this->baseSlug((string) $twin->title) === $this->baseSlug($title);
+
+        return [
+            'id' => (string) $result->similarToContentId,
+            'title' => trim((string) $twin?->title),
+            'similarity' => round($result->signal(), 3),
+            'hard' => $result->tier === NearDupTier::Refresh || $sameSlug,
+        ];
+    }
+
     private function baseSlug(string $value): string
     {
         return (string) preg_replace('/-\d+$/', '', Str::slug($value));

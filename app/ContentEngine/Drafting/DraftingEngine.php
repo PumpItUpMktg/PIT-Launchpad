@@ -3,6 +3,7 @@
 namespace App\ContentEngine\Drafting;
 
 use App\ContentEngine\BlogQueue\BlogTargetQueue;
+use App\ContentEngine\DuplicateGuard;
 use App\ContentEngine\Linking\InternalLinkResolver;
 use App\ContentEngine\Linking\PostLinkInjector;
 use App\Enums\ContentKind;
@@ -34,6 +35,7 @@ class DraftingEngine
         private readonly DraftGuard $guard,
         private readonly InternalLinkResolver $links = new InternalLinkResolver,
         private readonly PostLinkInjector $linkInjector = new PostLinkInjector,
+        private readonly ?DuplicateGuard $duplicates = null,
     ) {}
 
     /**
@@ -97,6 +99,19 @@ class DraftingEngine
         if ($candidate->wp_post_id === null) {
             // $title is the normalized SEO title — a clean slug, no source suffix.
             $attributes['slug'] = $this->uniqueSlug($candidate->site_id, $title, $candidate->id);
+
+            // The drafted TITLE against the silo's other posts: the intake gate compared a news article
+            // with drafted articles and let twelve "Sump pump maintenance …" posts through; their titles
+            // give it away. A twin names itself on the row (the review queue's near-duplicate lane, and
+            // the approve gate's block/warn). Never fails the draft — a lookup error just skips it.
+            [$twinId, $twinNote] = $this->titleTwin($candidate, $title);
+            $attributes['near_dup_of_content_id'] = $twinId;
+            $meta = is_array($attributes['meta'] ?? null) ? $attributes['meta'] : ($candidate->meta ?? []);
+            unset($meta['near_dup']);
+            if ($twinNote !== null) {
+                $meta['near_dup'] = $twinNote;
+            }
+            $attributes['meta'] = $meta;
         }
 
         $candidate->fill($attributes)->save();
@@ -108,6 +123,33 @@ class DraftingEngine
         app(BlogTargetQueue::class)->consumeIfCovered($candidate->refresh());
 
         return new DraftResult($candidate, $payload, $verification, false);
+    }
+
+    /**
+     * The twin of the drafted title among the silo's other posts: [twin content id, the `meta.near_dup`
+     * note] — or [null, null] (which also clears a prior mark once a re-draft's title no longer collides).
+     *
+     * @return array{0: ?string, 1: ?array{twin_title: string, similarity: float, hard: bool, on: string}}
+     */
+    private function titleTwin(Content $candidate, string $title): array
+    {
+        $site = $candidate->site;
+        if ($site === null) {
+            return [null, null];
+        }
+        try {
+            $twin = ($this->duplicates ?? app(DuplicateGuard::class))
+                ->titleTwin($site, $title, $candidate->matched_silo_id ?? $candidate->silo_id, $candidate->id);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [null, null];
+        }
+        if ($twin === null) {
+            return [null, null];
+        }
+
+        return [$twin['id'], ['twin_title' => $twin['title'], 'similarity' => $twin['similarity'], 'hard' => $twin['hard'], 'on' => 'title']];
     }
 
     private function createDraft(
