@@ -45,7 +45,7 @@ class IndexWatchlist
      * flags a build/staging host Google will never index ({@see config('launchpad.indexing.test_domain_suffixes')}).
      *
      * @return array{
-     *     rows: list<array{content_id: string, title: string, url: ?string, kind: string, published_at: ?string, inspected_at: ?string, indexed_at: ?string, state: string, reason: ?string, days_waiting: ?int}>,
+     *     rows: list<array{content_id: string, title: string, url: ?string, kind: string, published_at: ?string, inspected_at: ?string, indexed_at: ?string, state: string, reason: ?string, verdict: ?string, days_waiting: ?int, market_id: ?string, indexnow_at: ?string}>,
      *     waiting: int, inspected: int, landed: int, watch_days: int,
      *     readiness: array{connected: bool, test_domain: bool, host: ?string},
      *     metrics: array{published_week: int, indexed_week: int, not_indexed: int, stuck: int, stuck_days: int}
@@ -53,6 +53,13 @@ class IndexWatchlist
      */
     /** The sortable columns, in the order the header shows them. */
     public const SORTS = ['published', 'inspected', 'status', 'indexed'];
+
+    /**
+     * Verdicts that are Google honouring something WE set — a redirect or a canonical — not a page waiting
+     * to be indexed. Never on the list, never in the not-indexed or stuck counts (the same set the coverage
+     * panels count as "Excluded (correct)").
+     */
+    public const EXCLUDED = [IndexCoverageState::ExcludedRedirect->value, IndexCoverageState::ExcludedCanonical->value];
 
     /**
      * @param  string  $sort  one of {@see SORTS}: `status` (waiting → inspected → landed, then oldest published),
@@ -73,7 +80,7 @@ class IndexWatchlist
         $pages = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('status', ContentStatus::Published->value)
-            ->get(['id', 'title', 'slug', 'kind', 'page_type', 'published_at']);
+            ->get(['id', 'title', 'slug', 'kind', 'page_type', 'published_at', 'parent_location_id', 'indexnow_submitted_at']);
 
         $verdicts = PageIndexState::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
@@ -91,6 +98,8 @@ class IndexWatchlist
         $landed = [];
         /** @var array<string, Carbon> $indexedAtById every indexed page's index date (the metrics count past the watch window) */
         $indexedAtById = [];
+        /** @var array<string, true> $excludedIds pages Google correctly excludes (redirect / canonical) — not waiting */
+        $excludedIds = [];
         foreach ($pages as $page) {
             $id = (string) $page->id;
             /** @var PageIndexState|null $verdict */
@@ -111,7 +120,10 @@ class IndexWatchlist
                 'indexed_at' => null,
                 'state' => 'published',
                 'reason' => null,
+                'verdict' => $inspected ? (string) $verdict->index_verdict : null,
                 'days_waiting' => $published === null ? null : (int) $published->copy()->startOfDay()->diffInDays($today),
+                'market_id' => $page->parent_location_id === null ? null : (string) $page->parent_location_id,
+                'indexnow_at' => $page->indexnow_submitted_at instanceof Carbon ? $page->indexnow_submitted_at->toDateString() : null,
             ];
 
             if ($pass || $inGoogle) {
@@ -128,6 +140,12 @@ class IndexWatchlist
                 $landed[] = $row;
 
                 continue;
+            }
+
+            if ($inspected && in_array((string) $verdict->index_verdict, self::EXCLUDED, true)) {
+                $excludedIds[$id] = true;
+
+                continue; // a correct exclusion is not a page waiting on Google
             }
 
             if ($inspected) {
@@ -147,7 +165,7 @@ class IndexWatchlist
             'landed' => count($landed),
             'watch_days' => $watchDays,
             'readiness' => $this->readiness($site),
-            'metrics' => $this->metrics($pages, $indexedAtById, $today),
+            'metrics' => $this->metrics($pages, $indexedAtById, $excludedIds, $today),
         ];
     }
 
@@ -160,9 +178,10 @@ class IndexWatchlist
      *
      * @param  Collection<int, Content>  $pages
      * @param  array<string, Carbon>  $indexedAtById  content id => index date, for every indexed page
+     * @param  array<string, true>  $excludedIds  pages Google correctly excludes — neither indexed nor waiting
      * @return array{published_week: int, indexed_week: int, not_indexed: int, stuck: int, stuck_days: int}
      */
-    private function metrics(Collection $pages, array $indexedAtById, Carbon $today): array
+    private function metrics(Collection $pages, array $indexedAtById, array $excludedIds, Carbon $today): array
     {
         $stuckDays = max(1, (int) config('launchpad.indexing.stuck_days', 10));
         $weekAgo = $today->copy()->subDays(7);
@@ -184,6 +203,9 @@ class IndexWatchlist
                 }
 
                 continue;
+            }
+            if (isset($excludedIds[$id])) {
+                continue; // correctly excluded — not waiting, not stuck
             }
             $notIndexed++;
             if ($published !== null && $published->lessThanOrEqualTo($stuckBefore)) {
