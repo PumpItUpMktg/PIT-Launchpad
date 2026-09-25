@@ -32,7 +32,7 @@ test('assemble builds the manifest across standard, service, and location source
 
     $rows = BuildPage::query()->where('site_id', $site->id)->get();
 
-    expect($rows->where('source', BuildSource::Standard)->count())->toBe(7) // 6 fixed + FAQ
+    expect($rows->where('source', BuildSource::Standard)->count())->toBe(8) // 7 fixed + FAQ
         ->and($rows->where('source', BuildSource::Service)->count())->toBe(2) // hub + own-page (folded excluded)
         ->and($rows->where('source', BuildSource::Location)->count())->toBe(1)
         ->and($rows->firstWhere('page_key', 'home')->priority)->toBe(0)
@@ -96,5 +96,5 @@ test('assemble is idempotent — re-running upserts, never duplicates', function
     app(BuildManifestAssembler::class)->assemble($site->fresh());
 
     expect(BuildPage::query()->where('site_id', $site->id)->count())->toBe($first)
-        ->and($first)->toBe(6); // the fixed core, no optionals/services/towns
+        ->and($first)->toBe(7); // the fixed core, no optionals/services/towns
 });

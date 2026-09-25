@@ -186,6 +186,42 @@ final class BlockSections
     }
 
     /**
+     * The Blog page's index: one sub-section per silo, each a plain linked list "Title · date". Crawlable
+     * and complete on purpose — cards are for the six-post feeds; the index is the map of everything.
+     * Empty (no posts yet) → a single honest line, never an empty section.
+     *
+     * @param  list<array{silo: string, posts: list<array{title: string, url: string, date: string}>}>  $groups
+     */
+    public function postIndex(string $eyebrow, string $heading, array $groups, bool $preview = false): string
+    {
+        $children = [$this->sectionHead($eyebrow, $heading)];
+        $any = false;
+        foreach ($groups as $group) {
+            $items = [];
+            foreach ($group['posts'] as $p) {
+                $title = trim($p['title']);
+                $url = trim($p['url']);
+                if ($title === '' || $url === '') {
+                    continue;
+                }
+                $date = trim($p['date']);
+                $items[] = '<a href="'.$this->attr($url).'">'.$this->text($title).'</a>'.($date !== '' ? ' <span class="lp-post-meta">· '.$this->text($date).'</span>' : '');
+            }
+            if ($items === []) {
+                continue;
+            }
+            $any = true;
+            $children[] = $this->b->heading(3, trim((string) $group['silo']));
+            $children[] = $this->b->list($items, ['className' => 'lp-post-index']);
+        }
+        if (! $any) {
+            $children[] = $this->b->paragraph($preview ? '[Published articles will be listed here]' : 'Articles are on the way — check back soon.', ['textColor' => 'accent-ink']);
+        }
+
+        return $this->b->group($children, ['align' => 'full', 'className' => 'lp-posts lp-posts--index']);
+    }
+
+    /**
      * Symptoms — "signs you need this": the spoke page's search-intent hook. Record bullets with an
      * alert marker + an optional drafted intro line. Data-gated on real symptoms (record field, else
      * the service's captured problem phrases resolved upstream); preview → a labeled example set.

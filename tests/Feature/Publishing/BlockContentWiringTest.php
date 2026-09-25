@@ -1399,6 +1399,7 @@ it('every page ships its FINER identity in the blob — rich standard pages neve
         [StandardPageType::Faq, 'faq'],
         [StandardPageType::Contact, 'contact'],
         [StandardPageType::AreasWeServe, 'areas-we-serve'],
+        [StandardPageType::Blog, 'blog'],
         [StandardPageType::WhyChooseUs, 'why-choose-us'],
         [StandardPageType::Privacy, 'privacy'],   // true boilerplate keeps its own fine type too
         [StandardPageType::Terms, 'terms'],

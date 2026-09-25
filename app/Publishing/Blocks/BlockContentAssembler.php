@@ -18,7 +18,6 @@ use App\Local\Proof\NullLocalReviews;
 use App\Local\Proof\ServiceJobProvider;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Models\Content;
-use App\Models\ContentTown;
 use App\Models\ConversionConfig;
 use App\Models\CoverageArea;
 use App\Models\Location;
@@ -61,6 +60,7 @@ final class BlockContentAssembler
         private readonly ServiceReviewProvider $serviceReviews,
         private readonly ServiceJobProvider $serviceJobs,
         private readonly LocationSubject $locationSubject,
+        private readonly BlogFeeds $feeds,
     ) {}
 
     /**
@@ -120,6 +120,10 @@ final class BlockContentAssembler
 
         if ($content->standard_type === StandardPageType::Faq) {
             return $this->composer->composeFaq($slots, $ctx, $this->faqItems($slots, $this->offersEmergency($content)), $preview);
+        }
+
+        if ($content->standard_type === StandardPageType::Blog) {
+            return $this->composer->composeBlogIndex($slots, $ctx, $this->blogIndex($content), $preview);
         }
 
         if ($content->standard_type === StandardPageType::AreasWeServe) {
@@ -1203,29 +1207,7 @@ final class BlockContentAssembler
      */
     private function localPosts(Content $content, string $city): array
     {
-        $townKey = $this->townKey($city);
-        if ($townKey === '') {
-            return [];
-        }
-
-        $ids = ContentTown::query()
-            ->where('site_id', $content->site_id)
-            ->where('town', $townKey)
-            ->pluck('content_id');
-        if ($ids->isEmpty()) {
-            return [];
-        }
-
-        $posts = Content::withoutGlobalScope(SiteScope::class)
-            ->whereIn('id', $ids)
-            ->where('kind', ContentKind::Post->value)
-            ->where('status', ContentStatus::Published->value)
-            ->whereNotNull('slug')
-            ->orderByDesc('published_at')
-            ->limit(6)
-            ->get();
-
-        return $this->postFeed($posts);
+        return $this->postFeed($this->feeds->localPosts((string) $content->site_id, $this->townKey($city)));
     }
 
     /**
@@ -1239,23 +1221,24 @@ final class BlockContentAssembler
      */
     private function siloPosts(Content $content): array
     {
-        $siloId = $content->silo_id;
-        if ($siloId === null) {
-            return [];
-        }
+        return $this->postFeed($this->feeds->siloPosts((string) $content->site_id, $content->silo_id));
+    }
 
-        $posts = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->where('kind', ContentKind::Post->value)
-            ->where('status', ContentStatus::Published->value)
-            ->whereNotNull('slug')
-            ->where(fn ($q) => $q->where('matched_silo_id', $siloId)
-                ->orWhere(fn ($q2) => $q2->whereNull('matched_silo_id')->where('silo_id', $siloId)))
-            ->orderByDesc('published_at')
-            ->limit(6)
-            ->get();
-
-        return $this->postFeed($posts);
+    /**
+     * The Blog page's index — every published post as a linked row, grouped by silo ({@see BlogFeeds::index}).
+     *
+     * @return list<array{silo: string, posts: list<array{title: string, url: string, date: string}>}>
+     */
+    private function blogIndex(Content $content): array
+    {
+        return array_map(fn (array $group): array => [
+            'silo' => $group['silo'],
+            'posts' => $group['posts']->map(fn (Content $p): array => [
+                'title' => (string) $p->title,
+                'url' => '/'.Permalinks::slugPath((string) $p->slug),
+                'date' => $p->published_at?->format('M j, Y') ?? '',
+            ])->all(),
+        ], $this->feeds->index((string) $content->site_id));
     }
 
     /**

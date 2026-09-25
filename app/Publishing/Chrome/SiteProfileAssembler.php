@@ -31,7 +31,7 @@ final class SiteProfileAssembler
     private const HEADER_SERVICE_LIMIT = 8;
 
     /** The pages eligible for the header MAIN menu — company pages + the Areas We Serve page. */
-    public const MAIN_NAV_SLUGS = ['about', 'about-us', 'faq', 'contact', 'why-choose-us', 'why-us', 'areas-we-serve', 'areas', 'service-areas'];
+    public const MAIN_NAV_SLUGS = ['about', 'about-us', 'faq', 'contact', 'why-choose-us', 'why-us', 'areas-we-serve', 'areas', 'service-areas', 'blog'];
 
     public function __construct(private readonly SiteContact $contact) {}
 
@@ -459,7 +459,7 @@ final class SiteProfileAssembler
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
             ->where('status', ContentStatus::Published->value)
-            ->whereIn('slug', ['about', 'about-us', 'faq', 'contact', 'why-choose-us', 'why-us'])
+            ->whereIn('slug', ['about', 'about-us', 'faq', 'contact', 'why-choose-us', 'why-us', 'blog'])
             ->orderBy('created_at')
             ->get();
 
