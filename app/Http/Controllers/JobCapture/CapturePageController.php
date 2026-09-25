@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\JobCapture;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 
@@ -16,10 +15,14 @@ use Illuminate\Http\Response;
  */
 class CapturePageController extends Controller
 {
-    /** The PWA shell — login, job list, and capture screens in one offline-capable page. */
-    public function app(): View
+    /**
+     * The PWA shell — login, job list, and capture screens in one offline-capable page. `no-cache` so the
+     * browser revalidates it on every launch: the service worker (network-first) holds the offline copy,
+     * the HTTP cache must not pin a stale one.
+     */
+    public function app(): Response
     {
-        return view('capture.app');
+        return response(view('capture.app')->render(), 200, ['Cache-Control' => 'no-cache']);
     }
 
     /** The web app manifest (add-to-home-screen: full-screen, own icon, launches at /capture). */

@@ -403,7 +403,15 @@
     if (token()) { show('list'); loadJobs(); drainQueue(); } else { show('login'); }
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/capture/sw.js', { scope: '/capture' }).catch(() => {});
+      // When an updated worker takes over (a deploy), reload once so the screen is the new shell —
+      // never a stale one under a fresh worker.
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (navigator.serviceWorker.controller && !reloaded) { reloaded = true; location.reload(); }
+      });
+      navigator.serviceWorker.register('/capture/sw.js', { scope: '/capture' })
+        .then((reg) => { reg.update().catch(() => {}); })
+        .catch(() => {});
     }
   }
   boot();
