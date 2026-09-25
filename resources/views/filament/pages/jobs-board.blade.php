@@ -182,7 +182,7 @@
                             <div>
                                 <div class="jb-title">{{ $j['title'] }} <x-lp.chip :tone="$tone($j['status'])">{{ $j['status_label'] }}</x-lp.chip></div>
                                 <div class="jb-meta">
-                                    {{ $j['client'] ?: 'No client name' }} · {{ $j['place'] }}@if ($j['performed_at']) · {{ $j['performed_at'] }}@endif
+                                    {{ $j['client'] ?: 'No client name' }}@if ($j['place'] !== '—') · {{ $j['place'] }}@else · <span title="Town resolves once the job is placed">no town yet</span>@endif @if ($j['performed_at'])· {{ $j['performed_at'] }}@endif
                                     @if ($j['lat'] !== null)
                                         · <a href="https://www.openstreetmap.org/?mlat={{ $j['lat'] }}&mlon={{ $j['lng'] }}#map=15/{{ $j['lat'] }}/{{ $j['lng'] }}" target="_blank" rel="noopener">map (approx.)</a>
                                     @endif
