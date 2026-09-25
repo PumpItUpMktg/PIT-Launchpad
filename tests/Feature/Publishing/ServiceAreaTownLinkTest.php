@@ -91,6 +91,9 @@ it('renders an unbuilt town as PLAIN TEXT (empty url), not a self-referencing Ar
 it('links every served town that has a page — the largest few prominently, the rest in a second tier', function () {
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
     $location = Location::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown', 'county_geoids' => ['42017']]);
+    // Mocked like the tests above: without this the resolver looks county 42017 up over the network
+    // (Census TIGERweb), and a CI run with no route out returned no counties at all — a flake, not a fault.
+    townLinkGazetteer('42', '42017', 'Bucks County');
 
     // Eight served towns, all with published pages. Six is the prominent tier; the other two used to be
     // invisible in text — reachable only as an unlabelled dot on the map.
