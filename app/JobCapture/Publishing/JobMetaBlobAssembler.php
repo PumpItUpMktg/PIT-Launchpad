@@ -28,6 +28,9 @@ final class JobMetaBlobAssembler
             'slug' => $job->publicSlug(),
             'description' => (string) $job->enhanced_description,
             'client_name' => (string) $job->client_name_display,
+            // When the work was really done (a backfilled past job); null for a capture-time job, where
+            // the push date IS the job date. The plugin dates the post from it so an old job reads as old.
+            'performed_at' => $job->performed_at?->toDateString(),
             'seo' => [
                 'title' => $title,
                 'meta_description' => (string) $job->meta_description,

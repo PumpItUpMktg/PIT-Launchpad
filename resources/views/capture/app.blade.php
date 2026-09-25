@@ -24,7 +24,9 @@
   .screen[hidden] { display:none; }
   h1 { font-size:20px; margin:4px 0 16px; }
   label { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px; }
-  input[type=text], input[type=tel], textarea { width:100%; background:var(--panel); border:1px solid var(--line); border-radius:12px; color:var(--ink); padding:14px; font-size:16px; }
+  .check-row { display:flex; align-items:center; gap:10px; font-size:14px; color:inherit; margin:16px 0 4px; }
+  .check-row input { width:20px; height:20px; margin:0; }
+  input[type=text], input[type=tel], input[type=date], textarea { width:100%; background:var(--panel); border:1px solid var(--line); border-radius:12px; color:var(--ink); padding:14px; font-size:16px; }
   textarea { min-height:120px; resize:vertical; }
   .btn { display:block; width:100%; text-align:center; padding:16px; border-radius:14px; border:0; font-size:17px; font-weight:700; background:var(--sky); color:#04263a; margin-top:18px; }
   .btn:disabled { opacity:.5; }
@@ -94,6 +96,15 @@
     <div id="manual-fields">
       <label for="client">Customer name <span class="subtle">(optional)</span></label>
       <input type="text" id="client" placeholder="First name + last initial" autocomplete="off">
+    </div>
+
+    <label class="check-row"><input type="checkbox" id="past-job"> <span>This is a past job — I’m not at the address</span></label>
+    <div id="past-fields" hidden>
+      <label for="address">Job address <span class="subtle">(street, town, state — this sets the location, not your phone)</span></label>
+      <input type="text" id="address" placeholder="12 Main St, Doylestown, PA 18901" autocomplete="street-address">
+      <label for="performed">When was the work done?</label>
+      <input type="date" id="performed">
+      <p class="subtle">The address is geocoded and blurred the same way as a live capture; the public page and photos carry the blurred point, never the street address.</p>
     </div>
 
     <label for="desc">What did you do?</label>
@@ -209,6 +220,7 @@
         '<div class="chips">' + (job.job_types || []).map((t) => '<span class="chip">' + t + '</span>').join('') + '</div></div>';
     }
     $('#client').value = ''; $('#desc').value = ''; $('#gps-msg').textContent = '';
+    $('#past-job').checked = false; $('#past-fields').hidden = true; $('#address').value = ''; $('#performed').value = '';
     renderSlots();
     show('capture');
     // Best-effort GPS — works offline; a walk-in with no fix defers its address to review.
@@ -248,6 +260,12 @@
     };
     if (!capture.job) { payload.client_name_display = $('#client').value.trim() || null; }
     if (capture.lat != null && capture.lng != null) { payload.lat = capture.lat; payload.lng = capture.lng; }
+    // A past job: the typed address places it (the server prefers it over the fix above) and the date is
+    // the day the work was done. Blank address → the office places it in review.
+    if ($('#past-job').checked) {
+      payload.address = $('#address').value.trim() || null;
+      payload.performed_at = $('#performed').value || null;
+    }
 
     const localId = 'c_' + Date.now() + '_' + Math.round(Math.random() * 1e6);
     await qAdd({ localId, payload });
@@ -266,11 +284,20 @@
     if (before === 0) { if (interactive) toast('You’re all caught up — nothing to upload.'); return; }
     if (!navigator.onLine) { if (interactive) toast('You’re offline — they’ll upload automatically when you reconnect.'); return; }
 
-    let sessionExpired = false, hadError = false;
+    let sessionExpired = false, hadError = false, rejected = 0, unplaced = 0, rejectionMsg = '';
     for (const item of await qAll()) {
       try {
         const r = await api('/jobs', { method: 'POST', json: item.payload });
-        if (r.ok || r.status === 422) { await qDel(item.localId); }   // accepted (or rejected as unprocessable) → done
+        if (r.ok) {
+          await qDel(item.localId);
+          // The server says whether it could place the job (a device fix, or the past-job address it
+          // geocoded). Not placed = the office sets the location in review — say so, don't imply it's done.
+          try { const body = await r.json(); if (body && body.placed === false) unplaced++; } catch (e) {}
+        }
+        else if (r.status === 422) {                                   // rejected for good (e.g. a future date) — drop it, but SAY why
+          await qDel(item.localId); rejected++;
+          try { const body = await r.json(); rejectionMsg = (body && body.message) || rejectionMsg; } catch (e) {}
+        }
         else if (r.status === 401) { sessionExpired = true; break; }  // token died mid-drain
         else { hadError = true; }                                      // 5xx / 403 / etc — keep it, surface it
       } catch (e) { hadError = true; }                                 // offline / transient — stays queued
@@ -287,7 +314,9 @@
     }
 
     loadJobs();
-    if (sent > 0 && remaining === 0) toast(sent + ' job' + (sent === 1 ? '' : 's') + ' uploaded.');
+    if (rejected > 0) toast(rejected + ' job' + (rejected === 1 ? ' was' : 's were') + ' not accepted' + (rejectionMsg ? ': ' + rejectionMsg : '.'));
+    else if (unplaced > 0) toast('Uploaded — ' + unplaced + ' job' + (unplaced === 1 ? ' has' : 's have') + ' no location yet; the office will set it.');
+    else if (sent > 0 && remaining === 0) toast(sent + ' job' + (sent === 1 ? '' : 's') + ' uploaded.');
     else if (remaining > 0 && (interactive || hadError)) toast('Couldn’t upload ' + remaining + ' job' + (remaining === 1 ? '' : 's') + ' — will keep trying.');
   }
 
@@ -357,6 +386,11 @@
     $('#done-ok').addEventListener('click', () => { show('list'); loadJobs(); });
 
     // Photo “or upload” path: a library picker that fills the empty slots (tap-to-shoot still lives on each box).
+    $('#past-job').addEventListener('change', (e) => {
+      $('#past-fields').hidden = !e.target.checked;
+      $('#gps-msg').textContent = e.target.checked ? '📍 Location will come from the address you type' : '';
+      if (!e.target.checked) { $('#address').value = ''; $('#performed').value = ''; }
+    });
     $('#upload-lib').addEventListener('click', () => $('#lib-input').click());
     $('#lib-input').addEventListener('change', async (e) => { await addPhotosToEmptySlots(e.target.files); e.target.value = ''; });
 

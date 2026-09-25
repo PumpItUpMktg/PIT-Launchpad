@@ -1,5 +1,7 @@
 <?php
 
+use App\Integrations\Census\Geocoder;
+use App\Integrations\Census\MockCensusGeocoder;
 use App\JobCapture\Auth\DeviceAuthenticator;
 use App\JobCapture\Capture\CaptureData;
 use App\JobCapture\Capture\CaptureIntake;
@@ -80,4 +82,32 @@ test('the job list returns this tech\'s captured jobs', function () {
         ->assertOk()
         ->assertJsonCount(1, 'jobs')
         ->assertJsonPath('jobs.0.client', 'Jane H.');
+});
+
+test('the API accepts a past job with an address and date, reports whether it was placed, and refuses a future date', function () {
+    Storage::fake('r2');
+    Queue::fake();
+    app()->instance(Geocoder::class, new MockCensusGeocoder(40.3101, -75.1299));
+    $device = TechDevice::factory()->create();
+    $token = techToken($device);
+
+    $response = $this->withToken($token)->postJson('/capture/api/jobs', [
+        'client_name_display' => 'Sam M.',
+        'raw_description' => 'Replaced a sump pump last spring.',
+        'lat' => 40.66, 'lng' => -74.65,
+        'address' => '12 Main St, Doylestown, PA 18901',
+        'performed_at' => '2026-04-14',
+        'photos' => [['data' => base64_encode(tinyJpeg()), 'filename' => '1.jpg']],
+    ])->assertCreated()->assertJson(['placed' => true]);
+    $job = Job::withoutGlobalScopes()->find($response->json('id'));
+    expect((float) $job->lat_true)->toBe(40.3101)
+        ->and($job->performed_at?->toDateString())->toBe('2026-04-14');
+
+    $this->withToken($token)->postJson('/capture/api/jobs', [
+        'raw_description' => 'x', 'address' => '12 Main St', 'performed_at' => now()->addDay()->toDateString(),
+    ])->assertUnprocessable()->assertJsonValidationErrors(['performed_at']);
+
+    // No address, no fix → not placed (the office sets the location in review).
+    $this->withToken($token)->postJson('/capture/api/jobs', ['raw_description' => 'walk-in'])
+        ->assertCreated()->assertJson(['placed' => false]);
 });

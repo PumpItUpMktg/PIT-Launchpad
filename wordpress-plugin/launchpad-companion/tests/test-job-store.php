@@ -51,6 +51,15 @@ class Test_Job_Store extends WP_UnitTestCase
         $this->assertContains('Sump Pump Repair', wp_get_object_terms($post->ID, JobCpt::TAX_SERVICE, ['fields' => 'names']));
     }
 
+    public function test_a_past_job_is_dated_from_performed_at_and_a_live_one_from_the_push(): void
+    {
+        $past = ( new JobStore() )->upsert(array_merge($this->payload(), ['job_id' => 'JOB0000000000000000000002', 'performed_at' => '2026-04-14']));
+        $this->assertSame('2026-04-14 12:00:00', get_post($past['wp_post_id'])->post_date);
+
+        $live = ( new JobStore() )->upsert(array_merge($this->payload(), ['job_id' => 'JOB0000000000000000000003']));
+        $this->assertSame(gmdate('Y-m-d'), substr(get_post($live['wp_post_id'])->post_date_gmt, 0, 10));
+    }
+
     public function test_upsert_is_idempotent_by_ulid(): void
     {
         $store = new JobStore();

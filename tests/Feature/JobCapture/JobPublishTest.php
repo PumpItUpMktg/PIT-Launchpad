@@ -50,7 +50,23 @@ test('it publishes an approved job to WordPress — keyed on the ULID, jittered 
         ->and($captured['job_id'])->toBe($job->id)                        // ULID upsert key, never a title match
         ->and($captured['location']['lat'])->toEqual((float) $job->lat_jittered)
         ->and($captured['location']['lat'])->not->toEqual((float) $job->lat_true)   // never the true point
-        ->and($captured['images'][0]['alt'])->toBe('A new sump pump');
+        ->and($captured['images'][0]['alt'])->toBe('A new sump pump')
+        ->and($captured['performed_at'])->toBeNull();                        // a capture-time job carries no work date
+});
+
+test('a backfilled past job pushes the day the work was done, so the plugin can date the post from it', function () {
+    $captured = null;
+    Http::fake(['*/launchpad/v1/job' => function ($request) use (&$captured) {
+        $captured = $request->data();
+
+        return Http::response(['wp_post_id' => 78, 'status' => 'publish']);
+    }]);
+
+    $job = publishableJob();
+    $job->forceFill(['performed_at' => '2026-04-14'])->save();
+    app(JobPublisher::class)->publish($job->fresh());
+
+    expect($captured['performed_at'])->toBe('2026-04-14');
 });
 
 test('a successful publish pings IndexNow for the job (when ping_on_publish is on)', function () {

@@ -82,6 +82,10 @@ class CaptureController extends Controller
             'raw_description' => ['nullable', 'string'],
             'lat' => ['nullable', 'numeric', 'between:-90,90'],
             'lng' => ['nullable', 'numeric', 'between:-180,180'],
+            // A past job: the typed street address (geocoded server-side, preferred over the device fix)
+            // and the date the work was really done — never in the future.
+            'address' => ['nullable', 'string', 'max:255'],
+            'performed_at' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
             'primary_photo_index' => ['nullable', 'integer', 'min:0', 'max:2'],
             'photos' => ['array', 'max:3'],
             'photos.*.data' => ['required', 'string'],
@@ -114,9 +118,17 @@ class CaptureController extends Controller
             photos: $photos,
             jobTypes: $validated['job_types'] ?? [],
             primaryPhotoIndex: (int) ($validated['primary_photo_index'] ?? 0),
+            address: isset($validated['address']) ? trim((string) $validated['address']) : null,
+            performedAt: $validated['performed_at'] ?? null,
         ));
 
-        return response()->json(['id' => $job->id, 'status' => $job->status->value], 201);
+        // `placed`: whether the job has a point (device fix or a geocoded address). False means the office
+        // sets the location in review — the phone says so instead of implying it is done.
+        return response()->json([
+            'id' => $job->id,
+            'status' => $job->status->value,
+            'placed' => $job->lat_true !== null && $job->lng_true !== null,
+        ], 201);
     }
 
     /** A device by id, resolved cross-tenant (auth happens before a site is bound). */

@@ -4,6 +4,7 @@ namespace App\JobCapture\Capture;
 
 use App\Enums\JobSource;
 use App\Enums\JobStatus;
+use App\Integrations\Census\Geocoder;
 use App\JobCapture\Photos\JobPhotoStore;
 use App\Jobs\EnhanceJob;
 use App\Jobs\ResolveJobGeography;
@@ -20,10 +21,27 @@ use App\Models\TechDevice;
  */
 final class CaptureIntake
 {
-    public function __construct(private readonly JobPhotoStore $photos) {}
+    public function __construct(
+        private readonly JobPhotoStore $photos,
+        private readonly Geocoder $geocoder,
+    ) {}
 
     public function capture(TechDevice $device, CaptureData $data): Job
     {
+        // A PAST job: the typed address IS the job's location — the phone is wherever the tech happens to
+        // be now, so its fix is ignored. Geocoded to the true point, which then jitters and resolves to
+        // city/county exactly like a live capture; the photos get the jittered point, never the address.
+        // An address that will not geocode still lands the job — with the address kept for the office and
+        // no point, so it defers to review like a walk-in instead of being lost from the phone's queue.
+        $address = trim((string) $data->address);
+        $lat = $data->lat;
+        $lng = $data->lng;
+        if ($address !== '') {
+            $point = $this->geocoder->geocode($address);
+            $lat = $point?->lat;
+            $lng = $point?->lng;
+        }
+
         $job = new Job([
             'site_id' => $device->site_id,
             'source' => JobSource::Manual,
@@ -33,8 +51,10 @@ final class CaptureIntake
             'client_name_display' => $data->clientNameDisplay,
             'raw_description' => $data->rawDescription,
             'source_description' => $data->rawDescription,   // seed the editable source from the raw input
-            'lat_true' => $data->lat,
-            'lng_true' => $data->lng,
+            'address_true' => $address !== '' ? $address : null,
+            'lat_true' => $lat,
+            'lng_true' => $lng,
+            'performed_at' => $data->performedAt,
             'primary_photo_index' => $data->primaryPhotoIndex,
         ]);
         $job->save();
@@ -42,8 +62,9 @@ final class CaptureIntake
         $this->storePhotos($job, $device, $data);
         $this->snapshotJobTypes($job, $data);
 
-        // GPS present → resolve geography off the request; a walk-in without coordinates defers to review.
-        if ($data->lat !== null && $data->lng !== null) {
+        // A point present (device fix, or the geocoded address) → resolve geography off the request; a
+        // walk-in without coordinates, or an address that would not geocode, defers to review.
+        if ($lat !== null && $lng !== null) {
             ResolveJobGeography::dispatch($job->id);
         }
 

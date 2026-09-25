@@ -45,6 +45,14 @@ final class JobStore
         if (! empty($payload['slug'])) {
             $postarr['post_name'] = sanitize_title((string) $payload['slug']);
         }
+        // A backfilled past job carries the day the work was done: date the post from it (site-local
+        // time, noon, so no timezone edge moves it a day) so an old job reads as old, sorts in its place,
+        // and never claims "today". Absent → WordPress dates the post at the push, as before.
+        $performed = (string) ($payload['performed_at'] ?? '');
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $performed) === 1) {
+            $postarr['post_date'] = $performed.' 12:00:00';
+            $postarr['post_date_gmt'] = get_gmt_from_date($performed.' 12:00:00');
+        }
         if ($existing > 0) {
             $postarr['ID'] = $existing;
         }

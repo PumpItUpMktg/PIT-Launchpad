@@ -24,7 +24,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // The capture PWA talks JSON too: a validation failure there must come back as a 422 the phone can
+        // read, not a redirect to an HTML page (fetch follows it, sees 200, and the phone would count a
+        // rejected job as uploaded and drop it from its queue).
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*'),
+            fn (Request $request) => $request->is('api/*', 'capture/api/*'),
         );
     })->create();
