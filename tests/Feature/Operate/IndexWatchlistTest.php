@@ -6,6 +6,8 @@ use App\Enums\IndexCoverageState;
 use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\IndexingBoard;
+use App\Integrations\UrlInspection\IndexInspector;
+use App\Integrations\UrlInspection\IndexStatus;
 use App\Models\Content;
 use App\Models\GscUrlDaily;
 use App\Models\PageIndexState;
@@ -52,7 +54,7 @@ it('lists published pages by state — plain until inspected, amber when inspect
     $list = app(IndexWatchlist::class)->for($site);
 
     expect($list['waiting'])->toBe(1)->and($list['inspected'])->toBe(1)->and($list['landed'])->toBe(1)
-        ->and(collect($list['rows'])->pluck('state', 'title')->all())->toBe(['Amber Town' => 'inspected', 'Plain Town' => 'published', 'Green Town' => 'indexed']); // waiting oldest-first, then landed
+        ->and(collect($list['rows'])->pluck('state', 'title')->all())->toBe(['Plain Town' => 'published', 'Amber Town' => 'inspected', 'Green Town' => 'indexed']); // default: by status, waiting → inspected → landed
 
     $rows = collect($list['rows'])->keyBy('title');
     expect($rows['Amber Town']['reason'])->toBe('Crawled — not indexed')
@@ -109,6 +111,7 @@ it('renders the watchlist block on the Indexing board, and an empty state when n
         ->toContain('is-inspected');
 
     PageIndexState::withoutGlobalScopes()->update(['index_verdict' => 'PASS', 'indexed_at' => '2026-09-10 00:00:00']); // long indexed → off the list
+    app()->instance(IndexInspector::class, watchInspector(true));
     expect(Livewire::test(IndexingBoard::class)->html())->toContain('Nothing waiting');
 });
 
@@ -123,4 +126,122 @@ it('lists a published post — which has no page type — without failing', func
 
     expect($rows['A Blog Post']['kind'])->toBe('post')
         ->and($rows['A Blog Post']['state'])->toBe('published');
+});
+
+it('sorts by published, inspected, status or indexed date, either direction, undated rows last', function () {
+    $site = watchSite();
+    $a = watchPage($site, 'A Plain', '2026-09-20 09:00:00', 'a');
+    $b = watchPage($site, 'B Amber', '2026-09-10 09:00:00', 'b');
+    $c = watchPage($site, 'C Green', '2026-09-15 09:00:00', 'c');
+    watchVerdict($site, $b, IndexCoverageState::CrawledNotIndexed->value, '2026-09-23 03:00:00');
+    watchVerdict($site, $c, 'PASS', '2026-09-21 03:00:00', indexedAt: '2026-09-22 03:00:00');
+    $titles = fn (string $sort, string $dir = 'asc'): array => collect(app(IndexWatchlist::class)->for($site, $sort, $dir)['rows'])->pluck('title')->all();
+
+    expect($titles('status'))->toBe(['A Plain', 'B Amber', 'C Green'])
+        ->and($titles('status', 'desc'))->toBe(['C Green', 'B Amber', 'A Plain'])
+        ->and($titles('published'))->toBe(['B Amber', 'C Green', 'A Plain'])
+        ->and($titles('published', 'desc'))->toBe(['A Plain', 'C Green', 'B Amber'])
+        ->and($titles('inspected'))->toBe(['C Green', 'B Amber', 'A Plain'])        // A never inspected → last
+        ->and($titles('inspected', 'desc'))->toBe(['B Amber', 'C Green', 'A Plain']) // still last when flipped
+        ->and($titles('indexed'))->toBe(['C Green', 'A Plain', 'B Amber'])           // only C has an index date
+        ->and($titles('bogus'))->toBe(['A Plain', 'B Amber', 'C Green']);            // unknown sort → status
+});
+
+it('clicking a column header sorts by it and clicking again flips the direction', function () {
+    Filament::setCurrentPanel('admin');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = watchSite();
+    watchPage($site, 'Older', '2026-09-10 09:00:00', 'older');
+    watchPage($site, 'Newer', '2026-09-20 09:00:00', 'newer');
+    app(ActiveTenant::class)->set($site->id);
+
+    $page = Livewire::test(IndexingBoard::class)
+        ->call('sortWatch', 'published')
+        ->assertSet('watchSort', 'published')->assertSet('watchDir', 'asc');
+    expect(collect($page->instance()->watchlist['rows'])->pluck('title')->all())->toBe(['Older', 'Newer']);
+
+    $page->call('sortWatch', 'published')->assertSet('watchDir', 'desc');
+    expect(collect($page->instance()->watchlist['rows'])->pluck('title')->all())->toBe(['Newer', 'Older']);
+
+    $page->call('sortWatch', 'nonsense')->assertSet('watchSort', 'published'); // ignored
+    $page->assertSee('Published ▼');
+});
+
+it('shows the watchlist on a fresh tenant with published pages but no index data yet', function () {
+    Filament::setCurrentPanel('admin');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = watchSite();
+    watchPage($site, 'Brand New Town', '2026-09-23 09:00:00', 'brand-new-town');
+    app(ActiveTenant::class)->set($site->id);
+
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+
+    expect($html)->toContain('No index data yet')   // the coverage panels' honest empty state stays
+        ->toContain('Waiting on Google')            // …and the watchlist still lists what is waiting
+        ->toContain('Brand New Town')
+        ->toContain('is-published');
+});
+
+/** An inspector that reports the connection state a test needs, without touching Google. */
+function watchInspector(bool $connected): IndexInspector
+{
+    return new class($connected) implements IndexInspector
+    {
+        public function __construct(public bool $isConnected) {}
+
+        public function connected(Site $site): bool
+        {
+            return $this->isConnected;
+        }
+
+        public function inspect(Site $site, string $url): ?IndexStatus
+        {
+            return null;
+        }
+
+        public function cached(Site $site, string $url): ?IndexStatus
+        {
+            return null;
+        }
+    };
+}
+
+it('says so when the site is on a test domain or has no Search Console connection — no data is expected', function () {
+    $connected = Site::factory()->create(['domain_url' => 'https://www.sandhogworks.com', 'gsc_property' => 'sc-domain:sandhogworks.com']);
+    $staging = Site::factory()->create(['domain_url' => 'https://miller-tire-auto-l6nxxj.flywp.xyz/']);
+    $noGsc = Site::factory()->create(['domain_url' => 'https://plumbers.example', 'gsc_property' => null]);
+
+    app()->instance(IndexInspector::class, watchInspector(true));
+    expect(app(IndexWatchlist::class)->readiness($connected))->toBe(['connected' => true, 'test_domain' => false, 'host' => 'www.sandhogworks.com'])
+        ->and(app(IndexWatchlist::class)->readiness($staging))->toBe(['connected' => true, 'test_domain' => true, 'host' => 'miller-tire-auto-l6nxxj.flywp.xyz']);
+
+    app()->instance(IndexInspector::class, watchInspector(false));
+    expect(app(IndexWatchlist::class)->readiness($noGsc)['connected'])->toBeFalse();
+});
+
+it('renders the test-domain and not-connected notes on the board, and neither when connected on a real domain', function () {
+    Filament::setCurrentPanel('admin');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+
+    $staging = Site::factory()->create(['domain_url' => 'https://miller-tire-auto-l6nxxj.flywp.xyz/']);
+    watchPage($staging, 'Perkasie', '2026-09-23 09:00:00', 'perkasie');
+    app(ActiveTenant::class)->set($staging->id);
+    app()->instance(IndexInspector::class, watchInspector(false));
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+    expect($html)->toContain('Test domain — nothing here can be indexed')
+        ->toContain('flywp.xyz')
+        ->toContain('and Search Console is connected')
+        ->toContain('Perkasie');
+
+    $real = Site::factory()->create(['domain_url' => 'https://plumbers.example']);
+    app(ActiveTenant::class)->set($real->id);
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+    expect($html)->toContain('Search Console is not connected')
+        ->toContain('Nothing on the list')
+        ->not->toContain('Test domain');
+
+    app()->instance(IndexInspector::class, watchInspector(true));
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+    expect($html)->not->toContain('Search Console is not connected')
+        ->toContain('Nothing waiting — every published page is indexed.');
 });

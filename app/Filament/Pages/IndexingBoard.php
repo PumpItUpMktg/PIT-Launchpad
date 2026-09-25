@@ -14,6 +14,7 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Livewire\Attributes\Url;
 
 /**
  * Indexing (operator) — Google index coverage for the tenant, split two ways that keep the number
@@ -40,6 +41,13 @@ class IndexingBoard extends Page
     protected string $view = 'filament.pages.indexing-board';
 
     public ?string $siteId = null;
+
+    /** Watchlist sort column ({@see IndexWatchlist::SORTS}) and direction — kept in the URL so a refresh holds them. */
+    #[Url(as: 'sort')]
+    public string $watchSort = 'status';
+
+    #[Url(as: 'dir')]
+    public string $watchDir = 'asc';
 
     public function mount(): void
     {
@@ -129,6 +137,21 @@ class IndexingBoard extends Page
     {
         $site = $this->siteId === null ? null : Site::query()->whereKey($this->siteId)->first();
 
-        return app(IndexWatchlist::class)->for($site);
+        return app(IndexWatchlist::class)->for($site, $this->watchSort, $this->watchDir);
+    }
+
+    /** Click a watchlist column header: sort by it; click it again to flip the direction. */
+    public function sortWatch(string $column): void
+    {
+        if (! in_array($column, IndexWatchlist::SORTS, true)) {
+            return;
+        }
+        if ($this->watchSort === $column) {
+            $this->watchDir = $this->watchDir === 'asc' ? 'desc' : 'asc';
+
+            return;
+        }
+        $this->watchSort = $column;
+        $this->watchDir = 'asc';
     }
 }
