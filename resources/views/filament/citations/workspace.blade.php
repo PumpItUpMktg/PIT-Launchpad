@@ -62,6 +62,8 @@
                                     <div style="font-weight:500">{{ $row->directoryName }}</div>
                                     @if ($row->listedFor)
                                         <div style="font-size:.72rem;color:var(--gray-400)">Listed for <strong>{{ $row->listedFor }}</strong> — not this location</div>
+                                    @elseif ($row->listingUrl && $row->chip['key'] === 'missing')
+                                        <div style="font-size:.72rem;color:var(--gray-400)">was at {{ $row->listingUrl }} — no longer found</div>
                                     @elseif ($row->listingUrl)
                                         <div style="font-size:.72rem;color:var(--gray-400)">{{ $row->listingUrl }}{{ $row->chip['key'] === 'needs_review' ? ' · unconfirmed' : '' }}</div>
                                     @endif

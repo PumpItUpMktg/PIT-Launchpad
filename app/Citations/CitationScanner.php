@@ -291,9 +291,11 @@ final class CitationScanner
     }
 
     /**
-     * Age out listings this scan did not find: a previously-present row counts a miss, and after
-     * `lost_after_misses` consecutive misses flips to Absent. Rows confirmed from the platform (GBP) and rows
-     * that are already Absent are left alone; a row found this pass resets its miss count.
+     * Age out listings this scan did not find. SERP absence alone is a weak signal (`site:` results vary run
+     * to run), so a row with a known URL is asked directly first: the page still answers → not lost at all
+     * (miss count reset); the page is gone (404) → Absent now; inconclusive (blocked) → a miss, and after
+     * `lost_after_misses` consecutive misses the row flips to Absent. Rows confirmed from the platform (GBP)
+     * and rows already Absent are left alone; a row found this pass resets its miss count.
      *
      * @param  list<string>  $foundDirectoryIds
      */
@@ -320,9 +322,17 @@ final class CitationScanner
                 continue; // not a miss — the check itself failed this pass
             }
 
+            $url = trim((string) $row->found_url);
+            $stillThere = $url !== '' ? $this->verifier->reachable($url) : null;
+            if ($stillThere === true) {
+                $row->forceFill(['missed_scans' => 0, 'last_scanned_at' => $now])->save();
+
+                continue; // the SERP skipped it this month; the listing itself is still up
+            }
+
             $misses = $row->missed_scans + 1;
             $fill = ['missed_scans' => $misses, 'last_scanned_at' => $now];
-            if ($misses >= $threshold) {
+            if ($stillThere === false || $misses >= $threshold) {
                 $fill += ['presence' => CitationPresence::Absent, 'needs_review' => false, 'mismatch_fields' => null];
             }
             $row->forceFill($fill)->save();
@@ -512,6 +522,13 @@ final class CitationScanner
             'postal' => (string) ($profile->postal ?? ''),
             'phone' => (string) ($profile->phone_primary ?? ''),
         ] : null;
+
+        // A one-page-per-business directory carries the company's NAP, not this location's: only the name
+        // is comparable there — a head-office phone or address is not a mismatch for a branch.
+        if ($canonical !== null && $directory->multi_location_policy === MultiLocationPolicy::OnePerBusiness) {
+            $result['address'] = null;
+            $result['phone'] = null;
+        }
 
         $mismatches = [];
         $needsReview = false;
