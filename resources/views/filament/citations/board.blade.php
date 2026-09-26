@@ -50,6 +50,10 @@
                             @endif
                         </div>
 
+                        @if ($card->unchecked > 0 && ! $card->isScanning())
+                            <p style="margin-top:.6rem;font-size:.78rem;color:#b45309;line-height:1.4">{{ $card->unchecked }} {{ \Illuminate\Support\Str::plural('directory', $card->unchecked) }} could not be checked (a DataForSEO hiccup) — rescan to cover {{ $card->unchecked === 1 ? 'it' : 'them' }}.</p>
+                        @endif
+
                         @if ($card->scanFailed() && $card->lastError)
                             <p style="margin-top:.6rem;font-size:.78rem;color:#b91c1c;line-height:1.4">{{ \Illuminate\Support\Str::limit($card->lastError, 160) }}</p>
                         @endif

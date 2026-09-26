@@ -93,7 +93,10 @@ class RunCitationScan implements ShouldQueue
 
             // Diff pre vs post, write the event ledger, and close the run with the buckets + score.
             $buckets = $differ->record($location, $run, $prior);
-            $recorder->close($run, $location, $buckets, $scoreResult['score']);
+            $unchecked = count($scanner->lastUnchecked());
+            $recorder->close($run, $location, $buckets, $scoreResult['score'], $unchecked > 0 || $scanner->lastFailedCalls() > 0
+                ? ['unchecked_directories' => $unchecked, 'failed_calls' => $scanner->lastFailedCalls()]
+                : []);
         } catch (Throwable $e) {
             $recorder->fail($run, class_basename($e).': '.$e->getMessage());
 

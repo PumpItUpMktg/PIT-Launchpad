@@ -78,6 +78,7 @@ final class TenantCitationBoard
                 scanState: $this->scanState($location),
                 lastScannedAt: $this->lastScannedAt($location),
                 lastError: $this->lastError($location),
+                unchecked: $this->unchecked($location),
             );
         })->all();
     }
@@ -103,6 +104,16 @@ final class TenantCitationBoard
         }
 
         return $latest->error !== null ? 'failed' : 'scanned';
+    }
+
+    /** Directories the latest completed run could not check (a DataForSEO hiccup) — a rescan covers them. */
+    private function unchecked(Location $location): int
+    {
+        $latest = CitationScanRun::query()->withoutGlobalScope(SiteScope::class)
+            ->where('location_id', $location->id)->latest('started_at')->first();
+        $meta = is_array($latest?->meta) ? $latest->meta : [];
+
+        return (int) ($meta['unchecked_directories'] ?? 0);
     }
 
     /** The latest run's failure reason (or a stale-run note), for the failed badge. */

@@ -252,3 +252,29 @@ it('throttles the free reads (tasks_ready / task_get) in their own window, not u
     expect(microtime(true) - $t)->toBeLessThan(5.0);
     HttpFacade::assertSentCount(11);
 });
+
+it('does NOT mark a 40101 "Internal SE Server Error" fatal — it is a transient per-task hiccup', function () {
+    $e = DataForSeoException::envelope(DataForSeoException::SE_ERROR, 'Internal SE Server Error.');
+
+    expect($e->fatal)->toBeFalse()
+        ->and($e->isTransient())->toBeTrue()
+        ->and(DataForSeoException::envelope(40100, 'Auth')->fatal)->toBeTrue();   // neighbours stay fatal
+});
+
+it('retries a 40101 task error once, then surfaces it', function () {
+    HttpFacade::fake([
+        '*/serp/google/organic/live/advanced' => HttpFacade::sequence()
+            ->push(dfsEnvelope([], taskStatus: 40101), 200)
+            ->push(dfsEnvelope([['items' => [['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://a.com/x', 'domain' => 'a.com']]]]), 200),
+    ]);
+
+    expect(dfsClient()->liveOrganic('site:a.com "x"', 2840, 'en', 10))->toHaveCount(1);
+    HttpFacade::assertSentCount(2);
+});
+
+it('surfaces a 40101 that persists past its one retry', function () {
+    HttpFacade::fake(['*' => HttpFacade::response(dfsEnvelope([], taskStatus: 40101), 200)]);
+
+    expect(fn () => dfsClient()->liveOrganic('site:a.com "x"', 2840, 'en', 10))->toThrow(DataForSeoException::class);
+    HttpFacade::assertSentCount(2);
+});

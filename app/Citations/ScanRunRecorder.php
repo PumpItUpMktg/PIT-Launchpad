@@ -49,8 +49,9 @@ final class ScanRunRecorder
 
     /**
      * @param  array{new: int, fixed: int, regressed: int, lost: int}  $buckets
+     * @param  array<string, mixed>  $meta  e.g. unchecked_directories / failed_calls from a partially-failed scan
      */
-    public function close(CitationScanRun $run, Location $location, array $buckets, ?int $score): void
+    public function close(CitationScanRun $run, Location $location, array $buckets, ?int $score, array $meta = []): void
     {
         $statuses = CitationStatus::query()->where('location_id', $location->id)->get();
 
@@ -69,6 +70,7 @@ final class ScanRunRecorder
             'fixed_count' => $buckets['fixed'],
             'regressed_count' => $buckets['regressed'],
             'lost_count' => $buckets['lost'],
+            'meta' => $meta === [] ? null : $meta,
         ])->save();
     }
 }
