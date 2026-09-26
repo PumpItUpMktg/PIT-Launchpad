@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $label
  * @property string $slug
  * @property string|null $silo_id soft reference to the originating silo
+ * @property string|null $service_id soft reference to the Service catalog row it mirrors (source=service)
  * @property JobTypeSource $source
  */
 class JobType extends Model

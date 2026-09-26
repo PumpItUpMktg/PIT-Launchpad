@@ -4,6 +4,7 @@ namespace App\Operator\Jobs;
 
 use App\Enums\JobStatus;
 use App\Filament\Pages\JobsBoard;
+use App\JobCapture\Photos\PhotoUrl;
 use App\JobCapture\Review\JobReviewActions;
 use App\JobCapture\Review\JobStorefrontResolver;
 use App\Models\Job;
@@ -99,16 +100,40 @@ class JobPortfolio
         return Job::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * A review-queue row — everything the workbench card shows: the write-up columns, the applied
+     * services, the photos (CDN url + alt + primary), the placement (operator-only typed address, jittered
+     * public point), and the decision state.
+     *
+     * @return array<string, mixed>
+     */
     private function queueRow(Job $job): array
     {
+        $primary = (int) $job->primary_photo_index;
+        $photos = is_array($job->photos) ? $job->photos : [];
+
         return [
             'id' => (string) $job->id,
             'title' => $this->title($job),
             'client' => (string) $job->client_name_display,
             'place' => $this->place($job),
+            'city' => $job->city?->name,
+            'county' => $job->county?->name,
+            'address' => (string) $job->address_true,
+            'lat' => $job->lat_jittered !== null ? (float) $job->lat_jittered : null,
+            'lng' => $job->lng_jittered !== null ? (float) $job->lng_jittered : null,
+            'pushed' => $job->wp_post_id !== null,
             'services' => $job->jobTypes->pluck('label')->all(),
             'photos' => is_array($job->photos) ? count($job->photos) : 0,
+            'photo_set' => array_map(fn (array $p, int $i): array => [
+                'url' => PhotoUrl::for((string) $p['r2_key']),
+                'alt' => (string) ($p['alt'] ?? ''),
+                'primary' => $i === $primary,
+            ], $photos, array_keys($photos)),
+            'raw' => (string) $job->raw_description,
+            'source' => (string) ($job->source_description ?? $job->raw_description),
+            'enhanced' => (string) $job->enhanced_description,
+            'meta' => (string) $job->meta_description,
             'performed_at' => $job->performed_at?->toFormattedDateString(),
             'status' => $job->status->value,
             'status_label' => $job->status->label(),

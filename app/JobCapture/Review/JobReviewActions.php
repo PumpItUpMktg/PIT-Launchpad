@@ -3,6 +3,8 @@
 namespace App\JobCapture\Review;
 
 use App\Enums\JobStatus;
+use App\JobCapture\Capture\ClientDisplayName;
+use App\JobCapture\Types\JobTypeVocabulary;
 use App\Jobs\EnhanceJob;
 use App\Jobs\PublishJob;
 use App\Jobs\UnpublishJob;
@@ -21,6 +23,8 @@ use App\Models\Job;
  */
 class JobReviewActions
 {
+    public function __construct(private readonly JobTypeVocabulary $vocabulary) {}
+
     /** The operator-editable fields on the review screen (raw_description is intentionally NOT here). */
     private const EDITABLE = ['source_description', 'enhanced_description', 'post_title', 'meta_description'];
 
@@ -77,9 +81,12 @@ class JobReviewActions
 
     /**
      * Save an operator's in-place edits (wording fixes, a corrected AI seed, primary-photo choice, per-photo
-     * alt text). No AI call — that is {@see reEnhance()}. Only whitelisted fields are written.
+     * alt text, the client name, the work date, the applied services). No AI call — that is
+     * {@see reEnhance()}. Only whitelisted fields are written.
      *
-     * @param  array<string, mixed>  $edits  any of EDITABLE, plus `primary_photo_index` and `alts` (list<string>)
+     * @param  array<string, mixed>  $edits  any of EDITABLE, plus `primary_photo_index`, `alts` (list<string>),
+     *                                       `client_name_full` (display name re-derived), `performed_at` (Y-m-d|null),
+     *                                       and `job_types` (list of labels or {label, slug?, job_type_id?})
      */
     public function saveEdits(Job $job, array $edits): void
     {
@@ -104,8 +111,23 @@ class JobReviewActions
             $fill['photos'] = $photos ?: null;
         }
 
+        if (array_key_exists('client_name_full', $edits)) {
+            $full = trim((string) $edits['client_name_full']);
+            $fill['client_name_full'] = $full !== '' ? $full : null;
+            $fill['client_name_display'] = ClientDisplayName::from($full);
+        }
+
+        if (array_key_exists('performed_at', $edits)) {
+            $date = trim((string) $edits['performed_at']);
+            $fill['performed_at'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1 ? $date : null;
+        }
+
         if ($fill !== []) {
             $job->forceFill($fill)->save();
+        }
+
+        if (array_key_exists('job_types', $edits) && is_array($edits['job_types'])) {
+            $this->vocabulary->apply($job, array_values($edits['job_types']));
         }
     }
 }

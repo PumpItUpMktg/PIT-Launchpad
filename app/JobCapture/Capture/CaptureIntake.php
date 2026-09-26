@@ -6,6 +6,7 @@ use App\Enums\JobSource;
 use App\Enums\JobStatus;
 use App\Integrations\Census\Geocoder;
 use App\JobCapture\Photos\JobPhotoStore;
+use App\JobCapture\Types\JobTypeVocabulary;
 use App\Jobs\EnhanceJob;
 use App\Jobs\ResolveJobGeography;
 use App\Models\Job;
@@ -24,6 +25,7 @@ final class CaptureIntake
     public function __construct(
         private readonly JobPhotoStore $photos,
         private readonly Geocoder $geocoder,
+        private readonly JobTypeVocabulary $vocabulary,
     ) {}
 
     public function capture(TechDevice $device, CaptureData $data): Job
@@ -87,14 +89,11 @@ final class CaptureIntake
         $job->forceFill(['photos' => $this->photos->store($site, $job, $data->photos, Job::MAX_PHOTOS)])->save();
     }
 
+    /** Snapshot the applied types, linked to the vocabulary where a label matches. */
     private function snapshotJobTypes(Job $job, CaptureData $data): void
     {
-        foreach (array_slice($data->jobTypes, 0, Job::MAX_JOB_TYPES) as $type) {
-            $job->jobTypes()->create([
-                'job_type_id' => $type['job_type_id'] ?? null,
-                'label' => $type['label'],
-                'slug' => $type['slug'],
-            ]);
+        foreach ($this->vocabulary->resolve((string) $job->site_id, $data->jobTypes) as $type) {
+            $job->jobTypes()->create($type);
         }
     }
 }

@@ -7,6 +7,7 @@ use App\JobCapture\Capture\CaptureData;
 use App\JobCapture\Capture\CaptureIntake;
 use App\Jobs\ResolveJobGeography;
 use App\Models\Job;
+use App\Models\Service;
 use App\Models\TechDevice;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -110,4 +111,34 @@ test('the API accepts a past job with an address and date, reports whether it wa
     // No address, no fix → not placed (the office sets the location in review).
     $this->withToken($token)->postJson('/capture/api/jobs', ['raw_description' => 'walk-in'])
         ->assertCreated()->assertJson(['placed' => false]);
+});
+
+test('the phone fetches the site\'s pickable services and a tagged capture links to the vocabulary', function () {
+    Storage::fake('r2');
+    Queue::fake();
+    $device = TechDevice::factory()->create();
+    Service::factory()->create(['site_id' => $device->site_id, 'name' => 'Sump Pump Replacement']);
+    Service::factory()->create(['name' => 'Another Tenant Service']); // never offered to this device
+    $token = techToken($device);
+
+    $options = $this->withToken($token)->getJson('/capture/api/options')
+        ->assertOk()
+        ->assertJsonCount(1, 'job_types')
+        ->assertJsonPath('job_types.0.label', 'Sump Pump Replacement')
+        ->json('job_types');
+
+    $response = $this->withToken($token)->postJson('/capture/api/jobs', [
+        'raw_description' => 'Replaced the pump.',
+        'job_types' => [
+            ['label' => $options[0]['label'], 'slug' => $options[0]['slug'], 'job_type_id' => $options[0]['id']],
+            ['label' => 'Gutter Cleanup', 'slug' => 'gutter-cleanup'],
+        ],
+    ])->assertCreated();
+
+    $job = Job::withoutGlobalScopes()->find($response->json('id'));
+    expect($job->jobTypes()->orderBy('label')->pluck('label')->all())->toBe(['Gutter Cleanup', 'Sump Pump Replacement'])
+        ->and($job->jobTypes()->where('slug', 'sump-pump-replacement')->value('job_type_id'))->toBe($options[0]['id'])
+        ->and($job->jobTypes()->where('slug', 'gutter-cleanup')->value('job_type_id'))->toBeNull();
+
+    $this->withoutToken()->getJson('/capture/api/options')->assertUnauthorized();
 });

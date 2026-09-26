@@ -63,6 +63,7 @@ Route::prefix('capture/api')->group(function (): void {
 
     Route::middleware('tech.device')->group(function (): void {
         Route::get('jobs', [CaptureController::class, 'index']);
+        Route::get('options', [CaptureController::class, 'options']);
         Route::post('jobs', [CaptureController::class, 'store']);
     });
 });

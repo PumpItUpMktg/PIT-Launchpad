@@ -3,7 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\JobStatus;
-use App\JobCapture\Review\JobReviewActions;
+use App\Filament\Concerns\ReviewsJobs;
 use App\Jobs\PublishJob;
 use App\Jobs\UnpublishJob;
 use App\Models\Job;
@@ -11,23 +11,26 @@ use App\Models\Scopes\SiteScope;
 use App\Models\User;
 use App\Operator\ActiveTenant;
 use App\Operator\Jobs\JobPortfolio;
+use App\Security\Capability;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Livewire\WithFileUploads;
 
 /**
- * Jobs (operator) — the tenant's Job-Capture work in one place: the review **queue** (jobs an operator
- * still has to act on) and the **published** body of work (+ the publish pipeline). The in-panel port of
- * the Operations Console's Job Review + Published Jobs, folded onto the operator lock: tenant-locked
- * (reads {@see ActiveTenant}, no per-page site picker), operator-only. Read data + actions come from the
- * existing Job-Capture services ({@see JobPortfolio}, {@see JobReviewActions}), so the semantics live in
- * one place; the render path stays HTTP-free.
+ * Jobs (operator) — the tenant's Job-Capture work in one place: the review **queue** (the full workbench:
+ * edit, services, photos, re-place, approve/reject, add a previous job, CSV import) and the **published**
+ * body of work (+ the publish pipeline). Tenant-locked (reads {@see ActiveTenant}, no per-page site
+ * picker), operator-only. Read data comes from {@see JobPortfolio}; the actions are the shared
+ * {@see ReviewsJobs} workbench, so the semantics live in one place; the render path stays HTTP-free.
  *
  * @property-read array{summary: array<string, int>, queue: list<array<string, mixed>>, published: list<array<string, mixed>>, pipeline: list<array<string, mixed>>} $board
  */
 class JobsBoard extends Page
 {
+    use ReviewsJobs, WithFileUploads;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-wrench-screwdriver';
 
     protected static ?string $navigationLabel = 'Jobs';
@@ -42,11 +45,6 @@ class JobsBoard extends Page
 
     /** Which view is showing: 'queue' (review backlog) or 'published' (live body + pipeline). */
     public string $tab = 'queue';
-
-    /** Inline reject flow — the id being rejected + its reason (mirrors the Console review screen). */
-    public ?string $rejectingId = null;
-
-    public string $rejectReason = '';
 
     public function mount(): void
     {
@@ -80,58 +78,6 @@ class JobsBoard extends Page
         $this->cancelReject();
     }
 
-    // Queue actions — thin over JobReviewActions (each resolves the job WITHIN the locked tenant) --------
-
-    public function approve(string $id): void
-    {
-        $job = $this->ownedJob($id);
-        if ($job === null) {
-            return;
-        }
-
-        if (app(JobReviewActions::class)->approve($job)) {
-            Notification::make()->title('Approved — queued for publishing.')->success()->send();
-        } else {
-            Notification::make()->title('Not approvable yet — it needs a write-up.')->warning()->send();
-        }
-    }
-
-    public function reEnhance(string $id): void
-    {
-        $job = $this->ownedJob($id);
-        if ($job === null) {
-            return;
-        }
-
-        app(JobReviewActions::class)->reEnhance($job);
-        Notification::make()->title('Re-queued for enhancement.')->success()->send();
-    }
-
-    public function startReject(string $id): void
-    {
-        $this->rejectingId = $id;
-        $this->rejectReason = '';
-    }
-
-    public function cancelReject(): void
-    {
-        $this->rejectingId = null;
-        $this->rejectReason = '';
-    }
-
-    public function confirmReject(): void
-    {
-        if ($this->rejectingId === null) {
-            return;
-        }
-        $job = $this->ownedJob($this->rejectingId);
-        if ($job !== null) {
-            app(JobReviewActions::class)->reject($job, $this->rejectReason);
-            Notification::make()->title('Rejected.')->success()->send();
-        }
-        $this->cancelReject();
-    }
-
     // Published/pipeline actions — mirror the Console's PublishedJobs (idempotent by ULID) --------------
 
     public function retryPublish(string $id): void
@@ -159,8 +105,21 @@ class JobsBoard extends Page
         Notification::make()->title('Taking the job down from WordPress.')->success()->send();
     }
 
+    public function can(Capability $capability): bool
+    {
+        return Auth::user()?->hasCapability($capability) ?? false;
+    }
+
+    protected function user(): User
+    {
+        $user = Auth::user();
+        abort_unless($user instanceof User, 403);
+
+        return $user;
+    }
+
     /** Resolve a job strictly within the locked tenant — never cross-tenant. */
-    private function ownedJob(string $id): ?Job
+    protected function ownedJob(string $id): ?Job
     {
         if ($this->siteId === null) {
             return null;

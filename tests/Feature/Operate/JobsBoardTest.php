@@ -3,16 +3,21 @@
 use App\Enums\JobStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\JobsBoard;
+use App\Integrations\Census\Geocoder;
+use App\Integrations\Census\GeocodeResult;
 use App\Jobs\EnhanceJob;
 use App\Jobs\PublishJob;
 use App\Jobs\UnpublishJob;
 use App\Models\Job;
+use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\ActiveTenant;
 use App\Operator\Jobs\JobPortfolio;
 use Filament\Facades\Filament;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -142,4 +147,123 @@ it('renders tenant-locked with jobs and no per-page site picker', function () {
     expect($html)->toContain('Sump pump swap in Trenton')
         ->and($html)->toContain('Review queue')
         ->and($html)->not->toContain('<select'); // tenant comes from the lock
+});
+
+// ── The workbench (add / import / edit / photos) on the admin board ─────────────────────────────
+
+function bindBoardGeocoder(): void
+{
+    app()->instance(Geocoder::class, new class implements Geocoder
+    {
+        public function geocode(string $address): ?GeocodeResult
+        {
+            return new GeocodeResult(40.5, -74.4, $address);
+        }
+    });
+}
+
+it('offers the site services as pickable job types (synced from the catalog)', function () {
+    $site = Site::factory()->create();
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Replacement']);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'French Drain']);
+    app(ActiveTenant::class)->set($site->id);
+
+    $html = Livewire::test(JobsBoard::class)->call('toggleAddJob')->assertOk()->html();
+
+    expect($html)->toContain('Sump Pump Replacement')->toContain('French Drain')->toContain('Import CSV');
+});
+
+it('adds a previous job from the board with services picked from the catalog', function () {
+    Bus::fake();
+    bindBoardGeocoder();
+    $site = Site::factory()->create();
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Replacement']);
+    app(ActiveTenant::class)->set($site->id);
+
+    Livewire::test(JobsBoard::class)
+        ->call('toggleAddJob')
+        ->set('newClientName', 'Jane Homeowner')
+        ->set('newAddress', '12 Main St, Somerville NJ')
+        ->set('newPerformedAt', '2025-05-20')
+        ->set('newJobTypeLabels', ['Sump Pump Replacement'])
+        ->set('newJobTypesOther', 'Gutter cleanup')
+        ->set('newDescription', 'Replaced the pump.')
+        ->call('addJob')
+        ->assertSet('addingJob', false);
+
+    $job = Job::withoutGlobalScopes()->where('site_id', $site->id)->first();
+    expect($job)->not->toBeNull()
+        ->and($job->client_name_display)->toBe('Jane H.')
+        ->and($job->performed_at->toDateString())->toBe('2025-05-20')
+        ->and($job->jobTypes()->orderBy('label')->pluck('label')->all())->toBe(['Gutter cleanup', 'Sump Pump Replacement'])
+        ->and($job->jobTypes()->where('slug', 'sump-pump-replacement')->value('job_type_id'))->not->toBeNull();
+});
+
+it('imports a CSV from the board and matches service_types to the catalog', function () {
+    Bus::fake();
+    bindBoardGeocoder();
+    $site = Site::factory()->create();
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Replacement']);
+    app(ActiveTenant::class)->set($site->id);
+    $csv = "client_name,address,performed_at,service_types,description\nJane Homeowner,\"12 Main St\",2025-06-01,sump pump replacement;French Drain,Replaced the pump.\nJohn Q,\"9 Oak Ave\",,,\n";
+
+    Livewire::test(JobsBoard::class)
+        ->set('csvFile', UploadedFile::fake()->createWithContent('jobs.csv', $csv))
+        ->call('importCsv');
+
+    $jobs = Job::withoutGlobalScopes()->where('site_id', $site->id)->get();
+    expect($jobs)->toHaveCount(2);
+    $jane = $jobs->firstWhere('client_name_full', 'Jane Homeowner');
+    expect($jane->jobTypes()->orderBy('label')->pluck('label')->all())->toBe(['French Drain', 'Sump Pump Replacement'])
+        ->and($jane->jobTypes()->where('slug', 'sump-pump-replacement')->value('job_type_id'))->not->toBeNull();
+});
+
+it('edits a queued job in place: client, date, services, write-up', function () {
+    $site = Site::factory()->create();
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'French Drain']);
+    app(ActiveTenant::class)->set($site->id);
+    $job = reviewJob($site);
+    $job->jobTypes()->create(['label' => 'Old Type', 'slug' => 'old-type']);
+
+    Livewire::test(JobsBoard::class)
+        ->call('startEdit', $job->id)
+        ->assertSet('editJobTypesOther', 'Old Type')     // a non-catalog type shows in the free-text box
+        ->set('editClientName', 'Jane Homeowner')
+        ->set('editPerformedAt', '2025-04-14')
+        ->set('editJobTypeLabels', ['French Drain'])
+        ->set('editJobTypesOther', '')
+        ->set('editTitle', 'Drain fixed')
+        ->call('saveEdits')
+        ->assertSet('editingId', null);
+
+    $job->refresh();
+    expect($job->client_name_display)->toBe('Jane H.')
+        ->and($job->performed_at->toDateString())->toBe('2025-04-14')
+        ->and($job->post_title)->toBe('Drain fixed')
+        ->and($job->jobTypes()->pluck('label')->all())->toBe(['French Drain']);
+});
+
+it('attaches uploaded photos to a queued job from the board', function () {
+    Storage::fake('r2');
+    $site = Site::factory()->create();
+    app(ActiveTenant::class)->set($site->id);
+    $job = reviewJob($site);
+
+    Livewire::test(JobsBoard::class)
+        ->set('jobPhotos.'.$job->id, [UploadedFile::fake()->image('after.jpg', 20, 20)])
+        ->call('attachPhotos', $job->id);
+
+    expect($job->refresh()->photos)->toHaveCount(1);
+});
+
+it('renders the workbench card with photos, services, and the write-up columns', function () {
+    $site = Site::factory()->create();
+    app(ActiveTenant::class)->set($site->id);
+    $job = reviewJob($site);
+    $job->forceFill(['photos' => [['r2_key' => 'k1', 'alt' => 'The new pump']], 'raw_description' => 'tech notes here'])->save();
+    $job->jobTypes()->create(['label' => 'Sump Pump Replacement', 'slug' => 'sump-pump-replacement']);
+
+    $html = Livewire::test(JobsBoard::class)->assertOk()->html();
+
+    expect($html)->toContain('Sump Pump Replacement')->toContain('tech notes here')->toContain('Add photos')->toContain('Re-place');
 });
