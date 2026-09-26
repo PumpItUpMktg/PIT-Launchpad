@@ -77,23 +77,47 @@ final class TenantCitationBoard
                 coveragePercent: $eligibleCount > 0 ? (int) round(100 * $live / $eligibleCount) : null,
                 scanState: $this->scanState($location),
                 lastScannedAt: $this->lastScannedAt($location),
+                lastError: $this->lastError($location),
             );
         })->all();
     }
 
-    /** @return 'never'|'scanned'|'scanning' */
+    /**
+     * The scan state from the run ledger. 'scanning' only while a run is open AND younger than the stale
+     * threshold — an open run older than that is a worker that died, shown as failed, never as scanning
+     * forever. 'failed' when the latest run closed with an error (a later clean run clears it).
+     *
+     * @return 'never'|'scanned'|'scanning'|'failed'
+     */
     private function scanState(Location $location): string
     {
-        $running = CitationScanRun::query()->withoutGlobalScope(SiteScope::class)
-            ->where('location_id', $location->id)->whereNull('finished_at')->exists();
-        if ($running) {
-            return 'scanning';
+        $latest = CitationScanRun::query()->withoutGlobalScope(SiteScope::class)
+            ->where('location_id', $location->id)->latest('started_at')->first();
+        if ($latest === null) {
+            return 'never';
         }
 
-        $any = CitationScanRun::query()->withoutGlobalScope(SiteScope::class)
-            ->where('location_id', $location->id)->exists();
+        $staleMinutes = max(1, (int) config('launchpad.citations.stale_run_minutes', 30));
+        if ($latest->finished_at === null) {
+            return $latest->started_at->gt(Carbon::now()->subMinutes($staleMinutes)) ? 'scanning' : 'failed';
+        }
 
-        return $any ? 'scanned' : 'never';
+        return $latest->error !== null ? 'failed' : 'scanned';
+    }
+
+    /** The latest run's failure reason (or a stale-run note), for the failed badge. */
+    private function lastError(Location $location): ?string
+    {
+        $latest = CitationScanRun::query()->withoutGlobalScope(SiteScope::class)
+            ->where('location_id', $location->id)->latest('started_at')->first();
+        if ($latest === null) {
+            return null;
+        }
+        if ($latest->finished_at === null) {
+            return 'The scan never finished — the queue worker may have stopped. Rescan.';
+        }
+
+        return $latest->error;
     }
 
     private function lastScannedAt(Location $location): ?Carbon

@@ -6,6 +6,7 @@ use App\Citations\CitationDiffer;
 use App\Citations\CitationLifecycle;
 use App\Citations\CitationReconciler;
 use App\Citations\CitationScanner;
+use App\Citations\DirectoryCatalog;
 use App\Citations\LocalPresenceScore;
 use App\Citations\PlatformCitationConfirmer;
 use App\Citations\ScanRunRecorder;
@@ -15,6 +16,7 @@ use App\Models\Scopes\SiteScope;
 use App\Support\CurrentSite;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Throwable;
 
 /**
  * Runs the monthly citation scan for one location on the queue (§ Citations). Idempotent by
@@ -23,7 +25,9 @@ use Illuminate\Foundation\Queue\Queueable;
  *
  * The run is wrapped in a {@see ScanRunRecorder} + {@see CitationDiffer} (PR4): the location's states are
  * captured BEFORE the scan mutates them, then diffed after, so the run records what changed this month
- * (new / fixed / regressed / lost) and the event ledger gains a row per transition.
+ * (new / fixed / regressed / lost) and the event ledger gains a row per transition. A run that throws (a
+ * DataForSEO error, a bad credential) or is killed by the timeout is CLOSED as failed with the reason — the
+ * board reads it as "scan failed", never as "scanning…" forever.
  */
 class RunCitationScan implements ShouldQueue
 {
@@ -63,29 +67,46 @@ class RunCitationScan implements ShouldQueue
             ->mapWithKeys(fn (CitationStatus $s): array => [(string) $s->directory_id => $s->presence])
             ->all();
 
+        DirectoryCatalog::ensureSeeded();
+
         $run = $recorder->open($location, $this->trigger);
 
-        $scanner->scanLocation($location);
+        try {
+            $scanner->scanLocation($location);
 
-        if ($this->sweepSharedNumbers) {
-            $scanner->sweepSharedNumbers((string) $location->site_id);
+            if ($this->sweepSharedNumbers) {
+                $scanner->sweepSharedNumbers((string) $location->site_id);
+            }
+
+            // Turn the applicable-but-unfound directories into tracked gaps.
+            $reconciler->reconcile($location);
+
+            // Confirm platform-integration listings (GBP) from the location's own data — after reconcile so it
+            // wins over "unfound → gap" (the organic scan can't see the Google map listing as a result domain).
+            $confirmer->confirm($location);
+
+            // Advance any awaiting-verification citations against what this pass actually found.
+            $lifecycle->verify($location, $run->started_at);
+
+            // Snapshot the resulting score after lifecycle + reconcile settle.
+            $scoreResult = $score->snapshot($location);
+
+            // Diff pre vs post, write the event ledger, and close the run with the buckets + score.
+            $buckets = $differ->record($location, $run, $prior);
+            $recorder->close($run, $location, $buckets, $scoreResult['score']);
+        } catch (Throwable $e) {
+            $recorder->fail($run, $e::class.': '.$e->getMessage());
+
+            throw $e;
         }
+    }
 
-        // Turn the applicable-but-unfound directories into tracked gaps.
-        $reconciler->reconcile($location);
-
-        // Confirm platform-integration listings (GBP) from the location's own data — after reconcile so it
-        // wins over "unfound → gap" (the organic scan can't see the Google map listing as a result domain).
-        $confirmer->confirm($location);
-
-        // Advance any awaiting-verification citations against what this pass actually found.
-        $lifecycle->verify($location, $run->started_at);
-
-        // Snapshot the resulting score after lifecycle + reconcile settle.
-        $scoreResult = $score->snapshot($location);
-
-        // Diff pre vs post, write the event ledger, and close the run with the buckets + score.
-        $buckets = $differ->record($location, $run, $prior);
-        $recorder->close($run, $location, $buckets, $scoreResult['score']);
+    /** The worker killed the job (timeout) or it failed outside handle(): close any open run for the location. */
+    public function failed(?Throwable $exception = null): void
+    {
+        app(ScanRunRecorder::class)->failOpenRuns(
+            $this->locationId,
+            $exception !== null ? $exception::class.': '.$exception->getMessage() : 'Scan job failed (timed out or the worker died).',
+        );
     }
 }

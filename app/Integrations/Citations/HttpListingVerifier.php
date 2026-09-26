@@ -40,13 +40,20 @@ final class HttpListingVerifier implements ListingVerifier
         return $phone !== null ? new VerifiedListing(phone: $phone) : null;
     }
 
-    /** Parse the first schema.org business node carrying a phone or address out of the page's JSON-LD blocks. */
+    /**
+     * Parse the richest schema.org business node out of the page's JSON-LD blocks — one carrying BOTH a phone
+     * and a postal address beats an address-only node beats a phone-only one. (A directory's own Organization
+     * node usually has a name and a phone but no PostalAddress; the listing's LocalBusiness node has all three,
+     * so it wins and the directory's name is never mistaken for the business's.)
+     */
     private function fromJsonLd(string $html): ?VerifiedListing
     {
         if (! preg_match_all('#<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>#is', $html, $matches)) {
             return null;
         }
 
+        $best = null;
+        $bestScore = 0;
         foreach ($matches[1] as $block) {
             $decoded = json_decode(trim($block), true);
             if (! is_array($decoded)) {
@@ -58,13 +65,15 @@ final class HttpListingVerifier implements ListingVerifier
                 $address = $this->flattenAddress($node['address'] ?? null);
                 $name = trim((string) ($node['name'] ?? '')) ?: null;
 
-                if ($phone !== null || $address !== null) {
-                    return new VerifiedListing(name: $name, address: $address, phone: $phone);
+                $score = ($address !== null ? 2 : 0) + ($phone !== null ? 1 : 0);
+                if ($score > $bestScore) {
+                    $bestScore = $score;
+                    $best = new VerifiedListing(name: $name, address: $address, phone: $phone);
                 }
             }
         }
 
-        return null;
+        return $best;
     }
 
     /**

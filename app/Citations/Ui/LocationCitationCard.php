@@ -13,7 +13,7 @@ use Illuminate\Support\Carbon;
 final readonly class LocationCitationCard
 {
     /**
-     * @param  'never'|'scanned'|'scanning'  $scanState
+     * @param  'never'|'scanned'|'scanning'|'failed'  $scanState
      * @param  array<string, mixed>  $nap
      */
     public function __construct(
@@ -31,7 +31,13 @@ final readonly class LocationCitationCard
         public ?int $coveragePercent,
         public string $scanState,
         public ?Carbon $lastScannedAt,
+        public ?string $lastError = null,
     ) {}
+
+    public function scanFailed(): bool
+    {
+        return $this->scanState === 'failed';
+    }
 
     public function isScanning(): bool
     {

@@ -1,5 +1,9 @@
 <x-filament-panels::page>
     @php($cards = $this->board)
+    @php($anyScanning = collect($cards)->contains(fn ($c) => $c->isScanning()))
+
+    {{-- While a scan is running, refresh so the card moves off "Scanning…" on its own. --}}
+    <div @if ($anyScanning) wire:poll.10s @endif></div>
 
     <div style="display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
         <x-filament::button wire:click="scanAll" icon="heroicon-o-magnifying-glass" wire:loading.attr="disabled">
@@ -35,12 +39,20 @@
                             </div>
                             @if ($card->isScanning())
                                 <x-filament::badge color="info">Scanning…</x-filament::badge>
+                            @elseif ($card->scanFailed())
+                                <x-filament::badge color="danger" title="{{ $card->lastError }}">Scan failed</x-filament::badge>
                             @elseif ($card->neverScanned())
                                 <x-filament::badge color="gray">Never scanned</x-filament::badge>
+                            @elseif ($card->coveragePercent === null)
+                                <x-filament::badge color="warning">No directories apply</x-filament::badge>
                             @else
                                 <x-filament::badge color="success">{{ $card->coveragePercent }}% live</x-filament::badge>
                             @endif
                         </div>
+
+                        @if ($card->scanFailed() && $card->lastError)
+                            <p style="margin-top:.6rem;font-size:.78rem;color:#b91c1c;line-height:1.4">{{ \Illuminate\Support\Str::limit($card->lastError, 160) }}</p>
+                        @endif
 
                         @if (! $card->neverScanned() && $card->eligible > 0)
                             @php($seg = fn ($n) => $card->eligible > 0 ? (100 * $n / $card->eligible) : 0)
@@ -75,7 +87,7 @@
                             <a href="{{ \App\Filament\Pages\Citations\CitationsWorkspace::getUrl(['location' => $card->locationId]) }}"
                                style="font-size:.82rem;color:var(--primary-600)">Open workspace →</a>
                             <x-filament::button size="sm" wire:click="launchScan('{{ $card->locationId }}')" wire:loading.attr="disabled">
-                                {{ $card->neverScanned() ? 'Launch first scan' : ($card->isScanning() ? 'Scanning…' : 'Rescan') }}
+                                {{ $card->neverScanned() ? 'Launch first scan' : ($card->isScanning() ? 'Scanning…' : ($card->scanFailed() ? 'Retry scan' : 'Rescan')) }}
                             </x-filament::button>
                         </div>
                     </x-filament::section>

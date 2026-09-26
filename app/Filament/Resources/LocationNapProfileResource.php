@@ -55,11 +55,11 @@ class LocationNapProfileResource extends Resource
             Select::make('location_id')->relationship('location', 'name')->required()->searchable()
                 ->helperText('One profile per location. This is the canonical NAP for that GBP.'),
             TextInput::make('business_name')->required(),
-            TextInput::make('address_1')->label('Address line 1')->required(),
+            TextInput::make('address_1')->label('Address line 1')->helperText('Leave blank for a service-area business with a hidden address.'),
             TextInput::make('address_2')->label('Address line 2'),
             TextInput::make('city')->required(),
             TextInput::make('state')->required()->maxLength(20),
-            TextInput::make('postal')->required()->maxLength(20),
+            TextInput::make('postal')->maxLength(20),
             TextInput::make('phone_primary')->required()->helperText('The location\'s own local number — canonical. Never a shared/toll-free line.'),
             TextInput::make('phone_secondary')->helperText('Shared/corporate/toll-free — acceptable but never primary.'),
             TextInput::make('website_url')->url(),

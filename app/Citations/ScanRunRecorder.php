@@ -27,6 +27,27 @@ final class ScanRunRecorder
     }
 
     /**
+     * Close a run that blew up (a DataForSEO error, a timeout) with the reason, so the board can say "scan
+     * failed" instead of "scanning…" forever. Idempotent — an already-closed run is left alone.
+     */
+    public function fail(CitationScanRun $run, string $error): void
+    {
+        if ($run->finished_at !== null) {
+            return;
+        }
+        $run->forceFill(['finished_at' => Carbon::now(), 'error' => mb_substr(trim($error), 0, 1000)])->save();
+    }
+
+    /** Close every still-open run for a location as failed (a worker that died mid-scan leaves one behind). */
+    public function failOpenRuns(string $locationId, string $error): void
+    {
+        CitationScanRun::query()->withoutGlobalScopes()
+            ->where('location_id', $locationId)->whereNull('finished_at')
+            ->get()
+            ->each(fn (CitationScanRun $run) => $this->fail($run, $error));
+    }
+
+    /**
      * @param  array{new: int, fixed: int, regressed: int, lost: int}  $buckets
      */
     public function close(CitationScanRun $run, Location $location, array $buckets, ?int $score): void

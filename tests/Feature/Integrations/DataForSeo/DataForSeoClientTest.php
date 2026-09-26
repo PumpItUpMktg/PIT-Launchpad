@@ -95,7 +95,7 @@ it('parses organic results and ignores non-organic SERP items', function () {
     $out = dfsClient()->liveOrganic('drain cleaning', 2840, 'en', 20);
 
     expect($out)->toHaveCount(2)
-        ->and($out[0])->toBe(['position' => 2, 'url' => 'https://a.com/x', 'domain' => 'a.com']);
+        ->and($out[0])->toBe(['position' => 2, 'url' => 'https://a.com/x', 'domain' => 'a.com', 'title' => '']);
 });
 
 it('parses local maps items', function () {

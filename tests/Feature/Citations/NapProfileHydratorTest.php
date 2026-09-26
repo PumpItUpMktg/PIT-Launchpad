@@ -81,7 +81,7 @@ test('it parses a suite into address line 2', function (): void {
 });
 
 test('it skips creation when Google is missing a required field', function (): void {
-    // No street_number / route → address_1 blank → cannot build a valid NAP.
+    // No phone → cannot build a NAP (a street line / ZIP are optional: service-area businesses hide them).
     $location = gbpBackedLocation([
         'address_components' => [
             ['long_name' => 'Austin', 'types' => ['locality']],
@@ -93,8 +93,8 @@ test('it skips creation when Google is missing a required field', function (): v
     $result = app(NapProfileHydrator::class)->hydrate($location);
 
     expect($result->skipped())->toBeTrue()
-        ->and($result->missing)->toContain('address_1')
-        ->and($result->missing)->toContain('postal')
+        ->and($result->missing)->not->toContain('address_1')
+        ->and($result->missing)->not->toContain('postal')
         ->and($result->missing)->toContain('phone_primary')
         ->and(LocationNapProfile::query()->withoutGlobalScope(SiteScope::class)
             ->where('location_id', $location->id)->exists())->toBeFalse();
@@ -188,4 +188,23 @@ test('it is a noop when the existing NAP is already complete', function (): void
 
     expect($result->changed())->toBeFalse()
         ->and($result->outcome)->toBe('noop');
+});
+
+test('a service-area business (hidden street address on Google) still gets a canonical NAP', function (): void {
+    $location = gbpBackedLocation([
+        'address_components' => [
+            ['long_name' => 'Austin', 'types' => ['locality']],
+            ['long_name' => 'Texas', 'short_name' => 'TX', 'types' => ['administrative_area_level_1']],
+        ],
+    ]);
+
+    $result = app(NapProfileHydrator::class)->hydrate($location);
+
+    $profile = LocationNapProfile::query()->withoutGlobalScope(SiteScope::class)->where('location_id', $location->id)->first();
+    expect($result->created())->toBeTrue()
+        ->and($profile)->not->toBeNull()
+        ->and($profile->address_1)->toBeNull()
+        ->and($profile->postal)->toBeNull()
+        ->and($profile->city)->toBe('Austin')
+        ->and($profile->phone_primary)->toBe('+15125550142');
 });
