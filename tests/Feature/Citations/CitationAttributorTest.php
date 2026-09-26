@@ -61,3 +61,21 @@ test('a tie between two siblings is parked as ambiguous', function (): void {
 
     expect($result->ambiguous)->toBeTrue();
 });
+
+test('a page the scanner cannot read is attributed by the town its URL or title names — one town only', function () use ($siblings): void {
+    // Clifton in the slug → Clifton's, at medium confidence (above the floor, below a phone match).
+    $bySlug = $this->attr->attribute(['url' => 'https://www.yelp.com/biz/acme-plumbing-clifton', 'title' => 'ACME Plumbing'], $siblings);
+    expect($bySlug->locationId)->toBe('loc-a')->and($bySlug->ambiguous)->toBeFalse()->and($bySlug->confidence)->toBe(35);
+
+    // Paramus in the SERP title → Paramus's.
+    $byTitle = $this->attr->attribute(['url' => 'https://nextdoor.com/pages/acme-plumbing-1', 'title' => 'ACME Plumbing - Paramus, NJ'], $siblings);
+    expect($byTitle->locationId)->toBe('loc-b')->and($byTitle->ambiguous)->toBeFalse();
+
+    // Both towns named → no owner from the URL → still ambiguous, never guessed.
+    $both = $this->attr->attribute(['url' => 'https://dir.test/acme-plumbing-clifton-paramus', 'title' => ''], $siblings);
+    expect($both->ambiguous)->toBeTrue();
+
+    // A scraped phone still outranks the slug: the page says Clifton but the number is Paramus's.
+    $phoneWins = $this->attr->attribute(['url' => 'https://dir.test/acme-plumbing-clifton', 'phone' => '201-222-2222'], $siblings);
+    expect($phoneWins->locationId)->toBe('loc-b');
+});

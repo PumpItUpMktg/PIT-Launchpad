@@ -28,5 +28,7 @@ final readonly class WorkspaceRow
         public ?Carbon $lastCheckedAt,
         public bool $eligible,
         public int $sortRank,
+        /** The sibling location this directory's found page belongs to (the URL is theirs, not this location's). */
+        public ?string $listedFor = null,
     ) {}
 }

@@ -4,6 +4,7 @@ namespace App\Citations;
 
 use App\Enums\CitationPresence;
 use App\Enums\CitationSource;
+use App\Enums\MultiLocationPolicy;
 use App\Integrations\Citations\ListingVerifier;
 use App\Integrations\Citations\NullListingVerifier;
 use App\Integrations\DataForSeo\DataForSeoClient;
@@ -50,7 +51,7 @@ final class CitationScanner
     private const MAX_CANDIDATES = 3;
 
     /** URL path fragments that mark a directory's own search / browse page rather than one listing. */
-    private const NON_LISTING_PATHS = ['/search', '/find', '/results', '/s?', 'find_desc=', '?q=', '/browse', '/category/', '/categories/', '/directory/'];
+    private const NON_LISTING_PATHS = ['/search', '/find', '/results', '/s?', 'find_desc=', '?q=', '/browse', '/category/', '/categories/', '/directory/', 'companylist', '/near-me', '/best-'];
 
     /** Directory ids whose presence check could not be made this scan (a failed call) — never aged out. @var list<string> */
     private array $unchecked = [];
@@ -114,7 +115,7 @@ final class CitationScanner
             // first never hides this location's own listing.
             $result = $this->pickOwnListing($location, $directory, $result, $siblings, $sharedPhones);
 
-            $this->writeStatus($location, $directory->id, $result, $siblings, $sharedPhones);
+            $this->writeStatus($location, $directory, $result, $siblings, $sharedPhones);
             $foundDirectoryIds[] = (string) $directory->id;
             $written++;
         }
@@ -175,8 +176,8 @@ final class CitationScanner
      * not a search/browse page, and names the brand in its title or URL. Capped per scan (each is one call).
      *
      * @param  Collection<int, Directory>  $applicable
-     * @param  array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}>  $found
-     * @return array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}>
+     * @param  array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<array{url: string, title: string}>}>  $found
+     * @return array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<array{url: string, title: string}>}>
      *
      * @phpstan-impure writes the call ledger + unchecked list
      */
@@ -218,7 +219,7 @@ final class CitationScanner
                 if (! $this->looksLikeListing($url, $title, $name)) {
                     continue;
                 }
-                $candidates[] = ['domain' => $rowDomain, 'url' => $url, 'city' => $city !== '' && $this->mentions($title.' '.$url, $city)];
+                $candidates[] = ['domain' => $rowDomain, 'url' => $url, 'title' => $title, 'city' => $city !== '' && $this->mentions($title.' '.$url, $city)];
                 if (count($candidates) >= self::MAX_CANDIDATES) {
                     break;
                 }
@@ -231,10 +232,11 @@ final class CitationScanner
             usort($candidates, fn (array $a, array $b): int => (int) $b['city'] <=> (int) $a['city']);
             $found[$candidates[0]['domain']] = [
                 'url' => $candidates[0]['url'],
+                'title' => $candidates[0]['title'],
                 'name' => null,
                 'address' => null,
                 'phone' => null,
-                'candidates' => array_values(array_unique(array_column($candidates, 'url'))),
+                'candidates' => array_map(fn (array $c): array => ['url' => $c['url'], 'title' => $c['title']], $candidates),
             ];
         }
 
@@ -255,8 +257,9 @@ final class CitationScanner
 
     /**
      * A listing page names the brand (in the SERP title or the URL slug) and is not the directory's own
-     * search / browse page. The brand test is token-based: at least half the brand's word tokens (ignoring
-     * short filler) must appear.
+     * search / browse page. The brand test is token-based and requires EVERY distinctive word of the brand:
+     * "Sump Pump Gurus" must show "gurus", so a directory's "sump pump installation in Downingtown" category
+     * page — which matches the trade words but not the brand — is never mistaken for the business's listing.
      */
     private function looksLikeListing(string $url, string $title, string $brand): bool
     {
@@ -275,9 +278,8 @@ final class CitationScanner
             return true;
         }
         $haystack = mb_strtolower($title.' '.str_replace(['-', '_', '/', '.'], ' ', $url));
-        $hits = count(array_filter($tokens, fn (string $t): bool => str_contains($haystack, $t)));
 
-        return $hits * 2 >= count($tokens);
+        return array_all($tokens, fn (string $t): bool => str_contains($haystack, $t));
     }
 
     /** Whether a title/URL haystack names a town (token-normalized, e.g. "newtown-pa" or "Newtown, PA"). */
@@ -363,7 +365,7 @@ final class CitationScanner
                     continue;
                 }
                 $result['phone'] = $line->phone;
-                $this->writeStatus($anchor, $directory->id, $result, $siblings, $sharedPhones);
+                $this->writeStatus($anchor, $directory, $result, $siblings, $sharedPhones);
                 $written++;
             }
         }
@@ -441,32 +443,35 @@ final class CitationScanner
      * directory check) and return the result that attribution assigns to this location — else the first
      * candidate, verified, so the normal judging (sibling's → Absent, unclear → needs review) applies.
      *
-     * @param  array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}  $result
+     * @param  array{url: string, title?: string, name: ?string, address: ?string, phone: ?string, candidates?: list<array{url: string, title: string}>}  $result
      * @param  list<array{location_id: string, phone_primary?: ?string, address_1?: ?string, city?: ?string, postal?: ?string}>  $siblings
      * @param  array<string, ?string>  $sharedPhones
-     * @return array{url: string, name: ?string, address: ?string, phone: ?string}
+     * @return array{url: string, title: string, name: ?string, address: ?string, phone: ?string}
      */
     private function pickOwnListing(Location $location, Directory $directory, array $result, array $siblings, array $sharedPhones): array
     {
         $domain = $this->normalizeDomain((string) $directory->domain);
-        $urls = $result['candidates'] ?? [$result['url']];
-        if (! in_array($result['url'], $urls, true)) {
-            array_unshift($urls, $result['url']);
+        $pages = $result['candidates'] ?? [['url' => $result['url'], 'title' => (string) ($result['title'] ?? '')]];
+        if (! in_array($result['url'], array_column($pages, 'url'), true)) {
+            array_unshift($pages, ['url' => $result['url'], 'title' => (string) ($result['title'] ?? '')]);
         }
-        if (count($siblings) <= 1) {
-            $urls = [$result['url']]; // single-location tenant: the first page is theirs — one fetch
+        // A single-location tenant, or a one-listing-per-business directory (Facebook, BBB…): the first page
+        // is the business's — "which location" is not a question there. One fetch.
+        $noAttribution = count($siblings) <= 1 || $directory->multi_location_policy === MultiLocationPolicy::OnePerBusiness;
+        if ($noAttribution) {
+            $pages = [$pages[0]];
         }
 
         $verifiedCandidates = [];
-        foreach ($urls as $url) {
-            $candidate = ['url' => $url, 'name' => null, 'address' => null, 'phone' => null];
-            $verified = $this->verifier->verify($domain, $url);
+        foreach ($pages as $page) {
+            $candidate = ['url' => $page['url'], 'title' => $page['title'], 'name' => null, 'address' => null, 'phone' => null];
+            $verified = $this->verifier->verify($domain, $page['url']);
             if ($verified !== null) {
                 $candidate['name'] = $verified->name;
                 $candidate['address'] = $verified->address;
                 $candidate['phone'] = $verified->phone;
             }
-            if (count($siblings) <= 1) {
+            if ($noAttribution) {
                 return $candidate;
             }
             $attr = $this->attributor->attribute($candidate, $siblings, $sharedPhones);
@@ -483,16 +488,17 @@ final class CitationScanner
     /**
      * Attribute a matched listing to the correct sibling, judge its state, and upsert the status row.
      *
-     * @param  array{url: string, name: ?string, address: ?string, phone: ?string}  $result
+     * @param  array{url: string, title?: string, name: ?string, address: ?string, phone: ?string}  $result
      * @param  list<array{location_id: string, phone_primary?: ?string, address_1?: ?string, city?: ?string, postal?: ?string}>  $siblings
      * @param  array<string, ?string>  $sharedPhones
      */
-    private function writeStatus(Location $location, string $directoryId, array $result, array $siblings, array $sharedPhones): void
+    private function writeStatus(Location $location, Directory $directory, array $result, array $siblings, array $sharedPhones): void
     {
-        // Single-location tenants have no attribution ambiguity — the listing is theirs. Multi-location
-        // tenants route through the scorer; organic-only results that can't be told apart land as unknown +
-        // needs_review.
-        if (count($siblings) === 1) {
+        $directoryId = (string) $directory->id;
+        // Single-location tenants have no attribution ambiguity — the listing is theirs; nor does a
+        // one-listing-per-business directory (the business has ONE page, every location "has" it).
+        // Otherwise route through the scorer; a page that can't be told apart lands unknown + needs_review.
+        if (count($siblings) === 1 || $directory->multi_location_policy === MultiLocationPolicy::OnePerBusiness) {
             $attr = new AttributionResult((string) $location->id, 100, false);
         } else {
             $attr = $this->attributor->attribute($result, $siblings, $sharedPhones);
@@ -544,7 +550,7 @@ final class CitationScanner
      * Decide the citation PRESENCE from attribution + NAP comparison. `$mismatches` and `$needsReview` are
      * populated by reference. Presence is the scanner's axis alone — it never decides lifecycle.
      *
-     * @param  array{url: string, name: ?string, address: ?string, phone: ?string}  $result
+     * @param  array{url: string, title?: string, name: ?string, address: ?string, phone: ?string}  $result
      * @param  array{business_name: string, address_1: string, address_2?: ?string, postal?: ?string, phone?: ?string}|null  $canonical
      * @param  list<string>  $sharedPhones  normalized shared/corporate numbers (never a phone mismatch)
      * @param  array<string, array{found: string, expected: string}>  $mismatches
