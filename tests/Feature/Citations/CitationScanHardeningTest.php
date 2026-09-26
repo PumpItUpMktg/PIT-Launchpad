@@ -199,3 +199,54 @@ test('the scan job seeds the national directory catalog when it is empty', funct
     expect(Directory::query()->where('is_active', true)->count())->toBeGreaterThan(10)
         ->and(CitationStatus::query()->where('location_id', $this->location->id)->count())->toBeGreaterThan(0); // reconciled as gaps
 });
+
+test('on a multi-location brand, a sibling\'s page ranking first never hides this location\'s own listing', function (): void {
+    $newtown = Location::factory()->for($this->site)->create();
+    LocationNapProfile::factory()->for($this->site)->create([
+        'location_id' => $newtown->id, 'business_name' => 'ACME Plumbing', 'address_1' => '9 Oak Ave',
+        'city' => 'Newtown', 'state' => 'PA', 'postal' => '18940', 'phone_primary' => '215-222-2222', 'categories' => null,
+    ]);
+    $yelp = Directory::factory()->create(['domain' => 'yelp.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+
+    $page = fn (string $phone, string $city): string => '<html><script type="application/ld+json">'.json_encode([
+        '@type' => 'LocalBusiness', 'name' => 'ACME Plumbing', 'telephone' => $phone, 'address' => ['addressLocality' => $city],
+    ]).'</script></html>';
+    Http::fake([
+        'yelp.com/biz/acme-plumbing-newtown' => Http::response($page('215-222-2222', 'Newtown')),
+        'yelp.com/biz/acme-plumbing-clifton' => Http::response($page('973-111-1111', 'Clifton')),
+    ]);
+    // The directory check returns the sibling's page FIRST (no town in title), then this location's.
+    $dfs = dfsAnswering(fn (string $q): array => str_starts_with($q, 'site:yelp.com') ? [
+        ['position' => 1, 'url' => 'https://www.yelp.com/biz/acme-plumbing-newtown', 'domain' => 'www.yelp.com', 'title' => 'ACME Plumbing - Plumbing'],
+        ['position' => 2, 'url' => 'https://www.yelp.com/biz/acme-plumbing-clifton', 'domain' => 'www.yelp.com', 'title' => 'ACME Plumbing - Plumbing'],
+    ] : []);
+
+    (new CitationScanner($dfs, verifier: new HttpListingVerifier))->scanLocation($this->location);
+
+    $row = CitationStatus::query()->where('location_id', $this->location->id)->where('directory_id', $yelp->id)->first();
+    expect($row->presence)->toBe(CitationPresence::PresentMatch)
+        ->and($row->found_url)->toBe('https://www.yelp.com/biz/acme-plumbing-clifton')   // its own page, not the sibling's
+        ->and($row->attributed_location_id)->toBe($this->location->id)
+        ->and($row->found_phone)->toBe('973-111-1111');
+    // The sibling's row was never touched by this location's scan.
+    expect(CitationStatus::query()->where('location_id', $newtown->id)->exists())->toBeFalse();
+});
+
+test('on a multi-location brand, a directory that blocks scraping is parked for review, never claimed', function (): void {
+    $newtown = Location::factory()->for($this->site)->create();
+    LocationNapProfile::factory()->for($this->site)->create([
+        'location_id' => $newtown->id, 'business_name' => 'ACME Plumbing', 'city' => 'Newtown', 'state' => 'PA', 'phone_primary' => '215-222-2222', 'categories' => null,
+    ]);
+    $yelp = Directory::factory()->create(['domain' => 'yelp.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    Http::fake(['yelp.com/*' => Http::response('blocked', 403)]);
+    $dfs = dfsAnswering(fn (string $q): array => str_starts_with($q, 'site:yelp.com') ? [
+        ['position' => 1, 'url' => 'https://www.yelp.com/biz/acme-plumbing-newtown', 'domain' => 'www.yelp.com', 'title' => 'ACME Plumbing'],
+    ] : []);
+
+    (new CitationScanner($dfs, verifier: new HttpListingVerifier))->scanLocation($this->location);
+
+    $row = CitationStatus::query()->where('location_id', $this->location->id)->where('directory_id', $yelp->id)->first();
+    expect($row->presence)->toBe(CitationPresence::Unknown)
+        ->and($row->needs_review)->toBeTrue()
+        ->and($row->attributed_location_id)->toBeNull();
+});

@@ -41,6 +41,9 @@ final class CitationScanner
     /** Max brand-anchored queries per location (spec: 3–5). */
     private const MAX_QUERIES = 5;
 
+    /** Listing pages kept per directory check — on a multi-location brand the first page may be a sibling's. */
+    private const MAX_CANDIDATES = 3;
+
     /** URL path fragments that mark a directory's own search / browse page rather than one listing. */
     private const NON_LISTING_PATHS = ['/search', '/find', '/results', '/s?', 'find_desc=', '?q=', '/browse', '/category/', '/categories/', '/directory/'];
 
@@ -86,12 +89,10 @@ final class CitationScanner
 
             // Read the listing's real NAP so attribution can tell this location's listing from a sibling's,
             // and the NAP compare can fault a mismatch. Null (blocked / no data) leaves it needs-review.
-            $verified = $this->verifier->verify($this->normalizeDomain((string) $directory->domain), $result['url']);
-            if ($verified !== null) {
-                $result['name'] = $verified->name ?? $result['name'];
-                $result['address'] = $verified->address ?? $result['address'];
-                $result['phone'] = $verified->phone ?? $result['phone'];
-            }
+            // On a multi-location brand the directory check may have surfaced several of the brand's pages:
+            // verify each and keep the one attribution assigns to THIS location, so a sibling's page ranking
+            // first never hides this location's own listing.
+            $result = $this->pickOwnListing($location, $directory, $result, $siblings, $sharedPhones);
 
             $this->writeStatus($location, $directory->id, $result, $siblings, $sharedPhones);
             $foundDirectoryIds[] = (string) $directory->id;
@@ -109,8 +110,8 @@ final class CitationScanner
      * not a search/browse page, and names the brand in its title or URL. Capped per scan (each is one call).
      *
      * @param  Collection<int, Directory>  $applicable
-     * @param  array<string, array{url: string, name: ?string, address: ?string, phone: ?string}>  $found
-     * @return array<string, array{url: string, name: ?string, address: ?string, phone: ?string}>
+     * @param  array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}>  $found
+     * @return array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}>
      */
     private function checkDirectories(LocationNapProfile $profile, Collection $applicable, array $found): array
     {
@@ -135,18 +136,35 @@ final class CitationScanner
             $checked++;
 
             $query = 'site:'.$domain.' "'.$name.'"'.($city !== '' ? ' '.$city : '');
+            $candidates = [];
             foreach ($this->dfs->liveOrganic($query, $locationCode, $language, 10) as $row) {
                 $rowDomain = $this->normalizeDomain((string) $row['domain']);
                 $url = (string) $row['url'];
+                $title = (string) ($row['title'] ?? '');
                 if ($rowDomain === '' || ($rowDomain !== $domain && ! str_ends_with($rowDomain, '.'.$domain))) {
                     continue; // not on the directory — the SERP wandered
                 }
-                if (! $this->looksLikeListing($url, (string) ($row['title'] ?? ''), $name)) {
+                if (! $this->looksLikeListing($url, $title, $name)) {
                     continue;
                 }
-                $found[$rowDomain] = ['url' => $url, 'name' => null, 'address' => null, 'phone' => null];
-                break;
+                $candidates[] = ['domain' => $rowDomain, 'url' => $url, 'city' => $city !== '' && $this->mentions($title.' '.$url, $city)];
+                if (count($candidates) >= self::MAX_CANDIDATES) {
+                    break;
+                }
             }
+            if ($candidates === []) {
+                continue;
+            }
+            // A page naming the town goes first — on a multi-location brand that is most likely THIS
+            // location's listing; the rest stay as fallbacks for attribution to sort out.
+            usort($candidates, fn (array $a, array $b): int => (int) $b['city'] <=> (int) $a['city']);
+            $found[$candidates[0]['domain']] = [
+                'url' => $candidates[0]['url'],
+                'name' => null,
+                'address' => null,
+                'phone' => null,
+                'candidates' => array_values(array_unique(array_column($candidates, 'url'))),
+            ];
         }
 
         return $found;
@@ -189,6 +207,14 @@ final class CitationScanner
         $hits = count(array_filter($tokens, fn (string $t): bool => str_contains($haystack, $t)));
 
         return $hits * 2 >= count($tokens);
+    }
+
+    /** Whether a title/URL haystack names a town (token-normalized, e.g. "newtown-pa" or "Newtown, PA"). */
+    private function mentions(string $haystack, string $town): bool
+    {
+        $t = $this->nap->name($town);
+
+        return $t !== '' && str_contains($this->nap->name(str_replace(['-', '_', '/'], ' ', $haystack)), $t);
     }
 
     /**
@@ -330,6 +356,50 @@ final class CitationScanner
         }
 
         return $out;
+    }
+
+    /**
+     * Verify the found page (and, on a multi-location tenant, each alternative candidate page from the
+     * directory check) and return the result that attribution assigns to this location — else the first
+     * candidate, verified, so the normal judging (sibling's → Absent, unclear → needs review) applies.
+     *
+     * @param  array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}  $result
+     * @param  list<array{location_id: string, phone_primary?: ?string, address_1?: ?string, city?: ?string, postal?: ?string}>  $siblings
+     * @param  array<string, ?string>  $sharedPhones
+     * @return array{url: string, name: ?string, address: ?string, phone: ?string}
+     */
+    private function pickOwnListing(Location $location, Directory $directory, array $result, array $siblings, array $sharedPhones): array
+    {
+        $domain = $this->normalizeDomain((string) $directory->domain);
+        $urls = $result['candidates'] ?? [$result['url']];
+        if (! in_array($result['url'], $urls, true)) {
+            array_unshift($urls, $result['url']);
+        }
+        if (count($siblings) <= 1) {
+            $urls = [$result['url']]; // single-location tenant: the first page is theirs — one fetch
+        }
+
+        $verifiedCandidates = [];
+        foreach ($urls as $url) {
+            $candidate = ['url' => $url, 'name' => null, 'address' => null, 'phone' => null];
+            $verified = $this->verifier->verify($domain, $url);
+            if ($verified !== null) {
+                $candidate['name'] = $verified->name;
+                $candidate['address'] = $verified->address;
+                $candidate['phone'] = $verified->phone;
+            }
+            if (count($siblings) <= 1) {
+                return $candidate;
+            }
+            $attr = $this->attributor->attribute($candidate, $siblings, $sharedPhones);
+            if (! $attr->ambiguous && $attr->locationId === (string) $location->id) {
+                return $candidate;
+            }
+            $verifiedCandidates[] = $candidate;
+        }
+
+        // None attributed to this location: judge the first page as found (sibling's → Absent, unclear → review).
+        return $verifiedCandidates[0];
     }
 
     /**

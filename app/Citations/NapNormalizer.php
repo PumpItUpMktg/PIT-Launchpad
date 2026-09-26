@@ -84,16 +84,19 @@ final class NapNormalizer
 
         $foundAddr = (string) ($found['address'] ?? '');
         $street = trim((string) ($canonical['address_1'] ?? ''));
-        if ($foundAddr !== '' && $street !== '') {
+        // A found address with no street number (a directory that publishes only "Clifton, NJ") has no
+        // street to fault — only the ZIP, when present, can disagree.
+        if ($foundAddr !== '' && $street !== '' && ($this->streetNumber($this->address($foundAddr)) !== '' || preg_match('/\b\d{5}\b/', $foundAddr) === 1)) {
             $expectedAddr = trim($street.' '.((string) ($canonical['address_2'] ?? '')));
             $foundNorm = $this->address($foundAddr);
             $streetNorm = $this->address($street);
+            $streetKnown = $this->streetNumber($foundNorm) !== '';
             $zipMismatch = false;
             $postal = preg_match('/\b(\d{5})\b/', (string) ($canonical['postal'] ?? ''), $pm) === 1 ? $pm[1] : '';
             if ($postal !== '' && preg_match_all('/\b(\d{5})\b/', $foundAddr, $fm) > 0) {
                 $zipMismatch = ! in_array($postal, $fm[1], true);
             }
-            if (! str_contains(' '.$foundNorm.' ', ' '.$streetNorm.' ') || $zipMismatch) {
+            if (($streetKnown && ! str_contains(' '.$foundNorm.' ', ' '.$streetNorm.' ')) || $zipMismatch) {
                 $out['address'] = ['found' => $foundAddr, 'expected' => trim($expectedAddr.' '.((string) ($canonical['postal'] ?? '')))];
             }
         }
