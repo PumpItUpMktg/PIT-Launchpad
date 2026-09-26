@@ -27,7 +27,7 @@ final class LocationWorkspace
     public function __construct(private readonly CitationApplicability $applicability = new CitationApplicability) {}
 
     /**
-     * @return array{stats: array{live: int, mismatch: int, in_flight: int, missing: int, submittable_missing: int}, rows: list<WorkspaceRow>}
+     * @return array{stats: array{live: int, mismatch: int, in_flight: int, missing: int, submittable_missing: int, needs_review: int}, rows: list<WorkspaceRow>}
      */
     public function forLocation(Location $location, bool $includeNotRelevant = false): array
     {
@@ -39,8 +39,12 @@ final class LocationWorkspace
         $statuses = CitationStatus::query()->withoutGlobalScope(SiteScope::class)
             ->where('location_id', $location->id)->get()->keyBy('directory_id');
 
+        // Sibling names, for a found page that attribution assigned to another of the brand's locations.
+        $siblingNames = Location::query()->withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $location->site_id)->pluck('name', 'id')->map('strval')->all();
+
         $rows = [];
-        $stats = ['live' => 0, 'mismatch' => 0, 'in_flight' => 0, 'missing' => 0, 'submittable_missing' => 0];
+        $stats = ['live' => 0, 'mismatch' => 0, 'in_flight' => 0, 'missing' => 0, 'submittable_missing' => 0, 'needs_review' => 0];
 
         foreach ($universe as $dir) {
             $eligible = ! $excluded->has((string) $dir->id);
@@ -62,6 +66,9 @@ final class LocationWorkspace
                 lastCheckedAt: $status?->last_scanned_at,
                 eligible: $eligible,
                 sortRank: self::RANK[$chip['key']] ?? 6,
+                listedFor: $status !== null && $status->attributed_location_id !== null && $status->attributed_location_id !== (string) $location->id
+                    ? ($siblingNames[$status->attributed_location_id] ?? 'another location')
+                    : null,
             );
 
             match ($chip['key']) {
@@ -69,6 +76,7 @@ final class LocationWorkspace
                 'mismatch' => $stats['mismatch']++,
                 'submitted' => $stats['in_flight']++,
                 'missing' => $stats['missing']++,
+                'needs_review' => $stats['needs_review']++,
                 default => null,
             };
             if ($chip['key'] === 'missing' && $submittable) {

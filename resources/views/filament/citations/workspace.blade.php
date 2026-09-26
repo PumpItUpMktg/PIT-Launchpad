@@ -16,6 +16,9 @@
             <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Wrong NAP</div><div style="font-size:1.5rem;font-weight:600;color:#b45309">{{ $stats['mismatch'] ?? 0 }}</div></x-filament::section>
             <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">In flight</div><div style="font-size:1.5rem;font-weight:600">{{ $stats['in_flight'] ?? 0 }}</div></x-filament::section>
             <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Missing</div><div style="font-size:1.5rem;font-weight:600">{{ $stats['missing'] ?? 0 }}</div><div style="font-size:.72rem;color:var(--gray-400)">{{ $stats['submittable_missing'] ?? 0 }} submittable</div></x-filament::section>
+            @if (($stats['needs_review'] ?? 0) > 0)
+                <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Needs review</div><div style="font-size:1.5rem;font-weight:600;color:#b45309">{{ $stats['needs_review'] }}</div><div style="font-size:.72rem;color:var(--gray-400)">found, not confirmed as this location's</div></x-filament::section>
+            @endif
         </div>
 
         {{-- Filters --}}
@@ -57,7 +60,11 @@
                                 </td>
                                 <td>
                                     <div style="font-weight:500">{{ $row->directoryName }}</div>
-                                    @if ($row->listingUrl)<div style="font-size:.72rem;color:var(--gray-400)">{{ $row->listingUrl }}</div>@endif
+                                    @if ($row->listedFor)
+                                        <div style="font-size:.72rem;color:var(--gray-400)">Listed for <strong>{{ $row->listedFor }}</strong> — not this location</div>
+                                    @elseif ($row->listingUrl)
+                                        <div style="font-size:.72rem;color:var(--gray-400)">{{ $row->listingUrl }}{{ $row->chip['key'] === 'needs_review' ? ' · unconfirmed' : '' }}</div>
+                                    @endif
                                 </td>
                                 <td style="color:var(--gray-500)">{{ ucfirst($row->tierLabel) }}{{ $row->isLocal ? ' · Local' : '' }}</td>
                                 <td><x-filament::badge :color="$row->chip['color']">{{ $row->chip['label'] }}</x-filament::badge></td>

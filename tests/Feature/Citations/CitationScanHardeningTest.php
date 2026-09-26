@@ -1,10 +1,12 @@
 <?php
 
 use App\Citations\CitationScanner;
+use App\Citations\Ui\LocationWorkspace;
 use App\Citations\Ui\TenantCitationBoard;
 use App\Enums\CitationPresence;
 use App\Enums\CitationSource;
 use App\Enums\DirectoryScope;
+use App\Enums\MultiLocationPolicy;
 use App\Integrations\Citations\HttpListingVerifier;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\DataForSeo\DataForSeoException;
@@ -239,8 +241,9 @@ test('on a multi-location brand, a directory that blocks scraping is parked for 
     ]);
     $yelp = Directory::factory()->create(['domain' => 'yelp.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
     Http::fake(['yelp.com/*' => Http::response('blocked', 403)]);
+    // A page naming no town at all: nothing to attribute on → review, never claimed.
     $dfs = dfsAnswering(fn (string $q): array => str_starts_with($q, 'site:yelp.com') ? [
-        ['position' => 1, 'url' => 'https://www.yelp.com/biz/acme-plumbing-newtown', 'domain' => 'www.yelp.com', 'title' => 'ACME Plumbing'],
+        ['position' => 1, 'url' => 'https://www.yelp.com/biz/acme-plumbing-2', 'domain' => 'www.yelp.com', 'title' => 'ACME Plumbing'],
     ] : []);
 
     (new CitationScanner($dfs, verifier: new HttpListingVerifier))->scanLocation($this->location);
@@ -249,6 +252,15 @@ test('on a multi-location brand, a directory that blocks scraping is parked for 
     expect($row->presence)->toBe(CitationPresence::Unknown)
         ->and($row->needs_review)->toBeTrue()
         ->and($row->attributed_location_id)->toBeNull();
+
+    // A page whose slug names the sibling's town is the sibling's — recorded Absent for this location.
+    $dfs = dfsAnswering(fn (string $q): array => str_starts_with($q, 'site:yelp.com') ? [
+        ['position' => 1, 'url' => 'https://www.yelp.com/biz/acme-plumbing-newtown', 'domain' => 'www.yelp.com', 'title' => 'ACME Plumbing'],
+    ] : []);
+    (new CitationScanner($dfs, verifier: new HttpListingVerifier))->scanLocation($this->location);
+    $row = CitationStatus::query()->where('location_id', $this->location->id)->where('directory_id', $yelp->id)->first();
+    expect($row->presence)->toBe(CitationPresence::Absent)
+        ->and($row->attributed_location_id)->toBe($newtown->id);
 });
 
 test('one failed DataForSEO call skips that directory (unchecked, never aged) while the rest of the scan proceeds', function (): void {
@@ -304,4 +316,55 @@ test('a scan where every DataForSEO call fails is a failed run, and an auth/quot
     }));
     expect(fn () => $quota->scanLocation($this->location))->toThrow(DataForSeoException::class)
         ->and($calls)->toBe(1);   // fatal → no further calls attempted
+});
+
+// ── The Downingtown case: category pages, unreadable own pages, siblings' pages, one-per-business pages ──
+
+test('a directory category page that matches the trade words but not the brand is never a listing', function (): void {
+    $angi = Directory::factory()->create(['domain' => 'angi.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    LocationNapProfile::query()->where('location_id', $this->location->id)->update(['business_name' => 'Sump Pump Gurus', 'city' => 'Downingtown']);
+
+    $scanner = new CitationScanner(dfsAnswering(fn (string $q): array => str_starts_with($q, 'site:angi.com') ? [
+        ['position' => 1, 'url' => 'https://www.angi.com/companylist/us/pa/downingtown/sump-pump-installation.htm', 'domain' => 'www.angi.com', 'title' => 'Top 10 Sump Pump Installation in Downingtown, PA'],
+        ['position' => 2, 'url' => 'https://www.yellowpages.com/downingtown-pa/pumping-contractors', 'domain' => 'www.yellowpages.com', 'title' => 'Best 30 Pumping Contractors in Downingtown, PA'],
+    ] : []));
+    $scanner->scanLocation($this->location);
+
+    expect(CitationStatus::query()->where('location_id', $this->location->id)->where('directory_id', $angi->id)->exists())->toBeFalse();
+});
+
+test('on a multi-location brand, an unreadable page is credited by the town in its URL: own town → live, sibling town → theirs, brand page → live', function (): void {
+    $doylestown = Location::factory()->for($this->site)->create(['name' => 'Doylestown']);
+    LocationNapProfile::query()->where('location_id', $this->location->id)->update(['business_name' => 'Sump Pump Gurus', 'city' => 'Downingtown']);
+    LocationNapProfile::factory()->for($this->site)->create([
+        'location_id' => $doylestown->id, 'business_name' => 'Sump Pump Gurus', 'city' => 'Doylestown', 'state' => 'PA', 'phone_primary' => '215-222-2222', 'categories' => null,
+    ]);
+    $chamber = Directory::factory()->create(['domain' => 'chamberofcommerce.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    $nextdoor = Directory::factory()->create(['domain' => 'nextdoor.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    $facebook = Directory::factory()->create(['domain' => 'facebook.com', 'scope' => DirectoryScope::National, 'is_active' => true, 'multi_location_policy' => MultiLocationPolicy::OnePerBusiness]);
+    Http::fake(['*' => Http::response('blocked', 403)]);   // nothing can be read — only the SERP's URL/title carry signal
+
+    $dfs = dfsAnswering(fn (string $q): array => match (true) {
+        str_starts_with($q, 'site:chamberofcommerce.com') => [['position' => 1, 'url' => 'https://www.chamberofcommerce.com/business-directory/pennsylvania/downingtown/pump-supplier/2017531193-sump-pump-gurus', 'domain' => 'www.chamberofcommerce.com', 'title' => 'Sump Pump Gurus - Downingtown, PA']],
+        str_starts_with($q, 'site:nextdoor.com') => [['position' => 1, 'url' => 'https://nextdoor.com/pages/sump-pump-gurus-doylestown-pa/', 'domain' => 'nextdoor.com', 'title' => 'Sump Pump Gurus']],
+        str_starts_with($q, 'site:facebook.com') => [['position' => 1, 'url' => 'https://www.facebook.com/SumpPumpGurus/', 'domain' => 'www.facebook.com', 'title' => 'Sump Pump Gurus | Facebook']],
+        default => [],
+    });
+    (new CitationScanner($dfs, verifier: new HttpListingVerifier))->scanLocation($this->location);
+
+    $row = fn (Directory $d) => CitationStatus::query()->where('location_id', $this->location->id)->where('directory_id', $d->id)->first();
+    expect($row($chamber)->presence)->toBe(CitationPresence::PresentMatch)          // the URL says downingtown → ours
+        ->and($row($chamber)->attributed_location_id)->toBe($this->location->id)
+        ->and($row($nextdoor)->presence)->toBe(CitationPresence::Absent)             // the URL says doylestown → theirs, not ours
+        ->and($row($nextdoor)->attributed_location_id)->toBe($doylestown->id)
+        ->and($row($facebook)->presence)->toBe(CitationPresence::PresentMatch)       // one page per business → every location has it
+        ->and($row($facebook)->attributed_location_id)->toBe($this->location->id)
+        ->and(CitationStatus::query()->where('location_id', $this->location->id)->where('needs_review', true)->count())->toBe(0);
+
+    // The workspace reads the sibling's row honestly and no longer hides anything from the totals.
+    $ws = (new LocationWorkspace)->forLocation($this->location);
+    $byName = collect($ws['rows'])->keyBy('directoryName');
+    expect($byName->get('nextdoor.com')?->listedFor ?? $byName->first(fn ($r) => $r->directoryId === (string) $nextdoor->id)->listedFor)->toBe('Doylestown')
+        ->and($ws['stats']['live'])->toBe(2)
+        ->and($ws['stats']['needs_review'])->toBe(0);
 });

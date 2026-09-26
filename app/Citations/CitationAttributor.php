@@ -16,6 +16,8 @@ namespace App\Citations;
  *   - a shared number OWNED by a location, AND the address agrees  → +25  (medium, address-gated)
  *   - city match                                                  → +8   (weak)
  *   - postal match                                                → +7   (weak)
+ *   - the listing's URL slug / SERP title names ONE sibling's town  → +35  (medium — the directory's own word,
+ *                                                                          used when the page can't be read)
  *   - a shared number with NO owner                               → +0   (zero signal — never attributes)
  */
 final class CitationAttributor
@@ -30,6 +32,8 @@ final class CitationAttributor
 
     private const POSTAL = 7;
 
+    private const TOWN_REF = 35;
+
     /** Below this the best candidate is too weak to trust. */
     private const CONFIDENCE_FLOOR = 30;
 
@@ -39,7 +43,7 @@ final class CitationAttributor
     public function __construct(private readonly NapNormalizer $nap = new NapNormalizer) {}
 
     /**
-     * @param  array{name?: ?string, address?: ?string, phone?: ?string}  $found  the found listing (as scraped)
+     * @param  array{name?: ?string, address?: ?string, phone?: ?string, url?: ?string, title?: ?string}  $found  the found listing (as scraped; url/title from the SERP)
      * @param  list<array{location_id: string, phone_primary?: ?string, address_1?: ?string, city?: ?string, postal?: ?string}>  $siblings  all of the tenant's locations
      * @param  array<string, ?string>  $sharedPhones  normalized shared number => owning location_id (or null for an un-owned shared line)
      */
@@ -53,6 +57,11 @@ final class CitationAttributor
         $foundAddr = (string) ($found['address'] ?? '');
         $foundStreetNo = $this->nap->streetNumber($this->nap->address($foundAddr));
         $foundAddrNorm = $this->nap->address($foundAddr);
+        // The directory's own attribution: a slug like /biz/acme-plumbing-clifton or a title "ACME Plumbing -
+        // Clifton, NJ" names the town. Counts only when exactly ONE sibling's town is named (two → a tie → review).
+        $ref = $this->nap->name(str_replace(['-', '_', '/', '.'], ' ', (string) ($found['url'] ?? '')).' '.(string) ($found['title'] ?? ''));
+        $townHits = array_values(array_filter($siblings, fn (array $sib): bool => $this->contains($ref, (string) ($sib['city'] ?? ''))));
+        $townOwner = count($townHits) === 1 ? (string) $townHits[0]['location_id'] : null;
 
         $scored = [];
         foreach ($siblings as $sib) {
@@ -83,6 +92,9 @@ final class CitationAttributor
             }
             if ($this->contains($foundAddrNorm, (string) ($sib['postal'] ?? ''))) {
                 $score += self::POSTAL;
+            }
+            if ($townOwner !== null && $townOwner === (string) $sib['location_id']) {
+                $score += self::TOWN_REF;
             }
 
             $scored[] = ['location_id' => $sib['location_id'], 'score' => $score];
