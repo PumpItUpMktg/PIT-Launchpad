@@ -368,3 +368,45 @@ test('on a multi-location brand, an unreadable page is credited by the town in i
         ->and($ws['stats']['live'])->toBe(2)
         ->and($ws['stats']['needs_review'])->toBe(0);
 });
+
+test('a listing the SERP skips is not lost while its page still answers; a 404 loses it at once', function (): void {
+    config(['launchpad.citations.lost_after_misses' => 2]);
+    $mapquest = Directory::factory()->create(['domain' => 'mapquest.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    $nextdoor = Directory::factory()->create(['domain' => 'nextdoor.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    foreach ([[$mapquest, 'https://www.mapquest.com/us/pennsylvania/sump-pump-gurus-426257850'], [$nextdoor, 'https://nextdoor.com/pages/sump-pump-gurus-downingtown-pa/']] as [$dir, $url]) {
+        CitationStatus::query()->create([
+            'site_id' => $this->site->id, 'location_id' => $this->location->id, 'directory_id' => $dir->id,
+            'presence' => CitationPresence::PresentMismatch, 'source' => CitationSource::Unknown, 'found_url' => $url,
+            'mismatch_fields' => ['phone' => ['found' => 'x', 'expected' => 'y']],
+        ]);
+    }
+    Http::fake([
+        'mapquest.com/*' => Http::response('still here', 200),
+        'nextdoor.com/*' => Http::response('gone', 404),
+    ]);
+
+    // The SERP returns nothing at all this month.
+    (new CitationScanner(dfsAnswering(fn (): array => []), verifier: new HttpListingVerifier))->scanLocation($this->location);
+
+    $mq = CitationStatus::query()->where('directory_id', $mapquest->id)->first();
+    $nd = CitationStatus::query()->where('directory_id', $nextdoor->id)->first();
+    expect($mq->presence)->toBe(CitationPresence::PresentMismatch)   // the page answers → nothing changed
+        ->and($mq->missed_scans)->toBe(0)
+        ->and($mq->mismatch_fields)->toHaveKey('phone')
+        ->and($nd->presence)->toBe(CitationPresence::Absent)         // 404 → lost now, not after two misses
+        ->and($nd->found_url)->toContain('nextdoor.com');            // kept, so the workspace can say "was at"
+});
+
+test('a one-page-per-business directory is compared on name only — the company phone is not a branch mismatch', function (): void {
+    $facebook = Directory::factory()->create(['domain' => 'facebook.com', 'scope' => DirectoryScope::National, 'is_active' => true, 'multi_location_policy' => MultiLocationPolicy::OnePerBusiness]);
+    Http::fake(['facebook.com/*' => Http::response('<html><script type="application/ld+json">'.json_encode([
+        '@type' => 'Organization', 'name' => 'ACME Plumbing', 'telephone' => '800-555-0100', 'address' => ['streetAddress' => '1 Head Office Way'],
+    ]).'</script></html>')]);
+    $dfs = dfsAnswering(fn (string $q): array => str_starts_with($q, 'site:facebook.com') ? [['position' => 1, 'url' => 'https://www.facebook.com/ACMEPlumbing/', 'domain' => 'www.facebook.com', 'title' => 'ACME Plumbing | Facebook']] : []);
+
+    (new CitationScanner($dfs, verifier: new HttpListingVerifier))->scanLocation($this->location);
+
+    $row = CitationStatus::query()->where('location_id', $this->location->id)->where('directory_id', $facebook->id)->first();
+    expect($row->presence)->toBe(CitationPresence::PresentMatch)
+        ->and($row->mismatch_fields)->toBeNull();
+});

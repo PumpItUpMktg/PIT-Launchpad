@@ -128,13 +128,34 @@ final class HttpListingVerifier implements ListingVerifier
         return $trimmed === '' ? null : $trimmed;
     }
 
-    /** North-American phone as a last resort when there's no structured data. */
+    /**
+     * A valid North-American phone as a last resort when there's no structured data. NANP only — area code
+     * and exchange start 2–9 — and never a run of digits inside a longer number (a page's numeric ids are not
+     * phone numbers).
+     */
     private function firstPhone(string $html): ?string
     {
-        if (preg_match('#(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}#', $html, $m)) {
+        if (preg_match('#(?<!\d)(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?[2-9]\d{2}[-.\s]?\d{4}(?!\d)#', $html, $m)) {
             return trim($m[0]);
         }
 
         return null;
+    }
+
+    public function reachable(string $url): ?bool
+    {
+        try {
+            $response = Http::timeout($this->timeout)
+                ->withHeaders(['User-Agent' => 'Mozilla/5.0 (compatible; LaunchpadCitations/1.0)'])
+                ->get($url);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return match (true) {
+            $response->ok() => true,
+            in_array($response->status(), [404, 410], true) => false,
+            default => null,   // 403 / 429 / 5xx: blocked or hiccup — says nothing about the listing
+        };
     }
 }

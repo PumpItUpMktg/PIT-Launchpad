@@ -12,4 +12,9 @@ final class NullListingVerifier implements ListingVerifier
     {
         return null;
     }
+
+    public function reachable(string $url): ?bool
+    {
+        return null;
+    }
 }

@@ -43,6 +43,11 @@ function fakeVerifier(callable $resolve): ListingVerifier
         {
             return ($this->resolve)($url);
         }
+
+        public function reachable(string $url): ?bool
+        {
+            return null;
+        }
     };
 }
 
@@ -143,4 +148,27 @@ test('without verification a multi-location listing stays unattributed (needs re
     $status = CitationStatus::query()->where('location_id', $trooper->id)->first();
     expect($status->presence)->toBe(CitationPresence::Unknown)
         ->and($status->needs_review)->toBeTrue();
+});
+
+test('the phone fallback accepts only a valid North-American number — a page id is not a phone', function (): void {
+    Http::fake([
+        'facebook.com/*' => Http::response('<html><body data-id="10005434354">content_id=100054343541234 no phone here</body></html>', 200),
+        'bbb.org/*' => Http::response('<html>ref 10005434354 — call 610-555-0142</html>', 200),
+    ]);
+
+    expect((new HttpListingVerifier)->verify('facebook.com', 'https://facebook.com/x'))->toBeNull()
+        ->and((new HttpListingVerifier)->verify('bbb.org', 'https://bbb.org/x')?->phone)->toBe('610-555-0142');
+});
+
+test('reachable() reports a live page, a gone page, and an inconclusive block', function (): void {
+    Http::fake([
+        'live.test/*' => Http::response('ok', 200),
+        'gone.test/*' => Http::response('nope', 404),
+        'blocked.test/*' => Http::response('denied', 403),
+    ]);
+    $v = new HttpListingVerifier;
+
+    expect($v->reachable('https://live.test/a'))->toBeTrue()
+        ->and($v->reachable('https://gone.test/a'))->toBeFalse()
+        ->and($v->reachable('https://blocked.test/a'))->toBeNull();
 });

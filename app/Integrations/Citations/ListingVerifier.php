@@ -12,4 +12,10 @@ namespace App\Integrations\Citations;
 interface ListingVerifier
 {
     public function verify(string $directoryDomain, string $url): ?VerifiedListing;
+
+    /**
+     * Whether a known listing URL still exists — the "lost" signal that does not depend on a flaky SERP.
+     * true = the page answers 200; false = it is gone (404 / 410); null = inconclusive (blocked, timeout).
+     */
+    public function reachable(string $url): ?bool;
 }
