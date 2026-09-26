@@ -95,7 +95,7 @@ class RunCitationScan implements ShouldQueue
             $buckets = $differ->record($location, $run, $prior);
             $recorder->close($run, $location, $buckets, $scoreResult['score']);
         } catch (Throwable $e) {
-            $recorder->fail($run, $e::class.': '.$e->getMessage());
+            $recorder->fail($run, class_basename($e).': '.$e->getMessage());
 
             throw $e;
         }
@@ -106,7 +106,7 @@ class RunCitationScan implements ShouldQueue
     {
         app(ScanRunRecorder::class)->failOpenRuns(
             $this->locationId,
-            $exception !== null ? $exception::class.': '.$exception->getMessage() : 'Scan job failed (timed out or the worker died).',
+            $exception !== null ? class_basename($exception).': '.$exception->getMessage() : 'Scan job failed (timed out or the worker died).',
         );
     }
 }
