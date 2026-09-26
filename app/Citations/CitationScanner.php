@@ -19,27 +19,40 @@ use Illuminate\Support\Collection;
 /**
  * Citation Management — the monthly directory scan (§ Citations, PR2).
  *
- * For one location it builds a few brand-anchored SERP queries from the canonical NAP profile, runs them
- * through DataForSEO organic search, and for every result domain: persists it (`citation_found_domains` — the
- * module keeps its own SERP domains because platform rank-tracking is cache-only), matches it against the
- * GLOBAL directory catalog, ATTRIBUTES it to the right sibling location BEFORE judging (Fix 1), then records a
- * `citation_status` row. A result that can't be attributed to a clear owner is parked as `ambiguous_review`,
- * never guessed — mis-attributing a sibling's correct listing would break a live citation.
+ * For one location it runs two kinds of DataForSEO organic queries against the canonical NAP profile:
  *
- * SERP-only (organic) presence carries no scraped NAP, so a confidently-attributed listing with nothing to
- * compare against is `unverified` (present, not yet confirmed). When a caller supplies found NAP fields the
- * mismatch check runs and the state sharpens to `listed_correct` / `needs_fix`.
+ *  1. A few brand-anchored queries (brand + city, brand + phone, brand + street, brand) — DISCOVERY. Every
+ *     result domain is persisted (`citation_found_domains`) and matched against the GLOBAL directory catalog.
+ *     Most directory pages never rank in a brand SERP, so on its own this finds only the big ones.
+ *  2. A targeted `site:{directory} "{brand}" {city}` check per APPLICABLE directory the discovery pass did not
+ *     already find — PRESENCE. A result on the directory's own domain that looks like a listing page (not the
+ *     directory's search page) and names the brand is that directory's listing.
+ *
+ * Every matched listing is ATTRIBUTED to the right sibling location BEFORE judging (Fix 1), the listing's real
+ * NAP is read through the {@see ListingVerifier} where the directory allows it, and a `citation_status` row is
+ * upserted. A result that can't be attributed to a clear owner is parked `needs_review`, never guessed.
+ *
+ * A listing found on an earlier scan but not this one counts a miss; after `citations.lost_after_misses`
+ * consecutive misses it flips to Absent (the differ then records it lost). Platform-confirmed rows (Google,
+ * from the location's own GBP) are never aged out by the SERP.
  */
 final class CitationScanner
 {
     /** Max brand-anchored queries per location (spec: 3–5). */
     private const MAX_QUERIES = 5;
 
+    /** Listing pages kept per directory check — on a multi-location brand the first page may be a sibling's. */
+    private const MAX_CANDIDATES = 3;
+
+    /** URL path fragments that mark a directory's own search / browse page rather than one listing. */
+    private const NON_LISTING_PATHS = ['/search', '/find', '/results', '/s?', 'find_desc=', '?q=', '/browse', '/category/', '/categories/', '/directory/'];
+
     public function __construct(
         private readonly DataForSeoClient $dfs,
         private readonly CitationAttributor $attributor = new CitationAttributor,
         private readonly NapNormalizer $nap = new NapNormalizer,
         private readonly ListingVerifier $verifier = new NullListingVerifier,
+        private readonly CitationApplicability $applicability = new CitationApplicability,
     ) {}
 
     /**
@@ -56,11 +69,16 @@ final class CitationScanner
         $sharedPhones = $this->sharedPhoneOwners((string) $location->site_id);
         $directories = Directory::query()->where('is_active', true)->get();
 
-        // Collapse the multi-query result set to one entry per domain (a listing that ranks for several
-        // queries is one listing). The query anchoring is enough signal for presence.
+        // Discovery: collapse the brand-query result set to one entry per domain (a listing that ranks for
+        // several queries is one listing).
         $found = $this->runQueries($this->buildQueries($profile));
 
+        // Presence: a targeted check per applicable directory the discovery pass missed.
+        $applicable = $this->applicability->forLocation($location);
+        $found = $this->checkDirectories($profile, $applicable, $found);
+
         $written = 0;
+        $foundDirectoryIds = [];
         foreach ($found as $domain => $result) {
             $directory = $this->matchDirectory($domain, $directories);
             $this->persistFoundDomain($location, $domain, $directory?->id, $result['url']);
@@ -71,18 +89,168 @@ final class CitationScanner
 
             // Read the listing's real NAP so attribution can tell this location's listing from a sibling's,
             // and the NAP compare can fault a mismatch. Null (blocked / no data) leaves it needs-review.
-            $verified = $this->verifier->verify($this->normalizeDomain((string) $directory->domain), $result['url']);
-            if ($verified !== null) {
-                $result['name'] = $verified->name ?? $result['name'];
-                $result['address'] = $verified->address ?? $result['address'];
-                $result['phone'] = $verified->phone ?? $result['phone'];
-            }
+            // On a multi-location brand the directory check may have surfaced several of the brand's pages:
+            // verify each and keep the one attribution assigns to THIS location, so a sibling's page ranking
+            // first never hides this location's own listing.
+            $result = $this->pickOwnListing($location, $directory, $result, $siblings, $sharedPhones);
 
             $this->writeStatus($location, $directory->id, $result, $siblings, $sharedPhones);
+            $foundDirectoryIds[] = (string) $directory->id;
             $written++;
         }
 
+        $this->ageOutUnfound($location, $foundDirectoryIds);
+
         return $written;
+    }
+
+    /**
+     * Targeted presence checks: for each applicable directory not already found, ask the SERP for that
+     * directory's own pages naming the brand. Accepts the first result that is on the directory's domain, is
+     * not a search/browse page, and names the brand in its title or URL. Capped per scan (each is one call).
+     *
+     * @param  Collection<int, Directory>  $applicable
+     * @param  array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}>  $found
+     * @return array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}>
+     */
+    private function checkDirectories(LocationNapProfile $profile, Collection $applicable, array $found): array
+    {
+        $name = trim((string) $profile->business_name);
+        if ($name === '') {
+            return $found;
+        }
+        $city = trim((string) ($profile->city ?? ''));
+        $limit = max(0, (int) config('launchpad.citations.directory_query_limit', 40));
+        $locationCode = (int) config('services.dataforseo.location_code', 2840);
+        $language = (string) config('services.dataforseo.language_code', 'en');
+
+        $checked = 0;
+        foreach ($applicable as $directory) {
+            $domain = $this->normalizeDomain((string) $directory->domain);
+            if ($domain === '' || $this->foundCovers($found, $domain)) {
+                continue;
+            }
+            if ($checked >= $limit) {
+                break;
+            }
+            $checked++;
+
+            $query = 'site:'.$domain.' "'.$name.'"'.($city !== '' ? ' '.$city : '');
+            $candidates = [];
+            foreach ($this->dfs->liveOrganic($query, $locationCode, $language, 10) as $row) {
+                $rowDomain = $this->normalizeDomain((string) $row['domain']);
+                $url = (string) $row['url'];
+                $title = (string) ($row['title'] ?? '');
+                if ($rowDomain === '' || ($rowDomain !== $domain && ! str_ends_with($rowDomain, '.'.$domain))) {
+                    continue; // not on the directory — the SERP wandered
+                }
+                if (! $this->looksLikeListing($url, $title, $name)) {
+                    continue;
+                }
+                $candidates[] = ['domain' => $rowDomain, 'url' => $url, 'city' => $city !== '' && $this->mentions($title.' '.$url, $city)];
+                if (count($candidates) >= self::MAX_CANDIDATES) {
+                    break;
+                }
+            }
+            if ($candidates === []) {
+                continue;
+            }
+            // A page naming the town goes first — on a multi-location brand that is most likely THIS
+            // location's listing; the rest stay as fallbacks for attribution to sort out.
+            usort($candidates, fn (array $a, array $b): int => (int) $b['city'] <=> (int) $a['city']);
+            $found[$candidates[0]['domain']] = [
+                'url' => $candidates[0]['url'],
+                'name' => null,
+                'address' => null,
+                'phone' => null,
+                'candidates' => array_values(array_unique(array_column($candidates, 'url'))),
+            ];
+        }
+
+        return $found;
+    }
+
+    /** Whether the discovery pass already found a page on this directory (exact or subdomain). */
+    private function foundCovers(array $found, string $domain): bool
+    {
+        foreach (array_keys($found) as $d) {
+            if ($d === $domain || str_ends_with((string) $d, '.'.$domain)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * A listing page names the brand (in the SERP title or the URL slug) and is not the directory's own
+     * search / browse page. The brand test is token-based: at least half the brand's word tokens (ignoring
+     * short filler) must appear.
+     */
+    private function looksLikeListing(string $url, string $title, string $brand): bool
+    {
+        $path = mb_strtolower((string) parse_url($url, PHP_URL_PATH)).'?'.mb_strtolower((string) parse_url($url, PHP_URL_QUERY));
+        foreach (self::NON_LISTING_PATHS as $fragment) {
+            if (str_contains($path, $fragment)) {
+                return false;
+            }
+        }
+
+        $tokens = array_values(array_filter(
+            preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($brand)) ?: [],
+            fn (string $t): bool => mb_strlen($t) >= 3 && ! in_array($t, ['the', 'and', 'llc', 'inc', 'co', 'company'], true),
+        ));
+        if ($tokens === []) {
+            return true;
+        }
+        $haystack = mb_strtolower($title.' '.str_replace(['-', '_', '/', '.'], ' ', $url));
+        $hits = count(array_filter($tokens, fn (string $t): bool => str_contains($haystack, $t)));
+
+        return $hits * 2 >= count($tokens);
+    }
+
+    /** Whether a title/URL haystack names a town (token-normalized, e.g. "newtown-pa" or "Newtown, PA"). */
+    private function mentions(string $haystack, string $town): bool
+    {
+        $t = $this->nap->name($town);
+
+        return $t !== '' && str_contains($this->nap->name(str_replace(['-', '_', '/'], ' ', $haystack)), $t);
+    }
+
+    /**
+     * Age out listings this scan did not find: a previously-present row counts a miss, and after
+     * `lost_after_misses` consecutive misses flips to Absent. Rows confirmed from the platform (GBP) and rows
+     * that are already Absent are left alone; a row found this pass resets its miss count.
+     *
+     * @param  list<string>  $foundDirectoryIds
+     */
+    private function ageOutUnfound(Location $location, array $foundDirectoryIds): void
+    {
+        $threshold = max(1, (int) config('launchpad.citations.lost_after_misses', 2));
+        $now = Carbon::now();
+
+        $rows = CitationStatus::query()
+            ->where('location_id', $location->id)
+            ->whereIn('presence', [CitationPresence::PresentMatch->value, CitationPresence::PresentMismatch->value, CitationPresence::Unknown->value])
+            ->where('source', '!=', CitationSource::Platform->value)
+            ->get();
+
+        foreach ($rows as $row) {
+            if (in_array((string) $row->directory_id, $foundDirectoryIds, true)) {
+                if ($row->missed_scans !== 0) {
+                    $row->forceFill(['missed_scans' => 0])->save();
+                }
+
+                continue;
+            }
+
+            $misses = $row->missed_scans + 1;
+            $fill = ['missed_scans' => $misses, 'last_scanned_at' => $now];
+            if ($misses >= $threshold) {
+                $fill += ['presence' => CitationPresence::Absent, 'needs_review' => false, 'mismatch_fields' => null];
+            }
+            $row->forceFill($fill)->save();
+        }
     }
 
     /**
@@ -191,6 +359,50 @@ final class CitationScanner
     }
 
     /**
+     * Verify the found page (and, on a multi-location tenant, each alternative candidate page from the
+     * directory check) and return the result that attribution assigns to this location — else the first
+     * candidate, verified, so the normal judging (sibling's → Absent, unclear → needs review) applies.
+     *
+     * @param  array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}  $result
+     * @param  list<array{location_id: string, phone_primary?: ?string, address_1?: ?string, city?: ?string, postal?: ?string}>  $siblings
+     * @param  array<string, ?string>  $sharedPhones
+     * @return array{url: string, name: ?string, address: ?string, phone: ?string}
+     */
+    private function pickOwnListing(Location $location, Directory $directory, array $result, array $siblings, array $sharedPhones): array
+    {
+        $domain = $this->normalizeDomain((string) $directory->domain);
+        $urls = $result['candidates'] ?? [$result['url']];
+        if (! in_array($result['url'], $urls, true)) {
+            array_unshift($urls, $result['url']);
+        }
+        if (count($siblings) <= 1) {
+            $urls = [$result['url']]; // single-location tenant: the first page is theirs — one fetch
+        }
+
+        $verifiedCandidates = [];
+        foreach ($urls as $url) {
+            $candidate = ['url' => $url, 'name' => null, 'address' => null, 'phone' => null];
+            $verified = $this->verifier->verify($domain, $url);
+            if ($verified !== null) {
+                $candidate['name'] = $verified->name;
+                $candidate['address'] = $verified->address;
+                $candidate['phone'] = $verified->phone;
+            }
+            if (count($siblings) <= 1) {
+                return $candidate;
+            }
+            $attr = $this->attributor->attribute($candidate, $siblings, $sharedPhones);
+            if (! $attr->ambiguous && $attr->locationId === (string) $location->id) {
+                return $candidate;
+            }
+            $verifiedCandidates[] = $candidate;
+        }
+
+        // None attributed to this location: judge the first page as found (sibling's → Absent, unclear → review).
+        return $verifiedCandidates[0];
+    }
+
+    /**
      * Attribute a matched listing to the correct sibling, judge its state, and upsert the status row.
      *
      * @param  array{url: string, name: ?string, address: ?string, phone: ?string}  $result
@@ -213,11 +425,13 @@ final class CitationScanner
             'business_name' => (string) $profile->business_name,
             'address_1' => (string) ($profile->address_1 ?? ''),
             'address_2' => (string) ($profile->address_2 ?? ''),
+            'postal' => (string) ($profile->postal ?? ''),
+            'phone' => (string) ($profile->phone_primary ?? ''),
         ] : null;
 
         $mismatches = [];
         $needsReview = false;
-        $presence = $this->judge($attr, (string) $location->id, $result, $canonical, $mismatches, $needsReview);
+        $presence = $this->judge($attr, (string) $location->id, $result, $canonical, array_keys($sharedPhones), $mismatches, $needsReview);
 
         $now = Carbon::now();
         // Presence is written on EVERY scan (its own axis); lifecycle and covered_by_sibling are owned by
@@ -237,6 +451,7 @@ final class CitationScanner
                 'mismatch_fields' => $mismatches === [] ? null : $mismatches,
                 'source' => CitationSource::Unknown,
                 'last_scanned_at' => $now,
+                'missed_scans' => 0,
             ],
         );
 
@@ -252,12 +467,13 @@ final class CitationScanner
      * populated by reference. Presence is the scanner's axis alone — it never decides lifecycle.
      *
      * @param  array{url: string, name: ?string, address: ?string, phone: ?string}  $result
-     * @param  array{business_name: string, address_1: string, address_2?: ?string}|null  $canonical
+     * @param  array{business_name: string, address_1: string, address_2?: ?string, postal?: ?string, phone?: ?string}|null  $canonical
+     * @param  list<string>  $sharedPhones  normalized shared/corporate numbers (never a phone mismatch)
      * @param  array<string, array{found: string, expected: string}>  $mismatches
      *
      * @param-out array<string, array{found: string, expected: string}> $mismatches
      */
-    private function judge(AttributionResult $attr, string $scannedLocationId, array $result, ?array $canonical, array &$mismatches, bool &$needsReview): CitationPresence
+    private function judge(AttributionResult $attr, string $scannedLocationId, array $result, ?array $canonical, array $sharedPhones, array &$mismatches, bool &$needsReview): CitationPresence
     {
         $mismatches = [];
         $needsReview = false;
@@ -272,14 +488,15 @@ final class CitationScanner
             return CitationPresence::Absent;
         }
 
-        $hasFoundNap = ($result['name'] ?? null) !== null || ($result['address'] ?? null) !== null;
+        $hasFoundNap = ($result['name'] ?? null) !== null || ($result['address'] ?? null) !== null || ($result['phone'] ?? null) !== null;
         if (! $hasFoundNap || $canonical === null) {
             return CitationPresence::PresentMatch; // present and ours; no scraped NAP to fault it on
         }
 
         $mismatches = $this->nap->mismatches(
-            ['name' => $result['name'], 'address' => $result['address']],
+            ['name' => $result['name'], 'address' => $result['address'], 'phone' => $result['phone']],
             $canonical,
+            $sharedPhones,
         );
 
         return $mismatches === [] ? CitationPresence::PresentMatch : CitationPresence::PresentMismatch;

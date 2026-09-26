@@ -1001,6 +1001,13 @@ return [
         // (operator review). A citation issued in this many work orders without resolving flips to `stalled`.
         'verification_cycle_threshold' => (int) env('LAUNCHPAD_CITATIONS_VERIFY_THRESHOLD', 3),
         'work_order_stall_threshold' => (int) env('LAUNCHPAD_CITATIONS_WORK_ORDER_STALL', 3),
+        // A listing found before but not in this scan is marked lost only after this many consecutive misses
+        // (one missed SERP is noise; two in a row is a finding).
+        'lost_after_misses' => (int) env('LAUNCHPAD_CITATIONS_LOST_AFTER_MISSES', 2),
+        // A scan run still open after this many minutes is treated as failed (the worker died), not running.
+        'stale_run_minutes' => (int) env('LAUNCHPAD_CITATIONS_STALE_RUN_MINUTES', 30),
+        // Cap on per-directory `site:` presence checks per location per scan (each is one DataForSEO call).
+        'directory_query_limit' => (int) env('LAUNCHPAD_CITATIONS_DIRECTORY_QUERY_LIMIT', 40),
     ],
 
     /*

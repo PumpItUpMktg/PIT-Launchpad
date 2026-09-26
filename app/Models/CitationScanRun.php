@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  *
  * @property Carbon $started_at
  * @property Carbon|null $finished_at
+ * @property string|null $error why the run failed (null = completed)
  */
 class CitationScanRun extends Model
 {

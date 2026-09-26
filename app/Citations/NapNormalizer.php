@@ -60,14 +60,20 @@ final class NapNormalizer
 
     /**
      * The substantive field mismatches between a found listing and the canonical NAP. Empty = a clean match
-     * (formatting-only differences are not findings). Phone comparison is left to the caller (shared-number
-     * rules, Fix 7); this covers name + address (incl. the street-number check).
+     * (formatting-only differences are not findings).
      *
-     * @param  array{name?: ?string, address?: ?string}  $found
-     * @param  array{business_name: string, address_1: string, address_2?: ?string}  $canonical
+     * A directory usually publishes the FULL address ("123 Main St, Clifton, NJ 07013") while the canonical
+     * street line is just "123 Main St", so the address check asks whether the canonical street line appears
+     * inside the found address (after normalization) and, when both carry a ZIP, that the ZIPs agree. A
+     * canonical NAP with no street (a service-area business) skips the address check. Phone is a mismatch
+     * only when the found number is neither the location's own line nor one of the tenant's shared numbers.
+     *
+     * @param  array{name?: ?string, address?: ?string, phone?: ?string}  $found
+     * @param  array{business_name: string, address_1?: ?string, address_2?: ?string, postal?: ?string, phone?: ?string}  $canonical
+     * @param  list<string>  $sharedPhones  raw or normalized shared/corporate numbers that are never a mismatch
      * @return array<string, array{found: string, expected: string}>
      */
-    public function mismatches(array $found, array $canonical): array
+    public function mismatches(array $found, array $canonical, array $sharedPhones = []): array
     {
         $out = [];
 
@@ -77,9 +83,31 @@ final class NapNormalizer
         }
 
         $foundAddr = (string) ($found['address'] ?? '');
-        $expectedAddr = trim($canonical['address_1'].' '.($canonical['address_2'] ?? ''));
-        if ($foundAddr !== '' && $this->address($foundAddr) !== $this->address($expectedAddr)) {
-            $out['address'] = ['found' => $foundAddr, 'expected' => $expectedAddr];
+        $street = trim((string) ($canonical['address_1'] ?? ''));
+        // A found address with no street number (a directory that publishes only "Clifton, NJ") has no
+        // street to fault — only the ZIP, when present, can disagree.
+        if ($foundAddr !== '' && $street !== '' && ($this->streetNumber($this->address($foundAddr)) !== '' || preg_match('/\b\d{5}\b/', $foundAddr) === 1)) {
+            $expectedAddr = trim($street.' '.((string) ($canonical['address_2'] ?? '')));
+            $foundNorm = $this->address($foundAddr);
+            $streetNorm = $this->address($street);
+            $streetKnown = $this->streetNumber($foundNorm) !== '';
+            $zipMismatch = false;
+            $postal = preg_match('/\b(\d{5})\b/', (string) ($canonical['postal'] ?? ''), $pm) === 1 ? $pm[1] : '';
+            if ($postal !== '' && preg_match_all('/\b(\d{5})\b/', $foundAddr, $fm) > 0) {
+                $zipMismatch = ! in_array($postal, $fm[1], true);
+            }
+            if (($streetKnown && ! str_contains(' '.$foundNorm.' ', ' '.$streetNorm.' ')) || $zipMismatch) {
+                $out['address'] = ['found' => $foundAddr, 'expected' => trim($expectedAddr.' '.((string) ($canonical['postal'] ?? '')))];
+            }
+        }
+
+        $foundPhone = $this->phone((string) ($found['phone'] ?? ''));
+        $expectedPhone = $this->phone((string) ($canonical['phone'] ?? ''));
+        if ($foundPhone !== '' && $expectedPhone !== '' && $foundPhone !== $expectedPhone) {
+            $shared = array_map(fn (string $p): string => $this->phone($p), $sharedPhones);
+            if (! in_array($foundPhone, $shared, true)) {
+                $out['phone'] = ['found' => (string) $found['phone'], 'expected' => (string) $canonical['phone']];
+            }
         }
 
         return $out;

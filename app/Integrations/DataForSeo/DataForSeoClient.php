@@ -159,7 +159,7 @@ class DataForSeoClient
     // --- SERP API: organic (live) ---
 
     /**
-     * @return list<array{position: int, url: string, domain: string}>
+     * @return list<array{position: int, url: string, domain: string, title?: string}>
      */
     public function liveOrganic(string $keyword, int $locationCode, string $language, int $depth): array
     {
@@ -353,7 +353,7 @@ class DataForSeoClient
 
     /**
      * @param  array<int, mixed>  $result
-     * @return list<array{position: int, url: string, domain: string}>
+     * @return list<array{position: int, url: string, domain: string, title: string}>
      */
     public static function parseOrganic(array $result): array
     {
@@ -367,6 +367,7 @@ class DataForSeoClient
                 'position' => (int) ($item['rank_absolute'] ?? $item['rank_group'] ?? 0),
                 'url' => (string) ($item['url'] ?? ''),
                 'domain' => (string) ($item['domain'] ?? ''),
+                'title' => (string) ($item['title'] ?? ''),
             ];
         }
 

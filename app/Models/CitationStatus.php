@@ -28,6 +28,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $last_scanned_at
  * @property int $verification_cycles
  * @property int $work_order_count
+ * @property int $missed_scans consecutive scans that did not find a previously-present listing
  */
 class CitationStatus extends Model
 {
@@ -67,6 +68,7 @@ class CitationStatus extends Model
             'attribution_confidence' => 'integer',
             'verification_cycles' => 'integer',
             'work_order_count' => 'integer',
+            'missed_scans' => 'integer',
             'submitted_at' => 'datetime',
             'first_seen_at' => 'datetime',
             'last_scanned_at' => 'datetime',

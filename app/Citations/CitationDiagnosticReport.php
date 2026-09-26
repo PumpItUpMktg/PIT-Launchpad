@@ -45,7 +45,7 @@ final class CitationDiagnosticReport
             $this->failedScanJobs > 0 => "Scans are failing on the worker ({$this->failedScanJobs} failed scan job(s)) — check the failed reason (launchpad:queue-diagnose) and clear once fixed.",
             $this->pendingJobs > 0 && $this->foundDomains === 0 => "Scans are queued ({$this->pendingJobs} pending) but nothing has been processed — the queue worker is likely DOWN.",
             $this->organicRows === 0 => 'DataForSEO returned zero organic results for the brand query — the query or location code may be off.',
-            $this->directoryHits === [] => 'Google returns results but none are catalog directories for this business — organic-SERP detection is missing the listings; targeted per-directory checks would find more.',
+            $this->directoryHits === [] => 'The brand query returns results but none are catalog directories — the scan\'s per-directory site: checks are what find those listings, so run a scan and read the card rather than this probe.',
             default => 'The scan path looks healthy — '.count($this->directoryHits).' directory listing(s) surfaced on the live probe.',
         };
     }

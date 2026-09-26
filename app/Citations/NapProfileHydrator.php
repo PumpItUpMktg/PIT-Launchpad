@@ -22,8 +22,11 @@ use App\Models\Scopes\SiteScope;
  */
 final class NapProfileHydrator
 {
-    /** The NOT-NULL NAP columns — all must be derivable before we create a fresh profile. */
-    private const REQUIRED = ['business_name', 'address_1', 'city', 'state', 'postal', 'phone_primary'];
+    /**
+     * What a canonical NAP needs before we create a fresh profile. A street line and ZIP are NOT required: a
+     * service-area business hides its address on Google, and its citations are still name + city + phone.
+     */
+    private const REQUIRED = ['business_name', 'city', 'state', 'phone_primary'];
 
     public function hydrate(Location $location): NapHydrationResult
     {

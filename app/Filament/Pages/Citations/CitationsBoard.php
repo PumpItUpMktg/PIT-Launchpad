@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Citations;
 
 use App\Citations\CitationDiagnostics;
+use App\Citations\DirectoryCatalog;
 use App\Citations\NapBackfiller;
 use App\Citations\NapHydrationResult;
 use App\Citations\NapProfileHydrator;
@@ -167,10 +168,14 @@ class CitationsBoard extends Page
      */
     public function launchScan(string $locationId): void
     {
-        $location = Location::query()->withoutGlobalScope(SiteScope::class)->find($locationId);
+        $site = $this->getSite();
+        // Lock-scoped: a location id from another tenant is ignored, never scanned.
+        $location = $site === null ? null : Location::query()->withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->find($locationId);
         if ($location === null) {
             return;
         }
+        DirectoryCatalog::ensureSeeded();
 
         $result = $this->ensureNap($location);
         if ($result !== null && ! $result->created()) {
@@ -201,6 +206,7 @@ class CitationsBoard extends Page
             return;
         }
 
+        DirectoryCatalog::ensureSeeded();
         $queued = 0;
         $skipped = 0;
         foreach ($this->board as $card) {
