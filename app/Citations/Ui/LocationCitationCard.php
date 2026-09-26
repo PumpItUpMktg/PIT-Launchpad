@@ -32,6 +32,7 @@ final readonly class LocationCitationCard
         public string $scanState,
         public ?Carbon $lastScannedAt,
         public ?string $lastError = null,
+        public int $unchecked = 0,     // directories the last scan could not check (DataForSEO hiccup)
     ) {}
 
     public function scanFailed(): bool

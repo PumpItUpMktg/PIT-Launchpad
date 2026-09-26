@@ -31,6 +31,11 @@ class DataForSeoClient
     /** Reactive backoff on a 40202 rate-limit envelope (proactive throttle below usually prevents it). */
     private const RATE_LIMIT_RETRIES = 5;
 
+    /** A 40101 "Internal SE Server Error" is a per-task hiccup on DataForSEO's side — one more try, then give up. */
+    private const SE_ERROR_RETRIES = 1;
+
+    private const SE_ERROR_BACKOFF_MS = 1500;
+
     /** Monotonic timestamps of the requests issued in the last 60s — the proactive per-minute throttle. */
     /** @var list<float> */
     private array $requestTimes = [];
@@ -163,14 +168,12 @@ class DataForSeoClient
      */
     public function liveOrganic(string $keyword, int $locationCode, string $language, int $depth): array
     {
-        $json = $this->request('/v3/serp/google/organic/live/advanced', [[
+        return self::parseOrganic($this->requestLiveTask('/v3/serp/google/organic/live/advanced', [
             'keyword' => $keyword,
             'location_code' => $locationCode,
             'language_code' => $language,
             'depth' => $depth,
-        ]]);
-
-        return self::parseOrganic($this->firstTaskResult($json));
+        ]));
     }
 
     // --- SERP API: local maps (live), one geo point ---
@@ -180,13 +183,11 @@ class DataForSeoClient
      */
     public function liveMaps(string $keyword, string $locationCoordinate, string $language): array
     {
-        $json = $this->request('/v3/serp/google/maps/live/advanced', [[
+        return self::parseMaps($this->requestLiveTask('/v3/serp/google/maps/live/advanced', [
             'keyword' => $keyword,
             'location_coordinate' => $locationCoordinate,
             'language_code' => $language,
-        ]]);
-
-        return self::parseMaps($this->firstTaskResult($json));
+        ]));
     }
 
     // --- Standard-mode task lifecycle (generic over an endpoint family) ---
@@ -433,13 +434,28 @@ class DataForSeoClient
     }
 
     /**
+     * POST one live task and return its result — the TASK-level status is checked inside the retry loop, so a
+     * per-task transient (40101 "Internal SE Server Error" comes back at task level, not the envelope) gets
+     * its retry too.
+     *
+     * @param  array<string, mixed>  $task
+     * @return array<int, mixed>
+     */
+    private function requestLiveTask(string $path, array $task): array
+    {
+        return $this->send(fn (): array => $this->firstTaskResult($this->handle($this->pending()->post($this->url($path), [$task]))));
+    }
+
+    /**
      * Issue a request under the DataForSEO rate limit: throttle proactively to stay under the per-minute
      * cap (so a discovery burst never trips it), and — if the cap is hit anyway (e.g. a concurrent run) —
-     * back off and retry the transient 40202 instead of crashing the whole run. Any other envelope error
-     * (auth/quota, fatal) surfaces immediately.
+     * back off and retry the transient 40202 instead of crashing the whole run. A 40101 (DataForSEO's own
+     * SE fetch failed) gets one more try. Any other envelope error (auth/quota, fatal) surfaces immediately.
      *
-     * @param  callable(): array<string, mixed>  $fn
-     * @return array<string, mixed>
+     * @template T of array
+     *
+     * @param  callable(): T  $fn
+     * @return T
      */
     private function send(callable $fn, bool $read = false): array
     {
@@ -449,6 +465,14 @@ class DataForSeoClient
             try {
                 return $fn();
             } catch (DataForSeoException $e) {
+                if ($e->statusCode === DataForSeoException::SE_ERROR) {
+                    if ($attempt > self::SE_ERROR_RETRIES) {
+                        throw $e;
+                    }
+                    usleep(self::SE_ERROR_BACKOFF_MS * 1000);
+
+                    continue;
+                }
                 if ($e->statusCode !== DataForSeoException::RATE_LIMITED || $attempt > self::RATE_LIMIT_RETRIES) {
                     throw $e;
                 }

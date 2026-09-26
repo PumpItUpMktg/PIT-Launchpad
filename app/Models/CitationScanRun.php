@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon $started_at
  * @property Carbon|null $finished_at
  * @property string|null $error why the run failed (null = completed)
+ * @property array<string, mixed>|null $meta e.g. unchecked_directories / failed_calls from a partially-failed scan
  */
 class CitationScanRun extends Model
 {

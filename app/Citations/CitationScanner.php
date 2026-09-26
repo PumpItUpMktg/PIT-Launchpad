@@ -7,6 +7,7 @@ use App\Enums\CitationSource;
 use App\Integrations\Citations\ListingVerifier;
 use App\Integrations\Citations\NullListingVerifier;
 use App\Integrations\DataForSeo\DataForSeoClient;
+use App\Integrations\DataForSeo\DataForSeoException;
 use App\Models\CitationFoundDomain;
 use App\Models\CitationStatus;
 use App\Models\Directory;
@@ -35,6 +36,10 @@ use Illuminate\Support\Collection;
  * A listing found on an earlier scan but not this one counts a miss; after `citations.lost_after_misses`
  * consecutive misses it flips to Absent (the differ then records it lost). Platform-confirmed rows (Google,
  * from the location's own GBP) are never aged out by the SERP.
+ *
+ * One failed DataForSEO call never sinks the scan: a transient error (their SE hiccup, a timeout) skips
+ * that query — a skipped directory is left UNCHECKED (no status written, never aged), and the run records
+ * how many. Only an auth/quota failure, or every call failing, fails the run.
  */
 final class CitationScanner
 {
@@ -46,6 +51,12 @@ final class CitationScanner
 
     /** URL path fragments that mark a directory's own search / browse page rather than one listing. */
     private const NON_LISTING_PATHS = ['/search', '/find', '/results', '/s?', 'find_desc=', '?q=', '/browse', '/category/', '/categories/', '/directory/'];
+
+    /** Directory ids whose presence check could not be made this scan (a failed call) — never aged out. @var list<string> */
+    private array $unchecked = [];
+
+    /** Every DataForSEO call this scan made: the transient failure it hit, or null when it answered. @var list<DataForSeoException|null> */
+    private array $ledger = [];
 
     public function __construct(
         private readonly DataForSeoClient $dfs,
@@ -65,6 +76,9 @@ final class CitationScanner
             return 0; // No canonical NAP → nothing authoritative to scan against.
         }
 
+        $this->unchecked = [];
+        $this->ledger = [];
+
         $siblings = $this->siblingDtos((string) $location->site_id);
         $sharedPhones = $this->sharedPhoneOwners((string) $location->site_id);
         $directories = Directory::query()->where('is_active', true)->get();
@@ -76,6 +90,12 @@ final class CitationScanner
         // Presence: a targeted check per applicable directory the discovery pass missed.
         $applicable = $this->applicability->forLocation($location);
         $found = $this->checkDirectories($profile, $applicable, $found);
+
+        // Nothing at all could be asked → the run is a failure, not a scan that found nothing.
+        $failures = array_values(array_filter($this->ledger));
+        if ($failures !== [] && count($failures) === count($this->ledger)) {
+            throw $failures[array_key_last($failures)];
+        }
 
         $written = 0;
         $foundDirectoryIds = [];
@@ -104,6 +124,51 @@ final class CitationScanner
         return $written;
     }
 
+    /** Directory ids the last scan could not check (a failed DataForSEO call) — reported on the run. @return list<string> */
+    public function lastUnchecked(): array
+    {
+        return $this->unchecked;
+    }
+
+    /** How many DataForSEO calls failed (and were skipped) on the last scan. */
+    public function lastFailedCalls(): int
+    {
+        return count(array_filter($this->ledger));
+    }
+
+    /**
+     * One organic query, tolerant: no-results → []; a transient failure (after the client's own retry) →
+     * null (the caller skips that query); an auth/quota failure → rethrown, nothing is scannable through it.
+     *
+     * @return list<array{position: int, url: string, domain: string, title?: string}>|null
+     *
+     * @phpstan-impure writes the call ledger
+     */
+    private function organic(string $query, int $depth): ?array
+    {
+        $locationCode = (int) config('services.dataforseo.location_code', 2840);
+        $language = (string) config('services.dataforseo.language_code', 'en');
+
+        try {
+            $rows = $this->dfs->liveOrganic($query, $locationCode, $language, $depth);
+            $this->ledger[] = null;
+
+            return $rows;
+        } catch (DataForSeoException $e) {
+            if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
+                $this->ledger[] = null;
+
+                return [];
+            }
+            if ($e->fatal) {
+                throw $e;
+            }
+            $this->ledger[] = $e;
+
+            return null;
+        }
+    }
+
     /**
      * Targeted presence checks: for each applicable directory not already found, ask the SERP for that
      * directory's own pages naming the brand. Accepts the first result that is on the directory's domain, is
@@ -112,6 +177,8 @@ final class CitationScanner
      * @param  Collection<int, Directory>  $applicable
      * @param  array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}>  $found
      * @return array<string, array{url: string, name: ?string, address: ?string, phone: ?string, candidates?: list<string>}>
+     *
+     * @phpstan-impure writes the call ledger + unchecked list
      */
     private function checkDirectories(LocationNapProfile $profile, Collection $applicable, array $found): array
     {
@@ -121,8 +188,6 @@ final class CitationScanner
         }
         $city = trim((string) ($profile->city ?? ''));
         $limit = max(0, (int) config('launchpad.citations.directory_query_limit', 40));
-        $locationCode = (int) config('services.dataforseo.location_code', 2840);
-        $language = (string) config('services.dataforseo.language_code', 'en');
 
         $checked = 0;
         foreach ($applicable as $directory) {
@@ -136,8 +201,14 @@ final class CitationScanner
             $checked++;
 
             $query = 'site:'.$domain.' "'.$name.'"'.($city !== '' ? ' '.$city : '');
+            $rows = $this->organic($query, 10);
+            if ($rows === null) {
+                $this->unchecked[] = (string) $directory->id; // could not be asked — left as it was, never aged
+
+                continue;
+            }
             $candidates = [];
-            foreach ($this->dfs->liveOrganic($query, $locationCode, $language, 10) as $row) {
+            foreach ($rows as $row) {
                 $rowDomain = $this->normalizeDomain((string) $row['domain']);
                 $url = (string) $row['url'];
                 $title = (string) ($row['title'] ?? '');
@@ -243,6 +314,9 @@ final class CitationScanner
 
                 continue;
             }
+            if (in_array((string) $row->directory_id, $this->unchecked, true)) {
+                continue; // not a miss — the check itself failed this pass
+            }
 
             $misses = $row->missed_scans + 1;
             $fill = ['missed_scans' => $misses, 'last_scanned_at' => $now];
@@ -332,16 +406,20 @@ final class CitationScanner
      *
      * @param  list<string>  $queries
      * @return array<string, array{url: string, name: ?string, address: ?string, phone: ?string}>
+     *
+     * @phpstan-impure writes the call ledger
      */
     private function runQueries(array $queries): array
     {
-        $locationCode = (int) config('services.dataforseo.location_code', 2840);
-        $language = (string) config('services.dataforseo.language_code', 'en');
         $depth = (int) config('services.dataforseo.serp_depth', 20);
 
         $out = [];
         foreach ($queries as $query) {
-            foreach ($this->dfs->liveOrganic($query, $locationCode, $language, $depth) as $row) {
+            $rows = $this->organic($query, $depth);
+            if ($rows === null) {
+                continue; // this query failed on DataForSEO's side — the others still carry discovery
+            }
+            foreach ($rows as $row) {
                 $domain = $this->normalizeDomain((string) $row['domain']);
                 if ($domain === '' || isset($out[$domain])) {
                     continue;

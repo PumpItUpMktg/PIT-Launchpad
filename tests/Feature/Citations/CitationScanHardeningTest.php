@@ -250,3 +250,58 @@ test('on a multi-location brand, a directory that blocks scraping is parked for 
         ->and($row->needs_review)->toBeTrue()
         ->and($row->attributed_location_id)->toBeNull();
 });
+
+test('one failed DataForSEO call skips that directory (unchecked, never aged) while the rest of the scan proceeds', function (): void {
+    config(['launchpad.citations.lost_after_misses' => 1]);
+    $bbb = Directory::factory()->create(['domain' => 'bbb.org', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    $yp = Directory::factory()->create(['domain' => 'yellowpages.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    // BBB was live last month; this month its check blows up on DataForSEO's side.
+    CitationStatus::query()->create([
+        'site_id' => $this->site->id, 'location_id' => $this->location->id, 'directory_id' => $bbb->id,
+        'presence' => CitationPresence::PresentMatch, 'source' => CitationSource::Unknown, 'found_url' => 'https://bbb.org/x',
+    ]);
+    $scanner = new CitationScanner(dfsAnswering(function (string $q): array {
+        if (str_starts_with($q, 'site:bbb.org')) {
+            throw DataForSeoException::envelope(DataForSeoException::SE_ERROR, 'Internal SE Server Error.');
+        }
+        if (str_starts_with($q, 'site:yellowpages.com')) {
+            return [['position' => 1, 'url' => 'https://www.yellowpages.com/clifton-nj/mip/acme-plumbing-1', 'domain' => 'www.yellowpages.com', 'title' => 'ACME Plumbing']];
+        }
+
+        return [];
+    }));
+
+    $written = $scanner->scanLocation($this->location);
+
+    expect($written)->toBe(1)
+        ->and($scanner->lastUnchecked())->toBe([$bbb->id])
+        ->and($scanner->lastFailedCalls())->toBe(1)
+        ->and(CitationStatus::query()->where('directory_id', $yp->id)->first()->presence)->toBe(CitationPresence::PresentMatch)
+        ->and(CitationStatus::query()->where('directory_id', $bbb->id)->first()->presence)->toBe(CitationPresence::PresentMatch)  // not aged — it was never checked
+        ->and(CitationStatus::query()->where('directory_id', $bbb->id)->first()->missed_scans)->toBe(0);
+
+    // The run records what could not be checked, and the board tells the operator.
+    app()->instance(DataForSeoClient::class, dfsAnswering(fn (string $q): array => str_starts_with($q, 'site:bbb.org')
+        ? throw DataForSeoException::envelope(DataForSeoException::SE_ERROR, 'Internal SE Server Error.')
+        : []));
+    app()->call([new RunCitationScan($this->location->id, sweepSharedNumbers: false, trigger: 'manual'), 'handle']);
+    $run = CitationScanRun::query()->where('location_id', $this->location->id)->latest('started_at')->first();
+    expect($run->error)->toBeNull()
+        ->and($run->meta['unchecked_directories'])->toBe(1)
+        ->and((new TenantCitationBoard)->forSite($this->site)[0]->unchecked)->toBe(1);
+});
+
+test('a scan where every DataForSEO call fails is a failed run, and an auth/quota error fails it at once', function (): void {
+    Directory::factory()->create(['domain' => 'bbb.org', 'scope' => DirectoryScope::National, 'is_active' => true]);
+
+    $allDown = new CitationScanner(dfsAnswering(fn (): array => throw DataForSeoException::envelope(DataForSeoException::SE_ERROR, 'Internal SE Server Error.')));
+    expect(fn () => $allDown->scanLocation($this->location))->toThrow(DataForSeoException::class);
+
+    $calls = 0;
+    $quota = new CitationScanner(dfsAnswering(function () use (&$calls): array {
+        $calls++;
+        throw DataForSeoException::envelope(40200, 'Payment Required.');
+    }));
+    expect(fn () => $quota->scanLocation($this->location))->toThrow(DataForSeoException::class)
+        ->and($calls)->toBe(1);   // fatal → no further calls attempted
+});
