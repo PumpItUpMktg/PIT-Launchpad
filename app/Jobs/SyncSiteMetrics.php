@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Metrics\MetricProviderRegistry;
+use App\Metrics\Providers\IndexMetricProvider;
 use App\Metrics\SyncResult;
 use App\Models\MetricSyncRun;
 use App\Models\Site;
@@ -10,6 +11,7 @@ use Carbon\CarbonPeriod;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -84,6 +86,13 @@ class SyncSiteMetrics implements ShouldQueue
                 Carbon::parse($this->rangeEnd)->startOfDay(),
             );
             $this->finish($run, $provider->sync($site, $range));
+
+            // Fresh verdicts → refresh the Indexing board's stuck-page diagnosis (a queued compute; the
+            // "Why?" panel only ever reads the cached result).
+            if ($this->provider === IndexMetricProvider::PROVIDER) {
+                Cache::forget(ComputeStuckPages::cacheKey((string) $site->id));
+                ComputeStuckPages::request((string) $site->id);
+            }
         } catch (Throwable $e) {
             Log::warning('metric sync failed', [
                 'site_id' => $site->id, 'provider' => $this->provider, 'error' => $e->getMessage(),

@@ -6,6 +6,7 @@ use App\Enums\IndexCoverageState;
 use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\IndexingBoard;
+use App\Jobs\ComputeStuckPages;
 use App\Jobs\SyncSiteMetrics;
 use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\Content;
@@ -15,7 +16,9 @@ use App\Models\Site;
 use App\Models\User;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
+use App\Operator\Coverage\StuckPages;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -350,7 +353,7 @@ it('opens a "Why?" panel on a stuck page with the reason, links, impressions and
     expect($post->fresh()->status)->toBe(ContentStatus::Candidate);
 });
 
-it('caches the stuck-page report per site between "Why?" clicks and clears it on a take-down', function () {
+it('computes the stuck-page report on the queue, reads it from the cache, dedupes requests, and recomputes after a take-down', function () {
     $this->travelTo('2026-09-25 12:00:00');
     $site = Site::factory()->create(['domain_url' => 'https://cache.example']);
     app(ActiveTenant::class)->set($site->id);
@@ -361,11 +364,23 @@ it('caches the stuck-page report per site between "Why?" clicks and clears it on
     indexRow($site, $post, IndexCoverageState::CrawledNotIndexed->value, 'https://cache.example/cached-post/');
     PageIndexState::query()->where('content_id', $post->id)->update(['last_inspected_at' => '2026-09-24 03:00:00']);
 
+    // Nothing computed yet and the queue is faked: the click queues ONE computation and shows the working state.
+    Bus::fake();
+    $html = Livewire::test(IndexingBoard::class)->call('explain', $post->id)->call('explain', $post->id)->call('explain', $post->id)->html();
+    Bus::assertDispatchedTimes(ComputeStuckPages::class, 1);   // the pending marker dedupes
+    expect($html)->toContain('Working out why')
+        ->and($html)->not->toContain('Drop it');
+
+    // The job lands → the panel is a pure read of the cache.
+    Cache::forget(ComputeStuckPages::pendingKey($site->id));
+    (new ComputeStuckPages($site->id))->handle(app(StuckPages::class));
     $html = Livewire::test(IndexingBoard::class)->call('explain', $post->id)->html();
     expect($html)->toContain('Drop it')
-        ->and(Cache::has(IndexingBoard::stuckCacheKey($site->id)))->toBeTrue()
-        ->and($html)->toContain('Working…');   // the loading label is wired on the button
+        ->and(Cache::has(ComputeStuckPages::cacheKey($site->id)))->toBeTrue()
+        ->and($html)->toContain('Working…');   // the button's own loading label is still wired
 
+    // A take-down clears the report and queues a fresh one.
     Livewire::test(IndexingBoard::class)->call('explain', $post->id)->call('takeDownPost', $post->id);
-    expect(Cache::has(IndexingBoard::stuckCacheKey($site->id)))->toBeFalse();
+    expect(Cache::has(ComputeStuckPages::cacheKey($site->id)))->toBeFalse()
+        ->and(Cache::has(ComputeStuckPages::pendingKey($site->id)))->toBeTrue(); // re-requested (the faked bus never releases the unique lock, so the dispatch count can't be read here)
 });
