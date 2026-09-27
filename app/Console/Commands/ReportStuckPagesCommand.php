@@ -42,6 +42,7 @@ class ReportStuckPagesCommand extends Command
             StuckPages::REGENERATE => 'REGENERATE — crawled, linked, still not indexed',
             StuckPages::RECHECK => 'RE-CHECK — no usable verdict',
             StuckPages::UNBLOCK => 'UNBLOCK — noindex / blocked on WordPress',
+            StuckPages::DROP => 'DROP — a crawled-and-declined post with no impressions ever; take it down',
         ];
 
         $lastLever = null;

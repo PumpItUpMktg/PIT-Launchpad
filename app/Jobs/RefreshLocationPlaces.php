@@ -33,6 +33,10 @@ class RefreshLocationPlaces implements ShouldQueue
 
         CurrentSite::set((string) $location->site_id);
 
-        $refresher->refresh($location);
+        try {
+            $refresher->refresh($location);
+        } finally {
+            CurrentSite::clear(); // never hand this tenant to the next job on the worker
+        }
     }
 }

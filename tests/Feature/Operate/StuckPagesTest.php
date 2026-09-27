@@ -5,6 +5,7 @@ use App\Enums\ContentStatus;
 use App\Enums\IndexCoverageState;
 use App\Enums\PageType;
 use App\Models\Content;
+use App\Models\GscUrlDaily;
 use App\Models\Location;
 use App\Models\PageIndexState;
 use App\Models\Site;
@@ -115,4 +116,47 @@ it('prints the report grouped by lever with the next commands', function () {
         ->assertSuccessful();
 
     $this->artisan('launchpad:report-stuck-pages')->expectsOutputToContain('Pass --site=')->assertFailed();
+});
+
+it('recommends DROP for a crawled-and-declined blog post with no impression ever, REWORK once it has earned any, and never DROP for a page', function () {
+    $site = stuckSite();
+    $market = Location::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown']);
+    $post = fn (string $title, string $slug) => Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'page_type' => null, 'status' => ContentStatus::Published,
+        'title' => $title, 'slug' => $slug, 'published_at' => '2026-09-01 09:00:00', 'wp_post_id' => 1,
+    ]);
+
+    $unseen = $post('Sump Pump Maintenance Tips', 'sump-pump-maintenance-tips');
+    stuckVerdict($site, $unseen, IndexCoverageState::CrawledNotIndexed->value);
+
+    $seen = $post('Basement Flood Guide', 'basement-flood-guide');
+    stuckVerdict($site, $seen, IndexCoverageState::CrawledNotIndexed->value);
+    GscUrlDaily::create([
+        'site_id' => $site->id, 'grain_hash' => hash('sha256', 'seen'), 'date' => '2026-08-20',
+        'url' => (string) PublicUrl::forContent($site->domain_url, $seen), 'impressions' => 3, 'clicks' => 0, 'ctr' => 0,
+    ]);
+
+    // Both posts are linked from an indexed hub, so neither is a "link it" case.
+    $hub = stuckPage($site, 'Hub', '2026-06-01 09:00:00', 'hub', $market->id,
+        '<p><a href="'.PublicUrl::forContent($site->domain_url, $unseen).'">a</a> <a href="'.PublicUrl::forContent($site->domain_url, $seen).'">b</a></p>');
+    stuckVerdict($site, $hub, 'PASS');
+
+    // A location page with the same verdict and no impressions is reworked, never dropped.
+    $town = stuckPage($site, 'Newtown', '2026-09-01 09:00:00', 'newtown-pa', $market->id);
+    stuckVerdict($site, $town, IndexCoverageState::CrawledNotIndexed->value);
+    $hubTwo = stuckPage($site, 'Hub Two', '2026-06-01 09:00:00', 'hub-two', $market->id, '<p><a href="'.PublicUrl::forContent($site->domain_url, $town).'">t</a></p>');
+    stuckVerdict($site, $hubTwo, 'PASS');
+
+    $rows = collect(app(StuckPages::class)->for($site)['rows'])->keyBy('title');
+
+    expect($rows['Sump Pump Maintenance Tips']['lever'])->toBe(StuckPages::DROP)
+        ->and($rows['Sump Pump Maintenance Tips']['recommendation'])->toBe(StuckPages::DROP)
+        ->and($rows['Sump Pump Maintenance Tips']['is_post'])->toBeTrue()
+        ->and($rows['Sump Pump Maintenance Tips']['impressions_ever'])->toBeFalse()
+        ->and($rows['Basement Flood Guide']['lever'])->toBe(StuckPages::REGENERATE)
+        ->and($rows['Basement Flood Guide']['recommendation'])->toBe(StuckPages::REWORK)
+        ->and($rows['Basement Flood Guide']['impressions_ever'])->toBeTrue()
+        ->and($rows['Newtown']['lever'])->toBe(StuckPages::REGENERATE)
+        ->and($rows['Newtown']['recommendation'])->toBe(StuckPages::REWORK)
+        ->and($rows['Newtown']['is_post'])->toBeFalse();
 });

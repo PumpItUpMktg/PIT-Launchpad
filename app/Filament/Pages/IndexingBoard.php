@@ -2,12 +2,17 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\ContentKind;
 use App\Jobs\SyncSiteMetrics;
 use App\Metrics\Providers\IndexMetricProvider;
+use App\Models\Content;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
 use App\Operator\Coverage\IndexWatchlist;
+use App\Operator\Coverage\StuckPages;
+use App\Publishing\DeleteFromWordpress;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -48,6 +53,9 @@ class IndexingBoard extends Page
 
     #[Url(as: 'dir')]
     public string $watchDir = 'asc';
+
+    /** The stuck page whose "Why?" panel is open (content id), or null. */
+    public ?string $whyId = null;
 
     public function mount(): void
     {
@@ -138,6 +146,59 @@ class IndexingBoard extends Page
         $site = $this->siteId === null ? null : Site::query()->whereKey($this->siteId)->first();
 
         return app(IndexWatchlist::class)->for($site, $this->watchSort, $this->watchDir);
+    }
+
+    /**
+     * The stuck pages (past the stuck window) with their reason, inbound links, impressions, lever and
+     * recommendation — keyed by content id for the "Why?" panel. Computed once per render, and only read
+     * when a panel is open, so the link graph is not built for a plain page view.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function getStuckProperty(): array
+    {
+        $site = $this->siteId === null ? null : Site::query()->whereKey($this->siteId)->first();
+        if ($site === null) {
+            return [];
+        }
+
+        return collect(app(StuckPages::class)->for($site)['rows'])->keyBy('content_id')->all();
+    }
+
+    /** Open (or close) the "Why isn't this indexed?" panel for one stuck page. */
+    public function explain(string $contentId): void
+    {
+        $this->whyId = $this->whyId === $contentId ? null : $contentId;
+    }
+
+    /**
+     * Take a stuck blog POST off WordPress (the "drop" recommendation) — the same take-down the Posts board
+     * offers: §2's delete by ULID, then the row goes back to Candidates. Only a post, only in the locked
+     * tenant; a page is never dropped from here.
+     */
+    public function takeDownPost(string $contentId): void
+    {
+        $content = $this->siteId === null ? null : Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->siteId)
+            ->where('kind', ContentKind::Post->value)
+            ->whereKey($contentId)
+            ->first();
+        if ($content === null) {
+            Notification::make()->warning()->title('Only a blog post can be dropped from here')->send();
+
+            return;
+        }
+
+        $result = app(DeleteFromWordpress::class)->delete($content);
+        if (! $result['deleted'] && $result['on_wp']) {
+            Notification::make()->danger()->title('Could not take it down')->body($result['message'])->send();
+
+            return;
+        }
+
+        $this->whyId = null;
+        Notification::make()->success()->title('Taken down')
+            ->body("'{$content->title}' was removed from WordPress and moved back to Candidates. It leaves this list on the next refresh.")->send();
     }
 
     /** Click a watchlist column header: sort by it; click it again to flip the direction. */

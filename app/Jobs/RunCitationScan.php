@@ -60,6 +60,23 @@ class RunCitationScan implements ShouldQueue
 
         CurrentSite::set((string) $location->site_id);
 
+        try {
+            $this->scan($location, $scanner, $reconciler, $score, $recorder, $differ, $lifecycle, $confirmer);
+        } finally {
+            CurrentSite::clear(); // never hand this tenant to the next job on the worker
+        }
+    }
+
+    private function scan(
+        Location $location,
+        CitationScanner $scanner,
+        CitationReconciler $reconciler,
+        LocalPresenceScore $score,
+        ScanRunRecorder $recorder,
+        CitationDiffer $differ,
+        CitationLifecycle $lifecycle,
+        PlatformCitationConfirmer $confirmer,
+    ): void {
         // Capture the pre-scan presence per directory so the diff can see what actually changed.
         $prior = CitationStatus::query()
             ->where('location_id', $location->id)

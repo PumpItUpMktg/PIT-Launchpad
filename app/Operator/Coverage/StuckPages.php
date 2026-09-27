@@ -2,7 +2,10 @@
 
 namespace App\Operator\Coverage;
 
+use App\Enums\ContentKind;
 use App\Enums\IndexCoverageState;
+use App\Models\Content;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\Links\InternalLinkGraph;
 
@@ -18,6 +21,11 @@ use App\Publishing\Links\InternalLinkGraph;
  *  - not yet inspected                 → re-check indexing (the daily sync has not reached it)
  *  - noindex / blocked                 → fix on WordPress; Launchpad cannot index past a noindex
  *  - inspection error                  → re-check indexing
+ *
+ * Each row also carries a plain recommendation for the operator — WAIT (a process lever: link, ping,
+ * re-check, unblock), REWORK (Google saw the page and passed; the content has to change), or DROP (a blog
+ * post Google crawled and declined that has never earned a single impression: a thin or duplicate news
+ * item — take it down rather than polish it). A core / location / service page is never "drop".
  */
 class StuckPages
 {
@@ -31,14 +39,22 @@ class StuckPages
 
     public const UNBLOCK = 'unblock';
 
+    /** A crawled-and-declined blog post with no impression ever: not worth reworking. */
+    public const DROP = 'drop';
+
+    public const WAIT = 'wait';
+
+    public const REWORK = 'rework';
+
     public function __construct(
         private readonly IndexWatchlist $watchlist,
         private readonly InternalLinkGraph $graph,
+        private readonly PageImpressions $impressions,
     ) {}
 
     /**
      * @return array{
-     *     rows: list<array{content_id: string, title: string, url: ?string, kind: string, published_at: ?string, days_waiting: ?int, reason: string, inbound: int, indexnow_at: ?string, market_id: ?string, lever: string, action: string}>,
+     *     rows: list<array{content_id: string, title: string, url: ?string, kind: string, published_at: ?string, days_waiting: ?int, reason: string, inbound: int, impressions_ever: bool, indexnow_at: ?string, market_id: ?string, lever: string, action: string, recommendation: string, is_post: bool}>,
      *     by_lever: array<string, int>, stuck_days: int, markets_needing_links: list<string>
      * }
      */
@@ -48,15 +64,19 @@ class StuckPages
         $stuckDays = $list['metrics']['stuck_days'];
         $graph = $this->graph->build($site);
 
+        $stuck = array_values(array_filter($list['rows'], fn (array $row): bool => $row['state'] !== 'indexed' && ($row['days_waiting'] ?? 0) >= $stuckDays));
+        $pages = Content::query()->withoutGlobalScope(SiteScope::class)->whereKey(array_column($stuck, 'content_id'))->get();
+        $everSeen = $this->impressions->ever($site, $pages);
+        $kinds = $pages->mapWithKeys(fn (Content $c): array => [(string) $c->id => $c->kind])->all();
+
         $rows = [];
         $byLever = [];
         $markets = [];
-        foreach ($list['rows'] as $row) {
-            if ($row['state'] === 'indexed' || ($row['days_waiting'] ?? 0) < $stuckDays) {
-                continue;
-            }
+        foreach ($stuck as $row) {
             $inbound = count($graph->inbound($row['content_id']));
-            [$lever, $action] = $this->lever($row['verdict'], $inbound);
+            $isPost = ($kinds[$row['content_id']] ?? null) === ContentKind::Post;
+            $seen = isset($everSeen[$row['content_id']]);
+            [$lever, $action] = $this->lever($row['verdict'], $inbound, $isPost, $seen);
             $rows[] = [
                 'content_id' => $row['content_id'],
                 'title' => $row['title'],
@@ -66,10 +86,17 @@ class StuckPages
                 'days_waiting' => $row['days_waiting'],
                 'reason' => $row['reason'] ?? IndexCoverageState::NotInspected->label(),
                 'inbound' => $inbound,
+                'impressions_ever' => $seen,
                 'indexnow_at' => $row['indexnow_at'],
                 'market_id' => $row['market_id'],
                 'lever' => $lever,
                 'action' => $action,
+                'recommendation' => match ($lever) {
+                    self::DROP => self::DROP,
+                    self::REGENERATE => self::REWORK,
+                    default => self::WAIT,
+                },
+                'is_post' => $isPost,
             ];
             $byLever[$lever] = ($byLever[$lever] ?? 0) + 1;
             if ($lever === self::LINK && $row['market_id'] !== null) {
@@ -89,7 +116,7 @@ class StuckPages
     }
 
     /** @return array{0: string, 1: string} [lever, the sentence] */
-    private function lever(?string $verdict, int $inbound): array
+    private function lever(?string $verdict, int $inbound, bool $isPost = false, bool $impressionsEver = false): array
     {
         $state = $verdict === null ? IndexCoverageState::NotInspected : (IndexCoverageState::tryFrom($verdict) ?? IndexCoverageState::NotIndexedOther);
 
@@ -97,6 +124,10 @@ class StuckPages
             $state === IndexCoverageState::NotInspected => [self::RECHECK, 'Not inspected yet — run "Re-check indexing" so Search Console reports on it'],
             $state === IndexCoverageState::Error => [self::RECHECK, 'Inspection errored — re-check indexing'],
             $state === IndexCoverageState::ExcludedBlocked => [self::UNBLOCK, 'Google reports noindex/blocked — fix on WordPress (robots, noindex, or a blocked path)'],
+            // A post Google crawled and declined that has never earned an impression is thin or duplicate:
+            // linking it will not change Google's verdict — drop it (checked before the link lever, which is
+            // the right first move for a PAGE).
+            $state === IndexCoverageState::CrawledNotIndexed && $isPost && ! $impressionsEver => [self::DROP, 'Google crawled it, declined to index it, and it has never earned a single impression — a thin or duplicate post. Take it down rather than rework it; the pillar page carries the topic'],
             $state === IndexCoverageState::CrawledNotIndexed && $inbound === 0 => [self::LINK, 'Crawled but judged not worth indexing, and nothing links to it — link it first (the market link plan), then re-inspect'],
             $state === IndexCoverageState::CrawledNotIndexed => [self::REGENERATE, 'Crawled, linked, still not indexed — regenerate with local grounding (jobs, reviews, neighbours), then re-inspect'],
             $inbound === 0 => [self::LINK, 'Google has not crawled it and nothing links to it — link it (the market link plan), then ping IndexNow'],
