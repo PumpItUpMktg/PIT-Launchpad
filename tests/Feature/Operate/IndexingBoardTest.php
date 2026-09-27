@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
@@ -347,4 +348,24 @@ it('opens a "Why?" panel on a stuck page with the reason, links, impressions and
     // The post (not on WordPress → no HTTP) goes back to Candidates and the panel closes.
     Livewire::test(IndexingBoard::class)->call('explain', $post->id)->call('takeDownPost', $post->id)->assertSet('whyId', null);
     expect($post->fresh()->status)->toBe(ContentStatus::Candidate);
+});
+
+it('caches the stuck-page report per site between "Why?" clicks and clears it on a take-down', function () {
+    $this->travelTo('2026-09-25 12:00:00');
+    $site = Site::factory()->create(['domain_url' => 'https://cache.example']);
+    app(ActiveTenant::class)->set($site->id);
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'page_type' => null, 'status' => ContentStatus::Published,
+        'title' => 'Cached Post', 'slug' => 'cached-post', 'published_at' => '2026-09-01 09:00:00', 'wp_post_id' => null,
+    ]);
+    indexRow($site, $post, IndexCoverageState::CrawledNotIndexed->value, 'https://cache.example/cached-post/');
+    PageIndexState::query()->where('content_id', $post->id)->update(['last_inspected_at' => '2026-09-24 03:00:00']);
+
+    $html = Livewire::test(IndexingBoard::class)->call('explain', $post->id)->html();
+    expect($html)->toContain('Drop it')
+        ->and(Cache::has(IndexingBoard::stuckCacheKey($site->id)))->toBeTrue()
+        ->and($html)->toContain('Working…');   // the loading label is wired on the button
+
+    Livewire::test(IndexingBoard::class)->call('explain', $post->id)->call('takeDownPost', $post->id);
+    expect(Cache::has(IndexingBoard::stuckCacheKey($site->id)))->toBeFalse();
 });

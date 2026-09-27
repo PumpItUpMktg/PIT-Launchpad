@@ -73,7 +73,10 @@
                             @elseif ($row['state'] === 'inspected')<x-lp.chip tone="warn">Not indexed</x-lp.chip>
                             @else<span class="k">Published</span>@endif
                             @if ($row['state'] !== 'indexed' && ($row['days_waiting'] ?? 0) >= $stuckDays)
-                                <button type="button" class="ix-why {{ $whyId === $row['content_id'] ? 'on' : '' }}" wire:click="explain('{{ $row['content_id'] }}')">{{ $whyId === $row['content_id'] ? 'Close' : 'Why?' }}</button>
+                                <button type="button" class="ix-why {{ $whyId === $row['content_id'] ? 'on' : '' }}" wire:click="explain('{{ $row['content_id'] }}')" wire:loading.attr="disabled" wire:target="explain('{{ $row['content_id'] }}')">
+                                    <span wire:loading.remove wire:target="explain('{{ $row['content_id'] }}')">{{ $whyId === $row['content_id'] ? 'Close' : 'Why?' }}</span>
+                                    <span wire:loading wire:target="explain('{{ $row['content_id'] }}')">Working…</span>
+                                </button>
                             @endif
                         </td>
                         <td class="date">{{ $row['indexed_at'] ? \Illuminate\Support\Carbon::parse($row['indexed_at'])->format('j M') : '—' }}@if ($row['state'] === 'indexed' && $row['days_waiting'] !== null) <span class="k">· {{ $row['days_waiting'] }}d to index</span>@endif</td>
