@@ -19,6 +19,7 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Attributes\Url;
 
 /**
@@ -148,10 +149,15 @@ class IndexingBoard extends Page
         return app(IndexWatchlist::class)->for($site, $this->watchSort, $this->watchDir);
     }
 
+    /** How long one site's stuck-page report is reused between "Why?" clicks (seconds). */
+    private const STUCK_CACHE_SECONDS = 600;
+
     /**
      * The stuck pages (past the stuck window) with their reason, inbound links, impressions, lever and
-     * recommendation — keyed by content id for the "Why?" panel. Computed once per render, and only read
-     * when a panel is open, so the link graph is not built for a plain page view.
+     * recommendation — keyed by content id for the "Why?" panel. Only read when a panel is open, and cached
+     * per site for ten minutes: the report builds the whole site's internal-link graph (every published
+     * body parsed for links), which on a few hundred pages is seconds of work — one compute serves every
+     * click on the board. A take-down clears it.
      *
      * @return array<string, array<string, mixed>>
      */
@@ -162,7 +168,16 @@ class IndexingBoard extends Page
             return [];
         }
 
-        return collect(app(StuckPages::class)->for($site)['rows'])->keyBy('content_id')->all();
+        return Cache::remember(
+            self::stuckCacheKey((string) $site->id),
+            self::STUCK_CACHE_SECONDS,
+            fn (): array => collect(app(StuckPages::class)->for($site)['rows'])->keyBy('content_id')->all(),
+        );
+    }
+
+    public static function stuckCacheKey(string $siteId): string
+    {
+        return 'indexing:stuck-pages:'.$siteId;
     }
 
     /** Open (or close) the "Why isn't this indexed?" panel for one stuck page. */
@@ -197,6 +212,7 @@ class IndexingBoard extends Page
         }
 
         $this->whyId = null;
+        Cache::forget(self::stuckCacheKey((string) $this->siteId));
         Notification::make()->success()->title('Taken down')
             ->body("'{$content->title}' was removed from WordPress and moved back to Candidates. It leaves this list on the next refresh.")->send();
     }
