@@ -134,6 +134,7 @@ use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
 use App\Support\CurrentSite;
+use App\Support\Tenancy\ResetTenantOnJobBoundary;
 use App\TownRank\TownRankPoints;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Events\MigrationsEnded;
@@ -777,6 +778,13 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(WorkerStopping::class, [WorkerHeartbeat::class, 'stopping']);
         // A timeout kill is not a clean stop: record it before the process dies, or the row goes silent.
         Event::listen(JobTimedOut::class, [WorkerHeartbeat::class, 'timedOut']);
+
+        // The tenant lock never survives a job boundary — a job that sets CurrentSite and forgets to clear it
+        // must not hand its tenant to the next job on the same worker (the cross-tenant write guard would
+        // then refuse the next job's own writes).
+        Event::listen(JobProcessing::class, [ResetTenantOnJobBoundary::class, 'processing']);
+        Event::listen(JobProcessed::class, [ResetTenantOnJobBoundary::class, 'processed']);
+        Event::listen(JobFailed::class, [ResetTenantOnJobBoundary::class, 'failed']);
 
         // §9 audit: record RBAC role changes. (Publish — ContentPublished — is
         // emitted by the §2 publish pipeline; that call site attaches there.)
