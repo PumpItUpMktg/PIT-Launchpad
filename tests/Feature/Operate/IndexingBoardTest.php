@@ -1,7 +1,9 @@
 <?php
 
+use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\IndexCoverageState;
+use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\IndexingBoard;
 use App\Jobs\SyncSiteMetrics;
@@ -314,4 +316,35 @@ it('shows the spread and the overdue count on the board', function () {
 it('stays quiet about vintage with no tenant selected', function () {
     expect(app(IndexStandings::class)->for(null)['freshness'])
         ->toBe(['oldest' => null, 'newest' => null, 'stale' => 0, 'total' => 0, 'interval_days' => null]);
+});
+
+it('opens a "Why?" panel on a stuck page with the reason, links, impressions and a recommendation, and drops a stuck post', function () {
+    $this->travelTo('2026-09-25 12:00:00');
+    $site = Site::factory()->create(['domain_url' => 'https://board.example']);
+    app(ActiveTenant::class)->set($site->id);
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'page_type' => null, 'status' => ContentStatus::Published,
+        'title' => 'Thin News Post', 'slug' => 'thin-news-post', 'published_at' => '2026-09-01 09:00:00', 'wp_post_id' => null,
+    ]);
+    indexRow($site, $post, IndexCoverageState::CrawledNotIndexed->value, 'https://board.example/thin-news-post/');
+    PageIndexState::query()->where('content_id', $post->id)->update(['last_inspected_at' => '2026-09-24 03:00:00']); // inspected → Google's verdict counts
+    $page = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Published,
+        'title' => 'Newtown PA', 'slug' => 'newtown-pa', 'published_at' => '2026-09-01 09:00:00', 'wp_post_id' => 1,
+    ]);
+
+    $test = Livewire::test(IndexingBoard::class)->assertSee('Why?')->call('explain', $post->id);
+    $html = $test->assertSet('whyId', $post->id)->html();
+    expect($html)->toContain('Drop it')
+        ->toContain('Take down this post')
+        ->toContain('Search impressions ever')
+        ->toContain('Google says');
+
+    // A page is never dropped from here.
+    Livewire::test(IndexingBoard::class)->call('takeDownPost', $page->id);
+    expect($page->fresh()->status)->toBe(ContentStatus::Published);
+
+    // The post (not on WordPress → no HTTP) goes back to Candidates and the panel closes.
+    Livewire::test(IndexingBoard::class)->call('explain', $post->id)->call('takeDownPost', $post->id)->assertSet('whyId', null);
+    expect($post->fresh()->status)->toBe(ContentStatus::Candidate);
 });
