@@ -13,36 +13,40 @@
      Filament's native components (.fi-*) already animate and are explicitly excluded. --}}
 <style data-lp-interactions>
     /* Pointer + smooth transition on every custom control (interactive chips only, never static labels). */
+    /* The prefix match is broad on purpose, so it must EXCLUDE two families that merely contain the
+       substrings: a page shell (`lp-shell--table` contains "-tab") and a data table (`jb-table`). Matching
+       a shell styled the whole page as one pressed button — and its :active transform shifted the content
+       under the pointer between mousedown and mouseup, so small links inside never received a click. */
     :where([class*="-btn"], [class*="-tab"], [class*="-pill"], [class*="-loctab"], [class*="-select"],
-           a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick]):not([class*="fi-"]) {
+           a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick]):not([class*="fi-"]):not([class*="lp-shell"]):not([class*="-table"]) {
         transition: filter .12s ease, transform .06s ease, box-shadow .12s ease,
                     background-color .12s ease, border-color .12s ease, opacity .12s ease;
     }
     :where([class*="-btn"], [class*="-tab"], [class*="-pill"], [class*="-loctab"],
-           a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick]):not([class*="fi-"]) {
+           a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick]):not([class*="fi-"]):not([class*="lp-shell"]):not([class*="-table"]) {
         cursor: pointer;
     }
 
     /* Hover — buttons lift a touch with a soft shadow + faint brightness (works on any fill). */
-    :where([class*="-btn"], [class*="-pill"], [class*="-loctab"]):not([class*="fi-"]):hover {
+    :where([class*="-btn"], [class*="-pill"], [class*="-loctab"]):not([class*="fi-"]):not([class*="lp-shell"]):not([class*="-table"]):hover {
         transform: translateY(-1px);
         box-shadow: 0 2px 7px rgba(15, 23, 42, .12);
         filter: brightness(1.03);
     }
     /* Ghost (non-solid) buttons also pick up a faint fill so transparent controls react too. */
-    :where([class*="-btn"], [class*="-pill"]):not(.primary):not(.danger):not(.green):not(.on):not([class*="fi-"]):hover {
+    :where([class*="-btn"], [class*="-pill"]):not(.primary):not(.danger):not(.green):not(.on):not([class*="fi-"]):not([class*="lp-shell"]):not([class*="-table"]):hover {
         background-color: rgba(148, 163, 184, .14);
     }
     /* Interactive chips / tabs / selects: brightness + a hairline shadow, without the lift. */
     :where(a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick],
-           [class*="-tab"], [class*="-select"]):not([class*="fi-"]):not(.on):hover {
+           [class*="-tab"], [class*="-select"]):not([class*="fi-"]):not([class*="lp-shell"]):not([class*="-table"]):not(.on):hover {
         filter: brightness(1.04);
         box-shadow: 0 1px 4px rgba(15, 23, 42, .10);
     }
 
     /* Press — a tactile depress while the pointer is held down. */
     :where([class*="-btn"], [class*="-tab"], [class*="-pill"], [class*="-loctab"],
-           a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick]):not([class*="fi-"]):active {
+           a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick]):not([class*="fi-"]):not([class*="lp-shell"]):not([class*="-table"]):active {
         transform: translateY(1px) scale(.985);
         box-shadow: none;
     }
@@ -55,19 +59,19 @@
         100% { box-shadow: 0 0 0 7px rgba(99, 102, 241, 0); }
     }
     :where([class*="-btn"], [class*="-tab"], [class*="-pill"], [class*="-loctab"], [class*="-chip"],
-           button, a[role="button"]).lp-clicked {
+           button, a[role="button"]):not([class*="lp-shell"]):not([class*="-table"]).lp-clicked {
         animation: lp-click-pulse .45s ease-out;
     }
 
     /* Keyboard focus ring (a11y) — visible in both themes. */
     :where([class*="-btn"], [class*="-tab"], [class*="-pill"], [class*="-loctab"], [class*="-select"],
-           a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick]):not([class*="fi-"]):focus-visible {
+           a[class*="-chip"], [class*="-chip"][wire\:click], [class*="-chip"][onclick]):not([class*="fi-"]):not([class*="lp-shell"]):not([class*="-table"]):focus-visible {
         outline: 2px solid #6366f1;
         outline-offset: 1px;
     }
 
     /* Busy — disabled / wire:loading controls read as working, not dead. */
-    :where([class*="-btn"], [class*="-pill"], [class*="-loctab"]):not([class*="fi-"]):is(:disabled, [disabled], [aria-disabled="true"]) {
+    :where([class*="-btn"], [class*="-pill"], [class*="-loctab"]):not([class*="fi-"]):not([class*="lp-shell"]):not([class*="-table"]):is(:disabled, [disabled], [aria-disabled="true"]) {
         opacity: .5;
         cursor: progress;
         box-shadow: none;
@@ -111,7 +115,9 @@
         document.addEventListener('click', function (e) {
             var el = e.target && e.target.closest ? e.target.closest(SEL) : null;
             if (!el) return;
-            if (String(el.className || '').indexOf('fi-') !== -1) return; // leave native Filament controls
+            var cls = String(el.className || '');
+            if (cls.indexOf('fi-') !== -1) return; // leave native Filament controls
+            if (/lp-shell|-table/.test(cls)) return; // a page shell / a table is never a control (see the sheet's note)
             el.classList.remove('lp-clicked');
             void el.offsetWidth;            // reflow so a rapid re-click restarts the pulse
             el.classList.add('lp-clicked');

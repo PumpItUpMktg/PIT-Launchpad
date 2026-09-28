@@ -18,7 +18,11 @@
      (workspace only) the rail in the `aside` slot. --}}
 <x-filament-panels::page>
     @include('filament._lp-styles')
-    <div {{ $attributes->merge(['class' => 'lpa lp-shell lp-shell--'.$variant]) }}>
+    {{-- The variant class must not contain "-tab" / "-btn" / "-pill" / "-chip": the global interaction
+         sheet (filament.shared.interaction-styles) prefix-matches those to style controls, and a shell
+         matched as a control makes the whole page behave as one button. "table" → "listing". --}}
+    @php($__variantClass = $variant === 'table' ? 'listing' : $variant)
+    <div {{ $attributes->merge(['class' => 'lpa lp-shell lp-shell--'.$__variantClass]) }}>
         @if ($title)
             <x-lp.page-header :eyebrow="$eyebrow" :title="$title" :lede="$lede" :scope="$scope">
                 @isset($meta)
