@@ -15,7 +15,7 @@ namespace App\TownRank;
 final class CollectionProgress
 {
     /**
-     * @return array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null}
+     * @return array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null, waiting: bool}
      */
     public static function for(int $collected, int $points): array
     {
@@ -29,6 +29,9 @@ final class CollectionProgress
             'remaining' => $remaining,
             'eta_seconds' => $remaining > 0 ? $seconds : null,
             'eta' => $remaining > 0 ? self::label($seconds) : null,
+            // Nothing has landed yet: the rate-based floor would read as "under a minute" for a scan that
+            // is still waiting on the vendor — say so instead of quoting a time.
+            'waiting' => $collected === 0 && $remaining > 0,
         ];
     }
 

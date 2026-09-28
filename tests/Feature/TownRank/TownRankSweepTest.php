@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\SiteStatus;
+use App\Jobs\CollectTownRankScan;
 use App\Jobs\IngestCoverageScans;
 use App\Jobs\IngestTownRankScans;
 use App\Jobs\RunTownRankSweep;
@@ -10,7 +11,6 @@ use App\Models\Location;
 use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
-use App\TownRank\TownRankScanner;
 use App\TownRank\TownRankSweep;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -96,32 +96,35 @@ it('the sweep command plans per eligible site and dispatches one job per site un
     Queue::assertPushed(RunTownRankSweep::class, 1);
 });
 
-it('the ingest sweep collects pending scans within its budget and closes expired ones as partial', function () {
+it('the ingest dispatcher hands each pending scan its own collector; a task not finished yet waits, an expired scan closes as partial', function () {
+    // The specific stub first: stubs match in registration order, and the queue fake's task_get is a wildcard.
+    Http::fake(['*/task_get/advanced/never-ready' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'never-ready', 'status_code' => 40602, 'status_message' => 'Task In Queue.']]])]);
     sweepFakeQueue(2);
     [$site, $grid] = sweepSite(2);
     config()->set('launchpad.town_rank.request_ceiling', 100);
     app(TownRankSweep::class)->run($site);   // 2 pending scans, 2 towns each
-    // A stale pending scan with a task that never became ready.
+    // A stale pending scan whose task DataForSEO never finished (406xx on a direct read).
     $stale = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $grid->id, 'mode' => 'local', 'status' => 'pending', 'points_count' => 1, 'scanned_at' => now()->subHours(30)]);
-    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $stale->id, 'label' => 'Old', 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => 'never-ready', 'collected_at' => null]);
+    $never = TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $stale->id, 'label' => 'Old', 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => 'never-ready', 'collected_at' => null]);
 
-    config()->set('launchpad.town_rank.ingest_batch', 3);   // 4 points ready + 1 never: budget stops at 3
-    (new IngestTownRankScans)->handle(app(TownRankScanner::class));
+    // The queue is sync here: the dispatcher's per-scan jobs run inline, each with its own budget.
+    config()->set('launchpad.town_rank.ingest_batch', 3);
+    (new IngestTownRankScans)->handle();
 
-    expect(TownRankPoint::query()->withoutGlobalScopes()->whereNotNull('collected_at')->count())->toBe(3)
-        ->and($stale->fresh()->status)->toBe('partial');   // expired → closed over what it has
-
-    config()->set('launchpad.town_rank.ingest_batch', 40);
-    (new IngestTownRankScans)->handle(app(TownRankScanner::class));
-    expect(TownRankScan::query()->withoutGlobalScopes()->where('site_id', $site->id)->where('status', 'complete')->count())->toBe(2);
+    expect(TownRankPoint::query()->withoutGlobalScopes()->whereNotNull('collected_at')->count())->toBe(4)   // both fresh scans, fully — per-scan budgets
+        ->and(TownRankScan::query()->withoutGlobalScopes()->where('site_id', $site->id)->where('status', 'complete')->count())->toBe(2)
+        ->and($never->fresh()->read_attempts)->toBe(0)         // not finished on the vendor's side is not a failed read
+        ->and($stale->fresh()->status)->toBe('partial');       // expired → closed over what it has
 });
 
 it('puts the collectors on the configured ranking lane, and on the default queue when none is set', function () {
     config(['launchpad.town_rank.queue' => null, 'launchpad.geo_grid.queue' => null]);
     expect((new IngestTownRankScans)->queue)->toBeNull()
+        ->and((new CollectTownRankScan('scan-1'))->queue)->toBeNull()
         ->and((new IngestCoverageScans)->queue)->toBeNull();
 
     config(['launchpad.town_rank.queue' => 'high', 'launchpad.geo_grid.queue' => 'high']);
     expect((new IngestTownRankScans)->queue)->toBe('high')
+        ->and((new CollectTownRankScan('scan-1'))->queue)->toBe('high')
         ->and((new IngestCoverageScans)->queue)->toBe('high');
 });

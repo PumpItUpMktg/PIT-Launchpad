@@ -4,36 +4,29 @@ namespace App\Jobs;
 
 use App\Models\Scopes\SiteScope;
 use App\Models\TownRankScan;
-use App\TownRank\TownRankScanner;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
- * The town-rank collection sweep (§ Town Rank, PR 3) — the async half of {@see RunTownRankSweep} and of a
- * CLI --scan the poll window didn't finish. Walks pending scans oldest-first, collecting ready task results
- * ({@see TownRankScanner::collectPending()}) under ONE per-run task_get budget AND a wall-clock deadline
- * short of the job timeout, so a run stops cleanly and never gets killed; a scan finalizes `complete` once every town is collected, and one still pending past the expiry
- * window is closed as `partial` over what it has so it can never block the next sweep. Cross-tenant, so the
- * {@see SiteScope} is dropped.
+ * The town-rank collection DISPATCHER (§ Town Rank): every minute, one {@see CollectTownRankScan} job per
+ * pending scan. Collection itself moved into those per-scan jobs — they run side by side across the worker
+ * lanes, read their tasks directly by id, and fail alone — so a whole-site burst (28 keywords × 2 modes ×
+ * 722 towns) drains at the read ceiling instead of one serial pass a minute that any single bad town could
+ * stall for every scan behind it. Each per-scan job is unique, so a scan already collecting is not queued
+ * again. Cross-tenant, so the {@see SiteScope} is dropped.
  */
 class IngestTownRankScans implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
-    /** Scheduled every minute; unique for the job's own timeout so runs queue behind one another, never beside. */
-    public int $uniqueFor = 300;
+    /** Scheduled every minute; unique so a minute's dispatch never stacks beside the previous one. */
+    public int $uniqueFor = 120;
 
-    public int $timeout = 120;   // a run stops at its deadline; ShouldBeUnique keeps the next minute's dispatch from stacking
+    public int $timeout = 60;
 
     public int $tries = 1;
-
-    /** Seconds kept back from the job timeout so a hung read and the finalize never race the kill. */
-    // Reads fail fast now (one try, 15s ceiling), so the margin only has to cover the read in flight when
-    // the deadline lands plus the finalize — not the 95s a 3×30s retry used to be able to eat.
-    private const DEADLINE_MARGIN_SECONDS = 40;
 
     public function __construct()
     {
@@ -45,47 +38,19 @@ class IngestTownRankScans implements ShouldBeUnique, ShouldQueue
         }
     }
 
-    public function handle(TownRankScanner $scanner): void
+    public function handle(): void
     {
-        $started = microtime(true);
-        $deadline = $started + max(30, $this->timeout - self::DEADLINE_MARGIN_SECONDS);
-        $budget = max(1, (int) config('launchpad.town_rank.ingest_batch', 1000));
-        $expiryCutoff = Carbon::now()->subHours(max(1, (int) config('launchpad.town_rank.pending_expiry_hours', 24)));
-
         $pending = TownRankScan::withoutGlobalScope(SiteScope::class)
             ->where('status', 'pending')
             ->orderBy('scanned_at')
-            ->get();
-        if ($pending->isEmpty()) {
-            return;
+            ->pluck('id');
+
+        foreach ($pending as $scanId) {
+            CollectTownRankScan::dispatch((string) $scanId);
         }
 
-        $spent = 0;
-        $finalized = 0;
-        $expired = 0;
-        foreach ($pending as $scan) {
-            if ($budget > 0 && microtime(true) < $deadline) {
-                $got = $scanner->collectPending($scan, $budget, $deadline);
-                $budget -= $got;
-                $spent += $got;
-                $scan->refresh();
-                if ($scan->status !== 'pending') {
-                    $finalized++;
-                }
-            }
-            if ($scan->status === 'pending' && $scan->scanned_at !== null && $scan->scanned_at->lt($expiryCutoff)) {
-                $scanner->finalize($scan, 'partial');
-                $expired++;
-            }
+        if ($pending->isNotEmpty()) {
+            Log::info('Town-rank dispatcher: per-scan collectors queued.', ['pending_scans' => $pending->count()]);
         }
-
-        Log::info('Town-rank collector: run finished.', [
-            'pending_scans' => $pending->count(),
-            'task_gets' => $spent,
-            'finalized' => $finalized,
-            'expired_partial' => $expired,
-            'seconds' => round(microtime(true) - $started, 1),
-            'stopped_at_deadline' => microtime(true) >= $deadline,
-        ]);
     }
 }

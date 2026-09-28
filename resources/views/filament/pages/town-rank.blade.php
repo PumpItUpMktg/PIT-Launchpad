@@ -181,7 +181,9 @@
                                                 <span style="color:#b45309">· partial: {{ number_format($card['uncollected'][$mode]) }} town(s) never collected</span>
                                             @elseif ($pg !== null)
                                                 <span style="color:#2563eb">collecting {{ number_format($pg['collected']) }} / {{ number_format($pg['points']) }} towns</span>
-                                                @if ($pg['eta'] !== null)
+                                                @if ($pg['waiting'] ?? false)
+                                                    <span style="color:#2563eb">· waiting for the first results</span>
+                                                @elseif ($pg['eta'] !== null)
                                                     <span style="color:#2563eb">· {{ number_format($pg['remaining']) }} left, at least {{ $pg['eta'] }}</span>
                                                 @endif
                                                 @if ($pg['collected'] > 0)<span>· so far: top-3 <b style="color:#15803d">{{ $s['top3'] }}</b> page-1 <b>{{ $s['top3'] + $s['page1'] }}</b> not found <b style="color:#9ca3af">{{ $s['not_found'] }}</b></span>@endif
