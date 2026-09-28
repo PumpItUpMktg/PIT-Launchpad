@@ -257,7 +257,10 @@ final class GeoGridScanner
         $spent = 0;
         $skipped = 0;
         if ($pending->isNotEmpty()) {
-            $ready = array_flip($this->client->tasksReady(self::MAPS_READY));
+            $ready = $this->readyTasks((string) $scan->id);
+            if ($ready === null) {
+                return 0;   // the ready poll itself failed this run — nothing read, everything waits for the next minute
+            }
 
             foreach ($pending as $point) {
                 if ($spent >= $budget || ($deadline !== null && microtime(true) >= $deadline)) {
@@ -334,6 +337,34 @@ final class GeoGridScanner
      * rank, the reason kept — so the scan can finalize and the map can colour "we never learned" apart from
      * "absent from the pack".
      */
+    /** A transport failure message carries a response excerpt — keep the reason, not the whole body. */
+    public const READ_ERROR_MAX = 1000;
+
+    /**
+     * The vendor's "which tasks are ready" poll, tolerant: a transient failure there is not a reason to
+     * fail the collection run — nothing was read, the points wait for the next pass. Null when it failed;
+     * auth / quota failures still stop the run.
+     *
+     * @return array<string, int>|null
+     */
+    private function readyTasks(string $scanId): ?array
+    {
+        try {
+            return array_flip($this->client->tasksReady(self::MAPS_READY));
+        } catch (DataForSeoException $e) {
+            if ($e->fatal) {
+                throw $e;
+            }
+            Log::warning('Geo-grid collect: the ready poll failed this run; nothing read, waiting for the next.', ['scan_id' => $scanId, 'error' => $e->getMessage()]);
+
+            return null;
+        } catch (Throwable $e) {
+            Log::warning('Geo-grid collect: the ready poll failed this run; nothing read, waiting for the next.', ['scan_id' => $scanId, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
     private function recordFailedRead(GeoGridPoint $point, ?string $error): void
     {
         $attempts = (int) $point->read_attempts + 1;
@@ -341,7 +372,7 @@ final class GeoGridScanner
 
         $point->forceFill([
             'read_attempts' => $attempts,
-            'read_error' => $error ?? 'the read produced no answer',
+            'read_error' => mb_substr($error ?? 'the read produced no answer', 0, self::READ_ERROR_MAX),
             'collected_at' => $terminal ? Carbon::now() : null,
         ])->save();
 

@@ -55,3 +55,39 @@ it('reads an unreadable town as its own state, never as "not found"', function (
     expect(TownRankReport::stateOf($missed, ['status' => 'complete']))->toBe('not_found')
         ->and(TownRankReport::stateOf($dead, ['status' => 'complete']))->toBe('unreadable');
 });
+
+it('does not fail the collection run when the vendor\'s ready poll itself errors — nothing read, the towns wait', function () {
+    config(['services.dataforseo.rate_limit_backoff_ms' => 0]);
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'pending', 'points_count' => 1, 'scanned_at' => now()]);
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'label' => 'Town', 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => 'task-1']);
+    Http::fake(['*/tasks_ready' => Http::response('Internal Server Error', 500)]);   // DataForSEO's side
+
+    $spent = app(TownRankScanner::class)->collectPending($scan, 10);
+
+    $point = $scan->points()->sole();
+    expect($spent)->toBe(0)
+        ->and($point->read_attempts)->toBe(0)          // not counted against the town — the poll failed, not its read
+        ->and($point->collected_at)->toBeNull()
+        ->and($scan->fresh()->status)->toBe('pending');
+});
+
+it('records a long transport failure as the read error without overflowing the column', function () {
+    config(['services.dataforseo.rate_limit_backoff_ms' => 0]);
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'pending', 'points_count' => 1, 'scanned_at' => now()]);
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'label' => 'Town', 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => 'task-long']);
+    Http::fake([
+        '*/tasks_ready' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'r', 'status_code' => 20000, 'result' => [['id' => 'task-long']]]]]),
+        '*/task_get/advanced/task-long' => Http::response('<html>'.str_repeat('x', 3000).'</html>', 500),   // a body-carrying 500
+    ]);
+
+    app(TownRankScanner::class)->collectPending($scan, 10);
+
+    $point = $scan->points()->sole();
+    expect($point->read_attempts)->toBe(1)
+        ->and($point->read_error)->not->toBeNull()
+        ->and(mb_strlen((string) $point->read_error))->toBeLessThanOrEqual(TownRankScanner::READ_ERROR_MAX);
+});
