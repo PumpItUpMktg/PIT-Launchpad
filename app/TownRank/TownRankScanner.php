@@ -4,6 +4,7 @@ namespace App\TownRank;
 
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\DataForSeo\DataForSeoException;
+use App\Jobs\CollectTownRankScan;
 use App\Models\Keyword;
 use App\Models\Site;
 use App\Models\TownRankPoint;
@@ -185,6 +186,91 @@ final class TownRankScanner
         $this->finalizeIfComplete($scan);
 
         return $spent;
+    }
+
+    /**
+     * Collect one pending scan by reading its uncollected tasks DIRECTLY by id — the per-scan collector's
+     * path ({@see CollectTownRankScan}). No tasks_ready gate: reads are free, the ids are known,
+     * and the ready list is capped and shared across every scan. A task DataForSEO has not finished yet
+     * (406xx) is skipped and not counted against the town; "No Search Results" collects as rank null; any
+     * other non-fatal failure records a read attempt (the town closes as unreadable at the ceiling); an
+     * auth / quota failure stops the run. Bounded by $budget reads and the wall-clock $deadline. Returns
+     * reads spent.
+     */
+    public function collectDirect(TownRankScan $scan, int $budget, ?float $deadline = null): int
+    {
+        if ($budget <= 0 || $scan->status !== 'pending' || ($deadline !== null && microtime(true) >= $deadline)) {
+            return 0;
+        }
+
+        /** @var Collection<int, TownRankPoint> $pending */
+        $pending = $scan->points()->whereNotNull('provider_task_id')->whereNull('collected_at')->get();
+        if ($pending->isEmpty()) {
+            $this->finalizeIfComplete($scan);
+
+            return 0;
+        }
+
+        $site = Site::withoutGlobalScopes()->find($scan->site_id);
+        $host = self::host($site?->domain_url);
+        $spent = 0;
+        $notReady = 0;
+        $failed = 0;
+
+        foreach ($pending as $point) {
+            if ($spent >= $budget || ($deadline !== null && microtime(true) >= $deadline)) {
+                break;
+            }
+            $spent++;
+            $read = $this->readTaskDirect((string) $point->provider_task_id);
+            if ($read['pending']) {
+                $notReady++;
+
+                continue;   // DataForSEO has not finished it — next pass
+            }
+            if ($read['items'] === null) {
+                $failed++;
+                $this->recordFailedRead($point, $read['error']);
+
+                continue;
+            }
+            $point->forceFill([...$this->extract($read['items'], $host), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
+        }
+
+        if ($notReady > 0 || $failed > 0) {
+            Log::info('Town-rank collect (direct): pass finished.', ['scan_id' => $scan->id, 'read' => $spent, 'not_ready' => $notReady, 'failed' => $failed]);
+        }
+
+        $this->finalizeIfComplete($scan);
+
+        return $spent;
+    }
+
+    /**
+     * One direct task read: the parsed items, or null with the reason, or "pending" when DataForSEO has not
+     * finished the task. Fatal (auth / quota) failures propagate.
+     *
+     * @return array{items: list<array{position: int, url: string, domain: string, title: string}>|null, error: string|null, pending: bool}
+     */
+    private function readTaskDirect(string $taskId): array
+    {
+        try {
+            return ['items' => DataForSeoClient::parseOrganic($this->client->taskGet(self::ORGANIC_GET, $taskId)), 'error' => null, 'pending' => false];
+        } catch (DataForSeoException $e) {
+            if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
+                return ['items' => [], 'error' => null, 'pending' => false];
+            }
+            if ($e->isTaskPending()) {
+                return ['items' => null, 'error' => null, 'pending' => true];
+            }
+            if ($e->fatal) {
+                throw $e;
+            }
+
+            return ['items' => null, 'error' => $e->getMessage(), 'pending' => false];
+        } catch (Throwable $e) {
+            return ['items' => null, 'error' => $e->getMessage(), 'pending' => false];
+        }
     }
 
     /**

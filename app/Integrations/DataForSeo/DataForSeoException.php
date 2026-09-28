@@ -39,6 +39,16 @@ class DataForSeoException extends RuntimeException
      */
     public const NO_SEARCH_RESULTS = 40102;
 
+    /**
+     * A task read before DataForSEO finished it answers in the 406xx band ("Task Handed" / "Task In Queue"):
+     * not a failure — the result simply is not there yet. A direct-read collector skips it and asks again
+     * on its next pass, without counting it against the town.
+     */
+    public function isTaskPending(): bool
+    {
+        return $this->statusCode !== null && $this->statusCode >= 40600 && $this->statusCode < 40700;
+    }
+
     public static function envelope(int $statusCode, string $message): self
     {
         // 401xx auth, 402xx payment/quota — fatal, surface loudly, do not retry. Two exceptions are
