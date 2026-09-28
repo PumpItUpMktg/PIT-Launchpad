@@ -55,12 +55,18 @@ class IndexingBoard extends Page
     #[Url(as: 'dir')]
     public string $watchDir = 'asc';
 
-    /** The stuck page whose "Why?" panel is open (content id), or null. */
+    /** The stuck page whose "Why?" panel is open (content id), or null — in the URL so a plain link opens it. */
+    #[Url(as: 'why')]
     public ?string $whyId = null;
 
     public function mount(): void
     {
         $this->siteId = app(ActiveTenant::class)->id();
+        // Arrived by a plain ?why= link (the Why? button is a real link, so it works whatever the state of
+        // the page's Livewire wiring): queue the diagnosis if nothing is cached, exactly as a click would.
+        if ($this->whyId !== null && $this->siteId !== null && $this->getStuckProperty() === null) {
+            ComputeStuckPages::request($this->siteId);
+        }
     }
 
     /**
@@ -227,6 +233,30 @@ class IndexingBoard extends Page
         ComputeStuckPages::request((string) $this->siteId);
         Notification::make()->success()->title('Taken down')
             ->body("'{$content->title}' was removed from WordPress and moved back to Candidates. It leaves this list on the next refresh.")->send();
+    }
+
+    /**
+     * The page's own URL with the watchlist state (sort, dir, open panel) as query — the column headers and
+     * the Why? buttons are plain links built from this, so they never depend on a Livewire click landing.
+     *
+     * @param  array<string, string|null>  $overrides
+     */
+    public function watchUrl(array $overrides = []): string
+    {
+        $query = array_filter(array_merge(
+            ['sort' => $this->watchSort, 'dir' => $this->watchDir, 'why' => $this->whyId],
+            $overrides,
+        ), fn ($v): bool => $v !== null && $v !== '');
+
+        return static::getUrl($query);
+    }
+
+    /** The link a column header carries: sort by it, or flip the direction when it is already the sort. */
+    public function sortUrl(string $column): string
+    {
+        $flip = $this->watchSort === $column && $this->watchDir === 'asc' ? 'desc' : 'asc';
+
+        return $this->watchUrl(['sort' => $column, 'dir' => $this->watchSort === $column ? $flip : 'asc']);
     }
 
     /** Click a watchlist column header: sort by it; click it again to flip the direction. */

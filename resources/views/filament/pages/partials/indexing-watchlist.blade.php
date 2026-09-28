@@ -8,7 +8,8 @@
 @php($stuck = $stuckReport['rows'] ?? [])
 @php($stuckPending = $whyId !== null && $stuckReport === null && $this->stuckPending)
 <style>
-    .ix-watch .ix-why { font-size:11px; font-weight:700; border:1px solid var(--line); background:#fff; border-radius:7px; padding:3px 8px; cursor:pointer; color:var(--ink); margin-left:6px; white-space:nowrap; }
+    .ix-watch .ix-why { display:inline-block; font-size:11px; font-weight:700; border:1px solid var(--line); background:#fff; border-radius:7px; padding:3px 8px; cursor:pointer; color:var(--ink); margin-left:6px; white-space:nowrap; text-decoration:none; }
+    .ix-watch a.ix-sort { text-decoration:none; display:inline-block; }
     .ix-watch .ix-why.on { border-color:var(--teal); color:var(--teal-deep); }
     .ix-watch tr.ix-panel td { background:var(--paper); border-top:0; padding:12px 16px 14px; }
     .ix-panel .rec { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; padding:4px 10px; border-radius:20px; }
@@ -55,10 +56,10 @@
             @php($arrow = fn (string $col): string => $watchSort === $col ? ($watchDir === 'asc' ? ' ▲' : ' ▼') : '')
             <thead><tr>
                 <th>Page</th>
-                <th><button type="button" class="ix-sort {{ $watchSort === 'published' ? 'on' : '' }}" wire:click="sortWatch('published')">Published{{ $arrow('published') }}</button></th>
-                <th><button type="button" class="ix-sort {{ $watchSort === 'inspected' ? 'on' : '' }}" wire:click="sortWatch('inspected')">Inspected{{ $arrow('inspected') }}</button></th>
-                <th><button type="button" class="ix-sort {{ $watchSort === 'status' ? 'on' : '' }}" wire:click="sortWatch('status')">Status{{ $arrow('status') }}</button></th>
-                <th><button type="button" class="ix-sort {{ $watchSort === 'indexed' ? 'on' : '' }}" wire:click="sortWatch('indexed')">Indexed{{ $arrow('indexed') }}</button></th>
+                <th><a class="ix-sort {{ $watchSort === 'published' ? 'on' : '' }}" href="{{ $this->sortUrl('published') }}">Published{{ $arrow('published') }}</a></th>
+                <th><a class="ix-sort {{ $watchSort === 'inspected' ? 'on' : '' }}" href="{{ $this->sortUrl('inspected') }}">Inspected{{ $arrow('inspected') }}</a></th>
+                <th><a class="ix-sort {{ $watchSort === 'status' ? 'on' : '' }}" href="{{ $this->sortUrl('status') }}">Status{{ $arrow('status') }}</a></th>
+                <th><a class="ix-sort {{ $watchSort === 'indexed' ? 'on' : '' }}" href="{{ $this->sortUrl('indexed') }}">Indexed{{ $arrow('indexed') }}</a></th>
             </tr></thead>
             <tbody>
                 @foreach ($watch['rows'] as $row)
@@ -75,10 +76,7 @@
                             @elseif ($row['state'] === 'inspected')<x-lp.chip tone="warn">Not indexed</x-lp.chip>
                             @else<span class="k">Published</span>@endif
                             @if ($row['state'] !== 'indexed' && ($row['days_waiting'] ?? 0) >= $stuckDays)
-                                <button type="button" class="ix-why {{ $whyId === $row['content_id'] ? 'on' : '' }}" wire:click="explain('{{ $row['content_id'] }}')" wire:loading.attr="disabled" wire:target="explain('{{ $row['content_id'] }}')">
-                                    <span wire:loading.remove wire:target="explain('{{ $row['content_id'] }}')">{{ $whyId === $row['content_id'] ? 'Close' : 'Why?' }}</span>
-                                    <span wire:loading wire:target="explain('{{ $row['content_id'] }}')">Working…</span>
-                                </button>
+                                <a class="ix-why {{ $whyId === $row['content_id'] ? 'on' : '' }}" href="{{ $this->watchUrl(['why' => $whyId === $row['content_id'] ? null : $row['content_id']]) }}">{{ $whyId === $row['content_id'] ? 'Close' : 'Why?' }}</a>
                             @endif
                         </td>
                         <td class="date">{{ $row['indexed_at'] ? \Illuminate\Support\Carbon::parse($row['indexed_at'])->format('j M') : '—' }}@if ($row['state'] === 'indexed' && $row['days_waiting'] !== null) <span class="k">· {{ $row['days_waiting'] }}d to index</span>@endif</td>
