@@ -376,11 +376,33 @@ it('computes the stuck-page report on the queue, reads it from the cache, dedupe
     (new ComputeStuckPages($site->id))->handle(app(StuckPages::class));
     $html = Livewire::test(IndexingBoard::class)->call('explain', $post->id)->html();
     expect($html)->toContain('Drop it')
-        ->and(Cache::has(ComputeStuckPages::cacheKey($site->id)))->toBeTrue()
-        ->and($html)->toContain('Working…');   // the button's own loading label is still wired
+        ->and(Cache::has(ComputeStuckPages::cacheKey($site->id)))->toBeTrue();
 
     // A take-down clears the report and queues a fresh one.
     Livewire::test(IndexingBoard::class)->call('explain', $post->id)->call('takeDownPost', $post->id);
     expect(Cache::has(ComputeStuckPages::cacheKey($site->id)))->toBeFalse()
         ->and(Cache::has(ComputeStuckPages::pendingKey($site->id)))->toBeTrue(); // re-requested (the faked bus never releases the unique lock, so the dispatch count can't be read here)
+});
+
+it('opens the "Why?" panel and sorts through plain links carrying the state in the URL — no Livewire click needed', function () {
+    $this->travelTo('2026-09-25 12:00:00');
+    $site = Site::factory()->create(['domain_url' => 'https://link.example']);
+    app(ActiveTenant::class)->set($site->id);
+    $post = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Post, 'page_type' => null, 'status' => ContentStatus::Published,
+        'title' => 'Linked Post', 'slug' => 'linked-post', 'published_at' => '2026-09-01 09:00:00', 'wp_post_id' => null,
+    ]);
+    indexRow($site, $post, IndexCoverageState::CrawledNotIndexed->value, 'https://link.example/linked-post/');
+    PageIndexState::query()->where('content_id', $post->id)->update(['last_inspected_at' => '2026-09-24 03:00:00']);
+
+    // The buttons are links: the Why? link carries ?why=<id>, the header carries ?sort=…&dir=….
+    $html = Livewire::test(IndexingBoard::class)->html();
+    expect($html)->toContain('why='.$post->id)
+        ->and($html)->toContain('sort=published')
+        ->and($html)->not->toContain('wire:click="explain(');
+
+    // Arriving by the link (a plain GET with ?why=) opens the panel; the queue is sync here so the diagnosis lands at once.
+    $html = Livewire::withQueryParams(['why' => $post->id, 'sort' => 'published', 'dir' => 'desc'])->test(IndexingBoard::class)
+        ->assertSet('whyId', $post->id)->assertSet('watchSort', 'published')->assertSet('watchDir', 'desc')->html();
+    expect($html)->toContain('Drop it')->toContain('Close');
 });
