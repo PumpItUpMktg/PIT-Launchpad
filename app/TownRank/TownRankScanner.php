@@ -153,7 +153,10 @@ final class TownRankScanner
         if ($pending->isNotEmpty()) {
             $site = Site::withoutGlobalScopes()->find($scan->site_id);
             $host = self::host($site?->domain_url);
-            $ready = array_flip($this->client->tasksReady(self::ORGANIC_READY));
+            $ready = $this->readyTasks(self::ORGANIC_READY, (string) $scan->id);
+            if ($ready === null) {
+                return 0;   // the ready poll itself failed this run — nothing read, everything waits for the next minute
+            }
 
             foreach ($pending as $point) {
                 if ($spent >= $budget || ($deadline !== null && microtime(true) >= $deadline)) {
@@ -243,6 +246,35 @@ final class TownRankScanner
     /** Reads that produced no answer before a town is closed as unreadable rather than retried forever. */
     public const MAX_READ_ATTEMPTS = 2;
 
+    /** A transport failure message carries a response excerpt — keep the reason, not the whole body. */
+    public const READ_ERROR_MAX = 1000;
+
+    /**
+     * The vendor's "which tasks are ready" poll, tolerant: a transient failure there (their HTTP 500, a
+     * timeout) is NOT a reason to fail the collection run — nothing was read, the towns simply wait for the
+     * next minute. Returns the ready ids flipped for isset(), or null when the poll failed. Auth / quota
+     * failures still stop the run.
+     *
+     * @return array<string, int>|null
+     */
+    private function readyTasks(string $path, string $scanId): ?array
+    {
+        try {
+            return array_flip($this->client->tasksReady($path));
+        } catch (DataForSeoException $e) {
+            if ($e->fatal) {
+                throw $e;
+            }
+            Log::warning('Town-rank collect: the ready poll failed this run; nothing read, waiting for the next.', ['scan_id' => $scanId, 'error' => $e->getMessage()]);
+
+            return null;
+        } catch (Throwable $e) {
+            Log::warning('Town-rank collect: the ready poll failed this run; nothing read, waiting for the next.', ['scan_id' => $scanId, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
     /**
      * One task_get, classified: the organic items on success (an empty page — "No Search Results" — is an
      * empty list, a real answer); null plus a reason when the read did not produce an answer (rate-limited,
@@ -281,7 +313,7 @@ final class TownRankScanner
 
         $point->forceFill([
             'read_attempts' => $attempts,
-            'read_error' => $error ?? 'the read produced no answer',
+            'read_error' => mb_substr($error ?? 'the read produced no answer', 0, self::READ_ERROR_MAX),
             'collected_at' => $terminal ? Carbon::now() : null,
         ])->save();
 
