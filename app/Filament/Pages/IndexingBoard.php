@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\ContentKind;
+use App\Jobs\ComputeStuckPages;
 use App\Jobs\SyncSiteMetrics;
 use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\Content;
@@ -11,7 +12,6 @@ use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
 use App\Operator\Coverage\IndexWatchlist;
-use App\Operator\Coverage\StuckPages;
 use App\Publishing\DeleteFromWordpress;
 use BackedEnum;
 use Carbon\Carbon;
@@ -149,41 +149,52 @@ class IndexingBoard extends Page
         return app(IndexWatchlist::class)->for($site, $this->watchSort, $this->watchDir);
     }
 
-    /** How long one site's stuck-page report is reused between "Why?" clicks (seconds). */
-    private const STUCK_CACHE_SECONDS = 600;
-
     /**
      * The stuck pages (past the stuck window) with their reason, inbound links, impressions, lever and
-     * recommendation — keyed by content id for the "Why?" panel. Only read when a panel is open, and cached
-     * per site for ten minutes: the report builds the whole site's internal-link graph (every published
-     * body parsed for links), which on a few hundred pages is seconds of work — one compute serves every
-     * click on the board. A take-down clears it.
+     * recommendation — keyed by content id for the "Why?" panel. A pure READ of what {@see ComputeStuckPages}
+     * parked in the cache: the report builds the whole site's link graph and is far too slow for a web
+     * request, so it is computed on the queue (after every index sync, and on demand from {@see explain()}).
+     * Null = nothing computed yet for this site.
      *
-     * @return array<string, array<string, mixed>>
+     * @return array{rows: array<string, array<string, mixed>>, computed_at: string}|null
      */
-    public function getStuckProperty(): array
+    public function getStuckProperty(): ?array
     {
-        $site = $this->siteId === null ? null : Site::query()->whereKey($this->siteId)->first();
-        if ($site === null) {
-            return [];
+        if ($this->siteId === null) {
+            return null;
         }
+        $cached = Cache::get(ComputeStuckPages::cacheKey($this->siteId));
 
-        return Cache::remember(
-            self::stuckCacheKey((string) $site->id),
-            self::STUCK_CACHE_SECONDS,
-            fn (): array => collect(app(StuckPages::class)->for($site)['rows'])->keyBy('content_id')->all(),
-        );
+        return is_array($cached) && isset($cached['rows']) ? $cached : null;
     }
 
-    public static function stuckCacheKey(string $siteId): string
+    /** Whether a stuck-page computation is queued/running for this site (the panel polls while it is). */
+    public function getStuckPendingProperty(): bool
     {
-        return 'indexing:stuck-pages:'.$siteId;
+        return $this->siteId !== null && Cache::has(ComputeStuckPages::pendingKey($this->siteId));
     }
 
-    /** Open (or close) the "Why isn't this indexed?" panel for one stuck page. */
+    /**
+     * Open (or close) the "Why isn't this indexed?" panel for one stuck page. With nothing computed yet for
+     * the site, queue the computation — the panel shows "working it out" and fills in when the job lands.
+     */
     public function explain(string $contentId): void
     {
         $this->whyId = $this->whyId === $contentId ? null : $contentId;
+        if ($this->whyId !== null && $this->siteId !== null && $this->getStuckProperty() === null) {
+            ComputeStuckPages::request($this->siteId);
+        }
+    }
+
+    /** Recompute the report now (the cached one is stale after edits / re-pushes). */
+    public function refreshStuck(): void
+    {
+        if ($this->siteId === null) {
+            return;
+        }
+        Cache::forget(ComputeStuckPages::cacheKey($this->siteId));
+        ComputeStuckPages::request($this->siteId);
+        Notification::make()->success()->title('Recomputing')->body('The stuck-page diagnosis is being rebuilt on the queue — the panel fills in when it lands.')->send();
     }
 
     /**
@@ -212,7 +223,8 @@ class IndexingBoard extends Page
         }
 
         $this->whyId = null;
-        Cache::forget(self::stuckCacheKey((string) $this->siteId));
+        Cache::forget(ComputeStuckPages::cacheKey((string) $this->siteId));
+        ComputeStuckPages::request((string) $this->siteId);
         Notification::make()->success()->title('Taken down')
             ->body("'{$content->title}' was removed from WordPress and moved back to Candidates. It leaves this list on the next refresh.")->send();
     }

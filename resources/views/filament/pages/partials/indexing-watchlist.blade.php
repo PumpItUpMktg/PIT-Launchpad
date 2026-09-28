@@ -4,7 +4,9 @@
      Google's reason); green = indexed, shown for `watch_days` days then gone. --}}
 @php($watch = $this->watchlist)
 @php($stuckDays = $watch['metrics']['stuck_days'] ?? 10)
-@php($stuck = $whyId !== null ? $this->stuck : [])
+@php($stuckReport = $whyId !== null ? $this->stuck : null)
+@php($stuck = $stuckReport['rows'] ?? [])
+@php($stuckPending = $whyId !== null && $stuckReport === null && $this->stuckPending)
 <style>
     .ix-watch .ix-why { font-size:11px; font-weight:700; border:1px solid var(--line); background:#fff; border-radius:7px; padding:3px 8px; cursor:pointer; color:var(--ink); margin-left:6px; white-space:nowrap; }
     .ix-watch .ix-why.on { border-color:var(--teal); color:var(--teal-deep); }
@@ -81,7 +83,21 @@
                         </td>
                         <td class="date">{{ $row['indexed_at'] ? \Illuminate\Support\Carbon::parse($row['indexed_at'])->format('j M') : '—' }}@if ($row['state'] === 'indexed' && $row['days_waiting'] !== null) <span class="k">· {{ $row['days_waiting'] }}d to index</span>@endif</td>
                     </tr>
-                    @if ($whyId === $row['content_id'] && isset($stuck[$row['content_id']]))
+                    @if ($whyId === $row['content_id'] && ! isset($stuck[$row['content_id']]))
+                        <tr class="ix-panel" wire:key="ix-why-{{ $row['content_id'] }}" @if ($stuckPending) wire:poll.5s @endif>
+                            <td colspan="5">
+                                @if ($stuckReport === null)
+                                    <div class="say">
+                                        <strong>Working out why…</strong> This maps every link on the site, which takes a minute on a large one. The answer appears here on its own.
+                                        @unless ($stuckPending) <button type="button" class="ix-why" wire:click="refreshStuck">Start</button> @endunless
+                                    </div>
+                                @else
+                                    <div class="say">This page is no longer in the stuck report (computed {{ \Illuminate\Support\Carbon::parse($stuckReport['computed_at'])->diffForHumans() }}) — it may have indexed since, or been re-published.
+                                        <button type="button" class="ix-why" wire:click="refreshStuck">Recompute</button></div>
+                                @endif
+                            </td>
+                        </tr>
+                    @elseif ($whyId === $row['content_id'])
                         @php($s = $stuck[$row['content_id']])
                         <tr class="ix-panel" wire:key="ix-why-{{ $row['content_id'] }}">
                             <td colspan="5">
@@ -108,6 +124,7 @@
                                         <span class="k" style="align-self:center">Use “Re-check indexing now” at the top of this page{{ $s['lever'] === \App\Operator\Coverage\StuckPages::PING ? ', then ping IndexNow (launchpad:boost-indexing)' : '' }}.</span>
                                     @endif
                                     @if ($s['url'])<a href="{{ $s['url'] }}" target="_blank" rel="noopener">View page ↗</a>@endif
+                                    <span class="k" style="align-self:center">Diagnosis from {{ \Illuminate\Support\Carbon::parse($stuckReport['computed_at'])->diffForHumans() }} · <button type="button" class="ix-why" style="margin-left:0" wire:click="refreshStuck">Recompute</button></span>
                                 </div>
                             </td>
                         </tr>
