@@ -33,6 +33,12 @@ final class TownVisibility
     /** Previous finished scans averaged into the movement baseline. */
     public const BASELINE_SCANS = 2;
 
+    /**
+     * Scans loaded per keyword when many town sets are scored at once ({@see forTownSets()}): the latest, the
+     * baseline, and one spare for a scan that collected nothing in a set (skipped, as {@see entry()} does).
+     */
+    public const SET_SCANS = self::BASELINE_SCANS + 2;
+
     private const CACHE_SECONDS = 1800;
 
     /**
@@ -163,6 +169,158 @@ final class TownVisibility
             'baseline_scans' => $baselines === [] ? 0 : max($baselines),
             'keywords' => count($scores),
         ];
+    }
+
+    /**
+     * Many town sets at once — the Service Areas page: every office's towns, and each county of an office.
+     * ONE lean point query for the whole site per mode — the latest {@see SET_SCANS} finished scans of every
+     * keyword, one row per collected town (scan, town, credit, weight) — then every set and every keyword is
+     * summed in memory. The per-set alternative ({@see forTownSet()}) is one aggregate per office × keyword,
+     * hundreds of them cold, which is what timed the page out. Cached per site, mode, the scan ids in play
+     * and the sets asked for, so a finished scan refreshes it and nothing recomputes otherwise.
+     *
+     * Each set's result is the {@see forTownSet()} shape plus `per_keyword` — that keyword's own entry for
+     * the set (the keyword card's number), keyed by keyword id.
+     *
+     * @param  iterable<Keyword>  $keywords
+     * @param  array<string, array{ids: list<string>, geo: list<string>}>  $sets  named town sets (coverage-area ids + GEOIDs)
+     * @return array<string, array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, keywords: int, per_keyword: array<string, array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, towns: int, page1_towns: int, top3_towns: int}>}>
+     */
+    public function forTownSets(Site $site, iterable $keywords, array $sets, string $mode = TownRankScan::MODE_TOWN_QUERY): array
+    {
+        $keywordIds = [];
+        foreach ($keywords as $keyword) {
+            $keywordIds[] = (string) $keyword->id;
+        }
+        $empty = ['score' => null, 'previous' => null, 'delta' => null, 'baseline_scans' => 0, 'keywords' => 0, 'per_keyword' => []];
+        if ($keywordIds === [] || $sets === []) {
+            return array_fill_keys(array_keys($sets), $empty);
+        }
+
+        // The scans in play: the newest SET_SCANS finished scans per keyword, newest first.
+        $scans = TownRankScan::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('mode', $mode)->whereIn('keyword_id', $keywordIds)
+            ->whereIn('status', ['complete', 'partial'])
+            ->orderByDesc('scanned_at')
+            ->get(['id', 'keyword_id', 'scanned_at']);
+        /** @var array<string, list<string>> $scanIdsByKeyword */
+        $scanIdsByKeyword = [];
+        foreach ($scans as $scan) {
+            $kw = (string) $scan->keyword_id;
+            if (count($scanIdsByKeyword[$kw] ?? []) < self::SET_SCANS) {
+                $scanIdsByKeyword[$kw][] = (string) $scan->id;
+            }
+        }
+        $scanIds = array_merge(...array_values($scanIdsByKeyword + [[]]));
+        if ($scanIds === []) {
+            return array_fill_keys(array_keys($sets), $empty);
+        }
+
+        ksort($sets);
+        $signature = md5(implode(',', $scanIds).'#'.serialize($sets));
+        $key = 'town-visibility:sets:'.$site->id.':'.$mode.':'.$signature;
+
+        return Cache::remember($key, self::CACHE_SECONDS, function () use ($scanIds, $scanIdsByKeyword, $keywordIds, $sets, $empty): array {
+            // One row per collected town per scan: which set(s) it belongs to is decided in memory.
+            $credit = sprintf(
+                'CASE WHEN p.rank IS NULL OR p.rank < 1 THEN 0 WHEN p.rank <= 3 THEN %s WHEN p.rank <= 10 THEN %s WHEN p.rank <= 20 THEN %s ELSE 0 END',
+                self::CREDIT['top3'], self::CREDIT['page1'], self::CREDIT['page2'],
+            );
+            $pop = 'COALESCE(g.population, c.population, 0)';
+            $rows = DB::table('town_rank_points as p')
+                ->leftJoin('coverage_areas as g', fn ($j) => $j->on('g.site_id', '=', 'p.site_id')->on('g.geo_id', '=', 'p.geo_id'))
+                ->leftJoin('coverage_areas as c', 'c.id', '=', 'p.coverage_area_id')
+                ->whereIn('p.scan_id', $scanIds)
+                ->whereNotNull('p.collected_at')
+                ->selectRaw('p.scan_id, p.geo_id, p.coverage_area_id, p.rank, ('.$credit.') * '.$pop.' as credit, '.$pop.' as weight')
+                ->cursor();
+
+            $lookups = [];
+            foreach ($sets as $name => $set) {
+                $lookups[$name] = ['ids' => array_fill_keys($set['ids'], true), 'geo' => array_fill_keys(array_filter($set['geo']), true)];
+            }
+            /** @var array<string, array<string, array{credit: float, weight: float, towns: int, page1: int, top3: int}>> $sums set → scan → totals */
+            $sums = [];
+            foreach ($rows as $row) {
+                $geo = (string) $row->geo_id;
+                $id = (string) $row->coverage_area_id;
+                $weight = (float) $row->weight;
+                foreach ($lookups as $name => $lookup) {
+                    if (! isset($lookup['geo'][$geo]) && ! isset($lookup['ids'][$id])) {
+                        continue;
+                    }
+                    $scanId = (string) $row->scan_id;
+                    if (! isset($sums[$name][$scanId])) {
+                        $sums[$name][$scanId] = ['credit' => 0.0, 'weight' => 0.0, 'towns' => 0, 'page1' => 0, 'top3' => 0];
+                    }
+                    $t = &$sums[$name][$scanId];
+                    $t['credit'] += (float) $row->credit;
+                    $t['weight'] += $weight;
+                    if ($weight > 0) {
+                        $t['towns']++;
+                        $rank = $row->rank === null ? null : (int) $row->rank;
+                        if ($rank !== null && $rank >= 1 && $rank <= 10) {
+                            $t['page1']++;
+                        }
+                        if ($rank !== null && $rank >= 1 && $rank <= 3) {
+                            $t['top3']++;
+                        }
+                    }
+                    unset($t);
+                }
+            }
+
+            $out = [];
+            foreach ($sets as $name => $set) {
+                $perKeyword = [];
+                $scores = [];
+                $previous = [];
+                $baselines = [];
+                foreach ($keywordIds as $kw) {
+                    $scored = [];
+                    foreach ($scanIdsByKeyword[$kw] ?? [] as $scanId) {   // newest first
+                        $t = $sums[$name][$scanId] ?? null;
+                        if ($t === null || $t['weight'] <= 0) {
+                            continue;
+                        }
+                        $scored[] = ['score' => (int) round(100 * $t['credit'] / $t['weight']), 'towns' => $t['towns'], 'page1' => $t['page1'], 'top3' => $t['top3']];
+                    }
+                    $latest = $scored[0] ?? null;
+                    $baseline = array_slice(array_column(array_slice($scored, 1), 'score'), 0, self::BASELINE_SCANS);
+                    $prev = $baseline === [] ? null : (int) round(array_sum($baseline) / count($baseline));
+                    $score = $latest['score'] ?? null;
+                    $perKeyword[$kw] = [
+                        'score' => $score,
+                        'previous' => $prev,
+                        'delta' => $score !== null && $prev !== null ? $score - $prev : null,
+                        'baseline_scans' => count($baseline),
+                        'towns' => $latest['towns'] ?? 0,
+                        'page1_towns' => $latest['page1'] ?? 0,
+                        'top3_towns' => $latest['top3'] ?? 0,
+                    ];
+                    if ($score === null) {
+                        continue;
+                    }
+                    $scores[] = $score;
+                    if ($prev !== null) {
+                        $previous[] = $prev;
+                        $baselines[] = count($baseline);
+                    }
+                }
+                $score = $scores === [] ? null : (int) round(array_sum($scores) / count($scores));
+                $prev = $previous === [] ? null : (int) round(array_sum($previous) / count($previous));
+                $out[$name] = [
+                    'score' => $score,
+                    'previous' => $prev,
+                    'delta' => $score !== null && $prev !== null ? $score - $prev : null,
+                    'baseline_scans' => $baselines === [] ? 0 : max($baselines),
+                    'keywords' => count($scores),
+                    'per_keyword' => $perKeyword,
+                ];
+            }
+
+            return $out + array_fill_keys(array_keys($sets), $empty);
+        });
     }
 
     /** @return array{score: null, previous: null, delta: null, baseline_scans: 0, towns: 0, page1_towns: 0, top3_towns: 0} */
