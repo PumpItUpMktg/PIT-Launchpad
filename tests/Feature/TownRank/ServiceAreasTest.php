@@ -105,12 +105,12 @@ it('builds an area page: one card per keyword with the website map sliced to the
     $fresh = app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['cards'][0];
     expect($fresh['gbp_run'])->toBe(['requests' => 2, 'cost' => 0.0, 'pending' => false]);
 
-    // Metrics: provisional shares now, the score itself explicitly undefined.
+    // Metrics: the provisional shares, and Town Visibility over the area's own towns (Hackettstown #2 at 10k + Mansfield not found at 7k → 59).
     $metrics = collect($card['metrics'])->keyBy('key');
     expect($metrics['web_page1_share']['value'])->toBe('50%')
         ->and($metrics['web_top3_share']['value'])->toBe('50%')
         ->and($metrics['gbp_top3_share']['value'])->toBe('50%')
-        ->and($metrics['score']['value'])->toBeNull();
+        ->and($metrics['score']['value'])->toBe('59 / 100');
 });
 
 it('leaves the GBP map null where no coverage scan exists for that location, and the website map null without a Town Rank scan', function () {
@@ -303,4 +303,23 @@ it('colours a town we could never read apart from one where we simply do not ran
         // and it is counted apart, so "not found" stays a fact we actually learned.
         ->and($card['web']['summary']['unreadable'])->toBe(1)
         ->and($card['web']['summary']['not_found'])->toBe(0);
+});
+
+it('scores Town Visibility per service area, per county on the map, and per keyword card from the area\'s own towns', function () {
+    $f = serviceAreaSite();
+    // Warren: Hackettstown #2 (10k, full credit) + Mansfield not found (7k) → 10000 / 17000 = 59.
+    // Northampton: Bethlehem #8 (75k, page-1 credit .7) → 70.
+    $areas = collect(app(ServiceAreas::class)->areas($f['site']))->keyBy('name');
+
+    expect($areas['Hackettstown office']['visibility'])->toMatchArray(['score' => 59, 'previous' => null, 'delta' => null, 'baseline_scans' => 0, 'keywords' => 1])
+        ->and($areas['Bethlehem office']['visibility']['score'])->toBe(70);
+
+    $area = app(ServiceAreas::class)->area($f['site'], $f['warren']->id);
+    expect($area['visibility']['score'])->toBe(59)
+        ->and($area['county_visibility'])->toHaveCount(1)
+        ->and($area['county_visibility'][0])->toMatchArray(['geoid' => '34041', 'towns' => 2, 'score' => 59]);
+
+    $score = collect($area['cards'][0]['metrics'])->firstWhere('key', 'score');
+    expect($score['label'])->toBe('Town Visibility')
+        ->and($score['value'])->toBe('59 / 100');
 });

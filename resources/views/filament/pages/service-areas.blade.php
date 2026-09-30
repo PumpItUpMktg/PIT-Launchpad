@@ -123,6 +123,12 @@
                             @endforelse
                         </div>
                         <div class="sub">{{ number_format($a['towns']) }} towns · {{ $a['keywords'] }} keywords</div>
+                        @if (($a['visibility']['score'] ?? null) !== null)
+                            @php($v = $a['visibility'])
+                            <div class="sub" title="Town Visibility: population-weighted share of this area's towns where the site ranks (town search)">Town visibility <b style="color:var(--s-text,inherit)">{{ $v['score'] }}</b>/100
+                                @if ($v['delta'] !== null && $v['delta'] !== 0)<b style="color:{{ $v['delta'] > 0 ? '#15803d' : '#c0392b' }}">{{ $v['delta'] > 0 ? '▲' : '▼' }}{{ abs($v['delta']) }}</b>@elseif ($v['delta'] === 0)<span>=</span>@endif
+                            </div>
+                        @endif
                     </button>
                 @endforeach
             </div>
@@ -133,9 +139,17 @@
             <h2>{{ $area['location']['name'] }}</h2>
             <span class="sub">{{ trim($area['location']['city'].($area['location']['state'] !== '' ? ', '.$area['location']['state'] : '')) }} · {{ number_format($area['towns']) }} towns</span>
         </div>
+        @php($av = $area['visibility'])
+        @if ($av['score'] !== null)
+            <div class="sub" style="margin:6px 0" title="Town Visibility: population-weighted share of this area's towns where the site ranks (town search), averaged over the tracked keywords">
+                Town visibility <b>{{ $av['score'] }}</b>/100
+                @if ($av['delta'] !== null && $av['delta'] !== 0)<b style="color:{{ $av['delta'] > 0 ? '#15803d' : '#c0392b' }}">{{ $av['delta'] > 0 ? '▲' : '▼' }}{{ abs($av['delta']) }}</b>@elseif ($av['delta'] === 0)<span>=</span>@endif
+                <span style="opacity:.7">· {{ $av['keywords'] }} keyword{{ $av['keywords'] === 1 ? '' : 's' }}{{ $av['baseline_scans'] >= 2 ? ' · vs the last two scans' : ($av['baseline_scans'] === 1 ? ' · since the last scan' : '') }}</span>
+            </div>
+        @endif
         <div class="s-counties">
-            @forelse ($area['counties'] as $c)
-                <span class="s-county">{{ $c['label'] }}</span>
+            @forelse ($area['county_visibility'] as $c)
+                <span class="s-county" title="{{ $c['towns'] }} town(s) in this county">{{ $c['label'] }}@if ($c['score'] !== null) · <b>{{ $c['score'] }}</b>/100@if ($c['delta'] !== null && $c['delta'] !== 0) <b style="color:{{ $c['delta'] > 0 ? '#15803d' : '#c0392b' }}">{{ $c['delta'] > 0 ? '▲' : '▼' }}{{ abs($c['delta']) }}</b>@endif @endif</span>
             @empty
                 <span class="s-county">no counties assigned</span>
             @endforelse

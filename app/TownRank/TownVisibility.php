@@ -103,39 +103,108 @@ final class TownVisibility
     {
         $out = [];
         foreach (TownRankScan::MODES as $mode) {
-            $latestId = TownRankScan::withoutGlobalScope(SiteScope::class)
-                ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
-                ->whereIn('status', ['complete', 'partial'])
-                ->orderByDesc('scanned_at')->value('id');
-            if ($latestId === null) {
-                $out[$mode] = ['score' => null, 'previous' => null, 'delta' => null, 'baseline_scans' => 0, 'towns' => 0, 'page1_towns' => 0, 'top3_towns' => 0];
-
-                continue;
-            }
-            $out[$mode] = Cache::remember(
-                'town-visibility:kw:'.$keyword->id.':'.$mode.':'.$latestId,
-                self::CACHE_SECONDS,
-                function () use ($site, $keyword, $mode): array {
-                    $scans = $this->scanScores($site, $keyword, $mode);   // newest first
-                    $latest = $scans[0] ?? null;
-                    $baseline = array_slice(array_column(array_slice($scans, 1), 'score'), 0, self::BASELINE_SCANS);
-                    $previous = $baseline === [] ? null : (int) round(array_sum($baseline) / count($baseline));
-                    $score = $latest['score'] ?? null;
-
-                    return [
-                        'score' => $score,
-                        'previous' => $previous,
-                        'delta' => $score !== null && $previous !== null ? $score - $previous : null,
-                        'baseline_scans' => count($baseline),
-                        'towns' => $latest['towns'] ?? 0,
-                        'page1_towns' => $latest['page1_towns'] ?? 0,
-                        'top3_towns' => $latest['top3_towns'] ?? 0,
-                    ];
-                },
-            );
+            $out[$mode] = $this->entry($site, $keyword, $mode, null);
         }
 
         return $out;
+    }
+
+    /**
+     * The same score for ONE set of towns — a service area, or one county of it — for a keyword and mode.
+     * Towns are named by coverage-area id and GEOID (a point matches on either, so a coverage rebuild that
+     * re-ids the rows still finds the town by GEOID).
+     *
+     * @param  list<string>  $townIds
+     * @param  list<string>  $geoIds
+     * @return array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, towns: int, page1_towns: int, top3_towns: int}
+     */
+    public function forTowns(Site $site, Keyword $keyword, string $mode, array $townIds, array $geoIds): array
+    {
+        $filter = ['ids' => array_values(array_unique($townIds)), 'geo' => array_values(array_unique(array_filter($geoIds)))];
+        if ($filter['ids'] === [] && $filter['geo'] === []) {
+            return self::empty();
+        }
+
+        return $this->entry($site, $keyword, $mode, $filter);
+    }
+
+    /**
+     * A town set across keywords (town-search mode by default): the mean of every keyword that has a finished
+     * scan there, the mean baseline, and the delta — the number a service area or a county reads.
+     *
+     * @param  iterable<Keyword>  $keywords
+     * @param  list<string>  $townIds
+     * @param  list<string>  $geoIds
+     * @return array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, keywords: int}
+     */
+    public function forTownSet(Site $site, iterable $keywords, array $townIds, array $geoIds, string $mode = TownRankScan::MODE_TOWN_QUERY): array
+    {
+        $scores = [];
+        $previous = [];
+        $baselines = [];
+        foreach ($keywords as $keyword) {
+            $v = $this->forTowns($site, $keyword, $mode, $townIds, $geoIds);
+            if ($v['score'] === null) {
+                continue;
+            }
+            $scores[] = $v['score'];
+            if ($v['previous'] !== null) {
+                $previous[] = $v['previous'];
+                $baselines[] = $v['baseline_scans'];
+            }
+        }
+        $score = $scores === [] ? null : (int) round(array_sum($scores) / count($scores));
+        $prev = $previous === [] ? null : (int) round(array_sum($previous) / count($previous));
+
+        return [
+            'score' => $score,
+            'previous' => $prev,
+            'delta' => $score !== null && $prev !== null ? $score - $prev : null,
+            'baseline_scans' => $baselines === [] ? 0 : max($baselines),
+            'keywords' => count($scores),
+        ];
+    }
+
+    /** @return array{score: null, previous: null, delta: null, baseline_scans: 0, towns: 0, page1_towns: 0, top3_towns: 0} */
+    private static function empty(): array
+    {
+        return ['score' => null, 'previous' => null, 'delta' => null, 'baseline_scans' => 0, 'towns' => 0, 'page1_towns' => 0, 'top3_towns' => 0];
+    }
+
+    /**
+     * One keyword × mode entry (optionally over a town set), cached per latest finished scan id.
+     *
+     * @param  array{ids: list<string>, geo: list<string>}|null  $filter
+     * @return array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, towns: int, page1_towns: int, top3_towns: int}
+     */
+    private function entry(Site $site, Keyword $keyword, string $mode, ?array $filter): array
+    {
+        $latestId = TownRankScan::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
+            ->whereIn('status', ['complete', 'partial'])
+            ->orderByDesc('scanned_at')->value('id');
+        if ($latestId === null) {
+            return self::empty();
+        }
+        $key = 'town-visibility:kw:'.$keyword->id.':'.$mode.':'.$latestId.($filter === null ? '' : ':'.md5(implode(',', $filter['ids']).'|'.implode(',', $filter['geo'])));
+
+        return Cache::remember($key, self::CACHE_SECONDS, function () use ($site, $keyword, $mode, $filter): array {
+            $scans = $this->scanScores($site, $keyword, $mode, $filter);   // newest first
+            $latest = $scans[0] ?? null;
+            $baseline = array_slice(array_column(array_slice($scans, 1), 'score'), 0, self::BASELINE_SCANS);
+            $previous = $baseline === [] ? null : (int) round(array_sum($baseline) / count($baseline));
+            $score = $latest['score'] ?? null;
+
+            return [
+                'score' => $score,
+                'previous' => $previous,
+                'delta' => $score !== null && $previous !== null ? $score - $previous : null,
+                'baseline_scans' => count($baseline),
+                'towns' => $latest['towns'] ?? 0,
+                'page1_towns' => $latest['page1_towns'] ?? 0,
+                'top3_towns' => $latest['top3_towns'] ?? 0,
+            ];
+        });
     }
 
     /**
@@ -210,9 +279,10 @@ final class TownVisibility
      * coverage-area id) summed per scan, plus the page-1 / top-3 / populated-town counts. No point rows are
      * loaded. Newest first; a scan with no populated, collected towns is left out.
      *
+     * @param  array{ids: list<string>, geo: list<string>}|null  $filter  limit to these towns (by coverage-area id or GEOID)
      * @return list<array{id: string, date: string, score: int, towns: int, page1_towns: int, top3_towns: int}>
      */
-    private function scanScores(Site $site, Keyword $keyword, string $mode): array
+    private function scanScores(Site $site, Keyword $keyword, string $mode, ?array $filter = null): array
     {
         $scans = TownRankScan::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
@@ -233,6 +303,9 @@ final class TownVisibility
             ->leftJoin('coverage_areas as c', 'c.id', '=', 'p.coverage_area_id')
             ->whereIn('p.scan_id', $scans->pluck('id')->all())
             ->whereNotNull('p.collected_at')
+            ->when($filter !== null, fn ($q) => $q->where(function ($w) use ($filter): void {
+                $w->whereIn('p.geo_id', $filter['geo'])->orWhereIn('p.coverage_area_id', $filter['ids']);
+            }))
             ->groupBy('p.scan_id')
             ->selectRaw(
                 'p.scan_id, SUM(('.$credit.') * '.$pop.') as credit, SUM('.$pop.') as weight, '
