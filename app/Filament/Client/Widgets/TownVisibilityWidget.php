@@ -10,8 +10,10 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 
 /**
  * Town Visibility on the client dashboard (§7c): how much of the service territory can see the site in
- * search, 0–100, with the movement since the last weekly scan and the weekly trend. Observed rankings only —
- * no traffic or revenue claim. Hidden until the site has a finished town-rank scan.
+ * search, 0–100, with the movement against the two-scan baseline and the weekly trend. TOWN-SEARCH mode only
+ * ("{service} {town}", what a customer types): the from-town mode competes a bare term against national
+ * sites and reads as failure when it is the wrong yardstick — it stays on the operator board. Observed
+ * rankings only — no traffic or revenue claim. Hidden until the site has a finished town-rank scan.
  */
 class TownVisibilityWidget extends StatsOverviewWidget
 {
@@ -26,7 +28,7 @@ class TownVisibilityWidget extends StatsOverviewWidget
         }
         $visibility = app(TownVisibility::class)->forSite($site);
         $stats = [];
-        foreach ([TownRankScan::MODE_TOWN_QUERY => 'Town visibility — searching the town', TownRankScan::MODE_LOCAL => 'Town visibility — searching from the town'] as $mode => $label) {
+        foreach ([TownRankScan::MODE_TOWN_QUERY => 'Town visibility'] as $mode => $label) {
             $v = $visibility[$mode];
             if ($v['score'] === null) {
                 continue;
@@ -44,14 +46,15 @@ class TownVisibilityWidget extends StatsOverviewWidget
         return $stats;
     }
 
-    /** @param array{score: int|null, previous: int|null, delta: int|null, keywords: int, towns: int, page1_towns: int, top3_towns: int, history: list<array{date: string, score: int}>} $v */
+    /** @param array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, keywords: int, towns: int, page1_towns: int, top3_towns: int, history: list<array{date: string, score: int}>} $v */
     private static function description(array $v): string
     {
+        $against = $v['baseline_scans'] >= 2 ? 'vs the last two scans' : 'since the last scan';
         $move = match (true) {
             $v['delta'] === null => 'first measurement',
-            $v['delta'] > 0 => "up {$v['delta']} since the last scan",
-            $v['delta'] < 0 => 'down '.abs($v['delta']).' since the last scan',
-            default => 'unchanged since the last scan',
+            $v['delta'] > 0 => "up {$v['delta']} {$against}",
+            $v['delta'] < 0 => 'down '.abs($v['delta']).' '.$against,
+            default => "unchanged {$against}",
         };
 
         return sprintf('%s · page 1 in %s town-keyword pairs across %s keywords', $move, number_format($v['page1_towns']), number_format($v['keywords']));

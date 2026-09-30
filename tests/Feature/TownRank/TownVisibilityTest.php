@@ -100,3 +100,27 @@ it('puts the score on the operator card and on the client dashboard, and says no
     $this->actingAs($other);
     Livewire::test(TownVisibilityWidget::class)->assertOk()->assertDontSee('/ 100');
 });
+
+it('measures movement against the mean of the previous two finished scans, so one bouncy week is not a trend', function () {
+    [$site, $kw, $towns] = visibilitySite();
+    visibilityScan($site, $kw, $towns, [2, 8, null], '2026-09-14 06:00:00');    // 68
+    visibilityScan($site, $kw, $towns, [null, 8, null], '2026-09-21 06:00:00'); // 4900 / 22000 = 22 — a bounce
+    visibilityScan($site, $kw, $towns, [1, 4, 15], '2026-09-28 06:00:00');      // 75
+
+    $v = app(TownVisibility::class)->forKeyword($site, $kw)['town_query'];
+
+    expect($v['score'])->toBe(75)
+        ->and($v['previous'])->toBe(45)          // mean(68, 22), not the bounce alone
+        ->and($v['delta'])->toBe(30)
+        ->and($v['baseline_scans'])->toBe(2);
+
+    // The client widget names the baseline it moved against, and shows town search only.
+    $client = User::factory()->create(['role' => UserRole::Client]);
+    Membership::create(['user_id' => $client->id, 'account_id' => $site->account_id, 'site_id' => $site->id, 'role' => UserRole::Client]);
+    visibilityScan($site, $kw, $towns, [1, 1, 1], '2026-09-28 06:30:00', 'local');
+    Filament::setCurrentPanel('client');
+    $this->actingAs($client);
+    Livewire::test(TownVisibilityWidget::class)->assertOk()
+        ->assertSee('up 30 vs the last two scans')
+        ->assertDontSee('from the town');
+});
