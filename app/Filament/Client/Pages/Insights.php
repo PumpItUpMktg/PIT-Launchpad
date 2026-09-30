@@ -7,6 +7,7 @@ use App\Filament\Client\Widgets\LocalGridWidget;
 use App\Filament\Client\Widgets\PerformanceCardsWidget;
 use App\Filament\Client\Widgets\PositionTrendWidget;
 use App\Filament\Client\Widgets\ProgressWidget;
+use App\Filament\Client\Widgets\TownVisibilityWidget;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Widgets\Widget;
@@ -43,6 +44,7 @@ class Insights extends Page
             LocalGridWidget::class,
             PerformanceCardsWidget::class,
             ProgressWidget::class,
+            TownVisibilityWidget::class,
         ];
     }
 

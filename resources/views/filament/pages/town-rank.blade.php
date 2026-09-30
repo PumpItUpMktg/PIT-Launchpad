@@ -172,8 +172,14 @@
                                     @foreach (['town_query' => 'Town search', 'local' => 'From town'] as $mode => $label)
                                         @php($s = $card['modes'][$mode])
                                         @php($pg = $card['progress'][$mode])
+                                        @php($vis = $card['visibility'][$mode] ?? null)
                                         <div class="mrow">
                                             <span>{{ $label }}:</span>
+                                            @if ($vis !== null && $vis['score'] !== null && $pg === null)
+                                                <span title="Town Visibility: population-weighted share of towns where the site ranks (top-3 full credit, page 1 most, page 2 a little)"><b>{{ $vis['score'] }}</b><span style="color:#6b7280">/100</span>
+                                                    @if ($vis['delta'] !== null && $vis['delta'] !== 0)<b style="color:{{ $vis['delta'] > 0 ? '#15803d' : '#c0392b' }}">{{ $vis['delta'] > 0 ? '▲' : '▼' }}{{ abs($vis['delta']) }}</b>@elseif ($vis['delta'] === 0)<span style="color:#6b7280">=</span>@endif
+                                                </span>
+                                            @endif
                                             @if ($s === null)
                                                 <span>not scanned</span>
                                             @elseif (($card['uncollected'][$mode] ?? null) > 0)
