@@ -31,13 +31,14 @@ final class ServiceAreas
         private readonly TownRankBoard $board,
         private readonly TownRankReport $report,
         private readonly TownAreaMap $map,
+        private readonly TownVisibility $visibility,
     ) {}
 
     /**
      * Every service area of the site: the location, the counties it serves (labelled from the county
      * registry), how many towns that is, and how many keywords are tracked.
      *
-     * @return list<array{location_id: string, name: string, city: string, state: string, counties: list<array{geoid: string, label: string}>, towns: int, keywords: int}>
+     * @return list<array{location_id: string, name: string, city: string, state: string, counties: list<array{geoid: string, label: string}>, towns: int, keywords: int, visibility: array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, keywords: int}}>
      */
     public function areas(Site $site): array
     {
@@ -46,7 +47,8 @@ final class ServiceAreas
             return [];
         }
         $townsByLocation = $this->coverage->pointsForMany($locations);
-        $keywords = count($this->board->keywords($site));
+        $keywordModels = $this->keywordModels($site);
+        $keywords = count($keywordModels);
 
         $geoids = [];
         foreach ($locations as $location) {
@@ -65,10 +67,73 @@ final class ServiceAreas
                 'counties' => array_map(fn (string $g): array => ['geoid' => $g, 'label' => $labels[$g] ?? "County {$g}"], $this->map->countyGeoIds($location)),
                 'towns' => count($townsByLocation[(string) $location->id] ?? []),
                 'keywords' => $keywords,
+                // The area's own Town Visibility (town search): the score a client reads per office.
+                'visibility' => $this->visibility->forTownSet(
+                    $site, $keywordModels,
+                    array_column($townsByLocation[(string) $location->id] ?? [], 'coverage_area_id'),
+                    array_column($townsByLocation[(string) $location->id] ?? [], 'geo_id'),
+                ),
             ];
         }
 
         return $areas;
+    }
+
+    /**
+     * The tracked keywords as models, in the wall's order.
+     *
+     * @return list<Keyword>
+     */
+    private function keywordModels(Site $site): array
+    {
+        $ids = array_column($this->board->keywords($site), 'keyword_id');
+        if ($ids === []) {
+            return [];
+        }
+        $byId = Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($ids)->get()->keyBy('id');
+
+        return array_values(array_filter(array_map(fn (string $id) => $byId->get($id), $ids)));
+    }
+
+    /**
+     * Town Visibility per county of an area: the area's towns grouped by the county on their GEOID (a
+     * county subdivision's 10-digit GEOID starts with the 5-digit county; a place carries no county and is
+     * left to the area total), each scored across the tracked keywords.
+     *
+     * @param  list<array{geoid: string, label: string}>  $counties
+     * @param  list<array{coverage_area_id: string, geo_id: string, label: string, lat: float, lng: float, population: int}>  $towns
+     * @param  list<Keyword>  $keywords
+     * @return list<array{geoid: string, label: string, towns: int, score: int|null, previous: int|null, delta: int|null, baseline_scans: int}>
+     */
+    private function countyVisibility(Site $site, array $counties, array $towns, array $keywords): array
+    {
+        $byCounty = [];
+        foreach ($towns as $town) {
+            $geo = trim((string) $town['geo_id']);
+            if (strlen($geo) !== 10) {
+                continue;
+            }
+            $byCounty[substr($geo, 0, 5)][] = $town;
+        }
+
+        $out = [];
+        foreach ($counties as $county) {
+            $members = $byCounty[$county['geoid']] ?? [];
+            $v = $members === []
+                ? ['score' => null, 'previous' => null, 'delta' => null, 'baseline_scans' => 0]
+                : $this->visibility->forTownSet($site, $keywords, array_column($members, 'coverage_area_id'), array_column($members, 'geo_id'));
+            $out[] = [
+                'geoid' => $county['geoid'],
+                'label' => $county['label'],
+                'towns' => count($members),
+                'score' => $v['score'],
+                'previous' => $v['previous'],
+                'delta' => $v['delta'],
+                'baseline_scans' => $v['baseline_scans'],
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -81,6 +146,8 @@ final class ServiceAreas
      *     location: array{location_id: string, name: string, city: string, state: string},
      *     counties: list<array{geoid: string, label: string}>,
      *     towns: int,
+     *     visibility: array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, keywords: int},
+     *     county_visibility: list<array{geoid: string, label: string, towns: int, score: int|null, previous: int|null, delta: int|null, baseline_scans: int}>,
      *     outlines: list<array{geoid: string, label: string, paths: list<string>}>,
      *     town_paths: array<string, list<string>>,
      *     cards: list<array{
@@ -113,6 +180,9 @@ final class ServiceAreas
         $coords = $frame['coords'];
         $project = $frame['project'];
         $townPaths = $frame['town_paths'];
+        $areaTownIds = array_column($areaTowns, 'coverage_area_id');
+        $areaGeoIds = array_column($areaTowns, 'geo_id');
+        $keywordModels = $this->keywordModels($site);
 
         $cards = [];
         foreach ($this->board->keywords($site) as $entry) {
@@ -122,6 +192,7 @@ final class ServiceAreas
             }
             $web = $this->webMap($site, $keyword, $areaIds, $coords, $project);
             $gbp = $this->gbpMap($location, $keyword, $siteTowns, $coords, $project);
+            $score = $web === null ? null : $this->visibility->forTowns($site, $keyword, (string) $web['mode'], $areaTownIds, $areaGeoIds);
             $cards[] = [
                 'keyword_id' => (string) $keyword->id,
                 'query' => (string) $keyword->query,
@@ -135,7 +206,7 @@ final class ServiceAreas
                     'cost' => round(count($areaTowns) * (float) config('launchpad.geo_grid.cost_per_request', 0.002), 2),
                     'pending' => $gbp !== null && $gbp['status'] === 'pending',
                 ],
-                'metrics' => $this->metrics(count($areaTowns), $web, $gbp),
+                'metrics' => $this->metrics(count($areaTowns), $web, $gbp, $score),
             ];
         }
 
@@ -145,6 +216,8 @@ final class ServiceAreas
             'location' => ['location_id' => (string) $location->id, 'name' => (string) $location->name, 'city' => $cityState['city'], 'state' => $cityState['state']],
             'counties' => $frame['counties'],
             'towns' => count($areaTowns),
+            'visibility' => $this->visibility->forTownSet($site, $keywordModels, $areaTownIds, $areaGeoIds),
+            'county_visibility' => $this->countyVisibility($site, $frame['counties'], $areaTowns, $keywordModels),
             'outlines' => $frame['outlines'],
             'town_paths' => $townPaths,
             'cards' => $cards,
@@ -275,10 +348,17 @@ final class ServiceAreas
      *
      * @param  array<string, mixed>|null  $web
      * @param  array<string, mixed>|null  $gbp
+     * @param  array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, towns: int, page1_towns: int, top3_towns: int}|null  $score  Town Visibility over the area's towns
      * @return list<array{key: string, label: string, value: string|null, note: string}>
      */
-    private function metrics(int $towns, ?array $web, ?array $gbp): array
+    private function metrics(int $towns, ?array $web, ?array $gbp, ?array $score = null): array
     {
+        $visibility = $score === null || $score['score'] === null ? null : $score['score'].' / 100'.match (true) {
+            $score['delta'] === null => '',
+            $score['delta'] > 0 => ' ▲'.$score['delta'],
+            $score['delta'] < 0 => ' ▼'.abs($score['delta']),
+            default => ' =',
+        };
         $share = fn (int $n): ?string => $towns > 0 ? sprintf('%d%%', (int) round($n / $towns * 100)) : null;
         $webSummary = is_array($web['summary'] ?? null) ? $web['summary'] : [];
         $gbpSummary = is_array($gbp['summary'] ?? null) ? $gbp['summary'] : [];
@@ -287,7 +367,7 @@ final class ServiceAreas
             ['key' => 'web_page1_share', 'label' => 'Website page-1 share', 'value' => $web === null ? null : $share((int) ($webSummary['top3'] ?? 0) + (int) ($webSummary['page1'] ?? 0)), 'note' => 'towns where the site ranks 1–10 (provisional)'],
             ['key' => 'web_top3_share', 'label' => 'Website top-3 share', 'value' => $web === null ? null : $share((int) ($webSummary['top3'] ?? 0)), 'note' => 'towns where the site ranks 1–3 (provisional)'],
             ['key' => 'gbp_top3_share', 'label' => 'GBP top-3 share', 'value' => $gbp === null ? null : $share((int) ($gbpSummary['top3'] ?? 0)), 'note' => 'towns where the GBP is in the map pack (provisional)'],
-            ['key' => 'score', 'label' => 'Area score', 'value' => null, 'note' => 'not defined yet — the formula is chosen once the data has been seen'],
+            ['key' => 'score', 'label' => 'Town Visibility', 'value' => $visibility, 'note' => 'population-weighted share of these towns where the site ranks (top-3 full, page 1 most, page 2 a little)'.($score !== null && $score['baseline_scans'] >= 2 ? ' · movement vs the last two scans' : ($score !== null && $score['baseline_scans'] === 1 ? ' · movement since the last scan' : ''))],
         ];
     }
 
