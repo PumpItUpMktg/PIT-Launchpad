@@ -172,7 +172,7 @@ final class TownRankBoard
      *     modes: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}|null>,
      *     progress: array<string, array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null}|null>,
      *     uncollected: array<string, int|null>,
-     *     visibility: array<string, array{score: int|null, previous: int|null, delta: int|null, towns: int, page1_towns: int, top3_towns: int}|null>,
+     *     visibility: array<string, array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, towns: int, page1_towns: int, top3_towns: int}|null>,
      *     markers: list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>
      * }>
      */
@@ -197,11 +197,12 @@ final class TownRankBoard
             $progress = [];
             $uncollected = [];
             $visibility = [];
+            $keywordVisibility = $this->visibility->forKeyword($site, $keyword);
             $hasPrevious = false;
             foreach (TownRankScan::MODES as $mode) {
                 $scan = $data['scans'][$mode];
                 $modes[$mode] = $scan === null ? null : $data['summary'][$mode];
-                $visibility[$mode] = $scan === null ? null : $this->visibility->scoreRows($data['rows'], $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town');
+                $visibility[$mode] = $scan === null ? null : $keywordVisibility[$mode];
                 $progress[$mode] = $scan !== null && $scan['status'] === 'pending'
                     ? CollectionProgress::for((int) $scan['collected'], (int) $scan['points'])
                     : null;

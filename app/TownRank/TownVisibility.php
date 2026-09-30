@@ -17,6 +17,9 @@ use Illuminate\Support\Facades\Cache;
  * ▲▼ movement counts remain the detail underneath; this is the headline the client reads and the trend it
  * moves along week to week.
  *
+ * Movement is measured against a BASELINE of the previous two finished scans (their mean), not the last one
+ * alone: long-tail town queries bounce week to week, and a single-scan delta reads the bounce as a trend.
+ *
  * Honest framing: observed rankings and their movement only — no traffic, lead or revenue claim is derived.
  */
 final class TownVisibility
@@ -27,28 +30,29 @@ final class TownVisibility
     /** Finalized scans considered for the site trend, per keyword and mode (weekly cadence → ~3 months). */
     public const HISTORY_SCANS = 12;
 
+    /** Previous finished scans averaged into the movement baseline. */
+    public const BASELINE_SCANS = 2;
+
     private const CACHE_SECONDS = 1800;
 
     public function __construct(private readonly TownRankReport $report, private readonly TownRankPoints $points) {}
 
     /**
-     * Score one report row-set for a mode: the latest scan's score, the previous finalized scan's score on
-     * the same towns, and the delta. Null score = no finalized scan (or no populated towns) to score.
+     * Score one report row-set for a mode: the latest scan's population-weighted score and its page-1 /
+     * top-3 town counts. Null score = no finalized scan (or no populated towns) to score. Movement comes
+     * from {@see forKeyword()}, which measures against the two-scan baseline.
      *
      * @param  list<array<string, mixed>>  $rows  {@see TownRankReport::forKeyword()} rows
      * @param  'town'|'local'  $prefix
-     * @return array{score: int|null, previous: int|null, delta: int|null, towns: int, page1_towns: int, top3_towns: int}
+     * @return array{score: int|null, towns: int, page1_towns: int, top3_towns: int}
      */
     public function scoreRows(array $rows, string $prefix): array
     {
         $weight = 0;
         $credit = 0.0;
-        $prevWeight = 0;
-        $prevCredit = 0.0;
         $page1 = 0;
         $top3 = 0;
         $towns = 0;
-        $hasPrevious = false;
 
         foreach ($rows as $row) {
             $pop = max(0, (int) ($row['population'] ?? 0));
@@ -66,21 +70,10 @@ final class TownVisibility
             if (is_int($rank) && $rank <= 10) {
                 $page1++;
             }
-            if (array_key_exists("{$prefix}_change", $row) && $row["{$prefix}_change"] !== null) {
-                $hasPrevious = true;
-                $prevRank = $row["{$prefix}_prev_rank"] ?? null;
-                $prevWeight += $pop;
-                $prevCredit += $pop * self::creditFor(is_int($prevRank) ? $prevRank : null);
-            }
         }
 
-        $score = $weight > 0 ? (int) round(100 * $credit / $weight) : null;
-        $previous = $hasPrevious && $prevWeight > 0 ? (int) round(100 * $prevCredit / $prevWeight) : null;
-
         return [
-            'score' => $score,
-            'previous' => $previous,
-            'delta' => $score !== null && $previous !== null ? $score - $previous : null,
+            'score' => $weight > 0 ? (int) round(100 * $credit / $weight) : null,
             'towns' => $towns,
             'page1_towns' => $page1,
             'top3_towns' => $top3,
@@ -100,19 +93,39 @@ final class TownVisibility
     }
 
     /**
-     * Per keyword: both modes scored from the report (latest vs previous finalized scan).
+     * Per keyword: both modes scored from the report — the latest scan's score, the baseline (the mean of
+     * the previous {@see BASELINE_SCANS} finished scans, scored from their stored points), the delta, and
+     * how many scans the baseline rests on (0 = first measurement, no movement claimed).
      *
-     * @return array<string, array{score: int|null, previous: int|null, delta: int|null, towns: int, page1_towns: int, top3_towns: int}>
+     * @return array<string, array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, towns: int, page1_towns: int, top3_towns: int}>
      */
     public function forKeyword(Site $site, Keyword $keyword): array
     {
         $data = $this->report->forKeyword($site, $keyword);
+        $population = null;
         $out = [];
         foreach (TownRankScan::MODES as $mode) {
-            $prefix = $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town';
-            $out[$mode] = $data['scans'][$mode] === null
-                ? ['score' => null, 'previous' => null, 'delta' => null, 'towns' => 0, 'page1_towns' => 0, 'top3_towns' => 0]
-                : $this->scoreRows($data['rows'], $prefix);
+            $scan = $data['scans'][$mode];
+            if ($scan === null) {
+                $out[$mode] = ['score' => null, 'previous' => null, 'delta' => null, 'baseline_scans' => 0, 'towns' => 0, 'page1_towns' => 0, 'top3_towns' => 0];
+
+                continue;
+            }
+            $latest = $this->scoreRows($data['rows'], $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town');
+            $population ??= $this->populationIndex($site);
+            $history = $this->history($site, $keyword, $mode, $population, excludeScanId: (string) $scan['id']);
+            $baseline = array_slice(array_values($history), -self::BASELINE_SCANS);   // newest N before the latest
+            $previous = $baseline === [] ? null : (int) round(array_sum($baseline) / count($baseline));
+
+            $out[$mode] = [
+                'score' => $latest['score'],
+                'previous' => $previous,
+                'delta' => $latest['score'] !== null && $previous !== null ? $latest['score'] - $previous : null,
+                'baseline_scans' => count($baseline),
+                'towns' => $latest['towns'],
+                'page1_towns' => $latest['page1_towns'],
+                'top3_towns' => $latest['top3_towns'],
+            ];
         }
 
         return $out;
@@ -123,7 +136,7 @@ final class TownVisibility
      * previous scans, the page-1 town count summed across keywords, and the weekly trend — one point per
      * scan date, the mean score of the keywords finalized that day. Cached for half an hour.
      *
-     * @return array<string, array{score: int|null, previous: int|null, delta: int|null, keywords: int, towns: int, page1_towns: int, top3_towns: int, history: list<array{date: string, score: int}>}>
+     * @return array<string, array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, keywords: int, towns: int, page1_towns: int, top3_towns: int, history: list<array{date: string, score: int}>}>
      */
     public function forSite(Site $site): array
     {
@@ -135,7 +148,7 @@ final class TownVisibility
         Cache::forget('town-visibility:'.$site->id);
     }
 
-    /** @return array<string, array{score: int|null, previous: int|null, delta: int|null, keywords: int, towns: int, page1_towns: int, top3_towns: int, history: list<array{date: string, score: int}>}> */
+    /** @return array<string, array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, keywords: int, towns: int, page1_towns: int, top3_towns: int, history: list<array{date: string, score: int}>}> */
     private function computeSite(Site $site): array
     {
         $keywords = Keyword::withoutGlobalScope(SiteScope::class)
@@ -146,6 +159,7 @@ final class TownVisibility
         foreach (TownRankScan::MODES as $mode) {
             $scores = [];
             $previous = [];
+            $baselineScans = [];
             $page1 = 0;
             $top3 = 0;
             $towns = 0;
@@ -159,6 +173,7 @@ final class TownVisibility
                     $towns = max($towns, $latest['towns']);
                     if ($latest['previous'] !== null) {
                         $previous[] = $latest['previous'];
+                        $baselineScans[] = $latest['baseline_scans'];
                     }
                 }
                 foreach ($this->history($site, $keyword, $mode, $population) as $date => $score) {
@@ -172,6 +187,7 @@ final class TownVisibility
                 'score' => $score,
                 'previous' => $prev,
                 'delta' => $score !== null && $prev !== null ? $score - $prev : null,
+                'baseline_scans' => $baselineScans === [] ? 0 : max($baselineScans),
                 'keywords' => count($scores),
                 'towns' => $towns,
                 'page1_towns' => $page1,
@@ -188,13 +204,14 @@ final class TownVisibility
      * stored points against today's town populations.
      *
      * @param  array{geo: array<string, int>, id: array<string, int>}  $population
-     * @return array<string, int> Y-m-d => score
+     * @return array<string, int> Y-m-d => score, oldest first
      */
-    private function history(Site $site, Keyword $keyword, string $mode, array $population): array
+    private function history(Site $site, Keyword $keyword, string $mode, array $population, ?string $excludeScanId = null): array
     {
         $scans = TownRankScan::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
             ->whereIn('status', ['complete', 'partial'])
+            ->when($excludeScanId !== null, fn ($q) => $q->whereKeyNot($excludeScanId))
             ->orderByDesc('scanned_at')->limit(self::HISTORY_SCANS)->get();
         if ($scans->isEmpty()) {
             return [];
