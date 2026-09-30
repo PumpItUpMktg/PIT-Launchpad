@@ -16,6 +16,7 @@ use App\Models\TownRankScan;
 use App\TownRank\ServiceAreas;
 use App\TownRank\TownRankPoints;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Two service areas on one site: Warren County NJ (Hackettstown + Mansfield) and Northampton County PA
@@ -322,4 +323,26 @@ it('scores Town Visibility per service area, per county on the map, and per keyw
     $score = collect($area['cards'][0]['metrics'])->firstWhere('key', 'score');
     expect($score['label'])->toBe('Town Visibility')
         ->and($score['value'])->toBe('59 / 100');
+});
+
+it('scores every office of the list, and the area with its counties, from ONE point query each — not one per office × keyword', function () {
+    $f = serviceAreaSite();
+    $pointQueries = 0;
+    DB::listen(function ($query) use (&$pointQueries): void {
+        if (str_contains($query->sql, 'town_rank_points')) {
+            $pointQueries++;
+        }
+    });
+
+    $areas = app(ServiceAreas::class)->areas($f['site']);
+    expect($areas)->toHaveCount(2)
+        ->and($pointQueries)->toBe(1);
+
+    // The area page: the area + county sets are one query; the keyword map's own report is the other.
+    $pointQueries = 0;
+    Cache::flush();
+    $area = app(ServiceAreas::class)->area($f['site'], $f['warren']->id);
+    expect($area['visibility']['score'])->toBe(59)
+        ->and($area['county_visibility'][0]['score'])->toBe(59)
+        ->and($pointQueries)->toBeLessThanOrEqual(2);
 });

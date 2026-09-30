@@ -56,6 +56,13 @@ final class ServiceAreas
         }
         $labels = $this->map->countyLabels(array_values(array_unique($geoids)));
 
+        // Every office's Town Visibility (town search) from ONE point query — the score a client reads per office.
+        $sets = [];
+        foreach ($locations as $location) {
+            $sets[(string) $location->id] = self::townSet($townsByLocation[(string) $location->id] ?? []);
+        }
+        $visibility = $this->visibility->forTownSets($site, $keywordModels, $sets);
+
         $areas = [];
         foreach ($locations as $location) {
             $cityState = $location->cityState();
@@ -67,12 +74,7 @@ final class ServiceAreas
                 'counties' => array_map(fn (string $g): array => ['geoid' => $g, 'label' => $labels[$g] ?? "County {$g}"], $this->map->countyGeoIds($location)),
                 'towns' => count($townsByLocation[(string) $location->id] ?? []),
                 'keywords' => $keywords,
-                // The area's own Town Visibility (town search): the score a client reads per office.
-                'visibility' => $this->visibility->forTownSet(
-                    $site, $keywordModels,
-                    array_column($townsByLocation[(string) $location->id] ?? [], 'coverage_area_id'),
-                    array_column($townsByLocation[(string) $location->id] ?? [], 'geo_id'),
-                ),
+                'visibility' => self::setSummary($visibility[(string) $location->id]),
             ];
         }
 
@@ -96,16 +98,40 @@ final class ServiceAreas
     }
 
     /**
-     * Town Visibility per county of an area: the area's towns grouped by the county on their GEOID (a
-     * county subdivision's 10-digit GEOID starts with the 5-digit county; a place carries no county and is
-     * left to the area total), each scored across the tracked keywords.
+     * A town list as a {@see TownVisibility::forTownSets()} set: coverage-area ids + GEOIDs (a point matches
+     * on either, so a coverage rebuild that re-ids the rows still finds the town by GEOID).
      *
-     * @param  list<array{geoid: string, label: string}>  $counties
-     * @param  list<array{coverage_area_id: string, geo_id: string, label: string, lat: float, lng: float, population: int}>  $towns
-     * @param  list<Keyword>  $keywords
-     * @return list<array{geoid: string, label: string, towns: int, score: int|null, previous: int|null, delta: int|null, baseline_scans: int}>
+     * @param  list<array{coverage_area_id: string, geo_id: string}>  $towns
+     * @return array{ids: list<string>, geo: list<string>}
      */
-    private function countyVisibility(Site $site, array $counties, array $towns, array $keywords): array
+    private static function townSet(array $towns): array
+    {
+        return [
+            'ids' => array_values(array_unique(array_column($towns, 'coverage_area_id'))),
+            'geo' => array_values(array_unique(array_filter(array_column($towns, 'geo_id')))),
+        ];
+    }
+
+    /**
+     * The set's headline without the per-keyword detail.
+     *
+     * @param  array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, keywords: int, per_keyword: array<string, mixed>}  $set
+     * @return array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, keywords: int}
+     */
+    private static function setSummary(array $set): array
+    {
+        return ['score' => $set['score'], 'previous' => $set['previous'], 'delta' => $set['delta'], 'baseline_scans' => $set['baseline_scans'], 'keywords' => $set['keywords']];
+    }
+
+    /**
+     * An area's towns grouped by the county on their GEOID (a county subdivision's 10-digit GEOID starts
+     * with the 5-digit county; a place carries no county and is left to the area total) — the county sets
+     * the map header scores.
+     *
+     * @param  list<array{coverage_area_id: string, geo_id: string, label: string, lat: float, lng: float, population: int}>  $towns
+     * @return array<string, list<array{coverage_area_id: string, geo_id: string, label: string, lat: float, lng: float, population: int}>> county GEOID → its towns
+     */
+    private static function townsByCounty(array $towns): array
     {
         $byCounty = [];
         foreach ($towns as $town) {
@@ -116,24 +142,7 @@ final class ServiceAreas
             $byCounty[substr($geo, 0, 5)][] = $town;
         }
 
-        $out = [];
-        foreach ($counties as $county) {
-            $members = $byCounty[$county['geoid']] ?? [];
-            $v = $members === []
-                ? ['score' => null, 'previous' => null, 'delta' => null, 'baseline_scans' => 0]
-                : $this->visibility->forTownSet($site, $keywords, array_column($members, 'coverage_area_id'), array_column($members, 'geo_id'));
-            $out[] = [
-                'geoid' => $county['geoid'],
-                'label' => $county['label'],
-                'towns' => count($members),
-                'score' => $v['score'],
-                'previous' => $v['previous'],
-                'delta' => $v['delta'],
-                'baseline_scans' => $v['baseline_scans'],
-            ];
-        }
-
-        return $out;
+        return $byCounty;
     }
 
     /**
@@ -180,9 +189,32 @@ final class ServiceAreas
         $coords = $frame['coords'];
         $project = $frame['project'];
         $townPaths = $frame['town_paths'];
-        $areaTownIds = array_column($areaTowns, 'coverage_area_id');
-        $areaGeoIds = array_column($areaTowns, 'geo_id');
         $keywordModels = $this->keywordModels($site);
+
+        // Town Visibility (town search) for the area and each of its counties from ONE point query; every
+        // keyword card reads its own number from the area set. A card whose only scan is searched-from-town
+        // scores that mode for itself (rare: a keyword never scanned by town query).
+        $byCounty = self::townsByCounty($areaTowns);
+        $sets = ['area' => self::townSet($areaTowns)];
+        foreach ($frame['counties'] as $county) {
+            if (($byCounty[$county['geoid']] ?? []) !== []) {
+                $sets['county:'.$county['geoid']] = self::townSet($byCounty[$county['geoid']]);
+            }
+        }
+        $visibility = $this->visibility->forTownSets($site, $keywordModels, $sets);
+        $countyVisibility = [];
+        foreach ($frame['counties'] as $county) {
+            $v = $visibility['county:'.$county['geoid']] ?? ['score' => null, 'previous' => null, 'delta' => null, 'baseline_scans' => 0];
+            $countyVisibility[] = [
+                'geoid' => $county['geoid'],
+                'label' => $county['label'],
+                'towns' => count($byCounty[$county['geoid']] ?? []),
+                'score' => $v['score'],
+                'previous' => $v['previous'],
+                'delta' => $v['delta'],
+                'baseline_scans' => $v['baseline_scans'],
+            ];
+        }
 
         $cards = [];
         foreach ($this->board->keywords($site) as $entry) {
@@ -192,7 +224,11 @@ final class ServiceAreas
             }
             $web = $this->webMap($site, $keyword, $areaIds, $coords, $project);
             $gbp = $this->gbpMap($location, $keyword, $siteTowns, $coords, $project);
-            $score = $web === null ? null : $this->visibility->forTowns($site, $keyword, (string) $web['mode'], $areaTownIds, $areaGeoIds);
+            $score = match (true) {
+                $web === null => null,
+                $web['mode'] === TownRankScan::MODE_TOWN_QUERY => $visibility['area']['per_keyword'][(string) $keyword->id] ?? null,
+                default => $this->visibility->forTowns($site, $keyword, (string) $web['mode'], $sets['area']['ids'], $sets['area']['geo']),
+            };
             $cards[] = [
                 'keyword_id' => (string) $keyword->id,
                 'query' => (string) $keyword->query,
@@ -216,8 +252,8 @@ final class ServiceAreas
             'location' => ['location_id' => (string) $location->id, 'name' => (string) $location->name, 'city' => $cityState['city'], 'state' => $cityState['state']],
             'counties' => $frame['counties'],
             'towns' => count($areaTowns),
-            'visibility' => $this->visibility->forTownSet($site, $keywordModels, $areaTownIds, $areaGeoIds),
-            'county_visibility' => $this->countyVisibility($site, $frame['counties'], $areaTowns, $keywordModels),
+            'visibility' => self::setSummary($visibility['area']),
+            'county_visibility' => $countyVisibility,
             'outlines' => $frame['outlines'],
             'town_paths' => $townPaths,
             'cards' => $cards,
